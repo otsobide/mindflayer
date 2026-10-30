@@ -52,6 +52,7 @@ struct Project {
     path: String,
     name: Option<String>,
     marker: Option<String>,
+    migrates: bool,
     id: Option<String>,
     agents: Vec<String>,
     settings: Option<Settings>,

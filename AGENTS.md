@@ -204,11 +204,13 @@ under `apps/` with its own `Makefile`:
   Vue Query asks for again, how the server watches, and how a run waits for
   its views (`settle`), `src/api/commands.ts` the runner every change goes
   through (`useRunner`: a task previewed, shown, confirmed when it takes
-  something away, and run), and `src/api/transcript.ts` the query of the
-  server's transcript. `src/pages/` holds one
+  something away, and run), `src/api/transcript.ts` the query of the
+  server's transcript, and `src/api/scan.ts` the query of a scan, asked for
+  by hand. `src/pages/` holds one
   page per route (file routes): the overview (`index`), the projects
   (`projects`), a project's page (`project`, which `src/routes.ts` names by
-  its entry in the query), the library (`library`), one of its own
+  its entry in the query), what could be linked (`discover`, the folders it
+  scans in the query), the library (`library`), one of its own
   (`artifact`, named by its kind and name in the query), the shelf
   (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
   the query a page keeps its state in, `src/library.ts` finds the projects
@@ -221,7 +223,9 @@ under `apps/` with its own `Makefile`:
   (`IssueList`), a rendered body (`MarkdownBody`), an artifact's files
   (`FileTree`), the ledger's latest actions (`ActivityFeed`),
   `SnapshotGate`, which draws a page once the snapshot is answered, the
-  folder to link (`LinkForm`), and what the runner draws beside the pages:
+  folder to link (`LinkForm`), a project's agents and share toggles
+  (`SettingsForm`) and its migration, dry run first (`MigrateOffer`), and
+  what the runner draws beside the pages:
   `CommandRunner`, which makes it and says how each task ended in a toast,
   the task shown before it runs (`CommandDialog`), what the last run said
   (`WarningsDrawer`) and the transcript (`TranscriptDrawer`).
@@ -272,8 +276,8 @@ These are easy to break from a single file without noticing.
   from is core's too (`Catalog::folders`), and so are the names at a
   project's root that show an agent works there (`Agent::reads_at_root`) and
   the order `flayer scan --suggest` ranks what it finds in (`scan::Order`),
-  in which the minds screen and the link form show what is not linked,
-  without sorting it.
+  in which the minds screen, the link form and the panel's page of what
+  could be linked show what is not linked, without sorting it.
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
@@ -299,7 +303,16 @@ These are easy to break from a single file without noticing.
   opened by `flayer install` (`install::apply`): its marks are the
   `flayer install` and `flayer uninstall` lines they amount to
   (`Screen::task`), each run whatever came of the others
-  (`Task::chained`), so its transcript runs again. What a front end with
+  (`Task::chained`), so its transcript runs again. A batch a screen builds
+  from its marks or its toggles is built in the task module, from what was
+  marked (`Task::minds`, from each folder's `MindsChange`) or what the
+  settings and the toggles say (`Task::settings`, from two `Toggles`), and
+  the panel sends its marks and its toggles (`Task::Marks`,
+  `Task::Toggled`) for the same function to build, never the batch: one
+  rule for which lines they are, which `backend_test` holds the minds
+  screen and the panel to, the same folders for the same marks, though the
+  panel names a folder inside the workspace by its absolute path where the
+  screen names it by its route. What a front end with
   no terminal does not run is one list, `task::Refusal`, read off the
   parsed command by a match with no wildcard (`Refusal::of_mind`,
   `of_flayer`), so a new command says whether it is refused before it
@@ -369,8 +382,10 @@ These are easy to break from a single file without noticing.
   Its names are a contract under `view::FORMAT`, as a report's are under
   `ENVELOPE_VERSION`, and every URL in it, an error's message included,
   goes out through `url::redacted`. What a front end reads beside it is
-  only what it cannot hold: a scan, and which workspace a project's own
-  lines consult (`docs/architecture.md`, "The read model").
+  only what it cannot hold: a scan (the panel's `Query::Scan`, asked for
+  by hand and answered with the backend's `Scanned`), and which workspace
+  a project's own lines consult (`docs/architecture.md`, "The read
+  model").
 - **Every error has a stable code.** Each public error type in core,
   `ValidationIssue`, and `install::Refused`, why an install or an uninstall
   wrote nothing (`Installed::refused`, `Removed::refused`, and for a copy
@@ -620,8 +635,9 @@ These are easy to break from a single file without noticing.
     names something on the disk, in a match over every variant with no
     wildcard: a project or a loaded workspace by its entry as the marker
     spells it, which the backend turns into the absolute folder it resolves
-    to for the line's one `-C` or `-p`, and a folder not linked yet by an
-    absolute, normalized path outside every `.mindflayer`, verbatim. The
+    to for the line's one `-C` or `-p`, and a folder not linked yet, or one
+    a scan is to look under, by an absolute, normalized path outside every
+    `.mindflayer`, verbatim. The
     browser supplies no `-C`, `--home`, `-W` or agent home: the backend runs
     every line with the launch's, against the workspace it was launched on,
     named. A refused task runs nothing, and every refusal has a code.
@@ -845,7 +861,9 @@ These are easy to break from a single file without noticing.
   answers belongs in Vue Query; Pinia holds UI state only. The server's
   events reach the views only as Vue Query marking what they reached stale
   (`src/api/live.ts`), never as a read of their own and never a scan, over
-  one subscription a tab, let go while it is hidden. Every change goes
+  one subscription a tab, let go while it is hidden: a scan's query is
+  keyed outside what they mark (`scan`), never stale on its own, and asked
+  for again only by its page, as after a run of its own. Every change goes
   through the runner (`useRunner().ask`): the lines it shows are the ones
   the server previewed, never one the panel builds; a preview's `confirm`,
   the CLI's, makes it a confirmation, never a list of the panel's; and a run
@@ -854,7 +872,9 @@ These are easy to break from a single file without noticing.
   answer written into a view. A view lays
   out, groups and filters what the snapshot lists: every count it shows is
   one the snapshot carries (`summary`, a project's `tally`), every verdict
-  one core gave (a project's `health`), every order the snapshot's
+  one core gave (a project's `health`, whether it `migrates`), and every
+  word a scan's answer gives (what each folder `offers`, the entry a moved
+  one left), every order the snapshot's
   (`kinds`, `states`, `healths`, the registry's). A count or a verdict a
   view needs is added to `view::Snapshot` in core, never worked out from
   the lists, and a kind core adds reaches every view with no change
@@ -991,7 +1011,9 @@ These are easy to break from a single file without noticing.
   panel's backend answers (`make web/fixtures`), with the temporary folder
   as `/home`, fixed ids and pinned times, and beside them what opening each
   of the library's own is answered with (`library.json`, every files and
-  contents query an artifact's page asks), and what previewing and running
+  contents query an artifact's page asks), what scanning the folder of the
+  workspace `candidates.json` is a snapshot of is answered with
+  (`scan.json`), and what previewing and running
   a few tasks in turn is (`commands.json`). `tests/panel.ts` reads them and
   mounts the panel at an address, answering its queries with them, and a
   task with its preview and its run, told finished on the stream before

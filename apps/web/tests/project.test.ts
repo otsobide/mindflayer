@@ -203,6 +203,9 @@ describe('unlinking a project from its page', () => {
     expect(sent).toEqual([{ task: unlink.task, mode: 'preview' }])
     expect([...document.body.querySelectorAll('[data-testid="caution"]')].map(each => each.textContent?.replace(/\s+/g, ' ').trim()))
       .toEqual(unlink.preview.confirm.map(each => `${each.caution}: ${each.message}`))
+    // That it forgets, and deletes nothing: the CLI's words, which the page
+    // says no other way.
+    expect(document.body.querySelector('[data-testid="caution"]')?.textContent).toContain('nothing on disk is deleted')
     document.body.querySelector<HTMLElement>('[data-testid="cancel"]')!.click()
     await flushPromises()
     expect(sent.filter(each => each.mode === 'run')).toEqual([])
@@ -216,5 +219,104 @@ describe('unlinking a project from its page', () => {
     expect(sent.filter(each => each.mode === 'run')).toEqual([{ task: unlink.task, mode: 'run' }])
     // The projects' page is loaded as it is first shown.
     await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/projects'))
+  })
+})
+
+describe('changing a project\'s agents and share mode from its page', () => {
+  /** The toggled task the CLI's suite previewed and ran: `web` turned to name Codex too. */
+  const TOGGLED = commanded().find(each => each.task.type === 'toggled')!
+
+  /** The box of `testid` in the settings form, which Reka draws as a button. */
+  function box(testid: string): HTMLElement {
+    return document.body.querySelector<HTMLElement>(`[data-testid="${testid}"] [role="checkbox"], [role="checkbox"][data-testid="${testid}"]`)!
+  }
+
+  it('starts from what the settings say, and offers nothing to apply until a toggle is turned over', async () => {
+    const { page } = await render('/project?entry=web', fixture('workspace'))
+
+    const form = page.get('[data-testid="settings-form"]')
+    expect(['claude', 'codex', 'opencode'].map(agent => box(`agent-${agent}`).getAttribute('aria-checked'))).toEqual(['true', 'false', 'true'])
+    expect(form.get('[data-testid="share-mode"] [role="radio"][aria-checked="true"]').attributes('value')).toBe('shared')
+    expect(box('edit-tracked').getAttribute('aria-checked')).toBe('false')
+    expect(form.get('[data-testid="apply-settings"]').attributes('disabled')).toBeDefined()
+
+    box('agent-codex').click()
+    await flushPromises()
+    expect(form.get('[data-testid="apply-settings"]').attributes('disabled')).toBeUndefined()
+
+    box('agent-codex').click()
+    await flushPromises()
+    expect(form.get('[data-testid="apply-settings"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('sends the toggles as they stand beside what the settings said, and shows the lines the task module builds', async () => {
+    const { sent, transport } = commanding()
+    const { page } = await render('/project?entry=web', transport)
+
+    box('agent-codex').click()
+    await flushPromises()
+    await page.get('[data-testid="settings-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: TOGGLED.task, mode: 'preview' }])
+    expect([...document.body.querySelectorAll('[data-testid="command"]')].map(each => each.textContent)).toEqual(TOGGLED.preview.lines.map(line => `$ ${line}`))
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await flushPromises()
+    expect(sent.filter(each => each.mode === 'run')).toEqual([{ task: TOGGLED.task, mode: 'run' }])
+  })
+
+  it('offers no toggles for a project an older marker marks, nor for an entry that opens none', async () => {
+    const snapshot = fixture('workspace')
+    project(snapshot, 'web').migrates = true
+
+    const { page, router } = await render('/project?entry=web', snapshot)
+    expect(page.find('[data-testid="settings-form"]').exists()).toBe(false)
+
+    await router.push('/project?entry=gone')
+    await flushPromises()
+    expect(page.find('[data-testid="settings-form"]').exists()).toBe(false)
+  })
+})
+
+describe('migrating a project an older marker marks', () => {
+  const [DRY, YES] = commanded().filter(each => each.task.type === 'migrate') as [ReturnType<typeof commanded>[number], ReturnType<typeof commanded>[number]]
+
+  it('shows the dry run first, as it ran, and offers the migration only once it has been read', async () => {
+    const snapshot = fixture('candidates')
+    const { sent, transport } = commanding(snapshot)
+    const { page } = await render('/project?entry=legacy', transport)
+
+    expect(page.get('[data-testid="migrate"] h2').text()).toBe('Marked by .mind/mind.toml, which an older Mindflayer wrote')
+    expect(page.find('[data-testid="migrate-yes"]').exists()).toBe(false)
+    await page.get('[data-testid="migrate-dry"]').trigger('click')
+    await flushPromises()
+    expect(sent).toEqual([{ task: DRY.task, mode: 'preview' }])
+    expect([...document.body.querySelectorAll('[data-testid="command"]')].map(each => each.textContent)).toEqual(DRY.preview.lines.map(line => `$ ${line}`))
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await flushPromises()
+
+    await vi.waitFor(() => expect(page.find('[data-testid="migrate-said"]').exists()).toBe(true))
+    expect(page.get('[data-testid="migrate-said"]').text()).toBe(DRY.ran.outcome.runs[0]!.stdout.trim())
+    await page.get('[data-testid="migrate-yes"]').trigger('click')
+    await flushPromises()
+    expect(sent.at(-1)).toEqual({ task: YES.task, mode: 'preview' })
+    expect([...document.body.querySelectorAll('[data-testid="command"]')].map(each => each.textContent)).toEqual(YES.preview.lines.map(line => `$ ${line}`))
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await flushPromises()
+
+    expect(sent.filter(each => each.mode === 'run')).toEqual([{ task: DRY.task, mode: 'run' }, { task: YES.task, mode: 'run' }])
+    await vi.waitFor(() => expect(page.find('[data-testid="migrate-said"]').exists()).toBe(false))
+  })
+
+  it('is offered for a project an older marker marks alone', async () => {
+    const { page, router } = await render('/project?entry=legacy', fixture('candidates'))
+    expect(page.find('[data-testid="migrate"]').exists()).toBe(true)
+    expect(page.find('[data-testid="settings-form"]').exists()).toBe(false)
+
+    for (const entry of ['api', 'gone']) {
+      await router.push(`/project?entry=${entry}`)
+      await flushPromises()
+      expect(page.find('[data-testid="migrate"]').exists()).toBe(false)
+    }
   })
 })

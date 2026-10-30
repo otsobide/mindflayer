@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import axe from 'axe-core'
 import { defineComponent, h } from 'vue'
@@ -39,6 +39,7 @@ const PAGES: [string, Fixture][] = [
   ['/project?entry=docs', 'workspace'],
   ['/project?entry=gone', 'workspace'],
   ['/project?entry=nowhere', 'workspace'],
+  ['/project?entry=legacy', 'candidates'],
   ['/library', 'workspace'],
   ['/library?kind=rule', 'workspace'],
   ['/library?kind=rule&q=nowhere', 'workspace'],
@@ -54,6 +55,10 @@ const PAGES: [string, Fixture][] = [
   ['/shelf', 'unmade'],
   ['/sources', 'workspace'],
   ['/sources', 'unmade'],
+  ['/discover', 'workspace'],
+  ['/discover', 'unmade'],
+  ['/discover?root=%2Fhome%2Fyou%2FProjects', 'candidates'],
+  ['/discover?root=Projects', 'workspace'],
   ['/nowhere', 'workspace']
 ]
 
@@ -61,6 +66,46 @@ describe('every page', () => {
   it.each(PAGES)('%s, of the %s fixture, passes axe', async (path, name) => {
     await render(path, fixture(name))
 
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('a project\'s toggles', () => {
+  it('pass axe turned over, ready to apply', async () => {
+    await render('/project?entry=web', fixture('workspace'))
+
+    document.querySelector<HTMLElement>('[data-testid="agent-codex"] [role="checkbox"], [role="checkbox"][data-testid="agent-codex"]')!.click()
+    await flushPromises()
+
+    expect(document.querySelector('[data-testid="apply-settings"]')?.hasAttribute('disabled')).toBe(false)
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('a project an older marker marks', () => {
+  it('passes axe with what migrating it would do shown', async () => {
+    const { transport } = commanding(fixture('candidates'))
+    await render('/project?entry=legacy', transport)
+
+    document.querySelector<HTMLElement>('[data-testid="migrate-dry"]')!.click()
+    await flushPromises()
+    document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="migrate-said"]')).not.toBeNull())
+
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('the page of what could be linked', () => {
+  it('passes axe with folders marked, one a repository mind init writes into', async () => {
+    await render('/discover?root=%2Fhome%2Fyou%2FProjects', fixture('candidates'))
+
+    for (const box of document.querySelectorAll<HTMLElement>('[data-testid="suggestion"] [role="checkbox"]')) {
+      box.click()
+    }
+    await flushPromises()
+
+    expect(document.querySelector('[data-testid="writes-into"]')).not.toBeNull()
     expect(await violations()).toEqual([])
   })
 })

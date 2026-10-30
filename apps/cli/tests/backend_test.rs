@@ -899,3 +899,328 @@ fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
     assert_eq!(preview.confirm[0]["line"], 1);
     assert!(!home.join(FLAYER_DIR).exists(), "a preview made it");
 }
+
+/// What a scan the panel asks for is answered with: what `flayer scan
+/// --suggest --json` finds, each directory as it prints it and in its
+/// order, the words the command says why in, and what marking each asks
+/// for; nothing for one linked.
+#[test]
+fn a_scan_is_answered_with_what_flayer_scan_suggest_finds_in_its_order_and_words() {
+    let dir = workspace_with_candidates();
+    let backend = backend(dir.path());
+
+    let answer = backend
+        .query(query(json!({"type": "scan", "roots": [], "depth": null})))
+        .unwrap();
+
+    let suggested = flayer(dir.path(), &["scan", "--suggest", "--json"]).unwrap();
+    let printed: Value = serde_json::from_str(&suggested.stdout).unwrap();
+    let found: Vec<&Value> = answer["found"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|suggestion| &suggestion["found"])
+        .collect();
+    assert_eq!(
+        Value::Array(found.into_iter().cloned().collect()),
+        printed["data"]["found"]
+    );
+    let offered: Vec<(&str, &Value, &Value, &Value)> = answer["found"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|suggestion| {
+            (
+                suggestion["found"]["route"].as_str().unwrap(),
+                &suggestion["why"],
+                &suggestion["offers"],
+                &suggestion["moved_from"],
+            )
+        })
+        .collect();
+    assert_eq!(
+        offered,
+        [
+            (
+                "gamma",
+                &json!("mind project with an id"),
+                &json!("link"),
+                &Value::Null
+            ),
+            (
+                "repo",
+                &json!("git repository"),
+                &json!("init_and_link"),
+                &Value::Null
+            ),
+            ("alpha", &Value::Null, &Value::Null, &Value::Null),
+            ("beta", &Value::Null, &Value::Null, &Value::Null),
+        ]
+    );
+    assert_eq!(answer["roots"], json!([dir.path().to_str().unwrap()]));
+    assert_eq!(answer["depth"], 3);
+    assert_eq!(answer["warnings"], json!([]));
+}
+
+/// Only the folders the browser names, each as a folder to link is named,
+/// and only read: one the policy refuses is refused with its code before
+/// anything is walked, and a scan leaves the disk as it found it.
+#[test]
+fn a_scan_walks_only_folders_the_policy_allows_and_writes_nothing() {
+    let dir = workspace_with_candidates();
+    let backend = backend(dir.path());
+    let before = files(dir.path());
+    let climbing = under(dir.path(), &["repo", ".."]);
+    let flayer_dir = under(dir.path(), &[FLAYER_DIR]);
+
+    for (root, code) in [
+        ("repo", "path_relative"),
+        ("file:///etc", "path_url"),
+        (climbing.as_str(), "path_unnormalized"),
+        (flayer_dir.as_str(), "path_in_mindflayer"),
+    ] {
+        let refusal = backend
+            .query(query(
+                json!({"type": "scan", "roots": [under(dir.path(), &["repo"]), root], "depth": 1}),
+            ))
+            .unwrap_err();
+        assert_eq!(refusal.code, code, "{root}");
+    }
+
+    let answer = backend
+        .query(query(
+            json!({"type": "scan", "roots": [under(dir.path(), &["repo"])], "depth": 0}),
+        ))
+        .unwrap();
+    assert_eq!(answer["found"].as_array().unwrap().len(), 1, "{answer}");
+    assert_eq!(answer["depth"], 0);
+    assert_eq!(files(dir.path()), before);
+    // A field a scan does not have is refused, as a task's is.
+    assert!(serde_json::from_value::<Query>(
+        json!({"type": "scan", "roots": [], "depth": 1, "deep": true})
+    )
+    .is_err());
+}
+
+/// A folder named that is not there is a warning with its code beside an
+/// answer, as `flayer scan` warns of it, never an empty answer passed off as
+/// complete.
+#[test]
+fn a_scan_says_what_it_could_not_read_as_flayer_scan_warns_of_it() {
+    let dir = workspace_with_candidates();
+    let missing = under(dir.path(), &["wrok"]);
+
+    let answer = backend(dir.path())
+        .query(query(
+            json!({"type": "scan", "roots": [missing.clone()], "depth": 1}),
+        ))
+        .unwrap();
+
+    let scan = flayer(dir.path(), &["scan", &missing]).unwrap();
+    assert_eq!(answer["found"], json!([]));
+    let said: Vec<Value> = scan
+        .stderr
+        .iter()
+        .map(|line| json!({"text": line.text, "code": line.code}))
+        .collect();
+    assert_eq!(answer["warnings"], Value::Array(said));
+    assert_eq!(answer["warnings"][0]["code"], "scan_folder_unlisted");
+}
+
+/// A project found moved offers no link beside the entry it left stale,
+/// but names that entry as the marker spells it, which a relink takes.
+#[test]
+fn a_scan_names_the_entry_a_moved_project_left_for_its_relink() {
+    let dir = TempDir::new().unwrap();
+    let projects = dir.path().join("Projects");
+    let collapse = projects.join("collapse");
+    fs::create_dir_all(&collapse).unwrap();
+    flayer(&projects, &["init"]).unwrap();
+    flayer(&projects, &["add", "skill", "deploy", "Ship the service"]).unwrap();
+    new_project(&collapse);
+    flayer(&projects, &["link", "collapse"]).unwrap();
+    flayer(&projects, &["install", "-p", "collapse", "deploy"]).unwrap();
+    fs::create_dir_all(projects.join("apps")).unwrap();
+    let moved = projects.join("apps/collapse");
+    fs::rename(&collapse, &moved).unwrap();
+    let backend = backend(&projects);
+
+    let answer = backend
+        .query(query(json!({"type": "scan", "roots": [], "depth": null})))
+        .unwrap();
+
+    let suggestion = &answer["found"][0];
+    assert_eq!(suggestion["found"]["moved"], "collapse");
+    assert_eq!(suggestion["moved_from"], "collapse");
+    assert_eq!(suggestion["offers"], Value::Null);
+    assert_eq!(suggestion["why"], "moved: collapse -> apps/collapse");
+    let relink = task(json!({
+        "type": "relink",
+        "old": suggestion["moved_from"],
+        "new": suggestion["found"]["path"],
+    }));
+    assert_eq!(
+        backend.preview(&relink).unwrap().lines,
+        [format!(
+            "flayer relink collapse {}",
+            moved.to_str().unwrap()
+        )]
+    );
+    let outcome = backend.run(relink).unwrap();
+    assert!(outcome.ok, "{outcome:?}");
+    assert!(registry(&projects).contains("\"apps/collapse\""));
+}
+
+/// The panel's link batch is the minds screen's: for the same directories
+/// marked, the lines the backend previews for what the panel sends are the
+/// lines the screen's task is, each directory by its path, from a scan of a
+/// folder outside the workspace, where both spell it so. Inside it they
+/// spell a folder apart, and the batch is the same folder for folder
+/// ([`inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_folder`]).
+#[test]
+fn the_panels_link_batch_is_the_minds_screens_for_the_same_selection() {
+    let dir = workspace_with_candidates();
+    let work = TempDir::new().unwrap();
+    let delta = work.path().join("acme/delta");
+    fs::create_dir_all(&delta).unwrap();
+    new_project(&delta);
+    fs::create_dir_all(work.path().join("plain/.git")).unwrap();
+    let root = work.path().to_str().unwrap();
+    let backend = backend(dir.path());
+
+    // Every directory found and not linked, marked as the scan offers it.
+    let answer = backend
+        .query(query(
+            json!({"type": "scan", "roots": [root], "depth": null}),
+        ))
+        .unwrap();
+    let marks: Vec<Value> = answer["found"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|suggestion| !suggestion["offers"].is_null())
+        .map(|suggestion| json!({"path": suggestion["found"]["path"], "change": suggestion["offers"]}))
+        .collect();
+    assert_eq!(marks.len(), 2, "{answer}");
+    let previewed = backend
+        .preview(&task(json!({"type": "marks", "marks": marks})))
+        .unwrap()
+        .lines;
+
+    // The same ones ticked on the screen, opened on the same folder.
+    let mut app = tui::minds(dir.path(), &[work.path().to_path_buf()], &Lookup::default()).unwrap();
+    for _ in 0..2 {
+        press_key(&mut app, KeyCode::Char(' '));
+        press_key(&mut app, KeyCode::Down);
+    }
+    let tui::state::Mode::Minds(screen) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let screened: Vec<String> = screen
+        .task()
+        .unwrap()
+        .commands()
+        .iter()
+        .map(|line| mindflayer_cli::task::shell(line))
+        .collect();
+
+    assert_eq!(previewed, screened);
+    assert_eq!(
+        previewed,
+        [
+            format!("mind -C {} init", under(work.path(), &["plain"])),
+            format!(
+                "flayer link {} {}",
+                under(work.path(), &["acme", "delta"]),
+                under(work.path(), &["plain"])
+            ),
+        ]
+    );
+}
+
+/// Inside the workspace the two spell a folder apart: the screen by the
+/// route the scan gives from the root, where its lines run, and the panel
+/// by its path, which is all the path policy lets a browser name. The same
+/// batch all the same, folder for folder, and run, each leaves the
+/// workspace linking the same entries, the repository made a project first.
+#[test]
+fn inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_folder() {
+    let panel = workspace_with_candidates();
+    let screened = workspace_with_candidates();
+    let backend = backend(panel.path());
+
+    // Every directory found and not linked, marked as the scan offers it,
+    // under the workspace's own folder, where the page starts.
+    let answer = backend
+        .query(query(json!({"type": "scan", "roots": [], "depth": null})))
+        .unwrap();
+    let marks: Vec<Value> = answer["found"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|suggestion| !suggestion["offers"].is_null())
+        .map(|suggestion| json!({"path": suggestion["found"]["path"], "change": suggestion["offers"]}))
+        .collect();
+    assert_eq!(marks.len(), 2, "{answer}");
+    let marked = task(json!({"type": "marks", "marks": marks}));
+    let previewed = backend.preview(&marked).unwrap().lines;
+
+    // The same ones ticked on the screen, in a workspace laid out the same.
+    let mut app = tui::minds(screened.path(), &[], &Lookup::default()).unwrap();
+    for _ in 0..2 {
+        press_key(&mut app, KeyCode::Char(' '));
+        press_key(&mut app, KeyCode::Down);
+    }
+    let Mode::Minds(screen) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let ticked = screen.task().unwrap();
+    let Task::Minds { init, link, unlink } = &ticked else {
+        panic!("{ticked:?}")
+    };
+    assert_eq!(link, &["gamma", "repo"]);
+    // Each route read from the root the screen's lines run from.
+    let spelled = |routes: &[String]| -> Vec<String> {
+        routes
+            .iter()
+            .map(|route| under(panel.path(), &[route]))
+            .collect()
+    };
+    let by_path = Task::Minds {
+        init: spelled(init),
+        link: spelled(link),
+        unlink: spelled(unlink),
+    };
+    let by_path: Vec<String> = by_path
+        .commands()
+        .iter()
+        .map(|line| mindflayer_cli::task::shell(line))
+        .collect();
+    assert_eq!(previewed, by_path);
+
+    let outcome = backend.run(marked).unwrap();
+    assert!(outcome.ok, "{outcome:?}");
+    tui::step(&mut app, ticked);
+    tui::wait(&mut app);
+
+    let entries = |dir: &Path| -> Vec<PathBuf> {
+        FlayerWorkspace::open(dir)
+            .unwrap()
+            .members()
+            .into_iter()
+            .map(|member| member.entry)
+            .collect()
+    };
+    assert_eq!(entries(panel.path()), entries(screened.path()));
+    assert_eq!(
+        entries(panel.path()),
+        ["alpha", "beta", "gamma", "repo"].map(PathBuf::from)
+    );
+    for dir in [panel.path(), screened.path()] {
+        assert!(
+            MindProject::is_marked(&dir.join("repo")),
+            "{}",
+            dir.display()
+        );
+    }
+}

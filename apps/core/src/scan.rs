@@ -89,8 +89,10 @@ pub enum Order {
 /// A directory a workspace could manage.
 ///
 /// What it serializes to is a contract, as a status report's is: each field
-/// by its name.
+/// by its name. The panel reads it in what a scan it asks for is answered
+/// with, so it says its TypeScript too.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Found {
     /// Where it is.
     #[serde(serialize_with = "paths::lossy")]
@@ -168,6 +170,18 @@ impl Serialize for Reason {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.slug())
     }
+}
+
+// Under a name of its own: `Reason` in TypeScript is already the rule that
+// chose a workspace (`resolve::Reason`), and the two are written into one
+// folder, a file to a name.
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// Why a directory a scan found is worth linking, the strongest of what
+    /// it holds, best first: a mind project its settings name by an id, one
+    /// with none, a git repository an agent reads something in, and any
+    /// other git repository.
+    Reason as "ScanReason", by slug { Id, Mind, Agents, Git }
 }
 
 /// What a scan found.
@@ -518,6 +532,21 @@ fn route(directory: &Path, from: &Path) -> String {
         .as_deref()
         .and_then(paths::to_config_string)
         .unwrap_or_else(|| directory.display().to_string())
+}
+
+/// Whether `moved`, the entry a scan spelling routes from `from` says a
+/// directory moved from ([`Found::moved`]), is the one whose project was at
+/// `root`, where the registry resolves an entry ([`crate::Member::root`]).
+///
+/// Matched by the directory each names rather than by spelling, since
+/// `moved` is spelled as [`route`] spells it, by its path for a folder
+/// outside `from`, and an entry as the marker has it, by a route climbing
+/// out of the workspace for the same folder. One answer for the minds
+/// screen, which offers the relink on an entry's row, and the panel's
+/// backend, which names the entry a relink follows: the same match written
+/// in each would let one offer a link where the other offers a relink.
+pub fn moved_from(moved: &str, from: &Path, root: &Path) -> bool {
+    paths::normalize(&from.join(moved)) == root
 }
 
 /// The directories directly inside `directory`, in name order, leaving out

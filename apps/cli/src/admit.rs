@@ -12,14 +12,16 @@
 //!   the folder it points at, absolute, in the one `-C` the line has, with
 //!   `-W .` in front where `mind` would otherwise consult another workspace
 //!   about it, as the TUI decides for its rows.
-//! - **Each project an install, an uninstall or an adoption names** is an
-//!   entry too, and becomes the `-p` of the same folder.
+//! - **Each project an install, an uninstall, an adoption or a migration
+//!   names** is an entry too, and becomes the `-p` of the same folder.
 //! - **An entry `unlink`, `unload` or `relink` takes** is one the marker
 //!   holds, and goes to the command as the marker spells it, which is what
 //!   those commands take an entry by.
-//! - **A folder `link`, `load`, `init` or the minds screen's marks name** is
-//!   absolute, spelled normalized and outside every `.mindflayer`, and goes
-//!   to the command verbatim, so the preview shows the folder it acts on.
+//! - **A folder `link`, `load`, `init` or the minds screen's marks name**,
+//!   the panel's marks among them, is absolute, spelled normalized and
+//!   outside every `.mindflayer`, and goes to the command verbatim, so the
+//!   preview shows the folder it acts on; one marked to unlink is one an
+//!   entry points at.
 //!
 //! The walk over the variants is here, beside `Task`; what each value may be
 //! is core's, so a second front end taking tasks from outside asks the same
@@ -31,7 +33,7 @@ use mindflayer_core::{FlayerWorkspace, Member};
 use crate::commands::consulted;
 use crate::commands::workspace::same_directory;
 use crate::homes::Lookup;
-use crate::task::{Holder, Task};
+use crate::task::{Holder, MindsChange, Task};
 
 /// What a task from outside may ask of `workspace`, the one the panel was
 /// launched on, which `lookup` is where it looks for workspaces from.
@@ -91,6 +93,18 @@ impl Admission<'_> {
                     policy::linked_path(self.workspace, path)?;
                 }
             }
+            Task::Marks { marks } => {
+                for mark in marks {
+                    match mark.change {
+                        MindsChange::Link | MindsChange::InitAndLink => {
+                            policy::path(&mark.path)?;
+                        }
+                        MindsChange::Unlink => {
+                            policy::linked_path(self.workspace, &mark.path)?;
+                        }
+                    }
+                }
+            }
             Task::Add { holder, .. }
             | Task::Show { holder, .. }
             | Task::Edit { holder, .. }
@@ -99,13 +113,16 @@ impl Admission<'_> {
             | Task::Validate { holder }
             | Task::Targets { holder, .. }
             | Task::Settings { holder, .. }
+            | Task::Toggled { holder, .. }
             | Task::Update { holder, .. } => *holder = self.holder(holder)?,
             Task::Install { projects, .. } | Task::Uninstall { projects, .. } => {
                 for project in projects {
                     *project = self.project(project)?;
                 }
             }
-            Task::Adopt { project, .. } => *project = self.project(project)?,
+            Task::Adopt { project, .. } | Task::Migrate { project, .. } => {
+                *project = self.project(project)?;
+            }
             Task::ApplyInstall { changes } => {
                 for change in changes {
                     *change = self.task(change)?;

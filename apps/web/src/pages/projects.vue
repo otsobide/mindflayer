@@ -138,7 +138,18 @@ function clear() {
 
     <template #body>
       <SnapshotGate v-slot="{ snapshot }">
-        <LinkForm />
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <LinkForm />
+          <UButton
+            label="Discover projects to link"
+            icon="i-lucide-radar"
+            to="/discover"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            data-testid="discover"
+          />
+        </div>
 
         <div
           v-if="snapshot.projects.length === 0"

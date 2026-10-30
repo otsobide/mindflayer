@@ -52,6 +52,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/discover': RouteRecordInfo<
+      '/discover',
+      '/discover',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/library': RouteRecordInfo<
       '/library',
       '/library',
@@ -119,6 +126,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/artifact.vue': {
       routes:
         | '/artifact'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/discover.vue': {
+      routes:
+        | '/discover'
       views:
         | never
       pathParamNames:

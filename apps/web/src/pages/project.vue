@@ -13,6 +13,8 @@ import AppHeader from '@/components/AppHeader.vue'
 import CommandHint, { flayer } from '@/components/CommandHint.vue'
 import HealthBadge from '@/components/HealthBadge.vue'
 import IssueList from '@/components/IssueList.vue'
+import MigrateOffer from '@/components/MigrateOffer.vue'
+import SettingsForm from '@/components/SettingsForm.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import StateBadge from '@/components/StateBadge.vue'
 
@@ -262,6 +264,12 @@ function spelled(words: string[]): string {
               </li>
             </ul>
 
+            <MigrateOffer
+              v-if="project.entry && project.migrates"
+              :entry="project.entry"
+              :marker="project.marker"
+            />
+
             <section
               v-for="kind in snapshot.kinds"
               :key="kind"
@@ -415,6 +423,13 @@ function spelled(words: string[]): string {
                 </table>
               </div>
             </section>
+
+            <SettingsForm
+              v-if="project.entry && project.settings && !project.migrates"
+              :entry="project.entry"
+              :settings="project.settings"
+              :agents="snapshot.agents"
+            />
           </template>
         </template>
       </SnapshotGate>

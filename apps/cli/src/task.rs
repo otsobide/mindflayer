@@ -56,6 +56,24 @@ pub enum AgentsLine {
     Removed(Vec<Agent>),
 }
 
+/// What a project's agents and share toggles say: the agents ticked, its
+/// share mode, and whether a file git tracks may be edited to reach an
+/// agent. What [`Task::settings`] reads twice, as the project's settings
+/// say them and as the toggles do.
+///
+/// `{"agents": ["claude"], "share": "local", "edit_tracked": false}` in
+/// JSON: the names the snapshot gives the same three in a project's
+/// settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct Toggles {
+    /// As its settings name them, in their order; ticked, in any.
+    pub agents: Vec<Agent>,
+    pub share: Share,
+    pub edit_tracked: bool,
+}
+
 /// Which level a task runs at: what holds the artifacts it is about.
 ///
 /// `{"type": "project", "entry": "alpha"}` in JSON, or `{"type":
@@ -169,6 +187,22 @@ pub enum Task {
         link: Vec<String>,
         unlink: Vec<String>,
     },
+    /// What a front end's marks on directories ask for, each by the path a
+    /// command is given: the batch [`Task::minds`] builds from them, whose
+    /// lines these are, as the minds screen's are.
+    ///
+    /// How the panel links what a scan found: it sends its marks, never the
+    /// batch, so that a directory made a project is then linked, with the
+    /// rest, by the one function that says so, and the same marks make the
+    /// same lines on either front end: the same words where both spell a
+    /// folder alike, and the same batch folder for folder inside the
+    /// workspace, where the panel names one by its path, all the path
+    /// policy takes, and the minds screen by its route from the root.
+    /// [`Minds`](Task::Minds) taken from a
+    /// browser was the other way, which would hold the panel to spelling
+    /// that rule again in TypeScript, and could leave a folder made a
+    /// project and never linked.
+    Marks { marks: Vec<Mark> },
     /// `flayer gather list`.
     Shelf,
     /// `flayer workspaces`: the workspaces this machine knows, the one in
@@ -197,6 +231,24 @@ pub enum Task {
         /// The share mode, when it or `edit_tracked` changes.
         share: Option<Share>,
         edit_tracked: bool,
+    },
+    /// What a project's toggles amount to, turned from `was`, what its
+    /// settings say, to `now`, what the toggles say: the
+    /// [`Settings`](Task::Settings) task [`Task::settings`] builds, whose
+    /// lines these are, as the TUI's toggles' are.
+    ///
+    /// How the panel changes a project's agents and share mode: it sends
+    /// the toggles as they stand, never the lines' agents, so the order a
+    /// project names them in, and what unticking every one asks, is said by
+    /// the one function, never again in TypeScript. `was` is what the
+    /// panel read in the snapshot, as the TUI's is what it read when the
+    /// form opened: each line names the agents and the mode outright, so a
+    /// `was` the disk has moved on from changes which lines run, never what
+    /// a line sets.
+    Toggled {
+        holder: Holder,
+        was: Toggles,
+        now: Toggles,
     },
     /// `… update --yes [<kind:name>]`: what is installed in a project, or
     /// the one artifact named, brought up to date and put back where a copy
@@ -244,6 +296,21 @@ pub enum Task {
         kind: Kind,
         name: String,
     },
+    /// `flayer migrate -p <project> [--yes]`: one project the workspace
+    /// links moved from an older marker, a `mind.toml` or a
+    /// `settings.json`, to a `settings.toml`, what the workspace records of
+    /// it carried along; without `yes`, the dry run, which writes nothing
+    /// and says what would move. The project is named as an install's are,
+    /// by what `naming` gives.
+    ///
+    /// The workspace's command, as an install's is, so what it carries is
+    /// what the workspace on screen records: `mind migrate` in the project
+    /// finds a workspace by walking up, which misses one linking the
+    /// project from beside it. The agents and the share mode are left to
+    /// the command, every agent and shared for a `mind.toml`, as a project
+    /// committed by design was, and what a `settings.json` names for one,
+    /// for `mind agents` and `mind share` to change once it is moved.
+    Migrate { project: String, yes: bool },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
     /// What the install screen marked, as the `Install` and `Uninstall`
@@ -260,6 +327,7 @@ pub enum Task {
 /// it differs from how the directory started: what [`Task::minds`] is built
 /// from. By its name in snake_case in JSON: `"init_and_link"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum MindsChange {
     Link,
@@ -267,6 +335,31 @@ pub enum MindsChange {
     /// project yet.
     InitAndLink,
     Unlink,
+}
+
+impl MindsChange {
+    /// What marking a directory a scan found, and the workspace does not
+    /// link, asks for: linking it as it is, a mind project, or making it
+    /// one first, a git repository that is not one yet. One answer for the
+    /// minds screen and for what the panel is told a directory offers.
+    pub fn of_found(mind: bool) -> MindsChange {
+        if mind {
+            MindsChange::Link
+        } else {
+            MindsChange::InitAndLink
+        }
+    }
+}
+
+/// One directory a front end marked, by the path a command is given, with
+/// what to do to it: what [`Task::Marks`] holds, and [`Task::minds`] builds
+/// a batch from. `{"path": "/home/you/blog", "change": "link"}` in JSON.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct Mark {
+    pub path: String,
+    pub change: MindsChange,
 }
 
 impl Task {
@@ -293,6 +386,47 @@ impl Task {
             }
         }
         (!link.is_empty() || !unlink.is_empty()).then_some(Task::Minds { init, link, unlink })
+    }
+
+    /// The task turning a project's toggles from `was`, what its settings
+    /// say, to `now` amounts to, for `holder`: an `agents` line when the
+    /// agents change, then a `share` line when the share mode or
+    /// `edit_tracked` does; none while they say what the settings do.
+    ///
+    /// Here rather than on the TUI's toggles, where it was born, so every
+    /// front end's toggles amount to the same lines: the agents the project
+    /// names keep their order, and one ticked is named after them, in
+    /// report order, so a toggle does not reorder the settings; and since a
+    /// line cannot name no agent, unticking every one is `agents remove` of
+    /// every one named, which the command refuses for its own reason, the
+    /// rule that a project names an agent being core's.
+    pub fn settings(holder: Holder, was: &Toggles, now: &Toggles) -> Option<Task> {
+        let ticked = |agent: &Agent| now.agents.contains(agent);
+        let mut agents: Vec<Agent> = was.agents.iter().copied().filter(ticked).collect();
+        agents.extend(
+            Agent::ALL
+                .into_iter()
+                .filter(|agent| ticked(agent) && !was.agents.contains(agent)),
+        );
+        agents.dedup();
+        let mut named = was.agents.clone();
+        named.dedup();
+        let agents = match agents {
+            _ if agents == named => None,
+            none if none.is_empty() => Some(AgentsLine::Removed(named)),
+            some => Some(AgentsLine::Named(some)),
+        };
+        let share =
+            ((now.share, now.edit_tracked) != (was.share, was.edit_tracked)).then_some(now.share);
+        if agents.is_none() && share.is_none() {
+            return None;
+        }
+        Some(Task::Settings {
+            holder,
+            agents,
+            share,
+            edit_tracked: now.edit_tracked,
+        })
     }
 
     /// The command lines this task is, word by word, as a person would type
@@ -373,6 +507,10 @@ impl Task {
                 }
                 lines
             }
+            Task::Marks { marks } => {
+                Task::minds(marks.iter().map(|mark| (mark.path.clone(), mark.change)))
+                    .map_or_else(Vec::new, |batch| batch.commands())
+            }
             Task::Shelf => vec![words(&["flayer", "gather", "list"], &[])],
             Task::Workspaces => vec![words(&["flayer", "workspaces"], &[])],
             Task::Gather {
@@ -427,6 +565,8 @@ impl Task {
                 }
                 lines
             }
+            Task::Toggled { holder, was, now } => Task::settings(holder.clone(), was, now)
+                .map_or_else(Vec::new, |settings| settings.commands()),
             Task::Targets {
                 holder,
                 kind,
@@ -485,6 +625,14 @@ impl Task {
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
             }
+            Task::Migrate { project, yes } => {
+                let mut head = picking(&["flayer", "migrate"], std::slice::from_ref(project));
+                if *yes {
+                    head.push(String::from("--yes"));
+                }
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[])]
+            }
             Task::ApplyInstall { changes } => changes.iter().flat_map(Task::commands).collect(),
             Task::OpenInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
@@ -513,12 +661,15 @@ impl Task {
                 | Task::Remove { .. }
                 | Task::Gather { .. }
                 | Task::Minds { .. }
+                | Task::Marks { .. }
                 | Task::Settings { .. }
+                | Task::Toggled { .. }
                 | Task::Targets { .. }
                 | Task::Update { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
                 | Task::Adopt { .. }
+                | Task::Migrate { yes: true, .. }
                 | Task::ApplyInstall { .. }
         )
     }

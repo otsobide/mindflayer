@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use mindflayer_core::exclude::{self, Followed};
 use mindflayer_core::install;
 use mindflayer_core::relink::{self, RelinkError};
+use mindflayer_core::scan;
 use mindflayer_core::{
     Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, ProjectId, Share,
     WorkspaceError,
@@ -168,6 +169,39 @@ fn a_scan_finds_a_project_moved_from_a_stale_entry_by_its_id() {
     assert_eq!(found.moved.as_deref(), Some("collapse"));
     assert!(scan.untraced.is_empty());
     assert!(scan.failures.is_empty(), "{:?}", scan.failures);
+}
+
+#[test]
+fn a_moved_project_is_matched_to_its_entry_by_where_each_points() {
+    let dir = TempDir::new().unwrap();
+    let (mut workspace, _) = FlayerWorkspace::init(dir.path().join("Projects")).unwrap();
+    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let elsewhere = dir.path().join("Elsewhere");
+    let project = linked(&mut workspace, &elsewhere.join("collapse"));
+    linked(&mut workspace, &elsewhere.join("other"));
+    install_deploy(&workspace, &project);
+    let moved = elsewhere.join("apps/collapse");
+    fs::create_dir_all(moved.parent().unwrap()).unwrap();
+    fs::rename(project.root(), &moved).unwrap();
+
+    let request = scan::Request {
+        roots: vec![elsewhere.clone()],
+        ..scan::Request::default()
+    };
+    let scan = mindflayer_core::scan(&workspace, &request);
+
+    let found = scan.found.iter().find(|found| found.path == moved).unwrap();
+    // Outside the workspace, spelled by its path, where the marker spells
+    // the entry by a route climbing out of it.
+    let left = found.moved.as_deref().unwrap();
+    assert_eq!(Path::new(left), project.root());
+    let matched: Vec<PathBuf> = workspace
+        .members()
+        .into_iter()
+        .filter(|member| scan::moved_from(left, workspace.root(), &member.root))
+        .map(|member| member.entry)
+        .collect();
+    assert_eq!(matched, [PathBuf::from("../Elsewhere/collapse")]);
 }
 
 #[test]

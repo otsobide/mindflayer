@@ -144,5 +144,191 @@
       "name": "lint",
       "type": "remove"
     }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mind -C /home/you/Projects/notes init",
+        "flayer link /home/you/Projects/drafts /home/you/Projects/notes"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mind -C /home/you/Projects/notes init",
+        "flayer link /home/you/Projects/drafts /home/you/Projects/notes"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mind -C /home/you/Projects/notes init",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "initialized mind project `notes` in /home/you/Projects/notes/.mind\n"
+          },
+          {
+            "command": "flayer link /home/you/Projects/drafts /home/you/Projects/notes",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "linked drafts as drafts\nlinked notes as notes\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "marks": [
+        {
+          "change": "link",
+          "path": "/home/you/Projects/drafts"
+        },
+        {
+          "change": "init_and_link",
+          "path": "/home/you/Projects/notes"
+        }
+      ],
+      "type": "marks"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer relink old /home/you/Projects/archive/old"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer relink old /home/you/Projects/archive/old"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer relink old /home/you/Projects/archive/old",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "relinked old as archive/old, from old\n  1 install kept with it\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "new": "/home/you/Projects/archive/old",
+      "old": "old",
+      "type": "relink"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mind -C /home/you/Projects/web agents --yes claude opencode codex"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mind -C /home/you/Projects/web agents --yes claude opencode codex"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mind -C /home/you/Projects/web agents --yes claude opencode codex",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "set agents to claude,opencode,codex in web, where they were claude,opencode\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "holder": {
+        "entry": "web",
+        "type": "project"
+      },
+      "now": {
+        "agents": [
+          "claude",
+          "codex",
+          "opencode"
+        ],
+        "edit_tracked": false,
+        "share": "shared"
+      },
+      "type": "toggled",
+      "was": {
+        "agents": [
+          "claude",
+          "opencode"
+        ],
+        "edit_tracked": false,
+        "share": "shared"
+      }
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer migrate -p /home/you/Projects/legacy"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer migrate -p /home/you/Projects/legacy"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer migrate -p /home/you/Projects/legacy",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "would write .mind/settings.toml for legacy: agents claude,codex,opencode, share shared\nwould move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\nnothing changed: add --yes to go ahead\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "project": "legacy",
+      "type": "migrate",
+      "yes": false
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer migrate -p /home/you/Projects/legacy --yes"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer migrate -p /home/you/Projects/legacy --yes"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer migrate -p /home/you/Projects/legacy --yes",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "wrote .mind/settings.toml for legacy: agents claude,codex,opencode, share shared\nmoved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "project": "legacy",
+      "type": "migrate",
+      "yes": true
+    }
   }
 ]
