@@ -47,7 +47,7 @@ use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindflayer_core::view::Snapshot;
 use mindflayer_core::watch;
 use mindflayer_core::{FlayerWorkspace, MindProject, FLAYER_CONFIG, FLAYER_DIR};
-use mindflayer_server::{Backend, Refusal, Watched};
+use mindflayer_server::{Backend, Preview, Refusal, Watched};
 use serde::{Deserialize, Serialize};
 
 use crate::admit::Admission;
@@ -293,13 +293,16 @@ impl Backend for PanelBackend {
         }
     }
 
-    fn preview(&self, task: &Task) -> Result<Vec<String>, Refusal> {
-        Ok(self
-            .plan(task)?
-            .lines
-            .iter()
-            .map(|line| shell(line))
-            .collect())
+    fn preview(&self, task: &Task) -> Result<Preview, Refusal> {
+        Ok(Preview {
+            lines: self
+                .plan(task)?
+                .lines
+                .iter()
+                .map(|line| shell(line))
+                .collect(),
+            confirm: Vec::new(),
+        })
     }
 
     /// Planned again rather than trusted to the preview the server asked

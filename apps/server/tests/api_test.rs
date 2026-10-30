@@ -85,7 +85,35 @@ async fn a_preview_shows_a_tasks_lines_and_runs_nothing() {
     .await;
 
     assert_eq!(reply.status, StatusCode::OK);
-    assert_eq!(reply.json(), json!({ "lines": ["fake run link beta"] }));
+    assert_eq!(
+        reply.json(),
+        json!({ "lines": ["fake run link beta"], "confirm": [] })
+    );
+    assert!(runs.lock().unwrap().is_empty());
+}
+
+/// What the backend says to confirm goes to the panel as the backend wrote
+/// it, beside the lines it is about: the server reads none of it.
+#[tokio::test]
+async fn a_preview_carries_what_the_backend_says_to_confirm_as_it_says_it() {
+    let (server, runs) = launch();
+
+    let reply = post(
+        &server,
+        "/api/commands/preview",
+        Auth::Bearer(server.token()),
+        json!({ "name": "unlink beta", "confirm": ["beta", "its copies"] }),
+    )
+    .await;
+
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(
+        reply.json(),
+        json!({
+            "lines": ["fake run unlink beta"],
+            "confirm": [{ "fake_takes": "beta" }, { "fake_takes": "its copies" }],
+        })
+    );
     assert!(runs.lock().unwrap().is_empty());
 }
 

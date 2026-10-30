@@ -97,7 +97,7 @@ fn perform<B: Backend>(
 ) -> Done {
     let panicked = || String::from("the backend panicked while running the task");
     let lines = match panic::catch_unwind(AssertUnwindSafe(|| backend.preview(&task))) {
-        Ok(Ok(lines)) => lines,
+        Ok(Ok(preview)) => preview.lines,
         // A refused task ran nothing, so it is no run to replay.
         Ok(Err(refusal)) => return Ok(Err(refusal)),
         Err(_) => return Err(panicked()),

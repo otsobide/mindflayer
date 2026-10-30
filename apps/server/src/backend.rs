@@ -38,14 +38,15 @@ pub trait Backend: Send + Sync + 'static {
     fn query(&self, query: Self::Query) -> Result<serde_json::Value, Refusal>;
 
     /// The command lines a task is, each as somebody would type it, without
-    /// running any of them; or why none of them would run. The panel shows
-    /// them before it asks for the run, and the transcript records them
-    /// beside what the run produced.
+    /// running any of them, and what of them the panel has somebody confirm
+    /// first ([`Preview`]); or why none of them would run. The panel shows
+    /// them before it asks for the run, and the transcript records the
+    /// lines beside what the run produced.
     ///
     /// By reference, because the server asks for the lines of the very task
     /// it is about to run, and a task need not be `Clone` to be both shown
     /// and carried out.
-    fn preview(&self, task: &Self::Task) -> Result<Vec<String>, Refusal>;
+    fn preview(&self, task: &Self::Task) -> Result<Preview, Refusal>;
 
     /// Carry out a task, or refuse it with nothing of it run.
     ///
@@ -63,6 +64,29 @@ pub trait Backend: Send + Sync + 'static {
     /// the server starts and again after every change it reports, since a
     /// change can name new ones: a project linked, a folder made.
     fn watched_paths(&self) -> Vec<Watched>;
+}
+
+/// What a task would run, worked out with none of it run: what
+/// [`Backend::preview`] answers, and `POST /api/commands/preview` sends as
+/// it is, `{"lines": [...], "confirm": [...]}`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Preview {
+    /// The command lines, each as somebody would type it.
+    pub lines: Vec<String>,
+    /// What the panel has somebody confirm before it asks for the run, one
+    /// item for each thing a line takes away; none for a task the panel
+    /// runs once it is asked to.
+    ///
+    /// The backend's own JSON, carried to the panel unread, as a watched
+    /// path's scope is: which lines take something away is a rule of the
+    /// front end's, and so are the words for it. Said where the lines are,
+    /// so the panel is told it of the very lines it shows, rather than
+    /// asking a second time about a disk that may have changed between.
+    /// The server only carries it: a run sent without the panel having
+    /// asked anybody is run, as a shell runs the line typed into it, since
+    /// whoever holds the token is the person at this machine and the
+    /// question is for their slips, which is the panel's to ask.
+    pub confirm: Vec<serde_json::Value>,
 }
 
 /// One path a backend asks the server to watch, and what a change to it is

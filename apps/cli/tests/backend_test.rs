@@ -240,7 +240,9 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
     ];
 
     for (what, sent, code) in cases {
-        let preview = backend.preview(&task(sent.clone()));
+        let preview = backend
+            .preview(&task(sent.clone()))
+            .map(|preview| preview.lines);
         let run = backend.run(task(sent.clone()));
         assert_eq!(
             preview.map_err(|refusal| refusal.code),
@@ -305,7 +307,7 @@ fn a_task_cannot_carry_a_directory_a_home_a_workspace_or_an_agent_home() {
         let mut sent = json!({"type": "shelf"});
         sent[field] = json!("/etc");
         assert_eq!(
-            backend.preview(&task(sent)),
+            backend.preview(&task(sent)).map(|preview| preview.lines),
             Ok(vec![String::from("flayer gather list")])
         );
     }
@@ -323,7 +325,12 @@ fn a_task_held_by_a_linked_project_runs_in_that_project_with_the_directory_resol
     let line = format!("mind -C {} add skill deploy 'Ship it'", alpha.display());
     let beta_before = files(&beta);
 
-    assert_eq!(backend.preview(&task(sent.clone())), Ok(vec![line.clone()]));
+    assert_eq!(
+        backend
+            .preview(&task(sent.clone()))
+            .map(|preview| preview.lines),
+        Ok(vec![line.clone()])
+    );
     let outcome = backend.run(task(sent)).unwrap();
 
     assert_eq!(outcome.runs.len(), 1);
@@ -712,7 +719,7 @@ fn the_default_workspace_is_made_by_the_first_change_and_said_first() {
     assert_eq!(snapshot["workspace"]["reason"], "home");
     let link = json!({"type": "link", "path": fresh.to_str().unwrap()});
     assert_eq!(
-        backend.preview(&task(link.clone())).unwrap(),
+        backend.preview(&task(link.clone())).unwrap().lines,
         [
             String::from("flayer init"),
             format!("flayer link {}", fresh.display())
@@ -737,7 +744,7 @@ fn the_default_workspace_asked_to_be_made_is_made_by_one_line() {
     let init = json!({"type": "init_workspace"});
 
     assert_eq!(
-        backend.preview(&task(init.clone())).unwrap(),
+        backend.preview(&task(init.clone())).unwrap().lines,
         [String::from("flayer init")]
     );
     let outcome: Outcome = backend.run(task(init)).unwrap();
