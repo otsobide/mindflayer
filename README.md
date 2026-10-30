@@ -85,7 +85,9 @@ skill and rule says how it stands (`current`, `outdated`, `edited`,
 `authored`...), which of the project's agents read it, where it came from
 and where its copies are, and the page warns of what some agent never reads.
 Below, toggles change the project's agents and how it shares, and carry what
-is installed to where the agents now read.
+is installed to where the agents now read. A skill somebody keeps by hand in
+an agent's folder, which reads as `foreign`, can be adopted into the library
+from its row, after which Mindflayer manages it like anything it installed.
 
 ### The library
 
@@ -99,6 +101,23 @@ body rendered, every file it carries, what `validate` says of it and where
 it is installed.
 
 ![A skill of the library's own: its projects, its front matter and its body](docs/images/artifact.png)
+
+**Edit** opens its `SKILL.md`, or a rule's file, in an editor in the page.
+As you type, core judges the text by the rules a save is held to and says
+what `flayer validate` would say of it, in the same words. Saving runs
+`flayer edit --contents` with the text, shown first like every change, and
+only over what the file held when you opened it: a change made to it
+meanwhile, from an editor or a terminal, is never written over, and the
+save says so. A copy installed from it then reads as outdated, for Updates
+to bring along.
+
+![Editing a skill in the browser: its SKILL.md with a line just typed into the front matter, and validate's warning about it beside the editor](docs/images/editor.png)
+
+**New skill** and **New rule** add one, from nothing or from a template,
+judged as you type by what `flayer add` would refuse, and the page of each
+renames it.
+
+![Adding a skill from the built-in full template: its name and description typed, and core saying flayer add would write it](docs/images/new.png)
 
 Removing one starts with what removing it everywhere would do: the copy
 that goes from each project, and one changed by hand, which stays. Only
