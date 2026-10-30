@@ -5393,9 +5393,10 @@ Record what it reads first, in docs/agents.md, verified or docs-only with a
 fallback. Then a variant on `Agent` and its name, and its arm for each kind in
 the table's `standard`, and in `read`, behind `Agent::reads`, which both match
 every pair with no wildcard: neither a new agent nor a new kind compiles until
-somebody has said where it goes and where it reads. Its arm in `at_root`,
-behind `Agent::reads_at_root`, says which files at a project's root it reads,
-for a suggestion to rank by ([which to link first](#which-to-link-first)). The
+somebody has said where it goes and where it reads. Its arm in `files`,
+behind `Agent::reads_files`, says which files in a project it reads, which
+`Agent::reads_at_root` names by the name at the root each sits under, for a
+suggestion to rank by ([which to link first](#which-to-link-first)). The
 compiler lists every match on `Agent`, since each is exhaustive, but not what
 is not a match:
 
