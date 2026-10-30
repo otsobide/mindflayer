@@ -38,15 +38,17 @@ export function useFreshness(): ComputedRef<number> {
 
 /**
  * The queries the server's events mark stale, by the first word of their
- * key (`src/api/snapshot.ts`, `src/api/artifact.ts`): the snapshot, and what
- * was read of an artifact. Named rather than every query, for one asked for
- * by hand: a scan (#77) reads the disk far past what is watched, and an
- * event asking for it again would run one on every change, every command
- * and every tab shown again. A query added later is followed only once it
- * is named here. Spelled here rather than imported, since both modules
- * import this one.
+ * key (`src/api/snapshot.ts`, `src/api/artifact.ts`, `src/api/plan.ts`):
+ * the snapshot, what was read of an artifact, and the plan of the boxes
+ * marked with the lines it previews, which are of the disk as it stands.
+ * Named rather than every query, for one asked for by hand: a scan (#77)
+ * reads the disk far past what is watched, and an event asking for it
+ * again would run one on every change, every command and every tab shown
+ * again. A query added later is followed only once it is named here.
+ * Spelled here rather than imported, since every one of those modules
+ * imports this one.
  */
-const FOLLOWED: readonly unknown[] = ['snapshot', 'files', 'contents']
+const FOLLOWED: readonly unknown[] = ['snapshot', 'files', 'contents', 'plan', 'preview']
 
 /**
  * The query only a run changes, by the first word of its key

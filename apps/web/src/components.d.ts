@@ -16,6 +16,7 @@ declare module 'vue' {
     AppHeader: typeof import('./components/AppHeader.vue')['default']
     AppLogo: typeof import('./components/AppLogo.vue')['default']
     AppSidebar: typeof import('./components/AppSidebar.vue')['default']
+    AssignGrid: typeof import('./components/AssignGrid.vue')['default']
     CommandDialog: typeof import('./components/CommandDialog.vue')['default']
     CommandHint: typeof import('./components/CommandHint.vue')['default']
     CommandRunner: typeof import('./components/CommandRunner.vue')['default']

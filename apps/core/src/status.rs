@@ -234,6 +234,38 @@ impl State {
         }
     }
 
+    /// How a name core stands as `standing` beside an offer of it reads,
+    /// as the install screen and the panel's matrix say it of the offer's
+    /// box: none for one the project neither holds nor records, whose box
+    /// is empty. Matched with no wildcard, so a standing added does not
+    /// compile until it says which state it is.
+    pub const fn of_standing(standing: Standing) -> Option<State> {
+        match standing {
+            Standing::Absent => None,
+            Standing::Current => Some(State::Current),
+            Standing::Outdated => Some(State::Outdated),
+            Standing::Edited => Some(State::Edited),
+            Standing::Missing => Some(State::Missing),
+            Standing::Orphaned => Some(State::Orphaned),
+            Standing::Foreign => Some(State::Foreign),
+        }
+    }
+
+    /// Every state a box of an offer can stand in, in report order: each
+    /// that [`State::of_standing`] says of some standing, which leaves out
+    /// `authored`, since no offer is a project's own work. What a legend of
+    /// the boxes lists, so a front end leaves out no state by its name.
+    pub fn of_boxes() -> Vec<State> {
+        State::ALL
+            .into_iter()
+            .filter(|state| {
+                Standing::ALL
+                    .into_iter()
+                    .any(|standing| State::of_standing(standing) == Some(*state))
+            })
+            .collect()
+    }
+
     /// Whether every copy of what was installed is where it was put, as it
     /// was put there: what `missed` says of a rule only when it holds.
     fn whole(self) -> bool {

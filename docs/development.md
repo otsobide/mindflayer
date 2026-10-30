@@ -102,8 +102,9 @@ launcher or a version manager's shim.
 ## Developing the panel
 
 `apps/web` is the web panel, in Vue 3.5 and Nuxt UI 4 on Vite, written in
-TypeScript: the overview, the projects, the library, the shelf and the
-sources, in a frame of a sidebar and a header, dark unless you switch it to
+TypeScript: the overview, the projects, the matrix that assigns skills and
+rules to them, the library, the shelf and the sources, in a frame of a
+sidebar and a header, dark unless you switch it to
 light, which the next launch remembers, with a link and an unlink run
 through the server's previews and a transcript of what ran. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
 the version `package.json` pins in `packageManager`, which `corepack enable`
@@ -130,7 +131,10 @@ when `node_modules` is missing or older than `package.json`, the lockfile or
 `pnpm-workspace.yaml`. `make test` and `make build` run the panel's targets
 first, so they need Node 24 and pnpm too; `make core/test`, `make cli/test`
 and `make server/test` do not, nor does `make cli/build`, since the server
-builds without the panel. Its tests are `apps/web/tests/<area>.test.ts`.
+builds without the panel. Its tests are `apps/web/tests/<area>.test.ts`;
+`tests/matrix.test.ts` times the Assign page's first render, and runs once
+every other suite is done, since a render timed beside them times what
+else the machine is doing too.
 
 What the panel reads and sends has its types written from the Rust that
 serializes it, into `apps/web/src/api/generated`, which is committed and

@@ -58,6 +58,13 @@ describe('a kind core adds', () => {
     expect(page.find('[data-testid="no-match"]').exists()).toBe(true)
   })
 
+  it('gets a filter of the matrix', async () => {
+    const { page } = await render('/assign?kind=mcp', withAKindMore())
+
+    expect(page.get('[data-testid="filter-kind-mcp"]').attributes('aria-pressed')).toBe('true')
+    expect(page.find('[data-testid="no-match"]').exists()).toBe(true)
+  })
+
   it('gets a page of the library, counted as the snapshot counts it', async () => {
     const { page } = await render('/library?kind=mcp', withAKindMore())
 

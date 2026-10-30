@@ -142,6 +142,15 @@ const at: Places = (() => {
 const workspace = at.workspace
 const project = `/project?${new URLSearchParams({ entry: SHOWN })}`
 
+/**
+ * The boxes the matrix's image is taken with marked, each by the start of
+ * what it says it is: one ticked, one unticked.
+ */
+const ASSIGNED = [
+  `skill release-notes from ${join(at.scratch, 'team')} in data-pipeline`,
+  'skill api-conventions from workspace in admin-console'
+]
+
 /** The tour, in the order it is taken: the last three run a command and ask about another. */
 const TOUR: Shot[] = [
   {
@@ -178,6 +187,23 @@ const TOUR: Shot[] = [
     name: 'sources',
     path: '/sources',
     ready: async page => page.getByTestId('source').first().waitFor()
+  },
+  {
+    // Two boxes marked, a skill from the shelf into a project and one of
+    // the library's own out of another, with what the plan runs for them.
+    name: 'assign',
+    path: '/assign',
+    ready: async (page) => {
+      await page.getByTestId('matrix').waitFor()
+      for (const box of ASSIGNED) {
+        await page.getByRole('checkbox', { name: new RegExp(`^${literally(box)}(;|$)`) }).click()
+      }
+      await page.getByTestId('line').first().waitFor()
+      // Clicking scrolls a box out from under the headings: back to the top.
+      await page.getByTestId('matrix').evaluate((matrix) => {
+        matrix.scrollTo(0, 0)
+      })
+    }
   },
   {
     name: 'discover',

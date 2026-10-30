@@ -62,6 +62,21 @@ pub enum Standing {
 }
 
 impl Standing {
+    /// Every standing, from absent to foreign: what the states a box of an
+    /// offer can stand in are read from ([`State::of_boxes`]), each through
+    /// the one function that says it.
+    ///
+    /// [`State::of_boxes`]: crate::status::State::of_boxes
+    pub const ALL: [Standing; 7] = [
+        Standing::Absent,
+        Standing::Current,
+        Standing::Outdated,
+        Standing::Edited,
+        Standing::Missing,
+        Standing::Orphaned,
+        Standing::Foreign,
+    ];
+
     /// Whether the project holds it, which is what a checkbox shows:
     /// anything it holds by that name, but not an installation a copy of
     /// which has gone. Its box opens empty, for marking it to put every copy

@@ -1,0 +1,166 @@
+[
+  {
+    "answer": {
+      "conflicts": [],
+      "locked": [],
+      "tasks": [
+        {
+          "from": "https://github.com/acme/skills",
+          "kind": "skill",
+          "name": "format",
+          "projects": [
+            "api",
+            "docs"
+          ],
+          "type": "install"
+        }
+      ]
+    },
+    "query": {
+      "selection": [
+        {
+          "origin": "https://github.com/acme/skills",
+          "project": "api",
+          "reference": "skill:format",
+          "wanted": true
+        },
+        {
+          "origin": "https://github.com/acme/skills",
+          "project": "docs",
+          "reference": "skill:format",
+          "wanted": true
+        }
+      ],
+      "type": "plan"
+    }
+  },
+  {
+    "answer": {
+      "conflicts": [],
+      "locked": [],
+      "tasks": [
+        {
+          "from": "workspace",
+          "kind": "skill",
+          "name": "deploy",
+          "projects": [
+            "api"
+          ],
+          "type": "install"
+        }
+      ]
+    },
+    "query": {
+      "selection": [
+        {
+          "origin": "workspace",
+          "project": "api",
+          "reference": "skill:deploy",
+          "wanted": true
+        }
+      ],
+      "type": "plan"
+    }
+  },
+  {
+    "answer": {
+      "conflicts": [
+        {
+          "cells": [
+            {
+              "origin": "workspace",
+              "project": "docs",
+              "reference": "skill:deploy",
+              "wanted": true
+            },
+            {
+              "origin": "load:../team",
+              "project": "docs",
+              "reference": "skill:deploy",
+              "wanted": true
+            }
+          ],
+          "kind": "skill",
+          "name": "deploy",
+          "project": "docs",
+          "why": {
+            "code": "wanted_twice",
+            "message": "`deploy` is asked of docs from more than one place (workspace, load:../team), and a project holds one skill of a name: ask for one"
+          }
+        }
+      ],
+      "locked": [
+        {
+          "cell": {
+            "origin": "workspace",
+            "project": "web",
+            "reference": "skill:review",
+            "wanted": false
+          },
+          "why": {
+            "code": "edited",
+            "message": "`review` in web was changed since it was installed, so it is left alone unless a change to it is forced"
+          }
+        },
+        {
+          "cell": {
+            "origin": "https://github.com/acme/skills",
+            "project": "web",
+            "reference": "skill:triage",
+            "wanted": false
+          },
+          "why": {
+            "code": "foreign",
+            "message": "`triage` is in web, and Mindflayer did not put it there, so it is left alone"
+          }
+        }
+      ],
+      "tasks": [
+        {
+          "from": "https://github.com/acme/skills",
+          "kind": "skill",
+          "name": "format",
+          "projects": [
+            "api"
+          ],
+          "type": "install"
+        }
+      ]
+    },
+    "query": {
+      "selection": [
+        {
+          "origin": "https://github.com/acme/skills",
+          "project": "api",
+          "reference": "skill:format",
+          "wanted": true
+        },
+        {
+          "origin": "workspace",
+          "project": "docs",
+          "reference": "skill:deploy",
+          "wanted": true
+        },
+        {
+          "origin": "load:../team",
+          "project": "docs",
+          "reference": "skill:deploy",
+          "wanted": true
+        },
+        {
+          "origin": "workspace",
+          "project": "web",
+          "reference": "skill:review",
+          "wanted": false
+        },
+        {
+          "origin": "https://github.com/acme/skills",
+          "project": "web",
+          "reference": "skill:triage",
+          "wanted": false
+        }
+      ],
+      "type": "plan"
+    }
+  }
+]

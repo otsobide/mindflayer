@@ -12,6 +12,7 @@ use super::*;
 use crate::agent::Agent;
 use crate::artifact::ValidationIssue;
 use crate::contents::Withheld;
+use crate::install::Place;
 use crate::kind::Kind;
 use crate::ledger::SourceKind;
 use crate::resolve::Reason;
@@ -114,6 +115,7 @@ fn every_word_type_says_in_typescript_the_words_serde_writes() {
         scan::Reason::Git,
     ]);
     says_what_serde_writes(&[Withheld::Binary, Withheld::TooLarge]);
+    says_what_serde_writes(&[Place::Workspace, Place::Loaded, Place::Shelf]);
 }
 
 #[test]

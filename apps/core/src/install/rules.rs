@@ -267,13 +267,13 @@ pub(crate) fn survey(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     project: &MindProject,
-    offers: Vec<Offer>,
+    offers: &[Offer],
 ) -> Result<Vec<Candidate>, InstallError> {
     let held = Held::read(workspace, ledger, project)?;
     Ok(offers
         .iter()
         .map(|offer| Candidate {
-            standing: held.standing(workspace, project, offer.name(), &offers).0,
+            standing: held.standing(workspace, project, offer.name(), offers).0,
             offer: offer.clone(),
         })
         .collect())

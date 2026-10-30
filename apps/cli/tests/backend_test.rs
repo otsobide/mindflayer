@@ -1559,3 +1559,138 @@ fn applying_a_plans_tasks_leaves_what_the_install_screen_leaves_for_the_same_mar
     let team = fs::read_to_string(copies(&panel.join("alpha"), "deploy")[0].join("SKILL.md"));
     assert!(team.unwrap().contains("the team's way"));
 }
+
+/// Everything the ledger of the workspace at `home` records of what was
+/// installed, and what it logged, as text a row to a line: each
+/// installation and the targets it wrote, with every hash, each file it
+/// made, and each action with how it went. Without the times, which no two
+/// runs share.
+fn recorded(home: &Path) -> Vec<String> {
+    let workspace = FlayerWorkspace::open(home).unwrap();
+    let ledger = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
+    let mut rows = Vec::new();
+    for sql in [
+        "SELECT project, kind, name, coalesce(source_id, ''), coalesce(origin, ''), \
+                coalesce(content_hash, '') \
+           FROM installations ORDER BY project, kind, name",
+        "SELECT i.project || ' ' || i.kind || ' ' || i.name, coalesce(t.agent, ''), t.path, \
+                coalesce(t.content_hash, ''), '', '' \
+           FROM installation_targets t JOIN installations i ON i.id = t.installation_id \
+          ORDER BY i.project, i.kind, i.name, t.path",
+        "SELECT project, path, '', '', '', '' FROM created_files ORDER BY project, path",
+        "SELECT action, coalesce(target, ''), outcome, coalesce(detail, ''), '', '' \
+           FROM actions ORDER BY id",
+    ] {
+        let mut statement = ledger.prepare(sql).unwrap();
+        let found = statement
+            .query_map([], |row| {
+                (0..6)
+                    .map(|at| row.get::<_, rusqlite::types::Value>(at))
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .unwrap();
+        for row in found {
+            rows.push(format!("{:?}", row.unwrap()));
+        }
+    }
+    rows
+}
+
+/// What the panel applies is what its lines do typed into a shell: the same
+/// boxes planned in two workspaces made alike, the batch applied in one and
+/// its previewed lines run as `flayer` commands in the other, leave the same
+/// copies and the same ledger, every hash and every action logged alike.
+#[test]
+fn applying_a_batch_leaves_the_ledger_as_running_its_lines_in_the_cli() {
+    let (_panel, panel) = assigning();
+    let (_typed, typed) = assigning();
+    let selection = json!([
+        cell("alpha", "skill:deploy", "workspace", false),
+        cell("alpha", "skill:deploy", "load:../team", true),
+        cell("alpha", "skill:review", "workspace", true),
+        cell("beta", "skill:deploy", "workspace", true),
+        cell("beta", "skill:review", "workspace", false),
+    ]);
+
+    let backend = backend(&panel);
+    let answer = plan(&backend, selection.clone()).unwrap();
+    let applied = backend
+        .run(task(
+            json!({"type": "apply_install", "changes": answer["tasks"]}),
+        ))
+        .unwrap();
+    assert!(applied.ok, "{applied:?}");
+
+    let other = self::backend(&typed);
+    let answer = plan(&other, selection).unwrap();
+    let lines = other
+        .preview(&task(
+            json!({"type": "apply_install", "changes": answer["tasks"]}),
+        ))
+        .unwrap()
+        .lines;
+    assert_eq!(lines.len(), applied.runs.len(), "{lines:?}");
+    for line in &lines {
+        // A line names a folder by its path, which a temporary one spells
+        // with nothing a shell would quote.
+        assert!(!line.contains(['\'', '"', '\\']), "{line}");
+        let words: Vec<&str> = line.split_whitespace().collect();
+        assert_eq!(words[0], "flayer", "{line}");
+        let ran = flayer(&typed, &words[1..]).unwrap();
+        assert!(ran.ok, "{line}: {ran:?}");
+    }
+
+    assert_eq!(held(&panel), held(&typed));
+    let ledger = recorded(&panel);
+    assert_eq!(ledger, recorded(&typed));
+    assert!(
+        ledger.iter().any(|row| row.contains("load:../team")),
+        "{ledger:#?}"
+    );
+}
+
+/// Somebody's copy is locked by the plan, and refused by the command all
+/// the same when a task that would change it is sent without one: the plan
+/// says it before anything runs, and the run is what keeps it.
+#[test]
+fn a_task_reaching_somebodys_copy_is_refused_by_its_line_and_writes_nothing() {
+    let (dir, home) = assigning();
+    for copy in copies(&home.join("alpha"), "review") {
+        fs::create_dir_all(&copy).unwrap();
+        fs::write(copy.join("SKILL.md"), skill_file("review", "Mine")).unwrap();
+    }
+    let backend = backend(&home);
+    let answer = plan(
+        &backend,
+        json!([cell("alpha", "skill:review", "workspace", false)]),
+    )
+    .unwrap();
+    assert_eq!(answer["tasks"], json!([]));
+    assert_eq!(answer["locked"][0]["why"]["code"], "foreign", "{answer}");
+    let before = files(dir.path());
+    let ledger = recorded(&home);
+
+    for change in [
+        json!({"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "review"}),
+        json!({
+            "type": "install", "projects": ["alpha"], "kind": "skill", "name": "review",
+            "from": "workspace",
+        }),
+    ] {
+        let ran = backend
+            .run(task(json!({"type": "apply_install", "changes": [change]})))
+            .unwrap();
+        assert!(!ran.ok, "{change}: {ran:?}");
+        let said: Vec<Option<&str>> = ran.runs[0].stderr.iter().map(|line| line.code).collect();
+        let refused = ran.runs[0]
+            .error
+            .as_ref()
+            .map(|error| error.code)
+            .into_iter()
+            .chain(said.into_iter().flatten())
+            .collect::<Vec<_>>();
+        assert!(refused.contains(&"foreign"), "{change}: {ran:?}");
+    }
+    assert_eq!(files(dir.path()), before);
+    assert_eq!(recorded(&home), ledger);
+}
