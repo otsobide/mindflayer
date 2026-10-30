@@ -17,9 +17,11 @@ mod panel;
 mod server;
 mod token;
 mod transcript;
+mod watcher;
 mod writer;
 
 pub use backend::{Backend, Refusal, Watched};
 pub use events::{Event, Events, Subscription, CAPACITY};
 pub use panel::Panel;
 pub use server::{Listening, Server};
+pub use watcher::{Watcher, DEBOUNCE};

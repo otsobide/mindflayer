@@ -35,6 +35,8 @@ async fn the_stream_takes_the_cookie_and_starts_by_asking_for_everything() {
     assert_eq!(stream.header("cache-control"), Some("no-cache"));
     assert!(stream.header("content-security-policy").is_some());
     assert_eq!(stream.next().await, json!({"type": "resync"}));
+    // The fake names nothing to watch, which is everything watched.
+    assert_eq!(stream.next().await, json!({"type": "watching"}));
 }
 
 #[tokio::test]
@@ -51,7 +53,10 @@ async fn a_stream_that_falls_behind_is_told_to_ask_for_everything_again() {
     }
 
     assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(stream.next().await, json!({"type": "watching"}));
+    // What it missed, then how things are watched, which may be among it.
     assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(stream.next().await, json!({"type": "watching"}));
     // Then the latest the bus kept, in order.
     assert_eq!(
         stream.next().await,
@@ -118,8 +123,7 @@ async fn stopping_the_server_ends_its_streams() {
 async fn a_run_is_told_as_it_starts_and_once_it_is_in_the_transcript() {
     let (server, _) = launch();
     let token = Auth::Bearer(server.token());
-    let mut stream = subscribe(&server, token).await;
-    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    let mut stream = opened(&server, token).await;
 
     post(
         &server,
@@ -147,8 +151,7 @@ async fn a_run_is_told_as_it_starts_and_once_it_is_in_the_transcript() {
 async fn a_task_whose_lines_are_refused_is_told_to_nobody() {
     let (server, _) = launch();
     let token = Auth::Bearer(server.token());
-    let mut stream = subscribe(&server, token).await;
-    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    let mut stream = opened(&server, token).await;
 
     let reply = post(
         &server,
@@ -170,8 +173,7 @@ async fn a_task_whose_lines_are_refused_is_told_to_nobody() {
 async fn a_run_refused_or_panicking_is_still_told_finished() {
     let (server, runs) = launch();
     let token = Auth::Bearer(server.token());
-    let mut stream = subscribe(&server, token).await;
-    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    let mut stream = opened(&server, token).await;
 
     for task in [
         json!({ "name": "refused", "refuse_run": true }),

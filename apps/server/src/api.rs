@@ -13,6 +13,7 @@ use serde_json::json;
 
 use crate::events::Events;
 use crate::transcript::Transcript;
+use crate::watcher::Watcher;
 use crate::writer::Writer;
 use crate::{Backend, Refusal};
 
@@ -22,6 +23,9 @@ pub(crate) struct Api<B: Backend> {
     pub(crate) writer: Writer<B::Task>,
     pub(crate) transcript: Transcript,
     pub(crate) events: Events,
+    /// Held for as long as the routes are, and dropped with them, which
+    /// stops it: nothing reads it.
+    pub(crate) _watcher: Watcher,
 }
 
 /// `POST /api/query`: a read, answered by the backend.

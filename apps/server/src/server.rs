@@ -17,6 +17,7 @@ use crate::log::{self, Log, Sink};
 use crate::panel::{self, Panel};
 use crate::token::Token;
 use crate::transcript::Transcript;
+use crate::watcher::Watcher;
 use crate::writer::Writer;
 use crate::Backend;
 
@@ -202,8 +203,10 @@ fn route<B: Backend>(
         .map(|sink| Arc::new(Log::new(sink, token.clone())));
     let backend = Arc::new(server.backend);
     let transcript = Transcript::default();
+    let watched = Arc::clone(&backend);
     let api = Arc::new(Api {
         writer: Writer::start(Arc::clone(&backend), transcript.clone(), events.clone())?,
+        _watcher: Watcher::start(move || watched.watched_paths(), events.clone()),
         backend,
         transcript,
         events,

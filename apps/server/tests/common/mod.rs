@@ -402,3 +402,21 @@ pub async fn subscribe(server: &Listening, auth: Auth<'_>) -> Stream {
         buffer: String::new(),
     }
 }
+
+/// The event stream opened, past what it says first: to ask for
+/// everything, and that everything named is watched.
+pub async fn opened(server: &Listening, auth: Auth<'_>) -> Stream {
+    let mut stream = subscribe(server, auth).await;
+    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(stream.next().await, json!({"type": "watching"}));
+    stream
+}
+
+/// A server over a fake that names `watched` to watch, bound and ready, and
+/// the list, which a test changes for the next time the server asks.
+pub fn launch_watching(watched: Vec<Watched>) -> (Listening, Arc<Mutex<Vec<Watched>>>) {
+    let fake = Fake::default();
+    *fake.watched.lock().unwrap() = watched;
+    let list = Arc::clone(&fake.watched);
+    (Server::new(fake).bind().unwrap(), list)
+}
