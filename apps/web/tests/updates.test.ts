@@ -24,7 +24,7 @@ function changed(change: (updates: Updates) => void) {
   return answered
 }
 
-const [ALL, PROJECT, ONE, FORCED, UNINSTALL, ORPHANS] = updatings() as [Commanded, Commanded, Commanded, Commanded, Commanded, Commanded]
+const [ALL, PROJECT, ONE, FORCED, UNINSTALL, FORCED_UNINSTALL, ORPHANS] = updatings() as [Commanded, Commanded, Commanded, Commanded, Commanded, Commanded, Commanded]
 
 describe('the page of updates', () => {
   it('lists each installation under its state, the states in core\'s order, each counted as core counts it', async () => {
@@ -148,6 +148,7 @@ describe('each change the page of updates offers', () => {
     ['updates one installation in one project', ONE, '[data-testid="state-outdated"] [data-testid="row"]:first-child [data-testid="change"]'],
     ['forces an update over an edited copy', FORCED, '[data-testid="state-edited"] [data-testid="row"] [data-testid="change"]'],
     ['uninstalls what nothing offers any more', UNINSTALL, '[data-testid="state-orphaned"] [data-testid="row"] [data-testid="change"]'],
+    ['forces an uninstall of an edited copy nothing offers any more', FORCED_UNINSTALL, '[data-testid="state-edited"] [data-testid="row"]:nth-child(2) [data-testid="change"]'],
     ['takes every orphaned installation out', ORPHANS, '[data-testid="uninstall-orphans"]']
   ])('%s: the task the CLI\'s line is, shown before it runs, asked about when it takes something', async (_, expected, button) => {
     const { sent, transport } = commanding(fixture('updating'), updatings(), updates())
@@ -192,8 +193,23 @@ describe('each change the page of updates offers', () => {
       'Update: skill lint in api',
       'Update: rule git/commits in api',
       'Force update: skill lint in web',
+      'Force uninstall: skill release in web',
       'Update: skill review in api',
       'Uninstall: skill format in web'
     ])
+  })
+
+  it('offers each change forced only where core says only a forced one reaches the copy', async () => {
+    const { transport } = answering(fixture('updating'), updates())
+
+    const { page } = await render('/updates', transport)
+
+    const forced = survey().projects
+      .flatMap(project => project.installations.map(pending => [`${pending.kind} ${pending.name} in ${project.name}`, pending.forced] as const))
+    expect(forced.filter(([, force]) => force)).toEqual([['skill lint in web', true], ['skill release in web', true]])
+    for (const [named, force] of forced) {
+      const label = page.get(`[data-testid="change"][aria-label$=": ${named}"]`).attributes('aria-label')
+      expect(label?.startsWith('Force '), named).toBe(force)
+    }
   })
 })

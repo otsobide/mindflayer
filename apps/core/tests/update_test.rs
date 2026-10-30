@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::copy;
 use mindflayer_core::install::{self, Edits, Installed, Standing};
-use mindflayer_core::update::{self, Applied, Plan, Step, Updates};
+use mindflayer_core::status::State;
+use mindflayer_core::update::{self, Applied, Does, Plan, Step, Updates};
 use mindflayer_core::{
     claude_rules, create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger,
     MindProject, Reference, Share,
@@ -816,6 +817,7 @@ fn every_project_is_surveyed_for_what_an_update_does_and_why_it_leaves_what_it_l
                             at .claude/skills/edited, so an update leaves it alone, every copy \
                             of it; forcing the update writes over the change",
                     },
+                    "forced": true,
                 },
                 {
                     "kind": "skill",
@@ -825,6 +827,7 @@ fn every_project_is_surveyed_for_what_an_update_does_and_why_it_leaves_what_it_l
                     "does": "put_back",
                     "copies": [".agents/skills/missing"],
                     "left": null,
+                    "forced": false,
                 },
                 {
                     "kind": "skill",
@@ -839,6 +842,7 @@ fn every_project_is_surveyed_for_what_an_update_does_and_why_it_leaves_what_it_l
                             workspace, so an update leaves it as it is; uninstalling it takes \
                             it out",
                     },
+                    "forced": false,
                 },
                 {
                     "kind": "skill",
@@ -848,6 +852,7 @@ fn every_project_is_surveyed_for_what_an_update_does_and_why_it_leaves_what_it_l
                     "does": "refresh",
                     "copies": [],
                     "left": null,
+                    "forced": false,
                 },
             ],
             "writes": true,
@@ -899,6 +904,43 @@ fn a_workspace_whose_every_installation_is_left_writes_nothing() {
     assert_eq!(
         serde_json::to_value(pending).unwrap()["left"]["code"],
         "no_longer_offered"
+    );
+}
+
+/// An edited copy nothing offers any more is orphaned, as an update steps
+/// it, and still edited, as it stands: taken out only by a forced
+/// uninstall, which it says it needs, as it says the forced update an
+/// edited one still offered needs.
+#[test]
+fn an_edited_copy_is_said_to_need_forcing_whether_or_not_anything_offers_it() {
+    let given = given();
+    for name in ["kept", "dropped"] {
+        given.skill(name);
+        given.install(Kind::Skill, name);
+        type_into(&given.copies(name)[1].join("SKILL.md"));
+    }
+    fs::remove_dir_all(given.offered("dropped")).unwrap();
+
+    let updates = Updates::read(&given.workspace).unwrap();
+
+    let said: Vec<(&str, State, Does, bool)> = updates.projects[0]
+        .installations
+        .iter()
+        .map(|pending| {
+            (
+                pending.name.as_str(),
+                pending.state,
+                pending.does,
+                pending.forced,
+            )
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            ("dropped", State::Edited, Does::Orphaned, true),
+            ("kept", State::Edited, Does::Leave, true),
+        ]
     );
 }
 

@@ -123,7 +123,8 @@ describe('a kind, and a step, core adds', () => {
       state: 'outdated',
       does: 'resync' as Does,
       copies: ['.mcp.json'],
-      left: null
+      left: null,
+      forced: false
     })
 
     const { page } = await render('/updates', answering(fixture('updating'), answered).transport)

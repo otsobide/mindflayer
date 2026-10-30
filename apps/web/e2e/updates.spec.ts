@@ -87,7 +87,7 @@ test('a library skill changed shows outdated, and updating every project brings 
   expect(tree(join(own.at.workspace, alpha))[`.claude/skills/${UPDATED}/SKILL.md`]).toBe(LINT_SINCE)
 })
 
-test('removing a library skill shows what removing it everywhere does first, then takes it out of every project but the edited copy', async ({ page, own }) => {
+test('removing a library skill shows what removing it everywhere does first, then takes it out of every project but the edited copy, which a forced uninstall then takes out', async ({ page, own }) => {
   await own.open(`/artifact?${new URLSearchParams({ kind: 'skill', name: UPDATED })}`)
 
   await page.getByTestId('remove-dry').click()
@@ -114,4 +114,21 @@ test('removing a library skill shows what removing it everywhere does first, the
   }
   expect(existsSync(join(own.at.workspace, alpha, '.claude/skills', UPDATED))).toBe(false)
   expect(existsSync(join(own.at.workspace, beta, '.claude/skills', UPDATED))).toBe(true)
+
+  // What the removal left, edited with nothing offering it any more, is
+  // listed with the forced uninstall that alone takes it out.
+  await visit(page, 'Updates')
+  const left = page.getByTestId('state-edited').getByTestId('row')
+  await expect(left.getByTestId('project')).toHaveText(beta)
+  await expect(left.getByTestId('left')).toContainText('only a forced uninstall takes it out')
+  await left.getByTestId('change').click()
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer uninstall -p ${join(own.at.workspace, beta)} --force skill:${UPDATED}`])
+  await expect(dialog.getByTestId('caution')).toHaveCount(2)
+  await expect(dialog.getByTestId('cancel')).toBeFocused()
+  await dialog.getByTestId('run').click()
+  await expect(page.getByTestId('state-edited').getByTestId('row')).toHaveCount(0)
+
+  succeed(twin, 'flayer', twin.workspace, ['uninstall', '-p', beta, '--force', `skill:${UPDATED}`])
+  expect(tree(join(own.at.workspace, beta))).toEqual(tree(join(twin.workspace, beta)))
+  expect(existsSync(join(own.at.workspace, beta, '.claude/skills', UPDATED))).toBe(false)
 })

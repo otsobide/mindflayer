@@ -84,6 +84,13 @@
   "history": [
     {
       "action": "install",
+      "at": 1792850760,
+      "detail": "release into web",
+      "outcome": "ok",
+      "target": "web"
+    },
+    {
+      "action": "install",
       "at": 1792850700,
       "detail": "format into web",
       "outcome": "ok",
@@ -420,6 +427,23 @@
             ".claude/skills/lint"
           ],
           "unread": null
+        },
+        {
+          "agents": [
+            "claude",
+            "opencode"
+          ],
+          "issues": [],
+          "kind": "skill",
+          "name": "release",
+          "origin": "workspace",
+          "state": "edited",
+          "summary": "Cut a release the way the team does",
+          "targets": [
+            ".agents/skills/release",
+            ".claude/skills/release"
+          ],
+          "unread": null
         }
       ],
       "directories": [
@@ -437,6 +461,10 @@
         {
           "code": "copies_diverged",
           "message": "the copies of `lint` at /home/you/Updating/web/.agents/skills/lint and /home/you/Updating/web/.claude/skills/lint differ, so the agents reading them do not all load the same skill"
+        },
+        {
+          "code": "copies_diverged",
+          "message": "the copies of `release` at /home/you/Updating/web/.agents/skills/release and /home/you/Updating/web/.claude/skills/release differ, so the agents reading them do not all load the same skill"
         }
       ],
       "health": "attention",
@@ -460,7 +488,7 @@
       "tally": {
         "kinds": [
           {
-            "count": 2,
+            "count": 3,
             "kind": "skill"
           },
           {
@@ -478,7 +506,7 @@
             "state": "outdated"
           },
           {
-            "count": 1,
+            "count": 2,
             "state": "edited"
           },
           {
@@ -498,7 +526,7 @@
             "state": "authored"
           }
         ],
-        "total": 2
+        "total": 3
       },
       "templates": [
         {
@@ -590,7 +618,7 @@
     "held": {
       "kinds": [
         {
-          "count": 4,
+          "count": 5,
           "kind": "skill"
         },
         {
@@ -608,7 +636,7 @@
           "state": "outdated"
         },
         {
-          "count": 1,
+          "count": 2,
           "state": "edited"
         },
         {
@@ -628,7 +656,7 @@
           "state": "authored"
         }
       ],
-      "total": 5
+      "total": 6
     },
     "library": {
       "kinds": [

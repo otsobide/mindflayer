@@ -442,6 +442,7 @@ fn a_batch_is_held_to_it_change_by_change() {
         projects: vec![project.to_owned()],
         kind: Kind::Skill,
         name: String::from("deploy"),
+        force: false,
     };
 
     let batch = Task::ApplyInstall {

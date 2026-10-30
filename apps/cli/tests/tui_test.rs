@@ -1996,6 +1996,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             projects: vec![String::from("-odd"), String::from("./alpha")],
             kind: Kind::Rule,
             name: String::from("git/no-force-push"),
+            force: false,
         },
     ];
 
@@ -2068,6 +2069,7 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
         projects: vec![String::from("../collapse")],
         kind: Kind::Rule,
         name: String::from("git/commits"),
+        force: false,
     };
 
     assert_eq!(
@@ -2142,6 +2144,7 @@ fn an_install_task_installs_into_every_project_it_names_and_an_uninstall_takes_i
             projects: projects.clone(),
             kind: Kind::Skill,
             name: String::from("deploy"),
+            force: false,
         },
     );
 

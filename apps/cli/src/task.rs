@@ -287,11 +287,16 @@ pub enum Task {
     },
     /// `flayer uninstall -p <project>... <kind:name>`: one artifact taken
     /// back out of each project named, whichever place its copy came from,
-    /// each named as an install's are, by what `naming` gives.
+    /// each named as an install's are, by what `naming` gives. With
+    /// `force`, `--force`, taking out a copy changed since it was installed
+    /// too, which the line is then asked about for ([`Caution::Forces`]):
+    /// never from the install screen, whose marks leave an edit to a command
+    /// line, and from the panel only for the copy core says needs it.
     Uninstall {
         projects: Vec<String>,
         kind: Kind,
         name: String,
+        force: bool,
     },
     /// `… uninstall --orphaned`: every installation in a project that
     /// nothing offers any more where it came from, taken back out of it;
@@ -367,6 +372,7 @@ impl From<Change> for Task {
                 projects,
                 kind,
                 name,
+                force: false,
             },
         }
     }
@@ -667,8 +673,12 @@ impl Task {
                 projects,
                 kind,
                 name,
+                force,
             } => {
-                let head = picking(&["flayer", "uninstall"], projects);
+                let mut head = picking(&["flayer", "uninstall"], projects);
+                if *force {
+                    head.push(String::from("--force"));
+                }
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
             }

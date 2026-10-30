@@ -2654,9 +2654,14 @@ installation an update says something of, every one not current, by
 project in the registry's order and each directory once, with its kind,
 name and origin, its state as `status` says it, what an update does with
 it as a word (`update::Does`, the step without what it names), the copies
-that step names as routes from the project, and, for one it leaves, why
-(`update::Left`, as a `Said`). Beside them, how many stand in each state
-that asks for a command (`State::asks_for_a_command`, the rule a
+that step names as routes from the project, for one it leaves, why
+(`update::Left`, as a `Said`), and whether a change reaches it only forced
+(`forced`): a copy changed since it was installed, which an update not
+forced leaves and, once nothing offers it, an uninstall not forced leaves
+too, so the panel sends `--force` by core's word rather than telling the
+refusal its change would meet from the state and the step. Beside them,
+how many stand in each state that asks for a command
+(`State::asks_for_a_command`, the rule a
 project's `attention` is told by), whether updating every project, and
 each one, writes anything, and each entry that opens no project. Why it
 leaves one is core's words with a code, so the panel says it as core does
@@ -3013,7 +3018,9 @@ names rather than the command line.
 The panel's page of updates runs it for every project the workspace links
 (`Task::UninstallOrphaned` of the workspace, `flayer uninstall
 --all-projects --orphaned`), or `mind uninstall --orphaned` for one, never
-forced, asked about first as every uninstall is.
+forced, asked about first as every uninstall is. An edited copy it leaves
+is taken out from its own row, by the forced uninstall core says it needs
+(`update::Pending::forced`), asked about for the edit too.
 
 ### What no copy holds
 
@@ -5345,16 +5352,17 @@ What the pages offer:
 - **An update, from the page of updates**: of every project, `flayer
   update --all --yes`; of one, where an update writes something, `mind -C
   <project> update --yes`; and of one installation, the same line naming
-  it, each the `update` task the TUI's `u` sends. An edited copy offers the
-  update forced (`force`, the line's `--force`), which the preview makes a
-  confirmation by `Caution::Forces`, never a question of the panel's.
-  What nothing offers any more offers its uninstall, `flayer uninstall -p
-  <project> <kind:name>`, and the page all of them at once
-  (`Task::UninstallOrphaned`, `flayer uninstall --all-projects
-  --orphaned`, never forced), both asked about as an uninstall is. Which
-  change a row offers is read off the step core gave it, a word at a
-  time; the command still refuses whatever the disk says by the time it
-  runs.
+  it, each the `update` task the TUI's `u` sends. What nothing offers any
+  more offers its uninstall, `flayer uninstall -p <project> <kind:name>`,
+  and the page all of them at once (`Task::UninstallOrphaned`, `flayer
+  uninstall --all-projects --orphaned`, never forced), both asked about as
+  an uninstall is. Which change a row offers is read off the step core
+  gave it, a word at a time, and whether it is forced off core's `forced`
+  (`update::Pending`): an edited copy, which an update not forced leaves
+  and, once nothing offers it, an uninstall not forced leaves too, offers
+  either with `force`, the line's `--force`, which the preview makes a
+  confirmation by `Caution::Forces`, never a question of the panel's. The
+  command still refuses whatever the disk says by the time it runs.
 - **A removal, from the page of one of the library's own**, everywhere and
   never the library's copy alone, which would leave each copy installed
   from it orphaned: the dry run first, `flayer remove --everywhere
@@ -8252,12 +8260,15 @@ just listed.
   price, and the two can disagree for the moment between their reads,
   which a row reading one state on the projects table and another here
   would show.
-- **A row offers its change by the step core gave it.** An edited copy
-  nothing offers any more steps as `orphaned`, so it offers an uninstall,
-  which the command then refuses for the edit, saying so with `--force` as
-  the way out: the panel has no forced uninstall, and does not tell the
-  two apart itself. A forced uninstall would be a task of its own, behind
-  the same confirmation as a forced update; nothing asked for one yet.
+- **A row is forced by core's word, not told from its state.** An edited
+  copy nothing offers any more steps as `orphaned` and stands as `edited`,
+  and only a forced uninstall takes it out, as removing one of the
+  library's own everywhere leaves one. The panel could have told that from
+  the two words, which would be a rule of core's, which refusal an
+  uninstall meets, spelled again in TypeScript; core says it instead
+  (`Pending::forced`), and the uninstall task takes `force` as the update
+  task does, behind the same confirmation. `--orphaned` stays unforced,
+  leaving such a copy to its row, where it is read before it goes.
 - **The panel removes one of the library's own everywhere or not at
   all.** Removing the library's copy alone, which the CLI and the TUI
   still offer, would leave every copy installed from it orphaned, which

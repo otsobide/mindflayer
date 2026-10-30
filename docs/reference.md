@@ -2017,9 +2017,13 @@ same line naming it; **Force update** for an edited copy, the line with
 `--force`, a confirmation since it writes over the change; and
 **Uninstall** for one nothing offers any more, `flayer uninstall -p
 <project> <kind:name>`, beside **Uninstall every orphaned one**, `flayer
-uninstall --all-projects --orphaned`. Each line is shown first, as
-everywhere in the panel, and the page is drawn again from what it changed:
-an edited copy an update left is still listed, with why.
+uninstall --all-projects --orphaned`. One nothing offers that was changed
+since it was installed, as removing it everywhere leaves one, stands as
+`edited`, and neither uninstall takes it out: its row offers **Force
+uninstall**, the line with `--force`, a confirmation since the change goes
+with it. Each line is shown first, as everywhere in the panel, and the
+page is drawn again from what it changed: an edited copy an update left is
+still listed, with why.
 
 **It follows the disk.** A change made from a terminal, the TUI or an
 editor shows in the panel within a moment, without a reload: a skill edited,

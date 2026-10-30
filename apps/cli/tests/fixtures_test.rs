@@ -281,8 +281,10 @@ fn assigning(home: &Path) -> PathBuf {
 ///   so outdated, and `review`'s copy in `.agents/skills` deleted since, so
 ///   missing;
 /// - `web`, for Claude and OpenCode and shared, received `lint`, its copy
-///   in Claude's folder edited since, and `format`, removed from the
-///   library alone since, so orphaned;
+///   in Claude's folder edited since, `format`, removed from the library
+///   alone since, so orphaned, and `release`, its copy edited too, then
+///   removed from every project and the library, which leaves that copy
+///   edited with nothing offering it any more;
 /// - `gone` was linked, and its folder has gone since.
 fn updating(home: &Path) -> PathBuf {
     let root = home.join("Updating");
@@ -292,6 +294,7 @@ fn updating(home: &Path) -> PathBuf {
         ("skill", "lint", "Tidy the code before a commit"),
         ("skill", "review", "Read a change before it lands"),
         ("skill", "format", "Format the code the way the team does"),
+        ("skill", "release", "Cut a release the way the team does"),
         ("rule", "git/commits", "Write commit messages that say why"),
     ] {
         flayer(&root, &["add", kind, name, description]).unwrap();
@@ -304,7 +307,11 @@ fn updating(home: &Path) -> PathBuf {
         &["skill:lint", "skill:review", "rule:git/commits"],
     );
     project(&root, "web", &["--agents", "claude,opencode", "--shared"]);
-    install(&root, "web", &["skill:lint", "skill:format"]);
+    install(
+        &root,
+        "web",
+        &["skill:lint", "skill:format", "skill:release"],
+    );
 
     let changed = |file: &Path, line: &str| {
         let text = fs::read_to_string(file).unwrap();
@@ -322,10 +329,23 @@ fn updating(home: &Path) -> PathBuf {
         &root.join("web/.claude/skills/lint/SKILL.md"),
         "Our own way: lint before every push.",
     );
+    changed(
+        &root.join("web/.claude/skills/release/SKILL.md"),
+        "Our own way: tag from main only.",
+    );
     fs::remove_dir_all(root.join("api/.agents/skills/review")).unwrap();
     // The library's copy alone: what was installed from it is left behind.
     let removed = flayer(&root, &["remove", "--yes", "skill:format"]).unwrap();
     assert!(removed.stdout.starts_with("removed"), "{removed:?}");
+    // Everywhere, as the panel removes one: the edited copy is left.
+    let removed = flayer(&root, &["remove", "--everywhere", "--yes", "skill:release"]).unwrap();
+    assert!(
+        removed.ok
+            && removed
+                .stdout
+                .contains("left release in web, where it is edited"),
+        "{removed:?}"
+    );
 
     project(&root, "gone", &[]);
     fs::remove_dir_all(root.join("gone")).unwrap();
@@ -972,6 +992,24 @@ fn write_what_asking_what_an_update_would_do_is_answered_with() {
     for step in ["refresh", "put_back", "leave", "orphaned"] {
         assert!(does.contains(&step), "{step}: {json}");
     }
+    let forced: Vec<(&str, &str)> = answers[0]["answer"]["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|project| project["installations"].as_array().unwrap())
+        .filter(|pending| pending["forced"] == true)
+        .map(|pending| {
+            (
+                pending["name"].as_str().unwrap(),
+                pending["does"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        forced,
+        [("lint", "leave"), ("release", "orphaned")],
+        "{json}"
+    );
     write("updates", &json);
 }
 
@@ -979,8 +1017,9 @@ fn write_what_asking_what_an_update_would_do_is_answered_with() {
 /// runs each change it offers, each on the workspace [`updating`] builds as
 /// it was built, so each is answered as the first thing run there: every
 /// project updated, one, one installation in one, an edited one forced,
-/// an orphaned one uninstalled, and every orphaned one taken out. Each task
-/// as the page sends it, its preview, and what its run is answered with.
+/// an orphaned one uninstalled, an orphaned one edited since uninstalled
+/// forced, and every orphaned one taken out. Each task as the page sends
+/// it, its preview, and what its run is answered with.
 #[test]
 fn write_what_each_change_the_page_of_updates_sends_is_answered_with() {
     let project = |entry: &str| json!({"type": "project", "entry": entry});
@@ -989,7 +1028,8 @@ fn write_what_each_change_the_page_of_updates_sends_is_answered_with() {
         json!({"type": "update", "holder": project("api"), "reference": null, "force": false}),
         json!({"type": "update", "holder": project("api"), "reference": "skill:lint", "force": false}),
         json!({"type": "update", "holder": project("web"), "reference": "skill:lint", "force": true}),
-        json!({"type": "uninstall", "projects": ["web"], "kind": "skill", "name": "format"}),
+        json!({"type": "uninstall", "projects": ["web"], "kind": "skill", "name": "format", "force": false}),
+        json!({"type": "uninstall", "projects": ["web"], "kind": "skill", "name": "release", "force": true}),
         json!({"type": "uninstall_orphaned", "holder": {"type": "workspace"}}),
     ];
 
@@ -1019,7 +1059,7 @@ fn write_what_each_change_the_page_of_updates_sends_is_answered_with() {
     // they did.
     let said = answers[0]["ran"]["outcome"]["runs"][0]["stderr"].to_string();
     assert!(said.contains("\"edited\""), "{said}");
-    for (index, ok) in [false, true, true, true, true, false]
+    for (index, ok) in [false, true, true, true, true, true, false]
         .into_iter()
         .enumerate()
     {
@@ -1029,7 +1069,9 @@ fn write_what_each_change_the_page_of_updates_sends_is_answered_with() {
             answers[index]
         );
     }
-    let taken = answers[5]["ran"]["outcome"]["runs"][0]["stdout"].as_str();
+    let forced = answers[5]["ran"]["outcome"]["runs"][0]["stdout"].as_str();
+    assert_eq!(forced, Some("removed release from web\n"));
+    let taken = answers[6]["ran"]["outcome"]["runs"][0]["stdout"].as_str();
     assert_eq!(taken, Some("removed format from web\n"));
     let json = serde_json::to_string_pretty(&written).unwrap() + "\n";
     write("updated", &json);

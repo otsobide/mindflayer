@@ -178,7 +178,7 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
         ),
         (
             "one project of two",
-            json!({"type": "uninstall", "projects": ["alpha", "gamma"], "kind": "skill", "name": "alpha"}),
+            json!({"type": "uninstall", "projects": ["alpha", "gamma"], "kind": "skill", "name": "alpha", "force": false}),
             "not_registered",
         ),
         (
@@ -233,7 +233,7 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
         (
             "an editor in a batch",
             json!({"type": "apply_install", "changes": [
-                {"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "alpha"},
+                {"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "alpha", "force": false},
                 {"type": "edit", "holder": {"type": "workspace"}, "kind": "skill", "name": "x"},
             ]}),
             "opens_editor",
@@ -1348,7 +1348,7 @@ fn a_plan_is_answered_with_the_tasks_that_carry_it_out_and_changes_nothing() {
                     "name": "deploy",
                     "from": "load:../team",
                 },
-                {"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "deploy"},
+                {"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "deploy", "force": false},
             ],
             "conflicts": [],
             "locked": [],
@@ -1681,7 +1681,7 @@ fn a_task_reaching_somebodys_copy_is_refused_by_its_line_and_writes_nothing() {
     let ledger = recorded(&home);
 
     for change in [
-        json!({"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "review"}),
+        json!({"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "review", "force": false}),
         json!({
             "type": "install", "projects": ["alpha"], "kind": "skill", "name": "review",
             "from": "workspace",
@@ -1839,8 +1839,9 @@ fn a_query_of_what_an_update_would_do_takes_no_field() {
 /// Each change the page of updates and the page of one of the library's own
 /// offer, as the browser sends it, is the line somebody would type for it,
 /// each project named by the folder its entry points at; and what takes
-/// something away, a forced update, an uninstall and a removal told yes, is
-/// asked about first, while a removal's dry run is not.
+/// something away, a forced update, an uninstall, forced or not, and a
+/// removal told yes, is asked about first, while a removal's dry run is
+/// not.
 #[test]
 fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_takes() {
     let (_dir, home) = updating();
@@ -1871,9 +1872,14 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
             vec!["forces"],
         ),
         (
-            json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old"}),
+            json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old", "force": false}),
             format!("flayer uninstall -p {beta} skill:old"),
             vec!["uninstalls"],
+        ),
+        (
+            json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old", "force": true}),
+            format!("flayer uninstall -p {beta} --force skill:old"),
+            vec!["uninstalls", "forces"],
         ),
         (
             json!({"type": "uninstall_orphaned", "holder": {"type": "workspace"}}),
@@ -1955,4 +1961,54 @@ fn updating_every_project_from_the_panel_leaves_what_the_cli_leaves() {
         .unwrap();
     assert_eq!(after["states"][0], json!({"state": "outdated", "count": 0}));
     assert_eq!(after["states"][2], json!({"state": "missing", "count": 0}));
+}
+
+/// A copy changed since it was installed that nothing offers any more, as
+/// removing it from the library leaves one: core says it needs forcing,
+/// an uninstall not forced leaves it and says so by the code an install
+/// refuses an edit with, and the forced one the page of updates sends then
+/// takes it out.
+#[test]
+fn an_edited_copy_nothing_offers_any_more_is_taken_out_by_the_forced_uninstall_core_asks_for() {
+    let (_dir, home) = updating();
+    let copy = home.join("beta/.claude/skills/old");
+    let text = fs::read_to_string(copy.join("SKILL.md")).unwrap();
+    fs::write(copy.join("SKILL.md"), format!("{text}\nOur own way.\n")).unwrap();
+    let backend = backend(&home);
+
+    let answer = backend.query(query(json!({"type": "updates"}))).unwrap();
+    let old = &answer["projects"][1]["installations"][1];
+    assert_eq!(
+        (&old["name"], &old["state"], &old["does"], &old["forced"]),
+        (
+            &json!("old"),
+            &json!("edited"),
+            &json!("orphaned"),
+            &json!(true)
+        ),
+        "{answer}"
+    );
+
+    let uninstall = |force| {
+        task(json!({
+            "type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old",
+            "force": force,
+        }))
+    };
+    let left = backend.run(uninstall(false)).unwrap();
+    assert!(!left.ok, "{left:?}");
+    assert!(
+        left.runs[0]
+            .stderr
+            .iter()
+            .any(|line| line.code == Some("edited")),
+        "{left:?}"
+    );
+    assert!(copy.exists());
+    let taken = backend.run(uninstall(true)).unwrap();
+    assert!(taken.ok, "{taken:?}");
+    assert!(!copy.exists());
+    let after = backend.query(query(json!({"type": "updates"}))).unwrap();
+    assert_eq!(after["states"][3], json!({"state": "orphaned", "count": 0}));
+    assert_eq!(after["states"][1], json!({"state": "edited", "count": 1}));
 }

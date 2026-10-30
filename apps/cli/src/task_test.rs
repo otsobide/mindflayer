@@ -139,6 +139,7 @@ fn every(value: &str) -> Vec<Task> {
             projects: vec![owned()],
             kind: Kind::Rule,
             name: owned(),
+            force: false,
         },
         Task::Adopt {
             project: owned(),
@@ -187,6 +188,14 @@ fn every(value: &str) -> Vec<Task> {
             .filter(|task| matches!(task, Task::Install { .. } | Task::Uninstall { .. }))
             .cloned()
             .collect(),
+    });
+    // After the batch, which the install screen and the matrix send
+    // unforced: forced, from the page of updates, it is one line alone.
+    tasks.push(Task::Uninstall {
+        projects: vec![owned(), String::from("plain")],
+        kind: Kind::Skill,
+        name: owned(),
+        force: true,
     });
     for (at, holder) in holders(value).into_iter().enumerate() {
         let kind = Kind::ALL[at % Kind::ALL.len()];
@@ -589,6 +598,39 @@ fn what_nothing_offers_is_taken_out_of_every_project_or_of_one() {
         assert_eq!(task.commands(), [line(said)], "{task:?}");
         assert!(task.writes(), "{task:?}");
         assert_eq!(task.cautions(), [(0, Caution::Uninstalls)], "{task:?}");
+        assert_eq!(task.refusal(), None, "{task:?}");
+    }
+}
+
+/// One artifact taken out of projects, as somebody would type it, and
+/// forced only when asked: what the page of updates sends for a copy
+/// changed since it was installed that nothing offers any more, which an
+/// uninstall not forced leaves. Asked about first either way, and for the
+/// edit too when forced.
+#[test]
+fn an_uninstall_is_the_line_the_cli_takes_and_forced_only_when_asked() {
+    let uninstall = |projects: &[&str], force| Task::Uninstall {
+        projects: owned(projects),
+        kind: Kind::Skill,
+        name: String::from("-lint"),
+        force,
+    };
+
+    for (task, said, cautions) in [
+        (
+            uninstall(&["/work/alpha"], false),
+            "flayer uninstall -p /work/alpha skill:-lint",
+            vec![(0, Caution::Uninstalls)],
+        ),
+        (
+            uninstall(&["/work/alpha", "-odd"], true),
+            "flayer uninstall -p /work/alpha -p ./-odd --force skill:-lint",
+            vec![(0, Caution::Uninstalls), (0, Caution::Forces)],
+        ),
+    ] {
+        assert_eq!(task.commands(), [line(said)], "{task:?}");
+        assert!(task.writes(), "{task:?}");
+        assert_eq!(task.cautions(), cautions, "{task:?}");
         assert_eq!(task.refusal(), None, "{task:?}");
     }
 }
@@ -1200,6 +1242,7 @@ fn a_refused_task_names_the_line_it_is_refused_for() {
                 projects: owned(&["alpha"]),
                 kind: Kind::Skill,
                 name: String::from("deploy"),
+                force: false,
             },
             Task::OpenInstall,
         ],
@@ -1323,7 +1366,10 @@ fn a_task_is_asked_about_for_each_of_its_lines_that_takes_something_away() {
                 yes: true,
                 ..
             } => vec![(0, Caution::Removes), (0, Caution::Uninstalls)],
-            Task::Uninstall { .. } | Task::UninstallOrphaned { .. } => {
+            Task::Uninstall { force: true, .. } => {
+                vec![(0, Caution::Uninstalls), (0, Caution::Forces)]
+            }
+            Task::Uninstall { force: false, .. } | Task::UninstallOrphaned { .. } => {
                 vec![(0, Caution::Uninstalls)]
             }
             Task::Update { force: true, .. } => vec![(0, Caution::Forces)],

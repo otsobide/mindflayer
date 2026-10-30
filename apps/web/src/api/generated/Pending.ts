@@ -30,4 +30,13 @@ copies: Array<string>,
  * Why an update leaves it as the project holds it, when it does
  * ([`Left`]).
  */
-left: Said | null, };
+left: Said | null, 
+/**
+ * Whether a change reaches it only forced: a copy changed since it was
+ * installed, which an update not forced leaves alone and, once nothing
+ * offers it any more, an uninstall not forced leaves too. Said here so
+ * a front end sends `--force` by core's word, rather than telling from
+ * the state, the step, or both, which of core's refusals its change
+ * would meet.
+ */
+forced: boolean, };

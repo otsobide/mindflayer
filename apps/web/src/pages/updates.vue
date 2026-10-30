@@ -54,21 +54,30 @@ interface Offer {
 
 /**
  * What each step core gave offers, a word at a time: an update for what an
- * update writes, the same forced, which the server's preview makes a
- * confirmation, for an edit it leaves, and an uninstall for what nothing
- * offers any more. Nothing for a step this build knows no change for, a
- * place an install has to be told (`unsure`), whose reason says what to
- * type, or one core adds: the row is still drawn, by its word.
+ * update writes or leaves for an edit, and an uninstall for what nothing
+ * offers any more, either forced where core says only a forced one reaches
+ * the copy (`forced`), which the server's preview makes a confirmation.
+ * Nothing for a step this build knows no change for, a place an install
+ * has to be told (`unsure`), whose reason says what to type, or one core
+ * adds: the row is still drawn, by its word.
  */
 function offer({ project, pending }: Row): Offer | undefined {
+  const force = pending.forced
   switch (pending.does) {
     case 'refresh':
     case 'put_back':
-      return { label: 'Update', icon: 'i-lucide-refresh-cw', task: { type: 'update', holder: holder(project), reference: reference(pending), force: false } }
     case 'leave':
-      return { label: 'Force update', icon: 'i-lucide-pencil-off', task: { type: 'update', holder: holder(project), reference: reference(pending), force: true } }
+      return {
+        label: force ? 'Force update' : 'Update',
+        icon: force ? 'i-lucide-pencil-off' : 'i-lucide-refresh-cw',
+        task: { type: 'update', holder: holder(project), reference: reference(pending), force }
+      }
     case 'orphaned':
-      return { label: 'Uninstall', icon: 'i-lucide-package-minus', task: { type: 'uninstall', projects: [project.entry], kind: pending.kind, name: pending.name } }
+      return {
+        label: force ? 'Force uninstall' : 'Uninstall',
+        icon: 'i-lucide-package-minus',
+        task: { type: 'uninstall', projects: [project.entry], kind: pending.kind, name: pending.name, force }
+      }
     default:
       return undefined
   }

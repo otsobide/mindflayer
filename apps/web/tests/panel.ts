@@ -170,7 +170,8 @@ export function applying(): Commanded[] {
  * updates offers is previewed and run, each on the workspace as it was
  * built (tests/fixtures/updated.json): every project updated, one, one
  * installation in one, an edited one forced, an orphaned one uninstalled,
- * and every orphaned one taken out. Copied, so a test may change its copy.
+ * an orphaned one edited since uninstalled forced, and every orphaned one
+ * taken out. Copied, so a test may change its copy.
  */
 export function updatings(): Commanded[] {
   return structuredClone(updated) as unknown as Commanded[]

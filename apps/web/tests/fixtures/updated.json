@@ -27,6 +27,10 @@
                 "text": "warning: lint in web was changed since it was installed, at .claude/skills/lint, so it was left alone; --force writes over it"
               },
               {
+                "code": null,
+                "text": "note: release in web is no longer offered by workspace, so it was left as it is; uninstalling it takes it out"
+              },
+              {
                 "code": "not_a_project",
                 "text": "warning: /home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
               }
@@ -184,8 +188,54 @@
       }
     },
     "task": {
+      "force": false,
       "kind": "skill",
       "name": "format",
+      "projects": [
+        "web"
+      ],
+      "type": "uninstall"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [
+        {
+          "caution": "uninstalls",
+          "line": 0,
+          "message": "takes copies Mindflayer installed out of projects"
+        },
+        {
+          "caution": "forces",
+          "line": 0,
+          "message": "writes over, or takes out, a copy changed since it was installed"
+        }
+      ],
+      "lines": [
+        "flayer uninstall -p /home/you/Updating/web --force skill:release"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer uninstall -p /home/you/Updating/web --force skill:release"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer uninstall -p /home/you/Updating/web --force skill:release",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "removed release from web\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "force": true,
+      "kind": "skill",
+      "name": "release",
       "projects": [
         "web"
       ],
@@ -217,6 +267,10 @@
             "error": null,
             "ok": false,
             "stderr": [
+              {
+                "code": "edited",
+                "text": "warning: release in web was changed since it was installed, at .claude/skills/release, so it was left alone; --force takes it out"
+              },
               {
                 "code": "not_a_project",
                 "text": "warning: /home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"

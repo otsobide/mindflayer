@@ -688,6 +688,13 @@ pub struct Pending {
     /// Why an update leaves it as the project holds it, when it does
     /// ([`Left`]).
     pub left: Option<Said>,
+    /// Whether a change reaches it only forced: a copy changed since it was
+    /// installed, which an update not forced leaves alone and, once nothing
+    /// offers it any more, an uninstall not forced leaves too. Said here so
+    /// a front end sends `--force` by core's word, rather than telling from
+    /// the state, the step, or both, which of core's refusals its change
+    /// would meet.
+    pub forced: bool,
 }
 
 impl Updates {
@@ -741,6 +748,7 @@ impl Updates {
                             .step
                             .left(update, &project.name, &project.root)
                             .map(|left| Said::of(left.code(), &left)),
+                        forced: update.standing == Standing::Edited,
                     })
                 })
                 .collect();
