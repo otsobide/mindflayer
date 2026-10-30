@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import axe from 'axe-core'
 import { defineComponent, h } from 'vue'
@@ -6,7 +6,7 @@ import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
 import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
-import { answering, commanded, commanding, fixture, render, unmount, type Fixture } from './panel'
+import { answering, commanded, commanding, fixture, render, unmount, withLegacy, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -77,6 +77,20 @@ describe('a project\'s toggles', () => {
     await flushPromises()
 
     expect(document.querySelector('[data-testid="apply-settings"]')?.hasAttribute('disabled')).toBe(false)
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('a project an older marker marks', () => {
+  it('passes axe with what migrating it would do shown', async () => {
+    const { transport } = commanding(withLegacy())
+    await render('/project?entry=legacy', transport)
+
+    document.querySelector<HTMLElement>('[data-testid="migrate-dry"]')!.click()
+    await flushPromises()
+    document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="migrate-said"]')).not.toBeNull())
+
     expect(await violations()).toEqual([])
   })
 })

@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import type { Project } from '@/api/generated/Project'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { projectLink } from '@/routes'
-import { commanded, commanding, fixture, render, texts, unmount } from './panel'
+import { commanded, commanding, fixture, render, texts, unmount, withLegacy } from './panel'
 
 afterEach(unmount)
 
@@ -272,5 +272,48 @@ describe('changing a project\'s agents and share mode from its page', () => {
     await router.push('/project?entry=gone')
     await flushPromises()
     expect(page.find('[data-testid="settings-form"]').exists()).toBe(false)
+  })
+})
+
+describe('migrating a project an older marker marks', () => {
+  const [DRY, YES] = commanded().filter(each => each.task.type === 'migrate') as [ReturnType<typeof commanded>[number], ReturnType<typeof commanded>[number]]
+
+  it('shows the dry run first, as it ran, and offers the migration only once it has been read', async () => {
+    const snapshot = withLegacy()
+    const { sent, transport } = commanding(snapshot)
+    const { page } = await render('/project?entry=legacy', transport)
+
+    expect(page.get('[data-testid="migrate"] h2').text()).toBe('Marked by .mind/mind.toml, which an older Mindflayer wrote')
+    expect(page.find('[data-testid="migrate-yes"]').exists()).toBe(false)
+    await page.get('[data-testid="migrate-dry"]').trigger('click')
+    await flushPromises()
+    expect(sent).toEqual([{ task: DRY.task, mode: 'preview' }])
+    expect([...document.body.querySelectorAll('[data-testid="command"]')].map(each => each.textContent)).toEqual(DRY.preview.lines.map(line => `$ ${line}`))
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await flushPromises()
+
+    await vi.waitFor(() => expect(page.find('[data-testid="migrate-said"]').exists()).toBe(true))
+    expect(page.get('[data-testid="migrate-said"]').text()).toBe(DRY.ran.outcome.runs[0]!.stdout.trim())
+    await page.get('[data-testid="migrate-yes"]').trigger('click')
+    await flushPromises()
+    expect(sent.at(-1)).toEqual({ task: YES.task, mode: 'preview' })
+    expect([...document.body.querySelectorAll('[data-testid="command"]')].map(each => each.textContent)).toEqual(YES.preview.lines.map(line => `$ ${line}`))
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await flushPromises()
+
+    expect(sent.filter(each => each.mode === 'run')).toEqual([{ task: DRY.task, mode: 'run' }, { task: YES.task, mode: 'run' }])
+    await vi.waitFor(() => expect(page.find('[data-testid="migrate-said"]').exists()).toBe(false))
+  })
+
+  it('is offered for a project an older marker marks alone', async () => {
+    const { page, router } = await render('/project?entry=legacy', withLegacy())
+    expect(page.find('[data-testid="migrate"]').exists()).toBe(true)
+    expect(page.find('[data-testid="settings-form"]').exists()).toBe(false)
+
+    for (const entry of ['api', 'gone']) {
+      await router.push(`/project?entry=${entry}`)
+      await flushPromises()
+      expect(page.find('[data-testid="migrate"]').exists()).toBe(false)
+    }
   })
 })

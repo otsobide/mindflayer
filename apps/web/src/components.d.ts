@@ -24,6 +24,7 @@ declare module 'vue' {
     IssueList: typeof import('./components/IssueList.vue')['default']
     LinkForm: typeof import('./components/LinkForm.vue')['default']
     MarkdownBody: typeof import('./components/MarkdownBody.vue')['default']
+    MigrateOffer: typeof import('./components/MigrateOffer.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SettingsForm: typeof import('./components/SettingsForm.vue')['default']

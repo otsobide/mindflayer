@@ -35,6 +35,30 @@ export function fixture(name: Fixture): Snapshot {
   return structuredClone(FIXTURES[name]) as unknown as Snapshot
 }
 
+/**
+ * The workspace fixture with `legacy` linked beside its projects, which a
+ * `mind.toml` marks, as the CLI's suite linked it to migrate
+ * (tests/fixtures/commands.json): a project no snapshot fixture holds, so
+ * this copy holds it, made from `web` with what such a project lacks.
+ */
+export function withLegacy(): Snapshot {
+  const snapshot = fixture('workspace')
+  const web = snapshot.projects.find(project => project.entry === 'web')!
+  snapshot.projects.push({
+    ...structuredClone(web),
+    entry: 'legacy',
+    name: 'legacy',
+    path: '/home/you/Projects/legacy',
+    marker: 'mind.toml',
+    migrates: true,
+    id: null,
+    agents: [],
+    settings: null,
+    artifacts: []
+  })
+  return snapshot
+}
+
 /** A query, and what the server answers it with. */
 export interface Answered {
   query: Query
