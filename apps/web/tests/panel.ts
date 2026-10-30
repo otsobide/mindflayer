@@ -10,6 +10,7 @@ import App from '@/App.vue'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { TransportError, type LiveEvent, type Preview, type Query, type Ran, type Task, type Transport } from '@/api/transport'
 import { createPanel } from '@/panel'
+import assigning from './fixtures/assigning.json'
 import candidates from './fixtures/candidates.json'
 import commands from './fixtures/commands.json'
 import library from './fixtures/library.json'
@@ -25,9 +26,12 @@ import workspace from './fixtures/workspace.json'
  * `candidates` is `workspace` with more beside its projects, the one the
  * scan in tests/fixtures/scan.json looked through: two projects and two
  * repositories nobody linked, `old`, linked and moved since, and `legacy`,
- * linked, which a `mind.toml` marks.
+ * linked, which a `mind.toml` marks; and `assigning`, a workspace to assign
+ * in, which the matrix draws: one name offered from two places, the shelf,
+ * a copy of each state an install stands in, a project nothing can go into
+ * and an entry that opens none.
  */
-const FIXTURES = { workspace, unmade, candidates }
+const FIXTURES = { workspace, unmade, candidates, assigning }
 
 export type Fixture = keyof typeof FIXTURES
 

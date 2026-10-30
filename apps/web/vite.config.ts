@@ -5,6 +5,9 @@ import router from 'vue-router/vite'
 import ui from '@nuxt/ui/vite'
 import { colors } from './src/theme.ts'
 
+/** The suite that times a render, which runs on its own (`test.projects`). */
+const BENCHMARK = 'tests/matrix.test.ts'
+
 /** Where `flayer ui --dev --port 7878` listens while the panel is worked on. */
 const SERVER = 'http://127.0.0.1:7878'
 
@@ -77,6 +80,17 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
-    include: ['tests/**/*.test.ts']
+    // The matrix's benchmark (tests/matrix.test.ts) times a render, so it
+    // runs alone, once every other suite is done: beside them, each file in
+    // a worker of its own, it timed whatever else the machine was busy with,
+    // a build of the panel among them, as much as the render. Each project
+    // keeps Nuxt UI's modules inline, as its plugin has the root config do,
+    // which a project does not inherit, and says what it runs, since a
+    // project's `include` would be added to the root's rather than replace
+    // it.
+    projects: [
+      { extends: true, test: { name: 'panel', include: ['tests/**/*.test.ts'], exclude: [BENCHMARK], server: { deps: { inline: ['@nuxt/ui'] } } } },
+      { extends: true, test: { name: 'benchmark', include: [BENCHMARK], server: { deps: { inline: ['@nuxt/ui'] } }, sequence: { groupOrder: 1 } } }
+    ]
   }
 })

@@ -59,6 +59,11 @@ const PAGES: [string, Fixture][] = [
   ['/discover', 'unmade'],
   ['/discover?root=%2Fhome%2Fyou%2FProjects', 'candidates'],
   ['/discover?root=Projects', 'workspace'],
+  ['/assign', 'assigning'],
+  ['/assign?by=project', 'assigning'],
+  ['/assign?q=nowhere', 'assigning'],
+  ['/assign', 'workspace'],
+  ['/assign', 'unmade'],
   ['/nowhere', 'workspace']
 ]
 
