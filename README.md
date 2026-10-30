@@ -1879,8 +1879,9 @@ toggles until it moves to a `settings.toml`, and offers that move instead
 ([a project made before settings](#a-project-made-before-settings)): **See
 what migrating does** runs the dry run, `flayer migrate -p <project>`, and
 shows what it would write, move and leave, and only then **Migrate** runs it
-with `--yes`. It takes every agent and stays shared, as it was committed; the
-toggles change either once it has moved.
+with `--yes`. One a `mind.toml` marks takes every agent and stays shared, as
+it was committed, and one a `settings.json` marks keeps the agents and the
+share mode that file names; the toggles change either once it has moved.
 
 **Discover** finds the projects worth linking. Type the folders your
 repositories are kept in, one a line, each an absolute path, and how many
