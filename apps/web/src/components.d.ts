@@ -16,7 +16,9 @@ declare module 'vue' {
     AppHeader: typeof import('./components/AppHeader.vue')['default']
     AppLogo: typeof import('./components/AppLogo.vue')['default']
     AppSidebar: typeof import('./components/AppSidebar.vue')['default']
+    CommandDialog: typeof import('./components/CommandDialog.vue')['default']
     CommandHint: typeof import('./components/CommandHint.vue')['default']
+    CommandRunner: typeof import('./components/CommandRunner.vue')['default']
     FileTree: typeof import('./components/FileTree.vue')['default']
     HealthBadge: typeof import('./components/HealthBadge.vue')['default']
     IssueList: typeof import('./components/IssueList.vue')['default']
@@ -41,8 +43,11 @@ declare module 'vue' {
     UFieldGroup: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/FieldGroup.vue')['default']
     UIcon: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/vue/components/Icon.vue')['default']
     UInput: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Input.vue')['default']
+    UModal: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Modal.vue')['default']
     UNavigationMenu: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/NavigationMenu.vue')['default']
+    USlideover: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Slideover.vue')['default']
     UTooltip: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
+    WarningsDrawer: typeof import('./components/WarningsDrawer.vue')['default']
     WarningsPanel: typeof import('./components/WarningsPanel.vue')['default']
   }
 }
