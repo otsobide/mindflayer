@@ -4,13 +4,14 @@ import { provideRunner, type Say } from '@/api/commands'
 import { TransportError, type Ran } from '@/api/transport'
 import { useShell } from '@/stores/shell'
 import CommandDialog from './CommandDialog.vue'
+import TranscriptDrawer from './TranscriptDrawer.vue'
 import WarningsDrawer from './WarningsDrawer.vue'
 
 /*
  * The panel's one runner (`src/api/commands.ts`), handed to everything in
  * its slot, which is every page, and what it draws beside them: the task it
- * shows before it runs, a toast for how each ended, and what the last run
- * said. Here rather than in the runner, which holds no look: and here
+ * shows before it runs, a toast for how each ended, what the last run said,
+ * and the transcript of every run. Here rather than in the runner, which holds no look: and here
  * rather than in App.vue, inside UApp, whose toasts and their limit it uses.
  */
 
@@ -83,4 +84,5 @@ provideRunner(say)
   <slot />
   <CommandDialog />
   <WarningsDrawer />
+  <TranscriptDrawer />
 </template>
