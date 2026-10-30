@@ -428,9 +428,19 @@ jobs:
   # ships. Linux alone, which Playwright's WebKit runs on with the
   # libraries `--with-deps` installs; macOS and Windows are out of its
   # scope. A failed test's trace, and the report, are uploaded.
+  #
+  # The `if` is spelled out for the reason given above `build-core`: the
+  # implicit `success()` looks at every job upstream, not only `build-cli`,
+  # so test-cross gated off would skip this job too, and a skipped required
+  # check passes. `!cancelled()` rather than `always()`, so cancelling the
+  # run stops twenty minutes of browsers as well, which `always()` would
+  # keep running.
   e2e-web:
     name: e2e (web)
     needs: build-cli
+    if: >-
+      !cancelled() &&
+      needs.build-cli.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
