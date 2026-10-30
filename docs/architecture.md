@@ -5068,7 +5068,11 @@ a scan beside it and a tenth what an update would do, each a file under
   something, and each entry that opens no project. Which state a row is
   under is a filter of what core listed; what each step word is called,
   and which change it offers, is drawn, as a state's look is, a step core
-  adds shown by its word with none.
+  adds shown by its word with none. A state's section is reached by its
+  hash (`#state-outdated`, the projects table's badge), which the page
+  scrolls to itself once the section is drawn, since the router scrolls to
+  none and the section waits on two queries: once for each hash, so a live
+  update drawing it again leaves where somebody scrolled since.
 - **The library** (`/library?kind=...`) has a page for each kind in `kinds`,
   the first when none is named, listing the workspace's own of it, filtered
   by name or summary, each with the projects holding a copy and how each

@@ -1,9 +1,23 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { Updates } from '@/api/generated/Updates'
+import type { LiveEvent, Transport } from '@/api/transport'
 import { answering, commanding, fixture, render, texts, unmount, updates, updatings, type Commanded } from './panel'
 
-afterEach(unmount)
+afterEach(() => {
+  unmount()
+  vi.restoreAllMocks()
+})
+
+/** The id of each element brought into view while `run` runs, in turn. */
+async function scrolledTo(run: () => Promise<unknown>): Promise<string[]> {
+  const scrolled: string[] = []
+  vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+    scrolled.push(this.id)
+  })
+  await run()
+  return scrolled
+}
 
 /*
  * The page of updates, drawn from what the CLI's suite wrote: the workspace
@@ -122,6 +136,37 @@ describe('the page of updates', () => {
     const { page } = await render('/updates', transport)
 
     expect(page.get('[data-testid="updates-unread"]').text()).toContain('not_found')
+  })
+
+  it('brings the list a link names by its hash into view once it is drawn, and not again when a change is told', async () => {
+    const answered = updates()
+    const { transport } = answering(fixture('updating'), answered)
+    let tell: (event: LiveEvent) => void = () => {}
+    const streamed = { ...transport, subscribe: (listener: (event: LiveEvent) => void) => (tell = listener, () => {}) } as Transport
+
+    const scrolled = await scrolledTo(() => render('/updates#state-edited', streamed))
+
+    expect(scrolled).toEqual(['state-edited'])
+    ;(answered[0]!.answer as Updates).writes = false
+    const told = await scrolledTo(async () => {
+      tell({ type: 'changed', scopes: [{ type: 'workspace' }] })
+      await flushPromises()
+    })
+    expect(document.querySelector('[data-testid="update-all"]')?.hasAttribute('disabled')).toBe(true)
+    expect(told).toEqual([])
+  })
+
+  it('is reached at what is outdated from the projects table\'s badge', async () => {
+    const { transport } = answering(fixture('updating'), updates())
+    const { page, router } = await render('/projects', transport)
+
+    const scrolled = await scrolledTo(async () => {
+      await page.get('[data-testid="outdated"] a').trigger('click')
+      await flushPromises()
+    })
+
+    expect(router.currentRoute.value.fullPath).toBe('/updates#state-outdated')
+    expect(scrolled).toEqual(['state-outdated'])
   })
 
   it('lights the updates in the sidebar', async () => {

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { nextTick, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import type { Does } from '@/api/generated/Does'
 import type { Holder } from '@/api/generated/Holder'
 import type { Pending } from '@/api/generated/Pending'
@@ -6,6 +8,7 @@ import type { ProjectUpdates } from '@/api/generated/ProjectUpdates'
 import type { State } from '@/api/generated/State'
 import type { Updates } from '@/api/generated/Updates'
 import { useRunner } from '@/api/commands'
+import { useSnapshot } from '@/api/snapshot'
 import { TransportError, type Task } from '@/api/transport'
 import { useUpdates } from '@/api/updates'
 import AppHeader from '@/components/AppHeader.vue'
@@ -19,8 +22,30 @@ import { projectLink } from '@/routes'
 // by state, the states in the order it gives them, and filtered, never
 // worked out here.
 const { data: updates, error } = useUpdates()
+// The snapshot, which the gate below draws the sections behind.
+const { data: gated } = useSnapshot()
 const runner = useRunner()
 const { busy } = runner
+
+// A link names one state's list by its hash, as the projects table's
+// outdated badge does. The router scrolls to none, and the list is drawn
+// only once both the snapshot and the survey are answered, after the
+// navigation is done, so the page brings it into view itself once it is
+// there: once for each hash it is opened at, and not again when a live
+// update answers the survey again and somebody has scrolled away since.
+const route = useRoute()
+let reached: string | undefined
+watch([() => route.hash, updates, gated], async ([hash]) => {
+  if (!hash || hash === reached) {
+    return
+  }
+  await nextTick()
+  const target = document.getElementById(decodeURIComponent(hash.slice(1)))
+  if (target) {
+    reached = hash
+    target.scrollIntoView()
+  }
+}, { immediate: true })
 
 /** One installation, and the project it is in. */
 interface Row {
