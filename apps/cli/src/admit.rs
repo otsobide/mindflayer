@@ -109,6 +109,7 @@ impl Admission<'_> {
             Task::Add { holder, .. }
             | Task::Show { holder, .. }
             | Task::Edit { holder, .. }
+            | Task::Save { holder, .. }
             | Task::Rename { holder, .. }
             | Task::Remove { holder, .. }
             | Task::Validate { holder }

@@ -49,6 +49,7 @@ use crate::catalog::{Catalog, Reference};
 use crate::code::{codes, Said};
 use crate::copy;
 use crate::frontmatter;
+use crate::hash;
 use crate::install;
 use crate::kind::{Kind, Layout};
 use crate::lifecycle::{self, LifecycleError};
@@ -76,6 +77,16 @@ pub struct Contents {
     pub file: String,
     /// How many bytes it holds.
     pub size: u64,
+    /// The SHA-256 of what it holds ([`hash::bytes`]), when it was read
+    /// whole: none for one larger than [`CAP`], which never is.
+    ///
+    /// What `edit --if-unchanged` takes, so a front end that changes the
+    /// file holds the change to what it read, and is refused when somebody
+    /// changed it since (`edit_stale`). Hashed here, of the bytes the text
+    /// was read from, rather than by the front end from the text: one
+    /// recipe for every hash of a file, and a text a browser hashed could
+    /// be told apart from the file by nothing but a line ending.
+    pub hash: Option<String>,
     /// What it says, when it is UTF-8 text no larger than [`CAP`]; none
     /// otherwise, and [`withheld`](Self::withheld) says why.
     pub text: Option<String>,
@@ -410,17 +421,18 @@ fn read(
     if !metadata.is_file() {
         return Err(ContentsError::NotAFile { path });
     }
-    let withheld = |size, withheld| Contents {
+    let withheld = |size, hash, withheld| Contents {
         kind,
         name: name.clone(),
         file: file.to_owned(),
         size,
+        hash,
         text: None,
         withheld: Some(withheld),
         manifest: None,
     };
     if metadata.len() > CAP {
-        return Ok(withheld(metadata.len(), Withheld::TooLarge));
+        return Ok(withheld(metadata.len(), None, Withheld::TooLarge));
     }
     // One byte past the cap, so a file that grew since it was measured is
     // caught rather than cut short and passed off as whole.
@@ -430,19 +442,21 @@ fn read(
         .map_err(unreadable)?;
     let size = bytes.len() as u64;
     if size > CAP {
-        return Ok(withheld(size, Withheld::TooLarge));
+        return Ok(withheld(size, None, Withheld::TooLarge));
     }
+    let hash = Some(hash::bytes(&bytes));
     match String::from_utf8(bytes) {
         Ok(text) if !text.contains('\0') => Ok(Contents {
             kind,
             name,
             file: file.to_owned(),
             size,
+            hash,
             manifest: is_manifest(kind, file).then(|| Manifest::of(kind, &text)),
             text: Some(text),
             withheld: None,
         }),
-        _ => Ok(withheld(size, Withheld::Binary)),
+        _ => Ok(withheld(size, hash, Withheld::Binary)),
     }
 }
 

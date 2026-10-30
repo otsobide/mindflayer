@@ -237,13 +237,25 @@ impl Artifact {
         project: impl Into<PathBuf>,
     ) -> Result<Self, ArtifactError> {
         let directory = directory.into();
+        let source = read(&directory.join(manifest_of(Kind::Skill)))?;
+        Self::skill_holding(directory, project, &source)
+    }
+
+    /// A skill in `directory` whose manifest holds `source`, read as
+    /// [`skill`](Self::skill) reads one from the disk: what it would be
+    /// once written there, for a front end to be told what `validate` would
+    /// say of it before it is ([`crate::draft`]).
+    pub(crate) fn skill_holding(
+        directory: impl Into<PathBuf>,
+        project: impl Into<PathBuf>,
+        source: &str,
+    ) -> Result<Self, ArtifactError> {
+        let directory = directory.into();
         let path = directory.join(manifest_of(Kind::Skill));
-        let source = read(&path)?;
-        let document =
-            frontmatter::split(&source).map_err(|source| ArtifactError::FrontMatter {
-                path: path.clone(),
-                source,
-            })?;
+        let document = frontmatter::split(source).map_err(|source| ArtifactError::FrontMatter {
+            path: path.clone(),
+            source,
+        })?;
         let manifest =
             SkillManifest::parse(document.front_matter).map_err(|source| ArtifactError::Parse {
                 path: path.clone(),
@@ -276,13 +288,26 @@ impl Artifact {
     ) -> Result<Self, ArtifactError> {
         let path = file.into();
         let source = read(&path)?;
+        Ok(Self::rule_holding(path, name, project, &source))
+    }
+
+    /// A rule at `file` holding `source`, read as [`rule`](Self::rule) reads
+    /// one from the disk, as [`skill_holding`](Self::skill_holding) reads a
+    /// skill.
+    pub(crate) fn rule_holding(
+        file: impl Into<PathBuf>,
+        name: String,
+        project: impl Into<PathBuf>,
+        source: &str,
+    ) -> Self {
+        let path = file.into();
         // Reading it never fails, as a skill's can: a rule's front matter is
         // optional, so whatever cannot be read as front matter is content.
-        let (manifest, body) = RuleManifest::read(&source);
+        let (manifest, body) = RuleManifest::read(source);
         // The opening line of the body, not of the file, and not a declared
         // description: the body is what an agent reads once the front matter
         // is taken off, so its opening line is what the agent meets first.
-        Ok(Self {
+        Self {
             name,
             path,
             project: project.into(),
@@ -291,7 +316,7 @@ impl Artifact {
             placement: Placement::authored(),
             others: Vec::new(),
             differ: false,
-        })
+        }
     }
 
     /// What kind of artifact this is.

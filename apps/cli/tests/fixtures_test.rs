@@ -1076,3 +1076,214 @@ fn write_what_each_change_the_page_of_updates_sends_is_answered_with() {
     let json = serde_json::to_string_pretty(&written).unwrap() + "\n";
     write("updated", &json);
 }
+
+/// What the library's `review` holds once the editor has added two things
+/// to its front matter that `validate` warns of and `edit --contents`
+/// writes all the same: a `compatibility` that says nothing, and a
+/// `metadata` entry that is no string.
+fn review_warned() -> String {
+    REVIEW.replace(
+        "license: MIT\nmetadata:\n  owner: platform\n",
+        "license: MIT\ncompatibility: \"\"\nmetadata:\n  owner: platform\n  teams: [api, web]\n",
+    )
+}
+
+/// What the library's `review` holds once the editor has emptied its
+/// description, which `edit --contents` refuses.
+fn review_unfit() -> String {
+    REVIEW.replace(
+        "description: Read a change before it lands",
+        "description: \"\"",
+    )
+}
+
+/// What the library's `review` holds once the editor has changed a line of
+/// its body: what saving writes.
+fn review_saved() -> String {
+    REVIEW.replace(
+        "Read the diff **before** it lands",
+        "Read the diff **before** it lands, every time",
+    )
+}
+
+/// A draft of `text` for the library's `review`, as the editor asks core to
+/// judge it.
+fn edited_review(text: &str) -> Value {
+    json!({
+        "type": "validate", "holder": {"type": "workspace"},
+        "draft": {"type": "edit", "reference": "skill:review", "text": text},
+    })
+}
+
+/// A draft of the skill `name`, described as `description`, as the page
+/// adding one asks core to judge it.
+fn added_skill(name: &str, description: &str, template: Option<&str>) -> Value {
+    json!({
+        "type": "validate", "holder": {"type": "workspace"},
+        "draft": {
+            "type": "add", "kind": "skill", "name": name, "description": description,
+            "template": template,
+        },
+    })
+}
+
+/// What the panel is answered with when its editor and the page adding one
+/// of the library's own ask core to judge what is typed, on the workspace
+/// [`workspace`] builds (`drafts.json`): `review` as it is, with what
+/// `validate` warns of, and with its description emptied; and skills to
+/// add, one that would be written, from nothing and from `full`, one whose
+/// name is refused and one whose name is taken.
+///
+/// Beside them (`validated.json`), what `flayer validate` says of the
+/// library once `review` holds the draft it warns of, written with `flayer
+/// edit --contents`: what the panel's verdict is held to, word for word.
+#[test]
+fn write_what_judging_drafts_in_the_library_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = workspace(&home);
+    let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+
+    let answers = vec![
+        asked(&backend, edited_review(REVIEW)),
+        asked(&backend, edited_review(&review_warned())),
+        asked(&backend, edited_review(&review_unfit())),
+        asked(
+            &backend,
+            added_skill("deploy-docs", "Publish the docs", None),
+        ),
+        asked(
+            &backend,
+            added_skill("deploy-docs", "Publish the docs", Some("full")),
+        ),
+        asked(
+            &backend,
+            added_skill("Deploy Docs", "Publish the docs", None),
+        ),
+        asked(&backend, added_skill("review", "Read it again", None)),
+    ];
+    for (index, refused) in [
+        None,
+        None,
+        Some("edit_contents_unfit"),
+        None,
+        None,
+        Some("add_name_unfit"),
+        Some("add_exists"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let answer = &answers[index]["answer"];
+        assert_eq!(
+            answer["refused"]["code"].as_str(),
+            refused,
+            "{index}: {answer}"
+        );
+    }
+    let warned = answers[1]["answer"]["issues"].as_array().unwrap();
+    assert_eq!(warned.len(), 2, "{warned:?}");
+
+    let draft = home.join("review.md");
+    fs::write(&draft, review_warned()).unwrap();
+    flayer(
+        &root,
+        &[
+            "edit",
+            "--contents",
+            draft.to_str().unwrap(),
+            "skill:review",
+        ],
+    )
+    .unwrap();
+    let said = flayer(&root, &["validate"]).unwrap().stdout;
+    for issue in warned {
+        let line = format!("  - warning: {}\n", issue["message"].as_str().unwrap());
+        assert!(said.contains(&line), "{line:?} in {said}");
+    }
+
+    let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    write("drafts", &json);
+    let validated = json!({"text": review_warned(), "said": said});
+    let json = serde_json::to_string_pretty(&validated).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    write("validated", &json);
+}
+
+/// What the panel is answered with when each change its pages of the
+/// library and of a project send is previewed and run, each on the
+/// workspace [`workspace`] builds (`authored.json`): `review` saved from
+/// the editor, and saved again once its file was changed on disk since it
+/// was read, which is refused; a skill added from `full`; `lint` renamed;
+/// and the skill `web` keeps by hand in Claude's folder adopted into the
+/// library.
+#[test]
+fn write_what_each_change_authoring_sends_is_answered_with() {
+    let read = mindflayer_core::hash::bytes(REVIEW.as_bytes());
+    let save = json!({
+        "type": "save", "holder": {"type": "workspace"}, "kind": "skill", "name": "review",
+        "text": review_saved(), "hash": read,
+    });
+    let sent = [
+        (save.clone(), false),
+        (save, true),
+        (
+            json!({
+                "type": "add", "holder": {"type": "workspace"}, "kind": "skill",
+                "name": "deploy-docs", "description": "Publish the docs", "template": "full",
+            }),
+            false,
+        ),
+        (
+            json!({
+                "type": "rename", "holder": {"type": "workspace"}, "kind": "skill",
+                "from": "lint", "to": "tidy",
+            }),
+            false,
+        ),
+        (
+            json!({"type": "adopt", "project": "web", "kind": "skill", "name": "legacy"}),
+            false,
+        ),
+    ];
+
+    let mut answers = Vec::new();
+    let mut written = Vec::new();
+    for (sent, changed) in sent {
+        let dir = TempDir::new().unwrap();
+        let home = dir.path().join("you");
+        let root = workspace(&home);
+        if changed {
+            let review = own_directory_for(&root, Kind::Skill).join("review/SKILL.md");
+            fs::write(&review, format!("{REVIEW}\nChanged on disk since.\n")).unwrap();
+        }
+        let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+        let task: Task = serde_json::from_value(sent.clone()).unwrap();
+        let preview = backend
+            .preview(&task)
+            .unwrap_or_else(|refusal| panic!("{sent}: {}: {}", refusal.code, refusal.message));
+        let outcome = backend.run(task).unwrap();
+        let ran = json!({"lines": preview.lines, "outcome": outcome});
+        let answer = json!({"task": sent, "preview": preview, "ran": ran});
+        let json = serde_json::to_string(&answer).unwrap();
+        let json = pinned(&json, dir.path(), Some(&root));
+        assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+        written.push(serde_json::from_str::<Value>(&json).unwrap());
+        answers.push(answer);
+    }
+
+    for (index, ok) in [true, false, true, true, true].into_iter().enumerate() {
+        assert_eq!(
+            answers[index]["ran"]["outcome"]["runs"][0]["error"].is_null(),
+            ok,
+            "{index}: {}",
+            answers[index]
+        );
+    }
+    let stale = &answers[1]["ran"]["outcome"]["runs"][0]["error"]["code"];
+    assert_eq!(stale, "edit_stale");
+    let json = serde_json::to_string_pretty(&written).unwrap() + "\n";
+    write("authored", &json);
+}

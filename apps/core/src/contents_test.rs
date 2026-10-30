@@ -50,6 +50,7 @@ fn a_skills_manifest_comes_back_as_its_text() {
             name: String::from("deploy"),
             file: String::from("SKILL.md"),
             size: SKILL.len() as u64,
+            hash: Some(hash::bytes(SKILL.as_bytes())),
             text: Some(String::from(SKILL)),
             withheld: None,
             manifest: Some(Manifest {
@@ -128,6 +129,9 @@ fn a_binary_file_is_reported_with_its_size_and_never_read_out() {
         assert_eq!(contents.text, None, "{file}");
         assert_eq!(contents.withheld, Some(Withheld::Binary), "{file}");
         assert_eq!(contents.size, size, "{file}");
+        // Read whole all the same, so what it holds is hashed.
+        let bytes = fs::read(skill.join(file)).unwrap();
+        assert_eq!(contents.hash, Some(hash::bytes(&bytes)), "{file}");
     }
 }
 
@@ -143,8 +147,14 @@ fn a_file_over_the_cap_is_reported_with_its_size_and_never_read_out() {
     assert_eq!(huge.text, None);
     assert_eq!(huge.withheld, Some(Withheld::TooLarge));
     assert_eq!(huge.size, CAP + 1);
+    // Never read whole, so nothing it holds is hashed.
+    assert_eq!(huge.hash, None);
     // The cap itself is still read.
     let full = Contents::of_project(&project, "deploy", "full.md").unwrap();
+    assert_eq!(
+        full.hash,
+        Some(hash::bytes("a".repeat(over - 1).as_bytes()))
+    );
     assert_eq!(full.text.map(|text| text.len() as u64), Some(CAP));
 }
 
@@ -172,7 +182,7 @@ fn markup_comes_back_as_text_with_no_type_to_render_it_by() {
         keys.sort_unstable();
         assert_eq!(
             keys,
-            ["file", "kind", "manifest", "name", "size", "text", "withheld"]
+            ["file", "hash", "kind", "manifest", "name", "size", "text", "withheld"]
         );
         assert_eq!(json["manifest"], serde_json::Value::Null, "{file}");
     }
@@ -329,6 +339,7 @@ fn the_workspaces_own_are_read_from_its_library() {
             "name": "deploy",
             "file": "SKILL.md",
             "size": SKILL.len(),
+            "hash": hash::bytes(SKILL.as_bytes()),
             "text": SKILL,
             "withheld": null,
             "manifest": {

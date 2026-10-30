@@ -9,7 +9,7 @@ import { test as base, expect, type Page } from '@playwright/test'
 import type { Envelope } from '../src/api/generated/Envelope'
 import type { Listing } from '../src/api/generated/Listing'
 import { given, run, serve, type Places } from './environment.ts'
-import { assignable, changeable, updatable } from './fixture.ts'
+import { assignable, authorable, changeable, updatable } from './fixture.ts'
 
 /** The server under test, as the link it printed says. */
 export interface Served {
@@ -103,10 +103,11 @@ export interface Own extends Panel {
 /**
  * What a test's own workspace is built as: `changeable`, for the links and
  * unlinks, unless the spec says `assignable`, for the matrix
- * (`test.use({ building: 'assignable' })`), or `updatable`, for updating
- * and removing.
+ * (`test.use({ building: 'assignable' })`), `updatable`, for updating and
+ * removing, or `authorable`, for editing, adding and renaming in the
+ * library.
  */
-const BUILDERS = { changeable, assignable, updatable }
+const BUILDERS = { changeable, assignable, updatable, authorable }
 
 export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, own: Own, building: keyof typeof BUILDERS }>({
   building: ['changeable', { option: true }],

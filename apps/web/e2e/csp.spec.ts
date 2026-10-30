@@ -21,6 +21,7 @@ const PAGES = [
   '/library',
   '/library?kind=rule',
   ...LIBRARY.map(([kind, name]) => `/artifact?${new URLSearchParams({ kind, name })}`),
+  '/new?kind=skill',
   '/shelf',
   '/sources',
   '/nowhere'
@@ -29,6 +30,19 @@ const PAGES = [
 for (const path of PAGES) {
   test(`${path} loads without a CSP violation`, async ({ panel, watch }) => {
     await panel.open(path)
+    expect(watch.violations).toEqual([])
+  })
+}
+
+// The editor, CodeMirror's styles adopted into its shadow root as a
+// constructed sheet, never a <style> element. Drawn only once its file is
+// read, after the snapshot a page is drawn by, so each waits for it.
+for (const [kind, name] of LIBRARY) {
+  const path = `/edit?${new URLSearchParams({ kind, name })}`
+  test(`${path} draws its editor without a CSP violation`, async ({ page, panel, watch }) => {
+    await panel.open(path)
+    await expect(page.getByRole('textbox', { name: new RegExp(`^The text of ${name}'s `) })).toBeVisible()
+    await drawn(page)
     expect(watch.violations).toEqual([])
   })
 }

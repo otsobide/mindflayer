@@ -12,7 +12,7 @@ import IssueList from '@/components/IssueList.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import StateBadge from '@/components/StateBadge.vue'
 import { holding } from '@/library'
-import { artifactLink, libraryLink, projectLink } from '@/routes'
+import { artifactLink, libraryLink, newLink, projectLink } from '@/routes'
 
 const route = useRoute()
 const change = useQueryChange()
@@ -69,7 +69,16 @@ function folder(snapshot: Snapshot, kind: Kind): string | undefined {
       <AppHeader
         title="Library"
         icon="i-lucide-library-big"
-      />
+      >
+        <UButton
+          v-if="kind"
+          :label="`New ${kind}`"
+          icon="i-lucide-file-plus-2"
+          size="sm"
+          :to="newLink(kind)"
+          data-testid="new"
+        />
+      </AppHeader>
     </template>
 
     <template #body>

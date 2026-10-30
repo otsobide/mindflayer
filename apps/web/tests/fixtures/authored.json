@@ -1,0 +1,175 @@
+[
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "edited skill review: ok\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "hash": "8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d",
+      "holder": {
+        "type": "workspace"
+      },
+      "kind": "skill",
+      "name": "review",
+      "text": "---\nname: review\ndescription: Read a change before it lands\nlicense: MIT\nmetadata:\n  owner: platform\n---\n\n# review\n\nRead the diff **before** it lands, every time, and say what you would change.\n\n## Steps\n\n1. Run `scripts/diff.sh` to see what changed.\n2. Go through [the checklist](references/checklist.md).\n3. Leave one comment per finding, and *say why*.\n\n| check | why |\n| :--- | ---: |\n| tests | they pass |\n\nThe long version is at <https://example.com/review>.\n\n```sh\nscripts/diff.sh main\n```\n",
+      "type": "save"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+      ],
+      "outcome": {
+        "ok": false,
+        "runs": [
+          {
+            "command": "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review",
+            "error": {
+              "code": "edit_stale",
+              "message": "/home/you/Projects/.mindflayer/library/skills/review/SKILL.md: changed since it was read, its SHA-256 now cb41a83d67ebbaa277cd7fe70f07d309ac257de256c210e6d8f35d9115edf740 and not 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d, so it is not written over; read it again"
+            },
+            "ok": false,
+            "stderr": [],
+            "stdout": ""
+          }
+        ]
+      }
+    },
+    "task": {
+      "hash": "8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d",
+      "holder": {
+        "type": "workspace"
+      },
+      "kind": "skill",
+      "name": "review",
+      "text": "---\nname: review\ndescription: Read a change before it lands\nlicense: MIT\nmetadata:\n  owner: platform\n---\n\n# review\n\nRead the diff **before** it lands, every time, and say what you would change.\n\n## Steps\n\n1. Run `scripts/diff.sh` to see what changed.\n2. Go through [the checklist](references/checklist.md).\n3. Leave one comment per finding, and *say why*.\n\n| check | why |\n| :--- | ---: |\n| tests | they pass |\n\nThe long version is at <https://example.com/review>.\n\n```sh\nscripts/diff.sh main\n```\n",
+      "type": "save"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer add --template full skill deploy-docs 'Publish the docs'"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer add --template full skill deploy-docs 'Publish the docs'"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer add --template full skill deploy-docs 'Publish the docs'",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "created skill deploy-docs at /home/you/Projects/.mindflayer/library/skills/deploy-docs/SKILL.md\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "description": "Publish the docs",
+      "holder": {
+        "type": "workspace"
+      },
+      "kind": "skill",
+      "name": "deploy-docs",
+      "template": "full",
+      "type": "add"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer rename skill:lint tidy"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer rename skill:lint tidy"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer rename skill:lint tidy",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "renamed skill lint to tidy at /home/you/Projects/.mindflayer/library/skills/tidy\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "from": "lint",
+      "holder": {
+        "type": "workspace"
+      },
+      "kind": "skill",
+      "to": "tidy",
+      "type": "rename"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer adopt -p /home/you/Projects/web --yes skill:legacy"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer adopt -p /home/you/Projects/web --yes skill:legacy"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer adopt -p /home/you/Projects/web --yes skill:legacy",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "copied legacy from web into the library, at /home/you/Projects/.mindflayer/library/skills/legacy\nrecorded legacy in web as installed from workspace, at .claude/skills/legacy\nrecorded .agents/skills/legacy missing: `flayer update -p web` puts it there\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "kind": "skill",
+      "name": "legacy",
+      "project": "web",
+      "type": "adopt"
+    }
+  }
+]

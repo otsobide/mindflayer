@@ -29,3 +29,16 @@ export function libraryLink(kind: Kind): RouteLocationRaw {
 export function artifactLink(kind: Kind, name: string): RouteLocationRaw {
   return { path: '/artifact', query: { kind, name } }
 }
+
+/**
+ * Where one of the library's own is edited: the editor of the file it is
+ * read from, named as its page names it.
+ */
+export function editLink(kind: Kind, name: string): RouteLocationRaw {
+  return { path: '/edit', query: { kind, name } }
+}
+
+/** Where one of a kind is added to the library: from a template, or from nothing. */
+export function newLink(kind: Kind): RouteLocationRaw {
+  return { path: '/new', query: { kind } }
+}

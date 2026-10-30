@@ -183,6 +183,35 @@ const TOUR: Shot[] = [
     ready: async page => page.getByTestId('markdown').waitFor()
   },
   {
+    // Its SKILL.md in the editor, a line typed into its front matter that
+    // validate warns of, judged as core judges it, and not saved.
+    name: 'editor',
+    path: `/edit?${new URLSearchParams({ kind: 'skill', name: ARTIFACT })}`,
+    ready: async (page) => {
+      const text = page.getByRole('textbox', { name: `The text of ${ARTIFACT}'s SKILL.md` })
+      await text.click()
+      // Below the fence that opens it: a line further down may wrap.
+      await page.keyboard.press('ControlOrMeta+Home')
+      await page.keyboard.press('End')
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('compatibility: ""')
+      await page.getByTestId('verdict').getByTestId('issue').first().waitFor()
+      await page.getByTestId('judging').waitFor({ state: 'detached' })
+    }
+  },
+  {
+    // One added from the `full` template, typed and judged, not yet added.
+    name: 'new',
+    path: '/new?kind=skill',
+    ready: async (page) => {
+      await page.getByLabel('Name').fill('release-checklist')
+      await page.getByLabel('Description').fill('Walk through what every release needs before it ships')
+      await page.getByRole('radio', { name: /^full/ }).click()
+      await page.getByTestId('writes').waitFor()
+      await page.getByTestId('judging').waitFor({ state: 'detached' })
+    }
+  },
+  {
     name: 'shelf',
     path: '/shelf',
     ready: async page => page.getByTestId('row').first().waitFor()

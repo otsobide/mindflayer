@@ -482,6 +482,11 @@ fn a_skills_file_comes_back_as_text_inside_json() {
     assert_eq!(answer["text"], skill_file("alpha", "A skill"));
     assert_eq!(answer["withheld"], Value::Null);
     assert_eq!(answer["kind"], "skill");
+    // What `edit --if-unchanged` takes of it, core's hash of its bytes.
+    assert_eq!(
+        answer["hash"],
+        mindflayer_core::hash::bytes(skill_file("alpha", "A skill").as_bytes())
+    );
     // Cut where core cuts it, so the panel draws what it declares apart.
     assert_eq!(answer["manifest"]["front_matter"][0]["key"], "name");
     assert_eq!(answer["manifest"]["front_matter"][0]["value"], "alpha");
@@ -506,7 +511,7 @@ fn an_html_asset_or_an_svg_holding_a_script_is_not_served_as_content() {
         keys.sort_unstable();
         assert_eq!(
             keys,
-            ["file", "kind", "manifest", "name", "size", "text", "withheld"]
+            ["file", "hash", "kind", "manifest", "name", "size", "text", "withheld"]
         );
         // No file but the one the skill is read from is cut into parts.
         assert_eq!(answer["manifest"], Value::Null, "{file}");
@@ -2011,4 +2016,259 @@ fn an_edited_copy_nothing_offers_any_more_is_taken_out_by_the_forced_uninstall_c
     let after = backend.query(query(json!({"type": "updates"}))).unwrap();
     assert_eq!(after["states"][3], json!({"state": "orphaned", "count": 0}));
     assert_eq!(after["states"][1], json!({"state": "edited", "count": 1}));
+}
+
+/// A draft as the panel sends it to be judged.
+fn judge(holder: Value, draft: Value) -> Query {
+    query(json!({"type": "validate", "holder": holder, "draft": draft}))
+}
+
+fn added(name: &str, description: &str) -> Value {
+    json!({
+        "type": "add", "kind": "skill", "name": name, "description": description,
+        "template": null,
+    })
+}
+
+/// A draft is judged by the command that would write it, by its code and in
+/// its words, with nothing written: what `add` refuses, in the workspace's
+/// own or a project's, and a draft it would write.
+#[test]
+fn a_draft_is_judged_as_the_command_writing_it_would_judge_it_and_nothing_is_written() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let backend = backend(root);
+    let before = files(root);
+    let own = json!({"type": "workspace"});
+    let alpha = json!({"type": "project", "entry": "alpha"});
+
+    let fit = backend
+        .query(judge(own.clone(), added("review", "Read it")))
+        .unwrap();
+    let taken = backend.query(judge(own, added("deploy", "Again"))).unwrap();
+    let unfit = backend
+        .query(judge(alpha, added("Bad Name", "Read it")))
+        .unwrap();
+
+    assert_eq!(fit, json!({"issues": [], "refused": null}));
+    assert_eq!(files(root), before);
+    let said = flayer(root, &["add", "skill", "deploy", "Again"]).unwrap_err();
+    assert_eq!(taken["refused"]["code"], said.error.code());
+    assert_eq!(taken["refused"]["message"], said.error.to_string());
+    let said = mind(
+        &root.join("alpha"),
+        &["add", "skill", "Bad Name", "Read it"],
+    )
+    .unwrap_err();
+    assert_eq!(unfit["refused"]["code"], "add_name_unfit");
+    assert_eq!(unfit["refused"]["message"], said.error.to_string());
+}
+
+/// What `validate` would say of contents an edit would write is what it says
+/// once they are written, word for word, a warning said as one.
+#[test]
+fn contents_are_judged_in_the_words_validate_says_them_in_once_written() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let text = "---\nname: deploy\ndescription: Ship it\ncompatibility: \"\"\n---\n\n# deploy\n";
+
+    let judged = backend(root)
+        .query(judge(
+            json!({"type": "workspace"}),
+            json!({"type": "edit", "reference": "skill:deploy", "text": text}),
+        ))
+        .unwrap();
+
+    assert_eq!(judged["refused"], Value::Null, "{judged}");
+    let issues = judged["issues"].as_array().unwrap();
+    assert_eq!(issues.len(), 1, "{judged}");
+    let draft = root.join("draft.md");
+    fs::write(&draft, text).unwrap();
+    flayer(
+        root,
+        &[
+            "edit",
+            "--contents",
+            draft.to_str().unwrap(),
+            "skill:deploy",
+        ],
+    )
+    .unwrap();
+    let said = flayer(root, &["validate"]).unwrap().stdout;
+    for issue in issues {
+        let marked = if issue["warning"] == true {
+            "warning: "
+        } else {
+            ""
+        };
+        let line = format!("  - {marked}{}\n", issue["message"].as_str().unwrap());
+        assert!(said.contains(&line), "{line:?} in {said}");
+    }
+}
+
+/// Refused by `edit --contents`, with what `validate` would say beside it,
+/// and a holder the workspace does not link refused by the path policy.
+#[test]
+fn contents_an_edit_refuses_and_a_holder_not_linked_are_refused_with_their_codes() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    let backend = backend(root);
+    let unfit = json!({
+        "type": "edit", "reference": "skill:alpha",
+        "text": "---\nname: alpha\ndescription: \"\"\n---\n",
+    });
+
+    let judged = backend
+        .query(judge(
+            json!({"type": "project", "entry": "alpha"}),
+            unfit.clone(),
+        ))
+        .unwrap();
+    let elsewhere = backend
+        .query(judge(json!({"type": "project", "entry": "../gone"}), unfit))
+        .unwrap_err();
+
+    assert_eq!(judged["refused"]["code"], "edit_contents_unfit");
+    assert_eq!(judged["issues"][0]["code"], "description_empty");
+    assert_eq!(elsewhere.code, "not_registered");
+    let refused: Result<Query, _> = serde_json::from_value(json!({
+        "type": "validate", "holder": {"type": "workspace"},
+        "draft": {"type": "edit", "reference": "skill:alpha", "text": "", "path": "/etc"},
+    }));
+    assert!(refused.is_err(), "a field a draft does not have is refused");
+}
+
+/// A save of the library's `deploy`, `text` in place of what the hash of
+/// `read` says it was read from.
+fn save(text: &str, read: &str) -> Task {
+    task(json!({
+        "type": "save", "holder": {"type": "workspace"}, "kind": "skill", "name": "deploy",
+        "text": text, "hash": mindflayer_core::hash::bytes(read.as_bytes()),
+    }))
+}
+
+/// Whatever the workspace's scratch folder holds: nothing, once a run is
+/// over, a folder made for it left in place.
+fn scratch(root: &Path) -> Vec<PathBuf> {
+    let folder = FlayerWorkspace::open(root).unwrap().scratch_dir();
+    fs::read_dir(&folder)
+        .map(|entries| entries.map(|entry| entry.unwrap().path()).collect())
+        .unwrap_or_default()
+}
+
+/// The browser sends the text, the backend puts it where the line it
+/// previewed reads it, the line writes it into the artifact, and the file
+/// is taken away once it ran: the same line previewed and run.
+#[test]
+fn a_save_writes_the_text_through_edit_contents_and_takes_its_file_away_after() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
+    let read = fs::read_to_string(&manifest).unwrap();
+    let text = read.replace("Ship it", "Ship it today");
+    let backend = backend(root);
+
+    let preview = backend.preview(&save(&text, &read)).unwrap();
+    let ran = backend.run(save(&text, &read)).unwrap();
+
+    assert!(ran.ok, "{ran:?}");
+    assert_eq!(preview.lines, [ran.runs[0].command.clone()]);
+    let route = mindflayer_cli::task::scratch_route(&text);
+    assert_eq!(
+        ran.runs[0].command,
+        format!(
+            "flayer edit --contents {route} --if-unchanged {} skill:deploy",
+            mindflayer_core::hash::bytes(read.as_bytes())
+        )
+    );
+    assert!(
+        ran.runs[0].stdout.starts_with("edited skill deploy"),
+        "{ran:?}"
+    );
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), text);
+    assert_eq!(scratch(root), Vec::<PathBuf>::new());
+}
+
+/// A file changed since the text was read is not written over, and the text
+/// is taken away all the same, as it is from a save the edit refuses.
+#[test]
+fn a_save_the_edit_refuses_writes_nothing_and_still_takes_its_file_away() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
+    let read = fs::read_to_string(&manifest).unwrap();
+    let since = read.replace("Ship it", "Ship it now");
+    fs::write(&manifest, &since).unwrap();
+    let backend = backend(root);
+
+    let stale = backend
+        .run(save(&read.replace("Ship it", "Ship"), &read))
+        .unwrap();
+    let unfit = backend
+        .run(save(&since.replace("Ship it now", "\"\""), &since))
+        .unwrap();
+
+    for (ran, code) in [(&stale, "edit_stale"), (&unfit, "edit_contents_unfit")] {
+        assert!(!ran.ok, "{ran:?}");
+        assert_eq!(ran.runs[0].error.as_ref().unwrap().code, code, "{ran:?}");
+    }
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), since);
+    assert_eq!(scratch(root), Vec::<PathBuf>::new());
+}
+
+/// A file an interrupted run left under the name is the same text, and is
+/// taken; anything else there refuses the save before a line runs, and is
+/// left as it is.
+#[test]
+fn a_save_takes_the_text_left_under_its_name_and_refuses_anything_else_there() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
+    let read = fs::read_to_string(&manifest).unwrap();
+    let text = read.replace("Ship it", "Ship it today");
+    let left = root.join(mindflayer_cli::task::scratch_route(&text));
+    fs::create_dir_all(left.parent().unwrap()).unwrap();
+    fs::write(&left, &text).unwrap();
+    let backend = backend(root);
+
+    let taken = backend.run(save(&text, &read)).unwrap();
+    fs::write(&left, "somebody's").unwrap();
+    let refused = backend.run(save(&text, &text)).unwrap_err();
+
+    assert!(taken.ok, "{taken:?}");
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), text);
+    assert_eq!(refused.code, "scratch_unwritable");
+    assert_eq!(fs::read_to_string(&left).unwrap(), "somebody's");
+}
+
+/// A cloned workspace can bring its scratch folder as a link, to an agent's
+/// own folder: the text is never written through it, and no line runs.
+#[cfg(unix)]
+#[test]
+fn a_save_whose_scratch_folder_is_a_link_is_refused_and_writes_nothing_where_it_leads() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
+    let read = fs::read_to_string(&manifest).unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let commands = elsewhere.path().join("commands");
+    fs::create_dir(&commands).unwrap();
+    let folder = FlayerWorkspace::open(root).unwrap().scratch_dir();
+    std::os::unix::fs::symlink(&commands, &folder).unwrap();
+    let backend = backend(root);
+
+    let refused = backend
+        .run(save(&read.replace("Ship it", "Ship it today"), &read))
+        .unwrap_err();
+
+    assert_eq!(refused.code, "scratch_unwritable");
+    assert!(refused.message.contains("is a link"), "{}", refused.message);
+    assert_eq!(fs::read_dir(&commands).unwrap().count(), 0);
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), read);
 }

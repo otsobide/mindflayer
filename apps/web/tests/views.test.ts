@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { Health } from '@/api/generated/Health'
-import { answering, answers, commanded, commanding, fixture, plans, render, unmount, updates } from './panel'
+import { answering, answers, commanded, commanding, drafts, fixture, plans, render, unmount, updates } from './panel'
 
 /** Every `<style>` element anything adds while a test runs, which the CSP would refuse. */
 let styles: Element[]
@@ -122,6 +122,16 @@ describe('one of the library\'s own, about to be removed', () => {
     await flushPromises()
     document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
     await vi.waitFor(() => expect(page.find('[data-testid="remove-yes"]').exists()).toBe(true))
+
+    drawsEveryIcon(page)
+    expect(styles).toEqual([])
+  })
+})
+
+describe('authoring in the library', () => {
+  it.each(['/edit?kind=skill&name=review', '/new?kind=skill'])('%s draws every icon from the bundle and adds no style element', async (path) => {
+    const { transport } = answering(fixture('workspace'), [...answers(), ...drafts()])
+    const { page } = await render(path, transport)
 
     drawsEveryIcon(page)
     expect(styles).toEqual([])

@@ -13,10 +13,11 @@ import FileTree from '@/components/FileTree.vue'
 import IssueList from '@/components/IssueList.vue'
 import MarkdownBody from '@/components/MarkdownBody.vue'
 import RemoveOffer from '@/components/RemoveOffer.vue'
+import RenameForm from '@/components/RenameForm.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import StateBadge from '@/components/StateBadge.vue'
 import { holding } from '@/library'
-import { libraryLink, projectLink } from '@/routes'
+import { editLink, libraryLink, projectLink } from '@/routes'
 
 const route = useRoute()
 const change = useQueryChange()
@@ -70,7 +71,18 @@ function withheld(contents: Contents): string {
       <AppHeader
         :title="title"
         icon="i-lucide-file-text"
-      />
+      >
+        <UButton
+          v-if="held"
+          label="Edit"
+          icon="i-lucide-file-pen-line"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          :to="editLink(held.kind, held.name)"
+          data-testid="edit"
+        />
+      </AppHeader>
     </template>
 
     <template #body>
@@ -447,6 +459,11 @@ function withheld(contents: Contents): string {
               </p>
             </div>
           </section>
+
+          <RenameForm
+            :kind="held.kind"
+            :name="held.name"
+          />
 
           <RemoveOffer
             :kind="held.kind"

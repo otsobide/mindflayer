@@ -29,7 +29,9 @@
 use clap::Parser as _;
 use mindflayer_core::install::Change;
 use mindflayer_core::url::redacted;
-use mindflayer_core::{codes, Agent, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER};
+use mindflayer_core::{
+    codes, hash, Agent, FlayerWorkspace, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -160,6 +162,27 @@ pub enum Task {
         holder: Holder,
         kind: Kind,
         name: String,
+    },
+    /// `flayer edit [-p <project>] --contents <file> --if-unchanged <hash>
+    /// <kind:name>`: what the artifact is read from, a skill's `SKILL.md`
+    /// or a rule's file, replaced with `text` whole, only while it holds
+    /// what `hash`, the SHA-256 the panel was given with what it read
+    /// (`contents::Contents::hash`), is the hash of.
+    ///
+    /// The text, never a path: the file the line reads is the workspace's
+    /// scratch file for it ([`scratch_route`]), named by the line, which
+    /// the front end running it writes the text into before the line runs
+    /// and takes away after. A front end that has not written it runs a
+    /// line that reads nothing, which `edit` says. The workspace's command
+    /// at either level, `-p` naming a project, rather than `mind -C`, so
+    /// the route is read from the workspace's root, where the lines run and
+    /// the scratch folder is.
+    Save {
+        holder: Holder,
+        kind: Kind,
+        name: String,
+        text: String,
+        hash: String,
     },
     /// `… rename <kind:name> <to>`.
     Rename {
@@ -529,6 +552,24 @@ impl Task {
             Task::Edit { holder, kind, name } => {
                 vec![at(holder, &["edit"], &[&qualified(*kind, name)])]
             }
+            Task::Save {
+                holder,
+                kind,
+                name,
+                text,
+                hash,
+            } => {
+                let mut head = match holder {
+                    Holder::Workspace => owned(&["flayer", "edit"]),
+                    Holder::Project(entry) | Holder::Elsewhere(entry) => {
+                        picking(&["flayer", "edit"], std::slice::from_ref(entry))
+                    }
+                };
+                head.extend(option("--contents", &scratch_route(text)));
+                head.extend(option("--if-unchanged", hash));
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[&qualified(*kind, name)])]
+            }
             Task::Rename {
                 holder,
                 kind,
@@ -733,6 +774,7 @@ impl Task {
                 | Task::UnloadHere { .. }
                 | Task::Add { .. }
                 | Task::Edit { .. }
+                | Task::Save { .. }
                 | Task::Rename { .. }
                 | Task::Remove { yes: true, .. }
                 | Task::Gather { .. }
@@ -1213,6 +1255,41 @@ fn at(holder: &Holder, command: &[&str], positionals: &[&str]) -> Vec<String> {
     let mut head: Vec<&str> = start.iter().map(String::as_str).collect();
     head.extend_from_slice(command);
     words(&head, positionals)
+}
+
+/// Where a save's `text` is put for its line to read, as a route from the
+/// workspace's root, `/` separated: the file [`scratch_name`] names, in the
+/// workspace's scratch folder as core spells its route
+/// ([`FlayerWorkspace::scratch_route`]), so the file a front end writes
+/// there ([`FlayerWorkspace::scratch_dir`]) is the one the line reads.
+///
+/// By what it holds rather than by a name drawn for the run, so the line a
+/// preview shows is the line that runs, a preview and a run being two
+/// requests; and no two saves of different text are named alike, while two
+/// of the same text hold the same bytes. A file an interrupted run left
+/// under the name is the same text, which a front end may take as it is.
+/// In `.mindflayer`, where the line runs from and no agent looks, rather
+/// than in the system's temporary folder, where another user could read
+/// what is about to be written.
+pub fn scratch_route(text: &str) -> String {
+    format!(
+        "{}/{}",
+        FlayerWorkspace::scratch_route(),
+        scratch_name(text)
+    )
+}
+
+/// The name of the file a save's `text` is put in, in the workspace's
+/// scratch folder ([`scratch_route`]): `edit-`, the first sixteen hex
+/// digits of the SHA-256 of what it holds, and `.md`.
+pub fn scratch_name(text: &str) -> String {
+    let named = &hash::bytes(text.as_bytes())[..16];
+    format!("edit-{named}.md")
+}
+
+/// `words` as owned words.
+fn owned(words: &[&str]) -> Vec<String> {
+    words.iter().map(|word| (*word).to_owned()).collect()
 }
 
 /// `head`, then a `-p` for each of `projects`, each kept from being read as a

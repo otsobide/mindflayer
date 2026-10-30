@@ -1,0 +1,156 @@
+[
+  {
+    "answer": {
+      "issues": [],
+      "refused": null
+    },
+    "query": {
+      "draft": {
+        "reference": "skill:review",
+        "text": "---\nname: review\ndescription: Read a change before it lands\nlicense: MIT\nmetadata:\n  owner: platform\n---\n\n# review\n\nRead the diff **before** it lands, and say what you would change.\n\n## Steps\n\n1. Run `scripts/diff.sh` to see what changed.\n2. Go through [the checklist](references/checklist.md).\n3. Leave one comment per finding, and *say why*.\n\n| check | why |\n| :--- | ---: |\n| tests | they pass |\n\nThe long version is at <https://example.com/review>.\n\n```sh\nscripts/diff.sh main\n```\n",
+        "type": "edit"
+      },
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "validate"
+    }
+  },
+  {
+    "answer": {
+      "issues": [
+        {
+          "code": "compatibility_empty",
+          "message": "`compatibility` is empty; leave it out when the skill needs nothing in particular",
+          "warning": true
+        },
+        {
+          "code": "metadata_not_a_string",
+          "key": "teams",
+          "message": "`metadata` entry `teams` is not a string, so it is ignored, and left in the file as written",
+          "warning": true
+        }
+      ],
+      "refused": null
+    },
+    "query": {
+      "draft": {
+        "reference": "skill:review",
+        "text": "---\nname: review\ndescription: Read a change before it lands\nlicense: MIT\ncompatibility: \"\"\nmetadata:\n  owner: platform\n  teams: [api, web]\n---\n\n# review\n\nRead the diff **before** it lands, and say what you would change.\n\n## Steps\n\n1. Run `scripts/diff.sh` to see what changed.\n2. Go through [the checklist](references/checklist.md).\n3. Leave one comment per finding, and *say why*.\n\n| check | why |\n| :--- | ---: |\n| tests | they pass |\n\nThe long version is at <https://example.com/review>.\n\n```sh\nscripts/diff.sh main\n```\n",
+        "type": "edit"
+      },
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "validate"
+    }
+  },
+  {
+    "answer": {
+      "issues": [
+        {
+          "code": "description_empty",
+          "message": "`description` is empty",
+          "warning": false
+        }
+      ],
+      "refused": {
+        "code": "edit_contents_unfit",
+        "message": "the contents given for `review` break a rule, so nothing was written: `description` is empty"
+      }
+    },
+    "query": {
+      "draft": {
+        "reference": "skill:review",
+        "text": "---\nname: review\ndescription: \"\"\nlicense: MIT\nmetadata:\n  owner: platform\n---\n\n# review\n\nRead the diff **before** it lands, and say what you would change.\n\n## Steps\n\n1. Run `scripts/diff.sh` to see what changed.\n2. Go through [the checklist](references/checklist.md).\n3. Leave one comment per finding, and *say why*.\n\n| check | why |\n| :--- | ---: |\n| tests | they pass |\n\nThe long version is at <https://example.com/review>.\n\n```sh\nscripts/diff.sh main\n```\n",
+        "type": "edit"
+      },
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "validate"
+    }
+  },
+  {
+    "answer": {
+      "issues": [],
+      "refused": null
+    },
+    "query": {
+      "draft": {
+        "description": "Publish the docs",
+        "kind": "skill",
+        "name": "deploy-docs",
+        "template": null,
+        "type": "add"
+      },
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "validate"
+    }
+  },
+  {
+    "answer": {
+      "issues": [],
+      "refused": null
+    },
+    "query": {
+      "draft": {
+        "description": "Publish the docs",
+        "kind": "skill",
+        "name": "deploy-docs",
+        "template": "full",
+        "type": "add"
+      },
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "validate"
+    }
+  },
+  {
+    "answer": {
+      "issues": [],
+      "refused": {
+        "code": "add_name_unfit",
+        "message": "`Deploy Docs` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens"
+      }
+    },
+    "query": {
+      "draft": {
+        "description": "Publish the docs",
+        "kind": "skill",
+        "name": "Deploy Docs",
+        "template": null,
+        "type": "add"
+      },
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "validate"
+    }
+  },
+  {
+    "answer": {
+      "issues": [],
+      "refused": {
+        "code": "add_exists",
+        "message": "/home/you/Projects/.mindflayer/library/skills/review: already exists, and is left alone"
+      }
+    },
+    "query": {
+      "draft": {
+        "description": "Read it again",
+        "kind": "skill",
+        "name": "review",
+        "template": null,
+        "type": "add"
+      },
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "validate"
+    }
+  }
+]

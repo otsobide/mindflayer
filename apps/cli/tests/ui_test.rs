@@ -195,6 +195,45 @@ fn the_panel_runs_what_it_is_sent_and_the_next_snapshot_shows_it() {
     assert_eq!(transcript, json!([ran]));
 }
 
+/// A save as the panel's editor sends it, over loopback: the text it read
+/// and the hash it was read with, from the query of its file; the file on
+/// disk holding the text once the run answered, and nothing left in the
+/// workspace's scratch folder, where the text was put for the line to read.
+#[test]
+fn a_save_writes_the_text_and_leaves_nothing_in_the_scratch_folder() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let panel = serve("flayer", dir.path(), home.path());
+    let workspace = json!({"type": "workspace"});
+    let (status, read) = panel.post(
+        "/api/query",
+        json!({
+            "type": "contents", "holder": workspace, "reference": "skill:commit-style",
+            "file": "SKILL.md",
+        }),
+    );
+    assert_eq!(status, 200, "{read}");
+    let text = read["text"]
+        .as_str()
+        .unwrap()
+        .replace("writes commits", "writes its commits");
+
+    let (status, ran) = panel.post(
+        "/api/commands",
+        json!({
+            "type": "save", "holder": workspace, "kind": "skill", "name": "commit-style",
+            "text": text, "hash": read["hash"],
+        }),
+    );
+
+    assert_eq!(status, 200, "{ran}");
+    assert_eq!(ran["outcome"]["ok"], true, "{ran}");
+    let manifest = own_directory_for(dir.path(), Kind::Skill).join("commit-style/SKILL.md");
+    assert_eq!(fs::read_to_string(manifest).unwrap(), text);
+    let scratch = FlayerWorkspace::open(dir.path()).unwrap().scratch_dir();
+    assert_eq!(fs::read_dir(scratch).unwrap().count(), 0);
+}
+
 #[test]
 fn a_request_without_the_token_is_refused_with_a_401() {
     let dir = workspace_with_own();
