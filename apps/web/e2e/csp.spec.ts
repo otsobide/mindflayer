@@ -21,6 +21,10 @@ const PAGES = [
   '/library',
   '/library?kind=rule',
   ...LIBRARY.map(([kind, name]) => `/artifact?${new URLSearchParams({ kind, name })}`),
+  // The editor, CodeMirror's styles adopted into its shadow root as a
+  // constructed sheet, never a <style> element; and the page adding one.
+  ...LIBRARY.map(([kind, name]) => `/edit?${new URLSearchParams({ kind, name })}`),
+  '/new?kind=skill',
   '/shelf',
   '/sources',
   '/nowhere'

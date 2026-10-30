@@ -161,3 +161,16 @@ export function updatable(at: Places): void {
   const edited = draft(at, 'beta-lint.md', lint('Our own way: lint before every push.'))
   succeed(at, 'mind', join(at.workspace, beta), ['edit', `skill:${UPDATED}`, '--editor', `cp ${edited}`])
 }
+
+/** The skill `authorable`'s library holds, which the editor changes. */
+export const AUTHORED = 'review' as const
+
+/**
+ * A workspace for the spec that authors in the library from the panel,
+ * which no other spec reads: its library holds the skill `review`, as
+ * `flayer add` writes it, and nothing else.
+ */
+export function authorable(at: Places): void {
+  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'flayer', at.workspace, ['add', 'skill', AUTHORED, 'Read a change before it lands'])
+}
