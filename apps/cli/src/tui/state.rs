@@ -1693,6 +1693,7 @@ impl App {
                 | Task::ApplyInstall { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
+                | Task::UninstallOrphaned { .. }
                 | Task::Update { .. }
                 | Task::Minds { .. },
                 _,

@@ -293,6 +293,13 @@ pub enum Task {
         kind: Kind,
         name: String,
     },
+    /// `… uninstall --orphaned`: every installation in a project that
+    /// nothing offers any more where it came from, taken back out of it;
+    /// `flayer uninstall --all-projects --orphaned` for the workspace's own
+    /// row, out of every project it links, as an update reaches them. Never
+    /// forced: one changed since it was installed is left, every copy of it,
+    /// for a command line that says `--force` once somebody has looked.
+    UninstallOrphaned { holder: Holder },
     /// `flayer adopt -p <project> --yes <kind:name>`: somebody's skill in
     /// the project's agents' folders brought into the workspace's library,
     /// its copies recorded as installed from there: asked about before it
@@ -665,6 +672,13 @@ impl Task {
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
             }
+            Task::UninstallOrphaned { holder } => match holder {
+                Holder::Workspace => vec![words(
+                    &["flayer", "uninstall", "--all-projects", "--orphaned"],
+                    &[],
+                )],
+                _ => vec![at(holder, &["uninstall", "--orphaned"], &[])],
+            },
             // `--yes` before the name, as `remove` has it, so a name a
             // `--` has to keep from being read as a flag leaves it a flag.
             Task::Adopt {
@@ -720,6 +734,7 @@ impl Task {
                 | Task::Update { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
+                | Task::UninstallOrphaned { .. }
                 | Task::Adopt { .. }
                 | Task::Migrate { yes: true, .. }
                 | Task::ApplyInstall { .. }

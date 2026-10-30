@@ -12,7 +12,7 @@ use crate::{Cli, FlayerCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 33] = [
+const TAGS: [&str; 34] = [
     "init_workspace",
     "init_project",
     "link",
@@ -41,6 +41,7 @@ const TAGS: [&str; 33] = [
     "update",
     "install",
     "uninstall",
+    "uninstall_orphaned",
     "adopt",
     "migrate",
     "open_install",
@@ -220,6 +221,9 @@ fn every(value: &str) -> Vec<Task> {
                 yes: at % 2 == 0,
             },
             Task::Validate {
+                holder: holder.clone(),
+            },
+            Task::UninstallOrphaned {
                 holder: holder.clone(),
             },
             Task::Update {
@@ -559,6 +563,34 @@ fn a_removal_is_a_dry_run_until_it_is_told_and_only_then_asked_about() {
         remove(false, false).commands(),
         [line("flayer remove skill:lint")]
     );
+}
+
+/// Taking out what nothing offers any more, from every project the
+/// workspace links or from one, as somebody would type it: asked about
+/// first, since it takes copies away.
+#[test]
+fn what_nothing_offers_is_taken_out_of_every_project_or_of_one() {
+    let orphans = |holder| Task::UninstallOrphaned { holder };
+
+    for (task, said) in [
+        (
+            orphans(Holder::Workspace),
+            "flayer uninstall --all-projects --orphaned",
+        ),
+        (
+            orphans(Holder::Project(String::from("/work/alpha"))),
+            "mind -C /work/alpha uninstall --orphaned",
+        ),
+        (
+            orphans(Holder::Elsewhere(String::from("/work/alpha"))),
+            "mind -W . -C /work/alpha uninstall --orphaned",
+        ),
+    ] {
+        assert_eq!(task.commands(), [line(said)], "{task:?}");
+        assert!(task.writes(), "{task:?}");
+        assert_eq!(task.cautions(), [(0, Caution::Uninstalls)], "{task:?}");
+        assert_eq!(task.refusal(), None, "{task:?}");
+    }
 }
 
 /// What the panel's page of updates asks for, each the line somebody would
@@ -1291,7 +1323,9 @@ fn a_task_is_asked_about_for_each_of_its_lines_that_takes_something_away() {
                 yes: true,
                 ..
             } => vec![(0, Caution::Removes), (0, Caution::Uninstalls)],
-            Task::Uninstall { .. } => vec![(0, Caution::Uninstalls)],
+            Task::Uninstall { .. } | Task::UninstallOrphaned { .. } => {
+                vec![(0, Caution::Uninstalls)]
+            }
             Task::Update { force: true, .. } => vec![(0, Caution::Forces)],
             Task::Unlink { .. } => vec![(0, Caution::Unlinks)],
             Task::Unload { .. } | Task::UnloadHere { .. } => vec![(0, Caution::Unloads)],

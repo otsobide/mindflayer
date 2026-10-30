@@ -115,7 +115,8 @@ impl Admission<'_> {
             | Task::Targets { holder, .. }
             | Task::Settings { holder, .. }
             | Task::Toggled { holder, .. }
-            | Task::Update { holder, .. } => *holder = self.holder(holder)?,
+            | Task::Update { holder, .. }
+            | Task::UninstallOrphaned { holder } => *holder = self.holder(holder)?,
             Task::Install { projects, .. } | Task::Uninstall { projects, .. } => {
                 for project in projects {
                     *project = self.project(project)?;
