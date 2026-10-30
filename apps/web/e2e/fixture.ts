@@ -5,7 +5,7 @@
  * written by hand but the folders `mind init` is run in, as `mkdir` would.
  */
 import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { succeed, type Places } from './environment.ts'
 
 /** The workspace's own, each as `flayer add` takes it: kind, name, description. */
@@ -73,4 +73,35 @@ export function changeable(at: Places): void {
     succeed(at, 'mind', folder, ['init'])
   }
   succeed(at, 'flayer', at.workspace, ['link', 'drafts'])
+}
+
+/** The skill `assignable`'s loaded workspace offers, and where from as `--from` takes it. */
+export const OFFERED = { name: 'notes', origin: 'load:../team' } as const
+
+/** The projects `assignable` links, each for Claude and Codex. */
+export const ASSIGNED = ['alpha', 'beta'] as const
+
+/**
+ * A workspace for the spec that assigns from the matrix, which no other
+ * spec reads: `team`, a workspace beside it whose own skill `notes` it
+ * loads, and `alpha` and `beta`, each made by `mind init` for Claude and
+ * Codex and linked, holding nothing yet.
+ *
+ * Offered from a loaded workspace rather than from the shelf, which only a
+ * gather from a git source fills, and the suite builds nothing a git
+ * source makes: a load is the other place an offer comes from beside the
+ * workspace's own, and is installed with `--from` as one from the shelf is.
+ */
+export function assignable(at: Places): void {
+  const team: Places = { ...at, workspace: join(dirname(at.workspace), 'team') }
+  succeed(at, 'flayer', at.scratch, ['init', team.workspace], 'none')
+  succeed(team, 'flayer', team.workspace, ['add', 'skill', OFFERED.name, 'Keep notes as the team does'])
+  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'flayer', at.workspace, ['load', '../team'])
+  for (const name of ASSIGNED) {
+    const folder = join(at.workspace, name)
+    mkdirSync(folder)
+    succeed(at, 'mind', folder, ['init', '--agents', 'claude,codex'])
+    succeed(at, 'flayer', at.workspace, ['link', name])
+  }
 }
