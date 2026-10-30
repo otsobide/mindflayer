@@ -125,7 +125,7 @@ describe('the page of updates', () => {
 
     const { page } = await render('/updates', transport)
 
-    expect(page.get('[data-testid="nothing"]').text()).toContain('is current')
+    expect(page.get('[data-testid="nothing"]').text()).toContain('Everything installed in the projects the workspace links is current')
     expect(page.get('[data-testid="nothing"] [data-testid="commands"]').text()).toContain(`flayer -W ${snapshot.workspace.path} update --all`)
     expect(page.find('[data-testid="by-project"]').exists()).toBe(false)
   })

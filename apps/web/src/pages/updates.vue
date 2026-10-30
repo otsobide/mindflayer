@@ -235,7 +235,7 @@ function why(error: unknown): string {
             data-testid="nothing"
           >
             <p class="text-muted">
-              Everything installed in the projects {{ snapshot.workspace.name }} links is current: an update has nothing to do.
+              Everything installed in the projects the workspace links is current: an update has nothing to do.
             </p>
             <CommandHint
               :commands="[
