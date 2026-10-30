@@ -3,13 +3,16 @@
 
 mod common;
 
+use std::collections::BTreeMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use common::skill;
-use mindflayer_core::install::{self, Candidate};
+use mindflayer_core::install::{self, Candidate, Cell, Change, Plan};
 use mindflayer_core::ledger::Ledger;
 use mindflayer_core::{
-    create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Share,
+    create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Share, MIND_DIR,
+    SETTINGS_FILE,
 };
 use tempfile::TempDir;
 
@@ -17,11 +20,10 @@ use tempfile::TempDir;
 /// `deploy`, linking a project for each of `names`, each naming every agent;
 /// and `team`, a workspace it loads, with a `deploy` of its own too.
 struct Fixture {
-    _dir: TempDir,
+    dir: TempDir,
     workspace: FlayerWorkspace,
     team: FlayerWorkspace,
     projects: Vec<MindProject>,
-    ledger: Ledger,
 }
 
 fn given(names: &[&str]) -> Fixture {
@@ -41,13 +43,11 @@ fn given(names: &[&str]) -> Fixture {
     let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
     create(&team.own(), Kind::Skill, "deploy", "Ship it the team's way").unwrap();
     workspace.load(&team).unwrap();
-    let ledger = workspace.ledger().unwrap();
     Fixture {
-        _dir: dir,
+        dir,
         workspace,
         team,
         projects,
-        ledger,
     }
 }
 
@@ -56,19 +56,25 @@ impl Fixture {
     fn surveyed(&self, project: usize) -> Vec<Candidate> {
         install::survey(
             &self.workspace,
-            &self.ledger,
+            &self.reading(),
             &self.projects[project],
             Kind::Skill,
         )
         .unwrap()
     }
 
+    /// The ledger as a read opens it, making none.
+    fn reading(&self) -> Ledger {
+        self.workspace.ledger_for_reading().unwrap()
+    }
+
     /// Install `name` into `project` from `from`.
     fn install(&self, project: usize, name: &str, from: &str) {
         let project = &self.projects[project];
+        let ledger = self.workspace.ledger().unwrap();
         let candidate = install::offered(
             &self.workspace,
-            &self.ledger,
+            &ledger,
             project,
             Kind::Skill,
             name,
@@ -77,7 +83,7 @@ impl Fixture {
         .unwrap();
         install::install(
             &self.workspace,
-            &self.ledger,
+            &ledger,
             project,
             &candidate,
             &AgentHomes::default(),
@@ -91,7 +97,7 @@ impl Fixture {
         let candidates = self.surveyed(project);
         let held = install::holding(
             &self.workspace,
-            &self.ledger,
+            &self.reading(),
             &self.projects[project],
             &candidates,
         )
@@ -202,4 +208,365 @@ fn an_installation_nothing_it_came_from_offers_ticks_the_first_offer_of_its_name
     // Still there, so its box is still ticked, for unticking it to take it
     // out: the only box its name has.
     assert_eq!(fixture.held(0), pairs(&[("workspace", true)]));
+}
+
+// ---------------------------------------------------------------------------
+// What a selection amounts to, read off the disk
+// ---------------------------------------------------------------------------
+
+fn cell(project: &str, reference: &str, origin: &str, wanted: bool) -> Cell {
+    Cell {
+        project: project.to_owned(),
+        reference: reference.to_owned(),
+        origin: origin.to_owned(),
+        wanted,
+    }
+}
+
+impl Fixture {
+    fn planned(&self, selection: &[Cell]) -> Plan {
+        install::plan(&self.workspace, selection).unwrap()
+    }
+
+    /// Change the manifest of `project`'s copies of `name`, as somebody
+    /// editing an installed skill does.
+    fn edit(&self, project: usize, name: &str) {
+        for folder in [".claude/skills", ".agents/skills"] {
+            let manifest = self.projects[project]
+                .root()
+                .join(folder)
+                .join(name)
+                .join("SKILL.md");
+            fs::write(manifest, skill(name, "Mine now")).unwrap();
+        }
+    }
+}
+
+/// The code of each conflict, and of each box locked, in order.
+fn codes(plan: &Plan) -> (Vec<&str>, Vec<&str>) {
+    (
+        plan.conflicts
+            .iter()
+            .map(|conflict| conflict.why.code)
+            .collect(),
+        plan.locked.iter().map(|locked| locked.why.code).collect(),
+    )
+}
+
+fn owned(projects: &[&str]) -> Vec<String> {
+    projects.iter().map(|&project| project.to_owned()).collect()
+}
+
+/// Every file under `dir` with what it holds, to tell that nothing changed.
+fn files(dir: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    let mut found = BTreeMap::new();
+    let mut folders = vec![dir.to_path_buf()];
+    while let Some(folder) = folders.pop() {
+        for entry in fs::read_dir(&folder).unwrap() {
+            let entry = entry.unwrap();
+            if entry.file_type().unwrap().is_dir() {
+                folders.push(entry.path());
+            } else {
+                found.insert(entry.path(), fs::read(entry.path()).unwrap());
+            }
+        }
+    }
+    found
+}
+
+#[test]
+fn boxes_read_off_the_disk_plan_an_install_and_an_uninstall_naming_each_project_by_its_entry() {
+    let fixture = given(&["alpha", "beta"]);
+    fixture.install(0, "deploy", "workspace");
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:deploy", "workspace", false),
+        cell("beta", "skill:deploy", "load:../team", true),
+        // Not held from there: asked to be as it is.
+        cell("beta", "skill:deploy", "workspace", false),
+    ]);
+
+    assert_eq!(
+        plan.changes,
+        [
+            Change::Uninstall {
+                projects: owned(&["alpha"]),
+                kind: Kind::Skill,
+                name: String::from("deploy"),
+            },
+            Change::Install {
+                projects: owned(&["beta"]),
+                kind: Kind::Skill,
+                name: String::from("deploy"),
+                from: String::from("load:../team"),
+            },
+        ]
+    );
+    assert_eq!(codes(&plan), (vec![], vec![]));
+}
+
+#[test]
+fn an_offer_asked_for_in_place_of_the_one_a_project_holds_replaces_it() {
+    let fixture = given(&["alpha"]);
+    fixture.install(0, "deploy", "workspace");
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:deploy", "workspace", false),
+        cell("alpha", "skill:deploy", "load:../team", true),
+    ]);
+
+    assert_eq!(
+        plan.changes,
+        [Change::Install {
+            projects: owned(&["alpha"]),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            from: String::from("load:../team"),
+        }]
+    );
+}
+
+#[test]
+fn an_installation_nothing_offers_any_more_is_asked_away_by_the_origin_it_came_from() {
+    let fixture = given(&["alpha"]);
+    fixture.install(0, "deploy", "load:../team");
+    fs::remove_dir_all(
+        fixture
+            .team
+            .own()
+            .directory_for(Kind::Skill)
+            .unwrap()
+            .join("deploy"),
+    )
+    .unwrap();
+
+    let plan = fixture.planned(&[cell("alpha", "skill:deploy", "load:../team", false)]);
+
+    assert_eq!(
+        plan.changes,
+        [Change::Uninstall {
+            projects: owned(&["alpha"]),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+        }]
+    );
+}
+
+#[test]
+fn a_bare_name_is_the_one_kind_its_origin_offers_it_as() {
+    let fixture = given(&["alpha"]);
+    create(
+        &fixture.workspace.own(),
+        Kind::Rule,
+        "deploy",
+        "How we ship",
+    )
+    .unwrap();
+
+    let plan = fixture.planned(&[
+        // The team offers no rule of the name.
+        cell("alpha", "deploy", "load:../team", true),
+        cell("alpha", "rule:deploy", "workspace", true),
+    ]);
+
+    assert_eq!(
+        plan.changes,
+        [
+            Change::Install {
+                projects: owned(&["alpha"]),
+                kind: Kind::Skill,
+                name: String::from("deploy"),
+                from: String::from("load:../team"),
+            },
+            Change::Install {
+                projects: owned(&["alpha"]),
+                kind: Kind::Rule,
+                name: String::from("deploy"),
+                from: String::from("workspace"),
+            },
+        ]
+    );
+}
+
+#[test]
+fn a_plan_is_a_read_that_writes_nothing_and_makes_no_ledger() {
+    let fixture = given(&["alpha", "beta"]);
+    let before = files(fixture.dir.path());
+    assert!(!fixture.workspace.ledger_path().exists());
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:deploy", "workspace", true),
+        cell("beta", "skill:deploy", "load:../team", true),
+    ]);
+
+    assert_eq!(plan.changes.len(), 2, "{plan:?}");
+    assert!(!fixture.workspace.ledger_path().exists());
+    assert_eq!(files(fixture.dir.path()), before);
+}
+
+#[test]
+fn a_project_the_workspace_does_not_link_refuses_the_whole_plan() {
+    let fixture = given(&["alpha"]);
+
+    for entry in ["gamma", "--yes", "../team", "-C"] {
+        let error = install::plan(
+            &fixture.workspace,
+            &[
+                cell("alpha", "skill:deploy", "workspace", true),
+                cell(entry, "skill:deploy", "workspace", true),
+            ],
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), "not_registered", "{entry}: {error}");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Each conflict, and each lock, read off the disk
+// ---------------------------------------------------------------------------
+
+#[test]
+fn one_name_asked_for_from_two_places_clashes() {
+    let fixture = given(&["alpha"]);
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:deploy", "workspace", true),
+        cell("alpha", "skill:deploy", "load:../team", true),
+    ]);
+
+    assert_eq!(plan.changes, []);
+    assert_eq!(codes(&plan), (vec!["wanted_twice"], vec![]));
+}
+
+#[test]
+fn one_box_asked_both_ways_clashes() {
+    let fixture = given(&["alpha"]);
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:deploy", "workspace", true),
+        cell("alpha", "skill:deploy", "workspace", false),
+    ]);
+
+    assert_eq!(plan.changes, []);
+    assert_eq!(codes(&plan), (vec!["asked_both_ways"], vec![]));
+}
+
+#[test]
+fn somebodys_copy_is_locked_as_foreign_when_asked_away() {
+    let fixture = given(&["alpha"]);
+    let theirs = fixture.projects[0].root().join(".claude/skills/deploy");
+    fs::create_dir_all(&theirs).unwrap();
+    fs::write(theirs.join("SKILL.md"), skill("deploy", "Mine")).unwrap();
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:deploy", "workspace", false),
+        // There, whichever is asked for: as it is.
+        cell("alpha", "skill:deploy", "load:../team", true),
+    ]);
+
+    assert_eq!(plan.changes, []);
+    assert_eq!(codes(&plan), (vec![], vec!["foreign"]));
+}
+
+#[test]
+fn a_copy_edited_since_it_was_installed_is_locked_as_edited() {
+    let fixture = given(&["alpha"]);
+    fixture.install(0, "deploy", "workspace");
+    fixture.edit(0, "deploy");
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:deploy", "workspace", false),
+        cell("alpha", "skill:deploy", "load:../team", true),
+    ]);
+
+    assert_eq!(plan.changes, []);
+    assert_eq!(codes(&plan), (vec![], vec!["edited", "edited"]));
+}
+
+#[test]
+fn an_offer_its_origin_does_not_make_is_locked_as_not_offered() {
+    let fixture = given(&["alpha"]);
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:deploy", "load:../elsewhere", true),
+        cell("alpha", "skill:review", "workspace", true),
+        // Asked away from where nothing is held: as it is.
+        cell("alpha", "skill:review", "load:../team", false),
+    ]);
+
+    assert_eq!(plan.changes, []);
+    assert_eq!(codes(&plan), (vec![], vec!["not_offered", "not_offered"]));
+    assert_eq!(
+        plan.locked[0].why.message,
+        "nothing called `deploy` can be installed from load:../elsewhere: gather it, load a \
+         workspace that has it with `flayer load`, or add it to the workspace with `flayer add`"
+    );
+}
+
+#[test]
+fn a_project_with_nowhere_to_put_a_kind_is_locked_as_install_says() {
+    let fixture = given(&["alpha"]);
+    let root = fixture.dir.path().join("home/gamma");
+    fs::create_dir_all(root.join(MIND_DIR)).unwrap();
+    fs::write(
+        root.join(MIND_DIR).join(SETTINGS_FILE),
+        "version = 5\nid = \"0123456789abcdef0123456789abcdef\"\nname = \"gamma\"\n\
+         agents = []\nshare = \"shared\"\n",
+    )
+    .unwrap();
+    let mut workspace = fixture.workspace.clone();
+    workspace.link(&MindProject::open(&root).unwrap()).unwrap();
+
+    let plan = install::plan(
+        &workspace,
+        &[
+            cell("gamma", "skill:deploy", "workspace", true),
+            cell("alpha", "skill:deploy", "workspace", true),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(codes(&plan), (vec![], vec!["no_target"]));
+    assert_eq!(plan.changes.len(), 1, "{plan:?}");
+}
+
+#[test]
+fn a_project_that_does_not_open_is_locked_by_why_it_does_not() {
+    let fixture = given(&["alpha", "beta"]);
+    fs::remove_dir_all(fixture.projects[1].root().join(MIND_DIR)).unwrap();
+    let opening = fixture
+        .workspace
+        .members()
+        .into_iter()
+        .find(|member| member.entry == Path::new("beta"))
+        .unwrap()
+        .project
+        .unwrap_err()
+        .code();
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:deploy", "workspace", true),
+        cell("beta", "skill:deploy", "workspace", true),
+    ]);
+
+    assert_eq!(codes(&plan), (vec![], vec![opening]));
+    assert_eq!(plan.changes.len(), 1, "{plan:?}");
+}
+
+#[test]
+fn a_bare_name_two_kinds_are_offered_as_from_one_origin_is_locked_for_the_reference_to_say_which() {
+    let fixture = given(&["alpha"]);
+    create(
+        &fixture.workspace.own(),
+        Kind::Rule,
+        "deploy",
+        "How we ship",
+    )
+    .unwrap();
+
+    let plan = fixture.planned(&[cell("alpha", "deploy", "workspace", true)]);
+
+    assert_eq!(plan.changes, []);
+    assert_eq!(codes(&plan), (vec![], vec!["offered_as_kinds"]));
 }

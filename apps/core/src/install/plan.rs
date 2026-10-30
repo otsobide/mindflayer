@@ -26,12 +26,255 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{is_current, offered_for, project_entry, Candidate, Offer, Refused, Standing};
-use crate::catalog::QUALIFIER;
+use super::{
+    is_current, kinds_named, offered_for, project_entry, receives, survey, surveyed, Candidate,
+    InstallError, Offer, Refused, Standing, Surveyed,
+};
+use crate::catalog::{Reference, QUALIFIER};
 use crate::code::{codes, Said};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
+use crate::policy::{self, PolicyError};
+use crate::url::redacted;
 use crate::workspace::{FlayerWorkspace, MindProject};
+
+/// What `selection` amounts to in `workspace` as the disk stands now: each
+/// box read as it stands ([`Asked`]), then planned ([`Plan::of`]).
+///
+/// A read, as a snapshot is: no lock, and the ledger only as
+/// [`FlayerWorkspace::ledger_for_reading`] opens it, so nothing is made,
+/// scrubbed or written, and a default workspace nobody has made stays
+/// unmade. What it plans is still only a plan: the lines a front end runs
+/// for it go through the commands, which refuse whatever the disk says by
+/// then.
+///
+/// Each box names its project by its entry, as [`policy::linked`] takes
+/// one, and one the workspace does not link refuses the whole plan, as a
+/// `-p` that picks nothing refuses its whole line: a selection made of a
+/// workspace that has changed since is no reason to plan the rest without
+/// asking again. Each box the disk cannot be asked about is [`Locked`],
+/// first, by the code of why, and the rest go ahead:
+///
+/// - **A project that does not open**, by the error opening it gave.
+/// - **An offer asked for that its origin does not offer the project**,
+///   as `not_offered`, or as what [`receives`] says when the project has
+///   nowhere to put its kind at all, as `no_target`.
+/// - **A bare name more than one kind is offered as from its origin**, as
+///   `offered_as_kinds`, for the reference to say which, as an install of
+///   it says.
+///
+/// A box is read against the offers of its kind ([`survey`]), by its
+/// origin as printed, which every listing prints and `--from` takes; and,
+/// where none of them is from its origin, against what the ledger records
+/// ([`surveyed`]), so an installation nothing offers any more where it came
+/// from is asked away by the origin the snapshot says it came from. A box
+/// asked away from a place nothing of its name came from asks for what is
+/// so, and is not planned.
+pub fn plan(workspace: &FlayerWorkspace, selection: &[Cell]) -> Result<Plan, PlanError> {
+    let ledger = workspace.ledger_for_reading().map_err(InstallError::from)?;
+    let mut read = Read::default();
+    let mut asked = Vec::new();
+    let mut unasked = Vec::new();
+    for cell in selection {
+        match read.ask(workspace, &ledger, cell)? {
+            Ok(Some(one)) => asked.push(one),
+            Ok(None) => {}
+            Err(why) => unasked.push(Locked {
+                cell: cell.clone(),
+                why,
+            }),
+        }
+    }
+    let mut plan = Plan::of(&asked);
+    plan.locked.splice(0..0, unasked);
+    Ok(plan)
+}
+
+/// Why a selection could not be planned at all: a project the workspace
+/// does not link, or the ledger, or the offers, which could not be read.
+#[derive(Debug, Error)]
+pub enum PlanError {
+    #[error(transparent)]
+    Policy(#[from] PolicyError),
+    #[error(transparent)]
+    Install(#[from] InstallError),
+}
+
+codes!(PlanError {} carried {
+    Self::Policy(error) => error,
+    Self::Install(error) => error,
+});
+
+/// What a plan has read of the disk so far: each project once, and each
+/// kind of each once, however many boxes ask about it.
+#[derive(Default)]
+struct Read {
+    /// Each project by the entry a box named it by, or why it does not open.
+    projects: Vec<(String, Result<MindProject, Said>)>,
+    /// What each project is offered of each kind, by its entry.
+    kinds: Vec<(String, Kind, Seen)>,
+}
+
+/// What one project is offered of one kind, and how each offer stands.
+struct Seen {
+    candidates: Vec<Candidate>,
+    /// Whether the project holds each of `candidates` ([`holding`]).
+    held: Vec<bool>,
+    /// Every installation of the kind the ledger records in the project.
+    recorded: Vec<Surveyed>,
+    /// Why nothing of the kind can go into the project, when nothing can.
+    receives: Result<(), Said>,
+}
+
+impl Seen {
+    /// How the offer of `name` from `origin` stands, and whether the
+    /// project holds it from there; or, offered from elsewhere or not at
+    /// all, how the installation the ledger records from there stands, which
+    /// it holds. None when neither is.
+    fn find(&self, name: &str, origin: &str) -> Option<(Standing, bool)> {
+        let named = |candidate: &&Candidate| candidate.name() == name;
+        if let Some(at) = self
+            .candidates
+            .iter()
+            .position(|candidate| candidate.name() == name && candidate.origin() == origin)
+        {
+            return Some((self.candidates[at].standing, self.held[at]));
+        }
+        let recorded = self.recorded.iter().find(|surveyed| {
+            surveyed.record.name == name && surveyed.record.origin.as_deref() == Some(origin)
+        })?;
+        // Every offer of a name stands as its one installation, which an
+        // offer of it says as a survey tells it.
+        let standing = self
+            .candidates
+            .iter()
+            .find(named)
+            .map_or(recorded.standing, |candidate| candidate.standing);
+        Some((standing, standing.present()))
+    }
+}
+
+impl Read {
+    /// `cell` as it stands, or none when it is asked away from where
+    /// nothing is held; or why the disk cannot be asked about it.
+    fn ask(
+        &mut self,
+        workspace: &FlayerWorkspace,
+        ledger: &Ledger,
+        cell: &Cell,
+    ) -> Result<Result<Option<Asked>, Said>, PlanError> {
+        let project = match self.project(workspace, &cell.project)? {
+            Ok(project) => project.clone(),
+            Err(why) => return Ok(Err(why.clone())),
+        };
+        let reference = Reference::parse(&cell.reference);
+        let name = reference.name();
+        let origin = redacted(&cell.origin).into_owned();
+        let kinds = kinds_named(&reference);
+        let kind = match kinds[..] {
+            [kind] => kind,
+            _ => {
+                let mut offering = Vec::new();
+                for &kind in &kinds {
+                    let seen = self.seen(workspace, ledger, &project, &cell.project, kind)?;
+                    if seen.find(name, &origin).is_some() {
+                        offering.push(kind);
+                    }
+                }
+                match offering[..] {
+                    [kind] => kind,
+                    [] => kinds[0],
+                    _ => {
+                        return Ok(Err(said_of(&InstallError::OfferedAsKinds {
+                            name: name.to_owned(),
+                            kinds: offering,
+                        })))
+                    }
+                }
+            }
+        };
+        let seen = self.seen(workspace, ledger, &project, &cell.project, kind)?;
+        Ok(match seen.find(name, &origin) {
+            Some((standing, held)) => Ok(Some(Asked {
+                cell: cell.clone(),
+                kind,
+                name: name.to_owned(),
+                standing,
+                held,
+            })),
+            None if cell.wanted => Err(match &seen.receives {
+                Err(why) => why.clone(),
+                Ok(()) => said_of(&InstallError::NotOffered {
+                    name: name.to_owned(),
+                    from: Some(origin),
+                }),
+            }),
+            None => Ok(None),
+        })
+    }
+
+    /// The project `entry` names, opened once, or why it does not open.
+    fn project(
+        &mut self,
+        workspace: &FlayerWorkspace,
+        entry: &str,
+    ) -> Result<&Result<MindProject, Said>, PlanError> {
+        let at = match self.projects.iter().position(|(seen, _)| seen == entry) {
+            Some(at) => at,
+            None => {
+                let opened = policy::linked(workspace, entry)?
+                    .project
+                    .map_err(|error| Said::of(error.code(), &error));
+                self.projects.push((entry.to_owned(), opened));
+                self.projects.len() - 1
+            }
+        };
+        Ok(&self.projects[at].1)
+    }
+
+    /// What `project`, which `entry` names, is offered of `kind`, read once.
+    fn seen(
+        &mut self,
+        workspace: &FlayerWorkspace,
+        ledger: &Ledger,
+        project: &MindProject,
+        entry: &str,
+        kind: Kind,
+    ) -> Result<&Seen, PlanError> {
+        let at = match self
+            .kinds
+            .iter()
+            .position(|(seen, of, _)| seen == entry && *of == kind)
+        {
+            Some(at) => at,
+            None => {
+                let candidates = survey(workspace, ledger, project, kind)?;
+                let held =
+                    holding(workspace, ledger, project, &candidates).map_err(InstallError::from)?;
+                let recorded =
+                    surveyed(workspace, ledger, project, kind).map_err(InstallError::from)?;
+                let receives = receives(project, kind).map_err(|error| said_of(&error));
+                self.kinds.push((
+                    entry.to_owned(),
+                    kind,
+                    Seen {
+                        candidates,
+                        held,
+                        recorded,
+                        receives,
+                    },
+                ));
+                self.kinds.len() - 1
+            }
+        };
+        Ok(&self.kinds[at].2)
+    }
+}
+
+/// What `error` says, by its code.
+fn said_of(error: &InstallError) -> Said {
+    Said::of(error.code(), error)
+}
 
 /// Whether `project` holds each of `candidates`, every offer it is surveyed
 /// for ([`super::survey`]): what the box of each shows.
