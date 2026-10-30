@@ -109,6 +109,20 @@ repositories, and what happened lately: gathers, installs, relinks.
 
 ![Sources: the repository the shelf is filled from, and the latest actions](docs/images/sources.png)
 
+### Assign
+
+Every skill and rule there is to install, from the library, the workspaces
+it loads and the shelf, against every project. A box is ticked where the
+project holds that one, and says how it stands there. Tick and untick
+boxes, by offer or turned round by project, filtered by kind, origin, agent
+or name, from the mouse or the arrow keys: below, the plan says what they
+amount to, the `flayer install` and `flayer uninstall` lines it will run,
+and what it holds back and why, such as a copy somebody wrote or changed by
+hand, or one name asked of a project from two places. **Apply** runs the
+lines, shown first.
+
+![The matrix: the library's and the shelf's skills and rules against six projects, a box ticked and another unticked, and the two lines that will run](docs/images/assign.png)
+
 ### Discover
 
 Name the folders your repositories are kept in, and the panel finds what is
@@ -141,7 +155,7 @@ so they show the panel as it is.
 ## From the terminal
 
 Everything the panel does is a command, and so is everything it does not do
-yet, such as installing:
+yet, such as gathering:
 
 ```bash
 cd ~/Projects/blog && mind init      # make a repository a project
