@@ -5340,7 +5340,11 @@ everywhere. The viewport is 1440 by 900, wide enough for a project's table
 with every column beside the sidebar (1280 cut its targets short), at a
 device scale of 1.25: one image pixel to a CSS pixel blurs once GitHub
 scales the image to its column and a dense screen scales it up again, and
-two doubled what each weighs, the busiest close to the budget. The colour
+two doubled what each weighs, the busiest close to the budget. Dates are
+written in US English and in UTC: the panel writes them in the browser's
+language and time zone (`src/time.ts`), which Playwright takes from the
+machine, so a run under another language would put its words into an
+English README, and every run would tell its taker's time zone. The colour
 mode is picked through the cookie the panel keeps it in (`src/preferences.ts`),
 light for the tour and dark as well for the project's page, which the README
 shows in a `<picture>` that follows the reader's.

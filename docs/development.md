@@ -220,12 +220,13 @@ running `git`, `flayer` and `mind` (`e2e/demo.ts`: six projects, a library,
 a shelf gathered from a repository beside them, three installs behind
 where they came from, two repositories nobody linked), serves it with
 `flayer ui`, and opens each page of the tour in Chromium, in a 1440 by 900
-viewport at a device scale of 1.25, writing each into `docs/images`. It
-runs as the browser suite does, with no variable that leads to your
-workspaces or your agents' folders, an empty temporary home that has to be
-empty still at the end, and every command naming its home and every agent
-home. The project's page is taken in dark as well, for the README's
-`<picture>`; the rest of the tour is light.
+viewport at a device scale of 1.25, with dates in US English and UTC
+whatever your machine's language and time zone, writing each into
+`docs/images`. It runs as the browser suite does, with no variable that
+leads to your workspaces or your agents' folders, an empty temporary home
+that has to be empty still at the end, and every command naming its home
+and every agent home. The project's page is taken in dark as well, for the
+README's `<picture>`; the rest of the tour is light.
 
 The demo is built in `mindflayer-demo` under the system's temporary folder,
 `/tmp/mindflayer-demo` on Linux, always the same place, since every page

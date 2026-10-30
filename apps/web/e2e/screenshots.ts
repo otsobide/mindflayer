@@ -48,6 +48,16 @@ const VIEWPORT = { width: 1440, height: 900 }
  */
 const SCALE = 1.25
 
+/**
+ * The language and the time zone every date is written in. The panel
+ * writes one in the browser's own (src/time.ts), which Playwright takes
+ * from the machine: left to it, a run under another language would put
+ * its words into the English README, and every run would tell the time
+ * zone of whoever took it.
+ */
+const LOCALE = 'en-US'
+const ZONE = 'UTC'
+
 /** Above this an image is refused: regenerating them must not bloat the history. */
 const BUDGET = 300 * 1024
 
@@ -227,7 +237,7 @@ const DARK = ['project']
  * of it, each read for a leak before it is written.
  */
 async function take(browser: Browser, served: Serving, mode: 'light' | 'dark', shots: Shot[]): Promise<string[]> {
-  const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: SCALE, colorScheme: mode, reducedMotion: 'reduce' })
+  const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: SCALE, locale: LOCALE, timezoneId: ZONE, colorScheme: mode, reducedMotion: 'reduce' })
   // The panel is dark until somebody picks, and keeps what they picked in
   // a cookie of its own (src/preferences.ts): picked here before it opens.
   await context.addCookies([{ name: 'mindflayer-vueuse-color-scheme', value: mode, url: served.origin }])
