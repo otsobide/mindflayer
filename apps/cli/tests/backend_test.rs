@@ -2139,3 +2139,109 @@ fn contents_an_edit_refuses_and_a_holder_not_linked_are_refused_with_their_codes
     }));
     assert!(refused.is_err(), "a field a draft does not have is refused");
 }
+
+/// A save of the library's `deploy`, `text` in place of what the hash of
+/// `read` says it was read from.
+fn save(text: &str, read: &str) -> Task {
+    task(json!({
+        "type": "save", "holder": {"type": "workspace"}, "kind": "skill", "name": "deploy",
+        "text": text, "hash": mindflayer_core::hash::bytes(read.as_bytes()),
+    }))
+}
+
+/// Whatever the workspace's scratch folder holds: nothing, once a run is
+/// over, a folder made for it left in place.
+fn scratch(root: &Path) -> Vec<PathBuf> {
+    let folder = FlayerWorkspace::open(root).unwrap().scratch_dir();
+    fs::read_dir(&folder)
+        .map(|entries| entries.map(|entry| entry.unwrap().path()).collect())
+        .unwrap_or_default()
+}
+
+/// The browser sends the text, the backend puts it where the line it
+/// previewed reads it, the line writes it into the artifact, and the file
+/// is taken away once it ran: the same line previewed and run.
+#[test]
+fn a_save_writes_the_text_through_edit_contents_and_takes_its_file_away_after() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
+    let read = fs::read_to_string(&manifest).unwrap();
+    let text = read.replace("Ship it", "Ship it today");
+    let backend = backend(root);
+
+    let preview = backend.preview(&save(&text, &read)).unwrap();
+    let ran = backend.run(save(&text, &read)).unwrap();
+
+    assert!(ran.ok, "{ran:?}");
+    assert_eq!(preview.lines, [ran.runs[0].command.clone()]);
+    let route = mindflayer_cli::task::scratch_route(&text);
+    assert_eq!(
+        ran.runs[0].command,
+        format!(
+            "flayer edit --contents {route} --if-unchanged {} skill:deploy",
+            mindflayer_core::hash::bytes(read.as_bytes())
+        )
+    );
+    assert!(
+        ran.runs[0].stdout.starts_with("edited skill deploy"),
+        "{ran:?}"
+    );
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), text);
+    assert_eq!(scratch(root), Vec::<PathBuf>::new());
+}
+
+/// A file changed since the text was read is not written over, and the text
+/// is taken away all the same, as it is from a save the edit refuses.
+#[test]
+fn a_save_the_edit_refuses_writes_nothing_and_still_takes_its_file_away() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
+    let read = fs::read_to_string(&manifest).unwrap();
+    let since = read.replace("Ship it", "Ship it now");
+    fs::write(&manifest, &since).unwrap();
+    let backend = backend(root);
+
+    let stale = backend
+        .run(save(&read.replace("Ship it", "Ship"), &read))
+        .unwrap();
+    let unfit = backend
+        .run(save(&since.replace("Ship it now", "\"\""), &since))
+        .unwrap();
+
+    for (ran, code) in [(&stale, "edit_stale"), (&unfit, "edit_contents_unfit")] {
+        assert!(!ran.ok, "{ran:?}");
+        assert_eq!(ran.runs[0].error.as_ref().unwrap().code, code, "{ran:?}");
+    }
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), since);
+    assert_eq!(scratch(root), Vec::<PathBuf>::new());
+}
+
+/// A file an interrupted run left under the name is the same text, and is
+/// taken; anything else there refuses the save before a line runs, and is
+/// left as it is.
+#[test]
+fn a_save_takes_the_text_left_under_its_name_and_refuses_anything_else_there() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
+    let read = fs::read_to_string(&manifest).unwrap();
+    let text = read.replace("Ship it", "Ship it today");
+    let left = root.join(mindflayer_cli::task::scratch_route(&text));
+    fs::create_dir_all(left.parent().unwrap()).unwrap();
+    fs::write(&left, &text).unwrap();
+    let backend = backend(root);
+
+    let taken = backend.run(save(&text, &read)).unwrap();
+    fs::write(&left, "somebody's").unwrap();
+    let refused = backend.run(save(&text, &text)).unwrap_err();
+
+    assert!(taken.ok, "{taken:?}");
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), text);
+    assert_eq!(refused.code, "scratch_unwritable");
+    assert_eq!(fs::read_to_string(&left).unwrap(), "somebody's");
+}

@@ -21,6 +21,7 @@ export type Code =
   | "editor_unstarted"
   | "editor_failed"
   | "edit_contents_unread"
+  | "scratch_unwritable"
   | "no_workspace_above"
   | "no_default_workspace"
   | "install_no_projects"

@@ -136,6 +136,16 @@ pub enum CliError {
         #[source]
         source: io::Error,
     },
+    /// The text a front end was to hand `edit --contents` could not be put
+    /// in the workspace's scratch folder for the line to read, so the line
+    /// was not run: the folder could not be made, or something other than
+    /// that text is where it goes.
+    #[error("{path}: the text to save cannot be put here for `edit --contents` to read, so nothing was run: {source}")]
+    Scratch {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error("no flayer workspace above {0}; make one with `flayer init` in the directory that holds your projects")]
     NoWorkspaceAbove(PathBuf),
     #[error("{0}: not known, since there is no default workspace to remember it (--home or $MINDFLAYER_HOME names none)")]
@@ -217,6 +227,7 @@ codes!(CliError {
     Self::Editor { .. } => "editor_unstarted",
     Self::EditorFailed { .. } => "editor_failed",
     Self::ContentsUnread { .. } => "edit_contents_unread",
+    Self::Scratch { .. } => "scratch_unwritable",
     Self::NoWorkspaceAbove(_) => "no_workspace_above",
     Self::NoDefault(_) => "no_default_workspace",
     Self::InstallWhere => "install_no_projects",

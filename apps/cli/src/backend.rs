@@ -52,6 +52,8 @@
 //! task runs.
 
 use std::fmt::Display;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -74,7 +76,7 @@ use serde::{Deserialize, Serialize};
 use crate::admit::Admission;
 use crate::commands::project::{scan_warned, worth_linking};
 use crate::commands::{run_line, Ran};
-use crate::task::{cautioned, shell, Caution, Holder, MindsChange, Task};
+use crate::task::{self, cautioned, shell, Caution, Holder, MindsChange, Task};
 use crate::tui::state::{transcript, Done};
 use crate::{CliError, Lookup, Warning};
 
@@ -622,8 +624,18 @@ impl Backend for PanelBackend {
     /// Planned again rather than trusted to the preview the server asked
     /// for first: the plan is of the disk as the run meets it, and the
     /// trait promises no preview came first.
+    ///
+    /// A save's text is put where its line reads it before the line runs,
+    /// and taken away once the lines have run, whatever came of them
+    /// ([`Scratch`]): the browser sends the text, never a path.
     fn run(&self, task: Task) -> Result<Outcome, Refusal> {
         let plan = self.plan(&task)?;
+        let _scratch = match &task {
+            Task::Save { text, .. } => {
+                Some(Scratch::put(&self.root, text).map_err(|error| refused(error.code(), error))?)
+            }
+            _ => None,
+        };
         let watch = Watch::new();
         let mut runs: Vec<Run> = Vec::new();
         for words in &plan.lines {
@@ -673,6 +685,68 @@ impl Backend for PanelBackend {
                 scope: scope(watched.scope),
             })
             .collect()
+    }
+}
+
+/// A save's text, in the file its line reads it from
+/// ([`task::scratch_route`]), for as long as this is held: taken away when
+/// it is dropped, whatever came of the line.
+///
+/// Made with `create_new`, in a folder made with `create_dir`, never
+/// `create_dir_all`, so nothing is written through what somebody put there,
+/// and no `.mindflayer` is made where there is none, which a line of the
+/// panel's would then take for a workspace. A file already there under the
+/// name is taken as it is when it holds the text exactly, as one an
+/// interrupted run left would, the name being the text's hash; anything
+/// else there refuses the save, and is left as it is.
+struct Scratch {
+    path: PathBuf,
+}
+
+impl Scratch {
+    /// `text`, put where the line saving it reads it from, in the workspace
+    /// at `root`.
+    fn put(root: &Path, text: &str) -> Result<Scratch, CliError> {
+        let path = root.join(task::scratch_route(text));
+        let unwritable = |source| CliError::Scratch {
+            path: path.clone(),
+            source,
+        };
+        if let Some(folder) = path.parent() {
+            match fs::create_dir(folder) {
+                Err(error) if error.kind() != io::ErrorKind::AlreadyExists => {
+                    return Err(unwritable(error))
+                }
+                _ => {}
+            }
+        }
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                // Held from here, so a write that fails halfway takes away
+                // what it wrote.
+                let scratch = Scratch { path: path.clone() };
+                file.write_all(text.as_bytes())
+                    .and_then(|()| file.sync_all())
+                    .map_err(unwritable)?;
+                Ok(scratch)
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                let held = fs::symlink_metadata(&path).is_ok_and(|found| found.is_file())
+                    && fs::read(&path).is_ok_and(|held| held == text.as_bytes());
+                if held {
+                    Ok(Scratch { path })
+                } else {
+                    Err(unwritable(error))
+                }
+            }
+            Err(error) => Err(unwritable(error)),
+        }
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
     }
 }
 

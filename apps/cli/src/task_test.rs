@@ -12,7 +12,7 @@ use crate::{Cli, FlayerCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 34] = [
+const TAGS: [&str; 35] = [
     "init_workspace",
     "init_project",
     "link",
@@ -27,6 +27,7 @@ const TAGS: [&str; 34] = [
     "add",
     "show",
     "edit",
+    "save",
     "rename",
     "remove",
     "validate",
@@ -215,6 +216,15 @@ fn every(value: &str) -> Vec<Task> {
                 holder: holder.clone(),
                 kind,
                 name: owned(),
+            },
+            // Its text reaches no line, only the route named by its hash,
+            // so it is not one of the values a line is held to.
+            Task::Save {
+                holder: holder.clone(),
+                kind,
+                name: owned(),
+                text: String::from("---\nname: plain\n---\n"),
+                hash: owned(),
             },
             Task::Rename {
                 holder: holder.clone(),
@@ -1471,4 +1481,49 @@ fn a_change_core_plans_is_the_install_or_uninstall_task_that_runs_it() {
         Task::from(uninstall).commands(),
         [line("flayer uninstall -p alpha skill:deploy")]
     );
+}
+
+/// The text, never a path: what a save reads is the workspace's scratch file
+/// named by what the text holds, from the workspace's root, at either level,
+/// held to the hash it was read with.
+#[test]
+fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_was_read_with() {
+    let text = "---\nname: deploy\ndescription: Ship it\n---\n";
+    let hash = mindflayer_core::hash::bytes(b"before");
+    let route = scratch_route(text);
+    let save = |holder| Task::Save {
+        holder,
+        kind: Kind::Skill,
+        name: String::from("deploy"),
+        text: String::from(text),
+        hash: hash.clone(),
+    };
+
+    let own = save(Holder::Workspace);
+    let alpha = save(Holder::Project(String::from("alpha")));
+
+    let edit = [
+        "--contents",
+        &route,
+        "--if-unchanged",
+        &hash,
+        "skill:deploy",
+    ];
+    assert_eq!(own.commands(), [[&["flayer", "edit"][..], &edit].concat()]);
+    assert_eq!(
+        alpha.commands(),
+        [[&["flayer", "edit", "-p", "alpha"][..], &edit].concat()]
+    );
+    let folder = std::path::Path::new(FLAYER_DIR).join(SCRATCH_DIR);
+    let named = &mindflayer_core::hash::bytes(text.as_bytes())[..16];
+    assert_eq!(
+        std::path::Path::new(&route),
+        folder.join(format!("edit-{named}.md"))
+    );
+    assert_ne!(scratch_route("another text"), route);
+    for task in [own, alpha] {
+        assert!(task.writes(), "{task:?}");
+        assert_eq!(task.refusal(), None, "{task:?}");
+        assert_eq!(task.cautions(), [], "{task:?}");
+    }
 }
