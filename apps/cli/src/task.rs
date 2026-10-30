@@ -567,6 +567,17 @@ impl Task {
         }
     }
 
+    /// Each of its lines a front end asks somebody to confirm before it
+    /// runs them, by its place among [`commands`](Self::commands), with what
+    /// it takes away ([`cautioned`]).
+    ///
+    /// Asked of the lines, as [`refusal`](Self::refusal) is, so the one list
+    /// decides whatever task a line came from: the minds screen's batch is
+    /// asked about for its `flayer unlink` line and for nothing else.
+    pub fn cautions(&self) -> Vec<(usize, Caution)> {
+        cautioned(&self.commands())
+    }
+
     /// Why a front end with no terminal of its own does not run this task,
     /// when it does not: the refusal of the first of its lines that is
     /// refused ([`refused`]).
@@ -755,6 +766,184 @@ pub fn refused(words: &[String]) -> Option<Refusal> {
             .and_then(|cli| Refusal::of_flayer(cli.command.as_ref())),
         _ => None,
     }
+}
+
+/// What a command line takes away, which a front end asks somebody to
+/// confirm before it runs the line: what [`cautions`] reads off the parsed
+/// command, as [`refused`] reads a refusal, so a line is asked about the
+/// same way whatever task it came from, and by every front end.
+///
+/// One list, here, rather than one per front end: the panel holds no rules
+/// (D-18), so which of its lines need a yes first is said with each preview
+/// it is answered with, in these words, and a list in TypeScript would be a
+/// second place for a command to be forgotten. The TUI asks its own
+/// questions, worded for the row they are about, before it builds a task.
+///
+/// Only what takes something away, or writes over somebody's work: a line
+/// that only adds, or that changes what is installed where its agents now
+/// read, is shown before it runs and runs once asked. And never a dry run,
+/// which a line of a command that takes `--yes` is without it: it takes
+/// nothing away, and says what it would.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Error)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum Caution {
+    /// `remove --yes`, at either level: the artifact deleted.
+    #[error("deletes an artifact: its folder and everything in it, or its file")]
+    Removes,
+    /// `uninstall`, every form of it, and `flayer remove --everywhere
+    /// --yes`, which uninstalls from every project first.
+    #[error("takes copies Mindflayer installed out of projects")]
+    Uninstalls,
+    /// `unlink`, at either level.
+    #[error("makes the workspace forget a project, though nothing on disk is deleted")]
+    Unlinks,
+    /// `unload`, at either level: `unlink`'s twin, for a loaded workspace,
+    /// whose copies in the projects are left orphaned.
+    #[error(
+        "makes the workspace stop offering a loaded workspace's own, though nothing on disk is deleted"
+    )]
+    Unloads,
+    /// `--force`: on `install` and `uninstall`, and on `update` that is
+    /// told `--yes`.
+    #[error("writes over, or takes out, a copy changed since it was installed")]
+    Forces,
+}
+
+impl Caution {
+    /// What `mind <command>` takes away, in the order of [`Caution`]'s
+    /// variants; nothing for a line that takes nothing.
+    ///
+    /// One arm per command with no wildcard, as [`Refusal::of_mind`]'s, so
+    /// a new command does not compile until it says what it takes away.
+    pub fn of_mind(command: Option<&Command>) -> Vec<Caution> {
+        match command {
+            Some(Command::Remove { yes, .. }) => when(*yes, &[Caution::Removes]),
+            Some(Command::Install { force, .. }) => when(*force, &[Caution::Forces]),
+            Some(Command::Uninstall { force, .. }) => uninstalling(*force),
+            Some(Command::Update { force, yes, .. }) => when(*force && *yes, &[Caution::Forces]),
+            Some(Command::Unlink) => vec![Caution::Unlinks],
+            Some(Command::Unload { .. }) => vec![Caution::Unloads],
+            Some(Command::Flayer { command }) => Caution::of_flayer(command.as_ref()),
+            #[cfg(feature = "ui")]
+            Some(Command::Ui(_)) => Vec::new(),
+            None
+            | Some(
+                Command::Tui
+                | Command::Init { .. }
+                | Command::Add { .. }
+                | Command::Edit { .. }
+                | Command::Rename { .. }
+                | Command::Templates { .. }
+                | Command::List { .. }
+                | Command::Show { .. }
+                | Command::Validate { .. }
+                | Command::Status { .. }
+                | Command::Link
+                | Command::Load { .. }
+                | Command::Agents { .. }
+                | Command::Share { .. }
+                | Command::Targets { .. }
+                | Command::Migrate { .. },
+            ) => Vec::new(),
+        }
+    }
+
+    /// What `flayer <command>` takes away.
+    pub fn of_flayer(command: Option<&FlayerCommand>) -> Vec<Caution> {
+        match command {
+            Some(FlayerCommand::Remove {
+                yes, everywhere, ..
+            }) => match (*yes, *everywhere) {
+                (false, _) => Vec::new(),
+                (true, false) => vec![Caution::Removes],
+                (true, true) => vec![Caution::Removes, Caution::Uninstalls],
+            },
+            Some(FlayerCommand::Install { force, .. }) => when(*force, &[Caution::Forces]),
+            Some(FlayerCommand::Uninstall { force, .. }) => uninstalling(*force),
+            Some(FlayerCommand::Update { force, yes, .. }) => {
+                when(*force && *yes, &[Caution::Forces])
+            }
+            Some(FlayerCommand::Unlink { .. }) => vec![Caution::Unlinks],
+            Some(FlayerCommand::Unload { .. }) => vec![Caution::Unloads],
+            #[cfg(feature = "ui")]
+            Some(FlayerCommand::Ui(_)) => Vec::new(),
+            None
+            | Some(
+                FlayerCommand::Tui
+                | FlayerCommand::Init { .. }
+                | FlayerCommand::Activate { .. }
+                | FlayerCommand::Which
+                | FlayerCommand::Workspaces { .. }
+                | FlayerCommand::Add { .. }
+                | FlayerCommand::Edit { .. }
+                | FlayerCommand::Rename { .. }
+                | FlayerCommand::Templates { .. }
+                | FlayerCommand::List { .. }
+                | FlayerCommand::Show { .. }
+                | FlayerCommand::Validate { .. }
+                | FlayerCommand::Status { .. }
+                | FlayerCommand::Link { .. }
+                | FlayerCommand::Relink { .. }
+                | FlayerCommand::Load { .. }
+                | FlayerCommand::Minds { .. }
+                | FlayerCommand::Scan { .. }
+                | FlayerCommand::Gather(_)
+                | FlayerCommand::Adopt { .. }
+                | FlayerCommand::Agents { .. }
+                | FlayerCommand::Share { .. }
+                | FlayerCommand::Targets { .. }
+                | FlayerCommand::Migrate { .. },
+            ) => Vec::new(),
+        }
+    }
+}
+
+/// `cautions` when `asked`, and none otherwise.
+fn when(asked: bool, cautions: &[Caution]) -> Vec<Caution> {
+    if asked {
+        cautions.to_vec()
+    } else {
+        Vec::new()
+    }
+}
+
+/// What an uninstall takes away: copies, and with `--force` an edited one
+/// among them, which it otherwise leaves with every other copy of it.
+fn uninstalling(force: bool) -> Vec<Caution> {
+    let mut cautions = vec![Caution::Uninstalls];
+    if force {
+        cautions.push(Caution::Forces);
+    }
+    cautions
+}
+
+/// What `words`, a command line, takes away, which a front end asks about
+/// before it runs it; nothing for a line that takes nothing away.
+///
+/// Read with the parsers that run it, as [`refused`] is: `mind flayer
+/// unlink alpha` is `flayer unlink alpha`, and a flag in front of either
+/// changes nothing. A line neither takes would not run, and takes nothing.
+pub fn cautions(words: &[String]) -> Vec<Caution> {
+    match words.first().map(String::as_str) {
+        Some("mind") => Cli::try_parse_from(words)
+            .map(|cli| Caution::of_mind(cli.command.as_ref()))
+            .unwrap_or_default(),
+        Some("flayer") => FlayerCli::try_parse_from(words)
+            .map(|cli| Caution::of_flayer(cli.command.as_ref()))
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+/// What each of `lines` takes away, each line by its place among them,
+/// from 0: what a front end asks somebody to confirm before it runs them.
+pub fn cautioned(lines: &[Vec<String>]) -> Vec<(usize, Caution)> {
+    lines
+        .iter()
+        .enumerate()
+        .flat_map(|(at, line)| cautions(line).into_iter().map(move |caution| (at, caution)))
+        .collect()
 }
 
 /// One command line, at the level a holder is at: `flayer <command>` for the

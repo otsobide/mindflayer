@@ -870,3 +870,128 @@ fn a_refusal_says_why_by_a_code_of_its_own() {
         "opens a screen of its own, which needs a terminal to draw on"
     );
 }
+
+#[test]
+fn a_line_that_takes_something_away_is_asked_about_for_what_it_takes() {
+    use Caution::{Forces, Removes, Uninstalls, Unlinks, Unloads};
+    for (said, expected) in [
+        ("mind remove --yes deploy", vec![Removes]),
+        ("mind -C alpha remove -y rule:style", vec![Removes]),
+        ("flayer remove --yes skill:deploy", vec![Removes]),
+        ("flayer remove -p alpha --yes deploy", vec![Removes]),
+        ("mind flayer remove --yes deploy", vec![Removes]),
+        (
+            "flayer remove --everywhere --yes skill:deploy",
+            vec![Removes, Uninstalls],
+        ),
+        ("mind uninstall deploy", vec![Uninstalls]),
+        ("mind uninstall --orphaned", vec![Uninstalls]),
+        ("mind uninstall --force deploy", vec![Uninstalls, Forces]),
+        (
+            "flayer uninstall -p alpha -p beta skill:deploy",
+            vec![Uninstalls],
+        ),
+        (
+            "flayer uninstall --all-projects --orphaned",
+            vec![Uninstalls],
+        ),
+        (
+            "flayer uninstall -p alpha --force deploy",
+            vec![Uninstalls, Forces],
+        ),
+        ("mind install --force deploy", vec![Forces]),
+        ("flayer install -p alpha --force deploy", vec![Forces]),
+        ("mind update --yes --force", vec![Forces]),
+        ("flayer update --all --yes --force deploy", vec![Forces]),
+        ("mind unlink", vec![Unlinks]),
+        ("flayer unlink alpha beta", vec![Unlinks]),
+        ("mind flayer unlink alpha", vec![Unlinks]),
+        ("mind unload ../team", vec![Unloads]),
+        ("flayer unload team", vec![Unloads]),
+    ] {
+        assert_eq!(cautions(&line(said)), expected, "{said}");
+    }
+}
+
+/// A dry run takes nothing away, and nor does a line that only adds or
+/// carries what is installed to where its agents now read: each is shown
+/// before it runs, and runs once asked.
+#[test]
+fn a_line_that_takes_nothing_away_is_asked_about_for_nothing() {
+    for said in [
+        "mind remove deploy",
+        "flayer remove --everywhere skill:deploy",
+        "mind update --force",
+        "flayer update --all --force",
+        "mind update --yes",
+        "flayer install -p alpha deploy",
+        "flayer link alpha",
+        "mind add skill deploy Ship",
+        "mind rename deploy ship",
+        "flayer relink alpha beta",
+        "flayer load ../team",
+        "flayer adopt -p alpha --yes legacy",
+        "flayer agents -p alpha --yes claude",
+        "mind share --yes local",
+        "mind targets set --yes skills .skills",
+        "flayer migrate --library --yes",
+        "flayer validate",
+        "flayer init",
+        // A line no parser takes would not run, and takes nothing.
+        "flayer unlink",
+        "flayer frobnicate",
+        "ls",
+    ] {
+        assert_eq!(cautions(&line(said)), Vec::new(), "{said}");
+    }
+}
+
+#[test]
+fn a_task_is_asked_about_for_each_of_its_lines_that_takes_something_away() {
+    let values = VALUES.into_iter().filter(|value| !value.is_empty());
+    for task in values.flat_map(every) {
+        let expected = match &task {
+            Task::Remove {
+                everywhere: false, ..
+            } => vec![(0, Caution::Removes)],
+            Task::Remove {
+                everywhere: true, ..
+            } => vec![(0, Caution::Removes), (0, Caution::Uninstalls)],
+            Task::Uninstall { .. } => vec![(0, Caution::Uninstalls)],
+            Task::Unlink { .. } => vec![(0, Caution::Unlinks)],
+            Task::Unload { .. } | Task::UnloadHere { .. } => vec![(0, Caution::Unloads)],
+            // `mind -C <path> init`, `flayer link` and `flayer unlink`.
+            Task::Minds { .. } => vec![(2, Caution::Unlinks)],
+            // Its installs first, then its uninstalls, as `every` builds it.
+            Task::ApplyInstall { .. } => vec![(1, Caution::Uninstalls)],
+            _ => Vec::new(),
+        };
+
+        assert_eq!(task.cautions(), expected, "{task:?}");
+    }
+}
+
+/// Each by a word of its own in JSON, as the panel compares it, and its
+/// words for whoever is asked.
+#[test]
+fn a_caution_says_what_it_takes_in_a_word_and_in_words() {
+    let words: Vec<serde_json::Value> = [
+        Caution::Removes,
+        Caution::Uninstalls,
+        Caution::Unlinks,
+        Caution::Unloads,
+        Caution::Forces,
+    ]
+    .iter()
+    .map(|caution| serde_json::to_value(caution).unwrap())
+    .collect();
+
+    assert_eq!(
+        words,
+        ["removes", "uninstalls", "unlinks", "unloads", "forces"]
+    );
+    assert_eq!(
+        Caution::Unlinks.to_string(),
+        "makes the workspace forget a project, though nothing on disk is deleted"
+    );
+}
