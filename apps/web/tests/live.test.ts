@@ -137,3 +137,34 @@ describe('live updates', () => {
     expect(subscriptions).toEqual({ taken: 2, let: 1 })
   })
 })
+
+describe('a workspace the server cannot watch all of', () => {
+  it('says so above every page, and asks for everything again on a refresh by hand', async () => {
+    const { queries, transport, tell } = streaming()
+    const { page, router } = await render('/', transport)
+    expect(page.find('[data-testid="unwatched"]').exists()).toBe(false)
+
+    await tell({ type: 'unwatched', reason: 'the system\'s limit on watched folders is reached' })
+
+    const banner = page.get('[data-testid="unwatched"]')
+    expect(banner.text()).toContain('the system\'s limit on watched folders is reached: refresh to see them.')
+    const before = asked(queries, 'snapshot')
+    await banner.get('button').trigger('click')
+    await flushPromises()
+    expect(asked(queries, 'snapshot')).toBe(before + 1)
+
+    await router.push('/projects')
+    await flushPromises()
+    expect(page.find('[data-testid="unwatched"]').exists()).toBe(true)
+  })
+
+  it('stops saying so once the server watches everything again', async () => {
+    const { transport, tell } = streaming()
+    const { page } = await render('/', transport)
+    await tell({ type: 'unwatched', reason: 'the system\'s limit on watched folders is reached' })
+
+    await tell({ type: 'watching' })
+
+    expect(page.find('[data-testid="unwatched"]').exists()).toBe(false)
+  })
+})
