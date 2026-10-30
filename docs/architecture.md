@@ -1509,6 +1509,12 @@ type derives `Serialize` from the start:
   serializer's own function), a copy a route from its project, an origin
   through `url::serialize_redacted_option`, and why one is left a
   `code::Said` of `update::Left`.
+- **Judged for the panel by #82**: what core says of a draft before a
+  command writes it (`draft::Judged`), each issue a `ValidationIssue` as
+  `validate` reads it and why the command would write nothing a
+  `code::Said`; and the hash a file read for the panel carries
+  (`contents::Contents`'s `hash`, by `hash::bytes`), what `edit
+  --if-unchanged` takes, a field added to a type the panel read already.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
