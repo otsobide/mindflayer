@@ -1699,8 +1699,8 @@ second copy of it could check it ([open questions](#open-questions)).
   fixture, and of a home with no workspace, and finds no path made and no
   byte changed.
 - **No scan.** What could be linked is a walk of the disk, bounded but not
-  free, and a snapshot is what a live update (#74) rebuilds every time
-  something changes. So the scan is a query of its own, run when somebody
+  free, and a snapshot is what a [live update](#live-updates) rebuilds
+  every time something changes. So the scan is a query of its own, run when somebody
   asks (#77), which the TUI runs beside the snapshot. A test counts the
   scans its thread runs, with a counter only a test build has, and finds
   none.
@@ -3949,13 +3949,16 @@ cannot disagree with the CLI and the TUI about any of them. What it knows is
 HTTP (routes, the token, cache headers, a log line), and none of that would
 differ between two front ends.
 
-The panel's whole API is four endpoints, which are
+The panel's whole API is five endpoints, the first four
 [D-18](#d-18-the-panel-writes-by-running-commands) in HTTP:
 
 - `POST /api/query`: a read, answered with JSON of the backend's own shape.
 - `POST /api/commands/preview`: the command lines a task is, with nothing run.
 - `POST /api/commands`: run a task; the reply is its lines and its outcome.
 - `GET /api/transcript`: every task the session ran, with what each produced.
+- `GET /api/events`: what happens as it happens, a change on disk or a run
+  starting and finishing, as server-sent events ([live
+  updates](#live-updates)).
 
 Any other path under `/api` is a JSON 404, and every refusal, a body the
 backend cannot read included, is `{"error": "..."}`, so a script never has to
@@ -3979,7 +3982,10 @@ types know nothing of mindflayer, which is the property the CLI relies on.
 has a shape of its own and one type standing for all of them would be an enum
 whose only job is to serialize untagged. `preview` takes the task by
 reference, so a task need not be `Clone` to be both shown and run.
-`watched_paths` is for live updates (#74); nothing reads it yet.
+`watched_paths` names what to watch for [live updates](#live-updates): each
+path with its scope (`Watched`), a word of the backend's own carried to the
+panel as JSON, as a query's answer is, so the server names no type of the
+front end's here either.
 
 Each of `query`, `preview` and `run` may refuse what it was asked with a
 `Refusal`, a code and a message, which is how a rule of the front end's
@@ -4009,6 +4015,11 @@ waiting on the same thread.
   ([Writers at the same time](#writers-at-the-same-time)). And a long run
   holds that thread rather than one of the pool's, so the panel goes on
   reading while it waits.
+- **The watcher** is a `std::thread` of its own, which owns the system's
+  watches and asks the backend for its list again after each change
+  ([live updates](#live-updates)); notify and its debouncer keep a thread
+  each beside it. None of them is tokio's, since asking for the list reads
+  the disk.
 
 A run's lines are worked out on the writer thread just before it, against the
 disk the run itself meets after every write before it; a task whose lines
@@ -4308,6 +4319,147 @@ The CLI's suite (`backend_test`) drives `PanelBackend` through the trait with
 the JSON a browser would send, malicious shapes in a table, and binds no
 port; the server's own suites cover the transport over a fake backend.
 
+### Live updates
+
+The panel shows a change made from a terminal, the TUI or an editor without
+a reload (#74). The server watches what the backend names and tells the
+browser, on one stream, when something there changed; the panel then asks
+for the snapshot again, which is all it ever does about it. Nothing is
+pushed but the word that something changed: what changed is read the way
+every read is, so the panel cannot show a change the snapshot would not.
+
+**What is watched is core's** (`watch::watched`), every file and folder a
+snapshot reads that somebody can change, each with what it is of, the
+workspace or a project by its entry. The CLI's backend hands that list
+over, each scope written as the holder a query names
+(`{"type": "project", "entry": "api"}`), and a desktop shell would hand
+over the same one. For the workspace: its marker, its ledger, its shelf's
+folders, the folders its library keeps each kind in, its templates, each
+workspace it loads, by its marker and library, and the default workspace's
+marker in home, whose `known` the snapshot lists. For each project: its
+marker, whichever file it is in, each file an agent reads in it
+(`Agent::reads_files`: `AGENTS.md`, `CLAUDE.md`, `.mcp.json`,
+`.codex/config.toml` and the rest, every agent's, since the block of
+`AGENTS.md` is read whichever the project names), each folder it keeps a
+kind in and each its agents read one from (`Catalog::folders`), the files
+Claude is given its rules in, and its templates. An entry that opens no
+project is watched for its marker coming back.
+
+- **Named, never a tree.** Each path is watched on its own
+  (`RecursiveMode::NonRecursive`): a file for its own changes, a folder for
+  what is directly in it. The folders named are those discovery looks in
+  (`Catalog::looked_in`): a kind's folder, each skill's own folder, whose
+  `SKILL.md` is read, and every folder of rules the walk goes into, since a
+  rule is found at any depth. Never a project's root, which would wake for
+  every file of the code beside it, and never a `.git`, a `node_modules` or
+  what a skill keeps in folders of its own: a recursive watch costs one of
+  the system's watches for every folder under it. A test of core's list
+  holds it to that over a fixture with all of those, and one of the
+  server's to watching only the folders named and the one above each,
+  none of them recursively, which it sees in the mode the watcher asks
+  the system for: nothing on the stream would show it, since a change
+  further down is no path's either way.
+- **What is not there yet is named all the same**, a project's
+  `.claude/skills` before its first install, and watched from the nearest
+  folder above it that is, for its being made. That rule is the watcher's,
+  being the same for any path: it knows files and folders, never which
+  ones a project has.
+- **A folder above a path named is a change to it.** Removed or renamed,
+  it takes the path with it, and it is all that is told: the debouncer
+  folds what a folder held into its own removal, so `rm -rf` of a linked
+  project, `git clean` taking its `.claude` or a `mv` of either is told by
+  that one folder, which is named nowhere. A change to a folder beside
+  them, a project's `src`, is still nobody's.
+- **Asked for again after every change it tells**, since a change can name
+  new paths, a skill installed or a project linked: `flayer.toml` changing
+  is one such change. A folder an event named as made, removed or renamed
+  is watched again besides, and every folder below it, since a watch stays
+  with the folder it was set on, and an install puts a copy in place by a
+  rename over the folder. notify drops every watch below a folder removed,
+  or renamed away from a parent it watches, and one renamed back within the
+  debounce is where it was, with nothing below it watched until each is set
+  again. The watches are set before the change is told, so whatever the
+  panel reads on hearing it, any change after it is watched for.
+- **Nothing a read does.** A file opened or closed without a write is no
+  change, or a snapshot reading a watched file would set off the next
+  snapshot, without end. For the same reason the ledger is named by its
+  file and never by its folder: SQLite makes `mindflayer.db-wal` and
+  `mindflayer.db-shm` beside it to read it and takes them away as the last
+  connection closes, so a watch on `.mindflayer` would wake for every read.
+  A write reaches the file itself when its log is checkpointed, at the
+  latest as the last connection to it closes, as each command's does; a
+  read that is that last connection checkpoints a write before it, which is
+  that write's change told once. Tests hold both: core's, that a snapshot
+  changes nothing named, and the CLI's, that reading the workspace over the
+  real backend is told as no change, which fails when either rule is
+  broken.
+
+**The watcher** (`Watcher`) uses notify 8 and its full debouncer, which
+waits 300 milliseconds (`DEBOUNCE`) so a burst, a command writing a dozen
+files or an editor saving through a temporary one, is told as one change,
+each scope it reached once. notify, rather than a poll of the files, since
+the system says what changed as it changes; and its full debouncer rather
+than the mini one, since it keeps what kind of change each was, which is
+how a file read is told apart from a file written, where the mini one says
+only that a path changed. It starts with the server, setting the first watches
+before `bind` returns, so a change made as soon as the link is out is told.
+A backend that names nothing costs no watcher at all.
+
+**The events** go through a bus (`Events`), a tokio broadcast channel every
+subscriber hears all of, and out at `GET /api/events` as server-sent events,
+one `data:` line of JSON each, tagged by `type` as a task is:
+
+- `changed`, with `scopes`, each scope a change reached;
+- `command_started` and `command_finished`, with a run's `lines`: told on
+  the writer thread once its preview passed and once it stopped, however it
+  stopped, a refusal or a panic included, the finish once the run is in the
+  transcript;
+- `resync`, first on every stream and again for one that fell behind: the
+  channel keeps 64 events (`CAPACITY`) for a subscriber that has not read
+  them, and one further behind is told to ask for everything again rather
+  than handed a backlog;
+- `watching` or `unwatched` with its `reason`, after `resync` once the
+  watcher has said, and again whenever that changes.
+
+Server-sent events rather than a WebSocket: the stream goes one way, a
+browser's `EventSource` connects again by itself after a drop, and it is a
+plain GET, which the gate holds to the token as it holds every read, the
+cookie included. A comment every 15 seconds while nothing happens
+(`KeepAlive`) keeps a proxy between, the panel's dev server's among them,
+from taking the connection for one that died. The bus and the watcher know
+nothing of axum, so a desktop shell answering the panel without HTTP
+(D-17) takes events from the same two; `Listening::events` hands the bus to
+a front end. Stopping the server closes the bus first, which ends every
+stream: each is a request under way for as long as a browser keeps the page
+open, and a graceful stop would wait for it without end.
+
+**Six connections a browser.** The server speaks HTTP/1.1 only, and a
+browser opens at most six HTTP/1.1 connections to one host and port;
+HTTP/2 would carry every request on one, but browsers speak it only over
+TLS, which a loopback panel has no certificate for. Each stream holds a
+connection for as long as it is open, so six tabs of one panel would leave
+none to ask with. So the panel keeps one stream for a tab, never one for a
+view, and lets it go while the tab is hidden, taking it again when the tab
+is shown, which the server answers with `resync`. Tabs of two launches are
+two ports, and count apart.
+
+**The system's limits on watches.** On Linux each watch is one of inotify's,
+of which one user has `fs.inotify.max_user_watches` across every program
+(8192 on older kernels, more on newer ones with memory to spare), and each
+watcher one of `fs.inotify.max_user_instances`, 128 by default. A watch the
+system refuses is said rather than failed on: the watcher keeps every watch
+it could set, tells `unwatched` with why, and tries again with the next
+change, telling `watching` once every one is set. A watcher that cannot
+start at all, no instance left, is `unwatched` for as long as the server
+runs. macOS's FSEvents and Windows' `ReadDirectoryChangesW` have no such
+count per folder. The panel shows a banner on every page while the server
+is `unwatched`, saying why, with a button that asks for everything again,
+and asks again on every page and every return to the window, as it did
+before there was a stream ([its views](#its-views)). A project costs about
+ten watches, and one for each copy of a skill it holds, so a workspace
+reaches the old 8192 only past a few hundred projects; a watch of every
+folder in each repository would reach it with one `node_modules`.
+
 ### The log
 
 The server prints nothing of its own accord. A front end that wants a log hands
@@ -4393,8 +4545,9 @@ listener, a Unix signal or the Windows console's Ctrl-C, rather than
 `tokio::signal::ctrl_c`, which installs its handler only once it is first
 awaited. The first stops the server taking connections and lets every
 request under way be answered, a run above all, so a change is not cut off
-half way; the second stops at once, for whoever would rather have that than
-wait. What comes back once it stops is what the TUI hands back when it
+half way, and ends every event stream, which would otherwise be answered
+for as long as a tab stays open ([live updates](#live-updates)); the
+second stops at once, for whoever would rather have that than wait. What comes back once it stops is what the TUI hands back when it
 closes: every line the panel ran for a task that changes something
 (`Task::writes`), with what each said, laid out by the TUI's function
 (`PanelBackend::transcript`), so a session in the browser can be read and
@@ -4455,8 +4608,8 @@ views](#its-views)).
 
 Every request the panel makes goes through a `Transport`
 (`src/api/transport.ts`): `query` for a read, `send` for a task to preview or
-run, and `subscribe` for the events #74 will stream. Views get it from
-`useTransport`. The server's fourth endpoint, the transcript, has no call
+run, and `subscribe` for the events the server streams ([live
+updates](#live-updates)). Views get it from `useTransport`. The server's fourth endpoint, the transcript, has no call
 yet, because nothing shows it: the transcript drawer (#76) adds one, so that
 it too reaches the server through the transport, and a desktop shell can
 answer it. The HTTP transport (`src/api/http.ts`) is the only file allowed
@@ -4505,8 +4658,10 @@ never edited by hand. The transport takes its `Query`, `Task` and `Outcome`
 from there, and says what each query is answered with by its `type`
 (`Answers`), so a query Rust adds leaves the panel not compiling until it
 names the answer. Only the server's own replies, `{lines}` for a preview,
-`{lines, outcome}` for a run and `{error, code}` for a refusal, are still
-spelled in `transport.ts` ([open questions](#open-questions)).
+`{lines, outcome}` for a run and `{error, code}` for a refusal, and the
+events its stream tells (`LiveEvent`), are still spelled in `transport.ts`
+([open questions](#open-questions)); a change's scopes are the generated
+`Holder`, since what a change is to is the backend's word.
 
 - **Derived beside serde.** Each type derives `ts_rs::TS` beside its
   `Serialize` or `Deserialize`, under a `ts` feature of core's and the
@@ -4670,13 +4825,27 @@ A file opened from the listing is shown as text in a `<pre>`, whatever it
 holds, and a listed file is a button asking for it, never a link.
 
 Every page reads one Vue Query of the snapshot (`src/api/snapshot.ts`), so
-moving between them draws at once from what is cached, and asks again behind
-it: an answer is stale as soon as it comes, since nothing says yet when the
-workspace changed, so each page asks on opening, and so does the window when
-it comes back into focus. Once #74's events say when it changed, the panel
-will ask only then. `SnapshotGate` draws a page once the snapshot is
-answered, says it is waiting until then, and says why when the server
-refused.
+moving between them draws at once from what is cached. The server's events
+say when to ask again ([live updates](#live-updates)), and `src/api/live.ts`
+turns each into what Vue Query is to ask for again, never a read of its own
+and never a scan: `changed` marks the snapshot stale, and what was read of
+an artifact in a holder among its scopes; `resync` and `command_finished`
+mark all of those, since a command can change what nothing watches. Those
+queries are named by the first word of their key (`markStale`), rather than
+every query marked, for one asked for by hand: a scan (#77) reads the disk
+far past what is watched, and an event asking for it again would run one on
+every change, every command and every tab shown again. While the
+server says it is `watching`, an answer stays fresh until one of those
+marks it (`staleTime` of `Infinity`), so a page asks for nothing on
+opening. Otherwise, before the server has said and while it is
+`unwatched`, an answer is stale as soon as it comes, as before there was a
+stream: each page asks on opening, and so does the window when it comes
+back into focus, and `SnapshotGate` shows the banner that says why above
+the page, with a button that marks stale what `resync` would. How the server
+watches is what the stream said, kept beside the subscription and provided
+to the views, rather than in Pinia, which holds only what the browser
+decides. `SnapshotGate` draws a page once the snapshot is answered, says it
+is waiting until then, and says why when the server refused.
 
 - **The panel lays out, groups and filters; it works nothing out.** Every
   count it shows is one the snapshot carries, the `summary` and each
@@ -5393,9 +5562,11 @@ Record what it reads first, in docs/agents.md, verified or docs-only with a
 fallback. Then a variant on `Agent` and its name, and its arm for each kind in
 the table's `standard`, and in `read`, behind `Agent::reads`, which both match
 every pair with no wildcard: neither a new agent nor a new kind compiles until
-somebody has said where it goes and where it reads. Its arm in `at_root`,
-behind `Agent::reads_at_root`, says which files at a project's root it reads,
-for a suggestion to rank by ([which to link first](#which-to-link-first)). The
+somebody has said where it goes and where it reads. Its arm in `files`,
+behind `Agent::reads_files`, says which files in a project it reads, which
+`Agent::reads_at_root` names by the name at the root each sits under, for a
+suggestion to rank by ([which to link first](#which-to-link-first)), and
+the panel watches ([live updates](#live-updates)). The
 compiler lists every match on `Agent`, since each is exhaustive, but not what
 is not a match:
 
@@ -7340,10 +7511,11 @@ just listed.
   previews of M5 (#76) turn a task into its lines.
 - **The server's replies are spelled twice.** A preview's `{lines}`, a
   run's `{lines, outcome}` and a refusal's `{error, code}` are built with
-  `json!` in the server's `api.rs` and spelled again in the panel's
-  `transport.ts`, outside what is written from Rust ([its types come from
+  `json!` in the server's `api.rs`, and the stream's events are its
+  `Event`, and all are spelled again in the panel's `transport.ts`, outside
+  what is written from Rust ([its types come from
   Rust](#its-types-come-from-rust)): the server has no `ts` feature, and its
-  own tests hold what it answers. Structs of its own deriving `Serialize`,
+  own tests hold what it answers and tells. Structs of its own deriving `Serialize`,
   and `TS` under a feature, would bring them under the drift check, at the
   price of ts-rs in the one crate that depends on no mindflayer crate.
 - **What each query is answered with is the panel's to name.** `Answers`
@@ -7411,10 +7583,41 @@ just listed.
   an adopted copy no update reaches by default.
 - **A snapshot is read whole.** Every update reads every project's folders
   and the ledger again, so a workspace of many projects pays for all of them
-  each time one changes. Rebuilding only the projects whose paths changed
-  (`watched_paths`, #74) would cut that, at the price of a snapshot put
-  together from parts read at different moments, which could disagree about
-  an install that happened between two of them.
+  each time one changes. Rebuilding only the projects a change's scopes name
+  ([live updates](#live-updates)) would cut that, at the price of a
+  snapshot put together from parts read at different moments, which could
+  disagree about an install that happened between two of them.
+- **A change deep inside a skill.** A skill's own folder is watched, its
+  `SKILL.md` and what sits beside it, and nothing further down: a script in
+  `scripts/` edited by hand changes an installed copy's hash, and so its
+  state, without the panel being told until something watched changes, the
+  tab is shown again or the page asks by hand. Watching each skill's folders
+  all the way down would tell it, at the price of a watch for every folder
+  a skill keeps.
+- **A folder renamed above everything watched.** `mv ~/Work ~/Projects`
+  moves every project under it without a watched folder seeing it: a watch
+  is told of its own folder's rename and of what happens directly in it,
+  and `~/Work` is neither for any. The watches follow the folders, still
+  named by where they were, so the panel learns of it from the next change
+  in one of them, the tab shown again or a refresh by hand. Watching every
+  folder up to the root would tell it, at the price of waking for every
+  file made in each, the home folder's among them.
+- **A write the ledger has not checkpointed.** The ledger is watched by its
+  file, which a write reaches when its log is checkpointed. A connection
+  held open past a write, by a long command or a program reading the
+  ledger, delays that, and the change shows when the connection closes. The
+  panel's own runs say `command_finished` regardless, and a gather writes
+  the shelf's folders too, which are watched; a write elsewhere that nobody
+  closes on waits.
+- **The known workspaces' own markers.** The default workspace's marker is
+  watched, for which workspaces this machine knows, but not each of theirs,
+  so one renamed is shown by its old name until something watched changes.
+- **One folder by two spellings.** inotify gives one watch to a folder
+  however it was named, and notify tells its changes by the last name it
+  was watched by, so a folder reached through a link and also by its own
+  path is told under one of the two, and a change there may go untold.
+  Comparing what the system says by the folder's identity rather than its
+  name would close it.
 - **Which workspace a project's lines consult is not in the snapshot.** The
   TUI asks it beside the snapshot, from its own lookup, to know when a row's
   lines need `-W .`, and the panel's backend asks it the same way for each

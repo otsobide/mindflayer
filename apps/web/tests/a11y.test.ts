@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import axe from 'axe-core'
-import { fixture, render, unmount, type Fixture } from './panel'
+import type { LiveEvent, Transport } from '@/api/transport'
+import { answering, fixture, render, unmount, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -55,6 +56,23 @@ describe('every page', () => {
   it.each(PAGES)('%s, of the %s fixture, passes axe', async (path, name) => {
     await render(path, fixture(name))
 
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('a page over a workspace the server cannot watch all of', () => {
+  it('passes axe with the banner that says so', async () => {
+    const { transport } = answering(fixture('workspace'))
+    const unwatched: LiveEvent = { type: 'unwatched', reason: 'the system\'s limit on watched folders is reached' }
+    await render('/', {
+      ...transport,
+      subscribe(listener: (event: LiveEvent) => void) {
+        listener(unwatched)
+        return () => {}
+      }
+    } as Transport)
+
+    expect(document.querySelector('[data-testid="unwatched"]')).not.toBeNull()
     expect(await violations()).toEqual([])
   })
 })

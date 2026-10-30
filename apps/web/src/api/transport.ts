@@ -1,6 +1,7 @@
 import { inject, type InjectionKey } from 'vue'
 import type { Contents } from './generated/Contents'
 import type { Files } from './generated/Files'
+import type { Holder } from './generated/Holder'
 import type { Outcome } from './generated/Outcome'
 import type { Query } from './generated/Query'
 import type { Snapshot } from './generated/Snapshot'
@@ -38,6 +39,34 @@ export interface Run {
   outcome: Outcome
 }
 
+/**
+ * What the server's event stream tells (`GET /api/events`), each told
+ * apart by its `type`:
+ *
+ * - `changed`: something the server watches changed on disk, so what is
+ *   shown of each holder in `scopes` may be out of date;
+ * - `command_started` and `command_finished`: a task's lines started to
+ *   run, and stopped, however that went;
+ * - `resync`: something may have been missed, as on connecting, so
+ *   everything is asked for again;
+ * - `watching` and `unwatched`: whether everything the server was told to
+ *   watch is, and why not, when a change there shows only once asked for
+ *   by hand.
+ *
+ * Spelled here, beside the server's other replies, rather than generated
+ * from Rust: the stream is the server's own, and the server is a crate of
+ * its own with no part in `make web/types`, as `{lines}` and `{lines,
+ * outcome}` are. What a change is to is the backend's, a holder as a query
+ * names it, so that much is the generated `Holder`.
+ */
+export type LiveEvent
+  = | { type: 'changed', scopes: Holder[] }
+    | { type: 'command_started', lines: string[] }
+    | { type: 'command_finished', lines: string[] }
+    | { type: 'resync' }
+    | { type: 'watching' }
+    | { type: 'unwatched', reason: string }
+
 /** Stops a subscription. */
 export type Unsubscribe = () => void
 
@@ -66,10 +95,12 @@ export interface Transport {
   send(task: Task, mode: 'run'): Promise<Run>
 
   /**
-   * Be told whenever what the panel shows may have changed (#74). Each event
-   * arrives parsed; nothing is sent until the server has an event stream.
+   * Be told whenever what the panel shows may have changed, or how the
+   * server watches for it, until unsubscribed. `resync` comes first, and
+   * again whenever something may have been missed, a connection lost and
+   * made again among them.
    */
-  subscribe(listener: (event: unknown) => void): Unsubscribe
+  subscribe(listener: (event: LiveEvent) => void): Unsubscribe
 }
 
 /**

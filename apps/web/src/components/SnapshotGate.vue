@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { useQueryClient } from '@tanstack/vue-query'
 import type { Snapshot } from '@/api/generated/Snapshot'
+import { markStale, useLive } from '@/api/live'
 import { useSnapshot } from '@/api/snapshot'
 
 defineSlots<{
@@ -7,6 +9,16 @@ defineSlots<{
 }>()
 
 const { data, error, refetch } = useSnapshot()
+const live = useLive()
+const client = useQueryClient()
+
+// When the server cannot watch everything, a change made from a terminal,
+// the TUI or an editor may never be told: the page says so above what it
+// draws, and offers what it would have done, everything an event follows
+// asked for again, rather than failing or pretending to be up to date.
+function refresh() {
+  void markStale(client)
+}
 
 // The last answer stays drawn while a new one is asked for, and when asking
 // again fails: what was read is still worth reading, and Vue Query will ask
@@ -15,6 +27,17 @@ const { data, error, refetch } = useSnapshot()
 </script>
 
 <template>
+  <UAlert
+    v-if="live.state === 'unwatched'"
+    color="warning"
+    variant="subtle"
+    icon="i-lucide-eye-off"
+    title="Changes made outside the panel may not show by themselves"
+    :description="`${live.reason}: refresh to see them.`"
+    :actions="[{ label: 'Refresh', icon: 'i-lucide-rotate-cw', color: 'warning', variant: 'outline', size: 'sm', onClick: refresh }]"
+    class="shrink-0"
+    data-testid="unwatched"
+  />
   <slot
     v-if="data"
     :snapshot="data"

@@ -8,6 +8,7 @@ use std::thread;
 use serde_json::json;
 use tokio::sync::oneshot;
 
+use crate::events::{Event, Events};
 use crate::transcript::{Entry, Transcript};
 use crate::{Backend, Refusal};
 
@@ -36,26 +37,21 @@ pub(crate) struct Writer<T> {
 }
 
 impl<T: Send + 'static> Writer<T> {
-    /// Start the thread, recording every run in `transcript`. It lives as
-    /// long as somebody can still queue a task, and ends when the last router
-    /// holding this writer is dropped.
+    /// Start the thread, recording every run in `transcript` and telling
+    /// `events` as each starts and finishes. It lives as long as somebody
+    /// can still queue a task, and ends when the last router holding this
+    /// writer is dropped.
     pub(crate) fn start<B: Backend<Task = T>>(
         backend: Arc<B>,
         transcript: Transcript,
+        events: Events,
     ) -> io::Result<Self> {
         let (queue, tasks) = mpsc::channel::<Write<T>>();
         thread::Builder::new()
             .name(String::from("mindflayer-writes"))
             .spawn(move || {
                 for Write { task, reply } in tasks {
-                    // A backend that panics has a bug, but the thread
-                    // outlives it so the tasks queued behind can still run.
-                    let done = panic::catch_unwind(AssertUnwindSafe(|| perform(&*backend, task)))
-                        .map_err(|_| String::from("the backend panicked while running the task"));
-                    // A refused task ran nothing, so it is no run to replay.
-                    if let Ok(Ok(entry)) = &done {
-                        transcript.record(entry.clone());
-                    }
+                    let done = perform(&*backend, task, &transcript, &events);
                     // Nobody may be waiting any more: a client that gives up
                     // does not take its task back, which has already run.
                     let _ = reply.send(done);
@@ -78,17 +74,52 @@ impl<T: Send + 'static> Writer<T> {
 
 /// Run one task: its lines first, worked out on this thread, so they are the
 /// lines of the disk the run itself meets, after every write before it.
-/// A task whose lines the backend refuses is never handed to it to run.
+/// A task whose lines the backend refuses is never handed to it to run, and
+/// nobody is told it started, since nothing did.
 ///
-/// An outcome that will not serialize is still a run that happened, so it is
-/// recorded as an error beside the lines that ran rather than raised: raised,
-/// it would leave the transcript a run short, and the client a bare 500 for
-/// lines that may well have changed the disk.
-fn perform<B: Backend>(backend: &B, task: B::Task) -> Result<Entry, Refusal> {
-    let lines = backend.preview(&task)?;
-    let outcome = backend.run(task)?;
-    let outcome = serde_json::to_value(outcome).unwrap_or_else(
-        |error| json!({ "error": format!("the backend's outcome is not JSON: {error}") }),
-    );
-    Ok(Entry { lines, outcome })
+/// One that runs is told to every subscriber as it starts and as it
+/// finishes, however it finishes, a refusal or a panic included, so a panel
+/// showing it running never waits for an end that is not coming. Finished
+/// is told once the run is in the transcript, as the reply is sent, so
+/// whoever asks for the transcript on hearing it finds the run there.
+///
+/// A backend that panics has a bug, but the thread outlives it so the
+/// tasks queued behind can still run. An outcome that will not serialize is
+/// still a run that happened, so it is recorded as an error beside the
+/// lines that ran rather than raised: raised, it would leave the transcript
+/// a run short, and the client a bare 500 for lines that may well have
+/// changed the disk.
+fn perform<B: Backend>(
+    backend: &B,
+    task: B::Task,
+    transcript: &Transcript,
+    events: &Events,
+) -> Done {
+    let panicked = || String::from("the backend panicked while running the task");
+    let lines = match panic::catch_unwind(AssertUnwindSafe(|| backend.preview(&task))) {
+        Ok(Ok(lines)) => lines,
+        // A refused task ran nothing, so it is no run to replay.
+        Ok(Err(refusal)) => return Ok(Err(refusal)),
+        Err(_) => return Err(panicked()),
+    };
+    events.publish(Event::CommandStarted {
+        lines: lines.clone(),
+    });
+    let done = match panic::catch_unwind(AssertUnwindSafe(move || backend.run(task))) {
+        Ok(Ok(outcome)) => {
+            let outcome = serde_json::to_value(outcome).unwrap_or_else(
+                |error| json!({ "error": format!("the backend's outcome is not JSON: {error}") }),
+            );
+            let entry = Entry {
+                lines: lines.clone(),
+                outcome,
+            };
+            transcript.record(entry.clone());
+            Ok(Ok(entry))
+        }
+        Ok(Err(refusal)) => Ok(Err(refusal)),
+        Err(_) => Err(panicked()),
+    };
+    events.publish(Event::CommandFinished { lines });
+    done
 }

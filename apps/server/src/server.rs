@@ -11,11 +11,13 @@ use axum::Router;
 
 use crate::api::{self, Api};
 use crate::auth::{self, Gate};
+use crate::events::Events;
 use crate::guard::{self, Hosts};
 use crate::log::{self, Log, Sink};
 use crate::panel::{self, Panel};
 use crate::token::Token;
 use crate::transcript::Transcript;
+use crate::watcher::Watcher;
 use crate::writer::Writer;
 use crate::Backend;
 
@@ -98,13 +100,15 @@ impl<B: Backend> Server<B> {
         let address = listener.local_addr()?;
         let token = Token::issue();
         let dev_server = self.dev_server.clone();
-        let router = route(self, &token, address.port())?;
+        let events = Events::new();
+        let router = route(self, &token, address.port(), events.clone())?;
         Ok(Listening {
             listener,
             address,
             token,
             router,
             dev_server,
+            events,
         })
     }
 }
@@ -117,6 +121,8 @@ pub struct Listening {
     router: Router,
     /// Where the panel is served from instead, when that is a dev server.
     dev_server: Option<String>,
+    /// What `/api/events` streams.
+    events: Events,
 }
 
 impl Listening {
@@ -148,6 +154,13 @@ impl Listening {
         auth::cookie_name(self.address.port())
     }
 
+    /// The bus `/api/events` streams, for a front end that tells the panel
+    /// something of its own or listens without HTTP, as a desktop shell
+    /// would.
+    pub fn events(&self) -> Events {
+        self.events.clone()
+    }
+
     /// Every route, for a caller that wants to send requests in process
     /// rather than over the socket. Each still needs the Host header one over
     /// the socket would carry, naming this server.
@@ -155,37 +168,55 @@ impl Listening {
         self.router.clone()
     }
 
-    /// Answer requests until `shutdown` completes.
+    /// Answer requests until `shutdown` completes, then finish those under
+    /// way.
+    ///
+    /// The event streams are ended first, by closing their bus: each is a
+    /// request under way that would otherwise last as long as the browser
+    /// keeps the page open, and a graceful stop would wait for it.
     pub async fn serve(
         self,
         shutdown: impl Future<Output = ()> + Send + 'static,
     ) -> io::Result<()> {
         self.listener.set_nonblocking(true)?;
         let listener = tokio::net::TcpListener::from_std(self.listener)?;
+        let events = self.events;
         axum::serve(listener, self.router)
-            .with_graceful_shutdown(shutdown)
+            .with_graceful_shutdown(async move {
+                shutdown.await;
+                events.close();
+            })
             .await
     }
 }
 
 /// Every route, behind what guards it.
-fn route<B: Backend>(server: Server<B>, token: &Token, port: u16) -> io::Result<Router> {
+fn route<B: Backend>(
+    server: Server<B>,
+    token: &Token,
+    port: u16,
+    events: Events,
+) -> io::Result<Router> {
     let gate = Arc::new(Gate::new(token.clone(), port));
     let log = server
         .log
         .map(|sink| Arc::new(Log::new(sink, token.clone())));
     let backend = Arc::new(server.backend);
     let transcript = Transcript::default();
+    let watched = Arc::clone(&backend);
     let api = Arc::new(Api {
-        writer: Writer::start(Arc::clone(&backend), transcript.clone())?,
+        writer: Writer::start(Arc::clone(&backend), transcript.clone(), events.clone())?,
+        _watcher: Watcher::start(move || watched.watched_paths(), events.clone()),
         backend,
         transcript,
+        events,
     });
     let router = Router::new()
         .route("/api/query", endpoint(post(api::query::<B>)))
         .route("/api/commands/preview", endpoint(post(api::preview::<B>)))
         .route("/api/commands", endpoint(post(api::commands::<B>)))
         .route("/api/transcript", endpoint(get(api::transcript::<B>)))
+        .route("/api/events", endpoint(get(api::events::<B>)))
         // The bare prefix and everything under it that names no endpoint,
         // so a typo in a script gets a JSON 404 rather than the panel. `/api/`
         // needs a route of its own: the catch-all wants at least one

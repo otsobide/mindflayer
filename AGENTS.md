@@ -116,7 +116,9 @@ under `apps/` with its own `Makefile`:
   (`adopt`), the stable code each of its errors gives (`code`), the
   snapshot every front end reads a workspace through, with what it counts
   and each project's health, and the part of it `list --json` prints
-  (`view`), one file of an artifact read as text for
+  (`view`), every path a snapshot reads that a front end watches for a
+  change, each with the holder it is of (`watch`), one file of an artifact
+  read as text for
   the panel, cut at its front matter when it is the one the artifact is
   read from, and every file it holds listed (`contents`), which paths and
   entries a request from outside
@@ -162,15 +164,19 @@ under `apps/` with its own `Makefile`:
   cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
   Metadata checks and the CSP, `src/api.rs` the JSON endpoints,
   `src/writer.rs` the thread every run goes through, `src/transcript.rs` what
-  the session ran, `src/log.rs` the redacting request log and `src/panel.rs`
-  the embedded panel (`apps/web/dist`).
+  the session ran, `src/events.rs` the bus `/api/events` streams,
+  `src/watcher.rs` what watches the paths the backend names and tells the
+  bus what changed, `src/log.rs` the redacting request log and
+  `src/panel.rs` the embedded panel (`apps/web/dist`).
 - `apps/web` (`mindflayer-web`): the web panel, in Vue and Nuxt UI on Vite,
   with pnpm. `src/main.ts` mounts what `src/panel.ts` installs (router,
   Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
   too. `src/api/transport.ts` is the `Transport` interface and `useTransport`,
   and `src/api/http.ts` its HTTP implementation, `src/api/snapshot.ts` the
-  one query of the snapshot every view reads, and `src/api/artifact.ts` the
-  queries of an artifact's files and of one file. `src/pages/` holds one
+  one query of the snapshot every view reads, `src/api/artifact.ts` the
+  queries of an artifact's files and of one file, and `src/api/live.ts` the
+  tab's one subscription to the server's events, which it turns into what
+  Vue Query asks for again, and how the server watches. `src/pages/` holds one
   page per route (file routes): the overview (`index`), the projects
   (`projects`), a project's page (`project`, which `src/routes.ts` names by
   its entry in the query), the library (`library`), one of its own
@@ -768,7 +774,12 @@ These are easy to break from a single file without noticing.
   `Refusal`, a code and a message, sent as a 422; a task refused when its
   lines are asked for is never run, nor kept in the transcript. Queries and
   previews run on tokio's blocking pool, and every run on the one writer
-  thread, in the order it arrived. It binds
+  thread, in the order it arrived. Which paths it watches is core's
+  (`watch::watched`), handed over by the backend (`watched_paths`), each
+  with a scope it carries to the panel unread: the watcher knows files and
+  folders, each watched on its own and never a tree, and nothing of which
+  ones a project has. The bus and the watcher stay free of axum, so a
+  desktop shell reuses them. It binds
   127.0.0.1 only, answers only a Host naming it on its port as `127.0.0.1`,
   `localhost` or `[::1]`, refuses an Origin other than its own, answers under
   `/api` only a request that carries the launch token (in the cookie
@@ -785,7 +796,10 @@ These are easy to break from a single file without noticing.
   `EventSource`, `WebSocket` or `XMLHttpRequest` (an ESLint rule, tested in
   `tests/lint.test.ts`). Authentication is the transport's: relative URLs,
   the `HttpOnly` cookie, the `X-Mindflayer: 1` header. What the server
-  answers belongs in Vue Query; Pinia holds UI state only. A view lays
+  answers belongs in Vue Query; Pinia holds UI state only. The server's
+  events reach the views only as Vue Query marking what they reached stale
+  (`src/api/live.ts`), never as a read of their own and never a scan, over
+  one subscription a tab, let go while it is hidden. A view lays
   out, groups and filters what the snapshot lists: every count it shows is
   one the snapshot carries (`summary`, a project's `tally`), every verdict
   one core gave (a project's `health`), every order the snapshot's
@@ -899,10 +913,16 @@ These are easy to break from a single file without noticing.
   and serve a fixture panel (`tests/panel`), so they need no Node. Every
   request names the server in Host, and `Auth::Cookie` sends what the panel's
   page would; a test of a guard changes one header of that
-  (`common::request`, then `common::deliver`). The CLI's backend has a suite
+  (`common::request`, then `common::deliver`). A test of the event stream
+  reads it a frame at a time (`common::subscribe`, `common::opened`), and
+  one that watches files watches temporary folders only, through a fake
+  that names them (`common::launch_watching`), and waits for what it
+  expects at most `common::PATIENCE`. The CLI's backend has a suite
   of its own (`apps/cli/tests/backend_test.rs`), which drives `PanelBackend`
   through the `Backend` trait with the JSON a browser sends, binding no
-  port; `apps/cli/tests/ui_test.rs` starts the binaries' `ui` on port 0
+  port, and `apps/cli/tests/live_test.rs` starts the server's watcher over
+  it on a temporary workspace; `apps/cli/tests/ui_test.rs` starts the
+  binaries' `ui` on port 0
   (`common::start`) and sends the panel's requests over loopback. No test
   opens a browser: every `ui` one starts passes `--no-open`, and the opener
   is a stand-in in `ui`'s unit tests. A suite or test about the panel is

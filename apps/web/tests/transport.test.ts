@@ -150,12 +150,14 @@ describe('the HTTP transport', () => {
 
     const stop = httpTransport().subscribe(event => events.push(event))
     const [source] = sources as [FakeEventSource]
-    source.onmessage?.(new MessageEvent('message', { data: '{"changed":"snapshot"}' }))
+    const changed = { type: 'changed', scopes: [{ type: 'workspace' }] }
+    source.onmessage?.(new MessageEvent('message', { data: JSON.stringify(changed) }))
     source.onmessage?.(new MessageEvent('message', { data: 'not json' }))
+    source.onmessage?.(new MessageEvent('message', { data: '"resync"' }))
     stop()
 
     expect(source.url).toBe('/api/events')
-    expect(events).toEqual([{ changed: 'snapshot' }])
+    expect(events).toEqual([changed])
     expect(source.closed).toBe(true)
   })
 })

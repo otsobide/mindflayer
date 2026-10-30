@@ -1,7 +1,7 @@
 /*
  * The one file allowed to use `fetch` and `EventSource` (see eslint.config.ts).
  */
-import { TransportError, type Answer, type Preview, type Query, type Run, type Task, type Transport } from './transport'
+import { TransportError, type Answer, type LiveEvent, type Preview, type Query, type Run, type Task, type Transport } from './transport'
 
 /**
  * Sent with every request.
@@ -19,8 +19,8 @@ const HEADERS = {
 
 /**
  * The transport for a panel the local server serves, over HTTP: the server's
- * query, preview and commands endpoints, and the event stream #74 adds, all
- * under `/api`. Its transcript has no call yet (see `Transport`).
+ * query, preview and commands endpoints, and its event stream, all under
+ * `/api`. Its transcript has no call yet (see `Transport`).
  *
  * Relative URLs, so the panel talks to whichever server sent it, on
  * whatever port it took, or to the Vite dev server that proxies `/api` to
@@ -42,11 +42,13 @@ export function httpTransport(): Transport {
     subscribe(listener) {
       // Same origin, so the cookie goes with it; a GET changes nothing, so
       // it needs neither the header nor the JSON body EventSource cannot send.
+      // One source, which the browser connects again by itself when the
+      // connection drops, and the server then starts again with `resync`.
       const source = new EventSource('/api/events')
       source.onmessage = (message: MessageEvent<string>) => {
         const event = parse(message.data)
-        if (event !== undefined) {
-          listener(event)
+        if (typeof event === 'object' && event !== null && 'type' in event) {
+          listener(event as LiveEvent)
         }
       }
       return () => source.close()

@@ -15,6 +15,17 @@ axum = { version = "0.8", default-features = false, features = ["http1", "json",
 tokio = { version = "1", features = ["net", "rt", "sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# `unfold`, to turn the event bus into the stream `/api/events` sends: the
+# version axum already builds, with no feature it does not take itself.
+futures-util = { version = "0.3", default-features = false }
+# What tells the panel a file it shows changed (#74): the system's own
+# watches (inotify, FSEvents, ReadDirectoryChangesW) through notify, and its
+# full debouncer, which folds a burst of changes, a command writing a dozen
+# files, into one report, and pairs a rename's two halves. notify is
+# CC0-1.0 and the debouncer MIT or Apache-2.0, each a licence GPL-3.0-only
+# takes in, as is every crate they bring.
+notify = "8"
+notify-debouncer-full = "0.6"
 # The launch token. 0.10, the version already in the tree.
 rand = "0.10"
 # The launch link's query string, decoded the way a browser encodes it.

@@ -79,3 +79,6 @@ mindflayer-core = { path = "../core" }
 # same version and features as core's, so it is one build of SQLite.
 rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
 tempfile = "3"
+# To wait, bounded, for what the panel's watcher tells (`live_test`): the
+# runtime and timers the server's own suites use, and the version it builds.
+tokio = { version = "1", features = ["macros", "rt", "time"] }

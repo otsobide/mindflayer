@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 
 use common::*;
 use mindflayer_cli::backend::{Outcome, PanelBackend, Query};
+use mindflayer_core::watch;
 use mindflayer_server::{Backend, Refusal};
 use serde_json::{json, Value};
 
@@ -762,4 +763,55 @@ fn a_workspace_gone_since_launch_is_refused_rather_than_made_again() {
 
     assert_eq!(refusal.code, "not_a_workspace");
     assert!(!dir.path().join(FLAYER_DIR).exists());
+}
+
+/// What the server watches is what core names for a snapshot, each path's
+/// scope the holder a query reads it from, so the server learns no path of
+/// its own.
+#[test]
+fn the_backend_watches_what_core_names_each_by_the_holder_a_query_names() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    let workspace = FlayerWorkspace::open(root).unwrap();
+
+    let watched = backend(root).watched_paths();
+
+    let named: Vec<(PathBuf, Value)> = watch::watched(&workspace, None)
+        .into_iter()
+        .map(|each| {
+            let scope = match each.scope {
+                watch::Scope::Workspace => json!({"type": "workspace"}),
+                watch::Scope::Project(entry) => json!({"type": "project", "entry": entry}),
+            };
+            (each.path, scope)
+        })
+        .collect();
+    assert!(!named.is_empty());
+    assert_eq!(
+        watched
+            .into_iter()
+            .map(|each| (each.path, each.scope))
+            .collect::<Vec<_>>(),
+        named
+    );
+    let marker = root.join(FLAYER_DIR).join("flayer.toml");
+    assert!(named.contains(&(marker, json!({"type": "workspace"}))));
+    let alpha = root.join("alpha").join(".mind").join("settings.toml");
+    assert!(named.contains(&(alpha, json!({"type": "project", "entry": "alpha"}))));
+}
+
+/// Gone since launch: watched where its marker would be, for its coming
+/// back, rather than not at all.
+#[test]
+fn a_workspace_gone_since_launch_is_watched_for_its_marker() {
+    let dir = workspace_with_two();
+    let backend = backend(dir.path());
+    fs::remove_dir_all(dir.path().join(FLAYER_DIR)).unwrap();
+
+    let watched = backend.watched_paths();
+
+    let marker = dir.path().join(FLAYER_DIR).join("flayer.toml");
+    assert!(watched
+        .iter()
+        .any(|each| each.path == marker && each.scope == json!({"type": "workspace"})));
 }

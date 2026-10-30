@@ -55,6 +55,7 @@ pub mod typescript;
 pub mod update;
 pub mod url;
 pub mod view;
+pub mod watch;
 pub mod workspace;
 
 pub use activate::{ActivateError, Shell, UnknownShell};

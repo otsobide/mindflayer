@@ -190,6 +190,30 @@ pub fn find(
     })
 }
 
+/// Every folder whose entries decide which templates `project` is offered,
+/// with `workspace`'s as [`templates`] takes it: each folder templates are
+/// looked for in, closest first, whether or not it is there, and each
+/// folder in it, which a manifest written into makes a skill's template.
+///
+/// For a front end that watches a holder to know when what it shows is out
+/// of date (#74), each on its own and nothing below it: what a template's
+/// folder holds further down is the template's, and no part of finding it.
+pub fn looked_in(workspace: Option<&FlayerWorkspace>, project: &MindProject) -> Vec<PathBuf> {
+    let mut folders = Vec::new();
+    for directory in search_path(workspace, project) {
+        let mut inside: Vec<PathBuf> = fs::read_dir(&directory)
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| Some(entry.ok()?.path()))
+            .filter(|path| path.is_dir())
+            .collect();
+        inside.sort();
+        folders.push(directory);
+        folders.extend(inside);
+    }
+    folders
+}
+
 /// Where templates are looked for, closest first.
 ///
 /// `workspace` is the one the front end resolved for the command, given

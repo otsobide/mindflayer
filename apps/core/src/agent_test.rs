@@ -368,6 +368,53 @@ fn each_agent_reads_its_instructions_its_configuration_and_its_folders_at_a_proj
     );
 }
 
+/// Every file `agent` reads in a project, as strings to compare, each with
+/// `/` between its folders whatever the platform writes.
+fn files_of(agent: Agent) -> Vec<String> {
+    agent
+        .reads_files()
+        .iter()
+        .map(|file| {
+            file.components()
+                .map(|part| part.as_os_str().to_str().unwrap())
+                .collect::<Vec<_>>()
+                .join("/")
+        })
+        .collect()
+}
+
+#[test]
+fn each_agent_reads_its_instruction_files_and_its_configuration_file_in_a_project() {
+    assert_eq!(
+        files_of(Agent::Claude),
+        [".mcp.json", "AGENTS.md", "CLAUDE.local.md", "CLAUDE.md"]
+    );
+    assert_eq!(
+        files_of(Agent::Codex),
+        [".codex/config.toml", "AGENTS.md", "AGENTS.override.md"]
+    );
+    assert_eq!(
+        files_of(Agent::OpenCode),
+        ["AGENTS.md", "CLAUDE.md", "opencode.json"]
+    );
+}
+
+#[test]
+fn every_file_an_agent_reads_sits_in_a_name_it_reads_at_the_root() {
+    for agent in Agent::ALL {
+        for file in agent.reads_files() {
+            let first = file.components().next().unwrap();
+            assert!(
+                agent
+                    .reads_at_root()
+                    .contains(&PathBuf::from(first.as_os_str())),
+                "{agent} reads {}, and not its root's {first:?}",
+                file.display()
+            );
+        }
+    }
+}
+
 #[test]
 fn every_folder_an_agent_reads_a_kind_from_sits_in_a_name_it_reads_at_the_root() {
     for kind in Kind::ALL {

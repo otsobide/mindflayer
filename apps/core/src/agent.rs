@@ -84,16 +84,19 @@ impl Agent {
 
     /// Every name at a project's root this agent reads something from: the
     /// folder each place it reads a kind from sits in ([`reads`](Agent::reads),
-    /// so `.claude` for `.claude/skills`), its instruction files and its
-    /// project configuration, in name order.
+    /// so `.claude` for `.claude/skills`), its instruction files and the
+    /// folder its project configuration sits in, if any
+    /// ([`reads_files`](Agent::reads_files), so `.codex` for
+    /// `.codex/config.toml`), in name order.
     ///
     /// What tells a repository somebody works in with this agent from one
     /// nobody does, which is what a scan ranks a repository by when it
     /// suggests what to link. Names rather than
     /// what the files hold: an empty `CLAUDE.md` is still somebody's choice
     /// of agent, and a scan that read every file it found would be a crawl
-    /// of the disk. The folders come from `reads` rather than being spelled
-    /// again, so a folder an agent is found to read moves here with it.
+    /// of the disk. The names come from `reads` and `reads_files` rather
+    /// than being spelled again, so a folder or a file an agent is found to
+    /// read moves here with it.
     ///
     /// Pure, as `reads` is, and resting on the same facts in
     /// `docs/agents.md`.
@@ -101,38 +104,61 @@ impl Agent {
         let mut names: Vec<PathBuf> = Kind::ALL
             .into_iter()
             .flat_map(|kind| self.reads(kind))
-            .filter_map(|folder| {
-                folder
-                    .components()
+            .chain(self.reads_files())
+            .filter_map(|path| {
+                path.components()
                     .next()
                     .map(|first| PathBuf::from(first.as_os_str()))
             })
-            .chain(at_root(self).iter().map(PathBuf::from))
             .collect();
         names.sort();
         names.dedup();
         names
     }
+
+    /// Every file in a project this agent reads beside the folders it reads
+    /// a kind from: its instruction files and its project configuration,
+    /// each relative to the project's root, in name order.
+    ///
+    /// Each file rather than the name at the root it sits under, which is
+    /// what [`reads_at_root`](Agent::reads_at_root) gives: `.codex` says
+    /// Codex is used in a repository, but what changes when its
+    /// configuration does is `.codex/config.toml`, and a front end that
+    /// watches a project for changes watches that file, not the whole
+    /// folder (#74). Pure, as `reads` is, and resting on the same facts in
+    /// `docs/agents.md`.
+    pub fn reads_files(self) -> Vec<PathBuf> {
+        let mut files = files(self);
+        files.sort();
+        files
+    }
 }
 
-/// The files at a project's root `agent` reads, and the folder it keeps a
-/// project's configuration in, beside the folders [`read`] names.
+/// The files `agent` reads in a project, beside the folders [`read`] names,
+/// each relative to the project's root.
 ///
 /// One arm per agent with no wildcard, as `read`'s, so a new agent does not
 /// compile until somebody has said what it reads there. Each configuration
 /// file is the one D-10 puts an MCP server's entry in.
-fn at_root(agent: Agent) -> &'static [&'static str] {
+fn files(agent: Agent) -> Vec<PathBuf> {
+    let at_root = |names: &[&str]| names.iter().map(PathBuf::from).collect::<Vec<_>>();
     match agent {
         // Verified on Claude Code 2.1.309: `CLAUDE.md`, `CLAUDE.local.md`,
         // and `AGENTS.md` natively when neither is there. `.mcp.json`, its
         // project's MCP servers, is docs-only.
-        Agent::Claude => &[CLAUDE_MD, CLAUDE_LOCAL_MD, agents_md::FILE, ".mcp.json"],
+        Agent::Claude => at_root(&[CLAUDE_MD, CLAUDE_LOCAL_MD, agents_md::FILE, ".mcp.json"]),
         // Docs-only: `AGENTS.md`, or `AGENTS.override.md` in its place, and
-        // `.codex`, which holds a trusted project's `config.toml`.
-        Agent::Codex => &[agents_md::FILE, agents_md::OVERRIDE, ".codex"],
+        // a trusted project's `.codex/config.toml`, joined a folder at a
+        // time as `standard` joins them, so it has one kind of separator on
+        // Windows too.
+        Agent::Codex => {
+            let mut files = at_root(&[agents_md::FILE, agents_md::OVERRIDE]);
+            files.push(Path::new(".codex").join("config.toml"));
+            files
+        }
         // Docs-only: `AGENTS.md`, the `CLAUDE.md` V1 reads when there is no
         // `AGENTS.md`, and `opencode.json`, its project's configuration.
-        Agent::OpenCode => &[agents_md::FILE, CLAUDE_MD, "opencode.json"],
+        Agent::OpenCode => at_root(&[agents_md::FILE, CLAUDE_MD, "opencode.json"]),
     }
 }
 
