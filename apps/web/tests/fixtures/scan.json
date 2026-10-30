@@ -1,0 +1,171 @@
+[
+  {
+    "answer": {
+      "depth": 3,
+      "found": [
+        {
+          "found": {
+            "agent_files": [
+              ".agents",
+              ".claude"
+            ],
+            "id": "01d01d01d01d01d01d01d01d01d01d01",
+            "linked": false,
+            "mind": true,
+            "moved": "old",
+            "path": "/home/you/Projects/archive/old",
+            "reason": "id",
+            "route": "archive/old"
+          },
+          "moved_from": "old",
+          "offers": null,
+          "why": "moved: old -> archive/old"
+        },
+        {
+          "found": {
+            "agent_files": [],
+            "id": "b10b10b10b10b10b10b10b10b10b10b1",
+            "linked": false,
+            "mind": true,
+            "moved": null,
+            "path": "/home/you/Projects/blog",
+            "reason": "id",
+            "route": "blog"
+          },
+          "moved_from": null,
+          "offers": "link",
+          "why": "mind project with an id"
+        },
+        {
+          "found": {
+            "agent_files": [],
+            "id": "d4af7ed4af7ed4af7ed4af7ed4af7ed4",
+            "linked": false,
+            "mind": true,
+            "moved": null,
+            "path": "/home/you/Projects/drafts",
+            "reason": "id",
+            "route": "drafts"
+          },
+          "moved_from": null,
+          "offers": "link",
+          "why": "mind project with an id"
+        },
+        {
+          "found": {
+            "agent_files": [
+              "AGENTS.md"
+            ],
+            "id": null,
+            "linked": false,
+            "mind": false,
+            "moved": null,
+            "path": "/home/you/Projects/notes",
+            "reason": "agents",
+            "route": "notes"
+          },
+          "moved_from": null,
+          "offers": "init_and_link",
+          "why": "git repository with AGENTS.md"
+        },
+        {
+          "found": {
+            "agent_files": [],
+            "id": null,
+            "linked": false,
+            "mind": false,
+            "moved": null,
+            "path": "/home/you/Projects/scratch",
+            "reason": "git",
+            "route": "scratch"
+          },
+          "moved_from": null,
+          "offers": "init_and_link",
+          "why": "git repository"
+        },
+        {
+          "found": {
+            "agent_files": [
+              ".agents",
+              ".claude",
+              "AGENTS.md"
+            ],
+            "id": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5",
+            "linked": true,
+            "mind": true,
+            "moved": null,
+            "path": "/home/you/Projects/api",
+            "reason": "id",
+            "route": "api"
+          },
+          "moved_from": null,
+          "offers": null,
+          "why": null
+        },
+        {
+          "found": {
+            "agent_files": [],
+            "id": "fedcba9876543210fedcba9876543210",
+            "linked": true,
+            "mind": true,
+            "moved": null,
+            "path": "/home/you/Projects/docs",
+            "reason": "id",
+            "route": "docs"
+          },
+          "moved_from": null,
+          "offers": null,
+          "why": null
+        },
+        {
+          "found": {
+            "agent_files": [],
+            "id": null,
+            "linked": true,
+            "mind": true,
+            "moved": null,
+            "path": "/home/you/Projects/legacy",
+            "reason": "mind",
+            "route": "legacy"
+          },
+          "moved_from": null,
+          "offers": null,
+          "why": null
+        },
+        {
+          "found": {
+            "agent_files": [
+              ".agents",
+              ".claude"
+            ],
+            "id": "0123456789abcdef0123456789abcdef",
+            "linked": true,
+            "mind": true,
+            "moved": null,
+            "path": "/home/you/Projects/web",
+            "reason": "id",
+            "route": "web"
+          },
+          "moved_from": null,
+          "offers": null,
+          "why": null
+        }
+      ],
+      "roots": [
+        "/home/you/Projects"
+      ],
+      "truncated": false,
+      "untraced": [
+        "gone"
+      ],
+      "warnings": []
+    },
+    "query": {
+      "depth": null,
+      "roots": [
+        "/home/you/Projects"
+      ],
+      "type": "scan"
+    }
+  }
+]
