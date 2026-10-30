@@ -168,8 +168,10 @@ under `apps/` with its own `Makefile`:
   its own, and `src/homes.rs` decides the default home and the agent
   homes, and gathers them with `-W` and `$MINDFLAYER_WORKSPACE` into a
   `Lookup`. `src/task.rs` holds `Task`, work a front end asks for as the
-  command lines it is, every front end's rather than the TUI's alone, and
-  `Refusal`, what a front end with no terminal does not run.
+  command lines it is, every front end's rather than the TUI's alone,
+  `Refusal`, what a front end with no terminal does not run, and
+  `Caution`, what a line takes away, which such a front end asks about
+  first.
   `commands::run_line` runs one line a front end built, for the TUI and the
   panel alike. `src/admit.rs` holds a task sent from outside to the path
   policy (`Admission`), and `src/backend.rs` is the panel's backend
@@ -197,9 +199,13 @@ under `apps/` with its own `Makefile`:
   too. `src/api/transport.ts` is the `Transport` interface and `useTransport`,
   and `src/api/http.ts` its HTTP implementation, `src/api/snapshot.ts` the
   one query of the snapshot every view reads, `src/api/artifact.ts` the
-  queries of an artifact's files and of one file, and `src/api/live.ts` the
+  queries of an artifact's files and of one file, `src/api/live.ts` the
   tab's one subscription to the server's events, which it turns into what
-  Vue Query asks for again, and how the server watches. `src/pages/` holds one
+  Vue Query asks for again, how the server watches, and how a run waits for
+  its views (`settle`), `src/api/commands.ts` the runner every change goes
+  through (`useRunner`: a task previewed, shown, confirmed when it takes
+  something away, and run), and `src/api/transcript.ts` the query of the
+  server's transcript. `src/pages/` holds one
   page per route (file routes): the overview (`index`), the projects
   (`projects`), a project's page (`project`, which `src/routes.ts` names by
   its entry in the query), the library (`library`), one of its own
@@ -213,8 +219,12 @@ under `apps/` with its own `Makefile`:
   of a state, a health and the agents, a count, the warnings panel, the
   commands an empty state names, what is wrong with an artifact
   (`IssueList`), a rendered body (`MarkdownBody`), an artifact's files
-  (`FileTree`), the ledger's latest actions (`ActivityFeed`), and
-  `SnapshotGate`, which draws a page once the snapshot is answered.
+  (`FileTree`), the ledger's latest actions (`ActivityFeed`),
+  `SnapshotGate`, which draws a page once the snapshot is answered, the
+  folder to link (`LinkForm`), and what the runner draws beside the pages:
+  `CommandRunner`, which makes it and says how each task ended in a toast,
+  the task shown before it runs (`CommandDialog`), what the last run said
+  (`WarningsDrawer`) and the transcript (`TranscriptDrawer`).
   `src/stores/` holds Pinia's UI state,
   `src/query.ts` the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
   colour mode, and `src/overrides/` what replaces two pieces of the
@@ -222,9 +232,9 @@ under `apps/` with its own `Makefile`:
   committed, and so is `src/api/generated/`, written from Rust by `make
   web/types`. `e2e/` is the browser suite: `run.ts` its driver,
   `environment.ts` what every process it starts runs in, `fixture.ts` the
-  workspace it builds with the commands, `panel.ts` what the specs share,
+  workspaces it builds with the commands, `panel.ts` what the specs share,
   and the specs; `playwright.config.ts`, beside `vite.config.ts`, starts
-  `flayer ui` over that workspace.
+  `flayer ui` over the shared workspace.
 
 Beside them, `examples/` is content and not an app: a flayer workspace whose
 own two skills and two rules anyone can `flayer load` to try Mindflayer
@@ -295,7 +305,12 @@ These are easy to break from a single file without noticing.
   `of_flayer`), so a new command says whether it is refused before it
   compiles; a task is refused for its lines (`Task::refusal`). The TUI
   refuses only its screens and `ui`, which would hold it until a Ctrl-C the
-  screen keeps for itself. Each front end hands back, when it closes, every
+  screen keeps for itself. What a line takes away, which a front end with
+  no terminal asks somebody to confirm before it runs it, is one list too,
+  `task::Caution`, read the same way (`Caution::of_mind`, `of_flayer`,
+  `task::cautions`), and the panel's backend says it of the lines it
+  plans with each preview (`backend::Confirm`), never a list in
+  TypeScript. Each front end hands back, when it closes, every
   line that changed something (`Task::writes`), laid out by one function
   (`tui::state::transcript`): the TUI when it quits, `ui` when Ctrl-C stops
   it.
@@ -799,7 +814,11 @@ These are easy to break from a single file without noticing.
   written there is one the panel could disagree with the CLI about: it
   belongs in core, reached through the backend, which says it as a
   `Refusal`, a code and a message, sent as a 422; a task refused when its
-  lines are asked for is never run, nor kept in the transcript. Queries and
+  lines are asked for is never run, nor kept in the transcript. A preview
+  is the server's `Preview`, the lines and what the backend says to
+  confirm, carried unread as a watched path's scope is; the server
+  enforces none of it, so a run sent without the question is run, as a
+  shell runs what is typed into it. Queries and
   previews run on tokio's blocking pool, and every run on the one writer
   thread, in the order it arrived. Which paths it watches is core's
   (`watch::watched`), handed over by the backend (`watched_paths`), each
@@ -826,7 +845,13 @@ These are easy to break from a single file without noticing.
   answers belongs in Vue Query; Pinia holds UI state only. The server's
   events reach the views only as Vue Query marking what they reached stale
   (`src/api/live.ts`), never as a read of their own and never a scan, over
-  one subscription a tab, let go while it is hidden. A view lays
+  one subscription a tab, let go while it is hidden. Every change goes
+  through the runner (`useRunner().ask`): the lines it shows are the ones
+  the server previewed, never one the panel builds; a preview's `confirm`,
+  the CLI's, makes it a confirmation, never a list of the panel's; and a run
+  is over once the stream told it finished and the views read again, or
+  they read again after `PATIENCE` without word (`settle`), never an
+  answer written into a view. A view lays
   out, groups and filters what the snapshot lists: every count it shows is
   one the snapshot carries (`summary`, a project's `tally`), every verdict
   one core gave (a project's `health`), every order the snapshot's
@@ -966,9 +991,13 @@ These are easy to break from a single file without noticing.
   panel's backend answers (`make web/fixtures`), with the temporary folder
   as `/home`, fixed ids and pinned times, and beside them what opening each
   of the library's own is answered with (`library.json`, every files and
-  contents query an artifact's page asks). `tests/panel.ts` reads them and
-  mounts the panel at an address, answering its queries with them; a test
-  about something no fixture holds changes its own copy.
+  contents query an artifact's page asks), and what previewing and running
+  a few tasks in turn is (`commands.json`). `tests/panel.ts` reads them and
+  mounts the panel at an address, answering its queries with them, and a
+  task with its preview and its run, told finished on the stream before
+  it is answered, as the server tells it (`commanding`); a test about
+  something no fixture holds changes its own copy. A test that needs a
+  page of its own adds a route to `render`.
   `dist.test.ts` builds the panel in a process of its own, into a temporary
   folder under `node_modules`, and leaves `dist/` alone. `licences.test.ts`
   reads every installed package's licence: a new one outside its list of
@@ -986,8 +1015,11 @@ These are easy to break from a single file without noticing.
   list --json` in its envelope, and opens a page with `panel.open`, through
   the launch link, as a person does. Every test fails on a CSP violation or
   an uncaught error on its page (`watch`), and `csp.spec.ts` holds the watch
-  to seeing one. No spec changes anything: write flows come with the issues
-  that add them.
+  to seeing one. No spec changes the shared workspace: a test that changes
+  something takes a workspace and a `flayer ui` of its own (`own`, built by
+  `changeable` beside a copy of it and served by `serve`, through
+  `environment.ts` as every process is), and holds what the panel left to
+  what the same command leaves in the copy.
 - The tests of the panel's types are core's and the CLI's
   `src/typescript_test.rs`, compiled only with the `ts` feature, and named
   so `--lib typescript` picks them out: each crate's export
