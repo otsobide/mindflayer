@@ -24,14 +24,17 @@ fn changed(scope: &str) -> Value {
     json!({"type": "changed", "scopes": [scope]})
 }
 
-/// Long enough for a change to have been told, were it going to be: a few
-/// debounces, for the debouncer's tick and a machine under load.
-fn quiet() -> Duration {
+/// How long a change takes at most to be told: the debounce, and a margin
+/// for the debouncer's tick and a machine under load. Past it, a change
+/// that was going to be told has been.
+fn debounced() -> Duration {
     DEBOUNCE * 5
 }
 
 /// The acceptance's own: a file written into a watched folder is told as
-/// a change of that folder's scope, within the debounce and a margin.
+/// a change of that folder's scope, within the debounce and a margin,
+/// rather than within [`PATIENCE`], which other tests wait for what they
+/// expect to show that it comes at all.
 #[tokio::test]
 async fn a_file_written_into_a_watched_folder_is_told_as_a_change_of_its_scope() {
     let dir = TempDir::new().unwrap();
@@ -40,7 +43,7 @@ async fn a_file_written_into_a_watched_folder_is_told_as_a_change_of_its_scope()
 
     fs::write(dir.path().join("new.md"), "# New\n").unwrap();
 
-    assert_eq!(stream.next().await, changed("temp"));
+    assert_eq!(stream.within(debounced()).await, Some(changed("temp")));
 }
 
 /// Watched on its own, so a change further down is nobody's: told, it
@@ -55,7 +58,7 @@ async fn a_change_below_what_a_watched_folder_holds_directly_is_not_told() {
 
     fs::write(deep.join("run.sh"), "true\n").unwrap();
 
-    assert_eq!(stream.within(quiet()).await, None);
+    assert_eq!(stream.within(debounced()).await, None);
 }
 
 /// A file named on its own is watched through its folder, and nothing
@@ -68,7 +71,7 @@ async fn a_file_named_is_told_and_nothing_beside_it() {
     let mut stream = opened(&server, Auth::Bearer(server.token())).await;
 
     fs::write(dir.path().join("README.md"), "# Readme\n").unwrap();
-    assert_eq!(stream.within(quiet()).await, None);
+    assert_eq!(stream.within(debounced()).await, None);
     fs::write(&agents, "# Working here\n").unwrap();
 
     assert_eq!(stream.next().await, changed("project"));
@@ -110,7 +113,7 @@ async fn a_folder_above_what_is_named_removed_whole_is_told() {
     fs::remove_dir_all(&api).unwrap();
     assert_eq!(stream.next().await, changed("api"));
     // Told once or more, as the debounce cut it.
-    while stream.within(quiet()).await.is_some() {}
+    while stream.within(debounced()).await.is_some() {}
     fs::create_dir(&api).unwrap();
 
     assert_eq!(stream.next().await, changed("api"));
@@ -137,7 +140,7 @@ async fn a_folder_above_what_is_named_renamed_away_and_back_is_watched_again() {
     fs::rename(&claude, &aside).unwrap();
     fs::rename(&aside, &claude).unwrap();
     assert_eq!(stream.next().await, changed("project"));
-    while stream.within(quiet()).await.is_some() {}
+    while stream.within(debounced()).await.is_some() {}
     fs::write(review.join("SKILL.md"), "# Review\n").unwrap();
 
     assert_eq!(stream.next().await, changed("project"));
