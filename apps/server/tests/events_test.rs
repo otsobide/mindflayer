@@ -113,3 +113,82 @@ async fn stopping_the_server_ends_its_streams() {
         .unwrap();
     assert!(seen.starts_with("HTTP/1.1 200"), "{seen}");
 }
+
+#[tokio::test]
+async fn a_run_is_told_as_it_starts_and_once_it_is_in_the_transcript() {
+    let (server, _) = launch();
+    let token = Auth::Bearer(server.token());
+    let mut stream = subscribe(&server, token).await;
+    assert_eq!(stream.next().await, json!({"type": "resync"}));
+
+    post(
+        &server,
+        "/api/commands",
+        token,
+        json!({ "name": "link beta" }),
+    )
+    .await;
+
+    let lines = json!(["fake run link beta"]);
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "command_started", "lines": lines})
+    );
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "command_finished", "lines": lines})
+    );
+    let transcript = get(&server, "/api/transcript", token).await.json();
+    assert_eq!(transcript[0]["lines"], lines);
+}
+
+/// Nothing of it ran, so nothing started.
+#[tokio::test]
+async fn a_task_whose_lines_are_refused_is_told_to_nobody() {
+    let (server, _) = launch();
+    let token = Auth::Bearer(server.token());
+    let mut stream = subscribe(&server, token).await;
+    assert_eq!(stream.next().await, json!({"type": "resync"}));
+
+    let reply = post(
+        &server,
+        "/api/commands",
+        token,
+        json!({ "name": "unlink -rf", "refuse": true }),
+    )
+    .await;
+    server.events().publish(Event::Resync);
+
+    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(stream.next().await, json!({"type": "resync"}));
+}
+
+/// A panel showing a run under way waits for its end: one the backend
+/// refuses once it is handed over, or that panics, is told finished too,
+/// and the next still runs.
+#[tokio::test]
+async fn a_run_refused_or_panicking_is_still_told_finished() {
+    let (server, runs) = launch();
+    let token = Auth::Bearer(server.token());
+    let mut stream = subscribe(&server, token).await;
+    assert_eq!(stream.next().await, json!({"type": "resync"}));
+
+    for task in [
+        json!({ "name": "refused", "refuse_run": true }),
+        json!({ "name": "broken", "panic": true }),
+        json!({ "name": "after" }),
+    ] {
+        let name = task["name"].as_str().unwrap().to_owned();
+        post(&server, "/api/commands", token, task).await;
+        let lines = json!([format!("fake run {name}")]);
+        assert_eq!(
+            stream.next().await,
+            json!({"type": "command_started", "lines": lines})
+        );
+        assert_eq!(
+            stream.next().await,
+            json!({"type": "command_finished", "lines": lines})
+        );
+    }
+    assert_eq!(runs.lock().unwrap().last().unwrap(), "end after");
+}

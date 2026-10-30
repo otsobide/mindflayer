@@ -203,7 +203,7 @@ fn route<B: Backend>(
     let backend = Arc::new(server.backend);
     let transcript = Transcript::default();
     let api = Arc::new(Api {
-        writer: Writer::start(Arc::clone(&backend), transcript.clone())?,
+        writer: Writer::start(Arc::clone(&backend), transcript.clone(), events.clone())?,
         backend,
         transcript,
         events,
