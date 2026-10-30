@@ -172,3 +172,26 @@ fn a_files_bytes_hash_to_their_sha256_whatever_the_file_is_called() {
     );
     assert_ne!(bytes(b"a\n"), bytes(b"a\r\n"));
 }
+
+#[test]
+fn a_digest_is_64_hex_digits_in_either_case_and_nothing_else() {
+    let digest = bytes(b"");
+    assert!(is_digest(&digest));
+    assert!(is_digest(&digest.to_uppercase()));
+    assert!(is_digest(
+        &tree(tree_of(&[("SKILL.md", "")]).path()).unwrap()
+    ));
+
+    for given in [
+        String::new(),
+        String::from("nope"),
+        digest[..63].to_owned(),
+        format!("{digest}0"),
+        // What `sha256sum` prints, the file's name after the digits.
+        format!("{digest}  SKILL.md"),
+        format!(" {digest}"),
+        digest.replacen('e', "g", 1),
+    ] {
+        assert!(!is_digest(&given), "{given:?}");
+    }
+}

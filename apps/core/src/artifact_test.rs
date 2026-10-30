@@ -389,6 +389,35 @@ fn the_strict_rules_are_asked_of_the_folder_a_skill_is_about_to_be_filed_in() {
     );
 }
 
+#[test]
+fn a_rules_text_is_refused_for_saying_nothing_and_for_what_its_front_matter_leaves_unread() {
+    assert_eq!(rule_text_issues("# Never force-push\n"), vec![]);
+    assert_eq!(
+        rule_text_issues("---\npaths: src/**\n---\nOnly in src.\n"),
+        vec![]
+    );
+    // A heading of hashes alone says nothing, as reading it finds.
+    assert_eq!(
+        rule_text_issues("---\npaths: src/**\n---\n#\n"),
+        vec![ValidationIssue::Empty]
+    );
+    assert_eq!(
+        rule_text_issues("---\npaths: [1, 2]\ndescription: [x]\n---\nBody.\n"),
+        vec![
+            ValidationIssue::PathsNotStrings,
+            ValidationIssue::DescriptionNotAString
+        ]
+    );
+    let unparsed = rule_text_issues("---\n*nope\n---\nBody.\n");
+    assert!(
+        matches!(
+            unparsed.as_slice(),
+            [ValidationIssue::FrontMatterUnparsed { .. }]
+        ),
+        "{unparsed:?}"
+    );
+}
+
 /// A copy at `path` that `agents` read, with `issues` there.
 fn copy_at(path: &str, agents: &[Agent], authored: bool, installed: bool) -> ArtifactCopy {
     ArtifactCopy {

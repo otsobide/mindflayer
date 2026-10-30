@@ -87,6 +87,18 @@ pub fn bytes(contents: &[u8]) -> String {
     hex(Sha256::new_with_prefix(contents))
 }
 
+/// Whether `text` is a hash as [`bytes`] and [`tree`] spell one: 64 hex
+/// digits and nothing else, in either case, since a hash copied from
+/// elsewhere may be written in capitals and means the same.
+///
+/// For a hash somebody hands over to be compared with one of these, as
+/// `edit --if-unchanged` does: one that is no hash at all, such as the line
+/// `sha256sum` prints with the file's name after its digits, is told apart
+/// from the hash of something else, which no comparison could do.
+pub fn is_digest(text: &str) -> bool {
+    text.len() == 64 && text.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
 /// What `hasher` has taken in, as 64 lowercase hex digits.
 fn hex(hasher: Sha256) -> String {
     let mut hex = String::with_capacity(64);

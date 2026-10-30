@@ -391,6 +391,9 @@ mind add <KIND> <NAME> <DESCRIPTION> [--template NAME]
                            # create a skill or a rule that validates as written
 mind edit <NAME> [--editor CMD]
                            # open it in $VISUAL or $EDITOR, then check it
+mind edit <NAME> --contents FILE|- [--if-unchanged SHA256]
+                           # replace what it holds with a file, or standard
+                           # input, checked before anything is written
 mind rename <NAME> <NEW>   # folder and declared name together; `mv` for short
 mind remove <NAME> --yes   # delete it; without --yes, say what would go; `rm`
 mind templates [--json]    # what `add --template` can start from here
@@ -1817,10 +1820,11 @@ out](architecture.md#what-keeps-other-pages-out)).
 TUI does. It sends a task; the server turns it into the command lines you
 could have typed, shows them before they run, and runs them through the same
 parser, one at a time. A command that would open a screen, an editor or a
-shell is refused, and so is a path outside what the workspace allows, each
-with a reason and a code. The first Ctrl-C lets whatever is running finish,
-a second stops at once, and on the way out it prints every command that
-changed something, with what each said, as the TUI does when it closes:
+shell, or read standard input, is refused, and so is a path outside what
+the workspace allows, each with a reason and a code. The first Ctrl-C lets
+whatever is running finish, a second stops at once, and on the way out it
+prints every command that changed something, with what each said, as the
+TUI does when it closes:
 
 ```
 $ flayer install -p /home/you/Projects/collapse skill:commit-style
@@ -2491,6 +2495,8 @@ body, below any front matter, which stays front matter. Front matter that
 
 ```bash
 mind edit deploy              # $VISUAL, then $EDITOR, then vi
+mind edit deploy --contents draft.md
+                              # what draft.md holds, checked first
 mind rename deploy ship       # the folder and the `name` inside, together
 mind remove ship              # says what would be deleted, deletes nothing
 mind remove ship --yes        # deletes it
@@ -2503,6 +2509,33 @@ says what it broke. `rename` rewrites the `name` line and nothing else: the
 comments, the key order and the description stay as they were. `remove`
 without `--yes` is a dry run, because it is the one thing here that cannot be
 taken back.
+
+With `--contents`, `edit` opens no editor: what the file holds, or standard
+input with `-`, takes the place of the skill's `SKILL.md` or the rule's
+file, the rest of a skill's folder left as it is. It is checked first, so
+what would break the artifact is never written: a skill's front matter has
+to read, with a name and a description `add` would take, and the name has
+to be its folder's, since `rename` is what changes the two together; a rule
+has to say something, and its front matter, if it has any, to read whole.
+`--if-unchanged` takes the SHA-256 of what the file held when the contents
+were made from it, its 64 hex digits alone, which `sha256sum` prints
+before the file's name (`sha256sum FILE | cut -d' ' -f1` prints them
+alone), and refuses to write over a change made since; a value that is no
+SHA-256 is refused as one:
+
+```
+$ mind edit deploy --contents draft.md
+edited skill deploy: ok
+$ mind edit deploy --contents renamed.md
+error: the contents given for `deploy` call it `ship`: a skill's name is its folder's too, so it is changed with `mind rename`, which moves both, and nothing was written
+```
+
+The file is replaced through a temporary renamed onto it, and only where
+the project keeps that kind, inside the project: a `SKILL.md` that links
+out of its skill's folder or the skills folder is refused rather than
+written through, and so is one under a folder linked out of the project,
+as `.claude` can be. The workspace's own are held to the folder it keeps
+them in, which may be linked elsewhere.
 
 What `flayer install` put in an agent's folder is not changed from the
 project: `edit`, `rename` and `remove` refuse a skill found only where its

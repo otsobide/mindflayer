@@ -4,7 +4,7 @@
 //! place. The binaries parse with these types and so does every line the TUI
 //! runs, which is why a feature cannot reach the TUI without a command.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{ArgGroup, Args, Parser, Subcommand};
@@ -158,14 +158,13 @@ pub enum Command {
         template: Option<String>,
     },
 
-    /// Open one artifact in your editor.
+    /// Open one artifact in your editor, or replace what it holds.
     Edit {
         /// Its name, or `kind:name` when one name belongs to two kinds.
         reference: String,
 
-        /// The editor to open it in [default: $VISUAL, then $EDITOR, then vi].
-        #[arg(long, value_name = "COMMAND")]
-        editor: Option<String>,
+        #[command(flatten)]
+        editing: Editing,
     },
 
     /// Give one artifact a new name, on disk and in what it declares.
@@ -529,7 +528,7 @@ pub enum FlayerCommand {
     },
 
     /// Open one of the workspace's own artifacts, or a project's, in your
-    /// editor.
+    /// editor, or replace what it holds.
     Edit {
         /// Its name, or `kind:name` when one name belongs to two kinds.
         reference: String,
@@ -538,9 +537,8 @@ pub enum FlayerCommand {
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
 
-        /// The editor to open it in [default: $VISUAL, then $EDITOR, then vi].
-        #[arg(long, value_name = "COMMAND")]
-        editor: Option<String>,
+        #[command(flatten)]
+        editing: Editing,
     },
 
     /// Give one artifact a new name, on disk and in what it declares.
@@ -990,6 +988,56 @@ pub struct UiOptions {
     /// there.
     #[arg(long)]
     pub dev: bool,
+}
+
+/// How `edit` changes an artifact, at either level: in an editor, or by
+/// replacing what it holds with contents given whole.
+///
+/// One struct for both binaries' `edit`, so the two cannot come to take
+/// them differently, as [`ShareMode`] is for `share`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
+pub struct Editing {
+    /// The editor to open it in [default: $VISUAL, then $EDITOR, then vi].
+    #[arg(long, value_name = "COMMAND")]
+    pub editor: Option<String>,
+
+    /// Replace what it holds (a skill's SKILL.md, or a rule's file) with
+    /// what FILE holds, or standard input with `-`, instead of opening an
+    /// editor. Nothing is written unless it passes the rules `add` keeps.
+    //
+    // A path rather than the text itself, which a command line holds badly
+    // and a process listing shows to every user.
+    #[arg(long, value_name = "FILE", conflicts_with = "editor")]
+    pub contents: Option<PathBuf>,
+
+    /// With --contents: replace it only while it holds what it held when
+    /// it was read, whose SHA-256 this is (64 hex digits), so a change made
+    /// since is not written over.
+    #[arg(long, value_name = "SHA256", requires = "contents")]
+    pub if_unchanged: Option<String>,
+}
+
+/// Where `edit --contents` takes what the artifact is to hold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Given<'a> {
+    /// Standard input, named `-` as `cat` and git name it.
+    Input,
+    /// A file, as it was typed.
+    File(&'a Path),
+}
+
+impl Editing {
+    /// Where `--contents` takes the contents from; none when the edit is
+    /// an editor's.
+    pub fn given(&self) -> Option<Given<'_>> {
+        self.contents.as_deref().map(|contents| {
+            if contents == Path::new("-") {
+                Given::Input
+            } else {
+                Given::File(contents)
+            }
+        })
+    }
 }
 
 /// What `workspaces` does to the list besides showing it.
