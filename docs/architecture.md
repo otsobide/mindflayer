@@ -4270,6 +4270,21 @@ an HTML page or an SVG holding a script reaches the panel as text to show.
 Should some mistake put it on a page, the CSP runs no inline script and
 `nosniff` holds the answer to `application/json`.
 
+What an artifact holds is listed the same way (`Query::Files`, core's
+`contents::Files`): asked of the same holders by the same reference, held
+to the same bound, and answered with every file and folder by the route a
+file is then asked for by, a folder before what it holds and each folder's
+in the order of their names, and whether the listing stopped at
+`contents::FILES_CAP`, a thousand. The artifact's own folder or file
+leading out of its holder refuses the whole listing (`contents_outside`),
+as a file of it is refused; a link further down that leads out is listed
+with why and never followed, nor is one leading back into a folder it is
+in (`contents_cycle`) or to nothing (`contents_missing`), so one bad link
+hides nothing else and costs no walk without end. Nothing of where a
+refused link leads is listed, only its path in the reason. #67 left the
+listing for later; it sits beside the reading, in one module, so the two
+cannot hold a file to different bounds.
+
 It is the one way a file's contents reach the browser. `show` would be a
 second: it prints an artifact whole, read through every link on the way,
 since a rule shared by a link is still a rule, with no cap. So it is on the
@@ -4420,8 +4435,10 @@ the way Nuxt UI's dashboard-vue template lays out a dashboard, with a page
 per file under `src/pages`. It holds no rules, any more than the server
 does: what a valid task is, or what a project has, is core's to say, and the
 panel asks. So far it shows and changes nothing: an overview, the projects
-and a project's page, drawn from the snapshot (#72), in a frame of a sidebar
-and a header ([its views](#its-views)).
+and a project's page, drawn from the snapshot (#72), and the library, one of
+its own, the shelf and the sources (#73), the second reading an artifact's
+files besides, in a frame of a sidebar and a header ([its
+views](#its-views)).
 
 ### One way out: the transport
 
@@ -4466,7 +4483,8 @@ whatever listens on 127.0.0.1, so they hold nothing about anybody's work.
 
 What the panel sends and is answered with is said once, in Rust, and the
 panel compiles against TypeScript written from it (#70): the snapshot and
-everything it holds, a file's contents, what `list`, `show` and `validate`
+everything it holds, an artifact's files and a file's contents, what
+`list`, `show` and `validate`
 print, a query, a task, what a run produced, the envelope a reading
 command's `--json` prints, and every code core and the CLI give. That
 TypeScript is the contract, the panel's side of [the read
@@ -4563,7 +4581,7 @@ where serde's are, and the feature only reads them.
 
 ### Its views
 
-Three pages draw the snapshot ([the read model](#the-read-model)), each a
+Seven pages draw the snapshot ([the read model](#the-read-model)), each a
 file under `src/pages`:
 
 - **The overview** (`/`) names the workspace, where it is and why that one,
@@ -4576,6 +4594,62 @@ file under `src/pages`:
   kind, each artifact with its state, a badge in a slot for each of the
   project's agents, its origin, its targets, what does not read and what
   `validate` says, and what its agents never read above.
+- **The library** (`/library?kind=...`) has a page for each kind in `kinds`,
+  the first when none is named, listing the workspace's own of it, filtered
+  by name or summary, each with the projects holding a copy and how each
+  copy stands, and what `validate` says; and below, every workspace it
+  loads, with what it offers, its `origin` and why it does not open.
+- **One of the library's own** (`/artifact?kind=...&name=...`) shows its
+  front matter as a table, its body rendered, its files, each opening as
+  text (`&file=...`), what `validate` says of it, and the projects holding a
+  copy, each with its state, agents and targets. Named in the query, as a
+  project is, since a rule's name is a route.
+- **The shelf** (`/shelf`) lists what was gathered, filtered by kind, by
+  name, summary or origin, each with its `origin`, the commit it was taken
+  at and when.
+- **The sources** (`/sources`) lists where the shelf is filled from, each
+  with its `origin`, branch, folder, commit and what it supplied, and the
+  latest actions the ledger logged (`history`), newest first.
+
+A project holds a copy of one of the library's own when it holds an
+artifact of that kind and name whose `origin` is the library's
+(`library.origin`), the word a copy installed from it records: two words
+core wrote, compared, so a project's own of the same name, or one installed
+from the shelf, is never taken for it, and the panel spells no origin of its
+own. What a source supplied is the shelf's rows that name its folder, which
+no two sources share. Both are filters of what the snapshot lists, as a
+health filter is. An origin is shown as core says it, never put together
+from an address and a branch, which would be the rule for `--from` in
+TypeScript ([the read model](#the-read-model)).
+
+An artifact's page reads more than the snapshot: its files
+(`Query::Files`), whose answer names the file it is read from, then that
+file (`Query::Contents`), which core hands back cut at its front matter
+(`contents::Manifest`): each key at its top, in the order written, every
+value a string, a list or a mapping as YAML writes it, and the body after.
+Cut in core, by the readers that decide where front matter ends and
+whether a rule's fences hold any, rather than by the panel from the text,
+which could show as declared what every agent reads as content. The
+reference it sends is `kind:name`, as a command line takes it, so one name
+of two kinds never means either. Each is a Vue Query of its own
+(`src/api/artifact.ts`), asked once the one before it is answered.
+
+What a skill says is somebody else's, so its markdown is drawn from
+marked's tokens, an element at a time (`src/markdown.ts`), never handed to
+the browser as HTML to parse: raw HTML is shown as the markup it is, in a
+code span or block, no element gets a style or an event, a table's
+alignment is a class rather than the inline style marked's own renderer
+writes, an image is named rather than loaded, and a link keeps its address
+only to another site or a mail (`https:`, `http:`, `mailto:`), opened in a
+tab of its own with no referrer. Any other, to a file beside the skill above
+all, is its text alone, since the panel never links to an artifact's file,
+and a `javascript:` or `data:` URL never reaches an attribute. marked's
+renderer with v-html, behind a sanitizer, was the other way, which trusts
+the sanitizer to know every way HTML runs something. Its headings start a
+level below the section they are drawn in and never go down more than one
+level at a time, so the page's outline holds whatever the document skips.
+A file opened from the listing is shown as text in a `<pre>`, whatever it
+holds, and a listed file is a button asking for it, never a link.
 
 Every page reads one Vue Query of the snapshot (`src/api/snapshot.ts`), so
 moving between them draws at once from what is cached, and asks again behind
@@ -4639,7 +4713,10 @@ The views' tests render the snapshots in `apps/web/tests/fixtures`, which a
 test of the CLI writes (`apps/cli/tests/fixtures_test.rs`): it builds a
 workspace by running the commands, installing, editing a copy, changing
 the library, removing a linked folder, and reads it through the panel's
-backend as the server answers it, beside a home where nothing is made. So
+backend as the server answers it, beside a home where nothing is made.
+Beside them, `library.json` holds every query an artifact's page asks of
+the library's own, its files and each file of them, with what the backend
+answers, which the test transport answers from (`tests/panel.ts`). So
 the panel's tests render what core says rather than what a person drew,
 and a field the snapshot adds, renames or fills differently reaches them.
 What differs between runs is pinned: the temporary folder reads as
@@ -4679,13 +4756,17 @@ though three of its libraries assume otherwise:
   It also makes dark the default: `index.html` carries the class before any
   script runs, and dark is stored when this browser has chosen nothing.
 - Vite inlines nothing as a `data:` URL (`assetsInlineLimit: 0`).
+- A skill's markdown is drawn from its tokens, so nothing in it reaches the
+  page as HTML, a style or a `data:` URL ([its views](#its-views)).
 
 A nonce per launch would have let the style elements in, at the price of the
 server rewriting the page each time and the panel handing the nonce to each
 library that writes one. `tests/dist.test.ts` builds the panel as `make
 web/build` does, in a process of its own, and fails on a URL naming another
-host anywhere in the page, the scripts or the styles (namespace names, and
-the links Vue prints beside a production error, aside), a reference not to
+host anywhere in the page, the scripts or the styles (namespace names, the
+address marked writes into the message of an error its parser throws, which
+the panel never parses with, and the links Vue prints beside a production
+error, aside), a reference not to
 the panel's own files, an inline script or style in the page, a palette
 variable missing, or Iconify's API or the injected palette back in the
 scripts. The shell test fails on any `<style>` element added while the panel
@@ -7203,9 +7284,23 @@ just listed.
   no holder (`warnings`), or what the overview counts (`summary`). Which
   command prints each, a `--json` of its
   own, a history command, or the snapshot whole, is left for the issues
-  whose views show them (#72 onward, #73 for the shelf, the sources and an
-  activity feed), so that each is printed as the view that needs it reads
-  it.
+  whose views show them, so that each is printed as the view that needs it
+  reads it. #73 draws the loads, the sources and the history from the
+  snapshot, and prints none of them: a `--json` for each was no part of it.
+- **Only the library's own open.** An artifact's page reads the
+  workspace's own, the one holder of the snapshot an install takes from
+  that `Query::Files` and `Query::Contents` read. What is on the shelf has
+  no holder there, and a loaded workspace's own are counted by the
+  snapshot, not listed, so neither opens yet, nor does a project's own from
+  its page, though both queries read a linked project. A shelf holder would
+  be a holder no task takes, which `task::Holder` is shared with; a query's
+  holder of its own, with the shelf among its places, would open them.
+- **A skill's links to other sites stay links.** Its markdown keeps an
+  `https:`, `http:` or `mailto:` address as a link, opened with no referrer
+  in a tab of its own, so somebody reading a gathered skill can follow what
+  it cites. A skill could point at a page made to look like the panel; the
+  link's title says its address. Showing every address as text was the
+  other way, at the price of every reference a skill cites.
 - **The TUI still counts a row's problems itself.** Its project rows show
   how many of a project's artifacts do not read or have something
   `validate` says, and its failures, counted in the CLI from the
