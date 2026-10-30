@@ -24,7 +24,7 @@ use crate::install::state::{Screen as InstallScreen, Step as InstallStep};
 use crate::task::qualified;
 // Re-exported where the screens, and their tests, have always found them: a
 // key still asks for a task, though a task is every front end's now.
-pub use crate::task::{shell, AgentsLine, Holder, Task};
+pub use crate::task::{shell, AgentsLine, Holder, Task, Toggles};
 use crate::Lookup;
 
 /// How far a page key scrolls a page of output.
@@ -2250,53 +2250,32 @@ impl SettingsForm {
         }
     }
 
-    /// The agents ticked: those the project names already in its own order,
-    /// then the rest in report order, so naming one more does not reorder
-    /// what the settings say.
-    pub fn agents(&self) -> Vec<Agent> {
-        let ticked: Vec<Agent> = self
-            .ticked
+    /// The agents ticked, in report order.
+    fn ticked(&self) -> Vec<Agent> {
+        self.ticked
             .iter()
             .filter(|(_, ticked)| *ticked)
             .map(|(agent, _)| *agent)
-            .collect();
-        let mut agents: Vec<Agent> = self
-            .named
-            .iter()
-            .filter(|agent| ticked.contains(agent))
-            .copied()
-            .collect();
-        agents.extend(
-            ticked
-                .into_iter()
-                .filter(|agent| !self.named.contains(agent)),
-        );
-        agents.dedup();
-        agents
+            .collect()
     }
 
     /// The task the toggles amount to for `holder`: none while they say
-    /// what the project says already. Unticking every agent is a task like
-    /// any other, which the command refuses, so the reason is core's.
+    /// what the project says already. Built by the task module, from what
+    /// the project said when the form opened and what the toggles say now,
+    /// so the panel's toggles amount to the same lines.
     fn task(&self, holder: Holder) -> Option<Task> {
-        let agents = self.agents();
-        let mut named = self.named.clone();
-        named.dedup();
-        let agents = match agents {
-            _ if agents == named => None,
-            none if none.is_empty() => Some(AgentsLine::Removed(named)),
-            some => Some(AgentsLine::Named(some)),
-        };
-        let share = ((self.share, self.edit_tracked) != self.was).then_some(self.share);
-        if agents.is_none() && share.is_none() {
-            return None;
-        }
-        Some(Task::Settings {
-            holder,
-            agents,
+        let (share, edit_tracked) = self.was;
+        let was = Toggles {
+            agents: self.named.clone(),
             share,
+            edit_tracked,
+        };
+        let now = Toggles {
+            agents: self.ticked(),
+            share: self.share,
             edit_tracked: self.edit_tracked,
-        })
+        };
+        Task::settings(holder, &was, &now)
     }
 }
 

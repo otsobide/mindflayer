@@ -276,6 +276,81 @@ fn nothing_to_link_or_unlink_is_no_task() {
     );
 }
 
+/// Toggles of `agents`, shared and with tracked files left alone.
+fn toggles(agents: &[Agent], share: Share, edit_tracked: bool) -> Toggles {
+    Toggles {
+        agents: agents.to_vec(),
+        share,
+        edit_tracked,
+    }
+}
+
+#[test]
+fn toggles_keep_the_agents_a_project_names_in_its_order_and_name_one_ticked_after_them() {
+    let holder = Holder::Project(String::from("alpha"));
+    let was = toggles(&[Agent::OpenCode, Agent::Claude], Share::Shared, false);
+    // Ticked in any order: what the settings name keeps theirs, and one
+    // more comes after them, in report order.
+    let now = toggles(
+        &[Agent::Codex, Agent::Claude, Agent::OpenCode],
+        Share::Shared,
+        false,
+    );
+
+    assert_eq!(
+        Task::settings(holder.clone(), &was, &now),
+        Some(Task::Settings {
+            holder,
+            agents: Some(AgentsLine::Named(vec![
+                Agent::OpenCode,
+                Agent::Claude,
+                Agent::Codex,
+            ])),
+            share: None,
+            edit_tracked: false,
+        })
+    );
+}
+
+#[test]
+fn unticking_every_agent_is_removing_every_one_the_project_names() {
+    let holder = Holder::Project(String::from("alpha"));
+    let was = toggles(&[Agent::Claude, Agent::Codex], Share::Local, false);
+    let now = toggles(&[], Share::Local, false);
+
+    assert_eq!(
+        Task::settings(holder.clone(), &was, &now),
+        Some(Task::Settings {
+            holder,
+            agents: Some(AgentsLine::Removed(vec![Agent::Claude, Agent::Codex])),
+            share: None,
+            edit_tracked: false,
+        })
+    );
+}
+
+#[test]
+fn a_share_line_comes_when_the_mode_or_edit_tracked_changes_and_toggles_left_as_they_were_are_no_task(
+) {
+    let holder = Holder::Project(String::from("alpha"));
+    let was = toggles(&[Agent::Claude], Share::Local, false);
+
+    assert_eq!(Task::settings(holder.clone(), &was, &was), None);
+    // The same agents in another order are the same agents.
+    let mut reordered = toggles(&[Agent::Claude, Agent::Claude], Share::Local, false);
+    assert_eq!(Task::settings(holder.clone(), &was, &reordered), None);
+    reordered.edit_tracked = true;
+    assert_eq!(
+        Task::settings(holder.clone(), &was, &reordered),
+        Some(Task::Settings {
+            holder,
+            agents: None,
+            share: Some(Share::Local),
+            edit_tracked: true,
+        })
+    );
+}
+
 #[test]
 fn every_variant_is_among_the_tasks_the_tests_build() {
     let built: BTreeSet<String> = every("plain").iter().map(tag).collect();

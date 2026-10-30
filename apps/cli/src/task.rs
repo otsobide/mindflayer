@@ -56,6 +56,24 @@ pub enum AgentsLine {
     Removed(Vec<Agent>),
 }
 
+/// What a project's agents and share toggles say: the agents ticked, its
+/// share mode, and whether a file git tracks may be edited to reach an
+/// agent. What [`Task::settings`] reads twice, as the project's settings
+/// say them and as the toggles do.
+///
+/// `{"agents": ["claude"], "share": "local", "edit_tracked": false}` in
+/// JSON: the names the snapshot gives the same three in a project's
+/// settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct Toggles {
+    /// As its settings name them, in their order; ticked, in any.
+    pub agents: Vec<Agent>,
+    pub share: Share,
+    pub edit_tracked: bool,
+}
+
 /// Which level a task runs at: what holds the artifacts it is about.
 ///
 /// `{"type": "project", "entry": "alpha"}` in JSON, or `{"type":
@@ -293,6 +311,47 @@ impl Task {
             }
         }
         (!link.is_empty() || !unlink.is_empty()).then_some(Task::Minds { init, link, unlink })
+    }
+
+    /// The task turning a project's toggles from `was`, what its settings
+    /// say, to `now` amounts to, for `holder`: an `agents` line when the
+    /// agents change, then a `share` line when the share mode or
+    /// `edit_tracked` does; none while they say what the settings do.
+    ///
+    /// Here rather than on the TUI's toggles, where it was born, so every
+    /// front end's toggles amount to the same lines: the agents the project
+    /// names keep their order, and one ticked is named after them, in
+    /// report order, so a toggle does not reorder the settings; and since a
+    /// line cannot name no agent, unticking every one is `agents remove` of
+    /// every one named, which the command refuses for its own reason, the
+    /// rule that a project names an agent being core's.
+    pub fn settings(holder: Holder, was: &Toggles, now: &Toggles) -> Option<Task> {
+        let ticked = |agent: &Agent| now.agents.contains(agent);
+        let mut agents: Vec<Agent> = was.agents.iter().copied().filter(ticked).collect();
+        agents.extend(
+            Agent::ALL
+                .into_iter()
+                .filter(|agent| ticked(agent) && !was.agents.contains(agent)),
+        );
+        agents.dedup();
+        let mut named = was.agents.clone();
+        named.dedup();
+        let agents = match agents {
+            _ if agents == named => None,
+            none if none.is_empty() => Some(AgentsLine::Removed(named)),
+            some => Some(AgentsLine::Named(some)),
+        };
+        let share =
+            ((now.share, now.edit_tracked) != (was.share, was.edit_tracked)).then_some(now.share);
+        if agents.is_none() && share.is_none() {
+            return None;
+        }
+        Some(Task::Settings {
+            holder,
+            agents,
+            share,
+            edit_tracked: now.edit_tracked,
+        })
     }
 
     /// The command lines this task is, word by word, as a person would type
