@@ -53,8 +53,7 @@ impl Row {
     /// or not now: what the screen keeps room for beside it.
     pub fn offers(&self) -> MindsChange {
         match self.standing {
-            Standing::Found { mind: true } => MindsChange::Link,
-            Standing::Found { mind: false } => MindsChange::InitAndLink,
+            Standing::Found { mind } => MindsChange::of_found(mind),
             Standing::Linked { .. } => MindsChange::Unlink,
         }
     }

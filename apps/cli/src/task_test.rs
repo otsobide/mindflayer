@@ -6,12 +6,13 @@ use clap::parser::ValueSource;
 use clap::{ArgMatches, CommandFactory, Parser};
 
 use super::*;
+use crate::tui::minds::{Minds, Row, Standing};
 use crate::{Cli, FlayerCli};
 
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 30] = [
+const TAGS: [&str; 31] = [
     "init_workspace",
     "init_project",
     "link",
@@ -30,6 +31,7 @@ const TAGS: [&str; 30] = [
     "remove",
     "validate",
     "minds",
+    "marks",
     "shelf",
     "workspaces",
     "gather",
@@ -95,6 +97,22 @@ fn every(value: &str) -> Vec<Task> {
             init: vec![owned()],
             link: vec![owned(), String::from("plain")],
             unlink: vec![owned()],
+        },
+        Task::Marks {
+            marks: vec![
+                Mark {
+                    path: owned(),
+                    change: MindsChange::InitAndLink,
+                },
+                Mark {
+                    path: String::from("plain"),
+                    change: MindsChange::Link,
+                },
+                Mark {
+                    path: owned(),
+                    change: MindsChange::Unlink,
+                },
+            ],
         },
         Task::Shelf,
         Task::Workspaces,
@@ -349,6 +367,64 @@ fn a_share_line_comes_when_the_mode_or_edit_tracked_changes_and_toggles_left_as_
             edit_tracked: true,
         })
     );
+}
+
+/// The minds screen, holding a row for each of `rows`, a path standing
+/// as given, ticked as given.
+fn screen(rows: &[(&str, Standing, bool)]) -> Minds {
+    Minds {
+        rows: rows
+            .iter()
+            .map(|(path, standing, ticked)| Row {
+                path: (*path).to_owned(),
+                standing: *standing,
+                ticked: *ticked,
+                why: String::new(),
+            })
+            .collect(),
+        cursor: 0,
+    }
+}
+
+/// What a front end sends for the marks the minds screen's rows hold, in
+/// JSON as the panel sends them, each row turned over by what it offers.
+fn marked(screen: &Minds) -> Task {
+    let marks: Vec<serde_json::Value> = screen
+        .rows
+        .iter()
+        .filter_map(|row| Some(serde_json::json!({"path": row.path, "change": row.change()?})))
+        .collect();
+    serde_json::from_value(serde_json::json!({"type": "marks", "marks": marks})).unwrap()
+}
+
+#[test]
+fn marks_sent_as_json_make_the_lines_the_minds_screen_makes_for_the_same_selection() {
+    let found = |mind| Standing::Found { mind };
+    let linked = Standing::Linked { opens: true };
+    for rows in [
+        vec![
+            ("/work/beta", found(true), true),
+            ("/work/gamma", found(false), true),
+            ("/work/alpha", linked, false),
+            ("/work/delta", found(false), true),
+            ("/work/kept", linked, true),
+            ("/work/left", found(true), false),
+        ],
+        vec![("-odd", found(false), true), ("it's", found(true), true)],
+        vec![("/work/alpha", linked, false)],
+    ] {
+        let screen = screen(&rows);
+
+        let sent = marked(&screen);
+
+        assert_eq!(
+            sent.commands(),
+            screen.task().unwrap().commands(),
+            "{rows:?}"
+        );
+        assert_eq!(sent.cautions(), screen.task().unwrap().cautions());
+    }
+    assert_eq!(marked(&screen(&[])).commands(), Vec::<Vec<String>>::new());
 }
 
 #[test]
@@ -1036,7 +1112,7 @@ fn a_task_is_asked_about_for_each_of_its_lines_that_takes_something_away() {
             Task::Unlink { .. } => vec![(0, Caution::Unlinks)],
             Task::Unload { .. } | Task::UnloadHere { .. } => vec![(0, Caution::Unloads)],
             // `mind -C <path> init`, `flayer link` and `flayer unlink`.
-            Task::Minds { .. } => vec![(2, Caution::Unlinks)],
+            Task::Minds { .. } | Task::Marks { .. } => vec![(2, Caution::Unlinks)],
             // Its installs first, then its uninstalls, as `every` builds it.
             Task::ApplyInstall { .. } => vec![(1, Caution::Uninstalls)],
             _ => Vec::new(),

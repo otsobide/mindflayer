@@ -187,6 +187,18 @@ pub enum Task {
         link: Vec<String>,
         unlink: Vec<String>,
     },
+    /// What a front end's marks on directories ask for, each by the path a
+    /// command is given: the batch [`Task::minds`] builds from them, whose
+    /// lines these are, as the minds screen's are.
+    ///
+    /// How the panel links what a scan found: it sends its marks, never the
+    /// batch, so that a directory made a project is then linked, with the
+    /// rest, by the one function that says so, and the same marks make the
+    /// same lines on either front end. [`Minds`](Task::Minds) taken from a
+    /// browser was the other way, which would hold the panel to spelling
+    /// that rule again in TypeScript, and could leave a folder made a
+    /// project and never linked.
+    Marks { marks: Vec<Mark> },
     /// `flayer gather list`.
     Shelf,
     /// `flayer workspaces`: the workspaces this machine knows, the one in
@@ -278,6 +290,7 @@ pub enum Task {
 /// it differs from how the directory started: what [`Task::minds`] is built
 /// from. By its name in snake_case in JSON: `"init_and_link"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum MindsChange {
     Link,
@@ -285,6 +298,31 @@ pub enum MindsChange {
     /// project yet.
     InitAndLink,
     Unlink,
+}
+
+impl MindsChange {
+    /// What marking a directory a scan found, and the workspace does not
+    /// link, asks for: linking it as it is, a mind project, or making it
+    /// one first, a git repository that is not one yet. One answer for the
+    /// minds screen and for what the panel is told a directory offers.
+    pub fn of_found(mind: bool) -> MindsChange {
+        if mind {
+            MindsChange::Link
+        } else {
+            MindsChange::InitAndLink
+        }
+    }
+}
+
+/// One directory a front end marked, by the path a command is given, with
+/// what to do to it: what [`Task::Marks`] holds, and [`Task::minds`] builds
+/// a batch from. `{"path": "/home/you/blog", "change": "link"}` in JSON.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct Mark {
+    pub path: String,
+    pub change: MindsChange,
 }
 
 impl Task {
@@ -432,6 +470,10 @@ impl Task {
                 }
                 lines
             }
+            Task::Marks { marks } => {
+                Task::minds(marks.iter().map(|mark| (mark.path.clone(), mark.change)))
+                    .map_or_else(Vec::new, |batch| batch.commands())
+            }
             Task::Shelf => vec![words(&["flayer", "gather", "list"], &[])],
             Task::Workspaces => vec![words(&["flayer", "workspaces"], &[])],
             Task::Gather {
@@ -572,6 +614,7 @@ impl Task {
                 | Task::Remove { .. }
                 | Task::Gather { .. }
                 | Task::Minds { .. }
+                | Task::Marks { .. }
                 | Task::Settings { .. }
                 | Task::Targets { .. }
                 | Task::Update { .. }

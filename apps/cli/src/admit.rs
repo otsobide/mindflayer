@@ -17,9 +17,11 @@
 //! - **An entry `unlink`, `unload` or `relink` takes** is one the marker
 //!   holds, and goes to the command as the marker spells it, which is what
 //!   those commands take an entry by.
-//! - **A folder `link`, `load`, `init` or the minds screen's marks name** is
-//!   absolute, spelled normalized and outside every `.mindflayer`, and goes
-//!   to the command verbatim, so the preview shows the folder it acts on.
+//! - **A folder `link`, `load`, `init` or the minds screen's marks name**,
+//!   the panel's marks among them, is absolute, spelled normalized and
+//!   outside every `.mindflayer`, and goes to the command verbatim, so the
+//!   preview shows the folder it acts on; one marked to unlink is one an
+//!   entry points at.
 //!
 //! The walk over the variants is here, beside `Task`; what each value may be
 //! is core's, so a second front end taking tasks from outside asks the same
@@ -31,7 +33,7 @@ use mindflayer_core::{FlayerWorkspace, Member};
 use crate::commands::consulted;
 use crate::commands::workspace::same_directory;
 use crate::homes::Lookup;
-use crate::task::{Holder, Task};
+use crate::task::{Holder, MindsChange, Task};
 
 /// What a task from outside may ask of `workspace`, the one the panel was
 /// launched on, which `lookup` is where it looks for workspaces from.
@@ -89,6 +91,18 @@ impl Admission<'_> {
                 }
                 for path in unlink {
                     policy::linked_path(self.workspace, path)?;
+                }
+            }
+            Task::Marks { marks } => {
+                for mark in marks {
+                    match mark.change {
+                        MindsChange::Link | MindsChange::InitAndLink => {
+                            policy::path(&mark.path)?;
+                        }
+                        MindsChange::Unlink => {
+                            policy::linked_path(self.workspace, &mark.path)?;
+                        }
+                    }
                 }
             }
             Task::Add { holder, .. }

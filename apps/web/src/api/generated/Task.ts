@@ -2,6 +2,7 @@
 import type { AgentsLine } from "./AgentsLine";
 import type { Holder } from "./Holder";
 import type { Kind } from "./Kind";
+import type { Mark } from "./Mark";
 import type { Share } from "./Share";
 
 /**
@@ -17,7 +18,7 @@ import type { Share } from "./Share";
  * run without it. Each name is a contract once a front end sends it, as a
  * report's is, so a test pins every one.
  */
-export type Task = { "type": "init_workspace" } | { "type": "init_project" } | { "type": "link", path: string, } | { "type": "link_here" } | { "type": "init_and_link", path: string, } | { "type": "unlink", entry: string, } | { "type": "relink", old: string, new: string, } | { "type": "load", path: string, } | { "type": "load_here", path: string, } | { "type": "unload", entry: string, } | { "type": "unload_here", path: string, } | { "type": "add", holder: Holder, kind: Kind, name: string, description: string, template: string | null, } | { "type": "show", holder: Holder, reference: string, } | { "type": "edit", holder: Holder, kind: Kind, name: string, } | { "type": "rename", holder: Holder, kind: Kind, from: string, to: string, } | { "type": "remove", holder: Holder, kind: Kind, name: string, everywhere: boolean, } | { "type": "validate", holder: Holder, } | { "type": "minds", init: Array<string>, link: Array<string>, unlink: Array<string>, } | { "type": "shelf" } | { "type": "workspaces" } | { "type": "gather", url: string, folder: string, reference: string | null, } | { "type": "targets", holder: Holder, kind: Kind, folders: Array<string> | null, } | { "type": "settings", holder: Holder, 
+export type Task = { "type": "init_workspace" } | { "type": "init_project" } | { "type": "link", path: string, } | { "type": "link_here" } | { "type": "init_and_link", path: string, } | { "type": "unlink", entry: string, } | { "type": "relink", old: string, new: string, } | { "type": "load", path: string, } | { "type": "load_here", path: string, } | { "type": "unload", entry: string, } | { "type": "unload_here", path: string, } | { "type": "add", holder: Holder, kind: Kind, name: string, description: string, template: string | null, } | { "type": "show", holder: Holder, reference: string, } | { "type": "edit", holder: Holder, kind: Kind, name: string, } | { "type": "rename", holder: Holder, kind: Kind, from: string, to: string, } | { "type": "remove", holder: Holder, kind: Kind, name: string, everywhere: boolean, } | { "type": "validate", holder: Holder, } | { "type": "minds", init: Array<string>, link: Array<string>, unlink: Array<string>, } | { "type": "marks", marks: Array<Mark>, } | { "type": "shelf" } | { "type": "workspaces" } | { "type": "gather", url: string, folder: string, reference: string | null, } | { "type": "targets", holder: Holder, kind: Kind, folders: Array<string> | null, } | { "type": "settings", holder: Holder, 
 /**
  * The agents to name, when they change.
  */

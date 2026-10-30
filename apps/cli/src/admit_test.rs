@@ -8,7 +8,7 @@ use mindflayer_core::{Kind, MindProject};
 use tempfile::TempDir;
 
 use super::*;
-use crate::task::shell;
+use crate::task::{shell, Mark, MindsChange};
 
 /// A workspace at `work` linking `alpha` under it and `beside` next to it,
 /// and loading `library`, next to it too: nothing above any of them, so
@@ -298,10 +298,59 @@ fn a_folder_that_is_not_absolute_normalized_and_outside_any_workspace_folder_is_
                 link: vec![path.to_owned()],
                 unlink: Vec::new(),
             },
+            marks(&[(path, MindsChange::Link)]),
+            marks(&[(path, MindsChange::InitAndLink)]),
         ] {
             assert_eq!(code(admitted(&workspace, &task)), expected, "{task:?}");
         }
     }
+}
+
+/// The panel's marks, each a path and what to do to it.
+fn marks(marked: &[(&str, MindsChange)]) -> Task {
+    Task::Marks {
+        marks: marked
+            .iter()
+            .map(|(path, change)| Mark {
+                path: (*path).to_owned(),
+                change: *change,
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn marks_on_folders_go_to_the_minds_screen_s_lines_as_given() {
+    let (dir, workspace) = fixture();
+    let fresh = dir.path().join("fresh");
+    fs::create_dir(&fresh).unwrap();
+    let fresh = text(&fresh);
+    let beside = text(&dir.path().join("beside"));
+    let other = text(&dir.path().join("other"));
+
+    assert_eq!(
+        lines(
+            &workspace,
+            &marks(&[
+                (&other, MindsChange::Link),
+                (&fresh, MindsChange::InitAndLink),
+                (&beside, MindsChange::Unlink),
+            ])
+        ),
+        [
+            format!("mind -C {fresh} init"),
+            format!("flayer link {other} {fresh}"),
+            format!("flayer unlink {beside}"),
+        ]
+    );
+    let library = text(&dir.path().join("library"));
+    assert_eq!(
+        code(admitted(
+            &workspace,
+            &marks(&[(&library, MindsChange::Unlink)])
+        )),
+        "not_registered"
+    );
 }
 
 #[test]
