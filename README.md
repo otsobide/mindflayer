@@ -2668,7 +2668,10 @@ make web/build         # check the types, then build apps/web/dist
 make web/types         # write the types from Rust, then check the panel's (vue-tsc)
 make web/types/check   # fail when the types from Rust are not the ones committed
 make web/typecheck     # check the panel's types alone (vue-tsc)
-make web/clean         # remove dist/ and the tools' caches
+make web/clean         # remove dist/, what the browser suite wrote, and the tools' caches
+
+make web/e2e/browsers  # download Chromium and WebKit for the browser suite, once
+make web/e2e           # build the panel and the binaries, then drive them in both
 
 make web/test PNPM='npx --yes pnpm@12.15.0'
 ```
@@ -2696,8 +2699,37 @@ panel first where Node and pnpm run; without them they warn, and embed what
 TARGET=<triple>` starts the release built for that triple, once
 `apps/web/dist` is gone, and fails unless it serves the panel from the binary
 itself, as CI checks on every run.
-`make web/e2e` has no browser suite to run yet, and says so
-([#75](https://github.com/otsobide/mindflayer/issues/75)).
+
+`make web/e2e` tests the whole chain in a browser: it builds the panel and
+the debug binaries, builds a workspace in your system's temporary folder by
+running `flayer` and `mind`, serves it with `flayer ui`, and drives the
+panel in Chromium and WebKit with Playwright. The overview, each project's
+page and each artifact's page have to show what `flayer list --json`
+prints, a request from another origin has to be refused, and no page may log
+a violation of the server's content security policy. Nothing it runs can
+reach your workspaces or your agents' folders: Playwright runs without
+`$MINDFLAYER_WORKSPACE`, `$MINDFLAYER_HOME`, `$CLAUDE_CONFIG_DIR`,
+`$CODEX_HOME` and `$OPENCODE_CONFIG_DIR`, the server and every command get
+an empty temporary folder as `HOME`, and every command names its workspace
+and gives every agent-home option empty. The suite fails if that home is not
+empty once the server has stopped. Its specs are
+`apps/web/e2e/<area>.spec.ts`, and `make test` leaves them out, since they
+need the browsers and binaries built with the panel. `ARGS` go to
+`playwright test`, and `E2E_BIN` names another folder holding a `flayer` and
+a `mind` to drive, relative to `apps/web`:
+
+```bash
+make web/e2e ARGS='e2e/csp.spec.ts --debug'
+make web/e2e/run E2E_BIN=../../target/x86_64-unknown-linux-gnu/release
+```
+
+The browsers are Playwright's own builds, which `make web/e2e/browsers`
+downloads into `apps/web/node_modules` rather than `~/.cache`. Its WebKit
+needs libraries Playwright installs only on Debian and Ubuntu, with sudo
+(`make web/e2e/browsers WITH_DEPS=1`), so anywhere else, Arch among them,
+run the suite in Chromium alone with `make web/e2e BROWSERS=chromium`, and
+leave WebKit to CI's `e2e (web)`, which drives the release `build (cli)`
+built.
 
 `make web/dev` serves the panel on `http://127.0.0.1:5173` and reloads it as
 you edit. It passes `/api`, and the launch link, on to `flayer ui --dev`,

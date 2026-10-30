@@ -55,6 +55,10 @@ make web/fixtures/check   # cargo and git only (CI): fail when they are not the 
 make web/typecheck        # vue-tsc alone
 make web/test PNPM='npx --yes pnpm@12.15.0'
 pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
+make web/e2e/browsers     # Chromium and WebKit for the browser suite, into apps/web/node_modules
+make web/e2e              # build the panel and the debug binaries, then drive them in both browsers
+make web/e2e BROWSERS=chromium ARGS='-g overview'            # where Playwright's WebKit cannot run, as on Arch
+make web/e2e/run E2E_BIN=<dir>                               # the suite alone, on the flayer and mind in <dir>
 ```
 
 `make test` and `make build` run the panel's targets first (`web` is in the
@@ -75,6 +79,25 @@ web/build/if-node`), and `make web/build` touches
 in. `make cli/release/check TARGET=<triple>` fails unless the release for
 that triple serves the panel from the binary once `apps/web/dist` is gone;
 CI runs it.
+
+The browser suite (`make web/e2e`) is in neither aggregate: it needs
+Playwright's browsers, which `make web/e2e/browsers` downloads into
+`apps/web/node_modules` (`PLAYWRIGHT_BROWSERS_PATH`, never `~/.cache`), and
+binaries built with the panel in them, which `make web/e2e` builds, the
+panel first. Its driver, `apps/web/e2e/run.ts`, makes the fixture workspace
+and an empty home in the system's temporary folder, and refuses one with a
+`.mind` or a `.mindflayer` above it, so never point `TMPDIR` under your
+home for it. It starts Playwright without `MINDFLAYER_WORKSPACE`,
+`MINDFLAYER_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
+`OPENCODE_CONFIG_DIR`, so neither the server nor any command a spec runs
+sees them; each of those gets the temporary home as `HOME`, `-C` and
+`--workspace` naming the fixture and every agent-home option empty; and the
+run fails unless that home is as it was made once the server has stopped.
+`pnpm exec playwright test` alone is refused, since only the driver builds
+the fixture. Playwright's WebKit needs libraries it installs only on Debian
+and Ubuntu (`WITH_DEPS=1`, with sudo): anywhere else run it with
+`BROWSERS=chromium`, and leave WebKit to CI's `e2e (web)`. A local `make
+web/e2e` writes `apps/web/dist`, as `make web/build` does.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -197,7 +220,11 @@ under `apps/` with its own `Makefile`:
   colour mode, and `src/overrides/` what replaces two pieces of the
   libraries for the CSP. `src/*.d.ts` are written by the Vite plugins and
   committed, and so is `src/api/generated/`, written from Rust by `make
-  web/types`.
+  web/types`. `e2e/` is the browser suite: `run.ts` its driver,
+  `environment.ts` what every process it starts runs in, `fixture.ts` the
+  workspace it builds with the commands, `panel.ts` what the specs share,
+  and the specs; `playwright.config.ts`, beside `vite.config.ts`, starts
+  `flayer ui` over that workspace.
 
 Beside them, `examples/` is content and not an app: a flayer workspace whose
 own two skills and two rules anyone can `flayer load` to try Mindflayer
@@ -846,7 +873,9 @@ These are easy to break from a single file without noticing.
   (`tests/markdown.test.ts`, `tests/artifact.test.ts`).
   `tests/dist.test.ts` builds the panel and checks it; `tests/shell.test.ts`
   and `tests/views.test.ts` fail on any `<style>` element added at run
-  time, and on an icon the bundle lacks.
+  time, and on an icon the bundle lacks; and `e2e/csp.spec.ts` loads every
+  page in Chromium and WebKit under the server's real header, where any
+  violation fails the test it happens in.
 - **Activating prints, and writes nothing.** `flayer activate` prints core's
   code (`activate::script`), and nothing on stdout when it fails, so `eval`
   runs nothing. Nor does it remember the workspace in the default one's
@@ -944,6 +973,21 @@ These are easy to break from a single file without noticing.
   folder under `node_modules`, and leaves `dist/` alone. `licences.test.ts`
   reads every installed package's licence: a new one outside its list of
   GPL-3.0-compatible licences fails it.
+- The browser suite is `apps/web/e2e/<area>.spec.ts`, in Playwright, on
+  the real `flayer ui`: the debug build, or the binaries `E2E_BIN` names,
+  as CI names the release. It serves a workspace `e2e/fixture.ts` builds
+  with the real commands, each made to exit 0 with no warning, and
+  nothing written by hand but the folders `mind init` runs in; a state
+  only a hand edit, a removed folder or a git source makes is left to the
+  views' suites and their fixtures. Every process it starts goes through
+  `e2e/environment.ts` (`run`, `pinned`, `environment`), and the config
+  starts the server the same way, from the fixture's folder. A spec reads
+  the server from `served`, what the CLI says from `listing()`, `flayer
+  list --json` in its envelope, and opens a page with `panel.open`, through
+  the launch link, as a person does. Every test fails on a CSP violation or
+  an uncaught error on its page (`watch`), and `csp.spec.ts` holds the watch
+  to seeing one. No spec changes anything: write flows come with the issues
+  that add them.
 - The tests of the panel's types are core's and the CLI's
   `src/typescript_test.rs`, compiled only with the `ts` feature, and named
   so `--lib typescript` picks them out: each crate's export
@@ -966,11 +1010,14 @@ These are easy to break from a single file without noticing.
   into `main` come only from `dev`. PRs are merged with merge commits.
 - CI runs `fmt and clippy`, then `test (core)`, then `test (cli)`, `test
   (server)`, `test (web)` and `types drift (web)`, and builds each app after
-  its tests pass. `test (web)` is the one Linux job that sets up Node: it
-  lints, type-checks, tests and builds the panel, and uploads the build.
+  its tests pass. `test (web)` sets up Node, as only `e2e (web)` does
+  besides on Linux: it lints, type-checks, tests and builds the panel, and
+  uploads the build.
   `build (cli)` waits for it, embeds that build in a release, then removes
-  `apps/web/dist` and runs `make cli/release/check`. `types drift (web)`
-  runs `make web/types/check` and `make web/fixtures/check`. Development targets Linux only for now: macOS
+  `apps/web/dist`, runs `make cli/release/check` and uploads the release's
+  binaries, which `e2e (web)` downloads and drives in Chromium and WebKit
+  (`make web/e2e/run`), uploading the traces of what fails. `types drift
+  (web)` runs `make web/types/check` and `make web/fixtures/check`. Development targets Linux only for now: macOS
   and Windows (`test (macos)`, `test (windows)`, which set up Node too) run
   only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
   the compatibility pass (#154) puts them back on pushes to `dev`/`main` and
@@ -978,7 +1025,7 @@ These are easy to break from a single file without noticing.
 - The rulesets for `dev` and `main` require every check that runs on every
   pull request: `fmt and clippy`, `test (core)`, `test (cli)`, `test
   (server)`, `test (web)`, `types drift (web)`, `build (core)`, `build
-  (cli)` and `build (server)`, and `gitflow branch name` for `dev` or
+  (cli)`, `e2e (web)` and `build (server)`, and `gitflow branch name` for `dev` or
   `release source branch` for `main`. `test (macos)` and `test (windows)`
   are not required, since they run only when asked for. A check is required
   by its job's display name, so renaming a job means changing both

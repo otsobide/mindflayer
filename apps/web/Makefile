@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := build
-.PHONY: install build build/if-node test lint fmt types types/export types/check fixtures fixtures/check typecheck dev e2e clean
+.PHONY: install build build/if-node test lint fmt types types/export types/check fixtures fixtures/check typecheck dev e2e e2e/run e2e/browsers clean
 
 # pnpm at the version package.json's packageManager pins. Where it is not on
 # the PATH and corepack is not set up, name it some other way:
@@ -121,9 +121,42 @@ typecheck: $(INSTALLED) ## Check the panel's types alone (vue-tsc)
 dev: $(INSTALLED) ## Serve the panel on 127.0.0.1:5173, /api proxied to `flayer ui --dev --port 7878`
 	$(PNPM) run dev
 
-e2e: ## End-to-end tests in a browser: there are none yet (#75)
-	@echo "no end-to-end suite yet: #75 adds it, with Playwright"
-	@exit 1
+# The end-to-end suite (e2e/): the panel served by the real `flayer ui`
+# over a workspace built with the real commands, driven in a browser, with
+# Playwright. Its driver, e2e/run.ts, builds that workspace and its home in
+# the system's temporary folder, clears every variable that leads to a real
+# workspace or agent home, runs Playwright, and fails if the home is not as
+# it was made once the server has stopped.
+#
+# The binaries it runs: the debug build `e2e` makes, or any folder holding a
+# `flayer` and a `mind` with the panel in them, as CI names the release
+# `build (cli)` built. A path relative to this folder, or absolute.
+E2E_BIN ?= ../../target/debug
 
-clean: ## Remove the built panel and the tools' caches, keeping node_modules
-	rm -rf dist node_modules/.cache node_modules/.vite node_modules/.tmp
+# The browsers it runs in: Chromium, and WebKit, the engine a desktop shell
+# would draw the panel with. Playwright's WebKit needs libraries it installs
+# only on Debian and Ubuntu (`WITH_DEPS=1`, with sudo, as CI does), so on
+# any other system, Arch among them: make web/e2e BROWSERS=chromium
+BROWSERS ?= chromium webkit
+
+# Where Playwright keeps the browsers it downloads: inside node_modules,
+# which git ignores and `pnpm install` leaves alone, rather than its default
+# under ~/.cache, so what the suite installs stays with the clone. Exported,
+# so Playwright looks there wherever a target here runs it.
+export PLAYWRIGHT_BROWSERS_PATH ?= $(CURDIR)/node_modules/.playwright
+
+e2e/browsers: $(INSTALLED) ## Download the browsers the end-to-end suite runs in (BROWSERS), into node_modules
+	$(PNPM) exec playwright install $(if $(WITH_DEPS),--with-deps) $(BROWSERS)
+
+# The panel, then the binaries, which a server compiled before dist/ was
+# there would leave without it (see `build`), then the suite on them.
+e2e: build ## Build the panel and the debug binaries, then run the end-to-end suite on them
+	cargo build -p mindflayer-cli
+	$(MAKE) e2e/run
+
+# ARGS go to `playwright test`: a spec, `-g <title>`, `--debug`, `--ui`.
+e2e/run: $(INSTALLED) ## Run the end-to-end suite on the flayer and mind in E2E_BIN, in BROWSERS
+	MINDFLAYER_E2E_BIN='$(E2E_BIN)' node e2e/run.ts $(addprefix --project=,$(BROWSERS)) $(ARGS)
+
+clean: ## Remove the built panel, what the end-to-end suite wrote and the tools' caches, keeping node_modules
+	rm -rf dist test-results playwright-report node_modules/.cache node_modules/.vite node_modules/.tmp

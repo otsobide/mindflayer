@@ -2,3 +2,7 @@
 # which the server embeds from here.
 node_modules/
 dist/
+# What the end-to-end suite writes: a failed test's trace, and in CI the
+# report beside it, each uploaded from there.
+test-results/
+playwright-report/
