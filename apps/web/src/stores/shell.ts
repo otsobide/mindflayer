@@ -13,6 +13,10 @@ export const useShell = defineStore('shell', () => {
   const sidebarOpen = ref(false)
   /** The sidebar on a wide one, reduced to its icons. */
   const sidebarCollapsed = ref(false)
+  /** The drawer listing what the session ran. */
+  const transcriptOpen = ref(false)
+  /** The drawer listing what the last run said beside its output. */
+  const warningsOpen = ref(false)
 
-  return { sidebarOpen, sidebarCollapsed }
+  return { sidebarOpen, sidebarCollapsed, transcriptOpen, warningsOpen }
 })

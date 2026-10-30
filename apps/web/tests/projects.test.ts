@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { Project } from '@/api/generated/Project'
-import { fixture, render, texts, unmount } from './panel'
+import { commanded, commanding, fixture, render, texts, unmount } from './panel'
 
 afterEach(unmount)
 
@@ -180,5 +180,48 @@ describe('the keyboard', () => {
     for (const health of page.findAll('[data-testid^="filter-health-"]')) {
       expect(health.element.tagName).toBe('BUTTON')
     }
+  })
+})
+
+describe('linking a project from the table', () => {
+  it('sends the folder typed as a link task, shows the line the server previewed, and runs it once asked', async () => {
+    const [link] = commanded()
+    const { sent, transport } = commanding()
+    const { page } = await render('/projects', transport)
+
+    await page.get('input[data-testid="link-path"]').setValue(link!.task.type === 'link' ? link!.task.path : '')
+    await page.get('[data-testid="link-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: link!.task, mode: 'preview' }])
+    expect([...document.body.querySelectorAll('[data-testid="command"]')].map(each => each.textContent)).toEqual(link!.preview.lines.map(line => `$ ${line}`))
+
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: link!.task, mode: 'preview' }, { task: link!.task, mode: 'run' }])
+    expect((page.get('input[data-testid="link-path"]').element as HTMLInputElement).value).toBe('')
+  })
+
+  it('sends a folder as it was typed, for the server to refuse, and keeps it to be corrected', async () => {
+    const { sent, transport } = commanding()
+    const { page } = await render('/projects', transport)
+
+    await page.get('input[data-testid="link-path"]').setValue('Projects/../blog/')
+    await page.get('[data-testid="link-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: { type: 'link', path: 'Projects/../blog/' }, mode: 'preview' }])
+    expect(document.body.querySelector('[data-testid="preview"]')).toBeNull()
+    // The toast is drawn on a later tick than the refusal, so it is waited for.
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Nothing ran'))
+    expect((page.get('input[data-testid="link-path"]').element as HTMLInputElement).value).toBe('Projects/../blog/')
+  })
+
+  it('is offered while nothing is linked yet', async () => {
+    const { page } = await render('/projects', fixture('unmade'))
+
+    expect(page.find('[data-testid="no-projects"]').exists()).toBe(true)
+    expect(page.find('[data-testid="link-form"]').exists()).toBe(true)
   })
 })

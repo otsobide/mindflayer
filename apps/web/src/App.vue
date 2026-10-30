@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppSidebar from './components/AppSidebar.vue'
+import CommandRunner from './components/CommandRunner.vue'
 
 // The sidebar's size and whether it is collapsed go to vueuse's useStorage
 // (`storage="local"`), which src/preferences.ts points at a cookie of the
@@ -9,12 +10,14 @@ import AppSidebar from './components/AppSidebar.vue'
 
 <template>
   <UApp :tooltip="{ delayDuration: 300 }">
-    <UDashboardGroup
-      unit="rem"
-      storage="local"
-    >
-      <AppSidebar />
-      <RouterView />
-    </UDashboardGroup>
+    <CommandRunner>
+      <UDashboardGroup
+        unit="rem"
+        storage="local"
+      >
+        <AppSidebar />
+        <RouterView />
+      </UDashboardGroup>
+    </CommandRunner>
   </UApp>
 </template>

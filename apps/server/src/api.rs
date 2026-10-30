@@ -52,9 +52,10 @@ pub(crate) async fn query<B: Backend>(
     }
 }
 
-/// `POST /api/commands/preview`: the command lines a task is, and nothing
-/// run. On the blocking pool for the same reason as a query: working out a
-/// line can mean reading the disk.
+/// `POST /api/commands/preview`: the command lines a task is, and what of
+/// them the panel has somebody confirm, with nothing run. On the blocking
+/// pool for the same reason as a query: working out a line can mean reading
+/// the disk.
 pub(crate) async fn preview<B: Backend>(
     State(api): State<Arc<Api<B>>>,
     body: Result<Json<B::Task>, JsonRejection>,
@@ -65,7 +66,7 @@ pub(crate) async fn preview<B: Backend>(
     };
     let backend = Arc::clone(&api.backend);
     match tokio::task::spawn_blocking(move || backend.preview(&task)).await {
-        Ok(Ok(lines)) => Json(json!({ "lines": lines })).into_response(),
+        Ok(Ok(preview)) => Json(preview).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
         Err(_) => error(
             StatusCode::INTERNAL_SERVER_ERROR,

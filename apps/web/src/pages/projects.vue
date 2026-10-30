@@ -9,6 +9,7 @@ import AgentBadges from '@/components/AgentBadges.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
 import HealthBadge from '@/components/HealthBadge.vue'
+import LinkForm from '@/components/LinkForm.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import { useSnapshot } from '@/api/snapshot'
 import { first, useQueryChange } from '@/address'
@@ -137,6 +138,8 @@ function clear() {
 
     <template #body>
       <SnapshotGate v-slot="{ snapshot }">
+        <LinkForm />
+
         <div
           v-if="snapshot.projects.length === 0"
           class="flex flex-col items-start gap-3"

@@ -3744,6 +3744,17 @@ wrong](#a-code-for-what-went-wrong)). A list of tasks was the alternative,
 and it would leave out a line no task builds: a front end that runs lines it
 is sent would run one the list never named.
 
+Beside it, and read the same way, is what a line takes away
+(`task::Caution`, `task::cautions`): `remove --yes` deletes, `uninstall`
+and `flayer remove --everywhere --yes` take copies out, `unlink` and
+`unload` make the workspace forget a project or a load, and `--force` on an
+install, an uninstall or an update told `--yes` writes over or takes out an
+edited copy. A front end with no terminal asks somebody before it runs such
+a line, the panel with each preview ([its changes](#its-changes)); a match
+over every command with no wildcard (`Caution::of_mind`, `of_flayer`), so a
+new command says what it takes away before it compiles. The TUI asks its own
+questions still, worded for its rows ([open questions](#open-questions)).
+
 The exceptions are named, not hidden: opening the install screen builds the
 screen `flayer install` opens, as a read, rather than running a line, and
 re-reading the disk is not a command, because it changes nothing. Applying
@@ -3953,7 +3964,8 @@ The panel's whole API is five endpoints, the first four
 [D-18](#d-18-the-panel-writes-by-running-commands) in HTTP:
 
 - `POST /api/query`: a read, answered with JSON of the backend's own shape.
-- `POST /api/commands/preview`: the command lines a task is, with nothing run.
+- `POST /api/commands/preview`: the command lines a task is, and what of them
+  the panel has somebody confirm first, with nothing run.
 - `POST /api/commands`: run a task; the reply is its lines and its outcome.
 - `GET /api/transcript`: every task the session ran, with what each produced.
 - `GET /api/events`: what happens as it happens, a change on disk or a run
@@ -3981,7 +3993,12 @@ types know nothing of mindflayer, which is the property the CLI relies on.
 `query` returns JSON rather than a fourth associated type, because each query
 has a shape of its own and one type standing for all of them would be an enum
 whose only job is to serialize untagged. `preview` takes the task by
-reference, so a task need not be `Clone` to be both shown and run.
+reference, so a task need not be `Clone` to be both shown and run, and
+answers a `Preview` of the server's own: the lines, and beside them what the
+panel has somebody confirm before it asks for the run (`confirm`), each item
+the backend's JSON, carried unread as a watched path's scope is. In the one
+answer, so the panel is told what takes something away of the very lines it
+shows, rather than asking again of a disk that may have changed between.
 `watched_paths` names what to watch for [live updates](#live-updates): each
 path with its scope (`Watched`), a word of the backend's own carried to the
 panel as JSON, as a query's answer is, so the server names no type of the
@@ -3995,7 +4012,17 @@ runs. A struct of the server's own rather than a fourth associated type,
 since the server builds the reply from it (a 422 of `{"error", "code"}`)
 and knows nothing more of it, and its code a `&'static str`, as a code is a
 fixed word. An answer of the backend's own shape that says it refused was
-the alternative, and a preview, whose answer is lines, has no room for one.
+the alternative, and a preview, whose answer is the server's `Preview`, has
+no room for one.
+
+The server carries `confirm` and enforces none of it: a run sent without the
+panel having asked anybody is run, as a shell runs `flayer remove --yes`
+typed into it. Whoever holds the token is the person at this machine, and
+[the guards](#what-keeps-other-pages-out) keep every other page from
+sending a run at all; the question is for that person's slips, so it lives
+where they click ([its changes](#its-changes)). A run that had to carry a
+confirmation would make the run request a shape of its own around the task,
+and hold a script to a question only a person needs.
 
 ### Threads
 
@@ -4598,21 +4625,20 @@ Vue 3.5 and Nuxt UI 4 on Vite 8, in TypeScript 6 checked by vue-tsc, laid out
 the way Nuxt UI's dashboard-vue template lays out a dashboard, with a page
 per file under `src/pages`. It holds no rules, any more than the server
 does: what a valid task is, or what a project has, is core's to say, and the
-panel asks. So far it shows and changes nothing: an overview, the projects
-and a project's page, drawn from the snapshot (#72), and the library, one of
-its own, the shelf and the sources (#73), the second reading an artifact's
-files besides, in a frame of a sidebar and a header ([its
-views](#its-views)).
+panel asks. It shows an overview, the projects and a project's page, drawn
+from the snapshot (#72), and the library, one of its own, the shelf and the
+sources (#73), the second reading an artifact's files besides, in a frame of
+a sidebar and a header ([its views](#its-views)). It changes things by
+running tasks the server previews first, a link and an unlink so far, and
+shows a transcript of every run (#76, [its changes](#its-changes)).
 
 ### One way out: the transport
 
 Every request the panel makes goes through a `Transport`
 (`src/api/transport.ts`): `query` for a read, `send` for a task to preview or
-run, and `subscribe` for the events the server streams ([live
-updates](#live-updates)). Views get it from `useTransport`. The server's fourth endpoint, the transcript, has no call
-yet, because nothing shows it: the transcript drawer (#76) adds one, so that
-it too reaches the server through the transport, and a desktop shell can
-answer it. The HTTP transport (`src/api/http.ts`) is the only file allowed
+run, `transcript` for what the session ran, and `subscribe` for the events
+the server streams ([live updates](#live-updates)). Views get it from
+`useTransport`. The HTTP transport (`src/api/http.ts`) is the only file allowed
 `fetch`, `EventSource`, `WebSocket` or `XMLHttpRequest`: an ESLint rule
 refuses them in every other file, and a test runs the rule.
 
@@ -4623,8 +4649,10 @@ panel's own scripts never hold it. And every request it posts is JSON and
 carries `X-Mindflayer: 1`, a header no form or link can add, as the server
 asks of a change by cookie ([What keeps other pages
 out](#what-keeps-other-pages-out)). A desktop shell, the reason D-17 asks
-for the interface, would answer the same three calls without HTTP, and no
-view would change.
+for the interface, would answer the same four calls without HTTP, and no
+view would change. A refusal comes back as a `TransportError` holding the
+status, the words and, when the backend refused, its code, which the panel
+draws a refusal by.
 
 What the server answers lives in Vue Query's cache, which knows when an
 answer is stale and asks again; a refusal is not asked again, since the
@@ -4657,11 +4685,12 @@ written by ts-rs, committed so a fresh clone type-checks without cargo, and
 never edited by hand. The transport takes its `Query`, `Task` and `Outcome`
 from there, and says what each query is answered with by its `type`
 (`Answers`), so a query Rust adds leaves the panel not compiling until it
-names the answer. Only the server's own replies, `{lines}` for a preview,
-`{lines, outcome}` for a run and `{error, code}` for a refusal, and the
-events its stream tells (`LiveEvent`), are still spelled in `transport.ts`
-([open questions](#open-questions)); a change's scopes are the generated
-`Holder`, since what a change is to is the backend's word.
+names the answer. Only the server's own replies, `{lines, confirm}` for a
+preview, `{lines, outcome}` for a run and `{error, code}` for a refusal, and
+the events its stream tells (`LiveEvent`), are still spelled in
+`transport.ts` ([open questions](#open-questions)); a preview's items to
+confirm are the generated `Confirm` and a change's scopes the generated
+`Holder`, since both are the backend's words.
 
 - **Derived beside serde.** Each type derives `ts_rs::TS` beside its
   `Serialize` or `Deserialize`, under a `ts` feature of core's and the
@@ -4883,8 +4912,9 @@ is waiting until then, and says why when the server refused.
   practices but contrast, which happy-dom lays nothing out to measure.
 - **The commands are the empty states.** Whatever is empty names the
   command that would fill it, as somebody would type it, since every change
-  is a command ([D-18](#d-18-the-panel-writes-by-running-commands)):
-  the panel runs none of them until M5. Each is a `flayer` line naming the
+  is a command ([D-18](#d-18-the-panel-writes-by-running-commands)), for a
+  shell rather than for the panel, which runs only the tasks its pages offer
+  ([its changes](#its-changes)). Each is a `flayer` line naming the
   workspace with `-W` and its path, and a project with `-p` and its entry,
   rather than a `mind` line typed from the project's folder: which workspace
   `mind` consults there depends on the shell's own `-W`, activation and
@@ -4893,6 +4923,80 @@ is waiting until then, and says why when the server refused.
   workspace, or a panel launched with `-W` or on an activated workspace, it
   would act on another one or none. A workspace not made yet names `flayer
   init` first, since `-W` never makes the one it names.
+
+### Its changes
+
+Every change the panel makes is a task the server previews, the panel
+shows, and runs only once somebody says so
+([D-18](#d-18-the-panel-writes-by-running-commands)). One runner does it
+for every page (`src/api/commands.ts`), made once in `CommandRunner.vue`,
+which wraps the pages and draws what the runner shows beside them; a page
+hands it a task (`ask`) and is answered once that task's run is over, or
+was let go.
+
+- **The lines are the server's.** The preview (`POST
+  /api/commands/preview`) answers the lines the backend planned, and the
+  dialog (`CommandDialog.vue`) shows exactly those, each as `$ line`: the
+  panel puts no line together itself, so what it shows is what will run,
+  quoted for a shell by the CLI. A refused preview runs nothing and says
+  why, with its code, in a toast.
+- **Which lines take something away is the CLI's to say.** The backend reads
+  each planned line with the parsers that run it, as it reads a refusal,
+  through one list every front end shares (`task::Caution`, a match over
+  every command with no wildcard): `remove --yes`, `uninstall`, `flayer
+  remove --everywhere --yes`, `unlink`, `unload`, and `--force` on an
+  install, an uninstall, or an update told `--yes`. A dry run takes nothing
+  away, nor does a line that adds, or carries what is installed to where
+  the agents now read. The preview names each such line, by its place
+  among the lines, with the caution's word and the CLI's words for it
+  (`backend::Confirm`), and the dialog is then a confirmation: titled for
+  what it takes away, each line's cautions under it, its button the error
+  colour, and the focus on Cancel, so an Enter pressed by habit runs
+  nothing. A list in TypeScript was the alternative, and it would be a
+  second place for a command to be forgotten, as the TUI's own questions
+  are ([open questions](#open-questions)). Its icons are the panel's, for
+  each word it knows, and plain for one it does not.
+- **A run is over once its views are drawn from what it changed.** The run
+  goes through the live updates' `settle` (`src/api/live.ts`), which waits
+  for the stream to tell that run of those lines finished, a finish the
+  server tells just before it answers, so the stream may tell it first, and
+  for what that marked stale to be read again. When no word comes within
+  two seconds (`PATIENCE`), the stream let go while the tab was hidden, or
+  lost, it marks the same stale itself and waits for that. Nothing the run
+  answered is written into a view: an update made beforehand would be a
+  second guess at what core says, and could disagree with it.
+- **How it went is a toast, and what it said a drawer.** A toast says what
+  ran, or which line failed, and what the lines printed. When a run failed,
+  or said a line with a code, the warnings drawer (`WarningsDrawer.vue`)
+  opens, every warning, note and error under the line that said it, each
+  with its code beside its words and an icon chosen by that code: a plain
+  warning's or error's for a code it knows no icon for, and a note's for a
+  line with none. The toast offers it for a run that said only notes. A
+  refused run, or one whose answer never came, is a toast too, the second
+  naming the transcript, which says what did run. Either leaves the drawer
+  on the last run that answered, so an earlier toast still opens what that
+  run said: the drawer reads the last answered run in Vue Query's mutation
+  cache, kept while the tab is open, since the run mutation's own answer is
+  cleared as the next run starts and stays cleared when it fails.
+- **The transcript is the server's.** Every page's header opens it
+  (`TranscriptDrawer.vue`): every task the session ran, from any tab or
+  script holding the token, each line with what it printed, read from `GET
+  /api/transcript` only while the drawer is open and again whenever a run
+  finishes, since a finish and a resync mark it stale too. **Copy as
+  script** copies the lines each task ran, exactly as the server previewed
+  and ran them, one to a line, and nothing of the panel's own: pasted into a
+  shell in the workspace's folder, where the lines run from, they do it
+  again. A `cd` or a shebang in front was the alternative, and it would be
+  a line the panel wrote. It holds reads too, a `validate`, where what
+  `flayer ui` prints when it stops holds only what changed something.
+
+The pages offer two tasks so far, so that each part of this is something
+somebody uses: the projects page links the folder typed above its table,
+sent as typed for the path policy to hold, and a project's page unlinks it,
+which is a confirmation, then goes back to the projects. The preview and the
+run are Vue Query mutations, and the transcript a query, so what the server
+answered lives where every answer does; which drawer is open is Pinia's,
+beside the sidebar's state.
 
 ### Its fixtures come from Rust
 
@@ -4903,7 +5007,11 @@ the library, removing a linked folder, and reads it through the panel's
 backend as the server answers it, beside a home where nothing is made.
 Beside them, `library.json` holds every query an artifact's page asks of
 the library's own, its files and each file of them, with what the backend
-answers, which the test transport answers from (`tests/panel.ts`). So
+answers, which the test transport answers from (`tests/panel.ts`), and
+`commands.json` what previewing and running a few tasks in turn is
+answered with, a link, an unlink to confirm, a `validate` that fails with a
+code and a removal everywhere, which the runner's, the transcript's and the
+pages' tests answer their tasks from (`commanding`). So
 the panel's tests render what core says rather than what a person drew,
 and a field the snapshot adds, renames or fills differently reaches them.
 What differs between runs is pinned: the temporary folder reads as
@@ -5022,6 +5130,22 @@ and to the rows of the projects holding a copy. A security smoke test sends
 the panel's own query, with the cookie and every header the panel sends,
 from the panel's origin and from another, and only the second is refused,
 as is one carrying the token as Bearer, and the page itself.
+
+What the panel changes is held to the CLI byte for byte. A test that
+changes something takes a workspace of its own (`own`, in `e2e/panel.ts`):
+built under the run's folder by the commands, `flayer init` and two `mind
+init`s with one of them linked (`changeable`), copied whole beside itself
+before anything else touches it, and served by a `flayer ui` the test
+starts as the config starts the suite's (`serve`, in
+`e2e/environment.ts`), with the same home and options, and stops with the
+Ctrl-C a person would. A project linked from the panel, its line shown
+first, has to leave `flayer.toml` exactly as `flayer link` leaves the
+copy's; an unlink has to ask, focused on Cancel, leave the marker as it
+was when told no, and then leave it as `flayer unlink` leaves the copy's.
+Of its own, since the suite runs its tests side by side and in two
+browsers over one server: a change to the shared fixture would move what
+the overview counts under a test reading it, and the second browser would
+find its project linked already.
 
 No page may log a violation of the CSP. Each engine fires
 `securitypolicyviolation` and words its own console messages, and a
@@ -7598,17 +7722,37 @@ just listed.
   workspace's path after `-W`, and a project's page its entry, as the
   registry spells it, after `-p`, `relink` or `unlink`; one a shell would
   split, a space in it, is shown unquoted: quoting is the CLI's
-  (`task::shell`), and the panel has no line of the CLI's to show until the
-  previews of M5 (#76) turn a task into its lines.
-- **The server's replies are spelled twice.** A preview's `{lines}`, a
-  run's `{lines, outcome}` and a refusal's `{error, code}` are built with
-  `json!` in the server's `api.rs`, and the stream's events are its
-  `Event`, and all are spelled again in the panel's `transport.ts`, outside
+  (`task::shell`), and these name `-W`, which a task the server previews
+  never carries, so no preview could stand in for them.
+- **The server's replies are spelled twice.** A preview's `{lines,
+  confirm}` is the server's `Preview`, a run's `{lines, outcome}` its
+  transcript's `Entry`, a refusal's `{error, code}` is built with `json!` in
+  its `api.rs`, and the stream's events are its `Event`, and all are spelled
+  again in the panel's `transport.ts`, outside
   what is written from Rust ([its types come from
   Rust](#its-types-come-from-rust)): the server has no `ts` feature, and its
   own tests hold what it answers and tells. Structs of its own deriving `Serialize`,
   and `TS` under a feature, would bring them under the drift check, at the
   price of ts-rs in the one crate that depends on no mindflayer crate.
+- **The TUI asks its own questions.** It asks before an unlink, a removal,
+  a relink, an adoption and applying the install screen, whatever its marks
+  hold, in words of its own for what they are about; the panel asks before
+  every line `task::Caution` names, before an unload too, and before no
+  relink or adoption, which take nothing away. The TUI building its
+  questions from the same list, worded for its rows, would make the two
+  ask about the same lines.
+- **A confirmation is of the lines previewed.** The run is planned again on
+  the writer thread, and runs the lines the disk then gives, which the
+  transcript says; a line that changed in between, an entry pointed
+  elsewhere, a default workspace made meanwhile, runs without being asked
+  about again. Sending the previewed lines with the run, to be refused
+  when they differ, would close it, at the price of a run request shaped
+  around the task.
+- **Nothing says when the panel's run waits on the stream.** A run whose
+  finish the stream never tells waits two seconds (`PATIENCE`) before the
+  panel reads again for itself, which a tab whose stream was let go, or a
+  server that stopped telling, costs on every run; the runner says nothing
+  of it while it waits.
 - **What each query is answered with is the panel's to name.** `Answers`
   pairs each query's `type` with the type it is answered with, and vue-tsc
   holds it to name every query, but nothing holds the pairing to what the
@@ -7620,8 +7764,11 @@ just listed.
   Chromium alone, and a page WebKit draws differently is found in CI. A
   WebKit of the system's own (WebKitGTK, which a Tauri shell on Linux
   would use) is no browser Playwright drives.
-- **The browser suite reads, and from one fixture.** No spec changes
-  anything yet; the write flows bring theirs. And its fixture holds only
+- **The browser suite reads from one fixture, and changes its own.** A
+  test that changes something builds and serves a workspace of its own,
+  which costs a `flayer ui` a test; one server for every writing test,
+  taking turns, would cost less, at the price of tests that wait on each
+  other in two browsers. And its fixture holds only
   what commands make: an install changed since, a copy edited by hand, a
   linked folder gone or a shelf, which take a hand edit, a removal or a git
   source and a `git` binary to make, are drawn by the views' suites from

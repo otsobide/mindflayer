@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import type { Held } from '@/api/generated/Held'
 import type { Kind } from '@/api/generated/Kind'
 import type { Project } from '@/api/generated/Project'
 import type { Snapshot } from '@/api/generated/Snapshot'
+import { useRunner } from '@/api/commands'
 import { useSnapshot } from '@/api/snapshot'
 import { first } from '@/address'
 import AgentBadges from '@/components/AgentBadges.vue'
@@ -45,6 +46,22 @@ function count(project: Project, kind: Kind): number {
   return project.tally.kinds.find(counted => counted.kind === kind)?.count ?? 0
 }
 
+const runner = useRunner()
+const { busy } = runner
+const router = useRouter()
+
+/**
+ * Unlink it, which the server previews and the CLI says takes something
+ * away, so it is a question first; once it is gone, back to the projects,
+ * since this page names an entry the workspace no longer holds.
+ */
+async function unlink(entry: string) {
+  const ran = await runner.ask({ type: 'unlink', entry })
+  if (ran?.outcome.ok) {
+    await router.push('/projects')
+  }
+}
+
 /** `a`, `a and b`, `a, b and c`: a list said in words. */
 function spelled(words: string[]): string {
   return words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`
@@ -61,7 +78,19 @@ function spelled(words: string[]): string {
       <AppHeader
         :title="title"
         icon="i-lucide-folder-git-2"
-      />
+      >
+        <UButton
+          v-if="project?.entry"
+          label="Unlink"
+          icon="i-lucide-unlink"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          :disabled="busy"
+          data-testid="unlink"
+          @click="unlink(project.entry)"
+        />
+      </AppHeader>
     </template>
 
     <template #body>

@@ -1806,6 +1806,31 @@ $ flayer install -p /home/you/Projects/collapse skill:commit-style
 installed commit-style into collapse, from workspace
 ```
 
+**Every change is previewed first.** Whatever you ask the panel to change,
+it asks the server what that is before anything runs, and shows you the
+lines, exactly as the server will run them and as you could type them in
+the workspace's folder: nothing runs until you press Run. A line that takes
+something away makes that a question to confirm, saying what each line
+takes in the CLI's own words: `remove --yes`, which deletes an artifact,
+`uninstall` and `remove --everywhere`, which take installed copies out of
+projects, `unlink` and `unload`, which make the workspace forget a project
+or a loaded workspace, and `--force`, which writes over or takes out a copy
+changed since it was installed. Which lines those are is the CLI's to say,
+not the panel's, and Cancel has the focus, so an Enter pressed by habit
+runs nothing. Once a run is over and the pages show what it changed, a toast
+says how it went; when it failed, or said a warning, the drawer of what it
+said opens, every warning, note and error under the line that said it, with
+its code. So far the panel links a project, from the folder you type above
+the projects table, and unlinks one, from its page; everything else is
+still a command away.
+
+**The transcript**, in every page's header, lists every task the session
+ran, from this tab or any other, each line with what it printed, and
+**Copy as script** copies those lines, one to a line, exactly as they ran:
+pasted into a shell in the workspace's folder, they do it all again. What
+`flayer ui` prints when it stops is the same, but for the tasks that only
+read, such as a `validate`.
+
 **The overview** says which skills and rules your projects have at a
 glance. It names the workspace, where it is and how it was chosen, and counts
 what it holds: the projects it links and the entries that open none, each
@@ -1879,13 +1904,13 @@ Linux is the limit `fs.inotify.max_user_watches` sets, each page says so
 above what it shows, with a button that reads everything again.
 
 Every page works from the keyboard and says every state in words, never by
-colour alone. So far the panel only shows: changing things from it comes with
-the [next milestone](https://github.com/otsobide/mindflayer/milestones). The
-API under it is there for a script holding the token as a Bearer token:
-`POST /api/query` for a read (`{"type": "snapshot"}` answers what the panel
-draws, `{"type": "files", ...}` what one artifact holds, and `{"type":
-"contents", ...}` one file of it, as text), `POST /api/commands/preview` for
-the lines a task is, `POST /api/commands` to run them, `GET
+colour alone. The API under it is there for a script holding the token as a
+Bearer token: `POST /api/query` for a read (`{"type": "snapshot"}` answers
+what the panel draws, `{"type": "files", ...}` what one artifact holds, and
+`{"type": "contents", ...}` one file of it, as text), `POST
+/api/commands/preview` for the lines a task is and what of them the panel
+asks you to confirm (`{"lines": [...], "confirm": [...]}`), `POST
+/api/commands` to run them, which asks nobody, `GET
 /api/transcript` for everything the session ran, and `GET /api/events` for
 what happens as it happens, as server-sent events: `resync`, to read
 everything again, first and whenever a reader fell behind; right after it
@@ -2654,10 +2679,10 @@ launcher or a version manager's shim.
 ## Developing the panel
 
 `apps/web` is the web panel, in Vue 3.5 and Nuxt UI 4 on Vite, written in
-TypeScript. So far it shows and changes nothing: the overview, the
-projects, the library, the shelf and the sources, in a frame of a sidebar
-and a header, dark unless you switch it to light, which the next launch
-remembers. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
+TypeScript: the overview, the projects, the library, the shelf and the
+sources, in a frame of a sidebar and a header, dark unless you switch it to
+light, which the next launch remembers, with a link and an unlink run
+through the server's previews and a transcript of what ran. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
 the version `package.json` pins in `packageManager`, which `corepack enable`
 provides. Without corepack, name any other way to run it in `PNPM`:
 
@@ -2705,8 +2730,13 @@ the debug binaries, builds a workspace in your system's temporary folder by
 running `flayer` and `mind`, serves it with `flayer ui`, and drives the
 panel in Chromium and WebKit with Playwright. The overview, each project's
 page and each artifact's page have to show what `flayer list --json`
-prints, a request from another origin has to be refused, and no page may log
-a violation of the server's content security policy. Nothing it runs can
+prints, a project linked or unlinked from the panel has to leave
+`flayer.toml` byte for byte as `flayer link` or `flayer unlink` leaves a copy
+of the workspace, an unlink has to ask first and run nothing when told no, a
+request from another origin has to be refused, and no page may log a
+violation of the server's content security policy. A test that changes
+something does it to a workspace and a `flayer ui` of its own, so no other
+test sees the change. Nothing it runs can
 reach your workspaces or your agents' folders: Playwright runs without
 `$MINDFLAYER_WORKSPACE`, `$MINDFLAYER_HOME`, `$CLAUDE_CONFIG_DIR`,
 `$CODEX_HOME` and `$OPENCODE_CONFIG_DIR`, the server and every command get

@@ -18,11 +18,15 @@ function recording() {
       calls.push('send')
       return new Promise(() => {})
     },
+    transcript: () => {
+      calls.push('transcript')
+      return new Promise(() => {})
+    },
     subscribe: () => {
       calls.push('subscribe')
       return () => {}
     }
-  } as Transport
+  } as unknown as Transport
   return { calls, transport }
 }
 
