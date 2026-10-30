@@ -54,6 +54,10 @@ const PAGES: [string, Fixture][] = [
   ['/shelf', 'unmade'],
   ['/sources', 'workspace'],
   ['/sources', 'unmade'],
+  ['/discover', 'workspace'],
+  ['/discover', 'unmade'],
+  ['/discover?root=%2Fhome%2Fyou%2FProjects', 'workspace'],
+  ['/discover?root=Projects', 'workspace'],
   ['/nowhere', 'workspace']
 ]
 
@@ -61,6 +65,20 @@ describe('every page', () => {
   it.each(PAGES)('%s, of the %s fixture, passes axe', async (path, name) => {
     await render(path, fixture(name))
 
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('the page of what could be linked', () => {
+  it('passes axe with folders marked, one a repository mind init writes into', async () => {
+    await render('/discover?root=%2Fhome%2Fyou%2FProjects', fixture('workspace'))
+
+    for (const box of document.querySelectorAll<HTMLElement>('[data-testid="suggestion"] [role="checkbox"]')) {
+      box.click()
+    }
+    await flushPromises()
+
+    expect(document.querySelector('[data-testid="writes-into"]')).not.toBeNull()
     expect(await violations()).toEqual([])
   })
 })

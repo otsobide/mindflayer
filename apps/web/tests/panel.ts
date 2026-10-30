@@ -12,6 +12,7 @@ import { TransportError, type LiveEvent, type Preview, type Query, type Ran, typ
 import { createPanel } from '@/panel'
 import commands from './fixtures/commands.json'
 import library from './fixtures/library.json'
+import scan from './fixtures/scan.json'
 import unmade from './fixtures/unmade.json'
 import workspace from './fixtures/workspace.json'
 
@@ -50,6 +51,16 @@ export function answers(): Answered[] {
   return structuredClone(library) as unknown as Answered[]
 }
 
+/**
+ * What the workspace fixture's server answers when its page of what could
+ * be linked scans it (tests/fixtures/scan.json): the workspace's folder, to
+ * core's own depth, with what there is to find beside its projects, written
+ * as the snapshots are. Copied, so a test may change its copy.
+ */
+export function scans(): Answered[] {
+  return structuredClone(scan) as unknown as Answered[]
+}
+
 /** `value` with every object's keys in one order, to compare as text. */
 function sorted(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -63,10 +74,12 @@ function sorted(value: unknown): unknown {
 
 /**
  * A transport answering the snapshot with `snapshot`, and any other query
- * with the answer `answered` holds for it, refusing one it holds none for
- * as the server refuses what it cannot answer; each query written down.
+ * with the answer `answered` holds for it, what opening the library's own
+ * and scanning are answered with unless a test says otherwise, refusing
+ * one it holds none for as the server refuses what it cannot answer; each
+ * query written down.
  */
-export function answering(snapshot: Snapshot, answered: Answered[] = answers()) {
+export function answering(snapshot: Snapshot, answered: Answered[] = [...answers(), ...scans()]) {
   const queries: Query[] = []
   const transport = {
     query: (query: Query) => {
