@@ -297,13 +297,7 @@ pub(crate) fn scan_workspace(
     as_json: bool,
 ) -> Outcome {
     let scan = scan(workspace, request);
-    let warnings: Vec<Warning> = scan_said(&scan)
-        .into_iter()
-        .map(|(code, said)| Warning {
-            text: format!("warning: {said}"),
-            code,
-        })
-        .collect();
+    let warnings = scan_warned(&scan);
     if as_json {
         return json(&scan, &warnings);
     }
@@ -345,6 +339,20 @@ fn moved_to(old: &str, route: &str) -> String {
 /// in these words rather than its own.
 pub(crate) fn scan_warnings(scan: &Scan) -> Vec<String> {
     scan_said(scan).into_iter().map(|(_, said)| said).collect()
+}
+
+/// What a scan could not read, and that it stopped early, each as a line
+/// on stderr says it, with its code: what `flayer scan` warns of, and what
+/// the panel's scan is answered with beside what it found, in the same
+/// words.
+pub(crate) fn scan_warned(scan: &Scan) -> Vec<Warning> {
+    scan_said(scan)
+        .into_iter()
+        .map(|(code, said)| Warning {
+            text: format!("warning: {said}"),
+            code,
+        })
+        .collect()
 }
 
 /// What [`scan_warnings`] says, each beside the code of what it says, when
