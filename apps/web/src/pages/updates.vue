@@ -128,7 +128,7 @@ function why(error: unknown): string {
     <template #body>
       <SnapshotGate v-slot="{ snapshot }">
         <p class="max-w-3xl text-sm text-muted">
-          What updating every project {{ snapshot.workspace.name }} links would do, as <code class="font-mono text-xs">flayer update --all</code> says before it is told <code class="font-mono text-xs">--yes</code>:
+          What updating every project the workspace links would do, as <code class="font-mono text-xs">flayer update --all</code> says before it is told <code class="font-mono text-xs">--yes</code>:
           what is behind where it came from is written again, a copy gone is put back, and a copy changed since it was installed is left alone unless the update is forced.
         </p>
 
