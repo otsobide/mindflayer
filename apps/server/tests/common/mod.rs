@@ -12,6 +12,7 @@ pub use mindflayer_server::{Backend, Listening, Refusal, Server, Watched};
 pub use serde_json::{json, Value};
 pub use std::sync::{Arc, Condvar, Mutex};
 
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize, Serializer};
 use std::time::Duration;
 use tower::ServiceExt;
@@ -308,4 +309,90 @@ pub async fn get(server: &Listening, path: &str, auth: Auth<'_>) -> Reply {
 /// `POST path` with a JSON body.
 pub async fn post(server: &Listening, path: &str, auth: Auth<'_>, body: Value) -> Reply {
     send(server, Method::POST, path, auth, Some(body)).await
+}
+
+// ---------------------------------------------------------------------------
+// The event stream
+// ---------------------------------------------------------------------------
+
+/// How long a test waits for an event it expects before it fails: long
+/// past the watcher's debounce, for a machine under load, and still bounded.
+pub const PATIENCE: Duration = Duration::from_secs(10);
+
+/// `GET /api/events` answered, read an event at a time as a browser's
+/// `EventSource` reads it.
+pub struct Stream {
+    pub status: StatusCode,
+    pub headers: HeaderMap,
+    body: axum::body::BodyDataStream,
+    buffer: String,
+}
+
+impl Stream {
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.get(name).map(|value| value.to_str().unwrap())
+    }
+
+    /// The next event's JSON, or a failed test once [`PATIENCE`] has
+    /// passed without one.
+    pub async fn next(&mut self) -> Value {
+        self.within(PATIENCE)
+            .await
+            .unwrap_or_else(|| panic!("no event in {PATIENCE:?}"))
+    }
+
+    /// The next event's JSON, or none when `wait` passes without one or
+    /// the stream ends: comments, which keep the connection alive, are
+    /// passed over.
+    pub async fn within(&mut self, wait: Duration) -> Option<Value> {
+        let deadline = tokio::time::Instant::now() + wait;
+        loop {
+            if let Some(end) = self.buffer.find("\n\n") {
+                let frame: String = self.buffer.drain(..end + 2).collect();
+                let data: Vec<&str> = frame
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("data:"))
+                    .map(|data| data.strip_prefix(' ').unwrap_or(data))
+                    .collect();
+                if data.is_empty() {
+                    continue;
+                }
+                return Some(serde_json::from_str(&data.join("\n")).unwrap());
+            }
+            let chunk = tokio::time::timeout_at(deadline, self.body.next())
+                .await
+                .ok()??;
+            self.buffer
+                .push_str(std::str::from_utf8(&chunk.unwrap()).unwrap());
+        }
+    }
+
+    /// Every event up to the first of `type`, which is the last returned,
+    /// or a failed test once [`PATIENCE`] has passed without one.
+    pub async fn until(&mut self, kind: &str) -> Vec<Value> {
+        let mut seen = Vec::new();
+        loop {
+            let event = self.next().await;
+            let found = event["type"] == kind;
+            seen.push(event);
+            if found {
+                return seen;
+            }
+        }
+    }
+}
+
+/// Open the event stream, in process.
+pub async fn subscribe(server: &Listening, auth: Auth<'_>) -> Stream {
+    let response = server
+        .router()
+        .oneshot(request(server, Method::GET, "/api/events", auth, None))
+        .await
+        .unwrap();
+    Stream {
+        status: response.status(),
+        headers: response.headers().clone(),
+        body: response.into_body().into_data_stream(),
+        buffer: String::new(),
+    }
 }

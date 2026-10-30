@@ -2707,6 +2707,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "form_urlencoded",
+ "futures-util",
  "rand 0.10.2",
  "rust-embed",
  "serde",

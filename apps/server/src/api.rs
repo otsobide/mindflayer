@@ -1,14 +1,17 @@
 //! The JSON endpoints under `/api`.
 
+use std::convert::Infallible;
 use std::sync::Arc;
 
 use axum::extract::rejection::JsonRejection;
 use axum::extract::State;
 use axum::http::{Method, StatusCode, Uri};
+use axum::response::sse::{self, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::json;
 
+use crate::events::Events;
 use crate::transcript::Transcript;
 use crate::writer::Writer;
 use crate::{Backend, Refusal};
@@ -18,6 +21,7 @@ pub(crate) struct Api<B: Backend> {
     pub(crate) backend: Arc<B>,
     pub(crate) writer: Writer<B::Task>,
     pub(crate) transcript: Transcript,
+    pub(crate) events: Events,
 }
 
 /// `POST /api/query`: a read, answered by the backend.
@@ -87,6 +91,35 @@ pub(crate) async fn commands<B: Backend>(
 /// `GET /api/transcript`: every task the session ran, oldest first.
 pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>) -> Response {
     Json(api.transcript.entries()).into_response()
+}
+
+/// `GET /api/events`: every event from now on ([`crate::Event`]), as
+/// server-sent events, one `data:` line of JSON each, `resync` first.
+///
+/// Server-sent events rather than a WebSocket: the stream goes one way, a
+/// browser's `EventSource` reconnects by itself, and it is a plain GET, so
+/// the gate holds it to the token as it holds every other read, the cookie
+/// included. Each event unnamed, its type inside the JSON, so the panel
+/// reads them all through `onmessage` rather than a listener per name.
+///
+/// A comment every 15 seconds while nothing happens (`KeepAlive`), so a
+/// proxy between, the panel's dev server's among them, does not take the
+/// connection for one that has died. The stream ends when the bus is
+/// closed, which a server stopping does first: until then it is a request
+/// under way, which a graceful stop would wait for without end.
+pub(crate) async fn events<B: Backend>(State(api): State<Arc<Api<B>>>) -> Response {
+    let stream =
+        futures_util::stream::unfold(api.events.subscribe(), |mut subscription| async move {
+            let event = subscription.next().await?;
+            // Words, numbers and the backend's JSON: nothing in it can fail.
+            let frame = sse::Event::default()
+                .json_data(&event)
+                .expect("an event serializes");
+            Some((Ok::<_, Infallible>(frame), subscription))
+        });
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 /// Whether a path is the API's: `/api` and everything under it, where every

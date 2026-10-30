@@ -15,6 +15,9 @@ axum = { version = "0.8", default-features = false, features = ["http1", "json",
 tokio = { version = "1", features = ["net", "rt", "sync"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# `unfold`, to turn the event bus into the stream `/api/events` sends: the
+# version axum already builds, with no feature it does not take itself.
+futures-util = { version = "0.3", default-features = false }
 # The launch token. 0.10, the version already in the tree.
 rand = "0.10"
 # The launch link's query string, decoded the way a browser encodes it.
