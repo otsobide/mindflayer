@@ -73,7 +73,7 @@ use crate::resolve::ResolveError;
 use crate::scan::ScanFailure;
 use crate::status::StatusFailure;
 use crate::template::TemplateError;
-use crate::update::UpdateError;
+use crate::update::{Left, UpdateError};
 use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
 
 /// Give an error type its `code()` and its `CODES`.
@@ -235,6 +235,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("scan::ScanFailure", ScanFailure::CODES),
     ("status::StatusFailure", StatusFailure::CODES),
     ("template::TemplateError", TemplateError::CODES),
+    ("update::Left", Left::CODES),
     ("update::UpdateError", UpdateError::CODES),
     ("workspace::MisplacedTarget", MisplacedTarget::CODES),
     ("workspace::ProjectWarning", ProjectWarning::CODES),

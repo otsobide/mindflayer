@@ -20,6 +20,7 @@ use crate::scan;
 use crate::settings::{ProjectId, Share};
 use crate::status::State;
 use crate::template::{Origin, Template};
+use crate::update::Does;
 use crate::url::redacted;
 use crate::view::Health;
 use crate::workspace::MarkerFile;
@@ -116,6 +117,15 @@ fn every_word_type_says_in_typescript_the_words_serde_writes() {
     ]);
     says_what_serde_writes(&[Withheld::Binary, Withheld::TooLarge]);
     says_what_serde_writes(&[Place::Workspace, Place::Loaded, Place::Shelf]);
+    says_what_serde_writes(&[
+        Does::Keep,
+        Does::Refresh,
+        Does::PutBack,
+        Does::WriteOver,
+        Does::Leave,
+        Does::Orphaned,
+        Does::Unsure,
+    ]);
 }
 
 #[test]
