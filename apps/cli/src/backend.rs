@@ -45,8 +45,9 @@ use mindflayer_core::gather::Watch;
 use mindflayer_core::policy;
 use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindflayer_core::view::Snapshot;
+use mindflayer_core::watch;
 use mindflayer_core::{FlayerWorkspace, MindProject, FLAYER_CONFIG, FLAYER_DIR};
-use mindflayer_server::{Backend, Refusal};
+use mindflayer_server::{Backend, Refusal, Watched};
 use serde::{Deserialize, Serialize};
 
 use crate::admit::Admission;
@@ -334,16 +335,37 @@ impl Backend for PanelBackend {
         })
     }
 
-    /// The workspace's own folder, and every project and workspace it names:
-    /// for live updates (#74), which nothing reads yet.
-    fn watched_paths(&self) -> Vec<PathBuf> {
-        let mut paths = vec![self.root.join(FLAYER_DIR)];
-        if let Ok(workspace) = self.workspace() {
-            paths.extend(workspace.members().into_iter().map(|member| member.root));
-            paths.extend(workspace.loads().into_iter().map(|loaded| loaded.root));
-        }
-        paths
+    /// Every path core names for a snapshot of the workspace
+    /// ([`watch::watched`]), with the home the snapshot is read with, each
+    /// scope as the holder a query names: `{"type": "workspace"}`, or
+    /// `{"type": "project", "entry": ...}` by the entry the snapshot lists.
+    ///
+    /// One that will not open now, gone or broken since launch, is watched
+    /// where its marker and ledger would be, so its coming back is seen.
+    fn watched_paths(&self) -> Vec<Watched> {
+        let Ok(workspace) = self
+            .workspace()
+            .or_else(|_| FlayerWorkspace::unmade(&self.root))
+        else {
+            return Vec::new();
+        };
+        watch::watched(&workspace, self.lookup.home.as_deref())
+            .into_iter()
+            .map(|watched| Watched {
+                path: watched.path,
+                scope: scope(watched.scope),
+            })
+            .collect()
     }
+}
+
+/// What a watched path is of, as a query names the holder it reads from.
+fn scope(scope: watch::Scope) -> serde_json::Value {
+    let holder = match scope {
+        watch::Scope::Workspace => Holder::Workspace,
+        watch::Scope::Project(entry) => Holder::Project(entry),
+    };
+    serde_json::to_value(holder).expect("a holder serializes")
 }
 
 /// The project a query's `holder` names by its entry in `workspace`, or none

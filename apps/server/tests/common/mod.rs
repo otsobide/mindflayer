@@ -8,12 +8,11 @@
 
 pub use axum::body::{Body, Bytes};
 pub use axum::http::{header, HeaderMap, Method, Request, StatusCode};
-pub use mindflayer_server::{Backend, Listening, Refusal, Server};
+pub use mindflayer_server::{Backend, Listening, Refusal, Server, Watched};
 pub use serde_json::{json, Value};
 pub use std::sync::{Arc, Condvar, Mutex};
 
 use serde::{Deserialize, Serialize, Serializer};
-use std::path::PathBuf;
 use std::time::Duration;
 use tower::ServiceExt;
 
@@ -88,6 +87,8 @@ pub struct Fake {
     pub runs: Arc<Mutex<Vec<String>>>,
     /// Where a task that asks to be held waits.
     pub hold: Arc<Hold>,
+    /// What it asks the server to watch, which a test changes as it goes.
+    pub watched: Arc<Mutex<Vec<Watched>>>,
 }
 
 impl Backend for Fake {
@@ -128,8 +129,8 @@ impl Backend for Fake {
         })
     }
 
-    fn watched_paths(&self) -> Vec<PathBuf> {
-        Vec::new()
+    fn watched_paths(&self) -> Vec<Watched> {
+        self.watched.lock().unwrap().clone()
     }
 }
 
