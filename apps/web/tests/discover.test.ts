@@ -84,6 +84,37 @@ describe('the page of what could be linked', () => {
     expect(page.get('[data-testid="scanned"]').text()).toContain(`${ROOT} to depth 3`)
   })
 
+  it('walks the disk again when Scan is pressed, never drawing what an earlier visit was answered with', async () => {
+    const { queries, transport } = answering(fixture('workspace'))
+    const { page, router } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)
+
+    // Away, then back by the sidebar's link, which names no folder: the
+    // form starts from the workspace's own folder again, the one scanned.
+    await router.push('/projects')
+    await router.push('/discover')
+    await flushPromises()
+    expect(page.find('[data-testid="not-asked"]').exists()).toBe(true)
+    await page.get('[data-testid="scan-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(scansAsked(queries)).toEqual([SCAN.query, SCAN.query])
+    expect(router.currentRoute.value.query.root).toEqual([ROOT])
+  })
+
+  it('walks the disk again for folders scanned earlier in the same visit', async () => {
+    const { queries, transport } = answering(fixture('workspace'))
+    const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)
+
+    for (const typed of ['/srv/git', ROOT]) {
+      await page.get('textarea[data-testid="scan-roots"]').setValue(typed)
+      await page.get('[data-testid="scan-form"]').trigger('submit')
+      await flushPromises()
+    }
+
+    expect(scansAsked(queries).map(query => query.type === 'scan' && query.roots)).toEqual([[ROOT], ['/srv/git'], [ROOT]])
+    expect(page.find('[data-testid="scanned"]').exists()).toBe(true)
+  })
+
   it('is never scanned again by what the server streams, only by asking', async () => {
     const { queries, tell, transport } = commanding()
     const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)

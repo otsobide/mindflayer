@@ -1,5 +1,5 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
-import { useQuery } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { useTransport } from './transport'
 
 /**
@@ -22,15 +22,30 @@ export interface Asked {
  * past what the server watches, and one run on every change would be a
  * crawl each time anything moved. Never stale, for the same reason, so
  * neither a page opened again nor the window coming back into focus walks
- * the disk; a page asks again itself (`refetch`), as after a run that
- * changed what is linked.
+ * the disk.
+ *
+ * Kept, so an answer outlives the address that asked for it, which is why
+ * the page asks again itself rather than trusting what is kept: `forget`
+ * drops what a scan of the folders about to be asked for was answered with
+ * before somebody's Scan changes the address to them, or Vue Query would
+ * draw an answer from before whatever was linked since and ask nothing,
+ * and `stale` marks every answer kept once a run has changed what is
+ * linked, the one on the page asked for again at once. A `gcTime` of 0 was
+ * the other way, and would walk the disk again for a page only opened
+ * again.
  */
 export function useScan(asked: MaybeRefOrGetter<Asked | undefined>) {
   const transport = useTransport()
-  return useQuery({
+  const client = useQueryClient()
+  const query = useQuery({
     queryKey: computed(() => ['scan', toValue(asked)]),
     queryFn: () => transport.query({ type: 'scan', ...toValue(asked)! }),
     enabled: computed(() => toValue(asked) !== undefined),
     staleTime: Infinity
   })
+  return {
+    ...query,
+    forget: (wanted: Asked) => client.removeQueries({ queryKey: ['scan', wanted], exact: true }),
+    stale: () => client.invalidateQueries({ queryKey: ['scan'] })
+  }
 }

@@ -4903,7 +4903,12 @@ for it again would run one on every change, every command and every tab
 shown again. A scan is never stale on its own either, so neither a page
 opened again nor the window coming back into focus walks the disk: the page
 asks again when it is told to scan, and after a run of its own, which
-changed what the scan found linked. While the
+changed what the scan found linked. Told to scan folders a kept answer
+holds, from an earlier visit or an earlier set of folders, it drops that
+answer before the address changes to them (`forget`), or Vue Query would
+draw it and ask nothing; a run marks every kept answer stale (`stale`),
+the one on the page asked for again at once. A `gcTime` of 0 was the other
+way, and would walk the disk again for a page only opened again. While the
 server says it is `watching`, an answer stays fresh until one of those
 marks it (`staleTime` of `Infinity`), so a page asks for nothing on
 opening. Otherwise, before the server has said and while it is

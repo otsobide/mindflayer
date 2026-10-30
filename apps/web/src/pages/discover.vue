@@ -28,7 +28,7 @@ const asked = computed<Asked | undefined>(() => {
 })
 
 const { data: snapshot } = useSnapshot()
-const { data: scanned, error, isFetching, refetch } = useScan(asked)
+const { data: scanned, error, isFetching, refetch, forget, stale } = useScan(asked)
 
 /**
  * The folders as typed, one a line, sent as they are for the server to
@@ -52,14 +52,18 @@ watch([asked, () => snapshot.value?.workspace.path], ([now, path]) => {
   }
 }, { immediate: true })
 
-/** Scan what the form says, or the same again when it says what was asked. */
+/**
+ * Scan what the form says, or the same again when it says what was asked:
+ * walked again either way, never an answer kept from an earlier visit or
+ * an earlier set of folders, which whatever was linked since has changed.
+ */
 function scan() {
-  const typed = roots.value.split('\n').filter(line => line !== '')
-  const same = JSON.stringify({ roots: typed, depth: depth.value }) === JSON.stringify(asked.value)
-  if (same) {
+  const wanted: Asked = { roots: roots.value.split('\n').filter(line => line !== ''), depth: depth.value }
+  if (JSON.stringify(wanted) === JSON.stringify(asked.value)) {
     void refetch()
   } else {
-    change({ root: typed, depth: depth.value === null ? undefined : String(depth.value) })
+    forget(wanted)
+    change({ root: wanted.roots, depth: wanted.depth === null ? undefined : String(wanted.depth) })
   }
 }
 
@@ -92,14 +96,15 @@ const writtenInto = computed(() => picked.value.filter(suggestion => suggestion.
  * Link what is marked: its marks, each with what the scan said it offers,
  * which the backend turns into the minds screen's batch (`Task::minds`), a
  * `mind init` before the link for a repository that is not a project yet.
- * The lines are shown before they run. The scan is asked again after, since
- * what it found linked has changed, and no event asks for it.
+ * The lines are shown before they run. The scan is asked again after, and
+ * any other kept marked stale, since what it found linked has changed, and
+ * no event asks for it.
  */
 async function link() {
   const marks = picked.value.map(suggestion => ({ path: suggestion.found.path, change: suggestion.offers as MindsChange }))
   const ran = await runner.ask({ type: 'marks', marks })
   if (ran) {
-    void refetch()
+    void stale()
   }
 }
 
@@ -107,7 +112,7 @@ async function link() {
 async function relink(suggestion: Suggestion) {
   const ran = await runner.ask({ type: 'relink', old: suggestion.moved_from!, new: suggestion.found.path })
   if (ran) {
-    void refetch()
+    void stale()
   }
 }
 
