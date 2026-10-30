@@ -58,6 +58,33 @@ nothing it ran wrote into the folder, and finds the reference's walk-through
 in the output of the commands it shows.
 An example whose summary changes changes the reference with it.
 
+### The README tours the panel; the reference holds the rest
+
+`README.md` is the first page anybody reads, here and on GitHub, so it says
+what Mindflayer is in a few lines, how to install it, `flayer ui`, and tours
+the panel in screenshots ([the README's
+screenshots](#the-readmes-screenshots)), with the few commands a newcomer
+needs. It had grown into a reference of close to 2,800 lines, every
+command's literal output among them, which buried all of that. The
+reference moved, whole and unchanged in substance, into
+[docs/reference.md](reference.md), how to build and test into
+[docs/development.md](development.md), and literal output is the
+reference's alone: `examples_test.rs` reads its walk-through of the
+examples from there.
+
+Every relative link in the README and under `docs/` is held to lead
+somewhere by `apps/cli/tests/docs_test.rs`: the file it names is there, an
+anchor names a heading as GitHub spells it (lowercased, punctuation
+dropped, spaces made hyphens, a repeated one numbered), and every image in
+`docs/images` is shown by some page, since one nobody shows is weight the
+history carries for nothing. A Rust test rather than a link checker from
+npm, so it runs in `test (cli)` and `make test` with no Node, as CI's Rust
+jobs have none, and offline: a link to another site is not fetched, or
+somebody else's outage would fail the build. It reads Markdown just far
+enough for that, skipping fenced blocks and code spans, where a link or a
+`#` is an example; the move into `docs/` found the one anchor that led
+nowhere.
+
 ### No em dash in what the repository says
 
 The owner finds the em dash reads as machine-written, so none is written:
@@ -5266,6 +5293,70 @@ links against libraries Playwright installs only on Debian and Ubuntu
 every action with the page and the requests at each step, in
 `test-results/`, and CI adds the HTML report.
 
+### The README's screenshots
+
+The README's pictures of the panel are taken, never drawn or captured by
+hand: a capture by hand drifts from the panel unnoticed, and shows whatever
+the machine it was taken on holds, a home's path and an account's name
+among it. `make docs/screenshots` builds the panel and the debug binaries
+as `make web/e2e` does and runs `e2e/screenshots.ts`, which reuses the
+suite's harness (`environment.ts`): every process without the variables
+that lead to a real workspace or agent home, an empty temporary home that
+has to be empty still once the server has stopped, every command naming
+its home, and every agent home empty.
+
+The workspace it shows is `e2e/demo.ts`'s rather than the suite's fixture,
+which is made to be compared and looks it: six projects with plausible
+names, each a repository `git init` made and `mind init` made a project,
+some local and some shared, for different agents; a library of two skills
+and three rules, with bodies to render; a shelf gathered from a repository
+beside the workspace, made with the git binary under a fixed author and
+date and no configuration of the user's; installs from both, three of them
+outdated, one by a second gather and one by an edit of the library's own;
+a rule stating `paths`, so a project's page warns that two of its agents
+never read it; and two repositories nobody linked, for Discover. Every
+change is a command; the files written by hand are the repositories'
+contents, as a person's work is, and each body of the library's own is
+written by `flayer edit --editor 'cp <draft>'`, as an editor saves it.
+
+It lives in `mindflayer-demo` under the system's temporary folder, always
+the same, rather than a folder made fresh for each run as the suite's is:
+every page shows the workspace's path, so a fresh name would change every
+image at every run, and a reader is better served by
+`/tmp/mindflayer-demo/Projects` than by a random suffix. A fixed name in a
+shared folder could be somebody else's, so a run removes it only when it
+carries the mark an earlier run left, and refuses it otherwise; the
+`.mind` or `.mindflayer` check above the temporary folder is the suite's.
+`flayer ui` is started there naming no workspace, so it finds the one it
+is in, as a person's does, and the overview says `above` rather than that
+`-W` named it.
+
+The tour is Playwright's library driving Chromium, not a spec: Playwright's
+runner would run the pages side by side, while the tour visits them once,
+in order: the preview of linking what Discover marked, then, once that has
+run, an unlink asked about and cancelled, and the transcript. Chromium
+alone, since the images are the same in WebKit, which does not run
+everywhere. The viewport is 1440 by 900, wide enough for a project's table
+with every column beside the sidebar (1280 cut its targets short), at a
+device scale of 1.25: one image pixel to a CSS pixel blurs once GitHub
+scales the image to its column and a dense screen scales it up again, and
+two doubled what each weighs, the busiest close to the budget. The colour
+mode is picked through the cookie the panel keeps it in (`src/preferences.ts`),
+light for the tour and dark as well for the project's page, which the README
+shows in a `<picture>` that follows the reader's.
+
+Before an image is written, the page is read, its URL, its markup and its
+text, for this account's home, a path under any other home but `/home/you`
+(the reference's stand-in, which the panel's own placeholders use), the
+account's name as a folder of a path, and the launch token, and any of
+them fails the run: the name only as a folder, since as a bare word it
+would be found in a page that says `root` or `admin` of something else. A
+page that threw, could not read the workspace, or says it cannot watch it
+fails too, as does an image over 300 KB, which regenerating would add to
+the history each time; each is near half that. Neither CI nor an aggregate
+runs it, since it needs Chromium and changes committed files: a change to
+what the panel shows runs it, looks at the images, and commits them.
+
 ### In `make test`, and in CI
 
 `web` is in the root `Makefile`'s `APPS` like any app, and first, so `make
@@ -7779,6 +7870,14 @@ project authors nothing of but the ledger records as a rule it received
 just listed.
 
 ## Open questions
+
+- **Nothing says when the screenshots are stale.** `make docs/screenshots`
+  takes them again, and AGENTS.md asks a change to what the panel shows to
+  run it, but no check fails when a page has changed and its image has
+  not: the images differ at every run (the port in the sidebar, when the
+  shelf was gathered), so a byte-for-byte check in CI would always fail,
+  and comparing pixels within a tolerance would need Chromium in a job,
+  and a tolerance somebody tunes.
 
 - **What of the snapshot no command prints.** #64 asked that whatever the
   panel shows, a script or an agent can print. `list --json` prints the

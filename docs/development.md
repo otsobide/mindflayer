@@ -58,6 +58,9 @@ own. Nor do they touch your agents' folders, which no command reads yet, and
 the commands they run themselves give every agent-home option empty. The server's suites never leave 127.0.0.1, and run
 against a fake front end rather than the CLI. The CLI's `ui` suite starts
 `flayer ui` on 127.0.0.1 with `--no-open`, so no test opens a browser.
+`docs_test.rs` holds the README and every page here to their relative
+links: a file one names has to be there, an anchor has to be a heading's,
+and every image in `docs/images` has to be shown by some page.
 
 ```bash
 cargo test -p mindflayer-cli --test tui_test          # one area
@@ -117,6 +120,7 @@ make web/clean         # remove dist/, what the browser suite wrote, and the too
 
 make web/e2e/browsers  # download Chromium and WebKit for the browser suite, once
 make web/e2e           # build the panel and the binaries, then drive them in both
+make docs/screenshots  # build them, then take the README's screenshots in Chromium
 
 make web/test PNPM='npx --yes pnpm@12.15.0'
 ```
@@ -206,3 +210,34 @@ policy, which lets nothing in from another host and nothing inline:
 
 A test also checks that every package installed carries a licence
 GPL-3.0-only can take in.
+
+### The README's screenshots
+
+The README tours the panel in pictures, and none is taken by hand. `make
+docs/screenshots` builds the panel and the debug binaries, as `make web/e2e`
+does, then runs `apps/web/e2e/screenshots.ts`: it builds a demo workspace by
+running `git`, `flayer` and `mind` (`e2e/demo.ts`: six projects, a library,
+a shelf gathered from a repository beside them, three installs behind
+where they came from, two repositories nobody linked), serves it with
+`flayer ui`, and opens each page of the tour in Chromium, in a 1440 by 900
+viewport at a device scale of 1.25, writing each into `docs/images`. It
+runs as the browser suite does, with no variable that leads to your
+workspaces or your agents' folders, an empty temporary home that has to be
+empty still at the end, and every command naming its home and every agent
+home. The project's page is taken in dark as well, for the README's
+`<picture>`; the rest of the tour is light.
+
+The demo is built in `mindflayer-demo` under the system's temporary folder,
+`/tmp/mindflayer-demo` on Linux, always the same place, since every page
+shows its paths. A run refuses that folder when something other than an earlier
+run of its own is there, and removes it when it is done. Before it writes
+an image, it reads the page for a path under a home (other than
+`/home/you`, the reference's stand-in, which the panel's own placeholders
+use), for your account's name as a folder, and for the launch token, and
+fails on any of them; it fails too on an image over 300 KB, which
+regenerating would add to the history every time.
+
+Run it whenever what the panel shows changes, look at every image it
+wrote, and commit them with the change. Chromium is enough, `make
+web/e2e/browsers BROWSERS=chromium`; like `make web/e2e` it leaves
+`apps/web/dist` behind, which `make web/clean` removes.

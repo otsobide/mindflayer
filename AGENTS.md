@@ -6,7 +6,12 @@ Mindflayer manages the skills and rules coding agents read, the way git manages
 code. A **mind project** (`.mind/settings.toml`) holds artifacts beside its
 code; a **flayer workspace** (`.mindflayer/flayer.toml`) links mind projects,
 holds artifacts of its own, gathers skills from git onto a shelf and installs
-them into projects. `README.md` is the user-facing surface.
+them into projects. `README.md` is the first page a newcomer reads: short,
+friendly and centred on the control panel (`flayer ui`), with screenshots
+`make docs/screenshots` takes and no command's output. `docs/reference.md`
+is the user-facing reference: every command with its literal output, the
+formats, `--json`, the TUI, the panel in full and upgrading.
+`docs/development.md` is how to build, test and work on the panel.
 `docs/architecture.md` records why each mechanism is the way it is: read the
 section for whatever you are about to change before changing it, and keep it
 true afterwards. Its "Decisions" section holds what the owner already chose for
@@ -59,6 +64,7 @@ make web/e2e/browsers     # Chromium and WebKit for the browser suite, into apps
 make web/e2e              # build the panel and the debug binaries, then drive them in both browsers
 make web/e2e BROWSERS=chromium ARGS='-g overview'            # where Playwright's WebKit cannot run, as on Arch
 make web/e2e/run E2E_BIN=<dir>                               # the suite alone, on the flayer and mind in <dir>
+make docs/screenshots     # build the panel and the binaries, then take the README's screenshots (Chromium)
 ```
 
 `make test` and `make build` run the panel's targets first (`web` is in the
@@ -98,6 +104,18 @@ the fixture. Playwright's WebKit needs libraries it installs only on Debian
 and Ubuntu (`WITH_DEPS=1`, with sudo): anywhere else run it with
 `BROWSERS=chromium`, and leave WebKit to CI's `e2e (web)`. A local `make
 web/e2e` writes `apps/web/dist`, as `make web/build` does.
+
+`make docs/screenshots` takes the README's images into `docs/images` with the
+same harness: `apps/web/e2e/screenshots.ts` builds the demo workspace
+(`e2e/demo.ts`) in `mindflayer-demo` under the system's temporary folder, a
+fixed place so the paths the images show stay put, serves it with
+`flayer ui`, and takes each page of the tour in Playwright's Chromium (`make
+web/e2e/browsers BROWSERS=chromium`). It fails on a page showing a path
+under a home other than the reference's `/home/you`, the account's name as a
+folder or the launch token, on an image over 300 KB, and unless its home is
+still empty; it removes the folder after. It writes `apps/web/dist` too.
+Neither CI nor an aggregate runs it: whoever changes what the panel shows
+runs it, looks at every image it wrote, and commits them.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -238,7 +256,9 @@ under `apps/` with its own `Makefile`:
   `environment.ts` what every process it starts runs in, `fixture.ts` the
   workspaces it builds with the commands, `panel.ts` what the specs share,
   and the specs; `playwright.config.ts`, beside `vite.config.ts`, starts
-  `flayer ui` over the shared workspace.
+  `flayer ui` over the shared workspace. Beside the suite, through the same
+  `environment.ts`, `demo.ts` builds the README's demo workspace and
+  `screenshots.ts` takes the images of it (`make docs/screenshots`).
 
 Beside them, `examples/` is content and not an app: a flayer workspace whose
 own two skills and two rules anyone can `flayer load` to try Mindflayer
@@ -1056,6 +1076,13 @@ These are easy to break from a single file without noticing.
   real command lines (`App::runner`).
 - Fixtures use `tempfile::TempDir`. Test names are sentences
   (`init_flayer_is_the_same_as_init`).
+- `apps/cli/tests/docs_test.rs` holds `README.md` and every page under
+  `docs/` to their relative links, in Rust so it runs without Node or the
+  network: each file a link names is there, each anchor is a heading's as
+  GitHub spells it, and each image in `docs/images` is shown by some page.
+  A link to another site is not followed. `examples_test.rs` finds the
+  reference's "Try it with the examples" walk-through in what the commands
+  print.
 
 ## Workflow
 
@@ -1087,8 +1114,13 @@ These are easy to break from a single file without noticing.
 - Commit messages: `<area>: <imperative summary>`, where area is `core`,
   `cli`, `server`, `web`, `docs`, `build`, `ci` or `chore` (`core, cli:` when
   a change spans two apps).
-- When behaviour changes, update the README (its examples are literal output,
-  so re-run them) and `docs/architecture.md`, including its "Open questions".
+- When behaviour changes, update `docs/reference.md` (its examples are
+  literal output, so re-run them) and `docs/architecture.md`, including its
+  "Open questions". Literal output belongs in the reference, never in the
+  README, which says what Mindflayer is and tours the panel in a few
+  screens. A change to what the panel shows, a page, a view or its look,
+  runs `make docs/screenshots`, and its PR carries the images it wrote; a
+  change to what the README says of the panel goes with it.
 
 ## Style
 
