@@ -5,7 +5,7 @@
  * developer's. The driver (run.ts), the config and the specs all read it
  * from here, so none of them can start a command some other way.
  */
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -163,4 +163,86 @@ export function succeed(at: Places, name: 'flayer' | 'mind', directory: string, 
     throw new Error(`\`${ran.line}\` exited ${ran.status}:\n${ran.stdout}${ran.stderr}`)
   }
   return ran
+}
+
+/**
+ * `flayer ui` as a person starts it over the workspace `at` names, on a
+ * port the system picks, with nothing opened: what the config starts the
+ * suite's server with, and `serve` a spec's own.
+ */
+export function ui(at: Places): string[] {
+  return ['ui', '--no-open', '--port', '0', '-C', at.workspace, ...pinned(at, 'fixture')]
+}
+
+/** A `flayer ui` a spec started, and how to stop it. */
+export interface Serving {
+  /** Where it listens: `http://127.0.0.1:<port>`. */
+  origin: string
+  token: string
+  /** The link it printed, which trades the token for the cookie. */
+  link: string
+  /** Ctrl-C, as a person stops it, and wait until it has. */
+  stop(): Promise<void>
+}
+
+/** The link `flayer ui` prints first on stdout, and the only line there while it serves. */
+const LINK = /^(?<origin>http:\/\/127\.0\.0\.1:\d+)\/\?token=(?<token>[0-9a-f]+)$/m
+
+/**
+ * Start `flayer ui` over the workspace `at` names, as the config starts the
+ * suite's, from that workspace with the environment `environment` gives,
+ * and answer once it printed its link: for a spec that changes a workspace
+ * of its own, which no other spec reads. Its stdout is read, never
+ * printed, so the token stays out of the log.
+ */
+export function serve(at: Places): Promise<Serving> {
+  const child = spawn(binary(at.bin, 'flayer'), ui(at), {
+    cwd: at.workspace,
+    env: environment(at),
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+  return new Promise((resolve, refuse) => {
+    let printed = ''
+    let said = ''
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      refuse(new Error(`flayer ui printed no link within a minute:\n${said}`))
+    }, 60_000)
+    child.stderr!.setEncoding('utf8').on('data', (chunk: string) => (said += chunk))
+    child.stdout!.setEncoding('utf8').on('data', (chunk: string) => {
+      printed += chunk
+      const link = LINK.exec(printed)
+      if (link?.groups) {
+        clearTimeout(timer)
+        resolve({ origin: link.groups.origin!, token: link.groups.token!, link: link[0], stop: () => stopped(child) })
+      }
+    })
+    child.on('error', (error) => {
+      clearTimeout(timer)
+      refuse(error)
+    })
+    child.on('exit', (code) => {
+      clearTimeout(timer)
+      refuse(new Error(`flayer ui exited ${code} before it printed a link:\n${said}`))
+    })
+  })
+}
+
+/**
+ * `child` stopped with the Ctrl-C a person stops `flayer ui` with, which
+ * lets it close every event stream and finish what it runs, and killed if
+ * it has not stopped ten seconds later.
+ */
+function stopped(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve()
+  }
+  return new Promise((done) => {
+    const timer = setTimeout(() => child.kill('SIGKILL'), 10_000)
+    child.on('exit', () => {
+      clearTimeout(timer)
+      done()
+    })
+    child.kill('SIGINT')
+  })
 }

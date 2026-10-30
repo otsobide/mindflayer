@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
-import { binary, given, pinned } from './e2e/environment.ts'
+import { binary, given, ui } from './e2e/environment.ts'
 
 /*
  * The panel end to end: the binary under test serving the fixture workspace
@@ -44,7 +44,7 @@ export default defineConfig({
     name: 'flayer ui',
     // `exec`, so the shell Playwright starts it through gives its place to
     // the server, and the Ctrl-C below reaches the server alone.
-    command: `exec ${[binary(at.bin, 'flayer'), 'ui', '--no-open', '--port', '0', '-C', at.workspace, ...pinned(at, 'fixture')].map(quoted).join(' ')}`,
+    command: `exec ${[binary(at.bin, 'flayer'), ...ui(at)].map(quoted).join(' ')}`,
     // From the fixture, so not even the process's own folder is in the
     // repository, which sits under the developer's home.
     cwd: at.workspace,
