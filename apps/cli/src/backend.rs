@@ -6,8 +6,9 @@
 //! [`Task`] the TUI runs, and an [`Outcome`] of its own. It is a front end
 //! as the TUI is, and works as the TUI does (D-18): a read is a query core
 //! answers, the snapshot or a file's contents, and a change is a task turned
-//! into the command lines it is, each shown before it runs, then run through
-//! the real parsers ([`run_line`]) on the server's one writer thread.
+//! into the command lines it is, each shown before it runs, with what of it
+//! the panel has somebody confirm first ([`Confirm`]), then run through the
+//! real parsers ([`run_line`]) on the server's one writer thread.
 //!
 //! What it adds is distrust, since every request comes from a browser:
 //!
@@ -26,6 +27,10 @@
 //! - **A task no front end without a terminal runs is refused**
 //!   ([`Task::refusal`]): a screen, an editor, a shell's code, a gather, and
 //!   `show`, which prints an artifact whole through any link.
+//! - **A scan walks only the folders the browser names**, each held to the
+//!   path policy as a folder to link is, and is only read: it is asked for
+//!   by hand ([`Query::Scan`]), never with the snapshot, which a live update
+//!   reads again on every change.
 //! - **A file reaches the browser only as text inside JSON**, held to its
 //!   holder once its links are followed, and never larger than core's cap
 //!   ([`Contents`]): the one way a file's contents leave, since `show` is
@@ -42,17 +47,18 @@ use std::sync::{Arc, Mutex, PoisonError};
 use mindflayer_core::code::Said;
 use mindflayer_core::contents::{Contents, Files};
 use mindflayer_core::gather::Watch;
-use mindflayer_core::policy;
 use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
+use mindflayer_core::scan::{self, Order, DEFAULT_DEPTH};
 use mindflayer_core::view::Snapshot;
-use mindflayer_core::watch;
-use mindflayer_core::{FlayerWorkspace, MindProject, FLAYER_CONFIG, FLAYER_DIR};
-use mindflayer_server::{Backend, Refusal, Watched};
+use mindflayer_core::{paths, policy, watch};
+use mindflayer_core::{FlayerWorkspace, Found, MindProject, Scan, FLAYER_CONFIG, FLAYER_DIR};
+use mindflayer_server::{Backend, Preview, Refusal, Watched};
 use serde::{Deserialize, Serialize};
 
 use crate::admit::Admission;
+use crate::commands::project::{scan_warned, worth_linking};
 use crate::commands::{run_line, Ran};
-use crate::task::{shell, Holder, Task};
+use crate::task::{cautioned, shell, Caution, Holder, MindsChange, Task};
 use crate::tui::state::{transcript, Done};
 use crate::{CliError, Lookup, Warning};
 
@@ -62,7 +68,8 @@ use crate::{CliError, Lookup, Warning};
 /// `{"type": "snapshot"}`, `{"type": "files", "holder": {"type":
 /// "workspace"}, "reference": "skill:deploy"}`, `{"type": "contents",
 /// "holder": {"type": "workspace"}, "reference": "skill:deploy", "file":
-/// "SKILL.md"}`. A field a query does not have is refused, as a task's is.
+/// "SKILL.md"}`, `{"type": "scan", "roots": ["/home/you/Work"], "depth":
+/// null}`. A field a query does not have is refused, as a task's is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -85,6 +92,119 @@ pub enum Query {
         reference: String,
         file: String,
     },
+    /// What could be linked under `roots`, `depth` levels down, as `flayer
+    /// scan --suggest` finds it ([`Scanned`]): each root an absolute,
+    /// normalized path outside every `.mindflayer` ([`policy::path`]), as a
+    /// folder to link is, which is only read; none is the workspace's root,
+    /// and no depth core's own (`scan::DEFAULT_DEPTH`), as for the command.
+    ///
+    /// A query of its own, asked for only when somebody asks, rather than a
+    /// part of the snapshot: a scan walks the disk far past what a snapshot
+    /// reads, and a live update reads the snapshot again on every change.
+    Scan {
+        roots: Vec<String>,
+        depth: Option<usize>,
+    },
+}
+
+/// What a scan the panel asked for found ([`Query::Scan`]): what `flayer
+/// scan --suggest --json` prints, each directory with what the panel needs
+/// to offer it, and what the command warns of beside it.
+///
+/// A shape of the backend's rather than the envelope the command prints,
+/// since what it adds to each directory is a front end's: the words the
+/// command says why in, what marking it asks for, and the entry a relink
+/// names. Each worked out here, in Rust, where the minds screen works out
+/// the same, rather than by the panel from the scan's fields.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Scanned {
+    /// Where it looked, each once, in the order given: the workspace's root
+    /// when it was given none.
+    pub roots: Vec<String>,
+    /// How many levels below each root it looked.
+    pub depth: usize,
+    /// Every directory it found, in the order `flayer scan --suggest` ranks
+    /// them: what is not linked first, most worth linking first, then what
+    /// is.
+    pub found: Vec<Suggestion>,
+    /// Each entry where no project is any more whose id the ledger never
+    /// learned, as the scan spells it: what `flayer relink <entry> <path>`
+    /// follows, which only somebody who knows where it went can type.
+    pub untraced: Vec<String>,
+    /// Whether it stopped at core's bound before looking everywhere, which
+    /// `warnings` says too.
+    pub truncated: bool,
+    /// What it could not read, and that it stopped early, as `flayer scan`
+    /// warns of them, each with its code.
+    pub warnings: Vec<Warning>,
+}
+
+/// One directory a scan found, and what the panel offers for it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Suggestion {
+    /// What `flayer scan --json` prints of it.
+    pub found: Found,
+    /// Why it is worth linking, in the words `flayer scan --suggest` and the
+    /// minds screen say it in ([`worth_linking`]); none for one linked.
+    pub why: Option<String>,
+    /// What marking it asks for ([`MindsChange::of_found`]): linking it, or
+    /// making it a project first. None for one linked, and for one found
+    /// moved, which wants a relink rather than a second entry beside the one
+    /// it left stale.
+    pub offers: Option<MindsChange>,
+    /// The entry it moved from, as the marker spells it, which a relink
+    /// names: matched by core's `scan::moved_from`, as the minds screen
+    /// matches it, since the scan spells `moved` as `flayer link` would
+    /// take it. None when it did not move.
+    pub moved_from: Option<String>,
+}
+
+impl Scanned {
+    /// What `scan` found in `workspace`, as the panel is answered with it.
+    fn of(workspace: &FlayerWorkspace, scan: &Scan) -> Scanned {
+        let members = workspace.members();
+        let left = |moved: &str| {
+            members
+                .iter()
+                .find(|member| scan::moved_from(moved, workspace.root(), &member.root))
+                .and_then(|member| paths::to_config_string(&member.entry))
+        };
+        let found = scan
+            .found
+            .iter()
+            .map(|found| {
+                let moved_from = found.moved.as_deref().and_then(left);
+                Suggestion {
+                    why: (!found.linked).then(|| {
+                        worth_linking(
+                            &found.route,
+                            found.moved.as_deref(),
+                            found.reason,
+                            &found.agent_files,
+                        )
+                    }),
+                    offers: (!found.linked && moved_from.is_none())
+                        .then(|| MindsChange::of_found(found.mind)),
+                    moved_from,
+                    found: found.clone(),
+                }
+            })
+            .collect();
+        Scanned {
+            roots: scan
+                .roots
+                .iter()
+                .map(|root| root.to_string_lossy().into_owned())
+                .collect(),
+            depth: scan.depth,
+            found,
+            untraced: scan.untraced.clone(),
+            truncated: scan.truncated,
+            warnings: scan_warned(scan),
+        }
+    }
 }
 
 /// What running a task's lines produced.
@@ -114,6 +234,23 @@ pub struct Run {
     /// Whether it ran and found everything in order: what its exit status
     /// would have said.
     pub ok: bool,
+}
+
+/// One thing a line of a task takes away, which the panel has somebody
+/// confirm before it asks for the run: an item of a preview's `confirm`,
+/// one for each [`Caution`] of each line ([`cautioned`]).
+///
+/// The words beside the word, so the panel says what a line takes in the
+/// CLI's words rather than its own, and draws by the word alone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Confirm {
+    /// Which of the preview's lines, by its place among them, from 0.
+    pub line: usize,
+    /// What it takes away.
+    pub caution: Caution,
+    /// The same, said for whoever is asked.
+    pub message: String,
 }
 
 /// The backend over the workspace a panel was launched on.
@@ -290,16 +427,43 @@ impl Backend for PanelBackend {
                 .map_err(|error| refused(error.code(), error))?;
                 Ok(serde_json::to_value(contents).expect("contents serialize"))
             }
+            Query::Scan { roots, depth } => {
+                let roots = roots
+                    .iter()
+                    .map(|root| policy::path(root))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|error| refused(error.code(), error))?;
+                let request = scan::Request {
+                    roots,
+                    depth: depth.unwrap_or(DEFAULT_DEPTH),
+                    from: None,
+                    order: Order::Suggested,
+                };
+                let scanned = Scanned::of(&workspace, &scan::scan(&workspace, &request));
+                Ok(serde_json::to_value(scanned).expect("a scan serializes"))
+            }
         }
     }
 
-    fn preview(&self, task: &Task) -> Result<Vec<String>, Refusal> {
-        Ok(self
-            .plan(task)?
-            .lines
-            .iter()
-            .map(|line| shell(line))
-            .collect())
+    /// Each line as a shell would read it, and what the panel has somebody
+    /// confirm first, both of the one plan: so what the panel asks about is
+    /// the lines it shows, a `flayer init` in front of them counted.
+    fn preview(&self, task: &Task) -> Result<Preview, Refusal> {
+        let plan = self.plan(task)?;
+        let confirm = cautioned(&plan.lines)
+            .into_iter()
+            .map(|(line, caution)| Confirm {
+                line,
+                caution,
+                message: caution.to_string(),
+            })
+            // A number, a word and its words: nothing to fail on.
+            .map(|confirm| serde_json::to_value(confirm).expect("a confirm serializes"))
+            .collect();
+        Ok(Preview {
+            lines: plan.lines.iter().map(|line| shell(line)).collect(),
+            confirm,
+        })
     }
 
     /// Planned again rather than trusted to the preview the server asked

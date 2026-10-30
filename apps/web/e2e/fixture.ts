@@ -58,3 +58,19 @@ function project(at: Places, name: string, options: string[]): void {
   succeed(at, 'mind', folder, ['init', ...options])
   succeed(at, 'flayer', at.workspace, ['link', name])
 }
+
+/**
+ * A workspace for a spec that changes it, which no other spec reads: two
+ * projects beside it, `drafts` linked and `notes` not, each made by `mind
+ * init` and nothing else, so that a link or an unlink from the panel can be
+ * held byte for byte to what the same command leaves in a copy of it.
+ */
+export function changeable(at: Places): void {
+  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
+  for (const name of ['drafts', 'notes']) {
+    const folder = join(at.workspace, name)
+    mkdirSync(folder)
+    succeed(at, 'mind', folder, ['init'])
+  }
+  succeed(at, 'flayer', at.workspace, ['link', 'drafts'])
+}

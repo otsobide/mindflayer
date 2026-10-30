@@ -4,11 +4,11 @@
 use std::fs;
 use std::path::Path;
 
-use mindflayer_core::{Kind, MindProject};
+use mindflayer_core::{Agent, Kind, MindProject, Share};
 use tempfile::TempDir;
 
 use super::*;
-use crate::task::shell;
+use crate::task::{shell, Mark, MindsChange, Toggles};
 
 /// A workspace at `work` linking `alpha` under it and `beside` next to it,
 /// and loading `library`, next to it too: nothing above any of them, so
@@ -78,6 +78,34 @@ fn a_project_held_by_its_entry_is_named_to_the_command_by_its_folder() {
             "mind -C {} add skill deploy 'Ship it'",
             text(&alpha)
         )]
+    );
+}
+
+#[test]
+fn a_project_s_toggles_are_held_to_its_entry_and_named_by_its_folder() {
+    let (_dir, workspace) = fixture();
+    let alpha = text(&workspace.root().join("alpha"));
+    let toggles = |agents: &[Agent], share| Toggles {
+        agents: agents.to_vec(),
+        share,
+        edit_tracked: false,
+    };
+    let toggled = |entry: &str| Task::Toggled {
+        holder: Holder::Project(entry.to_owned()),
+        was: toggles(&[Agent::Claude], Share::Shared),
+        now: toggles(&[Agent::Codex, Agent::Claude], Share::Local),
+    };
+
+    assert_eq!(
+        lines(&workspace, &toggled("alpha")),
+        [
+            format!("mind -C {alpha} agents --yes claude codex"),
+            format!("mind -C {alpha} share --yes local"),
+        ]
+    );
+    assert_eq!(
+        code(admitted(&workspace, &toggled("beta"))),
+        "not_registered"
     );
 }
 
@@ -171,6 +199,24 @@ fn each_project_an_install_names_is_named_by_its_folder() {
         project: String::from("gamma"),
         kind: Kind::Skill,
         name: String::from("deploy"),
+    };
+    assert_eq!(code(admitted(&workspace, &unknown)), "not_registered");
+    assert_eq!(
+        lines(
+            &workspace,
+            &Task::Migrate {
+                project: String::from("../beside"),
+                yes: true,
+            }
+        ),
+        [format!(
+            "flayer migrate -p {} --yes",
+            text(&dir.path().join("beside"))
+        )]
+    );
+    let unknown = Task::Migrate {
+        project: String::from("gamma"),
+        yes: false,
     };
     assert_eq!(code(admitted(&workspace, &unknown)), "not_registered");
 }
@@ -298,10 +344,59 @@ fn a_folder_that_is_not_absolute_normalized_and_outside_any_workspace_folder_is_
                 link: vec![path.to_owned()],
                 unlink: Vec::new(),
             },
+            marks(&[(path, MindsChange::Link)]),
+            marks(&[(path, MindsChange::InitAndLink)]),
         ] {
             assert_eq!(code(admitted(&workspace, &task)), expected, "{task:?}");
         }
     }
+}
+
+/// The panel's marks, each a path and what to do to it.
+fn marks(marked: &[(&str, MindsChange)]) -> Task {
+    Task::Marks {
+        marks: marked
+            .iter()
+            .map(|(path, change)| Mark {
+                path: (*path).to_owned(),
+                change: *change,
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn marks_on_folders_go_to_the_minds_screen_s_lines_as_given() {
+    let (dir, workspace) = fixture();
+    let fresh = dir.path().join("fresh");
+    fs::create_dir(&fresh).unwrap();
+    let fresh = text(&fresh);
+    let beside = text(&dir.path().join("beside"));
+    let other = text(&dir.path().join("other"));
+
+    assert_eq!(
+        lines(
+            &workspace,
+            &marks(&[
+                (&other, MindsChange::Link),
+                (&fresh, MindsChange::InitAndLink),
+                (&beside, MindsChange::Unlink),
+            ])
+        ),
+        [
+            format!("mind -C {fresh} init"),
+            format!("flayer link {other} {fresh}"),
+            format!("flayer unlink {beside}"),
+        ]
+    );
+    let library = text(&dir.path().join("library"));
+    assert_eq!(
+        code(admitted(
+            &workspace,
+            &marks(&[(&library, MindsChange::Unlink)])
+        )),
+        "not_registered"
+    );
 }
 
 #[test]

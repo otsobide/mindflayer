@@ -1,0 +1,161 @@
+<script setup lang="ts">
+import { computed, ref, useTemplateRef, watch, type ComponentPublicInstance } from 'vue'
+import type { Caution } from '@/api/generated/Caution'
+import type { Confirm } from '@/api/generated/Confirm'
+import { useRunner, type Asking } from '@/api/commands'
+
+const runner = useRunner()
+const { asking, running } = runner
+
+// What is drawn: the task asked about, kept as it was while the dialog
+// closes, so its lines do not empty out as it fades.
+const shown = ref<Asking>()
+watch(asking, (value) => {
+  if (value) {
+    shown.value = value
+  }
+}, { immediate: true })
+
+const confirming = computed(() => (shown.value?.preview.confirm.length ?? 0) > 0)
+
+// Closed by Escape, the overlay or its close button, which is a no; never
+// while the run is under way, which nobody can take back.
+const open = computed({
+  get: () => asking.value !== undefined,
+  set: (value: boolean) => {
+    if (!value) {
+      runner.cancel()
+    }
+  }
+})
+
+/** Each line the server previewed, with what the backend says it takes away. */
+interface Line {
+  line: string
+  cautions: Confirm[]
+}
+
+const lines = computed<Line[]>(() => {
+  const preview = shown.value?.preview
+  if (!preview) {
+    return []
+  }
+  return preview.lines.map((line, index) => ({ line, cautions: preview.confirm.filter(each => each.line === index) }))
+})
+
+const title = computed(() => {
+  if (confirming.value) {
+    return 'Confirm what this takes away'
+  }
+  return lines.value.length === 1 ? 'Run this command?' : `Run these ${lines.value.length} commands?`
+})
+
+const description = computed(() =>
+  confirming.value
+    ? 'Read what each line takes away: nothing runs until you confirm.'
+    : 'The panel runs exactly these lines, as you could type them in the workspace\'s folder.'
+)
+
+// How each caution looks, and nothing it means: the word and its words are
+// the backend's, both always said, so the icon only repeats them. Partial,
+// with a plain look for the rest, so a caution the CLI adds is drawn by its
+// words before anybody gives it an icon of its own.
+const ICONS: Partial<Record<Caution, string>> = {
+  removes: 'i-lucide-trash',
+  uninstalls: 'i-lucide-package-minus',
+  unlinks: 'i-lucide-unlink',
+  unloads: 'i-lucide-unplug',
+  forces: 'i-lucide-pencil-off'
+}
+
+const PLAIN = 'i-lucide-triangle-alert'
+
+const cancelButton = useTemplateRef<ComponentPublicInstance>('cancel')
+const runButton = useTemplateRef<ComponentPublicInstance>('run')
+
+// Focus on what a slip of the Enter key would do least harm with: cancel,
+// when the lines take something away; run, when they only add.
+function focus(event: Event) {
+  event.preventDefault()
+  const button = confirming.value ? cancelButton.value : runButton.value
+  ;(button?.$el as HTMLElement | undefined)?.focus()
+}
+</script>
+
+<template>
+  <UModal
+    v-model:open="open"
+    :title="title"
+    :description="description"
+    :dismissible="!running"
+    :close="!running"
+    :content="{ onOpenAutoFocus: focus }"
+  >
+    <template #body>
+      <ol
+        class="space-y-3"
+        aria-label="The lines it runs"
+        data-testid="preview"
+      >
+        <li
+          v-for="(each, index) in lines"
+          :key="index"
+          data-testid="line"
+        >
+          <code
+            class="block rounded-md border border-default bg-muted px-3 py-2 font-mono text-xs break-all text-highlighted"
+            data-testid="command"
+          ><span
+            class="select-none text-dimmed"
+            aria-hidden="true"
+          >$ </span>{{ each.line }}</code>
+          <ul
+            v-if="each.cautions.length > 0"
+            class="mt-2 space-y-1.5"
+          >
+            <li
+              v-for="caution in each.cautions"
+              :key="caution.caution"
+              class="flex items-start gap-2 text-sm"
+              data-testid="caution"
+            >
+              <UIcon
+                :name="ICONS[caution.caution] ?? PLAIN"
+                class="mt-0.5 size-4 shrink-0 text-error"
+                aria-hidden="true"
+                :data-icon="ICONS[caution.caution] ?? PLAIN"
+              />
+              <span class="min-w-0">
+                <span class="me-2 font-mono text-xs font-medium text-error">{{ caution.caution }}<span class="sr-only">:</span></span>
+                {{ caution.message }}
+              </span>
+            </li>
+          </ul>
+        </li>
+      </ol>
+    </template>
+
+    <template #footer>
+      <div class="flex w-full justify-end gap-2">
+        <UButton
+          ref="cancel"
+          label="Cancel"
+          color="neutral"
+          variant="outline"
+          :disabled="running"
+          data-testid="cancel"
+          @click="runner.cancel()"
+        />
+        <UButton
+          ref="run"
+          :label="confirming ? 'Confirm and run' : 'Run'"
+          :color="confirming ? 'error' : 'primary'"
+          :icon="confirming ? 'i-lucide-triangle-alert' : 'i-lucide-play'"
+          :loading="running"
+          data-testid="run"
+          @click="runner.run()"
+        />
+      </div>
+    </template>
+  </UModal>
+</template>

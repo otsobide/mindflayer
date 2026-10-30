@@ -254,7 +254,7 @@ fn status_warns_that_no_agent_reads_the_targets_once_they_are_set() {
 }
 
 /// Point every agent of the project at `root` at its `.skills`, as the
-/// README does: each folder they read made a link there.
+/// reference does: each folder they read made a link there.
 #[cfg(unix)]
 fn link_the_agents_to_skills(root: &Path) {
     for folder in [".claude", ".agents"] {

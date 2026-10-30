@@ -1,8 +1,12 @@
 <script setup lang="ts">
+import { useShell } from '@/stores/shell'
+
 defineProps<{
   title: string
   icon?: string
 }>()
+
+const shell = useShell()
 </script>
 
 <template>
@@ -20,6 +24,17 @@ defineProps<{
 
     <template #right>
       <slot />
+      <UTooltip text="Transcript: every task this session ran">
+        <UButton
+          icon="i-lucide-scroll-text"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          aria-label="Transcript"
+          data-testid="open-transcript"
+          @click="shell.transcriptOpen = true"
+        />
+      </UTooltip>
       <UColorModeButton size="sm" />
     </template>
   </UDashboardNavbar>

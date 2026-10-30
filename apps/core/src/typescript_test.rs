@@ -15,6 +15,7 @@ use crate::contents::Withheld;
 use crate::kind::Kind;
 use crate::ledger::SourceKind;
 use crate::resolve::Reason;
+use crate::scan;
 use crate::settings::{ProjectId, Share};
 use crate::status::State;
 use crate::template::{Origin, Template};
@@ -106,6 +107,12 @@ fn every_word_type_says_in_typescript_the_words_serde_writes() {
         MarkerFile::SettingsToml,
     ]);
     says_what_serde_writes(&[SourceKind::Git]);
+    says_what_serde_writes(&[
+        scan::Reason::Id,
+        scan::Reason::Mind,
+        scan::Reason::Agents,
+        scan::Reason::Git,
+    ]);
     says_what_serde_writes(&[Withheld::Binary, Withheld::TooLarge]);
 }
 
@@ -119,6 +126,21 @@ fn a_word_type_is_declared_as_the_union_of_its_words() {
         Agent::decl(&Config::new()),
         r#"type Agent = "claude" | "codex" | "opencode";"#
     );
+}
+
+/// A scan's reason under a name of its own, in a file of its own, apart
+/// from the rule that chose a workspace, which is `Reason` in both.
+#[test]
+fn a_word_type_named_apart_is_declared_and_written_under_that_name() {
+    assert_eq!(
+        scan::Reason::decl(&Config::new()),
+        r#"type ScanReason = "id" | "mind" | "agents" | "git";"#
+    );
+    assert_eq!(
+        scan::Reason::output_path(),
+        Some(PathBuf::from("ScanReason.ts"))
+    );
+    assert_eq!(Reason::output_path(), Some(PathBuf::from("Reason.ts")));
 }
 
 /// What the TypeScript is read off holds one issue of each code, so no

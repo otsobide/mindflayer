@@ -9,6 +9,7 @@ import AgentBadges from '@/components/AgentBadges.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
 import HealthBadge from '@/components/HealthBadge.vue'
+import LinkForm from '@/components/LinkForm.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import { useSnapshot } from '@/api/snapshot'
 import { first, useQueryChange } from '@/address'
@@ -137,6 +138,19 @@ function clear() {
 
     <template #body>
       <SnapshotGate v-slot="{ snapshot }">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <LinkForm />
+          <UButton
+            label="Discover projects to link"
+            icon="i-lucide-radar"
+            to="/discover"
+            color="neutral"
+            variant="outline"
+            size="sm"
+            data-testid="discover"
+          />
+        </div>
+
         <div
           v-if="snapshot.projects.length === 0"
           class="flex flex-col items-start gap-3"

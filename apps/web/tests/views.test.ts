@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { Health } from '@/api/generated/Health'
-import { fixture, render, unmount } from './panel'
+import { commanding, fixture, render, unmount } from './panel'
 
 /** Every `<style>` element anything adds while a test runs, which the CSP would refuse. */
 let styles: Element[]
@@ -57,7 +58,7 @@ function everyLook() {
 }
 
 describe('the views', () => {
-  it.each(['/', '/projects', '/projects?sort=name', '/projects?sort=name&order=desc', '/project?entry=api', '/project?entry=docs', '/project?entry=gone', '/library', '/library?kind=rule', '/artifact?kind=skill&name=review&file=SKILL.md', '/artifact?kind=rule&name=style/comments', '/shelf', '/shelf?kind=skill', '/sources'])(
+  it.each(['/', '/projects', '/projects?sort=name', '/projects?sort=name&order=desc', '/project?entry=api', '/project?entry=docs', '/project?entry=gone', '/library', '/library?kind=rule', '/artifact?kind=skill&name=review&file=SKILL.md', '/artifact?kind=rule&name=style/comments', '/shelf', '/shelf?kind=skill', '/sources', '/discover', '/discover?root=%2Fhome%2Fyou%2FProjects'])(
     '%s draws every icon from the bundle and adds no style element',
     async (path) => {
       const { page } = await render(path, everyLook())
@@ -66,4 +67,19 @@ describe('the views', () => {
       expect(styles).toEqual([])
     }
   )
+})
+
+describe('what a project an older marker marks offers', () => {
+  it('draws every icon from the bundle, its dry run shown, and adds no style element', async () => {
+    const { transport } = commanding(fixture('candidates'))
+    const { page } = await render('/project?entry=legacy', transport)
+
+    await page.get('[data-testid="migrate-dry"]').trigger('click')
+    await flushPromises()
+    document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await vi.waitFor(() => expect(page.find('[data-testid="migrate-yes"]').exists()).toBe(true))
+
+    drawsEveryIcon(page)
+    expect(styles).toEqual([])
+  })
 })

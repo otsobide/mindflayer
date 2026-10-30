@@ -6,7 +6,12 @@ Mindflayer manages the skills and rules coding agents read, the way git manages
 code. A **mind project** (`.mind/settings.toml`) holds artifacts beside its
 code; a **flayer workspace** (`.mindflayer/flayer.toml`) links mind projects,
 holds artifacts of its own, gathers skills from git onto a shelf and installs
-them into projects. `README.md` is the user-facing surface.
+them into projects. `README.md` is the first page a newcomer reads: short,
+friendly and centred on the control panel (`flayer ui`), with screenshots
+`make docs/screenshots` takes and no command's output. `docs/reference.md`
+is the user-facing reference: every command with its literal output, the
+formats, `--json`, the TUI, the panel in full and upgrading.
+`docs/development.md` is how to build, test and work on the panel.
 `docs/architecture.md` records why each mechanism is the way it is: read the
 section for whatever you are about to change before changing it, and keep it
 true afterwards. Its "Decisions" section holds what the owner already chose for
@@ -59,6 +64,7 @@ make web/e2e/browsers     # Chromium and WebKit for the browser suite, into apps
 make web/e2e              # build the panel and the debug binaries, then drive them in both browsers
 make web/e2e BROWSERS=chromium ARGS='-g overview'            # where Playwright's WebKit cannot run, as on Arch
 make web/e2e/run E2E_BIN=<dir>                               # the suite alone, on the flayer and mind in <dir>
+make docs/screenshots     # build the panel and the binaries, then take the README's screenshots (Chromium)
 ```
 
 `make test` and `make build` run the panel's targets first (`web` is in the
@@ -98,6 +104,18 @@ the fixture. Playwright's WebKit needs libraries it installs only on Debian
 and Ubuntu (`WITH_DEPS=1`, with sudo): anywhere else run it with
 `BROWSERS=chromium`, and leave WebKit to CI's `e2e (web)`. A local `make
 web/e2e` writes `apps/web/dist`, as `make web/build` does.
+
+`make docs/screenshots` takes the README's images into `docs/images` with the
+same harness: `apps/web/e2e/screenshots.ts` builds the demo workspace
+(`e2e/demo.ts`) in `mindflayer-demo` under the system's temporary folder, a
+fixed place so the paths the images show stay put, serves it with
+`flayer ui`, and takes each page of the tour in Playwright's Chromium (`make
+web/e2e/browsers BROWSERS=chromium`). It fails on a page showing a path
+under a home other than the reference's `/home/you`, the account's name as a
+folder or the launch token, on an image over 300 KB, and unless its home is
+still empty; it removes the folder after. It writes `apps/web/dist` too.
+Neither CI nor an aggregate runs it: whoever changes what the panel shows
+runs it, looks at every image it wrote, and commits them.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -168,8 +186,10 @@ under `apps/` with its own `Makefile`:
   its own, and `src/homes.rs` decides the default home and the agent
   homes, and gathers them with `-W` and `$MINDFLAYER_WORKSPACE` into a
   `Lookup`. `src/task.rs` holds `Task`, work a front end asks for as the
-  command lines it is, every front end's rather than the TUI's alone, and
-  `Refusal`, what a front end with no terminal does not run.
+  command lines it is, every front end's rather than the TUI's alone,
+  `Refusal`, what a front end with no terminal does not run, and
+  `Caution`, what a line takes away, which such a front end asks about
+  first.
   `commands::run_line` runs one line a front end built, for the TUI and the
   panel alike. `src/admit.rs` holds a task sent from outside to the path
   policy (`Admission`), and `src/backend.rs` is the panel's backend
@@ -197,12 +217,18 @@ under `apps/` with its own `Makefile`:
   too. `src/api/transport.ts` is the `Transport` interface and `useTransport`,
   and `src/api/http.ts` its HTTP implementation, `src/api/snapshot.ts` the
   one query of the snapshot every view reads, `src/api/artifact.ts` the
-  queries of an artifact's files and of one file, and `src/api/live.ts` the
+  queries of an artifact's files and of one file, `src/api/live.ts` the
   tab's one subscription to the server's events, which it turns into what
-  Vue Query asks for again, and how the server watches. `src/pages/` holds one
+  Vue Query asks for again, how the server watches, and how a run waits for
+  its views (`settle`), `src/api/commands.ts` the runner every change goes
+  through (`useRunner`: a task previewed, shown, confirmed when it takes
+  something away, and run), `src/api/transcript.ts` the query of the
+  server's transcript, and `src/api/scan.ts` the query of a scan, asked for
+  by hand. `src/pages/` holds one
   page per route (file routes): the overview (`index`), the projects
   (`projects`), a project's page (`project`, which `src/routes.ts` names by
-  its entry in the query), the library (`library`), one of its own
+  its entry in the query), what could be linked (`discover`, the folders it
+  scans in the query), the library (`library`), one of its own
   (`artifact`, named by its kind and name in the query), the shelf
   (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
   the query a page keeps its state in, `src/library.ts` finds the projects
@@ -213,8 +239,14 @@ under `apps/` with its own `Makefile`:
   of a state, a health and the agents, a count, the warnings panel, the
   commands an empty state names, what is wrong with an artifact
   (`IssueList`), a rendered body (`MarkdownBody`), an artifact's files
-  (`FileTree`), the ledger's latest actions (`ActivityFeed`), and
-  `SnapshotGate`, which draws a page once the snapshot is answered.
+  (`FileTree`), the ledger's latest actions (`ActivityFeed`),
+  `SnapshotGate`, which draws a page once the snapshot is answered, the
+  folder to link (`LinkForm`), a project's agents and share toggles
+  (`SettingsForm`) and its migration, dry run first (`MigrateOffer`), and
+  what the runner draws beside the pages:
+  `CommandRunner`, which makes it and says how each task ended in a toast,
+  the task shown before it runs (`CommandDialog`), what the last run said
+  (`WarningsDrawer`) and the transcript (`TranscriptDrawer`).
   `src/stores/` holds Pinia's UI state,
   `src/query.ts` the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
   colour mode, and `src/overrides/` what replaces two pieces of the
@@ -222,16 +254,18 @@ under `apps/` with its own `Makefile`:
   committed, and so is `src/api/generated/`, written from Rust by `make
   web/types`. `e2e/` is the browser suite: `run.ts` its driver,
   `environment.ts` what every process it starts runs in, `fixture.ts` the
-  workspace it builds with the commands, `panel.ts` what the specs share,
+  workspaces it builds with the commands, `panel.ts` what the specs share,
   and the specs; `playwright.config.ts`, beside `vite.config.ts`, starts
-  `flayer ui` over that workspace.
+  `flayer ui` over the shared workspace. Beside the suite, through the same
+  `environment.ts`, `demo.ts` builds the README's demo workspace and
+  `screenshots.ts` takes the images of it (`make docs/screenshots`).
 
 Beside them, `examples/` is content and not an app: a flayer workspace whose
 own two skills and two rules anyone can `flayer load` to try Mindflayer
 without gathering. `apps/cli/tests/examples_test.rs` holds every example to
-`validate` with no warning and finds the README's "Try it with the examples"
-output in what the commands print, so changing an example's summary line
-means changing the README too.
+`validate` with no warning and finds the "Try it with the examples" output
+of the reference, `docs/reference.md`, in what the commands print, so
+changing an example's summary line means changing the reference too.
 
 Outside `apps/`, `scripts/agent-probe/` holds the agent probe: `probe.sh`
 isolates a run and checks the real home is left alone, and `<agent>.sh` holds
@@ -262,8 +296,8 @@ These are easy to break from a single file without noticing.
   from is core's too (`Catalog::folders`), and so are the names at a
   project's root that show an agent works there (`Agent::reads_at_root`) and
   the order `flayer scan --suggest` ranks what it finds in (`scan::Order`),
-  in which the minds screen and the link form show what is not linked,
-  without sorting it.
+  in which the minds screen, the link form and the panel's page of what
+  could be linked show what is not linked, without sorting it.
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
@@ -289,13 +323,27 @@ These are easy to break from a single file without noticing.
   opened by `flayer install` (`install::apply`): its marks are the
   `flayer install` and `flayer uninstall` lines they amount to
   (`Screen::task`), each run whatever came of the others
-  (`Task::chained`), so its transcript runs again. What a front end with
+  (`Task::chained`), so its transcript runs again. A batch a screen builds
+  from its marks or its toggles is built in the task module, from what was
+  marked (`Task::minds`, from each folder's `MindsChange`) or what the
+  settings and the toggles say (`Task::settings`, from two `Toggles`), and
+  the panel sends its marks and its toggles (`Task::Marks`,
+  `Task::Toggled`) for the same function to build, never the batch: one
+  rule for which lines they are, which `backend_test` holds the minds
+  screen and the panel to, the same folders for the same marks, though the
+  panel names a folder inside the workspace by its absolute path where the
+  screen names it by its route. What a front end with
   no terminal does not run is one list, `task::Refusal`, read off the
   parsed command by a match with no wildcard (`Refusal::of_mind`,
   `of_flayer`), so a new command says whether it is refused before it
   compiles; a task is refused for its lines (`Task::refusal`). The TUI
   refuses only its screens and `ui`, which would hold it until a Ctrl-C the
-  screen keeps for itself. Each front end hands back, when it closes, every
+  screen keeps for itself. What a line takes away, which a front end with
+  no terminal asks somebody to confirm before it runs it, is one list too,
+  `task::Caution`, read the same way (`Caution::of_mind`, `of_flayer`,
+  `task::cautions`), and the panel's backend says it of the lines it
+  plans with each preview (`backend::Confirm`), never a list in
+  TypeScript. Each front end hands back, when it closes, every
   line that changed something (`Task::writes`), laid out by one function
   (`tui::state::transcript`): the TUI when it quits, `ui` when Ctrl-C stops
   it.
@@ -354,8 +402,10 @@ These are easy to break from a single file without noticing.
   Its names are a contract under `view::FORMAT`, as a report's are under
   `ENVELOPE_VERSION`, and every URL in it, an error's message included,
   goes out through `url::redacted`. What a front end reads beside it is
-  only what it cannot hold: a scan, and which workspace a project's own
-  lines consult (`docs/architecture.md`, "The read model").
+  only what it cannot hold: a scan (the panel's `Query::Scan`, asked for
+  by hand and answered with the backend's `Scanned`), and which workspace
+  a project's own lines consult (`docs/architecture.md`, "The read
+  model").
 - **Every error has a stable code.** Each public error type in core,
   `ValidationIssue`, and `install::Refused`, why an install or an uninstall
   wrote nothing (`Installed::refused`, `Removed::refused`, and for a copy
@@ -605,8 +655,9 @@ These are easy to break from a single file without noticing.
     names something on the disk, in a match over every variant with no
     wildcard: a project or a loaded workspace by its entry as the marker
     spells it, which the backend turns into the absolute folder it resolves
-    to for the line's one `-C` or `-p`, and a folder not linked yet by an
-    absolute, normalized path outside every `.mindflayer`, verbatim. The
+    to for the line's one `-C` or `-p`, and a folder not linked yet, or one
+    a scan is to look under, by an absolute, normalized path outside every
+    `.mindflayer`, verbatim. The
     browser supplies no `-C`, `--home`, `-W` or agent home: the backend runs
     every line with the launch's, against the workspace it was launched on,
     named. A refused task runs nothing, and every refusal has a code.
@@ -799,7 +850,11 @@ These are easy to break from a single file without noticing.
   written there is one the panel could disagree with the CLI about: it
   belongs in core, reached through the backend, which says it as a
   `Refusal`, a code and a message, sent as a 422; a task refused when its
-  lines are asked for is never run, nor kept in the transcript. Queries and
+  lines are asked for is never run, nor kept in the transcript. A preview
+  is the server's `Preview`, the lines and what the backend says to
+  confirm, carried unread as a watched path's scope is; the server
+  enforces none of it, so a run sent without the question is run, as a
+  shell runs what is typed into it. Queries and
   previews run on tokio's blocking pool, and every run on the one writer
   thread, in the order it arrived. Which paths it watches is core's
   (`watch::watched`), handed over by the backend (`watched_paths`), each
@@ -826,10 +881,20 @@ These are easy to break from a single file without noticing.
   answers belongs in Vue Query; Pinia holds UI state only. The server's
   events reach the views only as Vue Query marking what they reached stale
   (`src/api/live.ts`), never as a read of their own and never a scan, over
-  one subscription a tab, let go while it is hidden. A view lays
+  one subscription a tab, let go while it is hidden: a scan's query is
+  keyed outside what they mark (`scan`), never stale on its own, and asked
+  for again only by its page, as after a run of its own. Every change goes
+  through the runner (`useRunner().ask`): the lines it shows are the ones
+  the server previewed, never one the panel builds; a preview's `confirm`,
+  the CLI's, makes it a confirmation, never a list of the panel's; and a run
+  is over once the stream told it finished and the views read again, or
+  they read again after `PATIENCE` without word (`settle`), never an
+  answer written into a view. A view lays
   out, groups and filters what the snapshot lists: every count it shows is
   one the snapshot carries (`summary`, a project's `tally`), every verdict
-  one core gave (a project's `health`), every order the snapshot's
+  one core gave (a project's `health`, whether it `migrates`), and every
+  word a scan's answer gives (what each folder `offers`, the entry a moved
+  one left), every order the snapshot's
   (`kinds`, `states`, `healths`, the registry's). A count or a verdict a
   view needs is added to `view::Snapshot` in core, never worked out from
   the lists, and a kind core adds reaches every view with no change
@@ -966,9 +1031,15 @@ These are easy to break from a single file without noticing.
   panel's backend answers (`make web/fixtures`), with the temporary folder
   as `/home`, fixed ids and pinned times, and beside them what opening each
   of the library's own is answered with (`library.json`, every files and
-  contents query an artifact's page asks). `tests/panel.ts` reads them and
-  mounts the panel at an address, answering its queries with them; a test
-  about something no fixture holds changes its own copy.
+  contents query an artifact's page asks), what scanning the folder of the
+  workspace `candidates.json` is a snapshot of is answered with
+  (`scan.json`), and what previewing and running
+  a few tasks in turn is (`commands.json`). `tests/panel.ts` reads them and
+  mounts the panel at an address, answering its queries with them, and a
+  task with its preview and its run, told finished on the stream before
+  it is answered, as the server tells it (`commanding`); a test about
+  something no fixture holds changes its own copy. A test that needs a
+  page of its own adds a route to `render`.
   `dist.test.ts` builds the panel in a process of its own, into a temporary
   folder under `node_modules`, and leaves `dist/` alone. `licences.test.ts`
   reads every installed package's licence: a new one outside its list of
@@ -986,8 +1057,11 @@ These are easy to break from a single file without noticing.
   list --json` in its envelope, and opens a page with `panel.open`, through
   the launch link, as a person does. Every test fails on a CSP violation or
   an uncaught error on its page (`watch`), and `csp.spec.ts` holds the watch
-  to seeing one. No spec changes anything: write flows come with the issues
-  that add them.
+  to seeing one. No spec changes the shared workspace: a test that changes
+  something takes a workspace and a `flayer ui` of its own (`own`, built by
+  `changeable` beside a copy of it and served by `serve`, through
+  `environment.ts` as every process is), and holds what the panel left to
+  what the same command leaves in the copy.
 - The tests of the panel's types are core's and the CLI's
   `src/typescript_test.rs`, compiled only with the `ts` feature, and named
   so `--lib typescript` picks them out: each crate's export
@@ -1002,6 +1076,13 @@ These are easy to break from a single file without noticing.
   real command lines (`App::runner`).
 - Fixtures use `tempfile::TempDir`. Test names are sentences
   (`init_flayer_is_the_same_as_init`).
+- `apps/cli/tests/docs_test.rs` holds `README.md` and every page under
+  `docs/` to their relative links, in Rust so it runs without Node or the
+  network: each file a link names is there, each anchor is a heading's as
+  GitHub spells it, and each image in `docs/images` is shown by some page.
+  A link to another site is not followed. `examples_test.rs` finds the
+  reference's "Try it with the examples" walk-through in what the commands
+  print.
 
 ## Workflow
 
@@ -1033,8 +1114,13 @@ These are easy to break from a single file without noticing.
 - Commit messages: `<area>: <imperative summary>`, where area is `core`,
   `cli`, `server`, `web`, `docs`, `build`, `ci` or `chore` (`core, cli:` when
   a change spans two apps).
-- When behaviour changes, update the README (its examples are literal output,
-  so re-run them) and `docs/architecture.md`, including its "Open questions".
+- When behaviour changes, update `docs/reference.md` (its examples are
+  literal output, so re-run them) and `docs/architecture.md`, including its
+  "Open questions". Literal output belongs in the reference, never in the
+  README, which says what Mindflayer is and tours the panel in a few
+  screens. A change to what the panel shows, a page, a view or its look,
+  runs `make docs/screenshots`, and its PR carries the images it wrote; a
+  change to what the README says of the panel goes with it.
 
 ## Style
 

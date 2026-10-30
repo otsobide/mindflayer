@@ -6,12 +6,13 @@ use clap::parser::ValueSource;
 use clap::{ArgMatches, CommandFactory, Parser};
 
 use super::*;
+use crate::tui::minds::{Minds, Row, Standing};
 use crate::{Cli, FlayerCli};
 
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 30] = [
+const TAGS: [&str; 33] = [
     "init_workspace",
     "init_project",
     "link",
@@ -30,15 +31,18 @@ const TAGS: [&str; 30] = [
     "remove",
     "validate",
     "minds",
+    "marks",
     "shelf",
     "workspaces",
     "gather",
     "targets",
     "settings",
+    "toggled",
     "update",
     "install",
     "uninstall",
     "adopt",
+    "migrate",
     "open_install",
     "apply_install",
     "refresh",
@@ -96,6 +100,22 @@ fn every(value: &str) -> Vec<Task> {
             link: vec![owned(), String::from("plain")],
             unlink: vec![owned()],
         },
+        Task::Marks {
+            marks: vec![
+                Mark {
+                    path: owned(),
+                    change: MindsChange::InitAndLink,
+                },
+                Mark {
+                    path: String::from("plain"),
+                    change: MindsChange::Link,
+                },
+                Mark {
+                    path: owned(),
+                    change: MindsChange::Unlink,
+                },
+            ],
+        },
         Task::Shelf,
         Task::Workspaces,
         Task::Gather {
@@ -123,6 +143,14 @@ fn every(value: &str) -> Vec<Task> {
             project: owned(),
             kind: Kind::Skill,
             name: owned(),
+        },
+        Task::Migrate {
+            project: owned(),
+            yes: false,
+        },
+        Task::Migrate {
+            project: owned(),
+            yes: true,
         },
         Task::OpenInstall,
         Task::Refresh,
@@ -219,6 +247,16 @@ fn every(value: &str) -> Vec<Task> {
                 share: Some(Share::Shared),
                 edit_tracked: false,
             },
+            Task::Toggled {
+                holder: holder.clone(),
+                was: toggles(&[Agent::OpenCode, Agent::Claude], Share::Shared, false),
+                now: toggles(&[Agent::Codex, Agent::Claude], Share::Local, true),
+            },
+            Task::Toggled {
+                holder: holder.clone(),
+                was: toggles(&[Agent::Codex], Share::Local, false),
+                now: toggles(&[], Share::Local, false),
+            },
         ]);
     }
     tasks
@@ -274,6 +312,202 @@ fn nothing_to_link_or_unlink_is_no_task() {
             unlink: owned(&["alpha"]),
         })
     );
+}
+
+/// Toggles of `agents`, shared and with tracked files left alone.
+fn toggles(agents: &[Agent], share: Share, edit_tracked: bool) -> Toggles {
+    Toggles {
+        agents: agents.to_vec(),
+        share,
+        edit_tracked,
+    }
+}
+
+#[test]
+fn toggles_keep_the_agents_a_project_names_in_its_order_and_name_one_ticked_after_them() {
+    let holder = Holder::Project(String::from("alpha"));
+    let was = toggles(&[Agent::OpenCode, Agent::Claude], Share::Shared, false);
+    // Ticked in any order: what the settings name keeps theirs, and one
+    // more comes after them, in report order.
+    let now = toggles(
+        &[Agent::Codex, Agent::Claude, Agent::OpenCode],
+        Share::Shared,
+        false,
+    );
+
+    assert_eq!(
+        Task::settings(holder.clone(), &was, &now),
+        Some(Task::Settings {
+            holder,
+            agents: Some(AgentsLine::Named(vec![
+                Agent::OpenCode,
+                Agent::Claude,
+                Agent::Codex,
+            ])),
+            share: None,
+            edit_tracked: false,
+        })
+    );
+}
+
+#[test]
+fn unticking_every_agent_is_removing_every_one_the_project_names() {
+    let holder = Holder::Project(String::from("alpha"));
+    let was = toggles(&[Agent::Claude, Agent::Codex], Share::Local, false);
+    let now = toggles(&[], Share::Local, false);
+
+    assert_eq!(
+        Task::settings(holder.clone(), &was, &now),
+        Some(Task::Settings {
+            holder,
+            agents: Some(AgentsLine::Removed(vec![Agent::Claude, Agent::Codex])),
+            share: None,
+            edit_tracked: false,
+        })
+    );
+}
+
+#[test]
+fn a_share_line_comes_when_the_mode_or_edit_tracked_changes_and_toggles_left_as_they_were_are_no_task(
+) {
+    let holder = Holder::Project(String::from("alpha"));
+    let was = toggles(&[Agent::Claude], Share::Local, false);
+
+    assert_eq!(Task::settings(holder.clone(), &was, &was), None);
+    // The same agents in another order are the same agents.
+    let mut reordered = toggles(&[Agent::Claude, Agent::Claude], Share::Local, false);
+    assert_eq!(Task::settings(holder.clone(), &was, &reordered), None);
+    reordered.edit_tracked = true;
+    assert_eq!(
+        Task::settings(holder.clone(), &was, &reordered),
+        Some(Task::Settings {
+            holder,
+            agents: None,
+            share: Some(Share::Local),
+            edit_tracked: true,
+        })
+    );
+}
+
+/// The minds screen, holding a row for each of `rows`, a path standing
+/// as given, ticked as given.
+fn screen(rows: &[(&str, Standing, bool)]) -> Minds {
+    Minds {
+        rows: rows
+            .iter()
+            .map(|(path, standing, ticked)| Row {
+                path: (*path).to_owned(),
+                standing: *standing,
+                ticked: *ticked,
+                why: String::new(),
+            })
+            .collect(),
+        cursor: 0,
+    }
+}
+
+/// What a front end sends for the marks the minds screen's rows hold, in
+/// JSON as the panel sends them, each row turned over by what it offers.
+fn marked(screen: &Minds) -> Task {
+    let marks: Vec<serde_json::Value> = screen
+        .rows
+        .iter()
+        .filter_map(|row| Some(serde_json::json!({"path": row.path, "change": row.change()?})))
+        .collect();
+    serde_json::from_value(serde_json::json!({"type": "marks", "marks": marks})).unwrap()
+}
+
+#[test]
+fn marks_sent_as_json_make_the_lines_the_minds_screen_makes_for_the_same_selection() {
+    let found = |mind| Standing::Found { mind };
+    let linked = Standing::Linked { opens: true };
+    for rows in [
+        vec![
+            ("/work/beta", found(true), true),
+            ("/work/gamma", found(false), true),
+            ("/work/alpha", linked, false),
+            ("/work/delta", found(false), true),
+            ("/work/kept", linked, true),
+            ("/work/left", found(true), false),
+        ],
+        vec![("-odd", found(false), true), ("it's", found(true), true)],
+        vec![("/work/alpha", linked, false)],
+    ] {
+        let screen = screen(&rows);
+
+        let sent = marked(&screen);
+
+        assert_eq!(
+            sent.commands(),
+            screen.task().unwrap().commands(),
+            "{rows:?}"
+        );
+        assert_eq!(sent.cautions(), screen.task().unwrap().cautions());
+    }
+    assert_eq!(marked(&screen(&[])).commands(), Vec::<Vec<String>>::new());
+}
+
+#[test]
+fn toggles_sent_as_json_make_the_lines_the_task_module_builds_from_them() {
+    let holder = Holder::Project(String::from("alpha"));
+    let was = toggles(&[Agent::OpenCode, Agent::Claude], Share::Shared, false);
+    let now = toggles(&[Agent::Codex, Agent::Claude], Share::Local, true);
+
+    let sent: Task = serde_json::from_value(serde_json::json!({
+        "type": "toggled",
+        "holder": {"type": "project", "entry": "alpha"},
+        "was": {"agents": ["opencode", "claude"], "share": "shared", "edit_tracked": false},
+        "now": {"agents": ["codex", "claude"], "share": "local", "edit_tracked": true},
+    }))
+    .unwrap();
+
+    assert_eq!(
+        sent.commands(),
+        [
+            owned(&["mind", "-C", "alpha", "agents", "--yes", "claude", "codex"]),
+            owned(&[
+                "mind",
+                "-C",
+                "alpha",
+                "share",
+                "--yes",
+                "--edit-tracked",
+                "local"
+            ]),
+        ]
+    );
+    assert_eq!(
+        sent.commands(),
+        Task::settings(holder.clone(), &was, &now)
+            .unwrap()
+            .commands()
+    );
+    let unchanged = Task::Toggled {
+        holder,
+        was: was.clone(),
+        now: was,
+    };
+    assert_eq!(unchanged.commands(), Vec::<Vec<String>>::new());
+}
+
+#[test]
+fn a_migration_is_a_dry_run_until_it_is_told_and_only_then_a_write() {
+    let migrate = |yes| Task::Migrate {
+        project: String::from("legacy"),
+        yes,
+    };
+
+    assert_eq!(
+        migrate(false).commands(),
+        [owned(&["flayer", "migrate", "-p", "legacy"])]
+    );
+    assert!(!migrate(false).writes());
+    assert_eq!(
+        migrate(true).commands(),
+        [owned(&["flayer", "migrate", "-p", "legacy", "--yes"])]
+    );
+    assert!(migrate(true).writes());
+    assert_eq!(migrate(true).cautions(), Vec::new());
 }
 
 #[test]
@@ -868,5 +1102,130 @@ fn a_refusal_says_why_by_a_code_of_its_own() {
     assert_eq!(
         Refusal::Screen.to_string(),
         "opens a screen of its own, which needs a terminal to draw on"
+    );
+}
+
+#[test]
+fn a_line_that_takes_something_away_is_asked_about_for_what_it_takes() {
+    use Caution::{Forces, Removes, Uninstalls, Unlinks, Unloads};
+    for (said, expected) in [
+        ("mind remove --yes deploy", vec![Removes]),
+        ("mind -C alpha remove -y rule:style", vec![Removes]),
+        ("flayer remove --yes skill:deploy", vec![Removes]),
+        ("flayer remove -p alpha --yes deploy", vec![Removes]),
+        ("mind flayer remove --yes deploy", vec![Removes]),
+        (
+            "flayer remove --everywhere --yes skill:deploy",
+            vec![Removes, Uninstalls],
+        ),
+        ("mind uninstall deploy", vec![Uninstalls]),
+        ("mind uninstall --orphaned", vec![Uninstalls]),
+        ("mind uninstall --force deploy", vec![Uninstalls, Forces]),
+        (
+            "flayer uninstall -p alpha -p beta skill:deploy",
+            vec![Uninstalls],
+        ),
+        (
+            "flayer uninstall --all-projects --orphaned",
+            vec![Uninstalls],
+        ),
+        (
+            "flayer uninstall -p alpha --force deploy",
+            vec![Uninstalls, Forces],
+        ),
+        ("mind install --force deploy", vec![Forces]),
+        ("flayer install -p alpha --force deploy", vec![Forces]),
+        ("mind update --yes --force", vec![Forces]),
+        ("flayer update --all --yes --force deploy", vec![Forces]),
+        ("mind unlink", vec![Unlinks]),
+        ("flayer unlink alpha beta", vec![Unlinks]),
+        ("mind flayer unlink alpha", vec![Unlinks]),
+        ("mind unload ../team", vec![Unloads]),
+        ("flayer unload team", vec![Unloads]),
+    ] {
+        assert_eq!(cautions(&line(said)), expected, "{said}");
+    }
+}
+
+/// A dry run takes nothing away, and nor does a line that only adds or
+/// carries what is installed to where its agents now read: each is shown
+/// before it runs, and runs once asked.
+#[test]
+fn a_line_that_takes_nothing_away_is_asked_about_for_nothing() {
+    for said in [
+        "mind remove deploy",
+        "flayer remove --everywhere skill:deploy",
+        "mind update --force",
+        "flayer update --all --force",
+        "mind update --yes",
+        "flayer install -p alpha deploy",
+        "flayer link alpha",
+        "mind add skill deploy Ship",
+        "mind rename deploy ship",
+        "flayer relink alpha beta",
+        "flayer load ../team",
+        "flayer adopt -p alpha --yes legacy",
+        "flayer agents -p alpha --yes claude",
+        "mind share --yes local",
+        "mind targets set --yes skills .skills",
+        "flayer migrate --library --yes",
+        "flayer validate",
+        "flayer init",
+        // A line no parser takes would not run, and takes nothing.
+        "flayer unlink",
+        "flayer frobnicate",
+        "ls",
+    ] {
+        assert_eq!(cautions(&line(said)), Vec::new(), "{said}");
+    }
+}
+
+#[test]
+fn a_task_is_asked_about_for_each_of_its_lines_that_takes_something_away() {
+    let values = VALUES.into_iter().filter(|value| !value.is_empty());
+    for task in values.flat_map(every) {
+        let expected = match &task {
+            Task::Remove {
+                everywhere: false, ..
+            } => vec![(0, Caution::Removes)],
+            Task::Remove {
+                everywhere: true, ..
+            } => vec![(0, Caution::Removes), (0, Caution::Uninstalls)],
+            Task::Uninstall { .. } => vec![(0, Caution::Uninstalls)],
+            Task::Unlink { .. } => vec![(0, Caution::Unlinks)],
+            Task::Unload { .. } | Task::UnloadHere { .. } => vec![(0, Caution::Unloads)],
+            // `mind -C <path> init`, `flayer link` and `flayer unlink`.
+            Task::Minds { .. } | Task::Marks { .. } => vec![(2, Caution::Unlinks)],
+            // Its installs first, then its uninstalls, as `every` builds it.
+            Task::ApplyInstall { .. } => vec![(1, Caution::Uninstalls)],
+            _ => Vec::new(),
+        };
+
+        assert_eq!(task.cautions(), expected, "{task:?}");
+    }
+}
+
+/// Each by a word of its own in JSON, as the panel compares it, and its
+/// words for whoever is asked.
+#[test]
+fn a_caution_says_what_it_takes_in_a_word_and_in_words() {
+    let words: Vec<serde_json::Value> = [
+        Caution::Removes,
+        Caution::Uninstalls,
+        Caution::Unlinks,
+        Caution::Unloads,
+        Caution::Forces,
+    ]
+    .iter()
+    .map(|caution| serde_json::to_value(caution).unwrap())
+    .collect();
+
+    assert_eq!(
+        words,
+        ["removes", "uninstalls", "unlinks", "unloads", "forces"]
+    );
+    assert_eq!(
+        Caution::Unlinks.to_string(),
+        "makes the workspace forget a project, though nothing on disk is deleted"
     );
 }

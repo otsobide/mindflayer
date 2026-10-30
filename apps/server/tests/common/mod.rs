@@ -8,7 +8,7 @@
 
 pub use axum::body::{Body, Bytes};
 pub use axum::http::{header, HeaderMap, Method, Request, StatusCode};
-pub use mindflayer_server::{Backend, Listening, Refusal, Server, Watched};
+pub use mindflayer_server::{Backend, Listening, Preview, Refusal, Server, Watched};
 pub use serde_json::{json, Value};
 pub use std::sync::{Arc, Condvar, Mutex};
 
@@ -33,8 +33,9 @@ pub struct FakeQuery {
 /// The fake's task: a name to run under, whether to wait at the fake's hold
 /// before finishing, whether to finish with an outcome JSON cannot carry,
 /// whether to refuse it, when its lines are asked for (`refuse`) or only
-/// once it is handed over to run (`refuse_run`), and whether its run
-/// panics, as a backend with a bug would.
+/// once it is handed over to run (`refuse_run`), whether its run panics, as
+/// a backend with a bug would, and what its preview says to confirm first,
+/// in words of the fake's own (`confirm`).
 ///
 /// A run takes no notice of `refuse`: one whose lines were refused and is
 /// handed over all the same runs, and the runs it leaves say so.
@@ -51,6 +52,8 @@ pub struct FakeTask {
     pub refuse_run: bool,
     #[serde(default)]
     pub panic: bool,
+    #[serde(default)]
+    pub confirm: Vec<String>,
 }
 
 /// What the fake refuses with: a code of its own, which a real backend's
@@ -107,11 +110,18 @@ impl Backend for Fake {
         Ok(json!({ "echo": query.echo }))
     }
 
-    fn preview(&self, task: &FakeTask) -> Result<Vec<String>, Refusal> {
+    fn preview(&self, task: &FakeTask) -> Result<Preview, Refusal> {
         if task.refuse {
             return Err(refusal(&task.name));
         }
-        Ok(vec![format!("fake run {}", task.name)])
+        Ok(Preview {
+            lines: vec![format!("fake run {}", task.name)],
+            confirm: task
+                .confirm
+                .iter()
+                .map(|what| json!({ "fake_takes": what }))
+                .collect(),
+        })
     }
 
     fn run(&self, task: FakeTask) -> Result<FakeOutcome, Refusal> {

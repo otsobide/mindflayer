@@ -1,6 +1,7 @@
-//! The snapshots the panel's tests render from, and the answers to what its
-//! page of an artifact asks, written from the real thing: workspaces built
-//! by running the commands, read through the panel's backend as the server
+//! The snapshots the panel's tests render from, the answers to what its
+//! page of an artifact asks, and what previewing and running a few tasks is
+//! answered with, written from the real thing: workspaces built by running
+//! the commands, read and changed through the panel's backend as the server
 //! answers it, and written into the panel's `tests/fixtures` (`make
 //! web/fixtures`), committed beside its tests.
 //!
@@ -34,12 +35,16 @@ const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../web/tests/fixtur
 /// What the temporary folder a fixture is built in reads as.
 const HOME: &str = "/home";
 
-/// The id each project reads as, by its name, in place of the random one
-/// `mind init` gave it.
-const IDS: [(&str, &str); 3] = [
+/// The id each project reads as, by its route from the workspace, in place
+/// of the random one `mind init` gave it: the workspace's own, then those
+/// [`candidates`] makes, which only some fixtures build.
+const IDS: [(&str, &str); 6] = [
     ("api", "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5"),
     ("web", "0123456789abcdef0123456789abcdef"),
     ("docs", "fedcba9876543210fedcba9876543210"),
+    ("blog", "b10b10b10b10b10b10b10b10b10b10b1"),
+    ("drafts", "d4af7ed4af7ed4af7ed4af7ed4af7ed4"),
+    ("archive/old", "01d01d01d01d01d01d01d01d01d01d01"),
 ];
 
 /// The first time the ledger keeps, in seconds since the epoch: an
@@ -193,6 +198,56 @@ fn install(root: &Path, entry: &str, names: &[&str]) {
     }
 }
 
+/// What there is to find beside the projects of the workspace at `root`,
+/// left as somebody would leave it, for a scan to find and the panel to
+/// link:
+///
+/// - `blog` and `drafts`, projects nobody linked;
+/// - `notes`, a repository holding an `AGENTS.md`, and `scratch`, one
+///   holding nothing an agent reads, neither a project yet;
+/// - `old`, linked with `review` installed, which records its id, for
+///   [`moved`] to move;
+/// - `legacy`, linked, which a `mind.toml` marks, as an older Mindflayer
+///   made a project.
+fn candidates(root: &Path) {
+    for name in ["blog", "drafts"] {
+        let project = root.join(name);
+        fs::create_dir(&project).unwrap();
+        gix::init(&project).expect("initialize a repository");
+        mind(&project, &["init"]).unwrap();
+    }
+    for (name, files) in [
+        ("notes", &[("AGENTS.md", "# Agents\n")][..]),
+        ("scratch", &[][..]),
+    ] {
+        let repository = root.join(name);
+        fs::create_dir(&repository).unwrap();
+        gix::init(&repository).expect("initialize a repository");
+        write_files(&repository, files);
+    }
+    project(root, "old", &[]);
+    // Said with the warning that the load `team` has gone, as every install
+    // here is, so held to what it did rather than to how it exited.
+    let installed = flayer(root, &["install", "-p", "old", "review"]).unwrap();
+    assert!(
+        installed.stdout.starts_with("installed review into old"),
+        "{installed:?}"
+    );
+    let legacy = root.join("legacy");
+    fs::create_dir(&legacy).unwrap();
+    older_project(&legacy);
+    flayer(root, &["link", "legacy"]).unwrap();
+}
+
+/// `old`, which [`candidates`] linked, moved to `archive/old`, leaving its
+/// entry stale: apart, since a stale entry is a warning beside whatever
+/// reads every project, and the first tasks the panel runs are written
+/// from before it.
+fn moved(root: &Path) {
+    fs::create_dir(root.join("archive")).unwrap();
+    fs::rename(root.join("old"), root.join("archive/old")).unwrap();
+}
+
 /// `files`, each a route from `root` and what it holds.
 fn write_files(root: &Path, files: &[(&str, &str)]) {
     for (route, text) in files {
@@ -279,8 +334,12 @@ fn pinned(json: &str, dir: &Path, root: Option<&Path>) -> String {
     let escaped = serde_json::to_string(&dir.to_string_lossy()).unwrap();
     let mut json = json.replace(escaped.trim_matches('"'), HOME);
     if let Some(root) = root {
-        for (name, id) in IDS {
-            let project = MindProject::open(root.join(name)).unwrap();
+        // Only those this fixture built: the candidates are not in every
+        // one.
+        for (route, id) in IDS {
+            let Ok(project) = MindProject::open(root.join(route)) else {
+                continue;
+            };
             let random = project.settings().unwrap().id.to_string();
             json = json.replace(&random, id);
         }
@@ -311,6 +370,37 @@ fn write_the_snapshot_of_a_workspace_holding_something_of_everything() {
     let json = pinned(&json, dir.path(), Some(&root));
     assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
     write("workspace", &json);
+}
+
+/// The workspace [`workspace`] builds, with [`candidates`] beside its
+/// projects and `old` [`moved`], as the panel is answered with it: the one
+/// [`write_what_scanning_the_workspace_is_answered_with`] scans, so the
+/// page of what could be linked draws a snapshot and a scan of one
+/// workspace, and a project's page draws `legacy`, which a `mind.toml`
+/// marks, as core reads it rather than as a test would draw it.
+#[test]
+fn write_the_snapshot_of_a_workspace_with_more_to_find() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = workspace(&home);
+    candidates(&root);
+    moved(&root);
+    // Again, for what `candidates` installed.
+    pin_times(&root);
+
+    let json = answered(&root, &Lookup::default());
+
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    let snapshot: Value = serde_json::from_str(&json).unwrap();
+    let legacy = snapshot["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|project| project["entry"] == "legacy")
+        .unwrap_or_else(|| panic!("{json}"));
+    assert_eq!(legacy["migrates"], true, "{json}");
+    write("candidates", &json);
 }
 
 /// What opening each of the library's own asks, as the panel's page of one
@@ -382,4 +472,132 @@ fn write_the_snapshot_of_a_home_where_nothing_is_made() {
     let json = pinned(&json, dir.path(), None);
     assert!(!home.join(FLAYER_DIR).exists(), "the read made a workspace");
     write("unmade", &json);
+}
+
+/// What the panel is answered with when its page of what could be linked
+/// scans the workspace [`workspace`] builds, with [`candidates`] beside its
+/// projects: the query as the page sends it, every folder under the
+/// workspace to core's own depth, and the answer.
+#[test]
+fn write_what_scanning_the_workspace_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = workspace(&home);
+    candidates(&root);
+    moved(&root);
+    let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+
+    let answers = vec![asked(
+        &backend,
+        json!({"type": "scan", "roots": [root.to_str().unwrap()], "depth": null}),
+    )];
+
+    let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    for (route, offers) in [("drafts", "link"), ("notes", "init_and_link")] {
+        let found = answers[0]["answer"]["found"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|suggestion| suggestion["found"]["route"] == route)
+            .unwrap_or_else(|| panic!("{route}: {json}"));
+        assert_eq!(found["offers"], offers, "{json}");
+    }
+    write("scan", &json);
+}
+
+/// What the panel is answered with when it previews and runs each of a few
+/// tasks in turn on the workspace [`workspace`] builds, with `blog` made a
+/// project beside the others and not linked: each task as the panel sends
+/// it, its preview, and what its run is answered with, its lines and what
+/// they produced, as the server sends both.
+///
+/// A link, which asks nothing; an unlink, which the panel has somebody
+/// confirm; a validate of `docs`, which fails and says why with codes; a
+/// removal everywhere, which takes two things away; then what the page of
+/// what could be linked and a project's page send, against [`candidates`]
+/// beside the projects: `drafts` and `notes` marked, as the scan
+/// [`write_what_scanning_the_workspace_is_answered_with`] writes offers
+/// them, the second made a project first; `old` relinked to where the scan
+/// found it moved; `web`'s toggles turned to name Codex too; and `legacy`
+/// migrated, its dry run first.
+#[test]
+fn write_what_previewing_and_running_a_few_tasks_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = workspace(&home);
+    candidates(&root);
+    let blog = root.join("blog");
+    let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+    let mut answers = Vec::new();
+    let mut run = |sent: Value| {
+        let task: Task = serde_json::from_value(sent.clone()).unwrap();
+        let preview = backend
+            .preview(&task)
+            .unwrap_or_else(|refusal| panic!("{sent}: {}: {}", refusal.code, refusal.message));
+        let outcome = backend.run(task).unwrap();
+        let ran = json!({"lines": preview.lines, "outcome": outcome});
+        answers.push(json!({"task": sent, "preview": preview, "ran": ran}));
+    };
+
+    for sent in [
+        json!({"type": "link", "path": blog.to_str().unwrap()}),
+        json!({"type": "unlink", "entry": "gone"}),
+        json!({"type": "validate", "holder": {"type": "project", "entry": "docs"}}),
+        json!({
+            "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
+            "name": "lint", "everywhere": true,
+        }),
+    ] {
+        run(sent);
+    }
+
+    moved(&root);
+    let scan = PanelBackend::launch(&root, &Lookup::default())
+        .unwrap()
+        .query(Query::Scan {
+            roots: vec![root.to_str().unwrap().to_owned()],
+            depth: None,
+        })
+        .unwrap();
+    let found = scan["found"].as_array().unwrap();
+    // In the order the scan lists them, as the page marks them.
+    let marks: Vec<Value> = found
+        .iter()
+        .filter(|suggestion| ["drafts", "notes"].contains(&suggestion["found"]["route"].as_str().unwrap()))
+        .map(|suggestion| json!({"path": suggestion["found"]["path"], "change": suggestion["offers"]}))
+        .collect();
+    let old = found
+        .iter()
+        .find(|suggestion| suggestion["found"]["route"] == "archive/old")
+        .unwrap_or_else(|| panic!("{scan}"));
+    for sent in [
+        json!({"type": "marks", "marks": marks}),
+        json!({"type": "relink", "old": old["moved_from"], "new": old["found"]["path"]}),
+        json!({
+            "type": "toggled",
+            "holder": {"type": "project", "entry": "web"},
+            "was": {"agents": ["claude", "opencode"], "share": "shared", "edit_tracked": false},
+            "now": {"agents": ["claude", "codex", "opencode"], "share": "shared", "edit_tracked": false},
+        }),
+        json!({"type": "migrate", "project": "legacy", "yes": false}),
+        json!({"type": "migrate", "project": "legacy", "yes": true}),
+    ] {
+        run(sent);
+    }
+
+    let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    for (index, ok) in [true, true, false, true, true, true, true, true, true]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(
+            answers[index]["ran"]["outcome"]["ok"], ok,
+            "{index}: {json}"
+        );
+    }
+    write("commands", &json);
 }

@@ -1,0 +1,334 @@
+[
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer link /home/you/Projects/blog"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer link /home/you/Projects/blog"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer link /home/you/Projects/blog",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "linked blog as blog\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "path": "/home/you/Projects/blog",
+      "type": "link"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [
+        {
+          "caution": "unlinks",
+          "line": 0,
+          "message": "makes the workspace forget a project, though nothing on disk is deleted"
+        }
+      ],
+      "lines": [
+        "flayer unlink gone"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer unlink gone"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer unlink gone",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "unlinked gone\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "entry": "gone",
+      "type": "unlink"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mind -C /home/you/Projects/docs validate"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mind -C /home/you/Projects/docs validate"
+      ],
+      "outcome": {
+        "ok": false,
+        "runs": [
+          {
+            "command": "mind -C /home/you/Projects/docs validate",
+            "error": null,
+            "ok": false,
+            "stderr": [
+              {
+                "code": "front_matter_missing",
+                "text": "warning: /home/you/Projects/docs/skills/notes/SKILL.md: the file does not start with a `---` front matter fence"
+              }
+            ],
+            "stdout": "review: ok\n\n1 skill checked, 0 invalid, 1 file unreadable\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "holder": {
+        "entry": "docs",
+        "type": "project"
+      },
+      "type": "validate"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [
+        {
+          "caution": "removes",
+          "line": 0,
+          "message": "deletes an artifact: its folder and everything in it, or its file"
+        },
+        {
+          "caution": "uninstalls",
+          "line": 0,
+          "message": "takes copies Mindflayer installed out of projects"
+        }
+      ],
+      "lines": [
+        "flayer remove --everywhere --yes skill:lint"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer remove --everywhere --yes skill:lint"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer remove --everywhere --yes skill:lint",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "removed lint from web\nremoved skill lint from /home/you/Projects/.mindflayer/library/skills/lint\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "everywhere": true,
+      "holder": {
+        "type": "workspace"
+      },
+      "kind": "skill",
+      "name": "lint",
+      "type": "remove"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mind -C /home/you/Projects/notes init",
+        "flayer link /home/you/Projects/drafts /home/you/Projects/notes"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mind -C /home/you/Projects/notes init",
+        "flayer link /home/you/Projects/drafts /home/you/Projects/notes"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mind -C /home/you/Projects/notes init",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "initialized mind project `notes` in /home/you/Projects/notes/.mind\n"
+          },
+          {
+            "command": "flayer link /home/you/Projects/drafts /home/you/Projects/notes",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "linked drafts as drafts\nlinked notes as notes\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "marks": [
+        {
+          "change": "link",
+          "path": "/home/you/Projects/drafts"
+        },
+        {
+          "change": "init_and_link",
+          "path": "/home/you/Projects/notes"
+        }
+      ],
+      "type": "marks"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer relink old /home/you/Projects/archive/old"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer relink old /home/you/Projects/archive/old"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer relink old /home/you/Projects/archive/old",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "relinked old as archive/old, from old\n  1 install kept with it\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "new": "/home/you/Projects/archive/old",
+      "old": "old",
+      "type": "relink"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mind -C /home/you/Projects/web agents --yes claude opencode codex"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mind -C /home/you/Projects/web agents --yes claude opencode codex"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mind -C /home/you/Projects/web agents --yes claude opencode codex",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "set agents to claude,opencode,codex in web, where they were claude,opencode\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "holder": {
+        "entry": "web",
+        "type": "project"
+      },
+      "now": {
+        "agents": [
+          "claude",
+          "codex",
+          "opencode"
+        ],
+        "edit_tracked": false,
+        "share": "shared"
+      },
+      "type": "toggled",
+      "was": {
+        "agents": [
+          "claude",
+          "opencode"
+        ],
+        "edit_tracked": false,
+        "share": "shared"
+      }
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer migrate -p /home/you/Projects/legacy"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer migrate -p /home/you/Projects/legacy"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer migrate -p /home/you/Projects/legacy",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "would write .mind/settings.toml for legacy: agents claude,codex,opencode, share shared\nwould move .mind/mind.toml to .mind/tmp/mind.toml.v2, as it is\nnothing changed: add --yes to go ahead\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "project": "legacy",
+      "type": "migrate",
+      "yes": false
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer migrate -p /home/you/Projects/legacy --yes"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer migrate -p /home/you/Projects/legacy --yes"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer migrate -p /home/you/Projects/legacy --yes",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "wrote .mind/settings.toml for legacy: agents claude,codex,opencode, share shared\nmoved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "project": "legacy",
+      "type": "migrate",
+      "yes": true
+    }
+  }
+]

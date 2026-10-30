@@ -1,7 +1,7 @@
 /*
  * The one file allowed to use `fetch` and `EventSource` (see eslint.config.ts).
  */
-import { TransportError, type Answer, type LiveEvent, type Preview, type Query, type Run, type Task, type Transport } from './transport'
+import { TransportError, type Answer, type LiveEvent, type Preview, type Query, type Ran, type Task, type Transport } from './transport'
 
 /**
  * Sent with every request.
@@ -19,8 +19,8 @@ const HEADERS = {
 
 /**
  * The transport for a panel the local server serves, over HTTP: the server's
- * query, preview and commands endpoints, and its event stream, all under
- * `/api`. Its transcript has no call yet (see `Transport`).
+ * query, preview and commands endpoints, its transcript and its event
+ * stream, all under `/api`.
  *
  * Relative URLs, so the panel talks to whichever server sent it, on
  * whatever port it took, or to the Vite dev server that proxies `/api` to
@@ -36,7 +36,11 @@ export function httpTransport(): Transport {
     send(task: Task, mode: 'preview' | 'run') {
       return mode === 'preview'
         ? post<Preview>('/api/commands/preview', task)
-        : post<Run>('/api/commands', task)
+        : post<Ran>('/api/commands', task)
+    },
+
+    transcript() {
+      return ask<Ran[]>('GET', '/api/transcript')
     },
 
     subscribe(listener) {
@@ -56,16 +60,25 @@ export function httpTransport(): Transport {
   } as Transport
 }
 
-async function post<Reply>(path: string, body: unknown): Promise<Reply> {
+function post<Reply>(path: string, body: unknown): Promise<Reply> {
+  return ask<Reply>('POST', path, body)
+}
+
+/**
+ * A request to the server, and its answer as JSON; a GET carries no body.
+ * Every one with the same headers: a read needs neither `X-Mindflayer` nor
+ * the JSON type, but one way to ask leaves no request without them.
+ */
+async function ask<Reply>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Reply> {
   let response: Response
   try {
     response = await fetch(path, {
-      method: 'POST',
+      method,
       // The default, spelled out: the cookie is the panel's credential, and
       // it must never be offered to another origin.
       credentials: 'same-origin',
       headers: HEADERS,
-      body: JSON.stringify(body)
+      body: body === undefined ? undefined : JSON.stringify(body)
     })
   } catch {
     throw new TransportError(0, 'the server cannot be reached: is `flayer ui` still running?')
@@ -80,7 +93,7 @@ async function post<Reply>(path: string, body: unknown): Promise<Reply> {
   }
   const reply = parse(text)
   if (!response.ok) {
-    throw new TransportError(response.status, refusal(response, reply))
+    throw new TransportError(response.status, refusal(response, reply), code(reply))
   }
   // Every answer the server gives is JSON, so one that is not came from
   // something else on the way, and passing it on as `undefined` would read
@@ -100,6 +113,14 @@ function refusal(response: Response, reply: unknown): string {
     return reply.error
   }
   return `the server answered ${response.status} ${response.statusText}`.trimEnd()
+}
+
+/** The code a refusal says beside its words, when it says one. */
+function code(reply: unknown): string | undefined {
+  if (typeof reply === 'object' && reply !== null && 'code' in reply && typeof reply.code === 'string') {
+    return reply.code
+  }
+  return undefined
 }
 
 /** JSON, or nothing for a body that is not. */

@@ -35,6 +35,15 @@ name: string | null,
  */
 marker: MarkerFile | null, 
 /**
+ * Whether `mind migrate` has it to move: an older marker marks it, a
+ * `mind.toml` or a `settings.json`, whose settings nothing but that
+ * move changes ([`MindProject::changeable`]); false for an entry that
+ * opens no project. Told here rather than by a front end comparing
+ * `marker` with the file it knows to be the newest, which would be the
+ * rule written again, and wrong once a newer one is.
+ */
+migrates: boolean, 
+/**
  * The id its settings name it by (D-09), which a move is followed by.
  */
 id: ProjectId | null, 

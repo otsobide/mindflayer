@@ -11,18 +11,25 @@ export function first(value: LocationQueryValue | LocationQueryValue[] | undefin
   return one ?? undefined
 }
 
+/** Every value a query key holds, in the order given: none when it is not there. */
+export function every(value: LocationQueryValue | LocationQueryValue[] | undefined): string[] {
+  const all = Array.isArray(value) ? value : [value]
+  return all.filter((one): one is string => typeof one === 'string')
+}
+
 /**
  * A function putting `changes` into the address's query, in place of the
  * address it is at, so the back button leaves the page rather than undoing
- * each keystroke of a filter. An empty value takes its key out.
+ * each keystroke of a filter. An empty value, or an empty list, takes its
+ * key out; a list is the key given once for each of its values.
  */
 export function useQueryChange() {
   const route = useRoute()
   const router = useRouter()
-  return (changes: Record<string, string | undefined>) => {
+  return (changes: Record<string, string | string[] | undefined>) => {
     const query = { ...route.query, ...changes }
     for (const [key, value] of Object.entries(query)) {
-      if (value === undefined || value === '') {
+      if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
         delete query[key]
       }
     }

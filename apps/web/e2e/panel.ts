@@ -3,10 +3,13 @@
  * through its launch link as a person opens it, and what the CLI says of the
  * same workspace, to hold the page to.
  */
+import { cpSync, mkdtempSync } from 'node:fs'
+import { join } from 'node:path'
 import { test as base, expect, type Page } from '@playwright/test'
 import type { Envelope } from '../src/api/generated/Envelope'
 import type { Listing } from '../src/api/generated/Listing'
-import { given, run } from './environment.ts'
+import { given, run, serve, type Places } from './environment.ts'
+import { changeable } from './fixture.ts'
 
 /** The server under test, as the link it printed says. */
 export interface Served {
@@ -68,7 +71,35 @@ export interface Panel {
   open(path?: string): Promise<void>
 }
 
-export const test = base.extend<{ served: Served, panel: Panel, watch: Watch }>({
+/** Open `served`'s launch link in `page`, then `path`, as `Panel.open` says. */
+async function open(page: Page, served: Served, path: string): Promise<void> {
+  const landed = await page.goto(served.link)
+  expect(landed?.status(), 'the server serves the panel, which a binary built before it answers with a 503').toBe(200)
+  await expect(page, 'the launch link sends the browser on to the overview').toHaveURL(`${served.origin}/`)
+  if (path !== '/') {
+    await page.goto(new URL(path, served.origin).href)
+  }
+  await drawn(page)
+}
+
+/**
+ * A workspace of a test's own, served by a `flayer ui` of its own, for a
+ * test that changes what it serves: built by `changeable`, beside a copy of
+ * it made before anything else touched it (`twin`), on which the test runs
+ * the command the panel ran, to hold what each left byte for byte.
+ *
+ * Of its own, so neither the specs that read the suite's fixture while it
+ * changes, nor the same test in the other browser, ever see the change.
+ */
+export interface Own extends Panel {
+  /** Where it is, as every command a test runs on it names it. */
+  at: Places
+  /** The copy, as every command names it. */
+  twin: Places
+  served: Served
+}
+
+export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, own: Own }>({
   served: async ({}, use) => {
     await use(served())
   },
@@ -91,17 +122,24 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch }>(
   }, { auto: true }],
 
   panel: async ({ page, served }, use) => {
-    await use({
-      async open(path = '/') {
-        const landed = await page.goto(served.link)
-        expect(landed?.status(), 'the server serves the panel, which a binary built before it answers with a 503').toBe(200)
-        await expect(page, 'the launch link sends the browser on to the overview').toHaveURL(`${served.origin}/`)
-        if (path !== '/') {
-          await page.goto(new URL(path, served.origin).href)
-        }
-        await drawn(page)
-      }
-    })
+    await use({ open: (path = '/') => open(page, served, path) })
+  },
+
+  // Under the run's temporary folder, which the driver removes, and served
+  // with the run's home, which the driver holds to stay as it was made.
+  own: async ({ page }, use) => {
+    const at = given()
+    const folder = mkdtempSync(join(at.scratch, 'own-'))
+    const mine: Places = { ...at, workspace: join(folder, 'workspace') }
+    const twin: Places = { ...at, workspace: join(folder, 'twin') }
+    changeable(mine)
+    cpSync(mine.workspace, twin.workspace, { recursive: true })
+    const server = await serve(mine)
+    try {
+      await use({ at: mine, twin, served: server, open: (path = '/') => open(page, server, path) })
+    } finally {
+      await server.stop()
+    }
   }
 })
 

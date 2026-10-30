@@ -56,6 +56,24 @@ pub enum AgentsLine {
     Removed(Vec<Agent>),
 }
 
+/// What a project's agents and share toggles say: the agents ticked, its
+/// share mode, and whether a file git tracks may be edited to reach an
+/// agent. What [`Task::settings`] reads twice, as the project's settings
+/// say them and as the toggles do.
+///
+/// `{"agents": ["claude"], "share": "local", "edit_tracked": false}` in
+/// JSON: the names the snapshot gives the same three in a project's
+/// settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct Toggles {
+    /// As its settings name them, in their order; ticked, in any.
+    pub agents: Vec<Agent>,
+    pub share: Share,
+    pub edit_tracked: bool,
+}
+
 /// Which level a task runs at: what holds the artifacts it is about.
 ///
 /// `{"type": "project", "entry": "alpha"}` in JSON, or `{"type":
@@ -169,6 +187,22 @@ pub enum Task {
         link: Vec<String>,
         unlink: Vec<String>,
     },
+    /// What a front end's marks on directories ask for, each by the path a
+    /// command is given: the batch [`Task::minds`] builds from them, whose
+    /// lines these are, as the minds screen's are.
+    ///
+    /// How the panel links what a scan found: it sends its marks, never the
+    /// batch, so that a directory made a project is then linked, with the
+    /// rest, by the one function that says so, and the same marks make the
+    /// same lines on either front end: the same words where both spell a
+    /// folder alike, and the same batch folder for folder inside the
+    /// workspace, where the panel names one by its path, all the path
+    /// policy takes, and the minds screen by its route from the root.
+    /// [`Minds`](Task::Minds) taken from a
+    /// browser was the other way, which would hold the panel to spelling
+    /// that rule again in TypeScript, and could leave a folder made a
+    /// project and never linked.
+    Marks { marks: Vec<Mark> },
     /// `flayer gather list`.
     Shelf,
     /// `flayer workspaces`: the workspaces this machine knows, the one in
@@ -197,6 +231,24 @@ pub enum Task {
         /// The share mode, when it or `edit_tracked` changes.
         share: Option<Share>,
         edit_tracked: bool,
+    },
+    /// What a project's toggles amount to, turned from `was`, what its
+    /// settings say, to `now`, what the toggles say: the
+    /// [`Settings`](Task::Settings) task [`Task::settings`] builds, whose
+    /// lines these are, as the TUI's toggles' are.
+    ///
+    /// How the panel changes a project's agents and share mode: it sends
+    /// the toggles as they stand, never the lines' agents, so the order a
+    /// project names them in, and what unticking every one asks, is said by
+    /// the one function, never again in TypeScript. `was` is what the
+    /// panel read in the snapshot, as the TUI's is what it read when the
+    /// form opened: each line names the agents and the mode outright, so a
+    /// `was` the disk has moved on from changes which lines run, never what
+    /// a line sets.
+    Toggled {
+        holder: Holder,
+        was: Toggles,
+        now: Toggles,
     },
     /// `… update --yes [<kind:name>]`: what is installed in a project, or
     /// the one artifact named, brought up to date and put back where a copy
@@ -244,6 +296,21 @@ pub enum Task {
         kind: Kind,
         name: String,
     },
+    /// `flayer migrate -p <project> [--yes]`: one project the workspace
+    /// links moved from an older marker, a `mind.toml` or a
+    /// `settings.json`, to a `settings.toml`, what the workspace records of
+    /// it carried along; without `yes`, the dry run, which writes nothing
+    /// and says what would move. The project is named as an install's are,
+    /// by what `naming` gives.
+    ///
+    /// The workspace's command, as an install's is, so what it carries is
+    /// what the workspace on screen records: `mind migrate` in the project
+    /// finds a workspace by walking up, which misses one linking the
+    /// project from beside it. The agents and the share mode are left to
+    /// the command, every agent and shared for a `mind.toml`, as a project
+    /// committed by design was, and what a `settings.json` names for one,
+    /// for `mind agents` and `mind share` to change once it is moved.
+    Migrate { project: String, yes: bool },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
     /// What the install screen marked, as the `Install` and `Uninstall`
@@ -260,6 +327,7 @@ pub enum Task {
 /// it differs from how the directory started: what [`Task::minds`] is built
 /// from. By its name in snake_case in JSON: `"init_and_link"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "snake_case")]
 pub enum MindsChange {
     Link,
@@ -267,6 +335,31 @@ pub enum MindsChange {
     /// project yet.
     InitAndLink,
     Unlink,
+}
+
+impl MindsChange {
+    /// What marking a directory a scan found, and the workspace does not
+    /// link, asks for: linking it as it is, a mind project, or making it
+    /// one first, a git repository that is not one yet. One answer for the
+    /// minds screen and for what the panel is told a directory offers.
+    pub fn of_found(mind: bool) -> MindsChange {
+        if mind {
+            MindsChange::Link
+        } else {
+            MindsChange::InitAndLink
+        }
+    }
+}
+
+/// One directory a front end marked, by the path a command is given, with
+/// what to do to it: what [`Task::Marks`] holds, and [`Task::minds`] builds
+/// a batch from. `{"path": "/home/you/blog", "change": "link"}` in JSON.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct Mark {
+    pub path: String,
+    pub change: MindsChange,
 }
 
 impl Task {
@@ -293,6 +386,47 @@ impl Task {
             }
         }
         (!link.is_empty() || !unlink.is_empty()).then_some(Task::Minds { init, link, unlink })
+    }
+
+    /// The task turning a project's toggles from `was`, what its settings
+    /// say, to `now` amounts to, for `holder`: an `agents` line when the
+    /// agents change, then a `share` line when the share mode or
+    /// `edit_tracked` does; none while they say what the settings do.
+    ///
+    /// Here rather than on the TUI's toggles, where it was born, so every
+    /// front end's toggles amount to the same lines: the agents the project
+    /// names keep their order, and one ticked is named after them, in
+    /// report order, so a toggle does not reorder the settings; and since a
+    /// line cannot name no agent, unticking every one is `agents remove` of
+    /// every one named, which the command refuses for its own reason, the
+    /// rule that a project names an agent being core's.
+    pub fn settings(holder: Holder, was: &Toggles, now: &Toggles) -> Option<Task> {
+        let ticked = |agent: &Agent| now.agents.contains(agent);
+        let mut agents: Vec<Agent> = was.agents.iter().copied().filter(ticked).collect();
+        agents.extend(
+            Agent::ALL
+                .into_iter()
+                .filter(|agent| ticked(agent) && !was.agents.contains(agent)),
+        );
+        agents.dedup();
+        let mut named = was.agents.clone();
+        named.dedup();
+        let agents = match agents {
+            _ if agents == named => None,
+            none if none.is_empty() => Some(AgentsLine::Removed(named)),
+            some => Some(AgentsLine::Named(some)),
+        };
+        let share =
+            ((now.share, now.edit_tracked) != (was.share, was.edit_tracked)).then_some(now.share);
+        if agents.is_none() && share.is_none() {
+            return None;
+        }
+        Some(Task::Settings {
+            holder,
+            agents,
+            share,
+            edit_tracked: now.edit_tracked,
+        })
     }
 
     /// The command lines this task is, word by word, as a person would type
@@ -373,6 +507,10 @@ impl Task {
                 }
                 lines
             }
+            Task::Marks { marks } => {
+                Task::minds(marks.iter().map(|mark| (mark.path.clone(), mark.change)))
+                    .map_or_else(Vec::new, |batch| batch.commands())
+            }
             Task::Shelf => vec![words(&["flayer", "gather", "list"], &[])],
             Task::Workspaces => vec![words(&["flayer", "workspaces"], &[])],
             Task::Gather {
@@ -427,6 +565,8 @@ impl Task {
                 }
                 lines
             }
+            Task::Toggled { holder, was, now } => Task::settings(holder.clone(), was, now)
+                .map_or_else(Vec::new, |settings| settings.commands()),
             Task::Targets {
                 holder,
                 kind,
@@ -485,6 +625,14 @@ impl Task {
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
             }
+            Task::Migrate { project, yes } => {
+                let mut head = picking(&["flayer", "migrate"], std::slice::from_ref(project));
+                if *yes {
+                    head.push(String::from("--yes"));
+                }
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[])]
+            }
             Task::ApplyInstall { changes } => changes.iter().flat_map(Task::commands).collect(),
             Task::OpenInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
@@ -513,12 +661,15 @@ impl Task {
                 | Task::Remove { .. }
                 | Task::Gather { .. }
                 | Task::Minds { .. }
+                | Task::Marks { .. }
                 | Task::Settings { .. }
+                | Task::Toggled { .. }
                 | Task::Targets { .. }
                 | Task::Update { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
                 | Task::Adopt { .. }
+                | Task::Migrate { yes: true, .. }
                 | Task::ApplyInstall { .. }
         )
     }
@@ -565,6 +716,17 @@ impl Task {
                 .collect::<Vec<_>>()
                 .join(" && "),
         }
+    }
+
+    /// Each of its lines a front end asks somebody to confirm before it
+    /// runs them, by its place among [`commands`](Self::commands), with what
+    /// it takes away ([`cautioned`]).
+    ///
+    /// Asked of the lines, as [`refusal`](Self::refusal) is, so the one list
+    /// decides whatever task a line came from: the minds screen's batch is
+    /// asked about for its `flayer unlink` line and for nothing else.
+    pub fn cautions(&self) -> Vec<(usize, Caution)> {
+        cautioned(&self.commands())
     }
 
     /// Why a front end with no terminal of its own does not run this task,
@@ -755,6 +917,184 @@ pub fn refused(words: &[String]) -> Option<Refusal> {
             .and_then(|cli| Refusal::of_flayer(cli.command.as_ref())),
         _ => None,
     }
+}
+
+/// What a command line takes away, which a front end asks somebody to
+/// confirm before it runs the line: what [`cautions`] reads off the parsed
+/// command, as [`refused`] reads a refusal, so a line is asked about the
+/// same way whatever task it came from, and by every front end.
+///
+/// One list, here, rather than one per front end: the panel holds no rules
+/// (D-18), so which of its lines need a yes first is said with each preview
+/// it is answered with, in these words, and a list in TypeScript would be a
+/// second place for a command to be forgotten. The TUI asks its own
+/// questions, worded for the row they are about, before it builds a task.
+///
+/// Only what takes something away, or writes over somebody's work: a line
+/// that only adds, or that changes what is installed where its agents now
+/// read, is shown before it runs and runs once asked. And never a dry run,
+/// which a line of a command that takes `--yes` is without it: it takes
+/// nothing away, and says what it would.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Error)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum Caution {
+    /// `remove --yes`, at either level: the artifact deleted.
+    #[error("deletes an artifact: its folder and everything in it, or its file")]
+    Removes,
+    /// `uninstall`, every form of it, and `flayer remove --everywhere
+    /// --yes`, which uninstalls from every project first.
+    #[error("takes copies Mindflayer installed out of projects")]
+    Uninstalls,
+    /// `unlink`, at either level.
+    #[error("makes the workspace forget a project, though nothing on disk is deleted")]
+    Unlinks,
+    /// `unload`, at either level: `unlink`'s twin, for a loaded workspace,
+    /// whose copies in the projects are left orphaned.
+    #[error(
+        "makes the workspace stop offering a loaded workspace's own, though nothing on disk is deleted"
+    )]
+    Unloads,
+    /// `--force`: on `install` and `uninstall`, and on `update` that is
+    /// told `--yes`.
+    #[error("writes over, or takes out, a copy changed since it was installed")]
+    Forces,
+}
+
+impl Caution {
+    /// What `mind <command>` takes away, in the order of [`Caution`]'s
+    /// variants; nothing for a line that takes nothing.
+    ///
+    /// One arm per command with no wildcard, as [`Refusal::of_mind`]'s, so
+    /// a new command does not compile until it says what it takes away.
+    pub fn of_mind(command: Option<&Command>) -> Vec<Caution> {
+        match command {
+            Some(Command::Remove { yes, .. }) => when(*yes, &[Caution::Removes]),
+            Some(Command::Install { force, .. }) => when(*force, &[Caution::Forces]),
+            Some(Command::Uninstall { force, .. }) => uninstalling(*force),
+            Some(Command::Update { force, yes, .. }) => when(*force && *yes, &[Caution::Forces]),
+            Some(Command::Unlink) => vec![Caution::Unlinks],
+            Some(Command::Unload { .. }) => vec![Caution::Unloads],
+            Some(Command::Flayer { command }) => Caution::of_flayer(command.as_ref()),
+            #[cfg(feature = "ui")]
+            Some(Command::Ui(_)) => Vec::new(),
+            None
+            | Some(
+                Command::Tui
+                | Command::Init { .. }
+                | Command::Add { .. }
+                | Command::Edit { .. }
+                | Command::Rename { .. }
+                | Command::Templates { .. }
+                | Command::List { .. }
+                | Command::Show { .. }
+                | Command::Validate { .. }
+                | Command::Status { .. }
+                | Command::Link
+                | Command::Load { .. }
+                | Command::Agents { .. }
+                | Command::Share { .. }
+                | Command::Targets { .. }
+                | Command::Migrate { .. },
+            ) => Vec::new(),
+        }
+    }
+
+    /// What `flayer <command>` takes away.
+    pub fn of_flayer(command: Option<&FlayerCommand>) -> Vec<Caution> {
+        match command {
+            Some(FlayerCommand::Remove {
+                yes, everywhere, ..
+            }) => match (*yes, *everywhere) {
+                (false, _) => Vec::new(),
+                (true, false) => vec![Caution::Removes],
+                (true, true) => vec![Caution::Removes, Caution::Uninstalls],
+            },
+            Some(FlayerCommand::Install { force, .. }) => when(*force, &[Caution::Forces]),
+            Some(FlayerCommand::Uninstall { force, .. }) => uninstalling(*force),
+            Some(FlayerCommand::Update { force, yes, .. }) => {
+                when(*force && *yes, &[Caution::Forces])
+            }
+            Some(FlayerCommand::Unlink { .. }) => vec![Caution::Unlinks],
+            Some(FlayerCommand::Unload { .. }) => vec![Caution::Unloads],
+            #[cfg(feature = "ui")]
+            Some(FlayerCommand::Ui(_)) => Vec::new(),
+            None
+            | Some(
+                FlayerCommand::Tui
+                | FlayerCommand::Init { .. }
+                | FlayerCommand::Activate { .. }
+                | FlayerCommand::Which
+                | FlayerCommand::Workspaces { .. }
+                | FlayerCommand::Add { .. }
+                | FlayerCommand::Edit { .. }
+                | FlayerCommand::Rename { .. }
+                | FlayerCommand::Templates { .. }
+                | FlayerCommand::List { .. }
+                | FlayerCommand::Show { .. }
+                | FlayerCommand::Validate { .. }
+                | FlayerCommand::Status { .. }
+                | FlayerCommand::Link { .. }
+                | FlayerCommand::Relink { .. }
+                | FlayerCommand::Load { .. }
+                | FlayerCommand::Minds { .. }
+                | FlayerCommand::Scan { .. }
+                | FlayerCommand::Gather(_)
+                | FlayerCommand::Adopt { .. }
+                | FlayerCommand::Agents { .. }
+                | FlayerCommand::Share { .. }
+                | FlayerCommand::Targets { .. }
+                | FlayerCommand::Migrate { .. },
+            ) => Vec::new(),
+        }
+    }
+}
+
+/// `cautions` when `asked`, and none otherwise.
+fn when(asked: bool, cautions: &[Caution]) -> Vec<Caution> {
+    if asked {
+        cautions.to_vec()
+    } else {
+        Vec::new()
+    }
+}
+
+/// What an uninstall takes away: copies, and with `--force` an edited one
+/// among them, which it otherwise leaves with every other copy of it.
+fn uninstalling(force: bool) -> Vec<Caution> {
+    let mut cautions = vec![Caution::Uninstalls];
+    if force {
+        cautions.push(Caution::Forces);
+    }
+    cautions
+}
+
+/// What `words`, a command line, takes away, which a front end asks about
+/// before it runs it; nothing for a line that takes nothing away.
+///
+/// Read with the parsers that run it, as [`refused`] is: `mind flayer
+/// unlink alpha` is `flayer unlink alpha`, and a flag in front of either
+/// changes nothing. A line neither takes would not run, and takes nothing.
+pub fn cautions(words: &[String]) -> Vec<Caution> {
+    match words.first().map(String::as_str) {
+        Some("mind") => Cli::try_parse_from(words)
+            .map(|cli| Caution::of_mind(cli.command.as_ref()))
+            .unwrap_or_default(),
+        Some("flayer") => FlayerCli::try_parse_from(words)
+            .map(|cli| Caution::of_flayer(cli.command.as_ref()))
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+/// What each of `lines` takes away, each line by its place among them,
+/// from 0: what a front end asks somebody to confirm before it runs them.
+pub fn cautioned(lines: &[Vec<String>]) -> Vec<(usize, Caution)> {
+    lines
+        .iter()
+        .enumerate()
+        .flat_map(|(at, line)| cautions(line).into_iter().map(move |caution| (at, caution)))
+        .collect()
 }
 
 /// One command line, at the level a holder is at: `flayer <command>` for the
