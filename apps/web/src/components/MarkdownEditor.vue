@@ -4,7 +4,7 @@ import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { yamlFrontmatter } from '@codemirror/lang-yaml'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
-import { EditorState } from '@codemirror/state'
+import { Annotation, Compartment, EditorState, Text } from '@codemirror/state'
 import { EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 
@@ -96,6 +96,35 @@ const marked = HighlightStyle.define([
   { tag: [tags.bool, tags.number, tags.null, tags.atom], color: 'var(--ui-warning)' }
 ])
 
+/*
+ * The line separator the editor gives the text back with, each time a text
+ * is taken in: CRLF for a file written with CRLF alone, so a save that
+ * changed one line does not turn every other to LF, and CodeMirror's own
+ * otherwise, which reads a line at any of `\r\n`, `\r` and `\n` and
+ * gives LF back. A file mixing them would be drawn as a few long lines
+ * were CRLF the only separator, and is given back as LF once something is
+ * typed in it.
+ */
+const separator = new Compartment()
+
+/** Whether every line of `value` ends in CRLF, there being one at least. */
+function crlf(value: string): boolean {
+  return value.includes('\r\n') && !/[\r\n]/.test(value.replaceAll('\r\n', ''))
+}
+
+/** The separator the editor reads `value` by and gives it back with. */
+function separating(value: string) {
+  return crlf(value) ? EditorState.lineSeparator.of('\r\n') : []
+}
+
+/*
+ * A text taken in from outside, read again from the disk. Taken in as it
+ * is, never written back from what the editor makes of it: a file the
+ * editor would give back with other line endings is still the file, until
+ * somebody types.
+ */
+const fromOutside = Annotation.define<boolean>()
+
 onMounted(() => {
   const shadow = host.value!.attachShadow({ mode: 'open' })
   view = new EditorView({
@@ -104,9 +133,7 @@ onMounted(() => {
     state: EditorState.create({
       doc: text.value,
       extensions: [
-        // A file written with CRLF is given back with CRLF, rather than
-        // turned to LF by a save that changed one line.
-        ...(text.value.includes('\r\n') ? [EditorState.lineSeparator.of('\r\n')] : []),
+        separator.of(separating(text.value)),
         lineNumbers(),
         history(),
         drawSelection(),
@@ -130,9 +157,11 @@ onMounted(() => {
         syntaxHighlighting(marked),
         look,
         EditorView.contentAttributes.of({ 'aria-label': props.label }),
+        // `sliceDoc`, which joins the lines with the separator, where
+        // `doc.toString()` would join them with LF whatever it is.
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) {
-            text.value = update.state.doc.toString()
+          if (update.transactions.some(each => each.docChanged && !each.annotation(fromOutside))) {
+            text.value = update.state.sliceDoc()
           }
         })
       ]
@@ -141,10 +170,16 @@ onMounted(() => {
 })
 
 // The text changed from outside, read again from the disk: the editor
-// shows it, its undo history kept, so reading again can be undone.
+// shows it, its undo history kept, so reading again can be undone, split
+// into lines by the separator it was written with, which the editor then
+// gives it back with.
 watch(text, (value) => {
-  if (view && value !== view.state.doc.toString()) {
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })
+  if (view && value !== view.state.sliceDoc()) {
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: Text.of(value.split(crlf(value) ? '\r\n' : /\r\n?|\n/)) },
+      effects: separator.reconfigure(separating(value)),
+      annotations: fromOutside.of(true)
+    })
   }
 })
 

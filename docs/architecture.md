@@ -5474,7 +5474,11 @@ core says of them, never by a rule of the panel's (#82).
   while nothing typed would be lost, or once the file holds what the editor
   does, as after a save. Otherwise it says the file changed and offers to
   read it again, and a save is refused by the line, `edit_stale`, in core's
-  words, with nothing written over the change.
+  words, with nothing written over the change. A file is taken in as it
+  is, and stays what was read until something is typed: one whose every
+  line ends in CRLF is read and given back with CRLF, each time it is taken
+  in, and one mixing endings is read a line at any of them and given back
+  with LF once typed in, which CodeMirror's one separator cannot keep.
 - **CodeMirror, held to the CSP.** The editor is CodeMirror 6, drawn in a
   shadow root of its own (`MarkdownEditor.vue`). Its styles come from
   style-mod, which writes a `<style>` element into a document, refused by

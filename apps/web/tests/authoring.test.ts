@@ -187,6 +187,54 @@ describe('the editor', () => {
     expect(editor(page).view.state.doc.toString()).toBe(changed.text)
     expect(page.find('[data-testid="changed"]').exists()).toBe(false)
   })
+
+  it('takes in a file written with CRLF since it was read with LF, clean until typed in, and saves it with CRLF still', async () => {
+    const answered: Answered[] = [...answers(), ...drafts()]
+    const { sent, tell, transport } = commanding(fixture('workspace'), [], answered)
+    const { page } = await render(EDITOR, transport)
+    const lf = review().text!
+    const written = lf.replaceAll('\n', '\r\n')
+
+    // Written again with CRLF by somebody else while nothing was typed: the
+    // editor takes it in as it is.
+    const contents = answered.find(each => each.query.type === 'contents' && each.query.reference === 'skill:review' && each.query.file === 'SKILL.md')!
+    contents.answer = { ...(contents.answer as Contents), text: written, hash: 'e'.repeat(64) }
+    tell({ type: 'changed', scopes: [{ type: 'workspace' }] })
+    const { view } = editor(page)
+    await vi.waitFor(() => expect(view.state.sliceDoc()).toBe(written))
+
+    expect(view.state.doc.lines).toBe(lf.split('\n').length)
+    expect(page.find('[data-testid="unsaved"]').exists()).toBe(false)
+    expect(page.find('[data-testid="changed"]').exists()).toBe(false)
+    expect(page.get('[data-testid="save"]').attributes('disabled')).toBeDefined()
+
+    // One line typed in: every other keeps its CRLF.
+    const second = view.state.doc.line(2)
+    view.dispatch({ changes: { from: second.to, insert: ' today' } })
+    await flushPromises()
+    expect(page.find('[data-testid="unsaved"]').exists()).toBe(true)
+    await page.get('[data-testid="save"]').trigger('click')
+    await flushPromises()
+
+    const lines = written.split('\r\n')
+    lines[1] = `${lines[1]} today`
+    expect(sent[0]).toEqual({ task: { type: 'save', holder: { type: 'workspace' }, kind: 'skill', name: 'review', text: lines.join('\r\n'), hash: 'e'.repeat(64) }, mode: 'preview' })
+  })
+
+  it('reads a file mixing line endings a line at a time, clean until typed in', async () => {
+    const answered: Answered[] = [...answers(), ...drafts()]
+    const contents = answered.find(each => each.query.type === 'contents' && each.query.reference === 'skill:review' && each.query.file === 'SKILL.md')!
+    const lf = review().text!
+    const mixed = lf.replace('\n', '\r\n')
+    contents.answer = { ...(contents.answer as Contents), text: mixed }
+    const { page } = await render(EDITOR, commanding(fixture('workspace'), [], answered).transport)
+
+    const { view } = editor(page)
+
+    expect(view.state.doc.lines).toBe(lf.split('\n').length)
+    expect(view.state.doc.line(1).text).toBe('---')
+    expect(page.find('[data-testid="unsaved"]').exists()).toBe(false)
+  })
 })
 
 const NEW = '/new?kind=skill'
