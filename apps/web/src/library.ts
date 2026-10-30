@@ -10,16 +10,17 @@ export interface Holding {
 
 /**
  * Every project holding `held`, one of the library's own, with its copy
- * there, in the registry's order: each copy of that kind and name whose
- * origin is the one the library's own go by, as the snapshot says it
- * (`library.origin`). So a project's own of the same name, or one installed
- * from the shelf, is never taken for it. A filter of what the snapshot
- * lists, comparing words core wrote, and no rule of the panel's.
+ * there, in the registry's order: each project core names as holding it
+ * (`library.holders`), found by its entry, and its artifact of that kind
+ * and name. Which copies are the library's is core's to tell, never a
+ * comparison of a copy's origin here: an install recorded before origins
+ * were kept names none, and core still takes it for the library's.
  */
 export function holding(snapshot: Snapshot, held: Pick<Held, 'kind' | 'name'>): Holding[] {
+  const holders = snapshot.library.holders.filter(holder => holder.kind === held.kind && holder.name === held.name)
   return snapshot.projects.flatMap(project =>
-    project.artifacts
-      .filter(copy => copy.kind === held.kind && copy.name === held.name && copy.origin === snapshot.library.origin)
-      .map(copy => ({ project, copy }))
+    holders.some(holder => holder.entry === project.entry)
+      ? project.artifacts.filter(copy => copy.kind === held.kind && copy.name === held.name).map(copy => ({ project, copy }))
+      : []
   )
 }

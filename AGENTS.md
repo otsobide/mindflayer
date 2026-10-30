@@ -794,9 +794,12 @@ These are easy to break from a single file without noticing.
   the lists, and a kind core adds reaches every view with no change
   (`tests/kinds.test.ts`). So is a word it compares or shows: an origin as
   `--from` takes it (each shelf row's, source's and load's `origin`, and
-  `library.origin`, which tells the projects holding one of the library's
-  own), never put together from an address and a branch, and an artifact's
-  front matter, which core cuts from the file (`contents::Manifest`). Every
+  `library.origin`), never put together from an address and a branch, and
+  an artifact's front matter, which core cuts from the file
+  (`contents::Manifest`). So is which projects hold a copy of one of the
+  library's own (`library.holders`, by `install::from_the_library`, the
+  rule `flayer remove --everywhere` follows), never told by comparing a
+  copy's origin, which an install from before origins were kept lacks. Every
   page passes axe (`tests/a11y.test.ts`), works from the keyboard, and never
   says a state by colour alone.
 - **The panel's types are written from Rust, and are its contract.** Every

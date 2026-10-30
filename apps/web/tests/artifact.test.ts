@@ -154,6 +154,21 @@ describe('one of the library\'s own', () => {
     expect(texts(rows[0]!, '[data-testid="agent"]')).toEqual(api.artifacts.find(held => held.name === 'review')!.agents)
   })
 
+  it('lists each holder core names, though its copy names no origin', async () => {
+    const snapshot = fixture('workspace')
+    // As an install recorded before origins were kept names none.
+    for (const project of snapshot.projects) {
+      for (const copy of project.artifacts.filter(held => held.kind === 'skill' && held.name === 'review')) {
+        copy.origin = null
+      }
+    }
+
+    const { page } = await render(at('skill', 'review'), snapshot)
+
+    expect(page.findAll('[data-testid="holder"] [data-testid="project"]').map(project => project.text())).toEqual(['api', 'web', 'docs'])
+    expect(page.find('[data-testid="no-holding"]').exists()).toBe(false)
+  })
+
   it('names the command that installs it when no project holds a copy', async () => {
     const snapshot = fixture('workspace')
 

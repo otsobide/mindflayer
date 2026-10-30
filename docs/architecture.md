@@ -4622,14 +4622,15 @@ file under `src/pages`:
   with its `origin`, branch, folder, commit and what it supplied, and the
   latest actions the ledger logged (`history`), newest first.
 
-A project holds a copy of one of the library's own when it holds an
-artifact of that kind and name whose `origin` is the library's
-(`library.origin`), the word a copy installed from it records: two words
-core wrote, compared, so a project's own of the same name, or one installed
-from the shelf, is never taken for it, and the panel spells no origin of its
-own. What a source supplied is the shelf's rows that name its folder, which
-no two sources share. Both are filters of what the snapshot lists, as a
-health filter is. An origin is shown as core says it, never put together
+A project holds a copy of one of the library's own when core names it
+among `library.holders`, and the copy is its artifact of that kind and
+name: so a project's own of the same name, or one installed from the
+shelf, is never taken for it, and an install recorded before origins were
+kept, whose copy names no origin, is not left out, which comparing a
+copy's `origin` with `library.origin` in the panel would do. What a source
+supplied is the shelf's rows that name its folder, which no two sources
+share. Both are filters of what the snapshot lists, as a health filter
+is. An origin is shown as core says it, never put together
 from an address and a branch, which would be the rule for `--from` in
 TypeScript ([the read model](#the-read-model)).
 

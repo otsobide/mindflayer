@@ -80,14 +80,20 @@ describe('the library', () => {
     expect(review!.get('[data-testid="project"]').attributes('href')).toBe('/project?entry=api')
   })
 
-  it('never takes a project\'s own of the same name, or one from elsewhere, for a copy of it', async () => {
+  it('lists the holders core names, whatever origin a copy says or does not', async () => {
     const snapshot = fixture('workspace')
     const [template] = snapshot.projects[0]!.artifacts
+    // Of the same name, even naming the library's origin, but no holder
+    // core names: a project's own, and a copy of a rule of that name.
     snapshot.projects[0]!.artifacts.push(
       { ...template!, name: 'lint', state: 'authored', origin: null },
       { ...template!, kind: 'rule', name: 'lint', state: 'current', origin: 'workspace' }
     )
-    snapshot.projects[2]!.artifacts.push({ ...template!, name: 'lint', state: 'current', origin: 'https://github.com/acme/skills' })
+    snapshot.projects[2]!.artifacts.push({ ...template!, name: 'lint', state: 'current', origin: snapshot.library.origin })
+    // A holder core names whose copy names no origin, as an install
+    // recorded before origins were kept does not.
+    const web = snapshot.projects.find(project => project.entry === 'web')!
+    web.artifacts.find(copy => copy.kind === 'skill' && copy.name === 'lint')!.origin = null
 
     const { page } = await render('/library?kind=skill', snapshot)
 
