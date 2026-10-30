@@ -693,12 +693,16 @@ impl Backend for PanelBackend {
 /// it is dropped, whatever came of the line.
 ///
 /// Made with `create_new`, in a folder made with `create_dir`, never
-/// `create_dir_all`, so nothing is written through what somebody put there,
-/// and no `.mindflayer` is made where there is none, which a line of the
-/// panel's would then take for a workspace. A file already there under the
-/// name is taken as it is when it holds the text exactly, as one an
-/// interrupted run left would, the name being the text's hash; anything
-/// else there refuses the save, and is left as it is.
+/// `create_dir_all`, so no `.mindflayer` is made where there is none, which
+/// a line of the panel's would then take for a workspace. The folder is
+/// looked at once it is there, and a link in its place refuses the save:
+/// `create_dir` says a link is there as it says a folder is, and
+/// `create_new` refuses a link only as the file itself, following one in
+/// the folder's place, which a cloned workspace can bring to an agent's own
+/// folder. A file already there under the name is taken as it is when it
+/// holds the text exactly, as one an interrupted run left would, the name
+/// being the text's hash; anything else there refuses the save, and is left
+/// as it is.
 struct Scratch {
     path: PathBuf,
 }
@@ -718,6 +722,11 @@ impl Scratch {
                     return Err(unwritable(error))
                 }
                 _ => {}
+            }
+            if !fs::symlink_metadata(folder).is_ok_and(|found| found.is_dir()) {
+                return Err(unwritable(io::Error::other(
+                    "its folder is a link or no folder, and nothing is written through one",
+                )));
             }
         }
         match OpenOptions::new().write(true).create_new(true).open(&path) {

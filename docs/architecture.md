@@ -5449,11 +5449,14 @@ core says of them, never by a rule of the panel's (#82).
   preview and a run being two requests. The backend writes the text there
   before the line runs and takes the file away once the lines have run,
   whatever came of them (`backend::Scratch`): made with `create_new`, in a
-  folder made with `create_dir` inside a `.mindflayer` that is there, so
-  nothing is written through what somebody put in its place, and no
-  `.mindflayer` is made. A file already there under the name is taken when
-  it holds the text exactly, as an interrupted run would have left it, and
-  anything else there refuses the save (`scratch_unwritable`). In the
+  folder made with `create_dir` inside a `.mindflayer` that is there, so no
+  `.mindflayer` is made, and looked at once it is there, so nothing is
+  written through a link in its place, which a cloned workspace can bring
+  to an agent's own folder: `create_dir` says a link is there as it says a
+  folder is, and `create_new` follows one anywhere but at the file itself.
+  A file already there under the name is taken when it holds the text
+  exactly, as an interrupted run would have left it, and anything else
+  there, or a link, refuses the save (`scratch_unwritable`). In the
   workspace's `.mindflayer` (`FlayerWorkspace::scratch_dir`), where no agent
   looks: not the system's temporary folder, where another user could read
   what is about to be written, nor a project's `.mind/tmp`, which a cloned
@@ -9468,10 +9471,13 @@ just listed.
   judged, so a link put in its place afterwards is not followed; a folder on
   that path made a link in the moment between is. A path the policy judged
   outside every `.mindflayer` can likewise be made a link into one before
-  the command runs. Opening each folder on the way without following links
-  would close the first, as `ConfigFile` narrows its own window, at the
-  price of code per platform; the second is a race with somebody who can
-  already write where the command acts.
+  the command runs. The scratch folder a save puts its text in is looked at
+  once it is there, and refused as a link, so one put in its place between
+  that look and the file's making is followed the same way. Opening each
+  folder on the way without following links would close the first and the
+  third, as `ConfigFile` narrows its own window, at the price of code per
+  platform; the second is a race with somebody who can already write where
+  the command acts.
 - **A listing reads an artifact through its links.** The snapshot lists a
   rule with its summary, its first line when it has no front matter, read
   through any link as the catalog follows one, so a rule linked out of its

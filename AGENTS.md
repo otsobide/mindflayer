@@ -704,8 +704,9 @@ These are easy to break from a single file without noticing.
     values that start with a dash. A save's text reaches no line at all:
     the line names the workspace's scratch file for it, in `.mindflayer`
     (`FlayerWorkspace::scratch_dir`), which the backend writes with
-    `create_new`, in a folder made with `create_dir`, taking a file there
-    under the name only when it holds the text exactly.
+    `create_new`, in a folder made with `create_dir` and refused when it is
+    a link, taking a file there under the name only when it holds the text
+    exactly.
   - A task or a query the panel sends names only what core's path policy
     allows (`policy`), which `admit::Admission` asks of every value that
     names something on the disk, in a match over every variant with no

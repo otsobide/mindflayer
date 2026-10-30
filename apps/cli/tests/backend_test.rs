@@ -2245,3 +2245,30 @@ fn a_save_takes_the_text_left_under_its_name_and_refuses_anything_else_there() {
     assert_eq!(refused.code, "scratch_unwritable");
     assert_eq!(fs::read_to_string(&left).unwrap(), "somebody's");
 }
+
+/// A cloned workspace can bring its scratch folder as a link, to an agent's
+/// own folder: the text is never written through it, and no line runs.
+#[cfg(unix)]
+#[test]
+fn a_save_whose_scratch_folder_is_a_link_is_refused_and_writes_nothing_where_it_leads() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
+    let read = fs::read_to_string(&manifest).unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let commands = elsewhere.path().join("commands");
+    fs::create_dir(&commands).unwrap();
+    let folder = FlayerWorkspace::open(root).unwrap().scratch_dir();
+    std::os::unix::fs::symlink(&commands, &folder).unwrap();
+    let backend = backend(root);
+
+    let refused = backend
+        .run(save(&read.replace("Ship it", "Ship it today"), &read))
+        .unwrap_err();
+
+    assert_eq!(refused.code, "scratch_unwritable");
+    assert!(refused.message.contains("is a link"), "{}", refused.message);
+    assert_eq!(fs::read_dir(&commands).unwrap().count(), 0);
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), read);
+}
