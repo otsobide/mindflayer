@@ -25,6 +25,7 @@
   {
     "answer": {
       "file": "SKILL.md",
+      "hash": "5c633d1ea405c78f129f7e6d9b5b76efe656976f7606608609de9991276b20c8",
       "kind": "skill",
       "manifest": {
         "body": "\n# lint\n\nRun the formatter first.\n",
@@ -103,6 +104,7 @@
   {
     "answer": {
       "file": "SKILL.md",
+      "hash": "8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d",
       "kind": "skill",
       "manifest": {
         "body": "\n# review\n\nRead the diff **before** it lands, and say what you would change.\n\n## Steps\n\n1. Run `scripts/diff.sh` to see what changed.\n2. Go through [the checklist](references/checklist.md).\n3. Leave one comment per finding, and *say why*.\n\n| check | why |\n| :--- | ---: |\n| tests | they pass |\n\nThe long version is at <https://example.com/review>.\n\n```sh\nscripts/diff.sh main\n```\n",
@@ -142,6 +144,7 @@
   {
     "answer": {
       "file": "references/checklist.md",
+      "hash": "47369b9533417c5458d3a7de3a940e14491385ffe52a8d18bd4c991a27d73add",
       "kind": "skill",
       "manifest": null,
       "name": "review",
@@ -161,6 +164,7 @@
   {
     "answer": {
       "file": "scripts/diff.sh",
+      "hash": "9ad103f01ce7817630c11e7e46dc9ae49b9803f448cbd049238ce878a24c92cb",
       "kind": "skill",
       "manifest": null,
       "name": "review",
@@ -203,6 +207,7 @@
   {
     "answer": {
       "file": "commits.md",
+      "hash": "1b60c1aea658ecda6ddf543fb4e3593cd36326744568b6290a80b1c74088ecf7",
       "kind": "rule",
       "manifest": {
         "body": "# Write commit messages that say why\n",
@@ -248,6 +253,7 @@
   {
     "answer": {
       "file": "comments.md",
+      "hash": "b397293d2103a5bbb08fda1ea8a03efad3cb40ddd2a5814ee353a6ec09d35629",
       "kind": "rule",
       "manifest": {
         "body": "# Comment the why, not the what\n",

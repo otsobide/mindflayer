@@ -482,6 +482,11 @@ fn a_skills_file_comes_back_as_text_inside_json() {
     assert_eq!(answer["text"], skill_file("alpha", "A skill"));
     assert_eq!(answer["withheld"], Value::Null);
     assert_eq!(answer["kind"], "skill");
+    // What `edit --if-unchanged` takes of it, core's hash of its bytes.
+    assert_eq!(
+        answer["hash"],
+        mindflayer_core::hash::bytes(skill_file("alpha", "A skill").as_bytes())
+    );
     // Cut where core cuts it, so the panel draws what it declares apart.
     assert_eq!(answer["manifest"]["front_matter"][0]["key"], "name");
     assert_eq!(answer["manifest"]["front_matter"][0]["value"], "alpha");
@@ -506,7 +511,7 @@ fn an_html_asset_or_an_svg_holding_a_script_is_not_served_as_content() {
         keys.sort_unstable();
         assert_eq!(
             keys,
-            ["file", "kind", "manifest", "name", "size", "text", "withheld"]
+            ["file", "hash", "kind", "manifest", "name", "size", "text", "withheld"]
         );
         // No file but the one the skill is read from is cut into parts.
         assert_eq!(answer["manifest"], Value::Null, "{file}");

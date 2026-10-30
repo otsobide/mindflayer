@@ -21,6 +21,18 @@ file: string,
  */
 size: number, 
 /**
+ * The SHA-256 of what it holds ([`hash::bytes`]), when it was read
+ * whole: none for one larger than [`CAP`], which never is.
+ *
+ * What `edit --if-unchanged` takes, so a front end that changes the
+ * file holds the change to what it read, and is refused when somebody
+ * changed it since (`edit_stale`). Hashed here, of the bytes the text
+ * was read from, rather than by the front end from the text: one
+ * recipe for every hash of a file, and a text a browser hashed could
+ * be told apart from the file by nothing but a line ending.
+ */
+hash: string | null, 
+/**
  * What it says, when it is UTF-8 text no larger than [`CAP`]; none
  * otherwise, and [`withheld`](Self::withheld) says why.
  */
