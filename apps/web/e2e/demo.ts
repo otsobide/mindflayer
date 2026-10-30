@@ -1,0 +1,245 @@
+/*
+ * The workspace the README's screenshots show, built as somebody would build
+ * theirs: repositories made with git, then a command at a time with the
+ * binaries under test, so every page shows what those commands made. It is
+ * meant to look lived in, unlike the suite's fixture, which is meant to be
+ * compared: projects with plausible names, a library and a shelf with real
+ * bodies, installs from both, some of them behind where they came from,
+ * and two repositories nobody linked yet.
+ *
+ * The only files written by hand are the repositories' contents, as a
+ * person's own work would be, and the bodies `flayer edit` copies in through
+ * `--editor`, the way an editor would save them. Everything else is a
+ * command's.
+ */
+import { spawnSync } from 'node:child_process'
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { environment, run, succeed, type Places } from './environment.ts'
+
+/** `examples/` in this repository, whose skills and rules the demo reuses. */
+const EXAMPLES = fileURLToPath(new URL('../../../examples', import.meta.url))
+
+/** The workspace's folder, under the scratch folder, as the screenshots name it. */
+export const WORKSPACE = 'Projects'
+
+/** The project whose page the tour shows, and whose unlink it asks about. */
+export const SHOWN = 'mobile-app'
+
+/** The skill of the library's own whose page the tour shows. */
+export const ARTIFACT = 'api-conventions'
+
+/**
+ * Who the repositories' commits are by, and when: fixed, so a regenerated
+ * shelf shows the same commits. Neither the person running it nor their git
+ * configuration: no system or global file is read.
+ */
+function author(date: string): Record<string, string> {
+  return {
+    GIT_AUTHOR_NAME: 'Demo',
+    GIT_AUTHOR_EMAIL: 'demo@example.com',
+    GIT_AUTHOR_DATE: date,
+    GIT_COMMITTER_NAME: 'Demo',
+    GIT_COMMITTER_EMAIL: 'demo@example.com',
+    GIT_COMMITTER_DATE: date,
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: '/dev/null'
+  }
+}
+
+/** Run git with `args` in `directory`, as the demo's author at `date`, failing unless it exits 0. */
+function git(at: Places, directory: string, args: string[], date = '2026-10-01T09:00:00Z'): void {
+  const ran = spawnSync('git', ['-c', 'init.defaultBranch=main', '-c', 'commit.gpgsign=false', ...args], {
+    cwd: directory,
+    env: { ...environment(at), ...author(date) },
+    encoding: 'utf8',
+    timeout: 60_000
+  })
+  if (ran.error) {
+    throw ran.error
+  }
+  if (ran.status !== 0) {
+    throw new Error(`\`git ${args.join(' ')}\` in ${directory} exited ${ran.status}:\n${ran.stdout}${ran.stderr}`)
+  }
+}
+
+/** Write `text` to `path`, making the folders above it. */
+function write(path: string, text: string): void {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, text)
+}
+
+/** A repository at `folder`, empty, as `git init` makes one. */
+function repository(at: Places, folder: string): void {
+  mkdirSync(folder, { recursive: true })
+  git(at, folder, ['init', '--quiet'])
+}
+
+const API_CONVENTIONS = `---
+name: api-conventions
+description: How our HTTP APIs are shaped, from resource names to errors and pagination. Use when adding or changing an endpoint.
+---
+
+# API conventions
+
+Every service here speaks the same HTTP, so a client written for one works
+for the next.
+
+## Resources
+
+- Plural nouns for collections, \`/invoices\`, and an id below them,
+  \`/invoices/{id}\`. No verbs in a path: an action is a resource of its own,
+  \`POST /invoices/{id}/refunds\`.
+- JSON bodies, with fields in \`snake_case\` and times in RFC 3339.
+
+## Errors
+
+Answer with the status that says what went wrong, and a body a program can
+act on:
+
+\`\`\`json
+{ "error": { "code": "invoice_closed", "message": "A closed invoice cannot change." } }
+\`\`\`
+
+## Pagination
+
+By cursor: \`?limit=\` up to 100, and a \`next\` cursor in the answer while
+there is more. Never by offset, which skips rows as others are inserted.
+`
+
+const DEPLOY_CHECKLIST = `---
+name: deploy-checklist
+description: Ships a service from staging to production one checked step at a time. Use before any release.
+---
+
+# Deploy checklist
+
+1. The main branch is green, and the release notes are written.
+2. Deploy to staging and run the smoke tests.
+3. Watch the dashboards for ten minutes: errors, latency, saturation.
+4. Deploy to production behind the flag, then ramp it up.
+5. Say so in #releases, with a link to the notes.
+`
+
+/** The checklist once the team learned something, which leaves its installs behind. */
+const DEPLOY_CHECKLIST_SINCE = `${DEPLOY_CHECKLIST}6. Keep the previous build ready to roll back to for an hour.
+`
+
+const RELEASE_NOTES = `---
+name: release-notes
+description: Drafts release notes from the pull requests merged since the last tag. Use when cutting a release.
+---
+
+# Release notes
+
+1. List what merged since the last tag: \`git log --merges <tag>..HEAD\`.
+2. Group it under Added, Changed and Fixed, in the words of somebody using
+   the product, not the code's.
+3. Name every breaking change first, with what to do about it.
+`
+
+/** The notes as the team's repository has them a day later. */
+const RELEASE_NOTES_SINCE = `${RELEASE_NOTES}4. Thank whoever contributed for the first time.
+`
+
+const SECRETS = `# Keep secrets out of the repository
+
+- Read credentials from the environment or the secret store, never from a
+  file in the tree.
+- A secret that reached a commit is leaked: rotate it first, then remove it.
+`
+
+/**
+ * `at.workspace`, and the repositories around it:
+ *
+ * - its library holds the skills `api-conventions` and `deploy-checklist`
+ *   and the rules `git/commits`, `security/secrets` and `style/comments`;
+ * - its shelf holds `code-review`, `commit-style` and `release-notes`,
+ *   gathered from `team`, the team's repository beside it;
+ * - it links six projects, `billing-api`, `storefront`, `mobile-app`,
+ *   `infra`, `data-pipeline` and `admin-console`, each a repository given
+ *   `mind init`, with what each works with installed from both;
+ * - `release-notes` and `deploy-checklist` changed where they came from
+ *   since, so their installs are outdated;
+ * - `design-system`, a mind project, and `playground`, a repository, sit in
+ *   the workspace unlinked, for Discover to find.
+ */
+export function build(at: Places): void {
+  const drafts = join(at.scratch, 'drafts')
+
+  // The team's skills, in a repository of their own: two of the examples,
+  // and the release notes.
+  const team = join(at.scratch, 'team')
+  repository(at, team)
+  for (const skill of ['code-review', 'commit-style']) {
+    cpSync(join(EXAMPLES, 'skills', skill), join(team, 'skills', skill), { recursive: true })
+  }
+  write(join(team, 'skills/release-notes/SKILL.md'), RELEASE_NOTES)
+  git(at, team, ['add', 'skills'])
+  git(at, team, ['commit', '--quiet', '-m', 'Add the team\'s skills'])
+
+  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'flayer', at.workspace, ['gather', 'git', team])
+
+  // The library's own: each made by `flayer add`, then written as an
+  // editor would save it.
+  const own: [kind: 'skill' | 'rule', name: string, description: string, body: string][] = [
+    ['skill', 'api-conventions', 'How our HTTP APIs are shaped', API_CONVENTIONS],
+    ['skill', 'deploy-checklist', 'Ships a service safely', DEPLOY_CHECKLIST],
+    ['rule', 'git/commits', 'Commit one coherent step at a time', readFileSync(join(EXAMPLES, 'rules/git/commits.md'), 'utf8')],
+    ['rule', 'security/secrets', 'Keep secrets out of the repository', SECRETS],
+    ['rule', 'style/comments', 'Comments say why, not what', readFileSync(join(EXAMPLES, 'rules/style/comments.md'), 'utf8')]
+  ]
+  for (const [kind, name, description, body] of own) {
+    succeed(at, 'flayer', at.workspace, ['add', kind, name, description])
+    const draft = join(drafts, `${name}.md`)
+    write(draft, body)
+    succeed(at, 'flayer', at.workspace, ['edit', `${kind}:${name}`, '--editor', `cp ${draft}`])
+  }
+
+  // The projects, each a repository made a project and linked, with what
+  // it works with installed.
+  const projects: [name: string, options: string[], installs: string[]][] = [
+    ['billing-api', ['--agents', 'claude,codex'], ['skill:api-conventions', 'skill:code-review', 'rule:git/commits', 'rule:security/secrets']],
+    ['storefront', ['--agents', 'claude,opencode', '--shared'], ['skill:api-conventions', 'skill:commit-style', 'skill:release-notes', 'rule:git/commits']],
+    [SHOWN, [], ['skill:code-review', 'skill:commit-style', 'skill:release-notes', 'rule:git/commits', 'rule:style/comments']],
+    ['infra', ['--agents', 'claude'], ['skill:deploy-checklist', 'rule:security/secrets']],
+    ['data-pipeline', ['--agents', 'codex'], ['skill:code-review', 'rule:git/commits']],
+    ['admin-console', ['--agents', 'claude,opencode', '--shared'], ['skill:api-conventions', 'skill:commit-style', 'rule:git/commits']]
+  ]
+  for (const [name, options, installs] of projects) {
+    const folder = join(at.workspace, name)
+    repository(at, folder)
+    succeed(at, 'mind', folder, ['init', ...options])
+    succeed(at, 'flayer', at.workspace, ['link', name])
+    for (const install of installs) {
+      if (install !== 'rule:style/comments') {
+        succeed(at, 'flayer', at.workspace, ['install', '-p', name, install])
+        continue
+      }
+      // A rule stating `paths` reaches Claude alone, which the install says
+      // in a warning, and exits 1 for: installed all the same, and what the
+      // project's page warns of too.
+      const ran = run(at, 'flayer', at.workspace, ['install', '-p', name, install])
+      if (!ran.stdout.startsWith('installed ') || !/^warning: rule `style\/comments` states `paths`/.test(ran.stderr)) {
+        throw new Error(`\`${ran.line}\` exited ${ran.status}:\n${ran.stdout}${ran.stderr}`)
+      }
+    }
+  }
+  succeed(at, 'mind', join(at.workspace, 'billing-api'), ['add', 'skill', 'run-migrations', 'Applies and rolls back the database migrations'])
+
+  // A day later: the team improved its release notes, gathered again, and
+  // the deploy checklist grew a step, which leaves their installs behind.
+  write(join(team, 'skills/release-notes/SKILL.md'), RELEASE_NOTES_SINCE)
+  git(at, team, ['commit', '--quiet', '--all', '-m', 'Thank first-time contributors'], '2026-10-02T09:00:00Z')
+  succeed(at, 'flayer', at.workspace, ['gather', 'git', team])
+  write(join(drafts, 'deploy-checklist.md'), DEPLOY_CHECKLIST_SINCE)
+  succeed(at, 'flayer', at.workspace, ['edit', 'skill:deploy-checklist', '--editor', `cp ${join(drafts, 'deploy-checklist.md')}`])
+
+  // Two repositories nobody linked yet.
+  const design = join(at.workspace, 'design-system')
+  repository(at, design)
+  succeed(at, 'mind', design, ['init'])
+  repository(at, join(at.workspace, 'playground'))
+}

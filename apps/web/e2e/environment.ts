@@ -186,10 +186,12 @@ export function succeed(at: Places, name: 'flayer' | 'mind', directory: string, 
 /**
  * `flayer ui` as a person starts it over the workspace `at` names, on a
  * port the system picks, with nothing opened: what the config starts the
- * suite's server with, and `serve` a spec's own.
+ * suite's server with, and `serve` a spec's own. With `workspace` `none` it
+ * names none, and finds the one it is started in, as a person's does: what
+ * the screenshots show, from a folder no other workspace is above.
  */
-export function ui(at: Places): string[] {
-  return ['ui', '--no-open', '--port', '0', '-C', at.workspace, ...pinned(at, 'fixture')]
+export function ui(at: Places, workspace: 'fixture' | 'none' = 'fixture'): string[] {
+  return ['ui', '--no-open', '--port', '0', '-C', at.workspace, ...pinned(at, workspace)]
 }
 
 /** A `flayer ui` a spec started, and how to stop it. */
@@ -213,8 +215,8 @@ const LINK = /^(?<origin>http:\/\/127\.0\.0\.1:\d+)\/\?token=(?<token>[0-9a-f]+)
  * of its own, which no other spec reads. Its stdout is read, never
  * printed, so the token stays out of the log.
  */
-export function serve(at: Places): Promise<Serving> {
-  const child = spawn(binary(at.bin, 'flayer'), ui(at), {
+export function serve(at: Places, workspace: 'fixture' | 'none' = 'fixture'): Promise<Serving> {
+  const child = spawn(binary(at.bin, 'flayer'), ui(at, workspace), {
     cwd: at.workspace,
     env: environment(at),
     stdio: ['ignore', 'pipe', 'pipe']
