@@ -90,17 +90,26 @@ function block(token: Token, outline: Outline): VNode[] {
 }
 
 function list(token: Tokens.List, outline: Outline): VNode {
+  // A task's box is a token of its own, drawn where marked puts it: at the
+  // top of a tight item, and first in a loose one's paragraph (`span`).
+  // Drawn by the item instead, it came twice in a loose list, once as the
+  // item's and once as the paragraph's text.
   const items = token.items.map(item =>
-    h('li', [
-      ...(item.task ? [h('code', { class: CODE }, item.checked ? '[x]' : '[ ]'), ' '] : []),
-      ...blocks(item.tokens.filter(each => each.type !== 'checkbox'), outline)
-    ])
+    h('li', item.tokens.flatMap((each): VNodeChild[] => (each.type === 'checkbox' ? box(each as Tokens.Checkbox) : block(each, outline))))
   )
   if (token.ordered) {
     const start = typeof token.start === 'number' && token.start !== 1 ? { start: token.start } : {}
     return h('ol', { class: 'my-2 list-decimal ps-6', ...start }, items)
   }
   return h('ul', { class: 'my-2 list-disc ps-6' }, items)
+}
+
+/**
+ * A task's box, as the text it was written as: a checkbox would ask to be
+ * ticked, and nothing the panel shows of a skill changes it.
+ */
+function box(token: Tokens.Checkbox): VNodeChild[] {
+  return [h('code', { class: CODE }, token.checked ? '[x]' : '[ ]'), ' ']
 }
 
 /** A cell's alignment, by a class of the panel's rather than a style. */
@@ -153,6 +162,8 @@ function span(token: Token): VNodeChild {
     }
     case 'html':
       return h('code', { class: CODE }, (token as Tokens.Tag).text)
+    case 'checkbox':
+      return box(token as Tokens.Checkbox)
     default:
       return token.raw
   }

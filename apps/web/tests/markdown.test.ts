@@ -101,4 +101,12 @@ describe('markdown somebody else wrote', () => {
     expect(page.findAll('p > code').map(code => code.text())).toEqual(['<code>'])
     expect(page.get('del').text()).toBe('gone')
   })
+
+  it('draws a task box once, in a loose list as in a tight one', () => {
+    const page = draw('1. [ ] loose\n\n2. [x] two\n')
+
+    expect(page.findAll('ol > li').map(item => item.text())).toEqual(['[ ] loose', '[x] two'])
+    expect(page.findAll('ol > li code').map(code => code.text())).toEqual(['[ ]', '[x]'])
+    expect(page.findAll('ol > li > p').map(paragraph => paragraph.text())).toEqual(['[ ] loose', '[x] two'])
+  })
 })
