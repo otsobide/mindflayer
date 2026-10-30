@@ -5008,9 +5008,11 @@ the only way to know the port: the config reads it with a regex whose
 named groups Playwright puts in the environment of every worker
 (`MINDFLAYER_E2E_URL`, `MINDFLAYER_E2E_TOKEN`). The server's stdout is not
 printed, so the token stays out of the log, as the server keeps it out of
-its own; its stderr is. Each test opens the launch link first
-(`panel.open`), so the token is traded for the cookie as a person's browser
-trades it.
+its own; its stderr is. Every test that opens a page goes in through the
+launch link first (`panel.open`), so the token is traded for the cookie as
+a person's browser trades it. The security smoke tests send requests of
+their own: one with the cookie the link set, one with the token as
+Bearer, and one with neither.
 
 The specs hold the panel to the CLI: the overview's cards to the rows
 `flayer list --json` prints, counted from them rather than read from a
