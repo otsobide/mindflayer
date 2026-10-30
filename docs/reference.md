@@ -1850,9 +1850,10 @@ projects table or from what **Discover** finds, relinks one that moved,
 unlinks one from its page, changes a project's agents and share mode,
 migrates a project an older Mindflayer made, installs and uninstalls
 skills and rules from **Assign**, brings what is installed up to date and
-takes out what nothing offers from **Updates**, and removes one of the
-library's own everywhere, its dry run first; everything else is still a
-command away.
+takes out what nothing offers from **Updates**, removes one of the
+library's own everywhere, its dry run first, edits, adds and renames the
+library's own, and adopts a skill somebody keeps in a project's agents'
+folders; everything else is still a command away.
 
 **The transcript**, in every page's header, lists every task the session
 ran, from this tab or any other, each line with what it printed, and
@@ -1894,7 +1895,11 @@ on the workspace the panel shows wherever you type it, for a project linked
 from outside that workspace too; a workspace not made yet names `flayer init`
 first, since `-W` never makes the one it names. **Unlink**, at the top,
 asks first, and says that the workspace only forgets the project: nothing on
-disk is deleted.
+disk is deleted. A row that reads `foreign`, somebody's own in a folder an
+agent reads, offers **Adopt**, `flayer adopt -p <project> --yes
+<kind:name>` ([a repository that already has .claude/skills](#a-repository-that-already-has-claudeskills)), shown before it runs;
+what Mindflayer will not adopt, a rule or a skill an install could not have
+written, the line refuses, saying why.
 
 Below what it holds, **Agents and sharing** are the project's settings as
 toggles: a box for each agent that works in it, `local` or `shared`, and
@@ -1942,6 +1947,12 @@ how each copy stands, and what `validate` says of it; type to filter by name
 or summary. Below them are the workspaces it loads, each with where it is,
 how many of its own it offers, what `--from` takes for them (`load:../team`)
 and why one does not open. A kind it holds none of names `flayer add`.
+**New skill** and **New rule**, at the top, open a page that adds one: its
+name, its description and what it starts from, nothing or one of the
+kind's templates ([from a template](#from-a-template)), judged as you type by what
+`flayer add` would refuse, in its words, and by what `validate` would say
+of it once written. **Add** runs `flayer add [--template <template>] <kind>
+<name> <description>`, shown first, and opens what it added.
 
 **One of the library's own** opens from its name. It shows what its front
 matter declares, as a table, every key in the order written; its body,
@@ -1954,6 +1965,33 @@ named rather than loaded, and only a link to another site or a mail address
 stays a link, opened in a tab of its own. No file is ever served as itself,
 and a link in the skill that leads out of the folder the library keeps its
 kind in is listed with why and never followed.
+
+**Edit**, at the top, opens the file it is read from, its `SKILL.md` or a
+rule's file, in an editor in the page, line numbers and markdown with its
+front matter coloured, Ctrl-S to save and Tab to leave it. As you stop
+typing, the text is judged as `flayer edit --contents` would judge it: why
+it would refuse it, in its words (a name other than the skill's folder,
+which `rename` changes, front matter that does not read, or a rule the
+write is held to), and what `validate` would say of it once written, word
+for word as `flayer validate` then prints it. **Save** runs, shown first:
+
+```
+$ flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review
+edited skill review: ok
+```
+
+The browser sends the text, never a path: the file the line names is the
+text, put in the workspace's `.mindflayer/tmp` for the line to read, named
+by the first digits of its SHA-256, and taken away once the line has run,
+whatever came of it. `--if-unchanged` is the SHA-256 of what the file held
+when the editor read it, so a change made to it since, in an editor or from
+a terminal, is never written over: the page says the file changed, and the
+save is refused with `edit_stale`, the file left as the change left it,
+until **Read it again** starts from what it holds now. A copy installed
+from it then reads as outdated, for **Updates** to bring along.
+
+Below its files, **Rename it** runs `flayer rename <kind:name> <new name>`,
+shown first, and opens it under the name it has then.
 
 At the bottom, **See what removing it everywhere does** runs the dry run of
 `flayer remove --everywhere <kind:name>`, which deletes nothing, and shows
