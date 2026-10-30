@@ -29,6 +29,7 @@ declare module 'vue' {
     MarkdownEditor: typeof import('./components/MarkdownEditor.vue')['default']
     MigrateOffer: typeof import('./components/MigrateOffer.vue')['default']
     RemoveOffer: typeof import('./components/RemoveOffer.vue')['default']
+    RenameForm: typeof import('./components/RenameForm.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SettingsForm: typeof import('./components/SettingsForm.vue')['default']

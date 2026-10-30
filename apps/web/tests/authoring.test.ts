@@ -250,4 +250,19 @@ describe('one of the library\'s own', () => {
 
     expect(page.get('[data-testid="edit"]').attributes('href')).toBe(EDITOR)
   })
+
+  it('is renamed as the line the server previews, and its page then is its new name\'s', async () => {
+    const rename = change('rename')
+    const { sent, transport } = commanding(fixture('workspace'), [rename], answers())
+    const { page, router } = await render('/artifact?kind=skill&name=lint', transport)
+
+    await page.get('input[data-testid="rename-to"]').setValue('tidy')
+    await page.get('[data-testid="rename"]').trigger('submit')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: rename.task, mode: 'preview' }])
+    expect(shown()).toEqual(rename.preview.lines.map(line => `$ ${line}`))
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/artifact?kind=skill&name=tidy'))
+  })
 })
