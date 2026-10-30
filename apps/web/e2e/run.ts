@@ -64,9 +64,12 @@ function playwright(options: string[], env: Record<string, string>): Promise<num
   // A Ctrl-C reaches Playwright from the terminal as well, and Playwright
   // stops the server and its browsers; the driver waits for that, to check
   // the home and remove the folder after it. A termination sent to the
-  // driver alone, as CI cancels a job, is passed on.
+  // driver alone, as CI cancels a job, is passed on as that same SIGINT,
+  // not as a SIGTERM: Playwright handles no SIGTERM, and dying of one would
+  // leave `flayer ui`, in a process group of its own, serving a folder the
+  // driver then removes.
   const waiting = () => {}
-  const relay = () => child.kill('SIGTERM')
+  const relay = () => child.kill('SIGINT')
   process.on('SIGINT', waiting)
   process.on('SIGTERM', relay)
   return new Promise((done, failed) => {
