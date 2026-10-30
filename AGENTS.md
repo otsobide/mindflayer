@@ -168,8 +168,10 @@ under `apps/` with its own `Makefile`:
   the panel, cut at its front matter when it is the one the artifact is
   read from, and every file it holds listed (`contents`), which paths and
   entries a request from outside
-  may name (`policy`), and what `show` and `validate` say of each
-  artifact (`reading`). Its only I/O is files, and it never reads the
+  may name (`policy`), what `show` and `validate` say of each
+  artifact (`reading`), and what core says of one a command is about to
+  write, by the command's own checks and in `validate`'s words, for a
+  front end judging what is typed (`draft`). Its only I/O is files, and it never reads the
   environment. Under its `ts` feature, `typescript` gives what it hands a
   front end TypeScript (the roots its export writes, `words!`,
   `CoreCode`).
@@ -232,7 +234,8 @@ under `apps/` with its own `Makefile`:
   by hand, `src/api/plan.ts` the queries of a plan of the boxes marked
   on the matrix and of the lines it runs (`usePlan`, `usePreview`), and
   `src/api/updates.ts` the query of what an update of every project would
-  do (`useUpdates`).
+  do (`useUpdates`), and `src/api/draft.ts` the query of what core says of
+  a draft as it is typed (`useJudged`).
   `src/pages/` holds one
   page per route (file routes): the overview (`index`), the projects
   (`projects`), a project's page (`project`, which `src/routes.ts` names by
@@ -241,8 +244,9 @@ under `apps/` with its own `Makefile`:
   its filters and which way round it is in the query), what an update
   would do (`updates`), the library
   (`library`), one of its own
-  (`artifact`, named by its kind and name in the query), the shelf
-  (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
+  (`artifact`, named by its kind and name in the query), its editor
+  (`edit`, named the same way), the page adding one (`new`, its kind in
+  the query), the shelf (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
   the query a page keeps its state in, `src/library.ts` finds the projects
   holding one of the library's own, `src/markdown.ts` draws a skill's
   markdown from its tokens, and `src/time.ts` says the ledger's times.
@@ -256,7 +260,9 @@ under `apps/` with its own `Makefile`:
   folder to link (`LinkForm`), a project's agents and share toggles
   (`SettingsForm`) and its migration, dry run first (`MigrateOffer`), the
   removal of one of the library's own everywhere, dry run first
-  (`RemoveOffer`), the
+  (`RemoveOffer`), its rename (`RenameForm`), the editor, CodeMirror in a
+  shadow root of its own (`MarkdownEditor`), what core says of a draft
+  (`DraftVerdict`), the
   matrix's grid, drawn a screen at a time (`AssignGrid`), and
   what the runner draws beside the pages:
   `CommandRunner`, which makes it and says how each task ended in a toast,
@@ -361,8 +367,13 @@ These are easy to break from a single file without noticing.
   `of_flayer`), so a new command says whether it is refused before it
   compiles; a task is refused for its lines (`Task::refusal`). `edit` is
   refused in an editor and with `--contents -`, standard input, and run
-  with `--contents FILE` (`Refusal::of_edit`); no task builds that line,
-  so a browser names no file to read. The TUI refuses only its screens,
+  with `--contents FILE` (`Refusal::of_edit`); the one task that builds
+  that line, the panel's save (`Task::Save`, its text and the hash it was
+  read with), names the workspace's scratch file for its text
+  (`task::scratch_route`, by its hash, so the line previewed is the line
+  run), which the backend writes before the line runs and takes away
+  after, whatever came of it (`backend::Scratch`), so a browser names no
+  file to read. The TUI refuses only its screens,
   `ui`, which would hold it until a Ctrl-C the screen keeps for itself, and
   standard input, which is the screen's own keys. What a line takes away, which a front end with
   no terminal asks somebody to confirm before it runs it, is one list too,
@@ -434,7 +445,9 @@ These are easy to break from a single file without noticing.
   each change the task that runs it, which the panel sends back as one
   `apply_install`, never a task of its own), what an update of every
   project would do (`Query::Updates`, answered with core's
-  `update::Updates`), and which workspace
+  `update::Updates`), what core says of a draft about to be written
+  (`Query::Validate`, answered with core's `draft::Judged`), and which
+  workspace
   a project's own lines consult (`docs/architecture.md`, "The read
   model").
 - **Every error has a stable code.** Each public error type in core,
@@ -688,7 +701,11 @@ These are easy to break from a single file without noticing.
     module spells each line's own words, and puts a value after the option
     that takes it (`=` when it starts with a dash), behind `./` for a `-C`
     or `-p`, or after a `--` among positionals; a test feeds every variant
-    values that start with a dash.
+    values that start with a dash. A save's text reaches no line at all:
+    the line names the workspace's scratch file for it, in `.mindflayer`
+    (`FlayerWorkspace::scratch_dir`), which the backend writes with
+    `create_new`, in a folder made with `create_dir`, taking a file there
+    under the name only when it holds the text exactly.
   - A task or a query the panel sends names only what core's path policy
     allows (`policy`), which `admit::Admission` asks of every value that
     names something on the disk, in a match over every variant with no
@@ -957,7 +974,12 @@ These are easy to break from a single file without noticing.
   every installation an update says something of as core surveyed it
   (`Query::Updates`: its state, what an update does with it, the copies
   that names, why it is left, by a code, and how many stand in each
-  state), never told from the snapshot's states,
+  state), never told from the snapshot's states, every judgement of a
+  draft as core gave it (`Query::Validate`: why the command would write
+  nothing, by its code and in its words, and what `validate` would say of
+  it, word for word), never a rule of a name or of front matter spelled in
+  TypeScript, and the hash a save is held to as core gave it with what it
+  read (`contents::Contents::hash`), never one hashed in the browser,
   and every order the snapshot's
   (`kinds`, `states`, `healths`, the registry's). A count or a verdict a
   view needs is added to `view::Snapshot` in core, never worked out from
@@ -994,7 +1016,13 @@ These are easy to break from a single file without noticing.
   by Iconify's offline build (`src/overrides/iconify.ts`), the palette is
   declared in `main.css` while Nuxt UI's colours plugin is a stub
   (`src/overrides/colors.ts`), and the colour mode switches by class
-  (`src/color-mode.ts`). What somebody else wrote, a skill's markdown, is
+  (`src/color-mode.ts`). The editor is CodeMirror in a shadow root of its
+  own (`MarkdownEditor.vue`), where style-mod adopts a constructed sheet
+  (`adoptedStyleSheets`) rather than writing the `<style>` element it
+  writes into a document, and every style CodeMirror sets goes through the
+  CSSOM, never a `style` attribute; its test holds the sheet to being
+  adopted and to no `<style>` in the shadow root, which a document's
+  observer does not see. What somebody else wrote, a skill's markdown, is
   drawn element by element from marked's tokens (`src/markdown.ts`), never
   put on the page as HTML: raw HTML shows as text, no element gets a style
   or an event, no image loads, and a link keeps its address only to another
@@ -1104,7 +1132,12 @@ These are easy to break from a single file without noticing.
   (`applied.json`), and, of a workspace built to update (`updating.json`),
   what asking what an update would do is answered with (`updates.json`)
   and each change its page offers, previewed and run each on the
-  workspace as built (`updated.json`). `tests/panel.ts` reads them and
+  workspace as built (`updated.json`), and, of the first workspace, what
+  judging drafts of the library's own is answered with (`drafts.json`),
+  what `flayer validate` says once one is written, which the editor's
+  verdict is held to word for word (`validated.json`), and each change
+  authoring sends, previewed and run each on the workspace as built
+  (`authored.json`). `tests/panel.ts` reads them and
   mounts the panel at an address, answering its queries with them, and a
   task with its preview and its run, told finished on the stream before
   it is answered, as the server tells it (`commanding`); a test about
@@ -1126,7 +1159,7 @@ These are easy to break from a single file without noticing.
   nothing written by hand but the folders `mind init` runs in and, beside
   the workspace, the drafts an `--editor` copies in (`fixture.draft`), as
   an editor saves one, for `flayer edit` and `mind edit` to change an
-  artifact with; a state only a hand edit, a removed folder or a git
+  artifact with, or `--contents` names; a state only a hand edit, a removed folder or a git
   source makes is left to the views' suites and their fixtures. Every process it starts goes through
   `e2e/environment.ts` (`run`, `pinned`, `environment`), and the config
   starts the server the same way, from the fixture's folder. A spec reads
@@ -1137,7 +1170,8 @@ These are easy to break from a single file without noticing.
   to seeing one. No spec changes the shared workspace: a test that changes
   something takes a workspace and a `flayer ui` of its own (`own`, built by
   `changeable`, or what the spec's `building` names, `assignable` for the
-  matrix's or `updatable` for updating and removing, beside a copy of it
+  matrix's, `updatable` for updating and removing or `authorable` for
+  editing, adding and renaming in the library, beside a copy of it
   and served by `serve`, through
   `environment.ts` as every process is), and holds what the panel left to
   what the same command leaves in the copy.

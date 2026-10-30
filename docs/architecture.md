@@ -1833,7 +1833,9 @@ a plan of the boxes somebody ticked and unticked, asked for each time they
 change and never kept beside the snapshot (`Query::Plan`, [a batch is
 planned in core](#a-batch-is-planned-in-core)), what an update of every
 project would do (`Query::Updates`, [bringing what was installed up to
-date](#bringing-what-was-installed-up-to-date)), and which workspace `mind`
+date](#bringing-what-was-installed-up-to-date)), what core says of a draft
+about to be written (`Query::Validate`, [authoring in the
+library](#authoring-in-the-library)), and which workspace `mind`
 consults from each project, which depends on the
 front end's own `-W`, activation and home, and which the TUI asks to know
 when a row's lines need `-W .` ([the TUI looks where it was
@@ -4525,6 +4527,10 @@ of it a browser may name.
   each project by the entry its box named it by, and are admitted as any
   task's when they come back to be previewed and run. A reference or an
   origin is a value, which nothing offers when it is not one.
+- **A draft only judged** (`Query::Validate`): its holder held as a read
+  of an artifact's is, and nothing written; the text a save sends is a
+  value, which goes to no line but as the file the backend writes it to,
+  named by its hash ([authoring in the library](#authoring-in-the-library)).
 - **What no front end without a terminal runs** is refused by
   `Task::refusal`, naming the line ([every change is a command
   line](#every-change-is-a-command-line)).
@@ -4884,7 +4890,9 @@ of a sidebar and a header ([its views](#its-views)). It changes things by
 running tasks the server previews first, linking, relinking and unlinking
 projects, changing a project's agents and share mode and migrating one an
 older marker marks, and shows a transcript of every run (#76, #77, [its
-changes](#its-changes)).
+changes](#its-changes)). It edits, adds and renames the library's own, and
+adopts somebody's skill from a project's page, judged by core as they are
+typed ([authoring in the library](#authoring-in-the-library), #82).
 
 ### One way out: the transport
 
@@ -5385,6 +5393,9 @@ What the pages offer:
   once it ran, then the same line with `--yes`, offered only then and
   asked about for what it removes and uninstalls, after which the page
   goes back to the library. As a migration is, below.
+- **A save, an addition and a rename of one of the library's own, and an
+  adoption from a project's page**, each a task the server previews like
+  any other ([authoring in the library](#authoring-in-the-library)).
 - **A migration, for a project an older marker marks**, the dry run first,
   `flayer migrate -p <project>`, whose report the page shows once it ran,
   then the migration, the same line with `--yes`, offered only then. The
@@ -5398,6 +5409,81 @@ scan, the plan and the matrix's preview of its lines queries, so what the
 server answered lives where every answer does; which drawer is open is
 Pinia's, beside the sidebar's state, and so are the boxes marked on the
 matrix.
+
+### Authoring in the library
+
+The library's own are written from the panel as from a terminal: by `flayer
+edit --contents`, `flayer add`, `flayer rename` and `flayer adopt`, each a
+task the server previews and runs, and judged before they are sent by what
+core says of them, never by a rule of the panel's (#82).
+
+- **Judged by core, as it is typed.** A draft, the text in the editor or
+  what the form adding one holds, is sent as a query (`Query::Validate`,
+  with a `Draft`), once somebody stops typing for a quarter of a second,
+  and answered with core's `draft::Judged`: why the command would write
+  nothing, by the code and in the words it would refuse with, and what
+  `validate` would say of the artifact once written, each issue in its own
+  words. Core calls the command's checks rather than copies of them: the
+  template found as `add` finds it and every check `add` makes before it
+  writes, worked out apart from the write (`create::plan`, `Scaffold`), and
+  every rule `edit --contents` holds contents to before it reads the file
+  (`lifecycle::replaceable`), the hash aside, which only the write can tell.
+  What `validate` would say is the artifact read from the text as discovery
+  reads one from the disk (`Artifact::skill_holding`, `rule_holding`) and
+  judged by `Artifact::validate`, so the panel's list is word for word what
+  `flayer validate` then prints, which a test of the CLI writes beside the
+  panel's fixtures and the panel's test holds it to. A front end checking a
+  name or front matter itself was the other way, and would be a second
+  place for the Agent Skills rules to be spelled.
+- **The text, never a path.** A save is `Task::Save`: the holder, the
+  artifact by its kind and name, the text, and the hash core gave of the
+  file when it was read (`Contents::hash`, `hash::bytes`), never one worked
+  out in TypeScript, where a line ending could tell the text from the file.
+  Its line is `flayer edit [-p <project>] --contents <file> --if-unchanged
+  <hash> <kind:name>`, the file the workspace's scratch file for the text:
+  `.mindflayer/tmp/edit-<the first sixteen hex digits of its SHA-256>.md`,
+  a route from the root the lines run from (`task::scratch_route`). The
+  workspace's command at either level, `-p` naming a project, so the route
+  reads from where the lines run. Named by what it holds rather than drawn
+  for the run, so the line the preview shows is the line that runs, a
+  preview and a run being two requests. The backend writes the text there
+  before the line runs and takes the file away once the lines have run,
+  whatever came of them (`backend::Scratch`): made with `create_new`, in a
+  folder made with `create_dir` inside a `.mindflayer` that is there, so
+  nothing is written through what somebody put in its place, and no
+  `.mindflayer` is made. A file already there under the name is taken when
+  it holds the text exactly, as an interrupted run would have left it, and
+  anything else there refuses the save (`scratch_unwritable`). In the
+  workspace's `.mindflayer` (`FlayerWorkspace::scratch_dir`), where no agent
+  looks: not the system's temporary folder, where another user could read
+  what is about to be written, nor a project's `.mind/tmp`, which a cloned
+  repository can bring with it, or a link in its place.
+- **Only over what was read.** The editor keeps the hash of the text it
+  started from, and takes the file in again when it changes on disk only
+  while nothing typed would be lost, or once the file holds what the editor
+  does, as after a save. Otherwise it says the file changed and offers to
+  read it again, and a save is refused by the line, `edit_stale`, in core's
+  words, with nothing written over the change.
+- **CodeMirror, held to the CSP.** The editor is CodeMirror 6, drawn in a
+  shadow root of its own (`MarkdownEditor.vue`). Its styles come from
+  style-mod, which writes a `<style>` element into a document, refused by
+  `default-src 'self'`, and adopts a constructed sheet into a shadow root
+  (`adoptedStyleSheets`), which the CSP has no say over: it is built through
+  the CSSOM, as an element's `style` is, and so is every style CodeMirror
+  sets of its own, never a `style` attribute. A nonce was the other way, and
+  would have had the server write one into every page it serves. The
+  panel's colours and font reach it through the custom properties a shadow
+  root inherits; Tab is left to move the focus on, and the text is named for
+  whoever cannot see it. happy-dom adopts the sheet as a browser does, and
+  the panel's test holds it to being there and to no `<style>` element in
+  the shadow root or the page; the end-to-end suite loads the editor under
+  the server's header in both engines.
+- **Adding, from a template or none**, from a page of its own (`/new`), the
+  kind's templates as the snapshot lists them; **renaming**, from the page
+  of one of the library's own; and **adopting**, from the row of a project's
+  page that reads `foreign`, sent as `Task::Adopt` and refused by the line,
+  in core's words, for whatever core does not adopt, a rule among them.
+  Each goes to the page of the name it then has.
 
 ### Its fixtures come from Rust
 
@@ -5434,7 +5520,16 @@ opens none; `updates.json` what asking what an update would do there is
 answered with; and `updated.json` each change its page offers, previewed and
 run each on the workspace as it was built, so each is answered as the first
 thing run there. `commands.json` ends with a removal everywhere of one of
-the library's own, its dry run first, which that page sends. So
+the library's own, its dry run first, which that page sends. `drafts.json`
+holds what judging drafts of the first workspace is answered with, the
+library's `review` as it is, with two things `validate` warns of and with
+its description emptied, and skills to add, one `add` writes and two it
+refuses; `validated.json` what `flayer validate` says of the library once
+`review` holds the draft it warns of, which the editor's verdict is held to
+word for word; and `authored.json` each change authoring sends, previewed
+and run each on the workspace as it was built, a save, a save once the file
+changed on disk since it was read, an addition from a template, a rename
+and an adoption. So
 the panel's tests render what core says rather than what a person drew,
 and a field the snapshot adds, renames or fills differently reaches them.
 What differs between runs is pinned: the temporary folder reads as
@@ -5455,7 +5550,7 @@ would pass its tests while the snapshot moved under it.
 The server's CSP is `default-src 'self'` ([What keeps other pages
 out](#what-keeps-other-pages-out)): nothing from another host, no inline
 script or style, no `data:` URLs. The panel is built to need nothing more,
-though three of its libraries assume otherwise:
+though four of its libraries assume otherwise:
 
 - Geist and Geist Mono come from Fontsource, as files of the build.
 - Icons are Lucide's, bundled: Nuxt UI's own and every one a component
@@ -5473,6 +5568,9 @@ though three of its libraries assume otherwise:
   a program replace, and stops them with a class `main.css` holds instead.
   It also makes dark the default: `index.html` carries the class before any
   script runs, and dark is stored when this browser has chosen nothing.
+- CodeMirror's style-mod writes a `<style>` element into a document, and
+  adopts a constructed sheet into a shadow root, which is where the editor
+  is drawn ([authoring in the library](#authoring-in-the-library)).
 - Vite inlines nothing as a `data:` URL (`assetsInlineLimit: 0`).
 - A skill's markdown is drawn from its tokens, so nothing in it reaches the
   page as HTML, a style or a `data:` URL ([its views](#its-views)).
@@ -7361,8 +7459,8 @@ reads the bytes, a file typed from the directory the command works in as
 every path a command takes is, and `lifecycle::replace_contents` decides
 what may be written. Core never reads standard input, as it never reads the
 environment, and taking the bytes rather than a path keeps whatever reads
-them (the CLI now, the panel's backend through a file of its own, #82) from
-deciding anything about them.
+them (the CLI, and through it the panel's backend, by a file of its own,
+[#82](#authoring-in-the-library)) from deciding anything about them.
 
 - **Held to the rules a write is, before a byte is written.** An editor's
   edit is checked after the fact, since the editor has written the file by
@@ -7390,8 +7488,9 @@ deciding anything about them.
   (`edit_hash_malformed`): compared, it could only be called stale, which
   sends its writer to read again a file nobody changed, and the line
   `sha256sum` prints, the file's name after the digits, is one such value.
-  The panel's editor (#82) is to send it with every save, so a change made
-  in an editor while the page was open is refused rather than lost.
+  The panel's editor sends the one core gave with what it read
+  (`Contents::hash`) with every save, so a change made in an editor while
+  the page was open is refused rather than lost.
   Without it the write crosses whatever came first, as an editor's does.
 - **Where the artifact is kept, and nowhere else.** The file is followed
   through its links once, as `copy::followed` follows them for a copy and a
@@ -7435,9 +7534,9 @@ terminal refuses (`opens_editor`), and so does `--contents -`, which reads
 standard input (`reads_stdin`): the server's is the terminal `flayer ui` was
 started from, and the TUI's is the screen's own keys. A file runs, from
 either ([every change is a command
-line](#every-change-is-a-command-line)). No task builds such a line: a
-browser names no file to read, and the panel's editor (#82) hands the
-backend text, which it writes to a file of its own and names.
+line](#every-change-is-a-command-line)). The one task that builds such a
+line, `Task::Save`, names a file the backend writes the text into, never one
+a browser names ([authoring in the library](#authoring-in-the-library)).
 
 ## Scanning
 
@@ -8307,6 +8406,32 @@ project authors nothing of but the ledger records as a rule it received
 just listed.
 
 ## Open questions
+
+- **A save's line names a file gone once it ran.** The transcript keeps
+  `flayer edit --contents .mindflayer/tmp/edit-<hash>.md ...` as it ran, and
+  the backend takes the file away after, so the line pasted into a shell
+  reads nothing. Keeping the text beside the transcript, or a line that
+  hands it on standard input, would let it run again, the one at the price
+  of a folder of every text saved, the other of a line no front end without
+  a terminal runs.
+- **The workspace's scratch folder is not reserved.** `.mindflayer/tmp` holds
+  the text a save hands `edit --contents` for as long as the line runs, and
+  nothing stops a workspace's own `directories` naming it, as they may name
+  any folder of `.mindflayer` but the shelf and the cache
+  (`gathered_overlap`): a rules folder there would list the text as a rule
+  for that moment. Refusing it as the shelf is refused would need words for
+  a refusal that is not about gathering.
+- **Two servers saving the same text at once share a file.** The scratch
+  file is named by what it holds, so two `flayer ui` on one workspace saving
+  the same text into it at once write, and take away, one file; the second
+  line then reads nothing, and writes nothing. Each server's runs take
+  turns, so one panel never meets it.
+- **Adopting is offered on every foreign row.** Core adopts only a skill an
+  install could have written, and refuses the rest when the line runs, a
+  rule among them; whether a row can be adopted is not in the snapshot,
+  since telling it means hashing every copy of every foreign row on every
+  change. A word for it, worked out only for a row somebody points at, would
+  let the panel offer adopting only where it can be done.
 
 - **Nothing says when the screenshots are stale.** `make docs/screenshots`
   takes them again, and AGENTS.md asks a change to what the panel shows to
