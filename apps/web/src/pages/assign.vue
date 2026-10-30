@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import type { Cell } from '@/api/generated/Cell'
 import type { HeldBox } from '@/api/generated/HeldBox'
 import type { Offered } from '@/api/generated/Offered'
 import type { Project } from '@/api/generated/Project'
 import type { Said } from '@/api/generated/Said'
 import type { Snapshot } from '@/api/generated/Snapshot'
+import { usePlan, usePreview } from '@/api/plan'
 import { useSnapshot } from '@/api/snapshot'
+import { TransportError, type Task } from '@/api/transport'
 import { first, useQueryChange } from '@/address'
 import AppHeader from '@/components/AppHeader.vue'
 import AssignGrid, { type Line, type Row, type Shown } from '@/components/AssignGrid.vue'
 import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import { stateLook } from '@/components/StateBadge.vue'
+import { useMarks } from '@/stores/marks'
 
 const route = useRoute()
 const change = useQueryChange()
@@ -31,6 +35,7 @@ const agent = computed(() => first(route.query.agent))
 const byProject = computed(() => first(route.query.by) === 'project')
 
 const { data } = useSnapshot()
+const marks = useMarks()
 
 /** What names a project to a command and a box: its entry. */
 function named(project: Project): string {
@@ -72,6 +77,44 @@ const found = computed(() => {
     }
   }
   return { held, closed }
+})
+
+/** Whether the snapshot ticks the box a mark is of. */
+function ticked(cell: Omit<Cell, 'wanted'>): boolean {
+  return found.value.held.get(boxKey(cell.project, cell.reference, cell.origin))?.ticked ?? false
+}
+
+/**
+ * Every mark that asks for other than the snapshot shows, in the order
+ * marked: what is planned. One the snapshot has caught up with, since a
+ * command ran elsewhere, asks for nothing, and is left out.
+ */
+const selection = computed<Cell[]>(() => marks.marks
+  .filter(mark => mark.wanted !== ticked(mark))
+  .map(mark => ({ project: mark.project, reference: mark.reference, origin: mark.origin, wanted: mark.wanted })))
+
+const { data: planned, error: refused, isFetching: planning, isPlaceholderData } = usePlan(selection)
+/** The plan of the boxes marked now, none while it is asked for or when nothing is marked. */
+const plan = computed(() => (selection.value.length > 0 && !isPlaceholderData.value ? planned.value : undefined))
+
+/** The batch the plan's tasks are, sent back as they came, as the install screen applies its marks. */
+const batch = computed<Task | undefined>(() => (plan.value && plan.value.tasks.length > 0
+  ? { type: 'apply_install', changes: plan.value.tasks }
+  : undefined))
+const { data: preview, error: unpreviewed } = usePreview(batch)
+
+/** Each box the plan holds back, and why: locked by a code, or clashing with another. */
+const heldBack = computed(() => {
+  const held = new Map<string, { how: 'locked' | 'conflict', why: Said }>()
+  for (const conflict of planned.value?.conflicts ?? []) {
+    for (const cell of conflict.cells) {
+      held.set(boxKey(cell.project, cell.reference, cell.origin), { how: 'conflict', why: conflict.why })
+    }
+  }
+  for (const locked of planned.value?.locked ?? []) {
+    held.set(boxKey(locked.cell.project, locked.cell.reference, locked.cell.origin), { how: 'locked', why: locked.why })
+  }
+  return held
 })
 
 /** The offers the filters keep, grouped by where they are offered from, each group where its first is. */
@@ -139,11 +182,18 @@ function boxAt(line: number, column: number): { offered: Offered, project: Proje
     : { offered: offers.value[line]!, project: projects.value[column]! }
 }
 
-/** How the box of `offered` in `project` is drawn: as the snapshot has it. */
+/** How the box of `offered` in `project` is drawn: as the snapshot has it, as it was marked, as the plan holds it. */
 function shown(offered: Offered, project: Project): Shown {
   const entry = named(project)
+  const asked = { project: entry, reference: reference(offered), origin: offered.origin }
+  const key = boxKey(entry, asked.reference, asked.origin)
   const closed = found.value.closed.get(`${entry}\u0000${offered.kind}`)
-  const held = found.value.held.get(boxKey(entry, reference(offered), offered.origin))
+  const held = found.value.held.get(key)
+  const mark = marks.find(asked)
+  const isTicked = held?.ticked ?? false
+  const checked = mark?.wanted ?? isTicked
+  const changed = mark !== undefined && mark.wanted !== isTicked
+  const back = changed ? heldBack.value.get(key) : undefined
   const said = [`${offered.kind} ${offered.name} from ${offered.origin} in ${title(project)}`]
   if (closed) {
     said.push(`none can go there, ${closed.code}: ${closed.message}`)
@@ -151,19 +201,41 @@ function shown(offered: Offered, project: Project): Shown {
   if (held) {
     said.push(held.state)
   }
+  if (changed) {
+    said.push(checked ? 'marked to be ticked' : 'marked to be unticked')
+  }
+  if (back) {
+    said.push(`held back, ${back.why.code}: ${back.why.message}`)
+  }
   return {
     label: said.join('; '),
     closed: closed !== undefined,
-    checked: held?.ticked ?? false,
-    changed: false,
+    checked,
+    changed,
     state: held?.state ?? null,
-    held: null
+    held: back?.how ?? null
   }
 }
 
 function cell(line: number, column: number): Shown {
   const { offered, project } = boxAt(line, column)
   return shown(offered, project)
+}
+
+/** Mark the box at a line and a column the other way round from what it shows. */
+function toggle(line: number, column: number) {
+  const { offered, project } = boxAt(line, column)
+  const asked = { project: named(project), reference: reference(offered), origin: offered.origin }
+  const now = marks.find(asked)?.wanted ?? ticked(asked)
+  marks.mark({ ...asked, wanted: !now }, ticked(asked))
+}
+
+/** Why a plan or its preview was refused, with its code. */
+function why(error: unknown): string | undefined {
+  if (!error) {
+    return undefined
+  }
+  return error instanceof TransportError && error.code ? `${error.code}: ${error.message}` : String(error)
 }
 
 const filtered = computed(() => Boolean(text.value || kind.value || origin.value || agent.value))
@@ -351,6 +423,142 @@ function commands(snapshot: Snapshot) {
             />
           </div>
 
+          <section
+            v-if="marks.marks.length > 0"
+            class="flex flex-col gap-3 rounded-lg border border-default p-3"
+            aria-labelledby="plan-title"
+            data-testid="plan"
+          >
+            <div class="flex flex-wrap items-center gap-2">
+              <h2
+                id="plan-title"
+                class="text-sm font-semibold text-highlighted"
+              >
+                Planned
+              </h2>
+              <UBadge
+                :label="`${selection.length} marked`"
+                color="neutral"
+                variant="soft"
+                size="sm"
+                class="font-mono tabular-nums"
+                data-testid="marked"
+              />
+              <span
+                v-if="planning"
+                class="text-xs text-muted"
+                data-testid="planning"
+              >asking for the plan</span>
+              <div class="ms-auto flex gap-2">
+                <UButton
+                  label="Clear the marks"
+                  icon="i-lucide-eraser"
+                  color="neutral"
+                  variant="outline"
+                  size="sm"
+                  data-testid="clear-marks"
+                  @click="marks.clear()"
+                />
+              </div>
+            </div>
+
+            <p
+              v-if="why(refused)"
+              class="text-sm text-error"
+              data-testid="plan-refused"
+            >
+              The plan was refused, {{ why(refused) }}
+            </p>
+
+            <template v-if="plan">
+              <div v-if="plan.tasks.length > 0">
+                <h3 class="mb-1 text-xs font-medium text-muted">
+                  What runs
+                </h3>
+                <ul
+                  v-if="preview"
+                  class="flex flex-col gap-1 rounded-md bg-muted px-3 py-2 font-mono text-xs"
+                  data-testid="lines"
+                >
+                  <li
+                    v-for="line in preview.lines"
+                    :key="line"
+                    class="break-all"
+                    data-testid="line"
+                  >
+                    $ {{ line }}
+                  </li>
+                </ul>
+                <p
+                  v-else-if="why(unpreviewed)"
+                  class="text-sm text-error"
+                  data-testid="preview-refused"
+                >
+                  {{ why(unpreviewed) }}
+                </p>
+              </div>
+              <p
+                v-else
+                class="text-sm text-muted"
+                data-testid="nothing-runs"
+              >
+                Nothing runs: every box marked is held back.
+              </p>
+
+              <div v-if="plan.conflicts.length > 0">
+                <h3 class="mb-1 text-xs font-medium text-muted">
+                  Asked both ways, so neither runs
+                </h3>
+                <ul
+                  class="flex flex-col gap-1 text-sm"
+                  data-testid="conflicts"
+                >
+                  <li
+                    v-for="conflict in plan.conflicts"
+                    :key="`${conflict.project}:${conflict.kind}:${conflict.name}`"
+                    class="flex items-start gap-2"
+                    data-testid="conflict"
+                  >
+                    <UIcon
+                      name="i-lucide-triangle-alert"
+                      class="mt-0.5 size-4 shrink-0 text-error"
+                    />
+                    <span>
+                      <code class="font-mono text-xs">{{ conflict.project }} {{ conflict.kind }}:{{ conflict.name }}</code>,
+                      <code class="font-mono text-xs">{{ conflict.why.code }}</code>: {{ conflict.why.message }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+
+              <div v-if="plan.locked.length > 0">
+                <h3 class="mb-1 text-xs font-medium text-muted">
+                  Held back
+                </h3>
+                <ul
+                  class="flex flex-col gap-1 text-sm"
+                  data-testid="locks"
+                >
+                  <li
+                    v-for="locked in plan.locked"
+                    :key="JSON.stringify(locked.cell)"
+                    class="flex items-start gap-2"
+                    data-testid="lock"
+                  >
+                    <UIcon
+                      name="i-lucide-lock"
+                      class="mt-0.5 size-4 shrink-0 text-error"
+                    />
+                    <span>
+                      <code class="font-mono text-xs">{{ locked.cell.project }} {{ locked.cell.reference }} from {{ locked.cell.origin }}</code>,
+                      <code class="font-mono text-xs">{{ locked.why.code }}</code>: {{ locked.why.message }}
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            </template>
+          </section>
+
           <AssignGrid
             v-if="rows.length > 0 && columns.length > 0"
             class="w-fit max-w-full"
@@ -361,6 +569,7 @@ function commands(snapshot: Snapshot) {
             :lines="lines"
             :columns="columns"
             :cell="cell"
+            @toggle="toggle"
           />
 
           <div
@@ -430,7 +639,7 @@ function commands(snapshot: Snapshot) {
           </ul>
 
           <p class="text-muted">
-            Every offer against every project. A ticked box is one the project holds from there, as core says, and each says how what the project holds of its name stands.
+            Every offer against every project. A ticked box is one the project holds from there, as core says. Tick or untick boxes, and the plan above says what that runs, and what it holds back, before anything does.
           </p>
           <CommandHint :commands="commands(snapshot)" />
         </template>

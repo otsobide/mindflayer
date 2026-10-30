@@ -6,7 +6,7 @@ import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
 import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
-import { answering, commanded, commanding, fixture, render, unmount, type Fixture } from './panel'
+import { answering, commanded, commanding, fixture, plans, render, unmount, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -111,6 +111,26 @@ describe('the page of what could be linked', () => {
     await flushPromises()
 
     expect(document.querySelector('[data-testid="writes-into"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('the matrix', () => {
+  it('passes axe with boxes marked, and the plan of them drawn, held back and clashing', async () => {
+    const { transport } = answering(fixture('assigning'), plans())
+    await render('/assign', transport)
+
+    const [, , heldBack] = plans()
+    for (const cell of (heldBack!.query as { selection: { project: string, reference: string, origin: string }[] }).selection) {
+      const label = `${cell.reference.replace(':', ' ')} from ${cell.origin} in ${cell.project}`
+      const box = [...document.querySelectorAll<HTMLElement>('[data-testid="box"]')]
+        .find(each => each.getAttribute('aria-label')!.split('; ')[0] === label)!
+      box.click()
+      await flushPromises()
+    }
+
+    expect(document.querySelector('[data-testid="lock"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="conflict"]')).not.toBeNull()
     expect(await violations()).toEqual([])
   })
 })

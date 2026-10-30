@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { flushPromises, type DOMWrapper } from '@vue/test-utils'
+import type { Cell } from '@/api/generated/Cell'
 import type { Offered } from '@/api/generated/Offered'
 import type { Snapshot } from '@/api/generated/Snapshot'
-import { fixture, render, texts, unmount } from './panel'
+import type { Query } from '@/api/transport'
+import { answering, fixture, plans, render, texts, unmount } from './panel'
 
 afterEach(unmount)
 
@@ -34,6 +36,16 @@ function box(page: Page, kind: string, name: string, origin: string, project: st
     .filter(each => each.attributes('aria-label')!.split('; ')[0] === label)
   expect(found, label).toHaveLength(1)
   return found[0]!
+}
+
+/** Each plan the page asked for, by its boxes, in order. */
+function planned(queries: Query[]): Cell[][] {
+  return queries.flatMap(query => (query.type === 'plan' ? [query.selection] : []))
+}
+
+/** The selections the fixture plans were asked with, in order. */
+function selections(): Cell[][] {
+  return plans().map(answered => (answered.query as Extract<Query, { type: 'plan' }>).selection)
 }
 
 describe('the matrix', () => {
@@ -143,5 +155,96 @@ describe('the matrix', () => {
     await box(page, 'skill', 'deploy', 'load:../team', 'web').trigger('keydown', { key: 'End' })
     await flushPromises()
     expect((document.activeElement as HTMLElement).getAttribute('aria-label')!.split('; ')[0]).toBe('skill deploy from load:../team in gone')
+  })
+})
+
+describe('marking boxes', () => {
+  it('sends the boxes marked to be planned, in the order they were marked, and nothing for a box marked back', async () => {
+    const [simple] = selections()
+    const { queries, transport } = answering(fixture('assigning'), plans())
+
+    const { page } = await render('/assign', transport)
+    expect(page.find('[data-testid="plan"]').exists()).toBe(false)
+
+    await box(page, 'skill', 'format', 'https://github.com/acme/skills', 'api').trigger('click')
+    await box(page, 'skill', 'format', 'https://github.com/acme/skills', 'docs').trigger('click')
+    await flushPromises()
+
+    expect(planned(queries).at(-1)).toEqual(simple)
+    const format = box(page, 'skill', 'format', 'https://github.com/acme/skills', 'api')
+    expect(format.attributes('aria-checked')).toBe('true')
+    expect(format.attributes('data-changed')).toBe('true')
+    expect(format.attributes('aria-label')).toContain('marked to be ticked')
+    expect(page.get('[data-testid="marked"]').text()).toBe('2 marked')
+
+    // Marked back to what it showed: no mark.
+    await format.trigger('click')
+    await flushPromises()
+    expect(planned(queries).at(-1)).toEqual([simple![1]])
+    await box(page, 'skill', 'format', 'https://github.com/acme/skills', 'docs').trigger('click')
+    await flushPromises()
+    expect(page.find('[data-testid="plan"]').exists()).toBe(false)
+  })
+
+  it('unticks a box ticked, asking it away, and marks nothing in a project none of its kind can go into', async () => {
+    const [, replaced] = selections()
+    const { queries, transport } = answering(fixture('assigning'), plans())
+    const { page } = await render('/assign', transport)
+
+    await box(page, 'skill', 'format', 'https://github.com/acme/skills', 'bare').trigger('click')
+    await box(page, 'skill', 'format', 'https://github.com/acme/skills', 'gone').trigger('click')
+    await flushPromises()
+    expect(planned(queries)).toEqual([])
+
+    await box(page, 'skill', 'deploy', 'workspace', 'api').trigger('click')
+    await flushPromises()
+    expect(planned(queries).at(-1)).toEqual(replaced)
+    expect(texts(page, '[data-testid="line"]')).toEqual([])
+  })
+
+  it('draws the locks and the conflicts of the plan it is answered with, on the boxes and below', async () => {
+    const [, , heldBack] = selections()
+    const answer = plans()[2]!.answer as { conflicts: { cells: Cell[], why: { code: string, message: string } }[], locked: { cell: Cell, why: { code: string, message: string } }[] }
+    const { queries, transport } = answering(fixture('assigning'), plans())
+    const { page } = await render('/assign', transport)
+
+    for (const cell of heldBack!) {
+      const [kind, name] = cell.reference.split(':') as [string, string]
+      const project = cell.project
+      await box(page, kind, name, cell.origin, project).trigger('click')
+    }
+    await flushPromises()
+
+    expect(planned(queries).at(-1)).toEqual(heldBack)
+    expect(texts(page, '[data-testid="conflict"]')).toEqual(answer.conflicts.map(conflict =>
+      `docs skill:deploy, ${conflict.why.code}: ${conflict.why.message}`))
+    expect(texts(page, '[data-testid="lock"]')).toEqual(answer.locked.map(locked =>
+      `${locked.cell.project} ${locked.cell.reference} from ${locked.cell.origin}, ${locked.why.code}: ${locked.why.message}`))
+    for (const conflict of answer.conflicts) {
+      for (const cell of conflict.cells) {
+        const [kind, name] = cell.reference.split(':') as [string, string]
+        const shown = box(page, kind, name, cell.origin, cell.project)
+        expect(shown.attributes('data-held')).toBe('conflict')
+        expect(shown.attributes('aria-label')).toContain(`held back, ${conflict.why.code}`)
+      }
+    }
+    for (const locked of answer.locked) {
+      const [kind, name] = locked.cell.reference.split(':') as [string, string]
+      const shown = box(page, kind, name, locked.cell.origin, locked.cell.project)
+      expect(shown.attributes('data-held')).toBe('locked')
+      expect(shown.attributes('aria-label')).toContain(`held back, ${locked.why.code}: ${locked.why.message}`)
+    }
+    expect(box(page, 'skill', 'format', 'https://github.com/acme/skills', 'api').attributes('data-held')).toBeUndefined()
+  })
+
+  it('says why a plan was refused, with its code, and shows nothing to run', async () => {
+    const { transport } = answering(fixture('assigning'), [])
+    const { page } = await render('/assign', transport)
+
+    await box(page, 'skill', 'notes', 'load:../team', 'api').trigger('click')
+    await flushPromises()
+
+    expect(page.get('[data-testid="plan-refused"]').text()).toContain('not_found')
+    expect(page.findAll('[data-testid="line"]')).toHaveLength(0)
   })
 })

@@ -14,6 +14,7 @@ import assigning from './fixtures/assigning.json'
 import candidates from './fixtures/candidates.json'
 import commands from './fixtures/commands.json'
 import library from './fixtures/library.json'
+import planned from './fixtures/plans.json'
 import scan from './fixtures/scan.json'
 import unmade from './fixtures/unmade.json'
 import workspace from './fixtures/workspace.json'
@@ -68,6 +69,18 @@ export function answers(): Answered[] {
  */
 export function scans(): Answered[] {
   return structuredClone(scan) as unknown as Answered[]
+}
+
+/**
+ * What the assigning fixture's server answers when its matrix plans a few
+ * selections of boxes (tests/fixtures/plans.json), each in the order the
+ * boxes were marked: `format` into `api` and `docs`, the library's `deploy`
+ * in place of the team's in `api`, and a selection that clashes and is
+ * locked beside a change that goes ahead. Copied, so a test may change its
+ * copy.
+ */
+export function plans(): Answered[] {
+  return structuredClone(planned) as unknown as Answered[]
 }
 
 /** `value` with every object's keys in one order, to compare as text. */
@@ -133,15 +146,15 @@ export interface Sent {
 }
 
 /**
- * A transport answering queries as `answering` does, and each task of
- * `known` as the server answered it: its preview, and its run, told as
+ * A transport answering queries as `answering` does, with `answered`
+ * when given, and each task of `known` as the server answered it: its preview, and its run, told as
  * started and finished on the stream before it is answered, as the server
  * tells them, and kept in the transcript. Any other task is refused with a
  * code, as the backend refuses one. Each task sent is written down, and
  * `finishing` holds a run's finish back until the test lets it go.
  */
-export function commanding(snapshot: Snapshot = fixture('workspace'), known: Commanded[] = commanded()) {
-  const { queries, transport } = answering(snapshot)
+export function commanding(snapshot: Snapshot = fixture('workspace'), known: Commanded[] = commanded(), answered?: Answered[]) {
+  const { queries, transport } = answering(snapshot, answered)
   const sent: Sent[] = []
   const ran: Ran[] = []
   const listeners: ((event: LiveEvent) => void)[] = []
