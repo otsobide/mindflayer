@@ -2017,3 +2017,125 @@ fn an_edited_copy_nothing_offers_any_more_is_taken_out_by_the_forced_uninstall_c
     assert_eq!(after["states"][3], json!({"state": "orphaned", "count": 0}));
     assert_eq!(after["states"][1], json!({"state": "edited", "count": 1}));
 }
+
+/// A draft as the panel sends it to be judged.
+fn judge(holder: Value, draft: Value) -> Query {
+    query(json!({"type": "validate", "holder": holder, "draft": draft}))
+}
+
+fn added(name: &str, description: &str) -> Value {
+    json!({
+        "type": "add", "kind": "skill", "name": name, "description": description,
+        "template": null,
+    })
+}
+
+/// A draft is judged by the command that would write it, by its code and in
+/// its words, with nothing written: what `add` refuses, in the workspace's
+/// own or a project's, and a draft it would write.
+#[test]
+fn a_draft_is_judged_as_the_command_writing_it_would_judge_it_and_nothing_is_written() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let backend = backend(root);
+    let before = files(root);
+    let own = json!({"type": "workspace"});
+    let alpha = json!({"type": "project", "entry": "alpha"});
+
+    let fit = backend
+        .query(judge(own.clone(), added("review", "Read it")))
+        .unwrap();
+    let taken = backend.query(judge(own, added("deploy", "Again"))).unwrap();
+    let unfit = backend
+        .query(judge(alpha, added("Bad Name", "Read it")))
+        .unwrap();
+
+    assert_eq!(fit, json!({"issues": [], "refused": null}));
+    assert_eq!(files(root), before);
+    let said = flayer(root, &["add", "skill", "deploy", "Again"]).unwrap_err();
+    assert_eq!(taken["refused"]["code"], said.error.code());
+    assert_eq!(taken["refused"]["message"], said.error.to_string());
+    let said = mind(
+        &root.join("alpha"),
+        &["add", "skill", "Bad Name", "Read it"],
+    )
+    .unwrap_err();
+    assert_eq!(unfit["refused"]["code"], "add_name_unfit");
+    assert_eq!(unfit["refused"]["message"], said.error.to_string());
+}
+
+/// What `validate` would say of contents an edit would write is what it says
+/// once they are written, word for word, a warning said as one.
+#[test]
+fn contents_are_judged_in_the_words_validate_says_them_in_once_written() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let text = "---\nname: deploy\ndescription: Ship it\ncompatibility: \"\"\n---\n\n# deploy\n";
+
+    let judged = backend(root)
+        .query(judge(
+            json!({"type": "workspace"}),
+            json!({"type": "edit", "reference": "skill:deploy", "text": text}),
+        ))
+        .unwrap();
+
+    assert_eq!(judged["refused"], Value::Null, "{judged}");
+    let issues = judged["issues"].as_array().unwrap();
+    assert_eq!(issues.len(), 1, "{judged}");
+    let draft = root.join("draft.md");
+    fs::write(&draft, text).unwrap();
+    flayer(
+        root,
+        &[
+            "edit",
+            "--contents",
+            draft.to_str().unwrap(),
+            "skill:deploy",
+        ],
+    )
+    .unwrap();
+    let said = flayer(root, &["validate"]).unwrap().stdout;
+    for issue in issues {
+        let marked = if issue["warning"] == true {
+            "warning: "
+        } else {
+            ""
+        };
+        let line = format!("  - {marked}{}\n", issue["message"].as_str().unwrap());
+        assert!(said.contains(&line), "{line:?} in {said}");
+    }
+}
+
+/// Refused by `edit --contents`, with what `validate` would say beside it,
+/// and a holder the workspace does not link refused by the path policy.
+#[test]
+fn contents_an_edit_refuses_and_a_holder_not_linked_are_refused_with_their_codes() {
+    let dir = workspace_with_two();
+    let root = dir.path();
+    let backend = backend(root);
+    let unfit = json!({
+        "type": "edit", "reference": "skill:alpha",
+        "text": "---\nname: alpha\ndescription: \"\"\n---\n",
+    });
+
+    let judged = backend
+        .query(judge(
+            json!({"type": "project", "entry": "alpha"}),
+            unfit.clone(),
+        ))
+        .unwrap();
+    let elsewhere = backend
+        .query(judge(json!({"type": "project", "entry": "../gone"}), unfit))
+        .unwrap_err();
+
+    assert_eq!(judged["refused"]["code"], "edit_contents_unfit");
+    assert_eq!(judged["issues"][0]["code"], "description_empty");
+    assert_eq!(elsewhere.code, "not_registered");
+    let refused: Result<Query, _> = serde_json::from_value(json!({
+        "type": "validate", "holder": {"type": "workspace"},
+        "draft": {"type": "edit", "reference": "skill:alpha", "text": "", "path": "/etc"},
+    }));
+    assert!(refused.is_err(), "a field a draft does not have is refused");
+}

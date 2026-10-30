@@ -38,6 +38,10 @@
 //! - **What an update would do is only read** ([`Query::Updates`]): the
 //!   dry run of `flayer update --all`, core's, naming nothing a browser
 //!   sent; an update runs only as the task the panel sends for it.
+//! - **A draft is only judged** ([`Query::Validate`]): what core says of an
+//!   artifact a form or the editor is about to send, by the checks the
+//!   command makes and in its words, with what `validate` would say of it;
+//!   nothing is written until the task that writes it is sent.
 //! - **A file reaches the browser only as text inside JSON**, held to its
 //!   holder once its links are followed, and never larger than core's cap
 //!   ([`Contents`]): the one way a file's contents leave, since `show` is
@@ -53,6 +57,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use mindflayer_core::code::Said;
 use mindflayer_core::contents::{Contents, Files};
+use mindflayer_core::draft;
 use mindflayer_core::gather::Watch;
 use mindflayer_core::install::{self, Cell, Conflict, Locked};
 use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
@@ -60,7 +65,9 @@ use mindflayer_core::scan::{self, Order, DEFAULT_DEPTH};
 use mindflayer_core::update::Updates;
 use mindflayer_core::view::Snapshot;
 use mindflayer_core::{paths, policy, watch};
-use mindflayer_core::{FlayerWorkspace, Found, MindProject, Scan, FLAYER_CONFIG, FLAYER_DIR};
+use mindflayer_core::{
+    FlayerWorkspace, Found, Kind, MindProject, Reference, Scan, FLAYER_CONFIG, FLAYER_DIR,
+};
 use mindflayer_server::{Backend, Preview, Refusal, Watched};
 use serde::{Deserialize, Serialize};
 
@@ -80,8 +87,10 @@ use crate::{CliError, Lookup, Warning};
 /// "SKILL.md"}`, `{"type": "scan", "roots": ["/home/you/Work"], "depth":
 /// null}`, `{"type": "plan", "selection": [{"project": "alpha",
 /// "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`,
-/// `{"type": "updates"}`. A field a query does not have is refused, as a
-/// task's is.
+/// `{"type": "updates"}`, `{"type": "validate", "holder": {"type":
+/// "workspace"}, "draft": {"type": "edit", "reference": "skill:deploy",
+/// "text": "..."}}`. A field a query does not have is refused, as a task's
+/// is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -141,6 +150,36 @@ pub enum Query {
     /// live update reads the snapshot again on every change. Nothing in it
     /// is sent by the browser, so nothing is held to the path policy.
     Updates {},
+    /// What core says of `draft`, an artifact a command is about to write
+    /// in `holder` ([`draft::Judged`]): why the command would write nothing, in its
+    /// words, and what `validate` would say of it once written, in its own.
+    ///
+    /// How the panel's forms and editor judge what is typed as it is typed,
+    /// by core's rules and never a copy of them in TypeScript: only a read,
+    /// as a plan is, which writes nothing, and a draft judged fit is still
+    /// held to the same rules by the line that writes it. The holder is held
+    /// to the path policy as a read of an artifact's is.
+    Validate { holder: Holder, draft: Draft },
+}
+
+/// An artifact a command is about to write, as the panel asks core to judge
+/// it ([`Query::Validate`]): tagged as a query is, `{"type": "add", ...}`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Draft {
+    /// What `add` would write, by the fields an `add` task carries: a
+    /// template by its name, as `--template` takes it.
+    Add {
+        kind: Kind,
+        name: String,
+        description: String,
+        template: Option<String>,
+    },
+    /// What `edit --contents` would write into the artifact `reference`
+    /// names, `kind:name`, given `text` whole: its `SKILL.md`, or a rule's
+    /// file.
+    Edit { reference: String, text: String },
 }
 
 /// What a scan the panel asked for found ([`Query::Scan`]): what `flayer
@@ -527,6 +566,34 @@ impl Backend for PanelBackend {
                 let updates =
                     Updates::read(&workspace).map_err(|error| refused(error.code(), error))?;
                 Ok(serde_json::to_value(updates).expect("what an update would do serializes"))
+            }
+            // The holder a line would change, by the workspace on screen,
+            // which a line of the panel's names as it runs, so the templates
+            // offered and the records consulted are that one's.
+            Query::Validate { holder, draft } => {
+                let holder = linked(&workspace, holder)?.unwrap_or_else(|| workspace.own());
+                let judged = match draft {
+                    Draft::Add {
+                        kind,
+                        name,
+                        description,
+                        template,
+                    } => draft::added(
+                        Some(&workspace),
+                        &holder,
+                        kind,
+                        &name,
+                        &description,
+                        template.as_deref(),
+                    ),
+                    Draft::Edit { reference, text } => draft::edited(
+                        Some(&workspace),
+                        &holder,
+                        &Reference::parse(&reference),
+                        &text,
+                    ),
+                };
+                Ok(serde_json::to_value(judged).expect("a judgement serializes"))
             }
         }
     }

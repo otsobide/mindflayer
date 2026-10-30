@@ -3,6 +3,7 @@ import type { Confirm } from './generated/Confirm'
 import type { Contents } from './generated/Contents'
 import type { Files } from './generated/Files'
 import type { Holder } from './generated/Holder'
+import type { Judged } from './generated/Judged'
 import type { Outcome } from './generated/Outcome'
 import type { Planned } from './generated/Planned'
 import type { Query } from './generated/Query'
@@ -30,6 +31,7 @@ export interface Answers {
   scan: Scanned
   plan: Planned
   updates: Updates
+  validate: Judged
 }
 
 /** What `query` is answered with. */
