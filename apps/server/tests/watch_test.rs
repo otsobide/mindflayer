@@ -90,6 +90,59 @@ async fn a_folder_named_before_it_is_there_is_watched_once_made() {
     assert_eq!(stream.next().await, changed("project"));
 }
 
+/// A project's folder removed whole, by `rm -rf` or `git clean`: told
+/// only by the topmost folder it took, which is no path named, and what is
+/// named there is watched from above for its being made again.
+#[tokio::test]
+async fn a_folder_above_what_is_named_removed_whole_is_told() {
+    let dir = TempDir::new().unwrap();
+    let api = dir.path().join("api");
+    let skills = api.join(".claude").join("skills");
+    fs::create_dir_all(skills.join("review")).unwrap();
+    fs::write(api.join("AGENTS.md"), "# Api\n").unwrap();
+    let (server, _) = launch_watching(vec![
+        watched(&api.join("AGENTS.md"), "api"),
+        watched(&skills, "api"),
+        watched(&skills.join("review"), "api"),
+    ]);
+    let mut stream = opened(&server, Auth::Bearer(server.token())).await;
+
+    fs::remove_dir_all(&api).unwrap();
+    assert_eq!(stream.next().await, changed("api"));
+    // Told once or more, as the debounce cut it.
+    while stream.within(quiet()).await.is_some() {}
+    fs::create_dir(&api).unwrap();
+
+    assert_eq!(stream.next().await, changed("api"));
+}
+
+/// A folder above what is named renamed away and back, as a tool moving
+/// it aside does: the system dropped the watches below it as it went, and
+/// they are set again, so a change inside is told after.
+#[tokio::test]
+async fn a_folder_above_what_is_named_renamed_away_and_back_is_watched_again() {
+    let dir = TempDir::new().unwrap();
+    let claude = dir.path().join(".claude");
+    let review = claude.join("skills").join("review");
+    fs::create_dir_all(&review).unwrap();
+    // `AGENTS.md` has the project's folder watched, which sees the rename.
+    let (server, _) = launch_watching(vec![
+        watched(&dir.path().join("AGENTS.md"), "project"),
+        watched(&claude.join("skills"), "project"),
+        watched(&review, "project"),
+    ]);
+    let mut stream = opened(&server, Auth::Bearer(server.token())).await;
+    let aside = dir.path().join(".claude-aside");
+
+    fs::rename(&claude, &aside).unwrap();
+    fs::rename(&aside, &claude).unwrap();
+    assert_eq!(stream.next().await, changed("project"));
+    while stream.within(quiet()).await.is_some() {}
+    fs::write(review.join("SKILL.md"), "# Review\n").unwrap();
+
+    assert_eq!(stream.next().await, changed("project"));
+}
+
 /// The list is asked for again after a change, so a path the backend names
 /// since, a project linked, is watched from then on.
 #[tokio::test]

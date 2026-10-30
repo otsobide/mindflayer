@@ -48,6 +48,14 @@ fn only_the_folders_named_and_those_above_them_are_watched() {
     );
 }
 
+/// The scopes a change to `path` reaches under `plan`, by their names.
+fn reached(plan: &Plan, path: PathBuf) -> Vec<serde_json::Value> {
+    plan.reached(&path)
+        .into_iter()
+        .map(|scope| plan.scopes[scope].clone())
+        .collect()
+}
+
 #[test]
 fn a_change_counts_for_a_path_named_or_one_directly_in_a_folder_named() {
     let dir = tree();
@@ -59,12 +67,7 @@ fn a_change_counts_for_a_path_named_or_one_directly_in_a_folder_named() {
         watched(&root.join(".claude").join("skills"), "claude"),
     ];
     let plan = Plan::of(&list, Path::is_dir);
-    let reached = |path: PathBuf| -> Vec<serde_json::Value> {
-        plan.reached(&path)
-            .into_iter()
-            .map(|scope| plan.scopes[scope].clone())
-            .collect()
-    };
+    let reached = |path: PathBuf| reached(&plan, path);
 
     assert_eq!(reached(skills.join("lint")), [json!("project")]);
     assert_eq!(reached(skills.clone()), [json!("project")]);
@@ -74,6 +77,35 @@ fn a_change_counts_for_a_path_named_or_one_directly_in_a_folder_named() {
     // Below a folder's own entries, or beside a file named: nothing.
     assert!(reached(skills.join("deploy").join("SKILL.md")).is_empty());
     assert!(reached(root.join("README.md")).is_empty());
+}
+
+/// `rm -rf` of a project, or `mv` of a folder in it, is told by the one
+/// folder it took, which is above what is named rather than named: it is a
+/// change to each path below it.
+#[test]
+fn a_change_to_a_folder_above_paths_named_reaches_their_scopes() {
+    let dir = tree();
+    let root = dir.path();
+    let skills = root.join("skills");
+    let list = [
+        watched(&skills.join("deploy"), "deploy"),
+        watched(&root.join("AGENTS.md"), "agents"),
+    ];
+    let plan = Plan::of(&list, Path::is_dir);
+    let reached = |path: PathBuf| reached(&plan, path);
+
+    assert_eq!(reached(skills.clone()), [json!("deploy")]);
+    assert_eq!(
+        reached(root.to_path_buf()),
+        [json!("deploy"), json!("agents")]
+    );
+    assert_eq!(
+        reached(root.parent().unwrap().to_path_buf()),
+        [json!("deploy"), json!("agents")]
+    );
+    // Beside them, a folder holding nothing named.
+    assert!(reached(root.join("src")).is_empty());
+    assert!(reached(skills.join("lint")).is_empty());
 }
 
 /// What sets the watches in a test: it records each, and refuses every one
@@ -220,6 +252,29 @@ async fn a_folder_an_event_names_is_watched_again() {
     assert_eq!(state.watches.dropped, std::slice::from_ref(&deploy));
     assert_eq!(state.watches.set.len(), set + 1);
     assert_eq!(state.watches.set.last(), Some(&deploy));
+}
+
+/// notify drops every watch below a folder removed or renamed away, and
+/// one renamed back within the debounce is where it was: every folder
+/// below the one an event names is set again, not only that one.
+#[tokio::test]
+async fn every_folder_below_one_an_event_names_is_watched_again() {
+    let dir = tree();
+    let skills = dir.path().join("skills");
+    let deploy = skills.join("deploy");
+    let list = Arc::new(Mutex::new(vec![watched(&deploy, "project")]));
+    let events = Events::new();
+    let mut state = state(Stand::default(), &list, &events);
+    state.apply(&list.lock().unwrap().clone(), &[]);
+    assert_eq!(state.watches.set, [skills.clone(), deploy.clone()]);
+
+    state.changed(&[change(
+        EventKind::Modify(ModifyKind::Name(notify::event::RenameMode::To)),
+        skills.clone(),
+    )]);
+
+    assert_eq!(state.watches.dropped, [skills.clone(), deploy.clone()]);
+    assert_eq!(state.watches.set[2..], [skills, deploy]);
 }
 
 /// A snapshot opens every file it reads: were that a change, each snapshot

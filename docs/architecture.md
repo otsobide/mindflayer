@@ -4361,13 +4361,22 @@ project is watched for its marker coming back.
   folder above it that is, for its being made. That rule is the watcher's,
   being the same for any path: it knows files and folders, never which
   ones a project has.
+- **A folder above a path named is a change to it.** Removed or renamed,
+  it takes the path with it, and it is all that is told: the debouncer
+  folds what a folder held into its own removal, so `rm -rf` of a linked
+  project, `git clean` taking its `.claude` or a `mv` of either is told by
+  that one folder, which is named nowhere. A change to a folder beside
+  them, a project's `src`, is still nobody's.
 - **Asked for again after every change it tells**, since a change can name
   new paths, a skill installed or a project linked: `flayer.toml` changing
   is one such change. A folder an event named as made, removed or renamed
-  is watched again besides, since a watch stays with the folder it was set
-  on, and an install puts a copy in place by a rename over the folder. The
-  watches are set before the change is told, so whatever the panel reads on
-  hearing it, any change after it is watched for.
+  is watched again besides, and every folder below it, since a watch stays
+  with the folder it was set on, and an install puts a copy in place by a
+  rename over the folder. notify drops every watch below a folder removed,
+  or renamed away from a parent it watches, and one renamed back within the
+  debounce is where it was, with nothing below it watched until each is set
+  again. The watches are set before the change is told, so whatever the
+  panel reads on hearing it, any change after it is watched for.
 - **Nothing a read does.** A file opened or closed without a write is no
   change, or a snapshot reading a watched file would set off the next
   snapshot, without end. For the same reason the ledger is named by its
@@ -7578,6 +7587,14 @@ just listed.
   tab is shown again or the page asks by hand. Watching each skill's folders
   all the way down would tell it, at the price of a watch for every folder
   a skill keeps.
+- **A folder renamed above everything watched.** `mv ~/Work ~/Projects`
+  moves every project under it without a watched folder seeing it: a watch
+  is told of its own folder's rename and of what happens directly in it,
+  and `~/Work` is neither for any. The watches follow the folders, still
+  named by where they were, so the panel learns of it from the next change
+  in one of them, the tab shown again or a refresh by hand. Watching every
+  folder up to the root would tell it, at the price of waking for every
+  file made in each, the home folder's among them.
 - **A write the ledger has not checkpointed.** The ledger is watched by its
   file, which a write reaches when its log is checkpointed. A connection
   held open past a write, by a long command or a program reading the

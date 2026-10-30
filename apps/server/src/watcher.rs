@@ -35,11 +35,14 @@ pub const DEBOUNCE: Duration = Duration::from_millis(300);
 /// - **A path that is not there yet** is watched from the nearest folder
 ///   above it that is, for its being made; once it is, the list is asked
 ///   for again and it is watched itself.
+/// - **A folder above a path is a change to it.** Removed or renamed, it
+///   takes the path with it, and is all that is told: `rm -rf` of a
+///   project, or `mv` of its `.claude`, is told by that one folder alone.
 /// - **Asked for again after every change it tells**, since a change can
-///   name new paths, and a folder an event named is watched again: a watch
-///   stays with the folder it was set on, so one renamed away, or replaced
-///   by a rename over it, as an install puts a copy in place, takes the
-///   watch with it.
+///   name new paths, and a folder an event named is watched again, with
+///   every folder below it: a watch stays with the folder it was set on, so
+///   one renamed away, or replaced by a rename over it, as an install puts
+///   a copy in place, takes the watch with it.
 /// - **What a read does is no change.** A file opened or closed unwritten
 ///   is passed over, or a snapshot reading a watched file would set off
 ///   the next snapshot, without end.
@@ -211,14 +214,23 @@ impl<W: Watches> State<W> {
 
     /// Set the watches `watched` asks for, dropping those it no longer
     /// does, and setting again each folder in `named`, which an event
-    /// named as made, removed or renamed; then say how things are watched,
-    /// if that changed.
+    /// named as made, removed or renamed, and every folder below one; then
+    /// say how things are watched, if that changed.
+    ///
+    /// Every folder below too, since the system's watches go with a folder:
+    /// notify takes away each one under a folder removed, or renamed away
+    /// where its parent is watched, and where its parent is not they follow
+    /// it to where it went, still named by where it was. A folder renamed
+    /// away and back in one debounce is where it was, with nothing below it
+    /// watched until what is below it is set again.
     fn apply(&mut self, watched: &[Watched], named: &[PathBuf]) {
         let plan = Plan::of(watched, Path::is_dir);
         let dropped: Vec<PathBuf> = self
             .watched
             .iter()
-            .filter(|folder| !plan.folders.contains(*folder) || named.contains(*folder))
+            .filter(|folder| {
+                !plan.folders.contains(*folder) || named.iter().any(|path| folder.starts_with(path))
+            })
             .cloned()
             .collect();
         for folder in dropped {
@@ -302,7 +314,7 @@ struct Plan {
     /// Every scope the list names, each once, in the list's order.
     scopes: Vec<serde_json::Value>,
     /// The paths a change to which counts, each with its scopes: every path
-    /// listed, and each folder on the way to one that is not there yet.
+    /// listed, and every folder above one, there or not.
     paths: HashMap<PathBuf, BTreeSet<usize>>,
     /// The folders listed, a change to whatever is directly in which
     /// counts, each with its scopes.
@@ -335,27 +347,40 @@ impl Plan {
                     .insert(scope);
                 plan.folders.insert(each.path.clone());
             }
-            // The folder above, which sees it made, removed or renamed; or,
-            // where that is not there either, the nearest that is, which
-            // sees the first folder on the way made.
+            // The folder above is watched, which sees it made, removed or
+            // renamed; or, where that is not there either, the nearest that
+            // is, which sees the first folder on the way made.
+            //
+            // And every folder above counts as the path itself: one removed
+            // or renamed takes the path with it, and is all that is told of
+            // it, since the debouncer folds what a folder held into its own
+            // removal, so `rm -rf` of a project is one change, to its root.
+            let mut seen = false;
             let mut below = each.path.as_path();
             while let Some(above) = below.parent() {
-                if is_folder(above) {
+                if !seen && is_folder(above) {
                     plan.folders.insert(above.to_path_buf());
-                    break;
+                    seen = true;
                 }
-                plan.paths
+                let new = plan
+                    .paths
                     .entry(above.to_path_buf())
                     .or_default()
                     .insert(scope);
+                // A path listed before reached it with this scope, and went
+                // on from it to the nearest folder there and to the root.
+                if !new {
+                    break;
+                }
                 below = above;
             }
         }
         plan
     }
 
-    /// The scopes a change to `path` reaches: those of the path itself, and
-    /// of a folder listed that it is directly in.
+    /// The scopes a change to `path` reaches: those of the path itself, or
+    /// of every path listed below it, and of a folder listed that it is
+    /// directly in.
     fn reached(&self, path: &Path) -> BTreeSet<usize> {
         let mut scopes = self.paths.get(path).cloned().unwrap_or_default();
         if let Some(within) = path.parent().and_then(|folder| self.within.get(folder)) {
