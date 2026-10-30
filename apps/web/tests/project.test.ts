@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { Project } from '@/api/generated/Project'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { projectLink } from '@/routes'
-import { fixture, render, texts, unmount } from './panel'
+import { commanded, commanding, fixture, render, texts, unmount } from './panel'
 
 afterEach(unmount)
 
@@ -188,5 +188,33 @@ describe('the address of a project\'s page', () => {
     const { page } = await render('/project?entry=api', fixture('workspace'))
 
     expect(page.get('[data-testid="sidebar"] nav a[aria-current="page"]').text()).toBe('Projects')
+  })
+})
+
+describe('unlinking a project from its page', () => {
+  it('asks first, in the CLI\'s words, runs nothing until confirmed, then goes back to the projects', async () => {
+    const unlink = commanded()[1]!
+    const { sent, transport } = commanding()
+    const { page, router } = await render('/project?entry=gone', transport)
+
+    await page.get('[data-testid="unlink"]').trigger('click')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: unlink.task, mode: 'preview' }])
+    expect([...document.body.querySelectorAll('[data-testid="caution"]')].map(each => each.textContent?.replace(/\s+/g, ' ').trim()))
+      .toEqual(unlink.preview.confirm.map(each => `${each.caution}: ${each.message}`))
+    document.body.querySelector<HTMLElement>('[data-testid="cancel"]')!.click()
+    await flushPromises()
+    expect(sent.filter(each => each.mode === 'run')).toEqual([])
+    expect(router.currentRoute.value.path).toBe('/project')
+
+    await page.get('[data-testid="unlink"]').trigger('click')
+    await flushPromises()
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await flushPromises()
+
+    expect(sent.filter(each => each.mode === 'run')).toEqual([{ task: unlink.task, mode: 'run' }])
+    // The projects' page is loaded as it is first shown.
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/projects'))
   })
 })
