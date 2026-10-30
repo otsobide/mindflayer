@@ -1837,14 +1837,44 @@ on the workspace the panel shows wherever you type it, for a project linked
 from outside that workspace too; a workspace not made yet names `flayer init`
 first, since `-W` never makes the one it names.
 
+**The library** has a page for each kind, `skill` and `rule`, listing the
+workspace's own with what each is for, which projects hold a copy of it and
+how each copy stands, and what `validate` says of it; type to filter by name
+or summary. Below them are the workspaces it loads, each with where it is,
+how many of its own it offers, what `--from` takes for them (`load:../team`)
+and why one does not open. A kind it holds none of names `flayer add`.
+
+**One of the library's own** opens from its name. It shows what its front
+matter declares, as a table, every key in the order written; its body,
+rendered as markdown; every file it holds, each of which opens as the text it
+is; what `validate` says of it; and the projects holding a copy, with the
+state, agents and targets of each, or the `flayer install` that would put it
+in one. What a skill holds is somebody else's, so the panel shows it and
+never runs it: HTML in a `SKILL.md` is shown as the markup it is, an image is
+named rather than loaded, and only a link to another site stays a link,
+opened in a tab of its own. No file is ever served as itself, and a link in
+the skill that leads out of the folder the library keeps its kind in is
+listed with why and never followed.
+
+**The shelf** lists everything gathered, filtered by kind or by name,
+summary or origin, each with the commit it was taken at, when, and its
+origin as `--from` takes it: the address it came from, with `#` and the
+branch when one was asked for. **Sources** lists where the shelf is filled
+from, each with that same origin, the branch, the folder harvested, the
+commit last gathered and what it supplied, and below them what happened
+lately: the latest gathers, installs, uninstalls, relinks and adoptions the
+ledger logged, newest first, with every URL in them shown without
+credentials. An empty shelf names `flayer gather git`.
+
 Every page works from the keyboard and says every state in words, never by
 colour alone. So far the panel only shows: changing things from it comes with
 the [next milestone](https://github.com/otsobide/mindflayer/milestones). The
 API under it is there for a script holding the token as a Bearer token:
 `POST /api/query` for a read (`{"type": "snapshot"}` answers what the panel
-draws), `POST /api/commands/preview` for the lines a task is, `POST
-/api/commands` to run them, and `GET /api/transcript` for everything the
-session ran.
+draws, `{"type": "files", ...}` what one artifact holds, and `{"type":
+"contents", ...}` one file of it, as text), `POST /api/commands/preview` for
+the lines a task is, `POST /api/commands` to run them, and `GET
+/api/transcript` for everything the session ran.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
@@ -2606,9 +2636,10 @@ launcher or a version manager's shim.
 ## Developing the panel
 
 `apps/web` is the web panel, in Vue 3.5 and Nuxt UI 4 on Vite, written in
-TypeScript. So far it is the frame the views will fill: a sidebar, a header
-and an empty overview, dark unless you switch it to light, which the next
-launch remembers. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
+TypeScript. So far it shows and changes nothing: the overview, the
+projects, the library, the shelf and the sources, in a frame of a sidebar
+and a header, dark unless you switch it to light, which the next launch
+remembers. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
 the version `package.json` pins in `packageManager`, which `corepack enable`
 provides. Without corepack, name any other way to run it in `PNPM`:
 
@@ -2669,7 +2700,9 @@ policy, which lets nothing in from another host and nothing inline:
   names another host.
 - **Nothing inline.** No `<script>` or `<style>` written into the page, which
   is why the palette is declared in `src/assets/css/main.css` (from the
-  mapping in `src/theme.ts`) rather than injected, as Nuxt UI would.
+  mapping in `src/theme.ts`) rather than injected, as Nuxt UI would. A
+  skill's markdown is drawn element by element from its tokens
+  (`src/markdown.ts`), never put on the page as HTML.
 
 A test also checks that every package installed carries a licence
 GPL-3.0-only can take in.
