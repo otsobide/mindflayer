@@ -1017,8 +1017,10 @@ to date.
 
 Two shelves can offer `commit-style`, but a project has one directory of that
 name, so ticking one unticks the other rather than letting both apply and the
-second win quietly. A skill and a rule of one name are two things, and keep a
-box each.
+second win quietly. The one ticked when the screen opens is the one the
+project's copy was installed from, as the workspace recorded it, even when
+that copy is behind both places or edited since. A skill and a rule of one
+name are two things, and keep a box each.
 
 The screen offers the workspace's own skills and rules too, first and marked
 `[workspace]`: that is how something written once for every project reaches
