@@ -4,13 +4,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use mindflayer_core::hash;
 use mindflayer_core::install::{self, InstallError, Standing};
 use mindflayer_core::ledger::{Ledger, SourceKind};
 use mindflayer_core::lifecycle::{self, Record, Target};
 use mindflayer_core::AgentHomes;
 use mindflayer_core::{
     create, Agent, Catalog, Directories, FlayerWorkspace, Kind, LifecycleError, MindProject,
-    Reference, Share,
+    Reference, Share, ValidationIssue,
 };
 use tempfile::TempDir;
 
@@ -462,6 +463,271 @@ fn renaming_a_rule_refiles_it_by_its_new_route() {
     assert_eq!(
         fs::read_to_string(dir.path().join("rules/vcs/no-force-push.md")).unwrap(),
         "# Never force-push\n"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Replacing contents
+// ---------------------------------------------------------------------------
+
+/// What `deploy` is to hold once replaced: a manifest that passes.
+const SHIP: &str =
+    "---\nname: deploy\ndescription: Ship it, tests first\n---\n\n# deploy\n\nRun the tests.\n";
+
+/// Replace what `typed` names in `project` holds with `contents`, consulting
+/// no workspace.
+fn replace(
+    project: &MindProject,
+    typed: &str,
+    contents: &[u8],
+    expect: Option<&str>,
+) -> Result<lifecycle::Edited, LifecycleError> {
+    lifecycle::replace_contents(
+        None,
+        project,
+        &find(project, typed).unwrap(),
+        contents,
+        expect,
+    )
+}
+
+/// The names in `folder`, sorted.
+fn names(folder: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(folder)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+#[test]
+fn a_skills_contents_are_replaced_whole_and_nothing_else_it_holds_is() {
+    let (dir, project) = project();
+    create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+    write(dir.path(), "skills/deploy/scripts/run.sh", "echo ship\n");
+
+    let replaced = replace(&project, "deploy", SHIP.as_bytes(), None).unwrap();
+
+    assert!(replaced.changed);
+    assert_eq!(replaced.copy.unwrap(), Record::Untouched);
+    let folder = dir.path().join("skills/deploy");
+    assert_eq!(fs::read_to_string(folder.join("SKILL.md")).unwrap(), SHIP);
+    assert_eq!(
+        fs::read_to_string(folder.join("scripts/run.sh")).unwrap(),
+        "echo ship\n"
+    );
+    // Written through a temporary renamed onto it, which leaves nothing
+    // beside it.
+    assert_eq!(names(&folder), ["SKILL.md", "scripts"]);
+}
+
+#[test]
+fn contents_the_file_holds_already_write_nothing() {
+    let (dir, project) = project();
+    create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+    let manifest = dir.path().join("skills/deploy/SKILL.md");
+    let held = fs::read(&manifest).unwrap();
+
+    let replaced = replace(&project, "deploy", &held, None).unwrap();
+
+    assert!(!replaced.changed);
+    assert_eq!(replaced.copy.unwrap(), Record::Untouched);
+    assert_eq!(fs::read(&manifest).unwrap(), held);
+}
+
+#[test]
+fn a_skills_contents_that_break_a_rule_are_refused_and_nothing_is_written() {
+    let (dir, project) = project();
+    create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+    let manifest = dir.path().join("skills/deploy/SKILL.md");
+    let held = fs::read(&manifest).unwrap();
+
+    let refusals: [(&[u8], &str); 6] = [
+        (b"No front matter at all.\n", "edit_front_matter_unreadable"),
+        (b"---\nname: deploy\n", "edit_front_matter_unreadable"),
+        (b"---\nname: [deploy\n---\n", "edit_front_matter_unreadable"),
+        (
+            b"---\nname: deploy\ndescription: ''\n---\n",
+            "edit_contents_unfit",
+        ),
+        (
+            b"---\nname: ship\ndescription: Ship it\n---\n",
+            "edit_name_changed",
+        ),
+        (b"---\nname: deploy\xff\n---\n", "edit_contents_not_text"),
+    ];
+    for (contents, code) in refusals {
+        let error = replace(&project, "deploy", contents, None).unwrap_err();
+
+        assert_eq!(
+            error.code(),
+            code,
+            "{}: {error}",
+            String::from_utf8_lossy(contents)
+        );
+        assert_eq!(fs::read(&manifest).unwrap(), held);
+    }
+}
+
+#[test]
+fn a_changed_name_is_refused_with_the_command_that_changes_it() {
+    let (_dir, project) = project();
+    create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+
+    let error = replace(
+        &project,
+        "deploy",
+        b"---\nname: ship\ndescription: Ship it\n---\n",
+        None,
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "the contents given for `deploy` call it `ship`: a skill's name is its folder's too, so \
+         it is changed with `mind rename`, which moves both, and nothing was written"
+    );
+    let error = replace(
+        &project,
+        "deploy",
+        b"---\nname: deploy\ndescription: '  '\n---\n",
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "the contents given for `deploy` break a rule, so nothing was written: `description` is \
+         empty"
+    );
+}
+
+#[test]
+fn a_skill_that_does_not_read_is_fixed_by_replacing_its_contents() {
+    let (dir, project) = project();
+    write(dir.path(), "skills/deploy/SKILL.md", "no front matter\n");
+    assert!(find(&project, "deploy").unwrap().artifact.is_none());
+
+    replace(&project, "deploy", SHIP.as_bytes(), None).unwrap();
+
+    let fixed = find(&project, "deploy").unwrap().artifact.unwrap();
+    assert_eq!(fixed.description(), Some("Ship it, tests first"));
+}
+
+#[test]
+fn a_rules_contents_must_say_something_with_front_matter_that_reads() {
+    let (dir, project) = project();
+    create(&project, Kind::Rule, "git/no-force-push", "Never").unwrap();
+    let file = dir.path().join("rules/git/no-force-push.md");
+
+    let scoped = "---\npaths: src/**\n---\nNever force-push from src.\n";
+    assert!(
+        replace(&project, "git/no-force-push", scoped.as_bytes(), None)
+            .unwrap()
+            .changed
+    );
+    assert_eq!(fs::read_to_string(&file).unwrap(), scoped);
+
+    for (contents, issue) in [
+        ("---\npaths: src/**\n---\n\n", ValidationIssue::Empty),
+        (
+            "---\npaths: [1]\n---\nNever.\n",
+            ValidationIssue::PathsNotStrings,
+        ),
+    ] {
+        let error = replace(&project, "git/no-force-push", contents.as_bytes(), None).unwrap_err();
+
+        let LifecycleError::ContentsUnfit { issues, .. } = &error else {
+            panic!("{error}");
+        };
+        assert_eq!(issues, &[issue]);
+        assert_eq!(fs::read_to_string(&file).unwrap(), scoped);
+    }
+    let unparsed = replace(
+        &project,
+        "git/no-force-push",
+        b"---\n*nope\n---\nNever.\n",
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(unparsed.code(), "edit_contents_unfit", "{unparsed}");
+}
+
+#[test]
+fn contents_made_from_what_the_file_no_longer_holds_are_refused() {
+    let (dir, project) = project();
+    create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+    let manifest = dir.path().join("skills/deploy/SKILL.md");
+    let read = hash::bytes(&fs::read(&manifest).unwrap());
+    // Somebody else's editor, between the read and the write.
+    type_into(&manifest);
+    let theirs = fs::read_to_string(&manifest).unwrap();
+
+    let error = replace(&project, "deploy", SHIP.as_bytes(), Some(&read)).unwrap_err();
+
+    assert!(matches!(error, LifecycleError::Stale { .. }), "{error}");
+    assert_eq!(error.code(), "edit_stale");
+    let now = hash::bytes(theirs.as_bytes());
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "{}: changed since it was read, its SHA-256 now {now} and not {read}, so it is not \
+             written over; read it again",
+            manifest.display()
+        )
+    );
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), theirs);
+
+    // Made from what it holds now, in whichever case the digits are written.
+    let replaced = replace(
+        &project,
+        "deploy",
+        SHIP.as_bytes(),
+        Some(&now.to_uppercase()),
+    )
+    .unwrap();
+    assert!(replaced.changed);
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), SHIP);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_manifest_leading_out_of_where_its_kind_is_kept_is_never_written_through() {
+    let (dir, project) = project();
+    let elsewhere = TempDir::new().unwrap();
+    let theirs = elsewhere.path().join("bashrc");
+    fs::write(&theirs, "export EDITOR=vi\n").unwrap();
+    fs::create_dir_all(dir.path().join("skills/deploy")).unwrap();
+    let manifest = dir.path().join("skills/deploy/SKILL.md");
+    std::os::unix::fs::symlink(&theirs, &manifest).unwrap();
+
+    let error = replace(&project, "deploy", SHIP.as_bytes(), None).unwrap_err();
+
+    assert!(matches!(error, LifecycleError::LeadsOut { .. }), "{error}");
+    assert_eq!(error.code(), "edit_leads_outside");
+    assert_eq!(fs::read_to_string(&theirs).unwrap(), "export EDITOR=vi\n");
+    assert!(manifest.is_symlink());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_manifest_linked_to_a_file_where_its_kind_is_kept_is_written_through() {
+    let (dir, project) = project();
+    write(
+        dir.path(),
+        "skills/deploy/notes/manifest.md",
+        "no front matter\n",
+    );
+    let manifest = dir.path().join("skills/deploy/SKILL.md");
+    std::os::unix::fs::symlink("notes/manifest.md", &manifest).unwrap();
+
+    replace(&project, "deploy", SHIP.as_bytes(), None).unwrap();
+
+    // The link is kept, and what it leads to holds the contents.
+    assert!(manifest.is_symlink());
+    assert_eq!(
+        fs::read_to_string(dir.path().join("skills/deploy/notes/manifest.md")).unwrap(),
+        SHIP
     );
 }
 
@@ -1159,6 +1425,31 @@ fn an_edit_that_changes_nothing_keeps_the_record() {
     assert!(!edited.changed);
     assert_eq!(edited.copy.unwrap(), Record::Untouched);
     assert_eq!(records(&ledger), ["deploy"]);
+}
+
+#[test]
+fn an_installed_copy_whose_contents_are_replaced_keeps_its_record_and_reads_as_edited() {
+    let (_dir, workspace, project, ledger) = installed(&["deploy"]);
+    let target = find(&project, "deploy").unwrap();
+    let mut contents = fs::read_to_string(target.file()).unwrap();
+    contents.push_str("Mine.\n");
+
+    let replaced = lifecycle::replace_contents(
+        Some(&workspace),
+        &project,
+        &target,
+        contents.as_bytes(),
+        None,
+    )
+    .unwrap();
+
+    assert!(replaced.changed);
+    assert_eq!(replaced.copy.unwrap(), Record::Kept);
+    assert_eq!(records(&ledger), ["deploy"]);
+    assert_eq!(
+        standing(&workspace, &ledger, &project, "deploy"),
+        Standing::Edited
+    );
 }
 
 #[test]

@@ -638,6 +638,27 @@ pub(crate) fn strict_issues(manifest: &SkillManifest, folder: &str) -> Vec<Valid
         .collect()
 }
 
+/// Whatever a rule reading `source` breaks that Mindflayer will not write:
+/// having nothing to say, which `validate` calls invalid, and whatever its
+/// front matter leaves unread ([`rule_issues`]), which a template is refused
+/// for.
+///
+/// A rule's half of [`strict_issues`], judged on the text it will hold
+/// before a byte of it is written, as contents given whole are
+/// ([`crate::lifecycle::replace_contents`]). Not its name, which is its
+/// route rather than anything it says, and which the text cannot change.
+pub(crate) fn rule_text_issues(source: &str) -> Vec<ValidationIssue> {
+    let (manifest, body) = RuleManifest::read(source);
+    let mut issues = Vec::new();
+    // `opening_line`, as a rule's summary is found when it is read, so a
+    // rule written is one that reads as saying something.
+    if opening_line(body).is_none() {
+        issues.push(ValidationIssue::Empty);
+    }
+    issues.extend(rule_issues(&manifest));
+    issues
+}
+
 /// Read a file, naming it if that fails.
 fn read(path: &Path) -> Result<String, ArtifactError> {
     fs::read_to_string(path).map_err(|source| ArtifactError::Read {
