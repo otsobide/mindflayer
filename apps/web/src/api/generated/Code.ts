@@ -20,6 +20,7 @@ export type Code =
   | "targets_no_project"
   | "editor_unstarted"
   | "editor_failed"
+  | "edit_contents_unread"
   | "no_workspace_above"
   | "no_default_workspace"
   | "install_no_projects"

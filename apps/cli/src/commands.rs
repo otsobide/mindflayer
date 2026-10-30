@@ -139,10 +139,10 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 }),
             }
         }
-        Command::Edit { reference, editor } => {
+        Command::Edit { reference, editing } => {
             let project = project_here(&directory)?;
             consulting(&project, lookup, |workspace| {
-                edit_in(workspace, &project, reference, editor.as_deref())
+                edit_in(workspace, &project, reference, editing, &directory)
             })
         }
         Command::Rename { reference, to } => {
@@ -440,14 +440,15 @@ fn run_flayer(
         FlayerCommand::Edit {
             reference,
             project,
-            editor,
+            editing,
         } => {
             let workspace = workspace_here(directory, lookup)?;
             edit_in(
                 Some(&workspace),
                 &workspace.holder(project.as_deref())?,
                 reference,
-                editor.as_deref(),
+                editing,
+                directory,
             )
         }
         FlayerCommand::Rename {

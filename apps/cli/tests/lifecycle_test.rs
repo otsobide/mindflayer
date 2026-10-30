@@ -171,6 +171,220 @@ fn edit_says_so_when_the_editor_does_not_work() {
     );
 }
 
+/// What `deploy` is to hold once replaced: a manifest that passes.
+const SHIP: &str =
+    "---\nname: deploy\ndescription: Ship it, tests first\n---\n\n# deploy\n\nRun the tests.\n";
+
+/// A project in `dir` holding `deploy`, and `draft.md` beside it holding
+/// `draft`: what `edit --contents draft.md` reads. Its manifest is returned.
+fn drafted(dir: &Path, draft: &str) -> PathBuf {
+    mind(dir, &["init"]).unwrap();
+    mind(dir, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    fs::write(dir.join("draft.md"), draft).unwrap();
+    dir.join("skills/deploy/SKILL.md")
+}
+
+#[test]
+fn edit_replaces_what_an_artifact_holds_with_the_contents_of_a_file() {
+    let dir = TempDir::new().unwrap();
+    let manifest = drafted(dir.path(), SHIP);
+
+    // Typed from the directory the command works in, which `-C` names.
+    let outcome = mind(dir.path(), &["edit", "deploy", "--contents", "draft.md"]).unwrap();
+
+    assert_eq!(outcome.stdout, "edited skill deploy: ok\n");
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), SHIP);
+
+    let again = mind(dir.path(), &["edit", "deploy", "--contents", "draft.md"]).unwrap();
+    assert_eq!(again.stdout, "left skill deploy unchanged: ok\n");
+
+    // A rule's file is replaced the same way.
+    mind(dir.path(), &["add", "rule", "git/no-force-push", "Never"]).unwrap();
+    let rule = "---\npaths: src/**\n---\nNever force-push from src.\n";
+    fs::write(dir.path().join("rule.md"), rule).unwrap();
+    let outcome = mind(
+        dir.path(),
+        &["edit", "rule:git/no-force-push", "--contents", "rule.md"],
+    )
+    .unwrap();
+    assert_eq!(outcome.stdout, "edited rule git/no-force-push: ok\n");
+    assert_eq!(
+        fs::read_to_string(dir.path().join("rules/git/no-force-push.md")).unwrap(),
+        rule
+    );
+}
+
+#[test]
+fn edit_refuses_contents_whose_front_matter_does_not_read_and_writes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let manifest = drafted(dir.path(), "# deploy\n\nNo front matter.\n");
+    let held = fs::read_to_string(&manifest).unwrap();
+
+    let failure = mind(dir.path(), &["edit", "deploy", "--contents", "draft.md"]).unwrap_err();
+
+    assert_eq!(failure.error.code(), "edit_front_matter_unreadable");
+    assert_eq!(
+        failure.error.to_string(),
+        "the contents given for `deploy` cannot be read as a skill's, so nothing was written: \
+         the file does not start with a `---` front matter fence"
+    );
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), held);
+}
+
+#[test]
+fn edit_refuses_contents_made_from_what_the_file_no_longer_holds() {
+    let dir = TempDir::new().unwrap();
+    let manifest = drafted(dir.path(), SHIP);
+    let read = mindflayer_core::hash::bytes(&fs::read(&manifest).unwrap());
+    // Somebody else's change, after the contents were made from the file.
+    let mut theirs = fs::read_to_string(&manifest).unwrap();
+    theirs.push_str("Theirs.\n");
+    fs::write(&manifest, &theirs).unwrap();
+
+    let failure = mind(
+        dir.path(),
+        &[
+            "edit",
+            "deploy",
+            "--contents",
+            "draft.md",
+            "--if-unchanged",
+            &read,
+        ],
+    )
+    .unwrap_err();
+
+    assert_eq!(failure.error.code(), "edit_stale");
+    assert!(
+        failure
+            .error
+            .to_string()
+            .ends_with("so it is not written over; read it again"),
+        "{}",
+        failure.error
+    );
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), theirs);
+
+    let now = mindflayer_core::hash::bytes(theirs.as_bytes());
+    let outcome = mind(
+        dir.path(),
+        &[
+            "edit",
+            "deploy",
+            "--contents",
+            "draft.md",
+            "--if-unchanged",
+            &now,
+        ],
+    )
+    .unwrap();
+    assert_eq!(outcome.stdout, "edited skill deploy: ok\n");
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), SHIP);
+}
+
+#[test]
+fn edit_says_so_when_the_contents_cannot_be_read() {
+    let dir = TempDir::new().unwrap();
+    let manifest = drafted(dir.path(), SHIP);
+    let held = fs::read_to_string(&manifest).unwrap();
+
+    let failure = mind(dir.path(), &["edit", "deploy", "--contents", "absent.md"]).unwrap_err();
+
+    assert!(
+        matches!(*failure.error, CliError::ContentsUnread { .. }),
+        "{}",
+        failure.error
+    );
+    assert_eq!(failure.error.code(), "edit_contents_unread");
+    assert!(
+        failure.error.to_string().starts_with(&format!(
+            "{}: cannot be read",
+            dir.path().join("absent.md").display()
+        )),
+        "{}",
+        failure.error
+    );
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), held);
+}
+
+#[test]
+fn edit_takes_contents_or_an_editor_and_a_hash_only_with_contents() {
+    let dir = TempDir::new().unwrap();
+    for (args, kind) in [
+        (
+            &[
+                "edit",
+                "deploy",
+                "--contents",
+                "draft.md",
+                "--editor",
+                "true",
+            ][..],
+            clap::error::ErrorKind::ArgumentConflict,
+        ),
+        (
+            &["edit", "deploy", "--if-unchanged", "0123"][..],
+            clap::error::ErrorKind::MissingRequiredArgument,
+        ),
+    ] {
+        for binary in ["mind", "flayer"] {
+            let words = line(binary, args, dir.path());
+            let parsed = match binary {
+                "mind" => Cli::try_parse_from(&words).map(drop),
+                _ => FlayerCli::try_parse_from(&words).map(drop),
+            };
+            assert_eq!(parsed.unwrap_err().kind(), kind, "{words:?}");
+        }
+    }
+}
+
+#[test]
+fn edit_takes_the_contents_from_standard_input_given_as_a_dash() {
+    let dir = TempDir::new().unwrap();
+    let manifest = drafted(dir.path(), "");
+
+    let spawned = spawn_fed(
+        "mind",
+        dir.path(),
+        &["edit", "deploy", "--contents", "-"],
+        &[],
+        SHIP.as_bytes(),
+    );
+
+    assert!(spawned.ok, "{}", spawned.stderr);
+    assert_eq!(spawned.stdout, "edited skill deploy: ok\n");
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), SHIP);
+}
+
+#[test]
+fn flayer_edit_replaces_the_contents_of_one_of_the_workspaces_own_or_a_projects() {
+    let dir = workspace_with_two();
+    flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    fs::write(dir.path().join("draft.md"), SHIP).unwrap();
+    let alpha = skill_file("alpha", "A skill, rewritten");
+    fs::write(dir.path().join("alpha.md"), &alpha).unwrap();
+
+    let own = flayer(dir.path(), &["edit", "deploy", "--contents", "draft.md"]).unwrap();
+    let projects = flayer(
+        dir.path(),
+        &["edit", "-p", "alpha", "alpha", "--contents", "alpha.md"],
+    )
+    .unwrap();
+
+    assert_eq!(own.stdout, "edited skill deploy: ok\n");
+    assert_eq!(
+        fs::read_to_string(own_directory_for(dir.path(), Kind::Skill).join("deploy/SKILL.md"))
+            .unwrap(),
+        SHIP
+    );
+    assert_eq!(projects.stdout, "edited skill alpha: ok\n");
+    assert_eq!(
+        fs::read_to_string(dir.path().join("alpha/skills/alpha/SKILL.md")).unwrap(),
+        alpha
+    );
+}
+
 #[test]
 fn templates_lists_what_add_can_start_from_and_where_each_comes_from() {
     let dir = TempDir::new().unwrap();
@@ -412,6 +626,34 @@ fn an_installed_skill_reads_as_edited_when_the_editor_writes_it_and_then_fails()
     assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
     let manifest = fs::read_to_string(project.join("skills/deploy/SKILL.md")).unwrap();
     assert!(manifest.ends_with("Mine.\n"), "{manifest}");
+    let screen = screen_for(&workspace, &ledger);
+    assert_eq!(
+        screen.targets[0].rows[0].candidate.standing,
+        Standing::Edited
+    );
+}
+
+#[test]
+fn an_installed_skill_whose_contents_are_replaced_stays_installed_and_reads_as_edited() {
+    let (dir, workspace, ledger) = shelved_older(&["collapse"], &["deploy"]);
+    installed(dir.path(), &workspace, &ledger);
+    let project = dir.path().join("collapse");
+    let mut contents = fs::read_to_string(project.join("skills/deploy/SKILL.md")).unwrap();
+    contents.push_str("Mine.\n");
+    let draft = dir.path().join("draft.md");
+    fs::write(&draft, &contents).unwrap();
+
+    let outcome = mind(
+        &project,
+        &["edit", "deploy", "--contents", &draft.to_string_lossy()],
+    )
+    .unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        "edited skill deploy: ok\n  it was installed by `flayer install`, and stays so; edited, \
+         it is left alone by `flayer install` and `flayer uninstall` unless they are forced\n"
+    );
     let screen = screen_for(&workspace, &ledger);
     assert_eq!(
         screen.targets[0].rows[0].candidate.standing,

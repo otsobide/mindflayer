@@ -36,8 +36,8 @@ pub use homes::{agent_homes, default_home, Lookup};
 #[cfg(feature = "ui")]
 pub use parse::UiOptions;
 pub use parse::{
-    AgentHomeOptions, AgentNames, AgentsChange, Cli, Command, FlayerCli, FlayerCommand,
-    GatherCommand, Migrated, ShareMode, TargetsChange, WorkspacesCommand,
+    AgentHomeOptions, AgentNames, AgentsChange, Cli, Command, Editing, FlayerCli, FlayerCommand,
+    GatherCommand, Given, Migrated, ShareMode, TargetsChange, WorkspacesCommand,
 };
 pub use progress::ProgressLine;
 pub use render::{Failure, Outcome, Warning};
