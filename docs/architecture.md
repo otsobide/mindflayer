@@ -78,12 +78,12 @@ anchor names a heading as GitHub spells it (lowercased, punctuation
 dropped, spaces made hyphens, a repeated one numbered), and every image in
 `docs/images` is shown by some page, since one nobody shows is weight the
 history carries for nothing. A Rust test rather than a link checker from
-npm, so it runs in `test (cli)` and `make test` with no Node, as CI's Rust
-jobs have none, and offline: a link to another site is not fetched, or
-somebody else's outage would fail the build. It reads Markdown just far
+npm, so it runs in `test (cli)` and `make cli/test` with no Node, as CI's
+Rust jobs have none, and offline: a link to another site is not fetched,
+or somebody else's outage would fail the build. It reads Markdown just far
 enough for that, skipping fenced blocks and code spans, where a link or a
-`#` is an example; the move into `docs/` found the one anchor that led
-nowhere.
+`#` is an example. Its first run found one anchor that led nowhere, in
+this document since before the move, which no check had read until then.
 
 ### No em dash in what the repository says
 
