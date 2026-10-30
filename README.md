@@ -1887,9 +1887,12 @@ draws, `{"type": "files", ...}` what one artifact holds, and `{"type":
 "contents", ...}` one file of it, as text), `POST /api/commands/preview` for
 the lines a task is, `POST /api/commands` to run them, `GET
 /api/transcript` for everything the session ran, and `GET /api/events` for
-what happens as it happens, as server-sent events: `changed` when something
-watched changed, `command_started` and `command_finished` around each run,
-and `resync` when everything should be read again.
+what happens as it happens, as server-sent events: `resync`, to read
+everything again, first and whenever a reader fell behind; right after it
+`watching`, or `unwatched` with a `reason` when the server cannot watch
+everything, and either again whenever that changes; `changed` when something
+watched changed; and `command_started` and `command_finished` around each
+run.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
