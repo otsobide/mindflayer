@@ -988,6 +988,7 @@ impl App {
                             kind,
                             name: name.clone(),
                             everywhere: true,
+                            yes: true,
                         },
                     }
                 });
@@ -998,6 +999,7 @@ impl App {
                         kind,
                         name,
                         everywhere: false,
+                        yes: true,
                     },
                     also,
                     back: Box::new(Mode::Browse),

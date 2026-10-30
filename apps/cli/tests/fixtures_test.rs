@@ -639,7 +639,7 @@ fn write_what_previewing_and_running_a_few_tasks_is_answered_with() {
         json!({"type": "validate", "holder": {"type": "project", "entry": "docs"}}),
         json!({
             "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
-            "name": "lint", "everywhere": true,
+            "name": "lint", "everywhere": true, "yes": true,
         }),
     ] {
         run(sent);

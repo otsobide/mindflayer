@@ -365,6 +365,7 @@ fn a_line_that_fails_says_so_with_its_code() {
             "kind": "skill",
             "name": "missing",
             "everywhere": false,
+            "yes": true,
         })))
         .unwrap();
 
@@ -398,6 +399,7 @@ fn the_transcript_holds_the_lines_that_changed_something_and_no_read() {
             "kind": "skill",
             "name": "missing",
             "everywhere": false,
+            "yes": true,
         })))
         .unwrap();
 
@@ -843,12 +845,20 @@ fn a_preview_says_what_its_lines_take_away_for_the_panel_to_confirm() {
         (
             json!({
                 "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
-                "name": "deploy", "everywhere": true,
+                "name": "deploy", "everywhere": true, "yes": true,
             }),
             json!([
                 {"line": 0, "caution": "removes", "message": removes},
                 {"line": 0, "caution": "uninstalls", "message": uninstalls},
             ]),
+        ),
+        // Its dry run, which takes nothing.
+        (
+            json!({
+                "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
+                "name": "deploy", "everywhere": true, "yes": false,
+            }),
+            json!([]),
         ),
         // Its `mind init`, its `flayer link` and its `flayer unlink`.
         (
@@ -887,7 +897,7 @@ fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
     let preview = backend
         .preview(&task(json!({
             "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
-            "name": "deploy", "everywhere": false,
+            "name": "deploy", "everywhere": false, "yes": true,
         })))
         .unwrap_or_else(|refusal| panic!("{refusal:?}"));
 

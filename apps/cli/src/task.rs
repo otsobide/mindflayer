@@ -171,12 +171,15 @@ pub enum Task {
     /// `… remove --yes <kind:name>`: asked about before it gets here, which is
     /// what the `--yes` says. `flayer remove --everywhere --yes <kind:name>`
     /// when `everywhere`, one of the workspace's own taken out of every
-    /// project it links first.
+    /// project it links first. Without `yes`, the dry run, which deletes
+    /// nothing and says what would go, each project's copy with how it
+    /// stands when `everywhere`: what the panel shows before it asks.
     Remove {
         holder: Holder,
         kind: Kind,
         name: String,
         everywhere: bool,
+        yes: bool,
     },
     /// `flayer validate`, everything; `mind validate`, one project.
     Validate { holder: Holder },
@@ -524,13 +527,16 @@ impl Task {
                 kind,
                 name,
                 everywhere,
+                yes,
             } => {
-                let command: &[&str] = if *everywhere {
-                    &["remove", "--everywhere", "--yes"]
-                } else {
-                    &["remove", "--yes"]
-                };
-                vec![at(holder, command, &[&qualified(*kind, name)])]
+                let mut command = vec!["remove"];
+                if *everywhere {
+                    command.push("--everywhere");
+                }
+                if *yes {
+                    command.push("--yes");
+                }
+                vec![at(holder, &command, &[&qualified(*kind, name)])]
             }
             Task::Validate { holder } => vec![at(holder, &["validate"], &[])],
             Task::Minds { init, link, unlink } => {
@@ -704,7 +710,7 @@ impl Task {
                 | Task::Add { .. }
                 | Task::Edit { .. }
                 | Task::Rename { .. }
-                | Task::Remove { .. }
+                | Task::Remove { yes: true, .. }
                 | Task::Gather { .. }
                 | Task::Minds { .. }
                 | Task::Marks { .. }

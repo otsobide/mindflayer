@@ -142,7 +142,8 @@
       },
       "kind": "skill",
       "name": "lint",
-      "type": "remove"
+      "type": "remove",
+      "yes": true
     }
   },
   {

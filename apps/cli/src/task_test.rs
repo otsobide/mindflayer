@@ -160,6 +160,14 @@ fn every(value: &str) -> Vec<Task> {
             kind: Kind::Skill,
             name: owned(),
             everywhere: true,
+            yes: true,
+        },
+        Task::Remove {
+            holder: Holder::Workspace,
+            kind: Kind::Rule,
+            name: owned(),
+            everywhere: true,
+            yes: false,
         },
         Task::Update {
             holder: Holder::Workspace,
@@ -209,6 +217,7 @@ fn every(value: &str) -> Vec<Task> {
                 kind,
                 name: owned(),
                 everywhere: false,
+                yes: at % 2 == 0,
             },
             Task::Validate {
                 holder: holder.clone(),
@@ -515,6 +524,41 @@ fn a_migration_is_a_dry_run_until_it_is_told_and_only_then_a_write() {
     );
     assert!(migrate(true).writes());
     assert_eq!(migrate(true).cautions(), Vec::new());
+}
+
+/// What the panel's page of one of the library's own shows before it asks:
+/// removing it everywhere as a dry run, which writes and takes nothing, then
+/// the same line told `--yes`, which takes it out of every project and
+/// deletes it, and is asked about for both.
+#[test]
+fn a_removal_is_a_dry_run_until_it_is_told_and_only_then_asked_about() {
+    let remove = |everywhere, yes| Task::Remove {
+        holder: Holder::Workspace,
+        kind: Kind::Skill,
+        name: String::from("lint"),
+        everywhere,
+        yes,
+    };
+
+    assert_eq!(
+        remove(true, false).commands(),
+        [line("flayer remove --everywhere skill:lint")]
+    );
+    assert!(!remove(true, false).writes());
+    assert_eq!(remove(true, false).cautions(), Vec::new());
+    assert_eq!(
+        remove(true, true).commands(),
+        [line("flayer remove --everywhere --yes skill:lint")]
+    );
+    assert!(remove(true, true).writes());
+    assert_eq!(
+        remove(true, true).cautions(),
+        [(0, Caution::Removes), (0, Caution::Uninstalls)]
+    );
+    assert_eq!(
+        remove(false, false).commands(),
+        [line("flayer remove skill:lint")]
+    );
 }
 
 /// What the panel's page of updates asks for, each the line somebody would
@@ -1238,10 +1282,14 @@ fn a_task_is_asked_about_for_each_of_its_lines_that_takes_something_away() {
     for task in values.flat_map(every) {
         let expected = match &task {
             Task::Remove {
-                everywhere: false, ..
+                everywhere: false,
+                yes: true,
+                ..
             } => vec![(0, Caution::Removes)],
             Task::Remove {
-                everywhere: true, ..
+                everywhere: true,
+                yes: true,
+                ..
             } => vec![(0, Caution::Removes), (0, Caution::Uninstalls)],
             Task::Uninstall { .. } => vec![(0, Caution::Uninstalls)],
             Task::Update { force: true, .. } => vec![(0, Caution::Forces)],

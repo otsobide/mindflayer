@@ -1878,6 +1878,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Skill,
             name: String::from("deploy"),
             everywhere: false,
+            yes: true,
         },
         Task::Add {
             holder: Holder::Workspace,
@@ -1896,6 +1897,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Rule,
             name: String::from("style"),
             everywhere: false,
+            yes: true,
         },
         Task::InitProject,
         Task::LinkHere,
@@ -1919,6 +1921,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Skill,
             name: String::from("deploy"),
             everywhere: false,
+            yes: true,
         },
         Task::Add {
             holder: Holder::Elsewhere(String::from("-odd")),
@@ -1975,6 +1978,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Rule,
             name: String::from("git/no-force-push"),
             everywhere: true,
+            yes: true,
         },
         Task::Install {
             projects: vec![String::from("alpha"), String::from("-odd")],
@@ -2704,6 +2708,7 @@ fn d_on_the_workspaces_own_offers_to_remove_it_everywhere_with_e() {
             kind: Kind::Skill,
             name: String::from("commit-style"),
             everywhere: true,
+            yes: true,
         })
     );
     assert!(!own_directory_for(dir.path(), Kind::Skill)
