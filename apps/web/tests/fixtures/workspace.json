@@ -137,6 +137,33 @@
       }
     ],
     "failures": [],
+    "holders": [
+      {
+        "entry": "web",
+        "kind": "skill",
+        "name": "lint"
+      },
+      {
+        "entry": "api",
+        "kind": "skill",
+        "name": "review"
+      },
+      {
+        "entry": "web",
+        "kind": "skill",
+        "name": "review"
+      },
+      {
+        "entry": "docs",
+        "kind": "skill",
+        "name": "review"
+      },
+      {
+        "entry": "api",
+        "kind": "rule",
+        "name": "git/commits"
+      }
+    ],
     "origin": "workspace",
     "templates": [
       {

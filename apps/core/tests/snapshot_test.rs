@@ -423,6 +423,18 @@ const EXPECTED: &str = r#"{
         "unread": null
       }
     ],
+    "holders": [
+      {
+        "kind": "skill",
+        "name": "review",
+        "entry": "api"
+      },
+      {
+        "kind": "rule",
+        "name": "commits",
+        "entry": "api"
+      }
+    ],
     "templates": [
       {
         "name": "full",
@@ -1081,6 +1093,77 @@ fn a_second_spelling_of_a_load_lists_the_origin_its_offers_go_by() {
             ("./../team", "load:../team", 1)
         ]
     );
+}
+
+/// The projects holding a copy of each of the library's own, as core tells
+/// them: each as the kind and name it holds a copy of, and the entry the
+/// registry spells the project by.
+fn holders(snapshot: &Snapshot) -> Vec<(Kind, &str, &str)> {
+    snapshot
+        .library
+        .holders
+        .iter()
+        .map(|holder| (holder.kind, holder.name.as_str(), holder.entry.as_str()))
+        .collect()
+}
+
+/// An install recorded before origins were kept names none, and is a copy
+/// of one of the library's own all the same, as `flayer remove
+/// --everywhere` takes it: its project holds a copy of it, though no word
+/// beside the copy says so, so no front end comparing origins could tell.
+#[test]
+fn a_copy_recorded_before_origins_were_kept_is_a_copy_of_the_librarys_own() {
+    let fixture = fixture();
+    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute_batch("UPDATE installations SET origin = NULL WHERE name = 'review';")
+        .unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        holders(&snapshot),
+        [
+            (Kind::Skill, "review", "api"),
+            (Kind::Rule, "commits", "api")
+        ]
+    );
+    let review = snapshot.projects[0]
+        .artifacts
+        .iter()
+        .find(|held| held.name == "review")
+        .unwrap();
+    assert_eq!(
+        (review.origin.as_deref(), review.state),
+        (None, Some(State::Current))
+    );
+}
+
+/// Such a record may as well be a copy of a loaded workspace's own of that
+/// name, so while one offers it the record is taken for neither: saying it
+/// is the library's would be a guess.
+#[test]
+fn a_copy_recorded_before_origins_were_kept_is_nobodys_while_a_load_offers_its_name() {
+    let fixture = fixture();
+    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    rusqlite::Connection::open(workspace.ledger_path())
+        .unwrap()
+        .execute_batch("UPDATE installations SET origin = NULL WHERE name = 'review';")
+        .unwrap();
+    let team = FlayerWorkspace::open(fixture.dir.path().join("team")).unwrap();
+    common::write_files(
+        &team.own().directory_for(Kind::Skill).unwrap(),
+        &[("review/SKILL.md", &skill("review", "Read it"))],
+    );
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(holders(&snapshot), [(Kind::Rule, "commits", "api")]);
 }
 
 /// A listing of every kind is the snapshot's holders, as they are: what a

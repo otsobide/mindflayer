@@ -1615,9 +1615,16 @@ read, built and ordered in core from the read types the commands print:
   spell it, as `known` counts them, and a tally of what those projects,
   its library and its shelf hold;
 - its library, the workspace's own, with where it keeps each kind, the
-  templates `flayer add` finds, and the `origin` a copy installed from it
-  names (`workspace`), so a front end finds the projects holding one of its
-  own by comparing two words core wrote, rather than one of its own;
+  templates `flayer add` finds, the `origin` `--from` takes for each of its
+  own and a copy installed from one names (`workspace`), and the projects
+  holding a copy of each (`holders`), each by the registry entry it is
+  listed under. Those are the projects whose install the ledger tells came
+  from it (`install::from_the_library`), the rule `flayer remove
+  --everywhere` takes its copies by, rather than the copies whose origin
+  is `workspace`: an install recorded before origins were kept names none,
+  and is a copy of the library's own all the same while no loaded
+  workspace offers its name. A front end comparing origins would miss it,
+  and would hold a rule core holds already;
 - each project its registry names, in marker order, a stale entry with why
   it opens none, and a second spelling of one directory as a project of its
   own, since each entry is what `unlink` is given, as the TUI has always

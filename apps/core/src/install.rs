@@ -1033,6 +1033,28 @@ pub(crate) fn offered_for<'a>(record: &InstallRecord, offers: &'a [Offer]) -> Ve
         .collect()
 }
 
+/// Whether the installation `record` came from the library copy, `library`,
+/// as far as the ledger tells: what it records of where it came from
+/// matches that ([`offered_for`]), and nothing offered from `elsewhere`.
+///
+/// A record names its origin, and one naming the workspace's own came from
+/// the library. One from before origins were kept may have come from the
+/// workspace's own or from any workspace it loads, and is taken for the
+/// library's only while no loaded workspace offers its name: while one
+/// does, removing the library copy leaves it offered, and taking a copy out
+/// that may be that one's would be a guess. One rule for removing one of
+/// the workspace's own everywhere ([`crate::everywhere`]) and for the
+/// projects a snapshot says hold a copy of it ([`crate::view::LibraryHolder`]),
+/// so the two never name different projects.
+pub(crate) fn from_the_library(
+    record: &InstallRecord,
+    library: &Offer,
+    elsewhere: &[Offer],
+) -> bool {
+    !offered_for(record, std::slice::from_ref(library)).is_empty()
+        && offered_for(record, elsewhere).is_empty()
+}
+
 /// The one candidate called `name` that `from` names, among what `project`
 /// can be offered.
 ///

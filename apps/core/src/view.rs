@@ -40,7 +40,7 @@ use crate::code::Said;
 use crate::install::{self, LoadFailure, Offer};
 use crate::kind::Kind;
 use crate::known::{self, KnownWorkspace};
-use crate::ledger::{Entry, Gathered, LedgerError, Source};
+use crate::ledger::{Entry, Gathered, InstallRecord, LedgerError, Source};
 use crate::lifecycle;
 use crate::paths;
 use crate::relink;
@@ -185,21 +185,46 @@ pub struct Workspace {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Library {
-    /// What `--from` takes for each of its own, and what a project's copy
-    /// of one names as its [`origin`](Held::origin): so a front end finds
-    /// the projects holding one of them by comparing the two, rather than
-    /// by a word of its own that core could spell differently.
+    /// What `--from` takes for each of its own, and what an install of one
+    /// records as its origin: so a front end names it in a command line by
+    /// core's word rather than by one of its own that core could spell
+    /// differently.
     pub origin: &'static str,
     /// Where it keeps each kind, as a route from the workspace's root.
     pub directories: Vec<Directory>,
     /// Each of its own, by kind and then name: no project's, so none
     /// stands in a state, and nothing is installed into them.
     pub artifacts: Vec<Held>,
+    /// Each project its registry links that holds a copy of one of its own,
+    /// in the order of `artifacts`, then of the registry.
+    pub holders: Vec<LibraryHolder>,
     /// What `flayer add --template` can start from.
     pub templates: Vec<Template>,
     /// What could not be read in it and is no artifact's: a folder that
     /// cannot be listed, its templates.
     pub failures: Vec<Said>,
+}
+
+/// A project holding a copy of one of the workspace's own: one whose install
+/// the ledger tells came from it ([`install::from_the_library`]), the rule
+/// `flayer remove --everywhere` takes the copies it removes by.
+///
+/// Told here rather than by a front end comparing a copy's
+/// [`origin`](Held::origin) with [`Library::origin`], which would be a
+/// rule of its own, and a different one: a record from before origins were
+/// kept names none, and is a copy of one of the workspace's own all the
+/// same while no workspace it loads offers that name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct LibraryHolder {
+    /// The one of the workspace's own it holds a copy of.
+    pub kind: Kind,
+    pub name: String,
+    /// The project, as its registry entry spells it ([`Project::entry`]):
+    /// its artifact of that kind and name is the copy. Each entry that
+    /// spells one directory is a holder of its own, as each is a project
+    /// of the snapshot's.
+    pub entry: String,
 }
 
 /// One entry in a workspace's registry, and the project it opens.
@@ -757,6 +782,7 @@ impl Library {
         Library {
             origin: install::WORKSPACE_ORIGIN,
             directories: directories(&own, kinds),
+            holders: holders(workspace, &own, &artifacts),
             artifacts,
             templates,
             failures,
@@ -1047,6 +1073,83 @@ fn directories(project: &MindProject, kinds: &[Kind]) -> Vec<Directory> {
             })
         })
         .collect()
+}
+
+/// Each entry of `workspace`'s registry holding a copy of one of
+/// `artifacts`, its own, held in `own`: in the order of `artifacts`, then
+/// of the registry.
+///
+/// Each of its own is held to its place in `own` rather than to what is
+/// offered, as `flayer remove --everywhere` holds it: one whose file no
+/// longer reads is offered by nothing, and what was installed from it is a
+/// copy of it all the same. What cannot be read leaves a holder out and is
+/// said where it belongs, not again here: a ledger that does not open or
+/// answer, by each project linked, and an entry that opens no project, as
+/// its `stale`.
+fn holders(
+    workspace: &FlayerWorkspace,
+    own: &MindProject,
+    artifacts: &[Held],
+) -> Vec<LibraryHolder> {
+    if artifacts.is_empty() {
+        return Vec::new();
+    }
+    let Ok(ledger) = workspace.ledger_for_reading() else {
+        return Vec::new();
+    };
+    let members: Vec<(String, MindProject)> = workspace
+        .members()
+        .into_iter()
+        .filter_map(|member| Some((paths::as_route(&member.entry), member.project.ok()?)))
+        .collect();
+    let mut holders = Vec::new();
+    for kind in Kind::ALL {
+        let own_of_kind: Vec<&Held> = artifacts.iter().filter(|held| held.kind == kind).collect();
+        if own_of_kind.is_empty() {
+            continue;
+        }
+        let Ok(offers) = install::offers(workspace, &ledger, kind) else {
+            continue;
+        };
+        let elsewhere: Vec<Offer> = offers
+            .into_iter()
+            .filter(|offer| !matches!(offer, Offer::Workspace { .. }))
+            .collect();
+        // Each project's records of the kind, read once for all its own.
+        let records: Vec<(&str, Vec<InstallRecord>)> = members
+            .iter()
+            .filter_map(|(entry, project)| {
+                let named = install::entry_for_root(workspace, project.root());
+                Some((entry.as_str(), ledger.records(&named, kind).ok()?))
+            })
+            .collect();
+        for held in own_of_kind {
+            let Some(path) = lifecycle::place(own, kind, &held.name) else {
+                continue;
+            };
+            let library = Offer::Workspace {
+                kind,
+                name: held.name.clone(),
+                summary: None,
+                path,
+            };
+            holders.extend(
+                records
+                    .iter()
+                    .filter(|(_, records)| {
+                        records
+                            .iter()
+                            .any(|record| install::from_the_library(record, &library, &elsewhere))
+                    })
+                    .map(|(entry, _)| LibraryHolder {
+                        kind,
+                        name: held.name.clone(),
+                        entry: (*entry).to_owned(),
+                    }),
+            );
+        }
+    }
+    holders
 }
 
 /// What `read` answered, or nothing, with why among `warnings`.

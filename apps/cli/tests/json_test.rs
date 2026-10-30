@@ -32,8 +32,17 @@ struct Library {
     origin: String,
     directories: Vec<Directory>,
     artifacts: Vec<Held>,
+    holders: Vec<LibraryHolder>,
     templates: Vec<Template>,
     failures: Vec<Said>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LibraryHolder {
+    kind: String,
+    name: String,
+    entry: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -205,9 +214,23 @@ fn flayer_list_as_json_holds_the_entries_the_text_lists() {
     assert_eq!(tidy.summary.as_deref(), Some("Tidy it"));
     let library = listing.library.as_ref().unwrap();
     assert_eq!(library.artifacts[0].state, None);
-    // What a copy installed from it names, so a script finds the projects
-    // holding one of its own by comparing the two.
+    // What a copy installed from it names, and what `--from` takes for it.
     assert_eq!(tidy.origin.as_deref(), Some(library.origin.as_str()));
+    // The projects holding a copy of one of its own, as core tells them:
+    // alpha's `tidy` was installed from it, and nobody's own is taken for
+    // one.
+    let holders: Vec<(&str, &str, &str)> = library
+        .holders
+        .iter()
+        .map(|holder| {
+            (
+                holder.kind.as_str(),
+                holder.name.as_str(),
+                holder.entry.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(holders, [("skill", "tidy", "alpha")]);
 }
 
 #[test]
