@@ -186,20 +186,48 @@ describe('marking boxes', () => {
     expect(page.find('[data-testid="plan"]').exists()).toBe(false)
   })
 
-  it('unticks a box ticked, asking it away, and marks nothing in a project none of its kind can go into', async () => {
+  it('unticks a box ticked, asking it away', async () => {
+    const { queries, transport } = answering(fixture('assigning'), plans())
+    const { page } = await render('/assign', transport)
+
+    const review = box(page, 'skill', 'review', 'workspace', 'api')
+    expect(review.attributes('aria-checked')).toBe('true')
+    await review.trigger('click')
+    await flushPromises()
+
+    expect(planned(queries).at(-1)).toEqual([{ project: 'api', reference: 'skill:review', origin: 'workspace', wanted: false }])
+    expect(review.attributes('aria-checked')).toBe('false')
+    expect(review.attributes('data-changed')).toBe('true')
+    expect(review.attributes('aria-label')).toContain('marked to be unticked')
+  })
+
+  it('ticks another offer of a name a project holds, asking for it in place of the one held, which the plan runs', async () => {
     const [, replaced] = selections()
+    const { queries, transport } = answering(fixture('assigning'), plans())
+    const { page } = await render('/assign', transport)
+    expect(box(page, 'skill', 'deploy', 'load:../team', 'api').attributes('aria-checked')).toBe('true')
+
+    await box(page, 'skill', 'deploy', 'workspace', 'api').trigger('click')
+    await flushPromises()
+
+    expect(planned(queries).at(-1)).toEqual(replaced)
+    expect(page.find('[data-testid="plan-refused"]').exists()).toBe(false)
+    expect(page.get('[data-testid="plan"]').text()).toContain('What runs')
+    expect(page.find('[data-testid="nothing-runs"]').exists()).toBe(false)
+    expect(page.find('[data-testid="conflicts"]').exists()).toBe(false)
+    expect(page.find('[data-testid="locks"]').exists()).toBe(false)
+  })
+
+  it('marks nothing in a project none of its kind can go into, nor in an entry that opens none', async () => {
     const { queries, transport } = answering(fixture('assigning'), plans())
     const { page } = await render('/assign', transport)
 
     await box(page, 'skill', 'format', 'https://github.com/acme/skills', 'bare').trigger('click')
     await box(page, 'skill', 'format', 'https://github.com/acme/skills', 'gone').trigger('click')
     await flushPromises()
-    expect(planned(queries)).toEqual([])
 
-    await box(page, 'skill', 'deploy', 'workspace', 'api').trigger('click')
-    await flushPromises()
-    expect(planned(queries).at(-1)).toEqual(replaced)
-    expect(texts(page, '[data-testid="line"]')).toEqual([])
+    expect(planned(queries)).toEqual([])
+    expect(page.find('[data-testid="plan"]').exists()).toBe(false)
   })
 
   it('draws the locks and the conflicts of the plan it is answered with, on the boxes and below', async () => {
