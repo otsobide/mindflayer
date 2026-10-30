@@ -4959,6 +4959,87 @@ variable missing, or Iconify's API or the injected palette back in the
 scripts. The shell test fails on any `<style>` element added while the panel
 starts and switches colour mode.
 
+### End to end, in a browser
+
+Every suite above stops at a boundary: the server's suites run against a
+fake backend, the CLI's backend suite binds no port, `ui_test.rs` speaks
+HTTP without a browser, and the panel's suites draw fixtures in happy-dom
+over a fake transport. `apps/web/e2e` (#75) crosses all of them at once: the real
+`flayer ui`, the CLI's backend over core, the server and the panel it
+embeds, driven by Playwright in Chromium and in WebKit, the engine a
+desktop shell would draw the panel with.
+
+`make web/e2e` builds the panel and the debug binaries, a debug build
+reading `dist/` as requests come in, and runs `e2e/run.ts`, a driver, with
+Node. A driver because Playwright's order is the wrong one twice over: its
+webServer starts before any globalSetup runs, and the fixture has to be on
+disk before `flayer ui` resolves its workspace; and it stops the server
+only after every teardown, when the home is to be found untouched. So the
+driver makes a folder in the system's temporary folder, refusing one with a
+`.mind` or a `.mindflayer` above it, since resolving walks up before it
+looks at a home; makes an empty `home` there; builds the fixture workspace
+beside it (`e2e/fixture.ts`) with the binaries under test, a command at a
+time, each held to exit 0 with no warning, and nothing written by hand but
+the folders `mind init` runs in; runs `playwright test` with the options it
+was given; and once Playwright, and the server with it, has stopped, fails
+unless the home is as it was made, each file's size and time and the
+folder's own time, so a file written and removed again shows too. Then it
+removes the folder. `playwright test` run alone is refused, as nothing
+would build the fixture or check the home.
+
+What the suite starts can reach no workspace or agent home of the
+developer's, by three means, as the CLI's own tests do it. Playwright runs
+without `MINDFLAYER_WORKSPACE`, `MINDFLAYER_HOME`, `CLAUDE_CONFIG_DIR`,
+`CODEX_HOME` and `OPENCODE_CONFIG_DIR`, so neither the server nor any worker
+inherits them, and the config refuses to load with one set. The server and
+every command get the temporary home as `HOME`, never an empty one, with
+which Rust falls back to the account's. And every line names its home with
+`--home`, its workspace with `--workspace` (empty for `flayer init`, which
+names none and ignores the variable too) and `-C`, starts in a folder under
+the temporary one, and gives every agent-home option empty
+(`e2e/environment.ts`, which the driver, the config and the specs all start
+processes through).
+
+The webServer is `flayer ui --no-open --port 0`, `exec`ed by the shell
+Playwright starts it with, so the Ctrl-C it is stopped with (`SIGINT`)
+reaches the server alone and lets it close its event streams. Port 0, so a
+run never meets another, which leaves the link the server prints first as
+the only way to know the port: the config reads it with a regex whose
+named groups Playwright puts in the environment of every worker
+(`MINDFLAYER_E2E_URL`, `MINDFLAYER_E2E_TOKEN`). The server's stdout is not
+printed, so the token stays out of the log, as the server keeps it out of
+its own; its stderr is. Each test opens the launch link first
+(`panel.open`), so the token is traded for the cookie as a person's browser
+trades it.
+
+The specs hold the panel to the CLI: the overview's cards to the rows
+`flayer list --json` prints, counted from them rather than read from a
+count beside them; each project's page to what the listing says of that
+project, kind by kind, in its order; each of the library's own to its row
+and to the rows of the projects holding a copy. A security smoke test sends
+the panel's own query, with the cookie and every header the panel sends,
+from the panel's origin and from another, and only the second is refused,
+as is one carrying the token as Bearer, and the page itself.
+
+No page may log a violation of the CSP. Each engine fires
+`securitypolicyviolation` and words its own console messages, and a
+message the browser rather than a script logs may not reach Playwright, so
+a script Playwright adds beside the page's own says each event in the
+console in one form, and every test fails on any console line naming the
+policy, and on any error a page throws. One spec visits every page and
+switches the colour mode; another writes a style into the page, which the
+policy refuses, so a watch that saw nothing could not pass the rest.
+
+The browsers are Playwright's builds for its version, which `make
+web/e2e/browsers` downloads into `apps/web/node_modules`
+(`PLAYWRIGHT_BROWSERS_PATH`) rather than `~/.cache`, so what the suite
+installs stays with the clone and goes with `node_modules`. WebKit's build
+links against libraries Playwright installs only on Debian and Ubuntu
+(`WITH_DEPS=1`, with sudo), so elsewhere the suite runs in Chromium
+(`BROWSERS=chromium`), and WebKit in CI. A failed test keeps its trace,
+every action with the page and the requests at each step, in
+`test-results/`, and CI adds the HTML report.
+
 ### In `make test`, and in CI
 
 `web` is in the root `Makefile`'s `APPS` like any app, and first, so `make
@@ -5000,14 +5081,22 @@ CI gives the panel jobs of its own:
   to be gone, since a debug build reads it as requests come in and would
   pass; the script refuses to run while it is there rather than delete what
   somebody built. A script rather than a test: only a release with the
-  panel embedded can pass it, and `cargo test` builds neither.
+  panel embedded can pass it, and `cargo test` builds neither. Then it
+  uploads the release's `flayer` and `mind`.
+- **`e2e (web)`** waits for `build (cli)`, downloads those binaries outside
+  the checkout, installs Chromium and WebKit with the libraries they need,
+  and runs `make web/e2e/run` on them ([end to end, in a
+  browser](#end-to-end-in-a-browser)), uploading the traces and the report
+  when a test fails. It builds nothing: the binaries and the panel it drives
+  are the ones a release ships, the panel `test (web)` built and the
+  release `build (cli)` checked, rather than a third build of either.
 - **test-cross**, the macOS and Windows jobs, sets up Node and pnpm as
   `test (web)` does, since `make test` runs the panel's suite there, and
   runs it with `-k`, so one app failing on a platform does not hide whether
   the others pass there.
 
 The rulesets for `dev` and `main` require every check that runs on every
-pull request, the panel's two among them; AGENTS.md lists them by name.
+pull request, the panel's three among them; AGENTS.md lists them by name.
 
 `make install` and `make cli/release` build the panel first through `make
 web/build/if-node`. Where Node and pnpm run it is `make web/build`, and a
@@ -7523,6 +7612,27 @@ just listed.
   holds it to name every query, but nothing holds the pairing to what the
   backend answers, since `Backend::query` answers any JSON. A query type
   that says its answer in Rust, written into the TypeScript with it, would.
+- **WebKit where Playwright builds none.** Playwright's WebKit is built
+  against Ubuntu's libraries, which its `--with-deps` installs there and on
+  Debian only, so on Arch and most other systems the browser suite runs in
+  Chromium alone, and a page WebKit draws differently is found in CI. A
+  WebKit of the system's own (WebKitGTK, which a Tauri shell on Linux
+  would use) is no browser Playwright drives.
+- **The browser suite reads, and from one fixture.** No spec changes
+  anything yet; the write flows bring theirs. And its fixture holds only
+  what commands make: an install changed since, a copy edited by hand, a
+  linked folder gone or a shelf, which take a hand edit, a removal or a git
+  source and a `git` binary to make, are drawn by the views' suites from
+  the snapshots a test of the CLI writes, never end to end. So is a rule
+  installed, whose block in an `AGENTS.md` outside a work tree is a
+  warning.
+- **The browsers keep the developer's home.** Only the server and the
+  commands get the temporary `HOME`. Playwright, and the browsers it
+  starts, each with a profile of its own, keep the developer's: they reach
+  nothing of Mindflayer's but the server, and a run that names no
+  `PLAYWRIGHT_BROWSERS_PATH` finds its browsers through it. Nor does the
+  suite run on macOS or Windows: the webServer's command is a POSIX
+  shell's line.
 - **What no view reads has no TypeScript.** `status`, `scan` and
   `workspaces` print a `Status`, a `Scan` and a `Known`, and `gather list`
   its `Offer`s, which no root names, so the panel has no type for them yet.
