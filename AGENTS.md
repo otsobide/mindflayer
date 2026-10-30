@@ -150,7 +150,10 @@ under `apps/` with its own `Makefile`:
   `settings.json` to a `settings.toml` (`migrate`), bringing what was
   installed up to date with where it came from (`update`), installing one
   artifact into several projects at once, or taking it, or whatever nothing
-  offers any more, out of them (`assign`), removing one of the
+  offers any more, out of them (`assign`), planning what a selection of
+  boxes ticked and unticked amounts to, which offer of a name each project
+  holds, and what clashes or is locked, as a read (`install::plan`,
+  `install::holding`), removing one of the
   workspace's own from every project it links before the library
   (`everywhere`), and bringing a skill somebody keeps in a project's agents'
   folders into the library, its copies recorded as installed from there
@@ -290,7 +293,13 @@ These are easy to break from a single file without noticing.
   received nowhere (`ProjectStatus::missed`). Which kind a name typed bare
   is, to install or take out, is core's (`install::offered_typed`,
   `uninstall_typed`), and so is what a render of rules warns of
-  (`Rendered::warnings_of`). Where an agent reads
+  (`Rendered::warnings_of`). Every rule of a batch of boxes is core's
+  plan's (`install::plan`, `Plan::of`): which offer of a name a project
+  holds (`install::holding`), that an offer ticked in place of another
+  replaces it, one line an offer and one a name, kind by kind, and that two
+  offers of one name clash and a change to somebody's or an edited copy is
+  locked, by the code the command refuses it with (`Standing::refused`).
+  Where an agent reads
   (`Agent::reads`) is kept apart from where it is sent a copy: OpenCode reads
   `.claude/skills` and is sent nothing there. Which folders a project is read
   from is core's too (`Catalog::folders`), and so are the names at a
@@ -322,7 +331,8 @@ These are easy to break from a single file without noticing.
   the thread changes where they run, not what they are. The install screen applies the same way, in the TUI or
   opened by `flayer install` (`install::apply`): its marks are the
   `flayer install` and `flayer uninstall` lines they amount to
-  (`Screen::task`), each run whatever came of the others
+  (`Screen::task`), as core plans them (`install::Plan::of`), each change
+  the task that runs it (`Task::from`), each run whatever came of the others
   (`Task::chained`), so its transcript runs again. A batch a screen builds
   from its marks or its toggles is built in the task module, from what was
   marked (`Task::minds`, from each folder's `MindsChange`) or what the
@@ -403,7 +413,10 @@ These are easy to break from a single file without noticing.
   `ENVELOPE_VERSION`, and every URL in it, an error's message included,
   goes out through `url::redacted`. What a front end reads beside it is
   only what it cannot hold: a scan (the panel's `Query::Scan`, asked for
-  by hand and answered with the backend's `Scanned`), and which workspace
+  by hand and answered with the backend's `Scanned`), a plan of boxes
+  (`Query::Plan`, answered with the backend's `Planned`, core's plan with
+  each change the task that runs it, which the panel sends back as one
+  `apply_install`, never a task of its own), and which workspace
   a project's own lines consult (`docs/architecture.md`, "The read
   model").
 - **Every error has a stable code.** Each public error type in core,
@@ -655,7 +668,9 @@ These are easy to break from a single file without noticing.
     names something on the disk, in a match over every variant with no
     wildcard: a project or a loaded workspace by its entry as the marker
     spells it, which the backend turns into the absolute folder it resolves
-    to for the line's one `-C` or `-p`, and a folder not linked yet, or one
+    to for the line's one `-C` or `-p` (and each project a plan's boxes
+    name, held to it by `Admission::selection` before core plans), and a
+    folder not linked yet, or one
     a scan is to look under, by an absolute, normalized path outside every
     `.mindflayer`, verbatim. The
     browser supplies no `-C`, `--home`, `-W` or agent home: the backend runs
@@ -894,7 +909,8 @@ These are easy to break from a single file without noticing.
   one the snapshot carries (`summary`, a project's `tally`), every verdict
   one core gave (a project's `health`, whether it `migrates`), and every
   word a scan's answer gives (what each folder `offers`, the entry a moved
-  one left), every order the snapshot's
+  one left), every batch of boxes a plan core made (`Query::Plan`: its
+  tasks, what clashes and what is locked), every order the snapshot's
   (`kinds`, `states`, `healths`, the registry's). A count or a verdict a
   view needs is added to `view::Snapshot` in core, never worked out from
   the lists, and a kind core adds reaches every view with no change

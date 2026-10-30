@@ -1484,6 +1484,15 @@ type derives `Serialize` from the start:
   --json` prints of the snapshot (`view::Listing`), and what `show` and
   `validate` say of each artifact (`reading::Shown`, `reading::Validation`
   and its `Checked`).
+- **Planned for the panel by #78**: a box of a selection
+  (`install::Cell`, which the panel sends, and so reads too, refusing a
+  field it does not name), and what a selection amounts to
+  (`install::Plan`, its `Change`, `Conflict` and `Locked`), each name by
+  the field, a kind by its slug, an origin, a cell's or an install's,
+  through `url::serialize_redacted`, and why a box clashes or is locked as a
+  `code::Said`. The panel is answered with the backend's `Planned`, each
+  change the task that runs it, so a `Change` is tagged as a task is, its
+  type beside its fields.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do (`update::Plan`, `reapply::Plan`). Each
@@ -1778,7 +1787,10 @@ listed for its rules. Reading every kind for the health alone was the
 other way, which would weigh a failure the reply says nowhere.
 
 What a front end reads beside the snapshot is what no snapshot holds: a scan,
-and which workspace `mind` consults from each project, which depends on the
+a plan of the boxes somebody ticked and unticked, asked for each time they
+change and never kept beside the snapshot (`Query::Plan`, [a batch is
+planned in core](#a-batch-is-planned-in-core)), and which workspace `mind`
+consults from each project, which depends on the
 front end's own `-W`, activation and home, and which the TUI asks to know
 when a row's lines need `-W .` ([the TUI looks where it was
 told](#the-tui-looks-where-it-was-told)). The screen is the snapshot laid
@@ -2446,7 +2458,9 @@ written before is named differently now.
 A project has one directory per artifact name in each target, so two shelf
 entries offering `commit-style` cannot both be installed. The screen settles
 it by unticking the other rather than letting both apply and the second win: a
-conflict resolved where somebody can see it happening.
+conflict resolved where somebody can see it happening. A plan handed both
+says so rather than choosing ([a batch is planned in
+core](#a-batch-is-planned-in-core)).
 
 ### An edited copy is left alone
 
@@ -2794,6 +2808,85 @@ which is as it was asked to be and what most projects answer when every one
 is asked; when none of them has it, that is the typo it is for one project,
 and refused as one. A batch of one project, named or the only one linked, is
 said exactly as one install was before.
+
+### A batch is planned in core
+
+Ticking boxes is how both front ends assign: the install screen's, each a
+project's row of an offer, and the panel's matrix (#79), each a project and
+an offer. What the boxes ticked and unticked amount to is planned in one
+place, core's `install::plan` (#78,
+[D-18](#d-18-the-panel-writes-by-running-commands)), which is where every
+rule of a batch lives: neither front end holds one, and the panel holds none
+in TypeScript.
+
+- **Which offer of a name a project holds** (`install::holding`): one box a
+  name, the one its installation came from as the ledger records it
+  (`install::offered_for`), however many places offer the name. Among
+  several that a record from before origins were kept may have come from,
+  or when nothing it came from offers it any more, the one whose content
+  its copy is (`install::is_current`), then the first. Somebody's copy
+  ticks every offer's box, being there whichever is asked for and moved by
+  none, and an installation whose every copy has gone ticks none, for
+  ticking it to put them back. By the record before the content: the
+  content alone, which told it until #78, ticked the first offer for an
+  installation outdated or edited since, which is no offer's content, so
+  the screen ticked the first place's box whichever it came from, and the
+  panel, which reads where each came from off the snapshot, would have
+  drawn another box than the screen.
+- **What a selection amounts to** (`install::Plan::of`): each box as it
+  stands (`install::Asked`: its cell, its project's standing of the name,
+  and whether the project holds it from there), one project's boxes of one
+  name planned together, since the project has one copy of a name in each
+  folder it installs in. One offer asked for, and not held from there, is
+  installed from there, and a held one asked away beside it is replaced by
+  that install rather than taken out first, which would leave the project
+  without it were the install to fail. With none asked for, a held one asked
+  away takes the name out, by its name. The changes are the lines the
+  commands take already (`install::Change`): each offer's install one line
+  with a `-p` for each project asking it, always with `--from`, each name's
+  uninstall another, kind by kind in `Kind::ALL`'s order, each where the
+  first box asking it is, so the screen runs the lines it ran before.
+- **What cannot be planned is said, never guessed.** Two offers of one name
+  asked of one project, or one box asked both ways, is a `Conflict`
+  (`install::Clash`: `wanted_twice`, `asked_both_ways`), and nothing of the
+  name is planned in that project. A change to somebody's copy, or to one
+  edited since, is `Locked`, by the code the command would refuse it with
+  (`Standing::refused`: `foreign` and `edited`, `install::Refused`'s), rather
+  than by a second code for one condition. The other projects go ahead.
+- **A read.** `install::plan` opens the ledger through `ledger_for_reading`,
+  takes no lock, writes nothing and makes no default workspace. It reads
+  each box against the offers its project is surveyed for, by its origin
+  as printed, and, where none of them is from there, against what the
+  ledger records, so an installation nothing offers any more is asked away
+  by the origin the snapshot says it came from. It plans from that origin
+  too, so a credential typed into a box neither splits one offer into two
+  nor reaches a line. A box the disk cannot be
+  asked about is locked by why, before the rest: a project that does not
+  open, an offer its origin does not make (`not_offered`, or what
+  `install::receives` says when the project has nowhere to put the kind,
+  `no_target`), and a bare name two kinds are offered as from its origin
+  (`offered_as_kinds`). One asked for holds back the boxes of its name in
+  its project, each asking a change locked by the same why, as an edited
+  copy holds back its name's: planned without it, a held offer asked away
+  beside it would be taken out rather than replaced, which a load that
+  stopped opening or a gathered entry gone since the snapshot would do as
+  much as a typo. A project the workspace does not link refuses the whole
+  plan, as a `-p` that picks nothing refuses its whole line.
+
+The install screen plans through the same function, from the standings it
+surveyed when it opened (`Screen::task`): every box that disagrees with how
+it started, each project named as its lines name it
+(`FlayerWorkspace::naming`), the box an offer ticked in its place unticked
+asked away all the same, for core to see it replaced. Its keys still hold a
+box somebody's or edited, and untick another offer of a name when one is
+ticked, which is what the screen shows; neither is a rule of the batch,
+which core says again of whatever it is handed. The panel asks the CLI's
+backend (`Query::Plan`), whose answer is each change as the task that runs
+it (`Planned`, by `Task::from`), for the panel to send back as one
+`apply_install`, as the screen applies its marks: it never builds a task of
+its own. Leaving the plan in the screen's `install/state.rs`, where the
+rules lived until #78, was the alternative, rejected: the panel would have
+had to spell them again in TypeScript, or go without a matrix.
 
 ### Taking out what nothing offers
 
@@ -3358,7 +3451,8 @@ parts needs a terminal:
   holds nothing but the loop for that reason.
 
 What is marked is applied as the command lines it amounts to
-(`Screen::task`), kind by kind: a
+(`Screen::task`), as core plans them ([a batch is planned in
+core](#a-batch-is-planned-in-core)), kind by kind: a
 `flayer install -p <project>... --from <origin> <kind:name>` for each offer
 ticked, with a `-p` for each project ticked to take it, and a
 `flayer uninstall -p <project>... <kind:name>` for each artifact unticked,
@@ -3415,9 +3509,11 @@ screen keeps two columns however many kinds there are; and rather than every
 kind in one list, where a skill and a rule of one name would sit side by side
 as two boxes for what reads as one thing. A row is one kind and name, so
 ticking one offer unticks another of the same kind and name, and leaves a
-rule of a skill's name alone. Which offer of a rule the project holds is the
-one its record came from (`install::is_current`), since nothing in a project
-holds a rule's bytes alone to compare. A project offered nothing of the kind
+rule of a skill's name alone. Which offer of a name the project holds is
+core's to say (`install::holding`): the one its record came from, a rule's
+as a skill's, since nothing in a project holds a rule's bytes alone to
+compare, and a skill's copy may be behind both places or edited since. A
+project offered nothing of the kind
 shown says what core says it cannot take (`install::receives`), or where that
 kind comes from: a rule from the workspace's own or a load, never the shelf.
 A row whose box cannot move says why: somebody's, which nothing of
@@ -4322,6 +4418,13 @@ of it a browser may name.
   few names in each, opens markers and the ledger to read, and writes
   nothing, so nothing outside the workspace is reached that a command would
   not read.
+- **A plan only of linked projects** (`Query::Plan`): each box's project
+  an entry of the registry, held by `Admission::selection` as a task's
+  projects are, before core plans, which holds it to the same entries
+  again. A plan is a read, and runs nothing: the tasks it answers with name
+  each project by the entry its box named it by, and are admitted as any
+  task's when they come back to be previewed and run. A reference or an
+  origin is a value, which nothing offers when it is not one.
 - **What no front end without a terminal runs** is refused by
   `Task::refusal`, naming the line ([every change is a command
   line](#every-change-is-a-command-line)).
@@ -4728,7 +4831,7 @@ What the panel sends and is answered with is said once, in Rust, and the
 panel compiles against TypeScript written from it (#70): the snapshot and
 everything it holds, an artifact's files and a file's contents, what
 `list`, `show` and `validate`
-print, a query, a task, what a scan and a run produced, the envelope a
+print, a query, a task, what a scan, a plan and a run produced, the envelope a
 reading command's `--json` prints, and every code core and the CLI give. That
 TypeScript is the contract, the panel's side of [the read
 model](#the-read-model): `apps/web/src/api/generated`, a file a type,
@@ -7901,6 +8004,22 @@ just listed.
   whose views show them, so that each is printed as the view that needs it
   reads it. #73 draws the loads, the sources and the history from the
   snapshot, and prints none of them: a `--json` for each was no part of it.
+- **A plan says no agent a change reaches.** The issue that brought plans
+  into core (#78) counted which agents a change reaches among a batch's
+  rules, but the install screen held none: an install reaches every
+  folder `install::targets` gives when it runs, and a project's agents are
+  the snapshot's. A plan saying it of each change would be a second
+  reading of the targets beside the install's own, which could come to
+  disagree with it; the matrix (#79) may want it all the same.
+- **An installation nothing offers any more holds the box of its name's
+  offer.** A name the project holds ticks one of its offers' boxes
+  (`install::holding`), so one installed from a place that no longer
+  offers it ticks the box of another place offering the name, as the
+  screen always has, so that unticking it takes it out. Asking for that
+  offer alone is then asking for what is so, and changes nothing; asked
+  for with the origin it came from asked away, by the box the snapshot's
+  `origin` gives it, it is installed in its place. Whether the matrix
+  (#79) gives such an installation a box of its own is left to it.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has
@@ -7996,7 +8115,9 @@ just listed.
   print a `Status` and a `Known`, and `gather list` its `Offer`s, which no
   root names, so the panel has no type for them yet; nor does `scan --json`
   have one for its envelope's `Scan`, the panel reading each `Found` inside
-  the backend's own answer (`Scanned`). Each joins a crate's
+  the backend's own answer (`Scanned`), nor core's `install::Plan` and its
+  `Change`, a plan reaching the panel as the backend's `Planned`, its
+  changes the tasks that run them. Each joins a crate's
   `typescript::roots` when a view reads it, so that the folder holds what
   the panel compiles against, and no more.
 - **The page of what could be linked links, and unlinks nothing.** The

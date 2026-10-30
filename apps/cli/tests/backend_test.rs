@@ -1224,3 +1224,338 @@ fn inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_fo
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// A plan of boxes ticked and unticked
+// ---------------------------------------------------------------------------
+
+/// Under the folder it returns: a workspace at `home`, with `deploy` and
+/// `review` of its own, loading `team` beside it, whose `deploy` is the
+/// team's; linking `alpha` and `beta`, each a repository given `mind init`,
+/// `alpha` holding the workspace's `deploy` and `beta` its `review`. Its
+/// second value is `home`.
+fn assigning() -> (TempDir, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    let team = dir.path().join("team");
+    for root in [&home, &team] {
+        fs::create_dir_all(root).unwrap();
+        flayer(root, &["init"]).unwrap();
+    }
+    flayer(&home, &["add", "skill", "deploy", "Ship the service"]).unwrap();
+    flayer(&home, &["add", "skill", "review", "Review a change"]).unwrap();
+    flayer(&team, &["add", "skill", "deploy", "Ship it the team's way"]).unwrap();
+    flayer(&home, &["load", "../team"]).unwrap();
+    for name in ["alpha", "beta"] {
+        let root = home.join(name);
+        fs::create_dir(&root).unwrap();
+        new_project(&root);
+        flayer(&home, &["link", name]).unwrap();
+    }
+    flayer(
+        &home,
+        &[
+            "install",
+            "-p",
+            "alpha",
+            "--from",
+            "workspace",
+            "skill:deploy",
+        ],
+    )
+    .unwrap();
+    flayer(&home, &["install", "-p", "beta", "skill:review"]).unwrap();
+    (dir, home)
+}
+
+fn plan(backend: &PanelBackend, selection: Value) -> Result<Value, Refusal> {
+    backend.query(query(json!({"type": "plan", "selection": selection})))
+}
+
+fn cell(project: &str, reference: &str, origin: &str, wanted: bool) -> Value {
+    json!({"project": project, "reference": reference, "origin": origin, "wanted": wanted})
+}
+
+/// What the projects under `home` hold: each file outside a `.git`, a
+/// `.mind` or the `.mindflayer`, by its route from `home`, and what the
+/// workspace records installed in each, by kind and name, with where it
+/// came from.
+#[allow(clippy::type_complexity)]
+fn held(
+    home: &Path,
+) -> (
+    BTreeMap<PathBuf, Vec<u8>>,
+    Vec<(String, Kind, String, Option<String>)>,
+) {
+    let kept = |route: &Path| {
+        !route.components().any(|part| {
+            [".git", MIND_DIR, FLAYER_DIR].contains(&part.as_os_str().to_str().unwrap_or(""))
+        })
+    };
+    let copies = files(home)
+        .into_iter()
+        .map(|(path, bytes)| (path.strip_prefix(home).unwrap().to_path_buf(), bytes))
+        .filter(|(route, _)| kept(route))
+        .collect();
+    let workspace = FlayerWorkspace::locate(home).unwrap().unwrap();
+    let ledger = workspace.ledger_for_reading().unwrap();
+    let mut records = Vec::new();
+    for project in ["alpha", "beta"] {
+        for kind in Kind::ALL {
+            for record in ledger.records(project, kind).unwrap() {
+                records.push((project.to_owned(), kind, record.name, record.origin));
+            }
+        }
+    }
+    (copies, records)
+}
+
+#[test]
+fn a_plan_is_answered_with_the_tasks_that_carry_it_out_and_changes_nothing() {
+    let (dir, home) = assigning();
+    let backend = backend(&home);
+    let before = files(dir.path());
+
+    let answer = plan(
+        &backend,
+        json!([
+            cell("beta", "skill:deploy", "load:../team", true),
+            cell("alpha", "skill:deploy", "workspace", false),
+            // Held from there already: as it is.
+            cell("beta", "skill:review", "workspace", true),
+        ]),
+    )
+    .unwrap();
+
+    assert_eq!(
+        answer,
+        json!({
+            "tasks": [
+                {
+                    "type": "install",
+                    "projects": ["beta"],
+                    "kind": "skill",
+                    "name": "deploy",
+                    "from": "load:../team",
+                },
+                {"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "deploy"},
+            ],
+            "conflicts": [],
+            "locked": [],
+        })
+    );
+    assert_eq!(files(dir.path()), before);
+
+    // Sent back as one batch, each project named by the folder its entry
+    // points at, as any task's are.
+    let batch = task(json!({"type": "apply_install", "changes": answer["tasks"]}));
+    assert_eq!(
+        backend.preview(&batch).unwrap().lines,
+        [
+            format!(
+                "flayer install -p {} --from load:../team skill:deploy",
+                under(&home, &["beta"])
+            ),
+            format!(
+                "flayer uninstall -p {} skill:deploy",
+                under(&home, &["alpha"])
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_plan_names_only_projects_the_workspace_links_whatever_a_value_starts_with() {
+    let (dir, home) = assigning();
+    let backend = backend(&home);
+    let before = files(dir.path());
+    let alpha = under(&home, &["alpha"]);
+
+    for project in [
+        "--yes",
+        "-C",
+        "-W",
+        "--home=/etc",
+        "gamma",
+        "../team",
+        &alpha,
+    ] {
+        let refusal = plan(
+            &backend,
+            json!([
+                cell("alpha", "skill:review", "workspace", true),
+                cell(project, "skill:deploy", "workspace", true),
+            ]),
+        )
+        .unwrap_err();
+        assert_eq!(refusal.code, "not_registered", "{project}");
+    }
+
+    // Anywhere else a value that starts with a dash is that value, which
+    // nothing offers.
+    let answer = plan(
+        &backend,
+        json!([cell("alpha", "--yes", "--from=/etc", true)]),
+    )
+    .unwrap();
+    assert_eq!(answer["tasks"], json!([]));
+    assert_eq!(
+        answer["locked"][0]["why"]["code"], "not_offered",
+        "{answer}"
+    );
+    assert_eq!(files(dir.path()), before);
+
+    for sent in [
+        json!({"type": "plan", "selection": [], "home": "/etc"}),
+        json!({"type": "plan", "selection": [
+            {"project": "alpha", "reference": "skill:deploy", "origin": "workspace", "wanted": true, "force": true},
+        ]}),
+        json!({"type": "plan", "selection": [
+            {"project": "alpha", "reference": "skill:deploy", "origin": "workspace"},
+        ]}),
+    ] {
+        assert!(
+            serde_json::from_value::<Query>(sent.clone()).is_err(),
+            "{sent}"
+        );
+    }
+}
+
+#[test]
+fn a_plan_says_what_clashes_and_what_is_locked_by_the_codes_core_gives() {
+    let (_dir, home) = assigning();
+    for copy in copies(&home.join("beta"), "review") {
+        fs::write(copy.join("SKILL.md"), skill_file("review", "Mine now")).unwrap();
+    }
+    let backend = backend(&home);
+
+    let answer = plan(
+        &backend,
+        json!([
+            cell("alpha", "skill:deploy", "workspace", true),
+            cell("alpha", "skill:deploy", "load:../team", true),
+            cell("beta", "skill:review", "workspace", false),
+        ]),
+    )
+    .unwrap();
+
+    assert_eq!(answer["tasks"], json!([]));
+    let conflicts = answer["conflicts"].as_array().unwrap();
+    assert_eq!(conflicts.len(), 1, "{answer}");
+    assert_eq!(conflicts[0]["why"]["code"], "wanted_twice");
+    assert_eq!(conflicts[0]["cells"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        answer["locked"],
+        json!([{
+            "cell": cell("beta", "skill:review", "workspace", false),
+            "why": {
+                "code": "edited",
+                "message": "`review` in beta was changed since it was installed, so it is left \
+                            alone unless a change to it is forced",
+            },
+        }])
+    );
+}
+
+/// Put the screen's cursor on `project`'s box of `name` from `origin`, and
+/// press space, as a person marking it does.
+fn mark(screen: &mut Screen, project: &str, name: &str, origin: &str) {
+    screen.cursor = screen
+        .targets
+        .iter()
+        .position(|target| target.name() == project)
+        .unwrap();
+    let target = &mut screen.targets[screen.cursor];
+    target.cursor = target
+        .rows
+        .iter()
+        .position(|row| row.candidate.name() == name && row.candidate.origin() == origin)
+        .unwrap();
+    screen.focus = Focus::Offers;
+    press(screen, &[KeyCode::Char(' ')]);
+}
+
+/// The panel's batch and the install screen's are one plan: the same boxes
+/// marked on each, in two workspaces made alike, leave both holding the
+/// same copies, recorded alike, by the same tasks.
+#[test]
+fn applying_a_plans_tasks_leaves_what_the_install_screen_leaves_for_the_same_marks() {
+    let (_screened, screened) = assigning();
+    let (_panel, panel) = assigning();
+
+    let workspace = FlayerWorkspace::locate(&screened).unwrap().unwrap();
+    let (projects, _) = install_screen::registered(&workspace);
+    let mut screen = install_screen::open(&workspace, projects).unwrap();
+    // The team's `deploy` in the place of the workspace's, which unticks it.
+    mark(&mut screen, "alpha", "deploy", "load:../team");
+    mark(&mut screen, "alpha", "review", "workspace");
+    mark(&mut screen, "beta", "deploy", "workspace");
+    mark(&mut screen, "beta", "review", "workspace");
+    let applied = install_screen::apply(&workspace, &screen, &Lookup::default());
+    assert!(applied.ok, "{}", applied.stdout);
+
+    let backend = backend(&panel);
+    let answer = plan(
+        &backend,
+        json!([
+            cell("alpha", "skill:deploy", "workspace", false),
+            cell("alpha", "skill:deploy", "load:../team", true),
+            cell("alpha", "skill:review", "workspace", true),
+            cell("beta", "skill:deploy", "workspace", true),
+            cell("beta", "skill:review", "workspace", false),
+        ]),
+    )
+    .unwrap();
+    assert_eq!(
+        (&answer["conflicts"], &answer["locked"]),
+        (&json!([]), &json!([]))
+    );
+    let ran = backend
+        .run(task(
+            json!({"type": "apply_install", "changes": answer["tasks"]}),
+        ))
+        .unwrap();
+    assert!(ran.ok, "{ran:?}");
+
+    // The same tasks, in whichever order each was marked.
+    let Task::ApplyInstall { changes } = screen.task() else {
+        panic!("{:?}", screen.task())
+    };
+    let sorted = |tasks: Vec<Value>| {
+        let mut said: Vec<String> = tasks.iter().map(Value::to_string).collect();
+        said.sort();
+        said
+    };
+    assert_eq!(
+        sorted(serde_json::from_value(serde_json::to_value(&changes).unwrap()).unwrap()),
+        sorted(serde_json::from_value(answer["tasks"].clone()).unwrap())
+    );
+    let state = held(&panel);
+    assert_eq!(state, held(&screened));
+    let (_, records) = state;
+    assert_eq!(
+        records,
+        [
+            (
+                String::from("alpha"),
+                Kind::Skill,
+                String::from("deploy"),
+                Some(String::from("load:../team"))
+            ),
+            (
+                String::from("alpha"),
+                Kind::Skill,
+                String::from("review"),
+                Some(String::from("workspace"))
+            ),
+            (
+                String::from("beta"),
+                Kind::Skill,
+                String::from("deploy"),
+                Some(String::from("workspace"))
+            ),
+        ]
+    );
+    let team = fs::read_to_string(copies(&panel.join("alpha"), "deploy")[0].join("SKILL.md"));
+    assert!(team.unwrap().contains("the team's way"));
+}

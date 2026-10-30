@@ -27,6 +27,7 @@
 //! command of exactly these words ([`shell`]).
 
 use clap::Parser as _;
+use mindflayer_core::install::Change;
 use mindflayer_core::url::redacted;
 use mindflayer_core::{codes, Agent, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER};
 use serde::{Deserialize, Serialize};
@@ -321,6 +322,41 @@ pub enum Task {
     ApplyInstall { changes: Vec<Task> },
     /// Read the disk again.
     Refresh,
+}
+
+/// The task that runs one change core planned for a batch of boxes
+/// ([`Plan`](mindflayer_core::install::Plan)): `flayer install` of the
+/// offer from where it is, or `flayer uninstall` of the name, from each
+/// project the change names, spelled as the boxes named them.
+///
+/// Here, beside the tasks it becomes, so the install screen and the panel
+/// turn a plan into lines one way: core plans with no task of its own,
+/// since a task is a front end's.
+impl From<Change> for Task {
+    fn from(change: Change) -> Task {
+        match change {
+            Change::Install {
+                projects,
+                kind,
+                name,
+                from,
+            } => Task::Install {
+                projects,
+                kind,
+                name,
+                from: Some(from),
+            },
+            Change::Uninstall {
+                projects,
+                kind,
+                name,
+            } => Task::Uninstall {
+                projects,
+                kind,
+                name,
+            },
+        }
+    }
 }
 
 /// What one directory's mark on the minds screen asks of the workspace, when

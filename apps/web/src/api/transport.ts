@@ -4,6 +4,7 @@ import type { Contents } from './generated/Contents'
 import type { Files } from './generated/Files'
 import type { Holder } from './generated/Holder'
 import type { Outcome } from './generated/Outcome'
+import type { Planned } from './generated/Planned'
 import type { Query } from './generated/Query'
 import type { Scanned } from './generated/Scanned'
 import type { Snapshot } from './generated/Snapshot'
@@ -26,6 +27,7 @@ export interface Answers {
   files: Files
   contents: Contents
   scan: Scanned
+  plan: Planned
 }
 
 /** What `query` is answered with. */

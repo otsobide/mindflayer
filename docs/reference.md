@@ -1017,8 +1017,10 @@ to date.
 
 Two shelves can offer `commit-style`, but a project has one directory of that
 name, so ticking one unticks the other rather than letting both apply and the
-second win quietly. A skill and a rule of one name are two things, and keep a
-box each.
+second win quietly. The one ticked when the screen opens is the one the
+project's copy was installed from, as the workspace recorded it, even when
+that copy is behind both places or edited since. A skill and a rule of one
+name are two things, and keep a box each.
 
 The screen offers the workspace's own skills and rules too, first and marked
 `[workspace]`: that is how something written once for every project reaches
@@ -1970,8 +1972,12 @@ Every page works from the keyboard and says every state in words, never by
 colour alone. The API under it is there for a script holding the token as a
 Bearer token: `POST /api/query` for a read (`{"type": "snapshot"}` answers
 what the panel draws, `{"type": "files", ...}` what one artifact holds,
-`{"type": "contents", ...}` one file of it, as text, and `{"type": "scan",
-"roots": ["/home/you/Projects"], "depth": null}` what Discover lists), `POST
+`{"type": "contents", ...}` one file of it, as text, `{"type": "scan",
+"roots": ["/home/you/Projects"], "depth": null}` what Discover lists, and
+`{"type": "plan", "selection": [{"project": "alpha", "reference":
+"skill:deploy", "origin": "workspace", "wanted": true}]}` what boxes of a
+project and an offer, ticked or not, amount to: the tasks that carry them
+out, beside what clashes and what is locked, with nothing run), `POST
 /api/commands/preview` for the lines a task is and what of them the panel
 asks you to confirm (`{"lines": [...], "confirm": [...]}`), `POST
 /api/commands` to run them, which asks nobody, `GET

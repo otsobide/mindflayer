@@ -490,3 +490,33 @@ fn nothing_is_admitted_against_a_workspace_that_links_nothing() {
     );
     assert!(!dir.path().join(mindflayer_core::FLAYER_DIR).exists());
 }
+
+#[test]
+fn every_project_a_selection_names_is_an_entry_the_registry_holds() {
+    let (dir, workspace) = fixture();
+    let admission = Admission {
+        workspace: &workspace,
+        lookup: &Lookup::default(),
+    };
+    let selection = |project: &str| {
+        [
+            Cell::of("alpha", Kind::Skill, "deploy", "workspace", true),
+            Cell::of(project, Kind::Skill, "deploy", "workspace", false),
+        ]
+    };
+
+    assert!(admission.selection(&selection("../beside")).is_ok());
+    let alpha = text(&dir.path().join("work").join("alpha"));
+    for project in [
+        "-p",
+        "--yes",
+        "--home=/etc",
+        "beside",
+        "library",
+        alpha.as_str(),
+    ] {
+        let refused = admission.selection(&selection(project)).unwrap_err();
+        assert_eq!(refused.code(), "not_registered", "{project}");
+    }
+    assert!(admission.selection(&[]).is_ok());
+}
