@@ -1820,9 +1820,11 @@ not the panel's, and Cancel has the focus, so an Enter pressed by habit
 runs nothing. Once a run is over and the pages show what it changed, a toast
 says how it went; when it failed, or said a warning, the drawer of what it
 said opens, every warning, note and error under the line that said it, with
-its code. So far the panel links a project, from the folder you type above
-the projects table, and unlinks one, from its page; everything else is
-still a command away.
+its code. The panel links projects, from the folder you type above the
+projects table or from what **Discover** finds, relinks one that moved,
+unlinks one from its page, changes a project's agents and share mode, and
+migrates a project an older Mindflayer made; everything else is still a
+command away.
 
 **The transcript**, in every page's header, lists every task the session
 ran, from this tab or any other, each line with what it printed, and
@@ -1861,7 +1863,45 @@ kind the project holds none of names `flayer install -p` and `flayer add -p`.
 Every command the panel names says `-W` and the workspace's path, so it acts
 on the workspace the panel shows wherever you type it, for a project linked
 from outside that workspace too; a workspace not made yet names `flayer init`
-first, since `-W` never makes the one it names.
+first, since `-W` never makes the one it names. **Unlink**, at the top,
+asks first, and says that the workspace only forgets the project: nothing on
+disk is deleted.
+
+Below what it holds, **Agents and sharing** are the project's settings as
+toggles: a box for each agent that works in it, `local` or `shared`, and
+whether a file git tracks may be edited to reach an agent. **Apply** runs
+the lines they amount to, shown first, `mind agents --yes` naming the agents
+ticked, those the project names already keeping their order, then `mind
+share --yes`, each only when what it sets changes, as the TUI's toggles do;
+what is installed is carried to where the agents now read. A project an
+older Mindflayer made, marked by a `mind.toml` or a `settings.json`, has no
+toggles until it moves to a `settings.toml`, and offers that move instead
+([a project made before settings](#a-project-made-before-settings)): **See
+what migrating does** runs the dry run, `flayer migrate -p <project>`, and
+shows what it would write, move and leave, and only then **Migrate** runs it
+with `--yes`. It takes every agent and stays shared, as it was committed; the
+toggles change either once it has moved.
+
+**Discover** finds the projects worth linking. Type the folders your
+repositories are kept in, one a line, each an absolute path, and how many
+levels down to look, empty for three, and press **Scan**: the panel asks for
+what `flayer scan --suggest` would find there, the workspace's own folder
+offered to start from. It scans nothing until you ask, and nothing again by
+itself while you look, since a scan reads far more of the disk than the
+panel watches; a folder is only read. What is not linked comes first, most
+worth linking first, each with why in the command's words: a mind project
+with an id, one without, a git repository with the files that show an agent
+works in it, any other git repository. Tick the ones you want and press
+**Link what is marked**: the panel shows the lines first, a `mind -C <path>
+init` for each repository that is not a mind project yet, which it names
+before you ask since it writes into the repository, then one `flayer link`
+of them all, the same lines the TUI's minds screen runs for the same marks.
+A project that moved, which the scan tells by its id, the one the workspace
+last saw where the entry it left points, offers **Relink** instead, `flayer
+relink <old> <new>`, which keeps what was installed into it; an entry whose id the workspace never
+learned is named with the `flayer relink` that would follow it once you know
+where it went. Below are the projects it found linked already. The folders
+and the depth stay in the address, so a reload scans the same again.
 
 **The library** has a page for each kind, `skill` and `rule`, listing the
 workspace's own with what each is for, which projects hold a copy of it and
@@ -1906,8 +1946,9 @@ above what it shows, with a button that reads everything again.
 Every page works from the keyboard and says every state in words, never by
 colour alone. The API under it is there for a script holding the token as a
 Bearer token: `POST /api/query` for a read (`{"type": "snapshot"}` answers
-what the panel draws, `{"type": "files", ...}` what one artifact holds, and
-`{"type": "contents", ...}` one file of it, as text), `POST
+what the panel draws, `{"type": "files", ...}` what one artifact holds,
+`{"type": "contents", ...}` one file of it, as text, and `{"type": "scan",
+"roots": ["/home/you/Projects"], "depth": null}` what Discover lists), `POST
 /api/commands/preview` for the lines a task is and what of them the panel
 asks you to confirm (`{"lines": [...], "confirm": [...]}`), `POST
 /api/commands` to run them, which asks nobody, `GET
