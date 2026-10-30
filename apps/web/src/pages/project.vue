@@ -64,6 +64,16 @@ async function unlink(entry: string) {
   }
 }
 
+/**
+ * Adopt somebody's `held` from the project at `entry` into the library,
+ * `flayer adopt`, shown before it runs as every task is: what core will
+ * not adopt, a rule or a skill an install could not have written, it
+ * refuses when the line runs, in its words.
+ */
+async function adopt(entry: string, held: Held) {
+  await runner.ask({ type: 'adopt', project: entry, kind: held.kind, name: held.name })
+}
+
 /** `a`, `a and b`, `a, b and c`: a list said in words. */
 function spelled(words: string[]): string {
   return words.length < 2 ? words.join('') : `${words.slice(0, -1).join(', ')} and ${words.at(-1)}`
@@ -381,7 +391,26 @@ function spelled(words: string[]): string {
                         </div>
                       </th>
                       <td class="px-3 py-2">
-                        <StateBadge :state="held.state" />
+                        <div class="flex flex-col items-start gap-1.5">
+                          <StateBadge :state="held.state" />
+                          <!--
+                            Somebody's, in a folder its agents read: what
+                            adopting is for, offered on that state, which
+                            is core's, and judged by the line.
+                          -->
+                          <UButton
+                            v-if="held.state === 'foreign' && project.entry"
+                            label="Adopt"
+                            icon="i-lucide-import"
+                            color="neutral"
+                            variant="outline"
+                            size="xs"
+                            :aria-label="`Adopt ${held.name} into the library`"
+                            :disabled="busy"
+                            data-testid="adopt"
+                            @click="adopt(project.entry, held)"
+                          />
+                        </div>
                       </td>
                       <td class="px-3 py-2">
                         <AgentBadges

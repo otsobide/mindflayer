@@ -266,3 +266,20 @@ describe('one of the library\'s own', () => {
     await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/artifact?kind=skill&name=tidy'))
   })
 })
+
+describe('a project\'s page', () => {
+  it('offers to adopt somebody\'s skill from its row, as the line the server previews', async () => {
+    const adopt = change('adopt')
+    const { sent, transport } = commanding(fixture('workspace'), [adopt], answers())
+    const { page } = await render('/project?entry=web', transport)
+
+    const rows = page.findAll('[data-testid="artifact"]')
+    const legacy = rows.find(row => row.text().includes('legacy'))!
+    expect(rows.filter(row => row.find('[data-testid="adopt"]').exists())).toEqual([legacy])
+    await legacy.get('[data-testid="adopt"]').trigger('click')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: adopt.task, mode: 'preview' }])
+    expect(shown()).toEqual(adopt.preview.lines.map(line => `$ ${line}`))
+  })
+})
