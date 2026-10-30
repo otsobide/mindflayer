@@ -189,6 +189,61 @@ describe('the editor', () => {
   })
 })
 
+const NEW = '/new?kind=skill'
+
+/** Type into the field `testid` names. */
+async function fill(page: VueWrapper, testid: string, value: string) {
+  await page.get(`input[data-testid="${testid}"]`).setValue(value)
+}
+
+describe('adding one of the library\'s own', () => {
+  it('judges the name and the description as they are typed, in the words flayer add refuses with', async () => {
+    const { page } = await render(NEW, commanding(fixture('workspace'), [], [...answers(), ...drafts()]).transport)
+
+    await fill(page, 'description', 'Publish the docs')
+    await fill(page, 'name', 'Deploy Docs')
+    await new Promise(resolve => setTimeout(resolve, 300))
+    await flushPromises()
+
+    const unfit = judged({ type: 'add', name: 'Deploy Docs' })
+    expect(page.get('[data-testid="refused"]').text()).toContain('flayer add would refuse it')
+    expect(page.get('[data-testid="refused-message"]').text()).toBe(unfit.refused!.message)
+
+    await fill(page, 'name', 'review')
+    await fill(page, 'description', 'Read it again')
+    await new Promise(resolve => setTimeout(resolve, 300))
+    await flushPromises()
+    expect(page.get('[data-testid="refused-message"]').text()).toBe(judged({ type: 'add', name: 'review' }).refused!.message)
+
+    await fill(page, 'name', 'deploy-docs')
+    await fill(page, 'description', 'Publish the docs')
+    await new Promise(resolve => setTimeout(resolve, 300))
+    await flushPromises()
+    expect(page.find('[data-testid="refused"]').exists()).toBe(false)
+    expect(page.get('[data-testid="verdict"]').text()).toContain('flayer add would write it.')
+  })
+
+  it('offers the kind\'s templates, and adds from the one chosen as the line the server previews, then opens what it added', async () => {
+    const add = change('add')
+    const { sent, transport } = commanding(fixture('workspace'), [add], [...answers(), ...drafts()])
+    const { page, router } = await render(NEW, transport)
+    const offered = fixture('workspace').library.templates.filter(each => each.kind === 'skill').map(each => each.name)
+    expect(offered).toContain('full')
+
+    await fill(page, 'name', 'deploy-docs')
+    await fill(page, 'description', 'Publish the docs')
+    await page.get('[data-testid="template"] [role="radio"][value="template:full"]').trigger('click')
+    await flushPromises()
+    await page.get('[data-testid="new-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: add.task, mode: 'preview' }])
+    expect(shown()).toEqual(add.preview.lines.map(line => `$ ${line}`))
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/artifact?kind=skill&name=deploy-docs'))
+  })
+})
+
 describe('one of the library\'s own', () => {
   it('opens its editor from its page', async () => {
     const { page } = await render('/artifact?kind=skill&name=review', commanding(fixture('workspace'), [], [...answers(), ...drafts()]).transport)

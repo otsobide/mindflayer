@@ -80,6 +80,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/new': RouteRecordInfo<
+      '/new',
+      '/new',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/project': RouteRecordInfo<
       '/project',
       '/project',
@@ -179,6 +186,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/library.vue': {
       routes:
         | '/library'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/new.vue': {
+      routes:
+        | '/new'
       views:
         | never
       pathParamNames:

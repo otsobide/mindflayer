@@ -129,7 +129,7 @@ describe('one of the library\'s own, about to be removed', () => {
 })
 
 describe('authoring in the library', () => {
-  it.each(['/edit?kind=skill&name=review'])('%s draws every icon from the bundle and adds no style element', async (path) => {
+  it.each(['/edit?kind=skill&name=review', '/new?kind=skill'])('%s draws every icon from the bundle and adds no style element', async (path) => {
     const { transport } = answering(fixture('workspace'), [...answers(), ...drafts()])
     const { page } = await render(path, transport)
 

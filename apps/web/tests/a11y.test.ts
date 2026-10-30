@@ -51,6 +51,8 @@ const PAGES: [string, Fixture][] = [
   ['/artifact?kind=rule&name=style/comments', 'workspace'],
   ['/artifact?kind=skill&name=nowhere', 'workspace'],
   ['/edit?kind=skill&name=nowhere', 'workspace'],
+  ['/new?kind=rule', 'workspace'],
+  ['/new?kind=agent', 'workspace'],
   ['/shelf', 'workspace'],
   ['/shelf?kind=rule', 'workspace'],
   ['/shelf', 'unmade'],
@@ -184,6 +186,16 @@ describe('authoring in the library', () => {
 
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: validated.text } })
     await vi.waitFor(() => expect(document.querySelectorAll('[data-testid="issue"]')).toHaveLength(2))
+
+    expect(await violations()).toEqual([])
+  })
+
+  it('passes axe adding one, with a name flayer add refuses judged', async () => {
+    const { page } = await render('/new?kind=skill', answering(fixture('workspace'), [...answers(), ...drafts()]).transport)
+
+    await page.get('input[data-testid="name"]').setValue('Deploy Docs')
+    await page.get('input[data-testid="description"]').setValue('Publish the docs')
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="refused"]')).not.toBeNull())
 
     expect(await violations()).toEqual([])
   })
