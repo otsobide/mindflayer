@@ -69,6 +69,18 @@ describe('every page', () => {
   })
 })
 
+describe('a project\'s toggles', () => {
+  it('pass axe turned over, ready to apply', async () => {
+    await render('/project?entry=web', fixture('workspace'))
+
+    document.querySelector<HTMLElement>('[data-testid="agent-codex"] [role="checkbox"], [role="checkbox"][data-testid="agent-codex"]')!.click()
+    await flushPromises()
+
+    expect(document.querySelector('[data-testid="apply-settings"]')?.hasAttribute('disabled')).toBe(false)
+    expect(await violations()).toEqual([])
+  })
+})
+
 describe('the page of what could be linked', () => {
   it('passes axe with folders marked, one a repository mind init writes into', async () => {
     await render('/discover?root=%2Fhome%2Fyou%2FProjects', fixture('workspace'))
