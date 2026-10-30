@@ -6,7 +6,7 @@ import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
 import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
-import { answering, commanded, commanding, fixture, plans, render, unmount, updates, type Fixture } from './panel'
+import { answering, answers, commanded, commanding, fixture, plans, render, unmount, updates, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -157,6 +157,20 @@ describe('the page of updates', () => {
     await render('/updates', answering(fixture('workspace'), []).transport)
 
     expect(document.querySelector('[data-testid="updates-unread"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('one of the library\'s own, about to be removed', () => {
+  it('passes axe with what removing it everywhere would do shown', async () => {
+    const { transport } = commanding(fixture('workspace'), commanded(), answers())
+    await render('/artifact?kind=skill&name=review', transport)
+
+    document.querySelector<HTMLElement>('[data-testid="remove-dry"]')!.click()
+    await flushPromises()
+    document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="remove-said"]')).not.toBeNull())
+
     expect(await violations()).toEqual([])
   })
 })
