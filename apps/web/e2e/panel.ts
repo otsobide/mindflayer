@@ -31,6 +31,34 @@ function served(): Served {
   return { origin, token, link: `${origin}/?token=${token}` }
 }
 
+/** What a test's page said that the suite fails on. */
+export interface Watch {
+  /** Each CSP violation it logged, in its own words or the browser's. */
+  violations: string[]
+  /** Each error it threw that nothing caught. */
+  thrown: string[]
+}
+
+/**
+ * How a CSP violation reads in a console: as `report` says it, or as the
+ * browser does, each engine in words of its own that all name the policy.
+ */
+const VIOLATION = /csp violation|content security policy/i
+
+/**
+ * Run in the page before any script of its own: every violation said in the
+ * console in one form. Each engine fires the event, while what it writes in
+ * the console by itself differs, and Playwright may not pass on what a
+ * browser rather than a script logs. Playwright's own way in, beside the
+ * page's scripts, so the CSP that refuses an inline script does not refuse
+ * this one.
+ */
+function report(): void {
+  document.addEventListener('securitypolicyviolation', (event) => {
+    console.error(`csp violation: ${event.effectiveDirective} refused ${event.blockedURI || 'inline'} on ${location.pathname}`)
+  })
+}
+
 /** A page of the panel, opened as a person opens it. */
 export interface Panel {
   /**
@@ -40,10 +68,27 @@ export interface Panel {
   open(path?: string): Promise<void>
 }
 
-export const test = base.extend<{ served: Served, panel: Panel }>({
+export const test = base.extend<{ served: Served, panel: Panel, watch: Watch }>({
   served: async ({}, use) => {
     await use(served())
   },
+
+  // Every test's page, watched from before it opens anything to after the
+  // test is done: a violation or an uncaught error on any page fails the
+  // test it happened in, whatever that test was about.
+  watch: [async ({ page }, use) => {
+    const watch: Watch = { violations: [], thrown: [] }
+    await page.addInitScript(report)
+    page.on('console', (message) => {
+      if (VIOLATION.test(message.text())) {
+        watch.violations.push(message.text())
+      }
+    })
+    page.on('pageerror', error => watch.thrown.push(error.message))
+    await use(watch)
+    expect(watch.violations, 'the CSP violations the page logged').toEqual([])
+    expect(watch.thrown, 'what the page threw').toEqual([])
+  }, { auto: true }],
 
   panel: async ({ page, served }, use) => {
     await use({
@@ -62,10 +107,17 @@ export const test = base.extend<{ served: Served, panel: Panel }>({
 
 export { expect }
 
-/** Wait until the page is drawn: its panel there, and the snapshot answered. */
+/**
+ * Wait until the page is drawn: its panel there, the snapshot answered, and
+ * every font it loads loaded, so a font the CSP refused has been refused by
+ * the time a spec looks.
+ */
 export async function drawn(page: Page): Promise<void> {
   await expect(page.getByRole('main')).toBeVisible()
   await expect(page.getByTestId('reading')).toHaveCount(0)
+  await page.evaluate(async () => {
+    await document.fonts.ready
+  })
 }
 
 /**
