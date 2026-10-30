@@ -4830,14 +4830,18 @@ say when to ask again ([live updates](#live-updates)), and `src/api/live.ts`
 turns each into what Vue Query is to ask for again, never a read of its own
 and never a scan: `changed` marks the snapshot stale, and what was read of
 an artifact in a holder among its scopes; `resync` and `command_finished`
-mark everything, since a command can change what nothing watches. While the
+mark all of those, since a command can change what nothing watches. Those
+queries are named by the first word of their key (`markStale`), rather than
+every query marked, for one asked for by hand: a scan (#77) reads the disk
+far past what is watched, and an event asking for it again would run one on
+every change, every command and every tab shown again. While the
 server says it is `watching`, an answer stays fresh until one of those
 marks it (`staleTime` of `Infinity`), so a page asks for nothing on
 opening. Otherwise, before the server has said and while it is
 `unwatched`, an answer is stale as soon as it comes, as before there was a
 stream: each page asks on opening, and so does the window when it comes
 back into focus, and `SnapshotGate` shows the banner that says why above
-the page, with a button to ask for everything again. How the server
+the page, with a button that marks stale what `resync` would. How the server
 watches is what the stream said, kept beside the subscription and provided
 to the views, rather than in Pinia, which holds only what the browser
 decides. `SnapshotGate` draws a page once the snapshot is answered, says it

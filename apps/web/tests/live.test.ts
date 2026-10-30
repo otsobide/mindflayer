@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import { listen } from '@/api/live'
 import type { LiveEvent, Query, Transport } from '@/api/transport'
+import { createQueryClient } from '@/query'
 import { answering, fixture, render, unmount } from './panel'
 
 afterEach(() => {
@@ -125,6 +127,30 @@ describe('live updates', () => {
     await tell({ type: 'changed', scopes: [workspace] })
     expect(asked(queries, 'files')).toBe(files + 1)
     expect(asked(queries, 'contents')).toBe(contents + 1)
+  })
+
+  it('mark stale the snapshot and what was read of an artifact, never a query of another kind', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { stop } = listen(transport, client)
+    // A scan (#77) is asked for by hand, and reads far past what is watched.
+    const scan = ['scan', { roots: ['/work'], depth: 2 }]
+    const files = ['files', { holder: workspace, reference: 'skill:review' }]
+    const stale = (key: unknown[]) => client.getQueryState(key)?.isInvalidated
+
+    for (const event of [
+      { type: 'changed', scopes: [workspace] },
+      { type: 'command_finished', lines: ['flayer link beta'] },
+      { type: 'resync' }
+    ] as LiveEvent[]) {
+      for (const key of [['snapshot'], files, scan]) {
+        client.setQueryData(key, {})
+      }
+      await tell(event)
+
+      expect([stale(['snapshot']), stale(files), stale(scan)], event.type).toEqual([true, true, false])
+    }
+    stop()
   })
 
   it('let the stream go while the tab is hidden, and take it again once shown', async () => {

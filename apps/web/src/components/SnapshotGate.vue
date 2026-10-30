@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useQueryClient } from '@tanstack/vue-query'
 import type { Snapshot } from '@/api/generated/Snapshot'
-import { useLive } from '@/api/live'
+import { markStale, useLive } from '@/api/live'
 import { useSnapshot } from '@/api/snapshot'
 
 defineSlots<{
@@ -14,10 +14,10 @@ const client = useQueryClient()
 
 // When the server cannot watch everything, a change made from a terminal,
 // the TUI or an editor may never be told: the page says so above what it
-// draws, and offers what it would have done, everything asked for again,
-// rather than failing or pretending to be up to date.
+// draws, and offers what it would have done, everything an event follows
+// asked for again, rather than failing or pretending to be up to date.
 function refresh() {
-  void client.invalidateQueries()
+  void markStale(client)
 }
 
 // The last answer stays drawn while a new one is asked for, and when asking

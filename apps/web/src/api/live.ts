@@ -37,11 +37,33 @@ export function useFreshness(): ComputedRef<number> {
 }
 
 /**
+ * The queries the server's events mark stale, by the first word of their
+ * key (`src/api/snapshot.ts`, `src/api/artifact.ts`): the snapshot, and what
+ * was read of an artifact. Named rather than every query, for one asked for
+ * by hand: a scan (#77) reads the disk far past what is watched, and an
+ * event asking for it again would run one on every change, every command
+ * and every tab shown again. A query added later is followed only once it
+ * is named here. Spelled here rather than imported, since both modules
+ * import this one.
+ */
+const FOLLOWED: readonly unknown[] = ['snapshot', 'files', 'contents']
+
+/**
+ * Mark stale what the server's events follow: all of it, or what a change
+ * of `scopes` reached. The views on screen then ask for it again.
+ */
+export function markStale(client: QueryClient, scopes?: Holder[]): Promise<void> {
+  return client.invalidateQueries({
+    predicate: ({ queryKey }) => FOLLOWED.includes(queryKey[0]) && (scopes === undefined || reached(queryKey, scopes))
+  })
+}
+
+/**
  * Listen to the server's events for as long as the panel is open, one
  * subscription for the tab, and turn each into what Vue Query is to ask for
- * again, never a read of its own: a change marks the snapshot stale, and
- * what was read of an artifact in a holder it reached, which the views on
- * screen then ask for again.
+ * again, never a read of its own and never a scan: a change marks the
+ * snapshot stale, and what was read of an artifact in a holder it reached,
+ * which the views on screen then ask for again.
  *
  * The subscription is let go while the tab is hidden and taken again when it
  * is shown, which the server answers with `resync`: a browser opens at most
@@ -56,13 +78,13 @@ export function listen(transport: Transport, client: QueryClient, page: Document
   function told(event: LiveEvent) {
     switch (event.type) {
       case 'changed':
-        void client.invalidateQueries({ predicate: query => reached(query.queryKey, event.scopes) })
+        void markStale(client, event.scopes)
         break
       // A command can change anything, and what it changed may lie where
-      // nothing is watched: everything is asked for again.
+      // nothing is watched: everything an event follows is asked for again.
       case 'command_finished':
       case 'resync':
-        void client.invalidateQueries()
+        void markStale(client)
         break
       case 'command_started':
         break
@@ -107,8 +129,8 @@ export function listen(transport: Transport, client: QueryClient, page: Document
 
 /**
  * Whether a change of `scopes` reaches what was asked under `key`: what was
- * read of an artifact, by the holder it was read from, and everything else,
- * the snapshot first, which holds every holder.
+ * read of an artifact, by the holder it was read from, and the snapshot,
+ * which holds every holder.
  */
 function reached(key: QueryKey, scopes: Holder[]): boolean {
   const named = key[1]
