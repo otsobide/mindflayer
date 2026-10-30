@@ -103,7 +103,9 @@ it is installed.
 Removing one starts with what removing it everywhere would do: the copy
 that goes from each project, and one changed by hand, which stays. Only
 then is it removed, out of every project first and then the library, so no
-copy is left behind with nothing to update it from.
+copy installed as it was is left behind with nothing to update it from. A
+copy changed by hand stays as it is, with nothing offering it any more,
+until a forced uninstall from Updates takes it out.
 
 ![Removing a skill of the library's own: the dry run says which project's copy goes and which edited copy stays, before anything is removed](docs/images/remove.png)
 
@@ -136,10 +138,11 @@ lines, shown first.
 What updating every project would do, before it does it: the copies behind
 where they came from, those changed by hand, those gone missing and those
 nothing offers any more, each with where it came from and what an update
-does with it, or why it leaves it alone. **Update all**, one project or one
-skill. A copy somebody changed is never written over unless you force it,
-which asks first; what nothing offers any more is uninstalled, one or all
-at once.
+does with it, or why it leaves it alone. **Update all**, one project, or
+one skill or rule. A copy somebody changed is never written over unless you
+force it, which asks first; what nothing offers any more is uninstalled,
+one or all at once, and a copy of it changed by hand only by forcing its
+uninstall, which asks first too.
 
 ![The page of updates: skills behind where they came from in three projects, and a copy changed by hand that an update leaves alone, with why](docs/images/updates.png)
 
