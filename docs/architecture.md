@@ -2862,8 +2862,13 @@ in TypeScript.
   open, an offer its origin does not make (`not_offered`, or what
   `install::receives` says when the project has nowhere to put the kind,
   `no_target`), and a bare name two kinds are offered as from its origin
-  (`offered_as_kinds`). A project the workspace does not link refuses the
-  whole plan, as a `-p` that picks nothing refuses its whole line.
+  (`offered_as_kinds`). One asked for holds back the boxes of its name in
+  its project, each asking a change locked by the same why, as an edited
+  copy holds back its name's: planned without it, a held offer asked away
+  beside it would be taken out rather than replaced, which a load that
+  stopped opening or a gathered entry gone since the snapshot would do as
+  much as a typo. A project the workspace does not link refuses the whole
+  plan, as a `-p` that picks nothing refuses its whole line.
 
 The install screen plans through the same function, from the standings it
 surveyed when it opened (`Screen::task`): every box that disagrees with how

@@ -63,6 +63,16 @@ use crate::workspace::{FlayerWorkspace, MindProject};
 ///   `offered_as_kinds`, for the reference to say which, as an install of
 ///   it says.
 ///
+/// All but the boxes of its name in its project, when it is asked for:
+/// each of those that asks a change is locked by the same why, and none is
+/// planned, as none is beside an edited copy. Planned without it, a held
+/// offer asked away beside it would be taken out rather than replaced
+/// ([`Plan::of`]), leaving the project without the name when another offer
+/// of it was what was asked for, which a load that stopped opening or a
+/// gathered entry gone since the snapshot does as much as a typo. Planning
+/// the rest as though it were not there was the alternative, and is what
+/// did that.
+///
 /// A box is read against the offers of its kind ([`survey`]), by its
 /// origin as printed, which every listing prints and `--from` takes; and,
 /// where none of them is from its origin, against what the ledger records
@@ -73,11 +83,36 @@ use crate::workspace::{FlayerWorkspace, MindProject};
 pub fn plan(workspace: &FlayerWorkspace, selection: &[Cell]) -> Result<Plan, PlanError> {
     let ledger = workspace.ledger_for_reading().map_err(InstallError::from)?;
     let mut read = Read::default();
+    let mut read_off = Vec::with_capacity(selection.len());
+    for cell in selection {
+        read_off.push(read.ask(workspace, &ledger, cell)?);
+    }
+    // Every box asked for that could not be asked about, and why, before
+    // any is planned: a box of its name may come before it.
+    let unread: Vec<(&Cell, Said)> = selection
+        .iter()
+        .zip(&read_off)
+        .filter_map(|(cell, read)| match read {
+            Err(why) if cell.wanted => Some((cell, why.clone())),
+            _ => None,
+        })
+        .collect();
     let mut asked = Vec::new();
     let mut unasked = Vec::new();
-    for cell in selection {
-        match read.ask(workspace, &ledger, cell)? {
-            Ok(Some(one)) => asked.push(one),
+    for (cell, read) in selection.iter().zip(read_off) {
+        match read {
+            Ok(Some(one)) => match unread.iter().find(|(wanted, _)| names(wanted, &one)) {
+                Some((_, why)) => {
+                    // One asking for what is so changes nothing to hold.
+                    if one.held != one.cell.wanted {
+                        unasked.push(Locked {
+                            cell: one.cell,
+                            why: why.clone(),
+                        });
+                    }
+                }
+                None => asked.push(one),
+            },
             Ok(None) => {}
             Err(why) => unasked.push(Locked {
                 cell: cell.clone(),
@@ -88,6 +123,16 @@ pub fn plan(workspace: &FlayerWorkspace, selection: &[Cell]) -> Result<Plan, Pla
     let mut plan = Plan::of(&asked);
     plan.locked.splice(0..0, unasked);
     Ok(plan)
+}
+
+/// Whether `cell` names the name `one` is of, in its project, as whichever
+/// kind its reference may be: a bare name holds back the boxes of each kind
+/// it could be, since which of them it meant is what could not be read.
+fn names(cell: &Cell, one: &Asked) -> bool {
+    let reference = Reference::parse(&cell.reference);
+    cell.project == one.cell.project
+        && reference.name() == one.name
+        && kinds_named(&reference).contains(&one.kind)
 }
 
 /// Why a selection could not be planned at all: a project the workspace

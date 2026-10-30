@@ -505,6 +505,40 @@ fn an_offer_its_origin_does_not_make_is_locked_as_not_offered() {
 }
 
 #[test]
+fn a_held_offer_asked_away_beside_an_offer_nothing_offers_is_held_back_with_it() {
+    let fixture = given(&["alpha", "beta"]);
+    fixture.install(0, "deploy", "workspace");
+    fixture.install(1, "deploy", "workspace");
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:deploy", "workspace", false),
+        cell("alpha", "skill:deploy", "load:../elsewhere", true),
+        // Asked to be as it is: nothing to hold back.
+        cell("alpha", "skill:deploy", "load:../team", false),
+        cell("beta", "skill:deploy", "workspace", false),
+    ]);
+
+    // Planned without the box asked for, the one asked away would take
+    // `deploy` out of alpha, which asked for another in its place.
+    assert_eq!(
+        plan.changes,
+        [Change::Uninstall {
+            projects: owned(&["beta"]),
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+        }]
+    );
+    assert_eq!(codes(&plan), (vec![], vec!["not_offered", "not_offered"]));
+    let locked: Vec<&str> = plan
+        .locked
+        .iter()
+        .map(|locked| locked.cell.origin.as_str())
+        .collect();
+    assert_eq!(locked, ["workspace", "load:../elsewhere"]);
+    assert_eq!(plan.locked[0].why, plan.locked[1].why);
+}
+
+#[test]
 fn a_project_with_nowhere_to_put_a_kind_is_locked_as_install_says() {
     let fixture = given(&["alpha"]);
     let root = fixture.dir.path().join("home/gamma");
