@@ -102,6 +102,27 @@ describe('markdown somebody else wrote', () => {
     expect(page.get('del').text()).toBe('gone')
   })
 
+  it('shows each entity as the character it names, in text and in an address, never in code', () => {
+    const page = draw([
+      '# A &amp; B',
+      'Fish &amp; chips &copy; 2026 &#169; &#xA9;, write &lt;b&gt; for bold, `&amp;` stays',
+      '[x &amp; y](https://example.com/?a=1&amp;b=2) [run](&#106;avascript:alert(1))',
+      '![a &amp; b](logo.png)',
+      '| a &amp; b |\n| --- |\n| c &lt; d |',
+      '```\n&lt;kept&gt;\n```'
+    ].join('\n\n'))
+
+    expect(page.get('h3').text()).toBe('A & B')
+    expect(page.findAll('p')[0]!.text()).toBe('Fish & chips © 2026 © ©, write <b> for bold, &amp; stays')
+    expect(document.querySelector('b')).toBeNull()
+    expect(page.findAll('a').map(link => [link.text(), link.attributes('href')])).toEqual([['x & y', 'https://example.com/?a=1&b=2']])
+    expect(page.findAll('[data-unlinked]').map(text => text.text())).toEqual(['run'])
+    expect(page.html()).not.toContain('javascript:')
+    expect(page.get('[data-image]').text()).toBe('[image: a & b]')
+    expect(page.findAll('th, td').map(cell => cell.text())).toEqual(['a & b', 'c < d'])
+    expect(page.get('pre code').text()).toBe('&lt;kept&gt;')
+  })
+
   it('draws a task box once, in a loose list as in a tight one', () => {
     const page = draw('1. [ ] loose\n\n2. [x] two\n')
 

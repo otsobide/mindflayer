@@ -4643,11 +4643,17 @@ writes, an image is named rather than loaded, and a link keeps its address
 only to another site or a mail (`https:`, `http:`, `mailto:`), opened in a
 tab of its own with no referrer. Any other, to a file beside the skill above
 all, is its text alone, since the panel never links to an artifact's file,
-and a `javascript:` or `data:` URL never reaches an attribute. marked's
-renderer with v-html, behind a sanitizer, was the other way, which trusts
-the sanitizer to know every way HTML runs something. Its headings start a
-level below the section they are drawn in and never go down more than one
-level at a time, so the page's outline holds whatever the document skips.
+and a `javascript:` or `data:` URL never reaches an attribute. An entity
+or character reference (`&amp;`, `&#169;`) is decoded from the string,
+in text and in a link's address before it is judged, and left as written
+in code, as CommonMark reads them: marked leaves them for the browser to
+decode in the HTML its renderer writes, so text drawn as text would show
+them as written. The decoder is `entities`' strict one, which takes only
+a reference ended by `;`. marked's renderer with v-html, behind a
+sanitizer, was the other way, which trusts the sanitizer to know every way
+HTML runs something. Its headings start a level below the section they
+are drawn in and never go down more than one level at a time, so the
+page's outline holds whatever the document skips.
 A file opened from the listing is shown as text in a `<pre>`, whatever it
 holds, and a listed file is a button asking for it, never a link.
 

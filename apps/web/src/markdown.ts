@@ -1,3 +1,4 @@
+import { decodeHTMLStrict } from 'entities/decode'
 import { Lexer, type Token, type Tokens } from 'marked'
 import { h, type VNode, type VNodeChild } from 'vue'
 
@@ -23,6 +24,11 @@ import { h, type VNode, type VNodeChild } from 'vue'
  * - An image is never loaded: its description is shown in its place. The
  *   CSP would refuse one from another site, and one beside the skill is a
  *   file the server does not serve.
+ * - An entity or character reference (`&amp;`, `&#169;`) is the character
+ *   it names, in text and in a link's address, as CommonMark reads it:
+ *   marked leaves them as written for the browser to decode the HTML its
+ *   renderer writes, and text drawn as text is never decoded. Not in code,
+ *   where CommonMark keeps them as written too.
  */
 
 /** The protocols a link keeps its address for: another site, or a mail. */
@@ -81,7 +87,7 @@ function block(token: Token, outline: Outline): VNode[] {
     case 'text': {
       // Loose text at the level of blocks: a tight list item's.
       const text = token as Tokens.Text
-      return [h('span', text.tokens ? inline(text.tokens) : text.text)]
+      return [h('span', text.tokens ? inline(text.tokens) : decoded(text.text))]
     }
     default:
       // A token no extension here makes: what was written, as text.
@@ -140,7 +146,7 @@ function span(token: Token): VNodeChild {
   switch (token.type) {
     case 'text': {
       const text = token as Tokens.Text
-      return text.tokens ? inline(text.tokens) : text.text
+      return text.tokens ? inline(text.tokens) : decoded(text.text)
     }
     case 'escape':
       return (token as Tokens.Escape).text
@@ -158,7 +164,7 @@ function span(token: Token): VNodeChild {
       return link(token as Tokens.Link)
     case 'image': {
       const image = token as Tokens.Image
-      return h('span', { 'class': 'italic text-muted', 'data-image': '' }, `[image: ${image.text || 'no description'}]`)
+      return h('span', { 'class': 'italic text-muted', 'data-image': '' }, `[image: ${decoded(image.text) || 'no description'}]`)
     }
     case 'html':
       return h('code', { class: CODE }, (token as Tokens.Tag).text)
@@ -171,7 +177,7 @@ function span(token: Token): VNodeChild {
 
 /** A link, kept only to another site or a mail; otherwise its text. */
 function link(token: Tokens.Link): VNode {
-  const href = opened(token.href)
+  const href = opened(decoded(token.href))
   if (href === undefined) {
     return h('span', { 'data-unlinked': '' }, inline(token.tokens))
   }
@@ -180,6 +186,16 @@ function link(token: Tokens.Link): VNode {
     { href, title: href, target: '_blank', rel: 'noopener noreferrer nofollow', class: 'text-primary underline underline-offset-2' },
     inline(token.tokens)
   )
+}
+
+/**
+ * `written` with every entity and character reference in it decoded:
+ * strictly, only one ended by `;`, as CommonMark reads them, never a
+ * legacy one like `&copy` that HTML takes without it. Decoded from the
+ * string, never by handing the browser HTML to parse.
+ */
+function decoded(written: string): string {
+  return decodeHTMLStrict(written)
 }
 
 /** `href` as an absolute address with a protocol in `OPEN`, or none. */
