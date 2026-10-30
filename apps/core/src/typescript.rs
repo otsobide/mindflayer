@@ -94,8 +94,18 @@ pub fn docs(text: &[&str]) -> String {
 /// the serializer calls rather than derived, with each variant renamed to
 /// its word, for the reason the serializer is written by hand: a derive
 /// spells the variant, which a rename would change.
+///
+/// `as "Name",` before `by` declares it under a name of its own, for a type
+/// whose own name another module's type already has in TypeScript: both
+/// are written into one folder, a file to a name, so the second would be
+/// written over the first.
 macro_rules! words {
     ($(#[doc = $doc:literal])* $type:ident by $word:ident { $($variant:ident),+ $(,)? }) => {
+        $crate::typescript::words! {
+            $(#[doc = $doc])* $type as stringify!($type), by $word { $($variant),+ }
+        }
+    };
+    ($(#[doc = $doc:literal])* $type:ident as $name:expr, by $word:ident { $($variant:ident),+ $(,)? }) => {
         impl ::ts_rs::TS for $type {
             type WithoutGenerics = Self;
             type OptionInnerType = Self;
@@ -105,11 +115,11 @@ macro_rules! words {
             }
 
             fn name(_: &::ts_rs::Config) -> String {
-                stringify!($type).to_owned()
+                $name.to_owned()
             }
 
             fn decl(config: &::ts_rs::Config) -> String {
-                format!("type {} = {};", stringify!($type), Self::inline(config))
+                format!("type {} = {};", $name, Self::inline(config))
             }
 
             fn decl_concrete(config: &::ts_rs::Config) -> String {
@@ -126,7 +136,7 @@ macro_rules! words {
             }
 
             fn output_path() -> Option<::std::path::PathBuf> {
-                Some(concat!(stringify!($type), ".ts").into())
+                Some(format!("{}.ts", $name).into())
             }
         }
     };
