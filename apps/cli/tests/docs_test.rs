@@ -1,6 +1,6 @@
 //! The README and every page under `docs/`, held to their relative links: a
-//! file one names is there, and an anchor names a heading of the page it
-//! points into.
+//! file one names is there, an anchor names a heading of the page it points
+//! into, and every image in `docs/images` is shown somewhere.
 //!
 //! A test of this crate's rather than a tool of the panel's, so it runs
 //! wherever the Rust suites do, CI's `test (cli)` among them, with neither
@@ -286,9 +286,11 @@ fn decoded(target: &str) -> String {
     String::from_utf8_lossy(&kept).into_owned()
 }
 
-/// What is wrong with each relative link in the pages under `root`.
-fn broken(root: &Path) -> Vec<String> {
+/// What is wrong with each relative link in the pages under `root`, and
+/// every route from the repository a link reached.
+fn broken(root: &Path) -> (Vec<String>, BTreeSet<PathBuf>) {
     let mut problems = Vec::new();
+    let mut reached = BTreeSet::new();
     let mut offered: BTreeMap<PathBuf, BTreeSet<String>> = BTreeMap::new();
     let mut read = |page: &Path| -> BTreeSet<String> {
         offered
@@ -336,6 +338,7 @@ fn broken(root: &Path) -> Vec<String> {
                 problems.push(format!("{at}: no {} in the repository", route.display()));
                 continue;
             }
+            reached.insert(route.clone());
             if let Some(anchor) = anchor {
                 if route.extension().is_some_and(|extension| extension == "md")
                     && !read(&route).contains(&decoded(anchor))
@@ -348,18 +351,41 @@ fn broken(root: &Path) -> Vec<String> {
             }
         }
     }
-    problems
+    (problems, reached)
 }
 
 #[test]
 fn every_relative_link_in_the_readme_and_docs_leads_somewhere() {
-    let problems = broken(&root());
+    let (problems, _) = broken(&root());
 
     assert!(
         problems.is_empty(),
         "broken links:\n{}",
         problems.join("\n")
     );
+}
+
+#[test]
+fn every_image_in_docs_images_is_shown_somewhere() {
+    // `make docs/screenshots` writes every one of them, so one no page
+    // shows is one the history carries for nothing.
+    let root = root();
+    let (_, reached) = broken(&root);
+    let images = root.join("docs/images");
+    let mut unshown = Vec::new();
+    for entry in fs::read_dir(&images).unwrap() {
+        let route = entry
+            .unwrap()
+            .path()
+            .strip_prefix(&root)
+            .unwrap()
+            .to_path_buf();
+        if !reached.contains(&route) {
+            unshown.push(route.display().to_string());
+        }
+    }
+
+    assert!(unshown.is_empty(), "shown by no page: {unshown:?}");
 }
 
 #[test]
