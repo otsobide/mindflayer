@@ -1488,7 +1488,8 @@ type derives `Serialize` from the start:
   (`install::Cell`, which the panel sends, and so reads too, refusing a
   field it does not name), and what a selection amounts to
   (`install::Plan`, its `Change`, `Conflict` and `Locked`), each name by
-  the field, a kind by its slug, and why a box clashes or is locked as a
+  the field, a kind by its slug, an origin, a cell's or an install's,
+  through `url::serialize_redacted`, and why a box clashes or is locked as a
   `code::Said`. The panel is answered with the backend's `Planned`, each
   change the task that runs it, so a `Change` is tagged as a task is, its
   type beside its fields.
@@ -2857,7 +2858,9 @@ in TypeScript.
   each box against the offers its project is surveyed for, by its origin
   as printed, and, where none of them is from there, against what the
   ledger records, so an installation nothing offers any more is asked away
-  by the origin the snapshot says it came from. A box the disk cannot be
+  by the origin the snapshot says it came from. It plans from that origin
+  too, so a credential typed into a box neither splits one offer into two
+  nor reaches a line. A box the disk cannot be
   asked about is locked by why, before the rest: a project that does not
   open, an offer its origin does not make (`not_offered`, or what
   `install::receives` says when the project has nowhere to put the kind,

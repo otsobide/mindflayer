@@ -667,6 +667,25 @@ fn a_plan_serializes_each_field_by_its_name() {
 }
 
 #[test]
+fn a_plan_writes_every_origin_without_its_credentials_whoever_built_it() {
+    let typed = "https://user:secret@example.com/acme.git";
+    let printed = "https://example.com/acme.git";
+    let plan = Plan::of(&[
+        skill("alpha", "deploy", typed, Standing::Absent, false, true),
+        skill("alpha", "lint", typed, Standing::Foreign, true, false),
+        skill("beta", "review", typed, Standing::Absent, false, true),
+        skill("beta", "review", "workspace", Standing::Absent, false, true),
+    ]);
+
+    let json = serde_json::to_value(&plan).unwrap();
+
+    assert_eq!(json["changes"][0]["from"], printed);
+    assert_eq!(json["locked"][0]["cell"]["origin"], printed);
+    assert_eq!(json["conflicts"][0]["cells"][0]["origin"], printed);
+    assert!(!json.to_string().contains("secret"), "{json}");
+}
+
+#[test]
 fn a_cell_is_read_by_its_names_and_refuses_one_it_does_not_have() {
     let cell: Cell = serde_json::from_value(json!({
         "project": "alpha",

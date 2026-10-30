@@ -240,8 +240,14 @@ impl Read {
         };
         let seen = self.seen(workspace, ledger, &project, &cell.project, kind)?;
         Ok(match seen.find(name, &origin) {
+            // The box as it was found, by its origin as printed: two boxes
+            // naming one offer, one with a credential typed into it, are
+            // one origin, and no change installs from what was typed.
             Some((standing, held)) => Ok(Some(Asked {
-                cell: cell.clone(),
+                cell: Cell {
+                    origin,
+                    ..cell.clone()
+                },
                 kind,
                 name: name.to_owned(),
                 standing,
@@ -406,6 +412,9 @@ pub fn holding(
 pub struct Cell {
     pub project: String,
     pub reference: String,
+    // Written as every URL is, whoever built the cell: one a browser sent
+    // comes back inside a lock or a conflict as it was sent.
+    #[serde(serialize_with = "crate::url::serialize_redacted")]
     pub origin: String,
     /// Whether the project should hold it from there: ticked, or not.
     pub wanted: bool,
@@ -428,6 +437,8 @@ impl Cell {
 /// from, once the disk has been read for it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Asked {
+    /// The box, by its origin as printed ([`redacted`]): what an install
+    /// of it is from, and what its name's boxes are told apart by.
     pub cell: Cell,
     /// What its reference names.
     pub kind: Kind,
@@ -471,6 +482,7 @@ pub enum Change {
         projects: Vec<String>,
         kind: Kind,
         name: String,
+        #[serde(serialize_with = "crate::url::serialize_redacted")]
         from: String,
     },
     /// `flayer uninstall -p <project>... <kind:name>`: the name, whichever

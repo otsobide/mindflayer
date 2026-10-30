@@ -7,7 +7,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use common::skill;
+use common::{repository, skill};
+use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Candidate, Cell, Change, Plan};
 use mindflayer_core::ledger::Ledger;
 use mindflayer_core::{
@@ -350,6 +351,39 @@ fn an_installation_nothing_offers_any_more_is_asked_away_by_the_origin_it_came_f
             name: String::from("deploy"),
         }]
     );
+}
+
+#[test]
+fn a_credential_typed_into_a_box_is_its_origin_as_printed_and_never_said_back() {
+    let fixture = given(&["alpha"]);
+    let source = repository(&[("skills/lint/SKILL.md", &skill("lint", "Check it"))]);
+    // A URL, for the credential to have somewhere to be: a `file://` one,
+    // so the gather needs no network.
+    let address = format!("file://{}", source.path().display());
+    let ledger = fixture.workspace.ledger().unwrap();
+    gather::gather(&fixture.workspace, &ledger, &Request::git(address.clone())).unwrap();
+    let typed = address.replacen("file://", "file://user:secret@", 1);
+
+    let plan = fixture.planned(&[
+        cell("alpha", "skill:lint", &typed, true),
+        // The same offer, as every listing prints it: no clash.
+        cell("alpha", "skill:lint", &address, true),
+        cell("alpha", "skill:review", &typed, true),
+    ]);
+
+    assert_eq!(
+        plan.changes,
+        [Change::Install {
+            projects: owned(&["alpha"]),
+            kind: Kind::Skill,
+            name: String::from("lint"),
+            from: address.clone(),
+        }]
+    );
+    assert_eq!(codes(&plan), (vec![], vec!["not_offered"]));
+    let json = serde_json::to_string(&plan).unwrap();
+    assert!(!json.contains("secret"), "{json}");
+    assert!(json.contains(&format!(r#""origin":"{address}""#)), "{json}");
 }
 
 #[test]
