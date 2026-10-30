@@ -4,7 +4,7 @@ import { routes } from 'vue-router/auto-routes'
 import { createPinia } from 'pinia'
 import { VueQueryPlugin } from '@tanstack/vue-query'
 import ui from '@nuxt/ui/vue-plugin'
-import { listen, liveKey } from './api/live'
+import { listen, liveKey, settleKey } from './api/live'
 import { transportKey, type Transport } from './api/transport'
 import { installColorMode } from './color-mode'
 import { installPreferences } from './preferences'
@@ -42,8 +42,9 @@ export function createPanel({ transport, history = createWebHistory() }: PanelOp
       const queryClient = createQueryClient()
       app.use(VueQueryPlugin, { queryClient })
       // One subscription for the app, which is the tab, let go with it.
-      const { live, stop } = listen(transport, queryClient)
+      const { live, settle, stop } = listen(transport, queryClient)
       app.provide(liveKey, live)
+      app.provide(settleKey, settle)
       app.onUnmount(stop)
       app.use(ui)
     }

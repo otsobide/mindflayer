@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { listen } from '@/api/live'
-import type { LiveEvent, Query, Transport } from '@/api/transport'
+import { TransportError, type LiveEvent, type Query, type Transport } from '@/api/transport'
 import { createQueryClient } from '@/query'
 import { answering, fixture, render, unmount } from './panel'
 
@@ -153,6 +153,26 @@ describe('live updates', () => {
     stop()
   })
 
+  it('mark the transcript stale once a run finishes and on a resync, never for a change on disk', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { stop } = listen(transport, client)
+    const stale = () => client.getQueryState(['transcript'])?.isInvalidated
+
+    for (const [event, expected] of [
+      [{ type: 'changed', scopes: [workspace] }, false],
+      [{ type: 'command_started', lines: ['flayer link beta'] }, false],
+      [{ type: 'command_finished', lines: ['flayer link beta'] }, true],
+      [{ type: 'resync' }, true]
+    ] as [LiveEvent, boolean][]) {
+      client.setQueryData(['transcript'], [])
+      await tell(event)
+
+      expect(stale(), event.type).toBe(expected)
+    }
+    stop()
+  })
+
   it('let the stream go while the tab is hidden, and take it again once shown', async () => {
     const { subscriptions, transport } = streaming()
     await render('/', transport)
@@ -192,5 +212,77 @@ describe('a workspace the server cannot watch all of', () => {
     await tell({ type: 'watching' })
 
     expect(page.find('[data-testid="unwatched"]').exists()).toBe(false)
+  })
+})
+
+/** What a run of `flayer link /work/blog` is answered with. */
+const RAN = { lines: ['flayer link /work/blog'], outcome: { ok: true, runs: [] } }
+
+describe('a run the panel sends', () => {
+  it('is over once the stream tells it finished, a finish of other lines aside', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { settle, stop } = listen(transport, client, document, 60_000)
+    client.setQueryData(['snapshot'], {})
+    let over = false
+
+    const settled = settle(() => Promise.resolve(RAN)).then((answer) => {
+      over = true
+      return answer
+    })
+    await flushPromises()
+    expect(over).toBe(false)
+    await tell({ type: 'command_finished', lines: ['flayer link /work/other'] })
+    expect(over).toBe(false)
+    expect(client.getQueryState(['snapshot'])?.isInvalidated).toBe(true)
+    client.setQueryData(['snapshot'], {})
+    await tell({ type: 'command_finished', lines: RAN.lines })
+
+    expect(await settled).toBe(RAN)
+    expect(over).toBe(true)
+    expect(client.getQueryState(['snapshot'])?.isInvalidated).toBe(true)
+    stop()
+  })
+
+  it('is over at once when the stream told it finished before the answer came, as the server tells it', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { settle, stop } = listen(transport, client, document, 60_000)
+
+    const settled = settle(async () => {
+      await tell({ type: 'command_finished', lines: RAN.lines })
+      return RAN
+    })
+
+    expect(await settled).toBe(RAN)
+    stop()
+  })
+
+  it('asks for what it changed itself when the stream tells nothing in time', async () => {
+    const { transport } = streaming()
+    const client = createQueryClient()
+    const { settle, stop } = listen(transport, client, document, 10)
+    client.setQueryData(['snapshot'], {})
+    client.setQueryData(['transcript'], [])
+
+    expect(await settle(() => Promise.resolve(RAN))).toBe(RAN)
+
+    expect(client.getQueryState(['snapshot'])?.isInvalidated).toBe(true)
+    expect(client.getQueryState(['transcript'])?.isInvalidated).toBe(true)
+    stop()
+  })
+
+  it('refused, marks nothing stale and says why', async () => {
+    const { transport } = streaming()
+    const client = createQueryClient()
+    const { settle, stop } = listen(transport, client, document, 10)
+    client.setQueryData(['snapshot'], {})
+    const refusal = new TransportError(422, 'the path is relative', 'path_relative')
+
+    await expect(settle(() => Promise.reject(refusal))).rejects.toBe(refusal)
+
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(client.getQueryState(['snapshot'])?.isInvalidated).toBe(false)
+    stop()
   })
 })
