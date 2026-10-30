@@ -1,0 +1,237 @@
+[
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer update --all --yes"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer update --all --yes"
+      ],
+      "outcome": {
+        "ok": false,
+        "runs": [
+          {
+            "command": "flayer update --all --yes",
+            "error": null,
+            "ok": false,
+            "stderr": [
+              {
+                "code": null,
+                "text": "note: format in web is no longer offered by workspace, so it was left as it is; uninstalling it takes it out"
+              },
+              {
+                "code": "edited",
+                "text": "warning: lint in web was changed since it was installed, at .claude/skills/lint, so it was left alone; --force writes over it"
+              },
+              {
+                "code": "not_a_project",
+                "text": "warning: /home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+              }
+            ],
+            "stdout": "updated lint in api, from workspace\nput back review in api at .agents/skills/review, from workspace\nupdated rule git/commits in api, from workspace\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "force": false,
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": null,
+      "type": "update"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mind -C /home/you/Updating/api update --yes"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mind -C /home/you/Updating/api update --yes"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mind -C /home/you/Updating/api update --yes",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "updated lint in api, from workspace\nput back review in api at .agents/skills/review, from workspace\nupdated rule git/commits in api, from workspace\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "force": false,
+      "holder": {
+        "entry": "api",
+        "type": "project"
+      },
+      "reference": null,
+      "type": "update"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "mind -C /home/you/Updating/api update --yes skill:lint"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mind -C /home/you/Updating/api update --yes skill:lint"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mind -C /home/you/Updating/api update --yes skill:lint",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "updated lint in api, from workspace\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "force": false,
+      "holder": {
+        "entry": "api",
+        "type": "project"
+      },
+      "reference": "skill:lint",
+      "type": "update"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [
+        {
+          "caution": "forces",
+          "line": 0,
+          "message": "writes over, or takes out, a copy changed since it was installed"
+        }
+      ],
+      "lines": [
+        "mind -C /home/you/Updating/web update --yes --force skill:lint"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "mind -C /home/you/Updating/web update --yes --force skill:lint"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "mind -C /home/you/Updating/web update --yes --force skill:lint",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "updated lint in web, writing over the change at .claude/skills/lint, from workspace\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "force": true,
+      "holder": {
+        "entry": "web",
+        "type": "project"
+      },
+      "reference": "skill:lint",
+      "type": "update"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [
+        {
+          "caution": "uninstalls",
+          "line": 0,
+          "message": "takes copies Mindflayer installed out of projects"
+        }
+      ],
+      "lines": [
+        "flayer uninstall -p /home/you/Updating/web skill:format"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer uninstall -p /home/you/Updating/web skill:format"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer uninstall -p /home/you/Updating/web skill:format",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "removed format from web\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "kind": "skill",
+      "name": "format",
+      "projects": [
+        "web"
+      ],
+      "type": "uninstall"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [
+        {
+          "caution": "uninstalls",
+          "line": 0,
+          "message": "takes copies Mindflayer installed out of projects"
+        }
+      ],
+      "lines": [
+        "flayer uninstall --all-projects --orphaned"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer uninstall --all-projects --orphaned"
+      ],
+      "outcome": {
+        "ok": false,
+        "runs": [
+          {
+            "command": "flayer uninstall --all-projects --orphaned",
+            "error": null,
+            "ok": false,
+            "stderr": [
+              {
+                "code": "not_a_project",
+                "text": "warning: /home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+              }
+            ],
+            "stdout": "removed format from web\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "holder": {
+        "type": "workspace"
+      },
+      "type": "uninstall_orphaned"
+    }
+  }
+]
