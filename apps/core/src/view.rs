@@ -503,25 +503,14 @@ impl Health {
             || !project.unreached.is_empty()
             || !project.missed.is_empty()
             || !project.misplaced.is_empty()
-            || project
-                .artifacts
-                .iter()
-                .any(|held| held.state.is_some_and(asks_for_a_command) || !held.issues.is_empty());
+            || project.artifacts.iter().any(|held| {
+                held.state.is_some_and(State::asks_for_a_command) || !held.issues.is_empty()
+            });
         if attention {
             Health::Attention
         } else {
             Health::Ok
         }
-    }
-}
-
-/// Whether an artifact standing in `state` asks for a command: an update,
-/// a forced one, or an uninstall. Matched with no wildcard, so a state
-/// added does not compile until it says.
-fn asks_for_a_command(state: State) -> bool {
-    match state {
-        State::Outdated | State::Edited | State::Missing | State::Orphaned => true,
-        State::Current | State::Foreign | State::Authored => false,
     }
 }
 
