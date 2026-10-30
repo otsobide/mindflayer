@@ -243,9 +243,9 @@ under `apps/` with its own `Makefile`:
 Beside them, `examples/` is content and not an app: a flayer workspace whose
 own two skills and two rules anyone can `flayer load` to try Mindflayer
 without gathering. `apps/cli/tests/examples_test.rs` holds every example to
-`validate` with no warning and finds the README's "Try it with the examples"
-output in what the commands print, so changing an example's summary line
-means changing the README too.
+`validate` with no warning and finds the "Try it with the examples" output
+of the reference, `docs/reference.md`, in what the commands print, so
+changing an example's summary line means changing the reference too.
 
 Outside `apps/`, `scripts/agent-probe/` holds the agent probe: `probe.sh`
 isolates a run and checks the real home is left alone, and `<agent>.sh` holds

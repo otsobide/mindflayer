@@ -52,10 +52,11 @@ its own, such as `.claude` or `.agents`, not in one called `skills` or
 `apps/cli/tests/examples_test.rs` uses the folder where it is rather than a
 copy, since that folder is what a person loads. It holds every example to
 `validate` with neither a problem nor a warning, installs `commit-style` with
-the reference it carries and both rules where the README says they go, checks
-that nothing it ran wrote into the folder, and finds the README's walk-through
+the reference it carries and both rules where [the
+reference](reference.md#try-it-with-the-examples) says they go, checks that
+nothing it ran wrote into the folder, and finds the reference's walk-through
 in the output of the commands it shows.
-An example whose summary changes changes the README with it.
+An example whose summary changes changes the reference with it.
 
 ### No em dash in what the repository says
 
@@ -5570,7 +5571,7 @@ it. conda's `environments.txt` gains an environment the same way, when it is
 made and not when it is activated. #56 asked `flayer activate` to remember
 too, and it does not. Activating writes nothing ([activating a
 workspace](#activating-a-workspace)), which #55 was accepted on and the
-README promises; writing there would take the default workspace's lock at
+reference promises; writing there would take the default workspace's lock at
 every new shell whose startup file runs `eval "$(flayer activate DIR)"`, wait
 behind a gather holding it for up to `lock::WAIT`, and turn a default a newer
 build wrote, or a home nobody can write to, into a warning at every prompt.
