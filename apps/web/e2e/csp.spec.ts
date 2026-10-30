@@ -14,6 +14,7 @@ const PAGES = [
   '/',
   '/projects',
   ...PROJECTS.map(entry => `/project?${new URLSearchParams({ entry })}`),
+  '/discover',
   '/library',
   '/library?kind=rule',
   ...LIBRARY.map(([kind, name]) => `/artifact?${new URLSearchParams({ kind, name })}`),
