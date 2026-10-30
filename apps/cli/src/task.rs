@@ -33,7 +33,7 @@ use mindflayer_core::{codes, Agent, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{Cli, Command, FlayerCli, FlayerCommand, GatherCommand};
+use crate::{Cli, Command, Editing, FlayerCli, FlayerCommand, GatherCommand, Given};
 
 /// What an `agents` line says, as the toggles have it.
 ///
@@ -832,8 +832,9 @@ impl Task {
 /// One list, of commands as the parsers read them rather than of tasks, so
 /// a line refused for one front end is refused for every one, whichever
 /// task it came from or none. The TUI has a terminal, and refuses only the
-/// lines that would draw a screen inside its own ([`Refusal::Screen`]) or
-/// hold it until a Ctrl-C it keeps for itself ([`Refusal::Panel`]).
+/// lines that would draw a screen inside its own ([`Refusal::Screen`]),
+/// hold it until a Ctrl-C it keeps for itself ([`Refusal::Panel`]), or read
+/// the keys it reads ([`Refusal::Input`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum Refusal {
     /// The TUI (`mind` or `flayer` alone, or either's `tui`), the minds
@@ -841,11 +842,16 @@ pub enum Refusal {
     /// with neither a name nor a project).
     #[error("opens a screen of its own, which needs a terminal to draw on")]
     Screen,
-    /// `edit`, every form of it: it hands the terminal to an editor until
-    /// the editor is closed. Until #81 gives it a form that takes the
-    /// contents instead.
+    /// `edit` in an editor: it hands the terminal to one until it is
+    /// closed. `edit --contents` with a file opens none, and runs.
     #[error("opens an editor, which needs a terminal to draw on")]
     Editor,
+    /// `edit --contents -`, which reads what to write from standard input:
+    /// the terminal the front end was started from, or nothing, where a
+    /// line it runs would wait for an end nobody types. A front end hands
+    /// it a file instead.
+    #[error("reads standard input, which only a shell can hand it")]
+    Input,
     /// `flayer activate`, which prints code for a shell to run, and means
     /// nothing anywhere else.
     #[error("prints code for a shell to run, which only a shell can")]
@@ -878,6 +884,7 @@ pub enum Refusal {
 codes!(Refusal {
     Self::Screen => "opens_screen",
     Self::Editor => "opens_editor",
+    Self::Input => "reads_stdin",
     Self::Shell => "prints_shell_code",
     Self::Unwatched => "gather_unwatched",
     Self::Unheld => "show_unheld",
@@ -894,7 +901,7 @@ impl Refusal {
     pub fn of_mind(command: Option<&Command>) -> Option<Refusal> {
         match command {
             None | Some(Command::Tui) => Some(Refusal::Screen),
-            Some(Command::Edit { .. }) => Some(Refusal::Editor),
+            Some(Command::Edit { editing, .. }) => Refusal::of_edit(editing),
             Some(Command::Show { .. }) => Some(Refusal::Unheld),
             #[cfg(feature = "ui")]
             Some(Command::Ui(_)) => Some(Refusal::Panel),
@@ -939,7 +946,7 @@ impl Refusal {
                 all_projects: false,
                 ..
             }) if projects.is_empty() => Some(Refusal::Screen),
-            Some(FlayerCommand::Edit { .. }) => Some(Refusal::Editor),
+            Some(FlayerCommand::Edit { editing, .. }) => Refusal::of_edit(editing),
             Some(FlayerCommand::Activate { .. }) => Some(Refusal::Shell),
             Some(FlayerCommand::Show { .. }) => Some(Refusal::Unheld),
             Some(FlayerCommand::Gather(GatherCommand::Git { .. })) => Some(Refusal::Unwatched),
@@ -972,6 +979,18 @@ impl Refusal {
                 | FlayerCommand::Targets { .. }
                 | FlayerCommand::Migrate { .. },
             ) => None,
+        }
+    }
+
+    /// Why an `edit` at either level is not run by a front end with no
+    /// terminal, by how it takes what the artifact is to hold: an editor
+    /// or standard input, each the terminal's, are refused, and a file is
+    /// run, its contents held to core's rules as any edit's are.
+    fn of_edit(editing: &Editing) -> Option<Refusal> {
+        match editing.given() {
+            None => Some(Refusal::Editor),
+            Some(Given::Input) => Some(Refusal::Input),
+            Some(Given::File(_)) => None,
         }
     }
 }

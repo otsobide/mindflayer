@@ -34,6 +34,7 @@ export type Code =
   | "panel_failed"
   | "opens_screen"
   | "opens_editor"
+  | "reads_stdin"
   | "prints_shell_code"
   | "gather_unwatched"
   | "show_unheld"
