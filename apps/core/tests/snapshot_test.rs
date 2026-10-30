@@ -17,7 +17,7 @@ use mindflayer_core::resolve::{Inputs, Intent, Reason};
 use mindflayer_core::view::{Health, Held, Listing, LoadedWorkspace, Project, Snapshot};
 use mindflayer_core::{
     create, hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference,
-    Share, SourceKind, State, FLAYER_DIR,
+    Share, SourceKind, State, FLAYER_DIR, MIND_DIR, SETTINGS_JSON_FILE,
 };
 use tempfile::TempDir;
 
@@ -450,6 +450,7 @@ const EXPECTED: &str = r#"{
       "path": "<root>/hub/api",
       "name": "api",
       "marker": "settings.toml",
+      "migrates": false,
       "id": "<id>",
       "agents": [
         "claude",
@@ -592,6 +593,7 @@ const EXPECTED: &str = r#"{
       "path": "<root>/hub/gone",
       "name": null,
       "marker": null,
+      "migrates": false,
       "id": null,
       "agents": [],
       "settings": null,
@@ -935,6 +937,48 @@ fn a_project_with_nothing_to_do_is_ok_and_one_that_opens_none_is_stale() {
         .map(|project| project.health)
         .collect();
     assert_eq!(healths, [Health::Ok, Health::Stale]);
+}
+
+/// A project an older marker marks, a `mind.toml` or a `settings.json`, is
+/// one `mind migrate` moves, and the snapshot says so of those alone: one
+/// its `settings.toml` marks, and an entry that opens no project, have
+/// nothing to move.
+#[test]
+fn a_project_an_older_marker_marks_is_said_to_migrate_and_no_other() {
+    let fixture = fixture();
+    let mut workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let older = fixture.hub.join("older");
+    workspace
+        .link(&MindProject::init(&older).unwrap().0)
+        .unwrap();
+    let json = fixture.hub.join("json");
+    fs::create_dir_all(json.join(MIND_DIR)).unwrap();
+    fs::write(
+        json.join(MIND_DIR).join(SETTINGS_JSON_FILE),
+        r#"{"version": 3, "id": "0123456789abcdef0123456789abcdef", "name": "json",
+            "agents": ["claude"], "share": "shared", "directories": {}}"#,
+    )
+    .unwrap();
+    workspace.link(&MindProject::open(&json).unwrap()).unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+        .unwrap()
+        .unwrap();
+
+    let migrates: Vec<(Option<&str>, bool)> = snapshot
+        .projects
+        .iter()
+        .map(|project| (project.entry.as_deref(), project.migrates))
+        .collect();
+    assert_eq!(
+        migrates,
+        [
+            (Some("api"), false),
+            (Some("gone"), false),
+            (Some("older"), true),
+            (Some("json"), true),
+        ]
+    );
 }
 
 /// An edited copy asks for attention, a forced update or an uninstall,

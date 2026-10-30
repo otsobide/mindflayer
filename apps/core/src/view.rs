@@ -242,6 +242,13 @@ pub struct Project {
     /// The file its marker is read from, which says an older one `mind
     /// migrate` moves.
     pub marker: Option<MarkerFile>,
+    /// Whether `mind migrate` has it to move: an older marker marks it, a
+    /// `mind.toml` or a `settings.json`, whose settings nothing but that
+    /// move changes ([`MindProject::changeable`]); false for an entry that
+    /// opens no project. Told here rather than by a front end comparing
+    /// `marker` with the file it knows to be the newest, which would be the
+    /// rule written again, and wrong once a newer one is.
+    pub migrates: bool,
     /// The id its settings name it by (D-09), which a move is followed by.
     pub id: Option<ProjectId>,
     /// The agents its settings name, in report order: a slot each for every
@@ -847,6 +854,7 @@ impl Project {
             path: project.root().to_path_buf(),
             name: Some(project.name().to_owned()),
             marker: Some(project.marker_file()),
+            migrates: project.changeable().is_err(),
             id: settings.map(|settings| settings.id.clone()),
             agents: status.agents,
             settings: settings.map(ProjectSettings::of),
@@ -878,6 +886,7 @@ impl Project {
             path: root,
             name: None,
             marker: None,
+            migrates: false,
             id: None,
             agents: Vec::new(),
             settings: None,
