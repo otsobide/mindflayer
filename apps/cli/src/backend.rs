@@ -6,8 +6,9 @@
 //! [`Task`] the TUI runs, and an [`Outcome`] of its own. It is a front end
 //! as the TUI is, and works as the TUI does (D-18): a read is a query core
 //! answers, the snapshot or a file's contents, and a change is a task turned
-//! into the command lines it is, each shown before it runs, then run through
-//! the real parsers ([`run_line`]) on the server's one writer thread.
+//! into the command lines it is, each shown before it runs, with what of it
+//! the panel has somebody confirm first ([`Confirm`]), then run through the
+//! real parsers ([`run_line`]) on the server's one writer thread.
 //!
 //! What it adds is distrust, since every request comes from a browser:
 //!
@@ -52,7 +53,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::admit::Admission;
 use crate::commands::{run_line, Ran};
-use crate::task::{shell, Holder, Task};
+use crate::task::{cautioned, shell, Caution, Holder, Task};
 use crate::tui::state::{transcript, Done};
 use crate::{CliError, Lookup, Warning};
 
@@ -114,6 +115,23 @@ pub struct Run {
     /// Whether it ran and found everything in order: what its exit status
     /// would have said.
     pub ok: bool,
+}
+
+/// One thing a line of a task takes away, which the panel has somebody
+/// confirm before it asks for the run: an item of a preview's `confirm`,
+/// one for each [`Caution`] of each line ([`cautioned`]).
+///
+/// The words beside the word, so the panel says what a line takes in the
+/// CLI's words rather than its own, and draws by the word alone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Confirm {
+    /// Which of the preview's lines, by its place among them, from 0.
+    pub line: usize,
+    /// What it takes away.
+    pub caution: Caution,
+    /// The same, said for whoever is asked.
+    pub message: String,
 }
 
 /// The backend over the workspace a panel was launched on.
@@ -293,15 +311,24 @@ impl Backend for PanelBackend {
         }
     }
 
+    /// Each line as a shell would read it, and what the panel has somebody
+    /// confirm first, both of the one plan: so what the panel asks about is
+    /// the lines it shows, a `flayer init` in front of them counted.
     fn preview(&self, task: &Task) -> Result<Preview, Refusal> {
+        let plan = self.plan(task)?;
+        let confirm = cautioned(&plan.lines)
+            .into_iter()
+            .map(|(line, caution)| Confirm {
+                line,
+                caution,
+                message: caution.to_string(),
+            })
+            // A number, a word and its words: nothing to fail on.
+            .map(|confirm| serde_json::to_value(confirm).expect("a confirm serializes"))
+            .collect();
         Ok(Preview {
-            lines: self
-                .plan(task)?
-                .lines
-                .iter()
-                .map(|line| shell(line))
-                .collect(),
-            confirm: Vec::new(),
+            lines: plan.lines.iter().map(|line| shell(line)).collect(),
+            confirm,
         })
     }
 

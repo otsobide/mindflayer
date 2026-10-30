@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 
 use common::*;
 use mindflayer_cli::backend::{Outcome, PanelBackend, Query};
+use mindflayer_cli::task::Caution;
 use mindflayer_core::watch;
 use mindflayer_server::{Backend, Refusal};
 use serde_json::{json, Value};
@@ -821,4 +822,80 @@ fn a_workspace_gone_since_launch_is_watched_for_its_marker() {
     assert!(watched
         .iter()
         .any(|each| each.path == marker && each.scope == json!({"type": "workspace"})));
+}
+
+/// What the panel has somebody confirm comes with the lines, each by its
+/// place among them and in the CLI's words; a line that takes nothing away
+/// asks nothing.
+#[test]
+fn a_preview_says_what_its_lines_take_away_for_the_panel_to_confirm() {
+    let dir = workspace_with_two();
+    let backend = backend(dir.path());
+    let unlink = Caution::Unlinks.to_string();
+    let removes = Caution::Removes.to_string();
+    let uninstalls = Caution::Uninstalls.to_string();
+
+    for (sent, confirm) in [
+        (
+            json!({"type": "unlink", "entry": "alpha"}),
+            json!([{"line": 0, "caution": "unlinks", "message": unlink}]),
+        ),
+        (
+            json!({
+                "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
+                "name": "deploy", "everywhere": true,
+            }),
+            json!([
+                {"line": 0, "caution": "removes", "message": removes},
+                {"line": 0, "caution": "uninstalls", "message": uninstalls},
+            ]),
+        ),
+        // Its `mind init`, its `flayer link` and its `flayer unlink`.
+        (
+            json!({
+                "type": "minds",
+                "init": [under(dir.path(), &["gamma"])],
+                "link": [under(dir.path(), &["gamma"])],
+                "unlink": [under(dir.path(), &["beta"])],
+            }),
+            json!([{"line": 2, "caution": "unlinks", "message": unlink}]),
+        ),
+        (add_to(json!({"type": "workspace"})), json!([])),
+        (
+            json!({"type": "link", "path": under(dir.path(), &["alpha"])}),
+            json!([]),
+        ),
+    ] {
+        let preview = backend.preview(&task(sent.clone())).unwrap();
+        assert_eq!(Value::Array(preview.confirm), confirm, "{sent}");
+    }
+}
+
+/// Counted among the lines the panel shows, the `flayer init` that makes
+/// the default workspace first among them.
+#[test]
+fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir_all(&home).unwrap();
+    let lookup = Lookup {
+        home: Some(home.clone()),
+        ..Lookup::default()
+    };
+    let backend = PanelBackend::launch(&home, &lookup).unwrap();
+
+    let preview = backend
+        .preview(&task(json!({
+            "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
+            "name": "deploy", "everywhere": false,
+        })))
+        .unwrap_or_else(|refusal| panic!("{refusal:?}"));
+
+    assert_eq!(
+        preview.lines,
+        ["flayer init", "flayer remove --yes skill:deploy"]
+    );
+    assert_eq!(preview.confirm.len(), 1, "{preview:?}");
+    assert_eq!(preview.confirm[0]["line"], 1);
+    assert!(!home.join(FLAYER_DIR).exists(), "a preview made it");
 }
