@@ -88,6 +88,23 @@ fn a_reference_is_part_of_what_makes_a_source() {
     assert_ne!(main.id, next.id);
 }
 
+/// Two sources of one address are told apart by their branch, so the
+/// origin `--from` takes names the branch too, and only when one was asked
+/// for: the address alone is the remote's HEAD.
+#[test]
+fn a_sources_origin_is_its_address_with_the_branch_asked_for() {
+    let ledger = Ledger::in_memory().unwrap();
+    let head = ledger
+        .source_for(SourceKind::Git, "https://h/a", None, "skills")
+        .unwrap();
+    let main = ledger
+        .source_for(SourceKind::Git, "https://h/a", Some("main"), "skills")
+        .unwrap();
+
+    assert_eq!(head.origin(), "https://h/a");
+    assert_eq!(main.origin(), "https://h/a#main");
+}
+
 #[test]
 fn one_name_from_two_sources_is_two_rows() {
     let ledger = Ledger::in_memory().unwrap();

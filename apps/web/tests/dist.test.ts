@@ -10,16 +10,18 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 
 /**
  * What a page may name on another host and still fetch nothing from it:
- * namespace names, which the DOM compares as strings and never requests, and
- * the links Vue prints to the console beside a production error, which end
- * in the error's code.
+ * namespace names, which the DOM compares as strings and never requests, the
+ * address marked writes into the message of an error its parser throws,
+ * which the panel only lexes with, and the links Vue prints to the console
+ * beside a production error, which end in the error's code.
  */
 const NAMES = new Set([
   'http://www.w3.org/2000/svg',
   'http://www.w3.org/1999/xlink',
   'http://www.w3.org/1998/Math/MathML',
   'http://www.w3.org/XML/1998/namespace',
-  'http://www.w3.org/2000/xmlns/'
+  'http://www.w3.org/2000/xmlns/',
+  'https://github.com/markedjs/marked.'
 ])
 const PRINTED = 'https://vuejs.org/error-reference/'
 

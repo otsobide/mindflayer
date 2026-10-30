@@ -385,6 +385,39 @@ impl Catalog {
         (found, catalog.failures)
     }
 
+    /// Every folder whose entries decide what discovery finds of `kind` in
+    /// the folder `root`: `root` first, whether or not it is there, then the
+    /// rest in path order.
+    ///
+    /// For a kind kept a folder an artifact, each folder in `root`, whose
+    /// manifest discovery reads, one without a manifest yet included, since
+    /// writing one into it makes it an artifact. For a kind kept a file an
+    /// artifact, every folder the walk goes into, since one is found at any
+    /// depth. Never what an artifact's own folder holds further down: that
+    /// is the artifact's, assets and all, and no part of finding it.
+    ///
+    /// For a front end that watches a holder to know when what it shows is
+    /// out of date (#74), each folder on its own and nothing below it, as
+    /// discovery walks: a watch over the whole tree would wake for every
+    /// file an artifact keeps, and a folder the walk never enters, a hidden
+    /// one or one reached through a link, holds nothing it finds. What
+    /// cannot be listed is left out, as discovery reports it.
+    pub fn looked_in(root: &Path, kind: Kind) -> Vec<PathBuf> {
+        let mut catalog = Catalog::default();
+        let mut folders = match kind.layout() {
+            Layout::Directory { .. } => {
+                let mut entries = catalog.read_dir(root).unwrap_or_default();
+                entries.retain(|path| path.is_dir());
+                entries
+            }
+            Layout::Files { extension } => catalog.walk(root, extension).1,
+        };
+        folders.retain(|folder| folder != root);
+        folders.sort();
+        folders.insert(0, root.to_path_buf());
+        folders
+    }
+
     /// One artifact per immediate subdirectory holding `manifest`.
     fn load_directories(&mut self, root: &Path, manifest: &str, project: &Path) -> Vec<Artifact> {
         let mut found = Vec::new();
@@ -434,13 +467,26 @@ impl Catalog {
     /// Every file with `extension` at any depth under `root`, in order,
     /// leaving out what is hidden.
     fn files_in(&mut self, root: &Path, extension: &str) -> Vec<PathBuf> {
+        self.walk(root, extension).0
+    }
+
+    /// Every file with `extension` at any depth under `root`, in order,
+    /// and every folder the walk listed to find them, in the order it
+    /// listed them, leaving out what is hidden.
+    ///
+    /// One walk for both, so the folders [`looked_in`](Self::looked_in)
+    /// names are the ones discovery goes into, and no second walk can
+    /// follow a link or a hidden folder this one leaves alone.
+    fn walk(&mut self, root: &Path, extension: &str) -> (Vec<PathBuf>, Vec<PathBuf>) {
         let mut pending = vec![root.to_path_buf()];
         let mut files = Vec::new();
+        let mut listed = Vec::new();
 
         while let Some(directory) = pending.pop() {
             let Some(entries) = self.read_dir(&directory) else {
                 continue;
             };
+            listed.push(directory);
             for path in entries {
                 if is_hidden(&path) {
                     continue;
@@ -467,7 +513,7 @@ impl Catalog {
         }
 
         files.sort();
-        files
+        (files, listed)
     }
 
     /// The entries of a directory, or nothing when it is absent.

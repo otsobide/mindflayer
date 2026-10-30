@@ -1306,8 +1306,10 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
 `data` is what the command's text lists:
 
 - `list`: each holder as every front end reads it, `library` for the
-  workspace's own (`null` for one project's listing) and `projects` for
-  every entry the workspace links, a stale one saying why in `stale`. A
+  workspace's own (`null` for one project's listing), with the `origin` a
+  copy installed from it names and, in `holders`, each project holding a
+  copy of one of them, by its entry, and `projects` for every entry the
+  workspace links, a stale one saying why in `stale`. A
   project says where it authors each kind, its settings and templates, and
   every artifact it holds: its state, the agents that read it, where it came
   from, where each copy is, what `validate` says of it, and for a file that
@@ -1836,14 +1838,61 @@ on the workspace the panel shows wherever you type it, for a project linked
 from outside that workspace too; a workspace not made yet names `flayer init`
 first, since `-W` never makes the one it names.
 
+**The library** has a page for each kind, `skill` and `rule`, listing the
+workspace's own with what each is for, which projects hold a copy of it and
+how each copy stands, and what `validate` says of it; type to filter by name
+or summary. Below them are the workspaces it loads, each with where it is,
+how many of its own it offers, what `--from` takes for them (`load:../team`)
+and why one does not open. A kind it holds none of names `flayer add`.
+
+**One of the library's own** opens from its name. It shows what its front
+matter declares, as a table, every key in the order written; its body,
+rendered as markdown; every file it holds, each of which opens as the text it
+is; what `validate` says of it; and the projects holding a copy, with the
+state, agents and targets of each, or the `flayer install` that would put it
+in one. What a skill holds is somebody else's, so the panel shows it and
+never runs it: HTML in a `SKILL.md` is shown as the markup it is, an image is
+named rather than loaded, and only a link to another site or a mail address
+stays a link, opened in a tab of its own. No file is ever served as itself,
+and a link in the skill that leads out of the folder the library keeps its
+kind in is listed with why and never followed.
+
+**The shelf** lists everything gathered, filtered by kind or by name,
+summary or origin, each with the commit it was taken at, when, and its
+origin as `--from` takes it: the address it came from, with `#` and the
+branch when one was asked for. **Sources** lists where the shelf is filled
+from, each with that same origin, the branch, the folder harvested, the
+commit last gathered and what it supplied, and below them what happened
+lately: the latest gathers, installs, uninstalls, relinks and adoptions the
+ledger logged, newest first, with every URL in them shown without
+credentials. An empty shelf names `flayer gather git`.
+
+**It follows the disk.** A change made from a terminal, the TUI or an
+editor shows in the panel within a moment, without a reload: a skill edited,
+a project linked, an install. The server watches what the workspace's
+snapshot reads, its marker, its ledger, its library and its shelf, and in
+each project its marker, the files its agents read and the folders it keeps
+skills and rules in, each folder on its own and never a whole repository,
+and tells every open tab when something there changed, which then reads the
+workspace again. When the system will not let it watch everything, which on
+Linux is the limit `fs.inotify.max_user_watches` sets, each page says so
+above what it shows, with a button that reads everything again.
+
 Every page works from the keyboard and says every state in words, never by
 colour alone. So far the panel only shows: changing things from it comes with
 the [next milestone](https://github.com/otsobide/mindflayer/milestones). The
 API under it is there for a script holding the token as a Bearer token:
 `POST /api/query` for a read (`{"type": "snapshot"}` answers what the panel
-draws), `POST /api/commands/preview` for the lines a task is, `POST
-/api/commands` to run them, and `GET /api/transcript` for everything the
-session ran.
+draws, `{"type": "files", ...}` what one artifact holds, and `{"type":
+"contents", ...}` one file of it, as text), `POST /api/commands/preview` for
+the lines a task is, `POST /api/commands` to run them, `GET
+/api/transcript` for everything the session ran, and `GET /api/events` for
+what happens as it happens, as server-sent events: `resync`, to read
+everything again, first and whenever a reader fell behind; right after it
+`watching`, or `unwatched` with a `reason` when the server cannot watch
+everything, and either again whenever that changes; `changed` when something
+watched changed; and `command_started` and `command_finished` around each
+run.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
@@ -2605,9 +2654,10 @@ launcher or a version manager's shim.
 ## Developing the panel
 
 `apps/web` is the web panel, in Vue 3.5 and Nuxt UI 4 on Vite, written in
-TypeScript. So far it is the frame the views will fill: a sidebar, a header
-and an empty overview, dark unless you switch it to light, which the next
-launch remembers. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
+TypeScript. So far it shows and changes nothing: the overview, the
+projects, the library, the shelf and the sources, in a frame of a sidebar
+and a header, dark unless you switch it to light, which the next launch
+remembers. It needs Node 24 (`apps/web/.node-version`) and pnpm, at
 the version `package.json` pins in `packageManager`, which `corepack enable`
 provides. Without corepack, name any other way to run it in `PNPM`:
 
@@ -2618,7 +2668,10 @@ make web/build         # check the types, then build apps/web/dist
 make web/types         # write the types from Rust, then check the panel's (vue-tsc)
 make web/types/check   # fail when the types from Rust are not the ones committed
 make web/typecheck     # check the panel's types alone (vue-tsc)
-make web/clean         # remove dist/ and the tools' caches
+make web/clean         # remove dist/, what the browser suite wrote, and the tools' caches
+
+make web/e2e/browsers  # download Chromium and WebKit for the browser suite, once
+make web/e2e           # build the panel and the binaries, then drive them in both
 
 make web/test PNPM='npx --yes pnpm@12.15.0'
 ```
@@ -2646,8 +2699,37 @@ panel first where Node and pnpm run; without them they warn, and embed what
 TARGET=<triple>` starts the release built for that triple, once
 `apps/web/dist` is gone, and fails unless it serves the panel from the binary
 itself, as CI checks on every run.
-`make web/e2e` has no browser suite to run yet, and says so
-([#75](https://github.com/otsobide/mindflayer/issues/75)).
+
+`make web/e2e` tests the whole chain in a browser: it builds the panel and
+the debug binaries, builds a workspace in your system's temporary folder by
+running `flayer` and `mind`, serves it with `flayer ui`, and drives the
+panel in Chromium and WebKit with Playwright. The overview, each project's
+page and each artifact's page have to show what `flayer list --json`
+prints, a request from another origin has to be refused, and no page may log
+a violation of the server's content security policy. Nothing it runs can
+reach your workspaces or your agents' folders: Playwright runs without
+`$MINDFLAYER_WORKSPACE`, `$MINDFLAYER_HOME`, `$CLAUDE_CONFIG_DIR`,
+`$CODEX_HOME` and `$OPENCODE_CONFIG_DIR`, the server and every command get
+an empty temporary folder as `HOME`, and every command names its workspace
+and gives every agent-home option empty. The suite fails if that home is not
+empty once the server has stopped. Its specs are
+`apps/web/e2e/<area>.spec.ts`, and `make test` leaves them out, since they
+need the browsers and binaries built with the panel. `ARGS` go to
+`playwright test`, and `E2E_BIN` names another folder holding a `flayer` and
+a `mind` to drive, relative to `apps/web`:
+
+```bash
+make web/e2e ARGS='e2e/csp.spec.ts --debug'
+make web/e2e/run E2E_BIN=../../target/x86_64-unknown-linux-gnu/release
+```
+
+The browsers are Playwright's own builds, which `make web/e2e/browsers`
+downloads into `apps/web/node_modules` rather than `~/.cache`. Its WebKit
+needs libraries Playwright installs only on Debian and Ubuntu, with sudo
+(`make web/e2e/browsers WITH_DEPS=1`), so anywhere else, Arch among them,
+run the suite in Chromium alone with `make web/e2e BROWSERS=chromium`, and
+leave WebKit to CI's `e2e (web)`, which drives the release `build (cli)`
+built.
 
 `make web/dev` serves the panel on `http://127.0.0.1:5173` and reloads it as
 you edit. It passes `/api`, and the launch link, on to `flayer ui --dev`,
@@ -2668,7 +2750,9 @@ policy, which lets nothing in from another host and nothing inline:
   names another host.
 - **Nothing inline.** No `<script>` or `<style>` written into the page, which
   is why the palette is declared in `src/assets/css/main.css` (from the
-  mapping in `src/theme.ts`) rather than injected, as Nuxt UI would.
+  mapping in `src/theme.ts`) rather than injected, as Nuxt UI would. A
+  skill's markdown is drawn element by element from its tokens
+  (`src/markdown.ts`), never put on the page as HTML.
 
 A test also checks that every package installed carries a licence
 GPL-3.0-only can take in.

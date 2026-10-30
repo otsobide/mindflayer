@@ -8,12 +8,12 @@
 
 pub use axum::body::{Body, Bytes};
 pub use axum::http::{header, HeaderMap, Method, Request, StatusCode};
-pub use mindflayer_server::{Backend, Listening, Refusal, Server};
+pub use mindflayer_server::{Backend, Listening, Refusal, Server, Watched};
 pub use serde_json::{json, Value};
 pub use std::sync::{Arc, Condvar, Mutex};
 
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize, Serializer};
-use std::path::PathBuf;
 use std::time::Duration;
 use tower::ServiceExt;
 
@@ -32,8 +32,9 @@ pub struct FakeQuery {
 
 /// The fake's task: a name to run under, whether to wait at the fake's hold
 /// before finishing, whether to finish with an outcome JSON cannot carry,
-/// and whether to refuse it, when its lines are asked for (`refuse`) or
-/// only once it is handed over to run (`refuse_run`).
+/// whether to refuse it, when its lines are asked for (`refuse`) or only
+/// once it is handed over to run (`refuse_run`), and whether its run
+/// panics, as a backend with a bug would.
 ///
 /// A run takes no notice of `refuse`: one whose lines were refused and is
 /// handed over all the same runs, and the runs it leaves say so.
@@ -48,6 +49,8 @@ pub struct FakeTask {
     pub refuse: bool,
     #[serde(default)]
     pub refuse_run: bool,
+    #[serde(default)]
+    pub panic: bool,
 }
 
 /// What the fake refuses with: a code of its own, which a real backend's
@@ -88,6 +91,8 @@ pub struct Fake {
     pub runs: Arc<Mutex<Vec<String>>>,
     /// Where a task that asks to be held waits.
     pub hold: Arc<Hold>,
+    /// What it asks the server to watch, which a test changes as it goes.
+    pub watched: Arc<Mutex<Vec<Watched>>>,
 }
 
 impl Backend for Fake {
@@ -113,6 +118,9 @@ impl Backend for Fake {
         if task.refuse_run {
             return Err(refusal(&task.name));
         }
+        if task.panic {
+            panic!("{} panics, as asked", task.name);
+        }
         self.runs
             .lock()
             .unwrap()
@@ -128,8 +136,8 @@ impl Backend for Fake {
         })
     }
 
-    fn watched_paths(&self) -> Vec<PathBuf> {
-        Vec::new()
+    fn watched_paths(&self) -> Vec<Watched> {
+        self.watched.lock().unwrap().clone()
     }
 }
 
@@ -307,4 +315,108 @@ pub async fn get(server: &Listening, path: &str, auth: Auth<'_>) -> Reply {
 /// `POST path` with a JSON body.
 pub async fn post(server: &Listening, path: &str, auth: Auth<'_>, body: Value) -> Reply {
     send(server, Method::POST, path, auth, Some(body)).await
+}
+
+// ---------------------------------------------------------------------------
+// The event stream
+// ---------------------------------------------------------------------------
+
+/// How long a test waits for an event it expects before it fails: long
+/// past the watcher's debounce, for a machine under load, and still bounded.
+pub const PATIENCE: Duration = Duration::from_secs(10);
+
+/// `GET /api/events` answered, read an event at a time as a browser's
+/// `EventSource` reads it.
+pub struct Stream {
+    pub status: StatusCode,
+    pub headers: HeaderMap,
+    body: axum::body::BodyDataStream,
+    buffer: String,
+}
+
+impl Stream {
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers.get(name).map(|value| value.to_str().unwrap())
+    }
+
+    /// The next event's JSON, or a failed test once [`PATIENCE`] has
+    /// passed without one.
+    pub async fn next(&mut self) -> Value {
+        self.within(PATIENCE)
+            .await
+            .unwrap_or_else(|| panic!("no event in {PATIENCE:?}"))
+    }
+
+    /// The next event's JSON, or none when `wait` passes without one or
+    /// the stream ends: comments, which keep the connection alive, are
+    /// passed over.
+    pub async fn within(&mut self, wait: Duration) -> Option<Value> {
+        let deadline = tokio::time::Instant::now() + wait;
+        loop {
+            if let Some(end) = self.buffer.find("\n\n") {
+                let frame: String = self.buffer.drain(..end + 2).collect();
+                let data: Vec<&str> = frame
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("data:"))
+                    .map(|data| data.strip_prefix(' ').unwrap_or(data))
+                    .collect();
+                if data.is_empty() {
+                    continue;
+                }
+                return Some(serde_json::from_str(&data.join("\n")).unwrap());
+            }
+            let chunk = tokio::time::timeout_at(deadline, self.body.next())
+                .await
+                .ok()??;
+            self.buffer
+                .push_str(std::str::from_utf8(&chunk.unwrap()).unwrap());
+        }
+    }
+
+    /// Every event up to the first of `type`, which is the last returned,
+    /// or a failed test once [`PATIENCE`] has passed without one.
+    pub async fn until(&mut self, kind: &str) -> Vec<Value> {
+        let mut seen = Vec::new();
+        loop {
+            let event = self.next().await;
+            let found = event["type"] == kind;
+            seen.push(event);
+            if found {
+                return seen;
+            }
+        }
+    }
+}
+
+/// Open the event stream, in process.
+pub async fn subscribe(server: &Listening, auth: Auth<'_>) -> Stream {
+    let response = server
+        .router()
+        .oneshot(request(server, Method::GET, "/api/events", auth, None))
+        .await
+        .unwrap();
+    Stream {
+        status: response.status(),
+        headers: response.headers().clone(),
+        body: response.into_body().into_data_stream(),
+        buffer: String::new(),
+    }
+}
+
+/// The event stream opened, past what it says first: to ask for
+/// everything, and that everything named is watched.
+pub async fn opened(server: &Listening, auth: Auth<'_>) -> Stream {
+    let mut stream = subscribe(server, auth).await;
+    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(stream.next().await, json!({"type": "watching"}));
+    stream
+}
+
+/// A server over a fake that names `watched` to watch, bound and ready, and
+/// the list, which a test changes for the next time the server asks.
+pub fn launch_watching(watched: Vec<Watched>) -> (Listening, Arc<Mutex<Vec<Watched>>>) {
+    let fake = Fake::default();
+    *fake.watched.lock().unwrap() = watched;
+    let list = Arc::clone(&fake.watched);
+    (Server::new(fake).bind().unwrap(), list)
 }

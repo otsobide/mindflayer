@@ -1,0 +1,270 @@
+[
+  {
+    "answer": {
+      "entries": [
+        {
+          "folder": false,
+          "path": "SKILL.md",
+          "refused": null,
+          "size": 96
+        }
+      ],
+      "kind": "skill",
+      "manifest": "SKILL.md",
+      "name": "lint",
+      "truncated": false
+    },
+    "query": {
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "skill:lint",
+      "type": "files"
+    }
+  },
+  {
+    "answer": {
+      "file": "SKILL.md",
+      "kind": "skill",
+      "manifest": {
+        "body": "\n# lint\n\nRun the formatter first.\n",
+        "front_matter": [
+          {
+            "key": "name",
+            "value": "lint"
+          },
+          {
+            "key": "description",
+            "value": "Tidy the code before a commit"
+          }
+        ]
+      },
+      "name": "lint",
+      "size": 96,
+      "text": "---\nname: lint\ndescription: Tidy the code before a commit\n---\n\n# lint\n\nRun the formatter first.\n",
+      "withheld": null
+    },
+    "query": {
+      "file": "SKILL.md",
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "skill:lint",
+      "type": "contents"
+    }
+  },
+  {
+    "answer": {
+      "entries": [
+        {
+          "folder": false,
+          "path": "SKILL.md",
+          "refused": null,
+          "size": 485
+        },
+        {
+          "folder": true,
+          "path": "references",
+          "refused": null,
+          "size": null
+        },
+        {
+          "folder": false,
+          "path": "references/checklist.md",
+          "refused": null,
+          "size": 48
+        },
+        {
+          "folder": true,
+          "path": "scripts",
+          "refused": null,
+          "size": null
+        },
+        {
+          "folder": false,
+          "path": "scripts/diff.sh",
+          "refused": null,
+          "size": 21
+        }
+      ],
+      "kind": "skill",
+      "manifest": "SKILL.md",
+      "name": "review",
+      "truncated": false
+    },
+    "query": {
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "skill:review",
+      "type": "files"
+    }
+  },
+  {
+    "answer": {
+      "file": "SKILL.md",
+      "kind": "skill",
+      "manifest": {
+        "body": "\n# review\n\nRead the diff **before** it lands, and say what you would change.\n\n## Steps\n\n1. Run `scripts/diff.sh` to see what changed.\n2. Go through [the checklist](references/checklist.md).\n3. Leave one comment per finding, and *say why*.\n\n| check | why |\n| :--- | ---: |\n| tests | they pass |\n\nThe long version is at <https://example.com/review>.\n\n```sh\nscripts/diff.sh main\n```\n",
+        "front_matter": [
+          {
+            "key": "name",
+            "value": "review"
+          },
+          {
+            "key": "description",
+            "value": "Read a change before it lands"
+          },
+          {
+            "key": "license",
+            "value": "MIT"
+          },
+          {
+            "key": "metadata",
+            "value": "owner: platform"
+          }
+        ]
+      },
+      "name": "review",
+      "size": 485,
+      "text": "---\nname: review\ndescription: Read a change before it lands\nlicense: MIT\nmetadata:\n  owner: platform\n---\n\n# review\n\nRead the diff **before** it lands, and say what you would change.\n\n## Steps\n\n1. Run `scripts/diff.sh` to see what changed.\n2. Go through [the checklist](references/checklist.md).\n3. Leave one comment per finding, and *say why*.\n\n| check | why |\n| :--- | ---: |\n| tests | they pass |\n\nThe long version is at <https://example.com/review>.\n\n```sh\nscripts/diff.sh main\n```\n",
+      "withheld": null
+    },
+    "query": {
+      "file": "SKILL.md",
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "skill:review",
+      "type": "contents"
+    }
+  },
+  {
+    "answer": {
+      "file": "references/checklist.md",
+      "kind": "skill",
+      "manifest": null,
+      "name": "review",
+      "size": 48,
+      "text": "# Checklist\n\n- Does it say why?\n- Is it tested?\n",
+      "withheld": null
+    },
+    "query": {
+      "file": "references/checklist.md",
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "skill:review",
+      "type": "contents"
+    }
+  },
+  {
+    "answer": {
+      "file": "scripts/diff.sh",
+      "kind": "skill",
+      "manifest": null,
+      "name": "review",
+      "size": 21,
+      "text": "git diff \"$1\"...HEAD\n",
+      "withheld": null
+    },
+    "query": {
+      "file": "scripts/diff.sh",
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "skill:review",
+      "type": "contents"
+    }
+  },
+  {
+    "answer": {
+      "entries": [
+        {
+          "folder": false,
+          "path": "commits.md",
+          "refused": null,
+          "size": 37
+        }
+      ],
+      "kind": "rule",
+      "manifest": "commits.md",
+      "name": "git/commits",
+      "truncated": false
+    },
+    "query": {
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "rule:git/commits",
+      "type": "files"
+    }
+  },
+  {
+    "answer": {
+      "file": "commits.md",
+      "kind": "rule",
+      "manifest": {
+        "body": "# Write commit messages that say why\n",
+        "front_matter": null
+      },
+      "name": "git/commits",
+      "size": 37,
+      "text": "# Write commit messages that say why\n",
+      "withheld": null
+    },
+    "query": {
+      "file": "commits.md",
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "rule:git/commits",
+      "type": "contents"
+    }
+  },
+  {
+    "answer": {
+      "entries": [
+        {
+          "folder": false,
+          "path": "comments.md",
+          "refused": null,
+          "size": 32
+        }
+      ],
+      "kind": "rule",
+      "manifest": "comments.md",
+      "name": "style/comments",
+      "truncated": false
+    },
+    "query": {
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "rule:style/comments",
+      "type": "files"
+    }
+  },
+  {
+    "answer": {
+      "file": "comments.md",
+      "kind": "rule",
+      "manifest": {
+        "body": "# Comment the why, not the what\n",
+        "front_matter": null
+      },
+      "name": "style/comments",
+      "size": 32,
+      "text": "# Comment the why, not the what\n",
+      "withheld": null
+    },
+    "query": {
+      "file": "comments.md",
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "rule:style/comments",
+      "type": "contents"
+    }
+  }
+]

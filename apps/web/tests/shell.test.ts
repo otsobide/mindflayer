@@ -103,7 +103,7 @@ describe('the shell', () => {
 
     const sidebar = page.get('[data-testid="sidebar"]')
     expect(sidebar.text()).toContain('Mindflayer')
-    expect(sidebar.findAll('nav a').map(link => link.text())).toEqual(['Overview', 'Projects'])
+    expect(sidebar.findAll('nav a').map(link => link.text())).toEqual(['Overview', 'Projects', 'Library', 'Shelf', 'Sources'])
     expect(sidebar.get('nav a[aria-current="page"]').text()).toBe('Overview')
     expect(sidebar.get('[data-testid="address"]').text()).toBe(window.location.host)
 
@@ -160,12 +160,12 @@ describe('the shell', () => {
     expect(styles).toEqual([])
   })
 
-  it('asks the server for the snapshot, and for nothing else', async () => {
+  it('listens to the server once, asks it for the snapshot, and for nothing else', async () => {
     const { calls, transport } = recording()
 
     await render('/', transport)
 
-    expect(calls).toEqual(['query'])
+    expect(calls).toEqual(['subscribe', 'query'])
   })
 
   it('draws every icon it names from the bundle', async () => {

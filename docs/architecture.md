@@ -1614,8 +1614,17 @@ read, built and ordered in core from the read types the commands print:
   the entries that open none, each directory once however many entries
   spell it, as `known` counts them, and a tally of what those projects,
   its library and its shelf hold;
-- its library, the workspace's own, with where it keeps each kind and the
-  templates `flayer add` finds;
+- its library, the workspace's own, with where it keeps each kind, the
+  templates `flayer add` finds, the `origin` `--from` takes for each of its
+  own and a copy installed from one names (`workspace`), and the projects
+  holding a copy of each (`holders`), each by the registry entry it is
+  listed under. Those are the projects whose install the ledger tells came
+  from it (`install::from_the_library`), the rule `flayer remove
+  --everywhere` takes its copies by, rather than the copies whose origin
+  is `workspace`: an install recorded before origins were kept names none,
+  and is a copy of the library's own all the same while no loaded
+  workspace offers its name. A front end comparing origins would miss it,
+  and would hold a rule core holds already;
 - each project its registry names, in marker order, a stale entry with why
   it opens none, and a second spelling of one directory as a project of its
   own, since each entry is what `unlink` is given, as the TUI has always
@@ -1636,7 +1645,17 @@ read, built and ordered in core from the read types the commands print:
 - the workspaces it loads, each with how many of its own it offers; its
   shelf and the sources it is filled from; the workspaces this machine
   knows; the latest actions, newest first (`view::HISTORY`); and the
-  warnings that belong to none of those.
+  warnings that belong to none of those. Each load, each thing on the shelf
+  (`view::Shelved`) and each source (`view::ShelfSource`) says its
+  `origin`, what `--from` takes for what it offers and what an install of
+  that records, each spelled by the one function that spells it for an
+  install (`ledger::Source::origin`, `install::loaded_origin`): a second
+  spelling of a load the first's, as its offers are. The shelf's rows and
+  the sources are the ledger's with the origin flattened beside them, the
+  names `gather list --json` prints an offer from the shelf by, rather than
+  a shape of the snapshot's own; working the origin out in the panel, from
+  the address and the branch, was the other way, which would have put the
+  rule for `--from` in TypeScript.
 
 One value rather than each front end putting its view together from the
 reports, as the TUI did until #62: which unreadable file is which artifact's,
@@ -1680,8 +1699,8 @@ second copy of it could check it ([open questions](#open-questions)).
   fixture, and of a home with no workspace, and finds no path made and no
   byte changed.
 - **No scan.** What could be linked is a walk of the disk, bounded but not
-  free, and a snapshot is what a live update (#74) rebuilds every time
-  something changes. So the scan is a query of its own, run when somebody
+  free, and a snapshot is what a [live update](#live-updates) rebuilds
+  every time something changes. So the scan is a query of its own, run when somebody
   asks (#77), which the TUI runs beside the snapshot. A test counts the
   scans its thread runs, with a counter only a test build has, and finds
   none.
@@ -3930,13 +3949,16 @@ cannot disagree with the CLI and the TUI about any of them. What it knows is
 HTTP (routes, the token, cache headers, a log line), and none of that would
 differ between two front ends.
 
-The panel's whole API is four endpoints, which are
+The panel's whole API is five endpoints, the first four
 [D-18](#d-18-the-panel-writes-by-running-commands) in HTTP:
 
 - `POST /api/query`: a read, answered with JSON of the backend's own shape.
 - `POST /api/commands/preview`: the command lines a task is, with nothing run.
 - `POST /api/commands`: run a task; the reply is its lines and its outcome.
 - `GET /api/transcript`: every task the session ran, with what each produced.
+- `GET /api/events`: what happens as it happens, a change on disk or a run
+  starting and finishing, as server-sent events ([live
+  updates](#live-updates)).
 
 Any other path under `/api` is a JSON 404, and every refusal, a body the
 backend cannot read included, is `{"error": "..."}`, so a script never has to
@@ -3960,7 +3982,10 @@ types know nothing of mindflayer, which is the property the CLI relies on.
 has a shape of its own and one type standing for all of them would be an enum
 whose only job is to serialize untagged. `preview` takes the task by
 reference, so a task need not be `Clone` to be both shown and run.
-`watched_paths` is for live updates (#74); nothing reads it yet.
+`watched_paths` names what to watch for [live updates](#live-updates): each
+path with its scope (`Watched`), a word of the backend's own carried to the
+panel as JSON, as a query's answer is, so the server names no type of the
+front end's here either.
 
 Each of `query`, `preview` and `run` may refuse what it was asked with a
 `Refusal`, a code and a message, which is how a rule of the front end's
@@ -3990,6 +4015,11 @@ waiting on the same thread.
   ([Writers at the same time](#writers-at-the-same-time)). And a long run
   holds that thread rather than one of the pool's, so the panel goes on
   reading while it waits.
+- **The watcher** is a `std::thread` of its own, which owns the system's
+  watches and asks the backend for its list again after each change
+  ([live updates](#live-updates)); notify and its debouncer keep a thread
+  each beside it. None of them is tokio's, since asking for the list reads
+  the disk.
 
 A run's lines are worked out on the writer thread just before it, against the
 disk the run itself meets after every write before it; a task whose lines
@@ -4258,6 +4288,25 @@ an HTML page or an SVG holding a script reaches the panel as text to show.
 Should some mistake put it on a page, the CSP runs no inline script and
 `nosniff` holds the answer to `application/json`.
 
+What an artifact holds is listed the same way (`Query::Files`, core's
+`contents::Files`): asked of the same holders by the same reference, held
+to the same bound, and answered with every file and folder by the route a
+file is then asked for by, a folder before what it holds and each folder's
+in the order of their names, and whether the listing stopped at
+`contents::FILES_CAP`, a thousand. The artifact's own folder or file
+leading out of its holder refuses the whole listing (`contents_outside`),
+as a file of it is refused; a link further down that leads out is listed
+with why and never followed, nor is one leading back into a folder it is
+in (`contents_cycle`) or to nothing (`contents_missing`), so one bad link
+hides nothing else and costs no walk without end. Nothing of where a
+refused link leads is listed, only its path in the reason. A name no route
+spells, one that is not UTF-8 or that holds a `\`, which `place` refuses as
+a part of a route, is listed with why too (`contents_name_unfit`), by its
+name as near as UTF-8 writes it, and a folder of one is not walked: listed
+as a file, it would be a button whose answer could only be a refusal. #67
+left the listing for later; it sits beside the reading, in one module, so
+the two cannot hold a file to different bounds.
+
 It is the one way a file's contents reach the browser. `show` would be a
 second: it prints an artifact whole, read through every link on the way,
 since a rule shared by a link is still a rule, with no cap. So it is on the
@@ -4269,6 +4318,147 @@ disk it is.
 The CLI's suite (`backend_test`) drives `PanelBackend` through the trait with
 the JSON a browser would send, malicious shapes in a table, and binds no
 port; the server's own suites cover the transport over a fake backend.
+
+### Live updates
+
+The panel shows a change made from a terminal, the TUI or an editor without
+a reload (#74). The server watches what the backend names and tells the
+browser, on one stream, when something there changed; the panel then asks
+for the snapshot again, which is all it ever does about it. Nothing is
+pushed but the word that something changed: what changed is read the way
+every read is, so the panel cannot show a change the snapshot would not.
+
+**What is watched is core's** (`watch::watched`), every file and folder a
+snapshot reads that somebody can change, each with what it is of, the
+workspace or a project by its entry. The CLI's backend hands that list
+over, each scope written as the holder a query names
+(`{"type": "project", "entry": "api"}`), and a desktop shell would hand
+over the same one. For the workspace: its marker, its ledger, its shelf's
+folders, the folders its library keeps each kind in, its templates, each
+workspace it loads, by its marker and library, and the default workspace's
+marker in home, whose `known` the snapshot lists. For each project: its
+marker, whichever file it is in, each file an agent reads in it
+(`Agent::reads_files`: `AGENTS.md`, `CLAUDE.md`, `.mcp.json`,
+`.codex/config.toml` and the rest, every agent's, since the block of
+`AGENTS.md` is read whichever the project names), each folder it keeps a
+kind in and each its agents read one from (`Catalog::folders`), the files
+Claude is given its rules in, and its templates. An entry that opens no
+project is watched for its marker coming back.
+
+- **Named, never a tree.** Each path is watched on its own
+  (`RecursiveMode::NonRecursive`): a file for its own changes, a folder for
+  what is directly in it. The folders named are those discovery looks in
+  (`Catalog::looked_in`): a kind's folder, each skill's own folder, whose
+  `SKILL.md` is read, and every folder of rules the walk goes into, since a
+  rule is found at any depth. Never a project's root, which would wake for
+  every file of the code beside it, and never a `.git`, a `node_modules` or
+  what a skill keeps in folders of its own: a recursive watch costs one of
+  the system's watches for every folder under it. A test of core's list
+  holds it to that over a fixture with all of those, and one of the
+  server's to watching only the folders named and the one above each,
+  none of them recursively, which it sees in the mode the watcher asks
+  the system for: nothing on the stream would show it, since a change
+  further down is no path's either way.
+- **What is not there yet is named all the same**, a project's
+  `.claude/skills` before its first install, and watched from the nearest
+  folder above it that is, for its being made. That rule is the watcher's,
+  being the same for any path: it knows files and folders, never which
+  ones a project has.
+- **A folder above a path named is a change to it.** Removed or renamed,
+  it takes the path with it, and it is all that is told: the debouncer
+  folds what a folder held into its own removal, so `rm -rf` of a linked
+  project, `git clean` taking its `.claude` or a `mv` of either is told by
+  that one folder, which is named nowhere. A change to a folder beside
+  them, a project's `src`, is still nobody's.
+- **Asked for again after every change it tells**, since a change can name
+  new paths, a skill installed or a project linked: `flayer.toml` changing
+  is one such change. A folder an event named as made, removed or renamed
+  is watched again besides, and every folder below it, since a watch stays
+  with the folder it was set on, and an install puts a copy in place by a
+  rename over the folder. notify drops every watch below a folder removed,
+  or renamed away from a parent it watches, and one renamed back within the
+  debounce is where it was, with nothing below it watched until each is set
+  again. The watches are set before the change is told, so whatever the
+  panel reads on hearing it, any change after it is watched for.
+- **Nothing a read does.** A file opened or closed without a write is no
+  change, or a snapshot reading a watched file would set off the next
+  snapshot, without end. For the same reason the ledger is named by its
+  file and never by its folder: SQLite makes `mindflayer.db-wal` and
+  `mindflayer.db-shm` beside it to read it and takes them away as the last
+  connection closes, so a watch on `.mindflayer` would wake for every read.
+  A write reaches the file itself when its log is checkpointed, at the
+  latest as the last connection to it closes, as each command's does; a
+  read that is that last connection checkpoints a write before it, which is
+  that write's change told once. Tests hold both: core's, that a snapshot
+  changes nothing named, and the CLI's, that reading the workspace over the
+  real backend is told as no change, which fails when either rule is
+  broken.
+
+**The watcher** (`Watcher`) uses notify 8 and its full debouncer, which
+waits 300 milliseconds (`DEBOUNCE`) so a burst, a command writing a dozen
+files or an editor saving through a temporary one, is told as one change,
+each scope it reached once. notify, rather than a poll of the files, since
+the system says what changed as it changes; and its full debouncer rather
+than the mini one, since it keeps what kind of change each was, which is
+how a file read is told apart from a file written, where the mini one says
+only that a path changed. It starts with the server, setting the first watches
+before `bind` returns, so a change made as soon as the link is out is told.
+A backend that names nothing costs no watcher at all.
+
+**The events** go through a bus (`Events`), a tokio broadcast channel every
+subscriber hears all of, and out at `GET /api/events` as server-sent events,
+one `data:` line of JSON each, tagged by `type` as a task is:
+
+- `changed`, with `scopes`, each scope a change reached;
+- `command_started` and `command_finished`, with a run's `lines`: told on
+  the writer thread once its preview passed and once it stopped, however it
+  stopped, a refusal or a panic included, the finish once the run is in the
+  transcript;
+- `resync`, first on every stream and again for one that fell behind: the
+  channel keeps 64 events (`CAPACITY`) for a subscriber that has not read
+  them, and one further behind is told to ask for everything again rather
+  than handed a backlog;
+- `watching` or `unwatched` with its `reason`, after `resync` once the
+  watcher has said, and again whenever that changes.
+
+Server-sent events rather than a WebSocket: the stream goes one way, a
+browser's `EventSource` connects again by itself after a drop, and it is a
+plain GET, which the gate holds to the token as it holds every read, the
+cookie included. A comment every 15 seconds while nothing happens
+(`KeepAlive`) keeps a proxy between, the panel's dev server's among them,
+from taking the connection for one that died. The bus and the watcher know
+nothing of axum, so a desktop shell answering the panel without HTTP
+(D-17) takes events from the same two; `Listening::events` hands the bus to
+a front end. Stopping the server closes the bus first, which ends every
+stream: each is a request under way for as long as a browser keeps the page
+open, and a graceful stop would wait for it without end.
+
+**Six connections a browser.** The server speaks HTTP/1.1 only, and a
+browser opens at most six HTTP/1.1 connections to one host and port;
+HTTP/2 would carry every request on one, but browsers speak it only over
+TLS, which a loopback panel has no certificate for. Each stream holds a
+connection for as long as it is open, so six tabs of one panel would leave
+none to ask with. So the panel keeps one stream for a tab, never one for a
+view, and lets it go while the tab is hidden, taking it again when the tab
+is shown, which the server answers with `resync`. Tabs of two launches are
+two ports, and count apart.
+
+**The system's limits on watches.** On Linux each watch is one of inotify's,
+of which one user has `fs.inotify.max_user_watches` across every program
+(8192 on older kernels, more on newer ones with memory to spare), and each
+watcher one of `fs.inotify.max_user_instances`, 128 by default. A watch the
+system refuses is said rather than failed on: the watcher keeps every watch
+it could set, tells `unwatched` with why, and tries again with the next
+change, telling `watching` once every one is set. A watcher that cannot
+start at all, no instance left, is `unwatched` for as long as the server
+runs. macOS's FSEvents and Windows' `ReadDirectoryChangesW` have no such
+count per folder. The panel shows a banner on every page while the server
+is `unwatched`, saying why, with a button that asks for everything again,
+and asks again on every page and every return to the window, as it did
+before there was a stream ([its views](#its-views)). A project costs about
+ten watches, and one for each copy of a skill it holds, so a workspace
+reaches the old 8192 only past a few hundred projects; a watch of every
+folder in each repository would reach it with one `node_modules`.
 
 ### The log
 
@@ -4355,8 +4545,9 @@ listener, a Unix signal or the Windows console's Ctrl-C, rather than
 `tokio::signal::ctrl_c`, which installs its handler only once it is first
 awaited. The first stops the server taking connections and lets every
 request under way be answered, a run above all, so a change is not cut off
-half way; the second stops at once, for whoever would rather have that than
-wait. What comes back once it stops is what the TUI hands back when it
+half way, and ends every event stream, which would otherwise be answered
+for as long as a tab stays open ([live updates](#live-updates)); the
+second stops at once, for whoever would rather have that than wait. What comes back once it stops is what the TUI hands back when it
 closes: every line the panel ran for a task that changes something
 (`Task::writes`), with what each said, laid out by the TUI's function
 (`PanelBackend::transcript`), so a session in the browser can be read and
@@ -4408,15 +4599,17 @@ the way Nuxt UI's dashboard-vue template lays out a dashboard, with a page
 per file under `src/pages`. It holds no rules, any more than the server
 does: what a valid task is, or what a project has, is core's to say, and the
 panel asks. So far it shows and changes nothing: an overview, the projects
-and a project's page, drawn from the snapshot (#72), in a frame of a sidebar
-and a header ([its views](#its-views)).
+and a project's page, drawn from the snapshot (#72), and the library, one of
+its own, the shelf and the sources (#73), the second reading an artifact's
+files besides, in a frame of a sidebar and a header ([its
+views](#its-views)).
 
 ### One way out: the transport
 
 Every request the panel makes goes through a `Transport`
 (`src/api/transport.ts`): `query` for a read, `send` for a task to preview or
-run, and `subscribe` for the events #74 will stream. Views get it from
-`useTransport`. The server's fourth endpoint, the transcript, has no call
+run, and `subscribe` for the events the server streams ([live
+updates](#live-updates)). Views get it from `useTransport`. The server's fourth endpoint, the transcript, has no call
 yet, because nothing shows it: the transcript drawer (#76) adds one, so that
 it too reaches the server through the transport, and a desktop shell can
 answer it. The HTTP transport (`src/api/http.ts`) is the only file allowed
@@ -4454,7 +4647,8 @@ whatever listens on 127.0.0.1, so they hold nothing about anybody's work.
 
 What the panel sends and is answered with is said once, in Rust, and the
 panel compiles against TypeScript written from it (#70): the snapshot and
-everything it holds, a file's contents, what `list`, `show` and `validate`
+everything it holds, an artifact's files and a file's contents, what
+`list`, `show` and `validate`
 print, a query, a task, what a run produced, the envelope a reading
 command's `--json` prints, and every code core and the CLI give. That
 TypeScript is the contract, the panel's side of [the read
@@ -4464,8 +4658,10 @@ never edited by hand. The transport takes its `Query`, `Task` and `Outcome`
 from there, and says what each query is answered with by its `type`
 (`Answers`), so a query Rust adds leaves the panel not compiling until it
 names the answer. Only the server's own replies, `{lines}` for a preview,
-`{lines, outcome}` for a run and `{error, code}` for a refusal, are still
-spelled in `transport.ts` ([open questions](#open-questions)).
+`{lines, outcome}` for a run and `{error, code}` for a refusal, and the
+events its stream tells (`LiveEvent`), are still spelled in `transport.ts`
+([open questions](#open-questions)); a change's scopes are the generated
+`Holder`, since what a change is to is the backend's word.
 
 - **Derived beside serde.** Each type derives `ts_rs::TS` beside its
   `Serialize` or `Deserialize`, under a `ts` feature of core's and the
@@ -4551,7 +4747,7 @@ where serde's are, and the feature only reads them.
 
 ### Its views
 
-Three pages draw the snapshot ([the read model](#the-read-model)), each a
+Seven pages draw the snapshot ([the read model](#the-read-model)), each a
 file under `src/pages`:
 
 - **The overview** (`/`) names the workspace, where it is and why that one,
@@ -4564,15 +4760,92 @@ file under `src/pages`:
   kind, each artifact with its state, a badge in a slot for each of the
   project's agents, its origin, its targets, what does not read and what
   `validate` says, and what its agents never read above.
+- **The library** (`/library?kind=...`) has a page for each kind in `kinds`,
+  the first when none is named, listing the workspace's own of it, filtered
+  by name or summary, each with the projects holding a copy and how each
+  copy stands, and what `validate` says; and below, every workspace it
+  loads, with what it offers, its `origin` and why it does not open.
+- **One of the library's own** (`/artifact?kind=...&name=...`) shows its
+  front matter as a table, its body rendered, its files, each opening as
+  text (`&file=...`), what `validate` says of it, and the projects holding a
+  copy, each with its state, agents and targets. Named in the query, as a
+  project is, since a rule's name is a route.
+- **The shelf** (`/shelf`) lists what was gathered, filtered by kind, by
+  name, summary or origin, each with its `origin`, the commit it was taken
+  at and when.
+- **The sources** (`/sources`) lists where the shelf is filled from, each
+  with its `origin`, branch, folder, commit and what it supplied, and the
+  latest actions the ledger logged (`history`), newest first.
+
+A project holds a copy of one of the library's own when core names it
+among `library.holders`, and the copy is its artifact of that kind and
+name: so a project's own of the same name, or one installed from the
+shelf, is never taken for it, and an install recorded before origins were
+kept, whose copy names no origin, is not left out, which comparing a
+copy's `origin` with `library.origin` in the panel would do. What a source
+supplied is the shelf's rows that name its folder, which no two sources
+share. Both are filters of what the snapshot lists, as a health filter
+is. An origin is shown as core says it, never put together
+from an address and a branch, which would be the rule for `--from` in
+TypeScript ([the read model](#the-read-model)).
+
+An artifact's page reads more than the snapshot: its files
+(`Query::Files`), whose answer names the file it is read from, then that
+file (`Query::Contents`), which core hands back cut at its front matter
+(`contents::Manifest`): each key at its top, in the order written, every
+value a string, a list or a mapping as YAML writes it, and the body after.
+Cut in core, by the readers that decide where front matter ends and
+whether a rule's fences hold any, rather than by the panel from the text,
+which could show as declared what every agent reads as content. The
+reference it sends is `kind:name`, as a command line takes it, so one name
+of two kinds never means either. Each is a Vue Query of its own
+(`src/api/artifact.ts`), asked once the one before it is answered.
+
+What a skill says is somebody else's, so its markdown is drawn from
+marked's tokens, an element at a time (`src/markdown.ts`), never handed to
+the browser as HTML to parse: raw HTML is shown as the markup it is, in a
+code span or block, no element gets a style or an event, a table's
+alignment is a class rather than the inline style marked's own renderer
+writes, an image is named rather than loaded, and a link keeps its address
+only to another site or a mail (`https:`, `http:`, `mailto:`), opened in a
+tab of its own with no referrer. Any other, to a file beside the skill above
+all, is its text alone, since the panel never links to an artifact's file,
+and a `javascript:` or `data:` URL never reaches an attribute. An entity
+or character reference (`&amp;`, `&#169;`) is decoded from the string,
+in text and in a link's address before it is judged, and left as written
+in code, as CommonMark reads them: marked leaves them for the browser to
+decode in the HTML its renderer writes, so text drawn as text would show
+them as written. The decoder is `entities`' strict one, which takes only
+a reference ended by `;`. marked's renderer with v-html, behind a
+sanitizer, was the other way, which trusts the sanitizer to know every way
+HTML runs something. Its headings start a level below the section they
+are drawn in and never go down more than one level at a time, so the
+page's outline holds whatever the document skips.
+A file opened from the listing is shown as text in a `<pre>`, whatever it
+holds, and a listed file is a button asking for it, never a link.
 
 Every page reads one Vue Query of the snapshot (`src/api/snapshot.ts`), so
-moving between them draws at once from what is cached, and asks again behind
-it: an answer is stale as soon as it comes, since nothing says yet when the
-workspace changed, so each page asks on opening, and so does the window when
-it comes back into focus. Once #74's events say when it changed, the panel
-will ask only then. `SnapshotGate` draws a page once the snapshot is
-answered, says it is waiting until then, and says why when the server
-refused.
+moving between them draws at once from what is cached. The server's events
+say when to ask again ([live updates](#live-updates)), and `src/api/live.ts`
+turns each into what Vue Query is to ask for again, never a read of its own
+and never a scan: `changed` marks the snapshot stale, and what was read of
+an artifact in a holder among its scopes; `resync` and `command_finished`
+mark all of those, since a command can change what nothing watches. Those
+queries are named by the first word of their key (`markStale`), rather than
+every query marked, for one asked for by hand: a scan (#77) reads the disk
+far past what is watched, and an event asking for it again would run one on
+every change, every command and every tab shown again. While the
+server says it is `watching`, an answer stays fresh until one of those
+marks it (`staleTime` of `Infinity`), so a page asks for nothing on
+opening. Otherwise, before the server has said and while it is
+`unwatched`, an answer is stale as soon as it comes, as before there was a
+stream: each page asks on opening, and so does the window when it comes
+back into focus, and `SnapshotGate` shows the banner that says why above
+the page, with a button that marks stale what `resync` would. How the server
+watches is what the stream said, kept beside the subscription and provided
+to the views, rather than in Pinia, which holds only what the browser
+decides. `SnapshotGate` draws a page once the snapshot is answered, says it
+is waiting until then, and says why when the server refused.
 
 - **The panel lays out, groups and filters; it works nothing out.** Every
   count it shows is one the snapshot carries, the `summary` and each
@@ -4627,7 +4900,10 @@ The views' tests render the snapshots in `apps/web/tests/fixtures`, which a
 test of the CLI writes (`apps/cli/tests/fixtures_test.rs`): it builds a
 workspace by running the commands, installing, editing a copy, changing
 the library, removing a linked folder, and reads it through the panel's
-backend as the server answers it, beside a home where nothing is made. So
+backend as the server answers it, beside a home where nothing is made.
+Beside them, `library.json` holds every query an artifact's page asks of
+the library's own, its files and each file of them, with what the backend
+answers, which the test transport answers from (`tests/panel.ts`). So
 the panel's tests render what core says rather than what a person drew,
 and a field the snapshot adds, renames or fills differently reaches them.
 What differs between runs is pinned: the temporary folder reads as
@@ -4667,17 +4943,104 @@ though three of its libraries assume otherwise:
   It also makes dark the default: `index.html` carries the class before any
   script runs, and dark is stored when this browser has chosen nothing.
 - Vite inlines nothing as a `data:` URL (`assetsInlineLimit: 0`).
+- A skill's markdown is drawn from its tokens, so nothing in it reaches the
+  page as HTML, a style or a `data:` URL ([its views](#its-views)).
 
 A nonce per launch would have let the style elements in, at the price of the
 server rewriting the page each time and the panel handing the nonce to each
 library that writes one. `tests/dist.test.ts` builds the panel as `make
 web/build` does, in a process of its own, and fails on a URL naming another
-host anywhere in the page, the scripts or the styles (namespace names, and
-the links Vue prints beside a production error, aside), a reference not to
+host anywhere in the page, the scripts or the styles (namespace names, the
+address marked writes into the message of an error its parser throws, which
+the panel never parses with, and the links Vue prints beside a production
+error, aside), a reference not to
 the panel's own files, an inline script or style in the page, a palette
 variable missing, or Iconify's API or the injected palette back in the
 scripts. The shell test fails on any `<style>` element added while the panel
 starts and switches colour mode.
+
+### End to end, in a browser
+
+Every suite above stops at a boundary: the server's suites run against a
+fake backend, the CLI's backend suite binds no port, `ui_test.rs` speaks
+HTTP without a browser, and the panel's suites draw fixtures in happy-dom
+over a fake transport. `apps/web/e2e` (#75) crosses all of them at once: the real
+`flayer ui`, the CLI's backend over core, the server and the panel it
+embeds, driven by Playwright in Chromium and in WebKit, the engine a
+desktop shell would draw the panel with.
+
+`make web/e2e` builds the panel and the debug binaries, a debug build
+reading `dist/` as requests come in, and runs `e2e/run.ts`, a driver, with
+Node. A driver because Playwright's order is the wrong one twice over: its
+webServer starts before any globalSetup runs, and the fixture has to be on
+disk before `flayer ui` resolves its workspace; and it stops the server
+only after every teardown, when the home is to be found untouched. So the
+driver makes a folder in the system's temporary folder, refusing one with a
+`.mind` or a `.mindflayer` above it, since resolving walks up before it
+looks at a home; makes an empty `home` there; builds the fixture workspace
+beside it (`e2e/fixture.ts`) with the binaries under test, a command at a
+time, each held to exit 0 with no warning, and nothing written by hand but
+the folders `mind init` runs in; runs `playwright test` with the options it
+was given; and once Playwright, and the server with it, has stopped, fails
+unless the home is as it was made, each file's size and time and the
+folder's own time, so a file written and removed again shows too. Then it
+removes the folder. `playwright test` run alone is refused, as nothing
+would build the fixture or check the home.
+
+What the suite starts can reach no workspace or agent home of the
+developer's, by three means, as the CLI's own tests do it. Playwright runs
+without `MINDFLAYER_WORKSPACE`, `MINDFLAYER_HOME`, `CLAUDE_CONFIG_DIR`,
+`CODEX_HOME` and `OPENCODE_CONFIG_DIR`, so neither the server nor any worker
+inherits them, and the config refuses to load with one set. The server and
+every command get the temporary home as `HOME`, never an empty one, with
+which Rust falls back to the account's. And every line names its home with
+`--home`, its workspace with `--workspace` (empty for `flayer init`, which
+names none and ignores the variable too) and `-C`, starts in a folder under
+the temporary one, and gives every agent-home option empty
+(`e2e/environment.ts`, which the driver, the config and the specs all start
+processes through).
+
+The webServer is `flayer ui --no-open --port 0`, `exec`ed by the shell
+Playwright starts it with, so the Ctrl-C it is stopped with (`SIGINT`)
+reaches the server alone and lets it close its event streams. Port 0, so a
+run never meets another, which leaves the link the server prints first as
+the only way to know the port: the config reads it with a regex whose
+named groups Playwright puts in the environment of every worker
+(`MINDFLAYER_E2E_URL`, `MINDFLAYER_E2E_TOKEN`). The server's stdout is not
+printed, so the token stays out of the log, as the server keeps it out of
+its own; its stderr is. Every test that opens a page goes in through the
+launch link first (`panel.open`), so the token is traded for the cookie as
+a person's browser trades it. The security smoke tests send requests of
+their own: one with the cookie the link set, one with the token as
+Bearer, and one with neither.
+
+The specs hold the panel to the CLI: the overview's cards to the rows
+`flayer list --json` prints, counted from them rather than read from a
+count beside them; each project's page to what the listing says of that
+project, kind by kind, in its order; each of the library's own to its row
+and to the rows of the projects holding a copy. A security smoke test sends
+the panel's own query, with the cookie and every header the panel sends,
+from the panel's origin and from another, and only the second is refused,
+as is one carrying the token as Bearer, and the page itself.
+
+No page may log a violation of the CSP. Each engine fires
+`securitypolicyviolation` and words its own console messages, and a
+message the browser rather than a script logs may not reach Playwright, so
+a script Playwright adds beside the page's own says each event in the
+console in one form, and every test fails on any console line naming the
+policy, and on any error a page throws. One spec visits every page and
+switches the colour mode; another writes a style into the page, which the
+policy refuses, so a watch that saw nothing could not pass the rest.
+
+The browsers are Playwright's builds for its version, which `make
+web/e2e/browsers` downloads into `apps/web/node_modules`
+(`PLAYWRIGHT_BROWSERS_PATH`) rather than `~/.cache`, so what the suite
+installs stays with the clone and goes with `node_modules`. WebKit's build
+links against libraries Playwright installs only on Debian and Ubuntu
+(`WITH_DEPS=1`, with sudo), so elsewhere the suite runs in Chromium
+(`BROWSERS=chromium`), and WebKit in CI. A failed test keeps its trace,
+every action with the page and the requests at each step, in
+`test-results/`, and CI adds the HTML report.
 
 ### In `make test`, and in CI
 
@@ -4720,14 +5083,22 @@ CI gives the panel jobs of its own:
   to be gone, since a debug build reads it as requests come in and would
   pass; the script refuses to run while it is there rather than delete what
   somebody built. A script rather than a test: only a release with the
-  panel embedded can pass it, and `cargo test` builds neither.
+  panel embedded can pass it, and `cargo test` builds neither. Then it
+  uploads the release's `flayer` and `mind`.
+- **`e2e (web)`** waits for `build (cli)`, downloads those binaries outside
+  the checkout, installs Chromium and WebKit with the libraries they need,
+  and runs `make web/e2e/run` on them ([end to end, in a
+  browser](#end-to-end-in-a-browser)), uploading the traces and the report
+  when a test fails. It builds nothing: the binaries and the panel it drives
+  are the ones a release ships, the panel `test (web)` built and the
+  release `build (cli)` checked, rather than a third build of either.
 - **test-cross**, the macOS and Windows jobs, sets up Node and pnpm as
   `test (web)` does, since `make test` runs the panel's suite there, and
   runs it with `-k`, so one app failing on a platform does not hide whether
   the others pass there.
 
 The rulesets for `dev` and `main` require every check that runs on every
-pull request, the panel's two among them; AGENTS.md lists them by name.
+pull request, the panel's three among them; AGENTS.md lists them by name.
 
 `make install` and `make cli/release` build the panel first through `make
 web/build/if-node`. Where Node and pnpm run it is `make web/build`, and a
@@ -5282,9 +5653,11 @@ Record what it reads first, in docs/agents.md, verified or docs-only with a
 fallback. Then a variant on `Agent` and its name, and its arm for each kind in
 the table's `standard`, and in `read`, behind `Agent::reads`, which both match
 every pair with no wildcard: neither a new agent nor a new kind compiles until
-somebody has said where it goes and where it reads. Its arm in `at_root`,
-behind `Agent::reads_at_root`, says which files at a project's root it reads,
-for a suggestion to rank by ([which to link first](#which-to-link-first)). The
+somebody has said where it goes and where it reads. Its arm in `files`,
+behind `Agent::reads_files`, says which files in a project it reads, which
+`Agent::reads_at_root` names by the name at the root each sits under, for a
+suggestion to rank by ([which to link first](#which-to-link-first)), and
+the panel watches ([live updates](#live-updates)). The
 compiler lists every match on `Agent`, since each is exhaustive, but not what
 is not a match:
 
@@ -7191,9 +7564,23 @@ just listed.
   no holder (`warnings`), or what the overview counts (`summary`). Which
   command prints each, a `--json` of its
   own, a history command, or the snapshot whole, is left for the issues
-  whose views show them (#72 onward, #73 for the shelf, the sources and an
-  activity feed), so that each is printed as the view that needs it reads
-  it.
+  whose views show them, so that each is printed as the view that needs it
+  reads it. #73 draws the loads, the sources and the history from the
+  snapshot, and prints none of them: a `--json` for each was no part of it.
+- **Only the library's own open.** An artifact's page reads the
+  workspace's own, the one holder of the snapshot an install takes from
+  that `Query::Files` and `Query::Contents` read. What is on the shelf has
+  no holder there, and a loaded workspace's own are counted by the
+  snapshot, not listed, so neither opens yet, nor does a project's own from
+  its page, though both queries read a linked project. A shelf holder would
+  be a holder no task takes, which `task::Holder` is shared with; a query's
+  holder of its own, with the shelf among its places, would open them.
+- **A skill's links to other sites stay links.** Its markdown keeps an
+  `https:`, `http:` or `mailto:` address as a link, opened with no referrer
+  in a tab of its own, so somebody reading a gathered skill can follow what
+  it cites. A skill could point at a page made to look like the panel; the
+  link's title says its address. Showing every address as text was the
+  other way, at the price of every reference a skill cites.
 - **The TUI still counts a row's problems itself.** Its project rows show
   how many of a project's artifacts do not read or have something
   `validate` says, and its failures, counted in the CLI from the
@@ -7215,10 +7602,11 @@ just listed.
   previews of M5 (#76) turn a task into its lines.
 - **The server's replies are spelled twice.** A preview's `{lines}`, a
   run's `{lines, outcome}` and a refusal's `{error, code}` are built with
-  `json!` in the server's `api.rs` and spelled again in the panel's
-  `transport.ts`, outside what is written from Rust ([its types come from
+  `json!` in the server's `api.rs`, and the stream's events are its
+  `Event`, and all are spelled again in the panel's `transport.ts`, outside
+  what is written from Rust ([its types come from
   Rust](#its-types-come-from-rust)): the server has no `ts` feature, and its
-  own tests hold what it answers. Structs of its own deriving `Serialize`,
+  own tests hold what it answers and tells. Structs of its own deriving `Serialize`,
   and `TS` under a feature, would bring them under the drift check, at the
   price of ts-rs in the one crate that depends on no mindflayer crate.
 - **What each query is answered with is the panel's to name.** `Answers`
@@ -7226,6 +7614,27 @@ just listed.
   holds it to name every query, but nothing holds the pairing to what the
   backend answers, since `Backend::query` answers any JSON. A query type
   that says its answer in Rust, written into the TypeScript with it, would.
+- **WebKit where Playwright builds none.** Playwright's WebKit is built
+  against Ubuntu's libraries, which its `--with-deps` installs there and on
+  Debian only, so on Arch and most other systems the browser suite runs in
+  Chromium alone, and a page WebKit draws differently is found in CI. A
+  WebKit of the system's own (WebKitGTK, which a Tauri shell on Linux
+  would use) is no browser Playwright drives.
+- **The browser suite reads, and from one fixture.** No spec changes
+  anything yet; the write flows bring theirs. And its fixture holds only
+  what commands make: an install changed since, a copy edited by hand, a
+  linked folder gone or a shelf, which take a hand edit, a removal or a git
+  source and a `git` binary to make, are drawn by the views' suites from
+  the snapshots a test of the CLI writes, never end to end. So is a rule
+  installed, whose block in an `AGENTS.md` outside a work tree is a
+  warning.
+- **The browsers keep the developer's home.** Only the server and the
+  commands get the temporary `HOME`. Playwright, and the browsers it
+  starts, each with a profile of its own, keep the developer's: they reach
+  nothing of Mindflayer's but the server, and a run that names no
+  `PLAYWRIGHT_BROWSERS_PATH` finds its browsers through it. Nor does the
+  suite run on macOS or Windows: the webServer's command is a POSIX
+  shell's line.
 - **What no view reads has no TypeScript.** `status`, `scan` and
   `workspaces` print a `Status`, a `Scan` and a `Known`, and `gather list`
   its `Offer`s, which no root names, so the panel has no type for them yet.
@@ -7286,10 +7695,41 @@ just listed.
   an adopted copy no update reaches by default.
 - **A snapshot is read whole.** Every update reads every project's folders
   and the ledger again, so a workspace of many projects pays for all of them
-  each time one changes. Rebuilding only the projects whose paths changed
-  (`watched_paths`, #74) would cut that, at the price of a snapshot put
-  together from parts read at different moments, which could disagree about
-  an install that happened between two of them.
+  each time one changes. Rebuilding only the projects a change's scopes name
+  ([live updates](#live-updates)) would cut that, at the price of a
+  snapshot put together from parts read at different moments, which could
+  disagree about an install that happened between two of them.
+- **A change deep inside a skill.** A skill's own folder is watched, its
+  `SKILL.md` and what sits beside it, and nothing further down: a script in
+  `scripts/` edited by hand changes an installed copy's hash, and so its
+  state, without the panel being told until something watched changes, the
+  tab is shown again or the page asks by hand. Watching each skill's folders
+  all the way down would tell it, at the price of a watch for every folder
+  a skill keeps.
+- **A folder renamed above everything watched.** `mv ~/Work ~/Projects`
+  moves every project under it without a watched folder seeing it: a watch
+  is told of its own folder's rename and of what happens directly in it,
+  and `~/Work` is neither for any. The watches follow the folders, still
+  named by where they were, so the panel learns of it from the next change
+  in one of them, the tab shown again or a refresh by hand. Watching every
+  folder up to the root would tell it, at the price of waking for every
+  file made in each, the home folder's among them.
+- **A write the ledger has not checkpointed.** The ledger is watched by its
+  file, which a write reaches when its log is checkpointed. A connection
+  held open past a write, by a long command or a program reading the
+  ledger, delays that, and the change shows when the connection closes. The
+  panel's own runs say `command_finished` regardless, and a gather writes
+  the shelf's folders too, which are watched; a write elsewhere that nobody
+  closes on waits.
+- **The known workspaces' own markers.** The default workspace's marker is
+  watched, for which workspaces this machine knows, but not each of theirs,
+  so one renamed is shown by its old name until something watched changes.
+- **One folder by two spellings.** inotify gives one watch to a folder
+  however it was named, and notify tells its changes by the last name it
+  was watched by, so a folder reached through a link and also by its own
+  path is told under one of the two, and a change there may go untold.
+  Comparing what the system says by the folder's identity rather than its
+  name would close it.
 - **Which workspace a project's lines consult is not in the snapshot.** The
   TUI asks it beside the snapshot, from its own lookup, to know when a row's
   lines need `-W .`, and the panel's backend asks it the same way for each

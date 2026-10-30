@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import axe from 'axe-core'
-import { fixture, render, unmount, type Fixture } from './panel'
+import type { LiveEvent, Transport } from '@/api/transport'
+import { answering, fixture, render, unmount, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -33,6 +34,21 @@ const PAGES: [string, Fixture][] = [
   ['/project?entry=docs', 'workspace'],
   ['/project?entry=gone', 'workspace'],
   ['/project?entry=nowhere', 'workspace'],
+  ['/library', 'workspace'],
+  ['/library?kind=rule', 'workspace'],
+  ['/library?kind=rule&q=nowhere', 'workspace'],
+  ['/library?kind=agent', 'workspace'],
+  ['/library', 'unmade'],
+  ['/artifact?kind=skill&name=review', 'workspace'],
+  ['/artifact?kind=skill&name=review&file=references/checklist.md', 'workspace'],
+  ['/artifact?kind=rule&name=git/commits', 'workspace'],
+  ['/artifact?kind=rule&name=style/comments', 'workspace'],
+  ['/artifact?kind=skill&name=nowhere', 'workspace'],
+  ['/shelf', 'workspace'],
+  ['/shelf?kind=rule', 'workspace'],
+  ['/shelf', 'unmade'],
+  ['/sources', 'workspace'],
+  ['/sources', 'unmade'],
   ['/nowhere', 'workspace']
 ]
 
@@ -40,6 +56,23 @@ describe('every page', () => {
   it.each(PAGES)('%s, of the %s fixture, passes axe', async (path, name) => {
     await render(path, fixture(name))
 
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('a page over a workspace the server cannot watch all of', () => {
+  it('passes axe with the banner that says so', async () => {
+    const { transport } = answering(fixture('workspace'))
+    const unwatched: LiveEvent = { type: 'unwatched', reason: 'the system\'s limit on watched folders is reached' }
+    await render('/', {
+      ...transport,
+      subscribe(listener: (event: LiveEvent) => void) {
+        listener(unwatched)
+        return () => {}
+      }
+    } as Transport)
+
+    expect(document.querySelector('[data-testid="unwatched"]')).not.toBeNull()
     expect(await violations()).toEqual([])
   })
 })

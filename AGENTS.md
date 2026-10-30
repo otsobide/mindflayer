@@ -50,11 +50,15 @@ make web/lint             # ESLint, its style included; make web/fmt fixes that
 make web/build            # vue-tsc, then apps/web/dist, which the server embeds
 make web/types            # write the types from Rust into src/api/generated, then vue-tsc
 make web/types/check      # cargo and git only (CI): fail when they are not the ones committed
-make web/fixtures         # write the snapshots the views' tests render, from Rust (cargo only)
+make web/fixtures         # write the snapshots and answers the views' tests render, from Rust (cargo only)
 make web/fixtures/check   # cargo and git only (CI): fail when they are not the ones committed
 make web/typecheck        # vue-tsc alone
 make web/test PNPM='npx --yes pnpm@12.15.0'
 pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
+make web/e2e/browsers     # Chromium and WebKit for the browser suite, into apps/web/node_modules
+make web/e2e              # build the panel and the debug binaries, then drive them in both browsers
+make web/e2e BROWSERS=chromium ARGS='-g overview'            # where Playwright's WebKit cannot run, as on Arch
+make web/e2e/run E2E_BIN=<dir>                               # the suite alone, on the flayer and mind in <dir>
 ```
 
 `make test` and `make build` run the panel's targets first (`web` is in the
@@ -75,6 +79,25 @@ web/build/if-node`), and `make web/build` touches
 in. `make cli/release/check TARGET=<triple>` fails unless the release for
 that triple serves the panel from the binary once `apps/web/dist` is gone;
 CI runs it.
+
+The browser suite (`make web/e2e`) is in neither aggregate: it needs
+Playwright's browsers, which `make web/e2e/browsers` downloads into
+`apps/web/node_modules` (`PLAYWRIGHT_BROWSERS_PATH`, never `~/.cache`), and
+binaries built with the panel in them, which `make web/e2e` builds, the
+panel first. Its driver, `apps/web/e2e/run.ts`, makes the fixture workspace
+and an empty home in the system's temporary folder, and refuses one with a
+`.mind` or a `.mindflayer` above it, so never point `TMPDIR` under your
+home for it. It starts Playwright without `MINDFLAYER_WORKSPACE`,
+`MINDFLAYER_HOME`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
+`OPENCODE_CONFIG_DIR`, so neither the server nor any command a spec runs
+sees them; each of those gets the temporary home as `HOME`, `-C` and
+`--workspace` naming the fixture and every agent-home option empty; and the
+run fails unless that home is as it was made once the server has stopped.
+`pnpm exec playwright test` alone is refused, since only the driver builds
+the fixture. Playwright's WebKit needs libraries it installs only on Debian
+and Ubuntu (`WITH_DEPS=1`, with sudo): anywhere else run it with
+`BROWSERS=chromium`, and leave WebKit to CI's `e2e (web)`. A local `make
+web/e2e` writes `apps/web/dist`, as `make web/build` does.
 
 `make dev/link`, `make dev/unlink` and `make install` write into `~/.cargo/bin`
 (or `BINDIR`), outside the repository. Don't run them unless asked.
@@ -116,8 +139,12 @@ under `apps/` with its own `Makefile`:
   (`adopt`), the stable code each of its errors gives (`code`), the
   snapshot every front end reads a workspace through, with what it counts
   and each project's health, and the part of it `list --json` prints
-  (`view`), one file of an artifact read as text for
-  the panel (`contents`), which paths and entries a request from outside
+  (`view`), every path a snapshot reads that a front end watches for a
+  change, each with the holder it is of (`watch`), one file of an artifact
+  read as text for
+  the panel, cut at its front matter when it is the one the artifact is
+  read from, and every file it holds listed (`contents`), which paths and
+  entries a request from outside
   may name (`policy`), and what `show` and `validate` say of each
   artifact (`reading`). Its only I/O is files, and it never reads the
   environment. Under its `ts` feature, `typescript` gives what it hands a
@@ -160,26 +187,44 @@ under `apps/` with its own `Makefile`:
   cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
   Metadata checks and the CSP, `src/api.rs` the JSON endpoints,
   `src/writer.rs` the thread every run goes through, `src/transcript.rs` what
-  the session ran, `src/log.rs` the redacting request log and `src/panel.rs`
-  the embedded panel (`apps/web/dist`).
+  the session ran, `src/events.rs` the bus `/api/events` streams,
+  `src/watcher.rs` what watches the paths the backend names and tells the
+  bus what changed, `src/log.rs` the redacting request log and
+  `src/panel.rs` the embedded panel (`apps/web/dist`).
 - `apps/web` (`mindflayer-web`): the web panel, in Vue and Nuxt UI on Vite,
   with pnpm. `src/main.ts` mounts what `src/panel.ts` installs (router,
   Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
   too. `src/api/transport.ts` is the `Transport` interface and `useTransport`,
   and `src/api/http.ts` its HTTP implementation, `src/api/snapshot.ts` the
-  one query of the snapshot every view reads. `src/pages/` holds one page
-  per route (file routes): the overview (`index`), the projects
-  (`projects`) and a project's page (`project`, which `src/routes.ts`
-  names by its entry in the query). `src/components/` holds the frame
+  one query of the snapshot every view reads, `src/api/artifact.ts` the
+  queries of an artifact's files and of one file, and `src/api/live.ts` the
+  tab's one subscription to the server's events, which it turns into what
+  Vue Query asks for again, and how the server watches. `src/pages/` holds one
+  page per route (file routes): the overview (`index`), the projects
+  (`projects`), a project's page (`project`, which `src/routes.ts` names by
+  its entry in the query), the library (`library`), one of its own
+  (`artifact`, named by its kind and name in the query), the shelf
+  (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
+  the query a page keeps its state in, `src/library.ts` finds the projects
+  holding one of the library's own, `src/markdown.ts` draws a skill's
+  markdown from its tokens, and `src/time.ts` says the ledger's times.
+  `src/components/` holds the frame
   (`AppSidebar`, `AppHeader`, `AppLogo`) and the views' pieces: the badges
   of a state, a health and the agents, a count, the warnings panel, the
-  commands an empty state names, and `SnapshotGate`, which draws a page
-  once the snapshot is answered. `src/stores/` holds Pinia's UI state,
+  commands an empty state names, what is wrong with an artifact
+  (`IssueList`), a rendered body (`MarkdownBody`), an artifact's files
+  (`FileTree`), the ledger's latest actions (`ActivityFeed`), and
+  `SnapshotGate`, which draws a page once the snapshot is answered.
+  `src/stores/` holds Pinia's UI state,
   `src/query.ts` the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
   colour mode, and `src/overrides/` what replaces two pieces of the
   libraries for the CSP. `src/*.d.ts` are written by the Vite plugins and
   committed, and so is `src/api/generated/`, written from Rust by `make
-  web/types`.
+  web/types`. `e2e/` is the browser suite: `run.ts` its driver,
+  `environment.ts` what every process it starts runs in, `fixture.ts` the
+  workspace it builds with the commands, `panel.ts` what the specs share,
+  and the specs; `playwright.config.ts`, beside `vite.config.ts`, starts
+  `flayer ui` over that workspace.
 
 Beside them, `examples/` is content and not an app: a flayer workspace whose
 own two skills and two rules anyone can `flayer load` to try Mindflayer
@@ -571,7 +616,11 @@ These are easy to break from a single file without noticing.
     `copy::followed`, the check `copy::tree` makes, so one leading out of its
     holder is refused: a project's root, or the folder the workspace keeps
     its own of that kind in, whose root may be a home. It is the only way: `show`, which prints an artifact
-    whole through any link, is on the `Refusal` list (`show_unheld`).
+    whole through any link, is on the `Refusal` list (`show_unheld`). What
+    an artifact holds is listed in the same module, to the same bound
+    (`contents::Files`): a link further down that leads out, back into a
+    folder it is in, or to nothing is listed with why and never followed,
+    and a listing stops at `contents::FILES_CAP`.
   - An installed name must be one folder name for a skill
     (`install::is_folder_name`), and for a rule a route held to the name
     rules, which never climbs out (`install::is_installable_name`).
@@ -752,7 +801,12 @@ These are easy to break from a single file without noticing.
   `Refusal`, a code and a message, sent as a 422; a task refused when its
   lines are asked for is never run, nor kept in the transcript. Queries and
   previews run on tokio's blocking pool, and every run on the one writer
-  thread, in the order it arrived. It binds
+  thread, in the order it arrived. Which paths it watches is core's
+  (`watch::watched`), handed over by the backend (`watched_paths`), each
+  with a scope it carries to the panel unread: the watcher knows files and
+  folders, each watched on its own and never a tree, and nothing of which
+  ones a project has. The bus and the watcher stay free of axum, so a
+  desktop shell reuses them. It binds
   127.0.0.1 only, answers only a Host naming it on its port as `127.0.0.1`,
   `localhost` or `[::1]`, refuses an Origin other than its own, answers under
   `/api` only a request that carries the launch token (in the cookie
@@ -769,15 +823,26 @@ These are easy to break from a single file without noticing.
   `EventSource`, `WebSocket` or `XMLHttpRequest` (an ESLint rule, tested in
   `tests/lint.test.ts`). Authentication is the transport's: relative URLs,
   the `HttpOnly` cookie, the `X-Mindflayer: 1` header. What the server
-  answers belongs in Vue Query; Pinia holds UI state only. A view lays
+  answers belongs in Vue Query; Pinia holds UI state only. The server's
+  events reach the views only as Vue Query marking what they reached stale
+  (`src/api/live.ts`), never as a read of their own and never a scan, over
+  one subscription a tab, let go while it is hidden. A view lays
   out, groups and filters what the snapshot lists: every count it shows is
   one the snapshot carries (`summary`, a project's `tally`), every verdict
   one core gave (a project's `health`), every order the snapshot's
   (`kinds`, `states`, `healths`, the registry's). A count or a verdict a
   view needs is added to `view::Snapshot` in core, never worked out from
   the lists, and a kind core adds reaches every view with no change
-  (`tests/kinds.test.ts`). Every page passes axe (`tests/a11y.test.ts`),
-  works from the keyboard, and never says a state by colour alone.
+  (`tests/kinds.test.ts`). So is a word it compares or shows: an origin as
+  `--from` takes it (each shelf row's, source's and load's `origin`, and
+  `library.origin`), never put together from an address and a branch, and
+  an artifact's front matter, which core cuts from the file
+  (`contents::Manifest`). So is which projects hold a copy of one of the
+  library's own (`library.holders`, by `install::from_the_library`, the
+  rule `flayer remove --everywhere` follows), never told by comparing a
+  copy's origin, which an install from before origins were kept lacks. Every
+  page passes axe (`tests/a11y.test.ts`), works from the keyboard, and never
+  says a state by colour alone.
 - **The panel's types are written from Rust, and are its contract.** Every
   type core and the CLI hand the panel, or take from it, derives
   `ts_rs::TS` beside serde's derive under the `ts` feature
@@ -800,9 +865,17 @@ These are easy to break from a single file without noticing.
   by Iconify's offline build (`src/overrides/iconify.ts`), the palette is
   declared in `main.css` while Nuxt UI's colours plugin is a stub
   (`src/overrides/colors.ts`), and the colour mode switches by class
-  (`src/color-mode.ts`). `tests/dist.test.ts` builds the panel and checks
-  it; `tests/shell.test.ts` and `tests/views.test.ts` fail on any `<style>`
-  element added at run time, and on an icon the bundle lacks.
+  (`src/color-mode.ts`). What somebody else wrote, a skill's markdown, is
+  drawn element by element from marked's tokens (`src/markdown.ts`), never
+  put on the page as HTML: raw HTML shows as text, no element gets a style
+  or an event, no image loads, and a link keeps its address only to another
+  site or a mail address, never to an artifact's file
+  (`tests/markdown.test.ts`, `tests/artifact.test.ts`).
+  `tests/dist.test.ts` builds the panel and checks it; `tests/shell.test.ts`
+  and `tests/views.test.ts` fail on any `<style>` element added at run
+  time, and on an icon the bundle lacks; and `e2e/csp.spec.ts` loads every
+  page in Chromium and WebKit under the server's real header, where any
+  violation fails the test it happens in.
 - **Activating prints, and writes nothing.** `flayer activate` prints core's
   code (`activate::script`), and nothing on stdout when it fails, so `eval`
   runs nothing. Nor does it remember the workspace in the default one's
@@ -869,10 +942,16 @@ These are easy to break from a single file without noticing.
   and serve a fixture panel (`tests/panel`), so they need no Node. Every
   request names the server in Host, and `Auth::Cookie` sends what the panel's
   page would; a test of a guard changes one header of that
-  (`common::request`, then `common::deliver`). The CLI's backend has a suite
+  (`common::request`, then `common::deliver`). A test of the event stream
+  reads it a frame at a time (`common::subscribe`, `common::opened`), and
+  one that watches files watches temporary folders only, through a fake
+  that names them (`common::launch_watching`), and waits for what it
+  expects at most `common::PATIENCE`. The CLI's backend has a suite
   of its own (`apps/cli/tests/backend_test.rs`), which drives `PanelBackend`
   through the `Backend` trait with the JSON a browser sends, binding no
-  port; `apps/cli/tests/ui_test.rs` starts the binaries' `ui` on port 0
+  port, and `apps/cli/tests/live_test.rs` starts the server's watcher over
+  it on a temporary workspace; `apps/cli/tests/ui_test.rs` starts the
+  binaries' `ui` on port 0
   (`common::start`) and sends the panel's requests over loopback. No test
   opens a browser: every `ui` one starts passes `--no-open`, and the opener
   is a stand-in in `ui`'s unit tests. A suite or test about the panel is
@@ -885,13 +964,30 @@ These are easy to break from a single file without noticing.
   by hand: `apps/cli/tests/fixtures_test.rs`, under the `ts` feature,
   builds the workspaces by running the commands and writes what the
   panel's backend answers (`make web/fixtures`), with the temporary folder
-  as `/home`, fixed ids and pinned times. `tests/panel.ts` reads them and
-  mounts the panel at an address, answering its queries with one; a test
+  as `/home`, fixed ids and pinned times, and beside them what opening each
+  of the library's own is answered with (`library.json`, every files and
+  contents query an artifact's page asks). `tests/panel.ts` reads them and
+  mounts the panel at an address, answering its queries with them; a test
   about something no fixture holds changes its own copy.
   `dist.test.ts` builds the panel in a process of its own, into a temporary
   folder under `node_modules`, and leaves `dist/` alone. `licences.test.ts`
   reads every installed package's licence: a new one outside its list of
   GPL-3.0-compatible licences fails it.
+- The browser suite is `apps/web/e2e/<area>.spec.ts`, in Playwright, on
+  the real `flayer ui`: the debug build, or the binaries `E2E_BIN` names,
+  as CI names the release. It serves a workspace `e2e/fixture.ts` builds
+  with the real commands, each made to exit 0 with no warning, and
+  nothing written by hand but the folders `mind init` runs in; a state
+  only a hand edit, a removed folder or a git source makes is left to the
+  views' suites and their fixtures. Every process it starts goes through
+  `e2e/environment.ts` (`run`, `pinned`, `environment`), and the config
+  starts the server the same way, from the fixture's folder. A spec reads
+  the server from `served`, what the CLI says from `listing()`, `flayer
+  list --json` in its envelope, and opens a page with `panel.open`, through
+  the launch link, as a person does. Every test fails on a CSP violation or
+  an uncaught error on its page (`watch`), and `csp.spec.ts` holds the watch
+  to seeing one. No spec changes anything: write flows come with the issues
+  that add them.
 - The tests of the panel's types are core's and the CLI's
   `src/typescript_test.rs`, compiled only with the `ts` feature, and named
   so `--lib typescript` picks them out: each crate's export
@@ -914,11 +1010,14 @@ These are easy to break from a single file without noticing.
   into `main` come only from `dev`. PRs are merged with merge commits.
 - CI runs `fmt and clippy`, then `test (core)`, then `test (cli)`, `test
   (server)`, `test (web)` and `types drift (web)`, and builds each app after
-  its tests pass. `test (web)` is the one Linux job that sets up Node: it
-  lints, type-checks, tests and builds the panel, and uploads the build.
+  its tests pass. `test (web)` sets up Node, as only `e2e (web)` does
+  besides on Linux: it lints, type-checks, tests and builds the panel, and
+  uploads the build.
   `build (cli)` waits for it, embeds that build in a release, then removes
-  `apps/web/dist` and runs `make cli/release/check`. `types drift (web)`
-  runs `make web/types/check` and `make web/fixtures/check`. Development targets Linux only for now: macOS
+  `apps/web/dist`, runs `make cli/release/check` and uploads the release's
+  binaries, which `e2e (web)` downloads and drives in Chromium and WebKit
+  (`make web/e2e/run`), uploading the traces of what fails. `types drift
+  (web)` runs `make web/types/check` and `make web/fixtures/check`. Development targets Linux only for now: macOS
   and Windows (`test (macos)`, `test (windows)`, which set up Node too) run
   only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
   the compatibility pass (#154) puts them back on pushes to `dev`/`main` and
@@ -926,7 +1025,7 @@ These are easy to break from a single file without noticing.
 - The rulesets for `dev` and `main` require every check that runs on every
   pull request: `fmt and clippy`, `test (core)`, `test (cli)`, `test
   (server)`, `test (web)`, `types drift (web)`, `build (core)`, `build
-  (cli)` and `build (server)`, and `gitflow branch name` for `dev` or
+  (cli)`, `e2e (web)` and `build (server)`, and `gitflow branch name` for `dev` or
   `release source branch` for `main`. `test (macos)` and `test (windows)`
   are not required, since they run only when asked for. A check is required
   by its job's display name, so renaming a job means changing both

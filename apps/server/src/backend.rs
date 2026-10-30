@@ -56,8 +56,29 @@ pub trait Backend: Send + Sync + 'static {
     fn run(&self, task: Self::Task) -> Result<Self::Outcome, Refusal>;
 
     /// The files and folders whose changes mean what the panel shows is out
-    /// of date. Nothing reads them yet; live updates (#74) will watch them.
-    fn watched_paths(&self) -> Vec<PathBuf>;
+    /// of date, each with what it is of ([`Watched`]).
+    ///
+    /// Which paths those are is the front end's to say, since they are its
+    /// rules: what a project holds, and where its agents read. Asked when
+    /// the server starts and again after every change it reports, since a
+    /// change can name new ones: a project linked, a folder made.
+    fn watched_paths(&self) -> Vec<Watched>;
+}
+
+/// One path a backend asks the server to watch, and what a change to it is
+/// a change to.
+///
+/// Named, never a tree: a file is watched for its own changes and a folder
+/// for what is directly in it, nothing further down, so the backend names
+/// each folder it reads. One that is not there yet is watched for its being
+/// made, from the nearest folder above it that is.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Watched {
+    pub path: PathBuf,
+    /// The backend's own word for what the path is of, carried to the panel
+    /// in the event that says it changed and never read here: JSON, as a
+    /// query's answer is, so the server names no type of the front end's.
+    pub scope: serde_json::Value,
 }
 
 /// Why a backend will not do what it was asked, though it read the request:

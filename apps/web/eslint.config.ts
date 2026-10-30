@@ -20,6 +20,9 @@ export default withVueTs(
     ignores: [
       'dist/**',
       'node_modules/**',
+      // What the end-to-end suite writes, a report's viewer among it.
+      'test-results/**',
+      'playwright-report/**',
       // Written by the Vite plugins; checked by vue-tsc, not by hand.
       'src/auto-imports.d.ts',
       'src/components.d.ts',

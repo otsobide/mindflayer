@@ -116,6 +116,20 @@ pub struct Source {
     pub directory: String,
 }
 
+impl Source {
+    /// Where what it supplied came from, as one string: its address, with
+    /// the branch after a `#` when one was asked for. What `--from` takes
+    /// for it, and what an install from it records as its origin
+    /// ([`crate::install::Offer::origin`]), written here once so a listing
+    /// of the sources spells what an install of one of theirs does.
+    pub fn origin(&self) -> String {
+        match &self.reference {
+            Some(reference) => format!("{}#{reference}", self.url),
+            None => self.url.clone(),
+        }
+    }
+}
+
 /// One gathered artifact, and the source it came from.
 ///
 /// What it serializes to is a contract, as a status report's is: each field

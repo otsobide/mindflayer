@@ -45,6 +45,20 @@ declare module 'vue-router/auto-routes' {
       { path: ParamValue<false> },
       | never
     >,
+    '/artifact': RouteRecordInfo<
+      '/artifact',
+      '/artifact',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/library': RouteRecordInfo<
+      '/library',
+      '/library',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/project': RouteRecordInfo<
       '/project',
       '/project',
@@ -55,6 +69,20 @@ declare module 'vue-router/auto-routes' {
     '/projects': RouteRecordInfo<
       '/projects',
       '/projects',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/shelf': RouteRecordInfo<
+      '/shelf',
+      '/shelf',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/sources': RouteRecordInfo<
+      '/sources',
+      '/sources',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -88,6 +116,22 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | 'path'
     }
+    'src/pages/artifact.vue': {
+      routes:
+        | '/artifact'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/library.vue': {
+      routes:
+        | '/library'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/project.vue': {
       routes:
         | '/project'
@@ -99,6 +143,22 @@ declare module 'vue-router/auto-routes' {
     'src/pages/projects.vue': {
       routes:
         | '/projects'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/shelf.vue': {
+      routes:
+        | '/shelf'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/sources.vue': {
+      routes:
+        | '/sources'
       views:
         | never
       pathParamNames:

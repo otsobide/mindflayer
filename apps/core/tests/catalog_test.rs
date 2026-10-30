@@ -380,6 +380,62 @@ fn locating_in_a_folder_that_is_not_there_finds_nothing_and_no_failure() {
     assert!(failures.is_empty());
 }
 
+#[test]
+fn discovery_looks_in_each_skills_own_folder_and_nothing_below_it() {
+    let (_dir, one) = project("alpha");
+    write_skill(&one, "deploy", &skill_file("deploy"));
+    let skills = one.directory_for(Kind::Skill).unwrap();
+    fs::create_dir_all(skills.join("deploy/scripts/deep")).unwrap();
+    // A folder with no manifest yet: one written into it makes it a skill.
+    fs::create_dir_all(skills.join("draft")).unwrap();
+    fs::write(skills.join("README.md"), "Not a skill.\n").unwrap();
+
+    let folders = Catalog::looked_in(&skills, Kind::Skill);
+
+    assert_eq!(
+        folders,
+        [skills.clone(), skills.join("deploy"), skills.join("draft")]
+    );
+}
+
+#[test]
+fn discovery_looks_in_every_folder_of_rules_it_walks() {
+    let (_dir, one) = project("alpha");
+    let rules = one.directory_for(Kind::Rule).unwrap();
+    write_rule(&one, "git/no-force-push.md", "Never.\n");
+    write_rule(&one, "team/style/naming.md", "Names.\n");
+    // An empty folder is walked: a rule written into it is found.
+    fs::create_dir_all(rules.join("empty")).unwrap();
+    // A hidden one is not, so nothing in it is a rule.
+    write_rule(&one, ".drafts/later.md", "Later.\n");
+
+    let folders = Catalog::looked_in(&rules, Kind::Rule);
+
+    assert_eq!(
+        folders,
+        [
+            rules.clone(),
+            rules.join("empty"),
+            rules.join("git"),
+            rules.join("team"),
+            rules.join("team").join("style"),
+        ]
+    );
+}
+
+#[test]
+fn discovery_looks_in_a_folder_that_is_not_there_and_nowhere_else() {
+    let dir = TempDir::new().unwrap();
+    let missing = dir.path().join("missing");
+
+    for kind in Kind::ALL {
+        assert_eq!(
+            Catalog::looked_in(&missing, kind),
+            std::slice::from_ref(&missing)
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // References
 // ---------------------------------------------------------------------------

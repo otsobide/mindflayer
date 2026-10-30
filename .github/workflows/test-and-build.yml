@@ -53,8 +53,8 @@ jobs:
   # -------------------------------------------------------------------------
   # Tests: one job per app. Job display names follow one convention,
   # `test (<app>)` and `build (<app>)`, so a check's name says what it does and
-  # which app it belongs to; `types drift (web)`, the one check that is
-  # neither, says it the same way.
+  # which app it belongs to; `types drift (web)` and `e2e (web)`, the two
+  # checks that are neither, say it the same way.
   # -------------------------------------------------------------------------
   # Gate: the shared engine must pass before anything downstream runs.
   test-core:
@@ -407,6 +407,92 @@ jobs:
         run: |
           rm -rf apps/web/dist
           make cli/release/check TARGET="$TARGET"
+
+      # For `e2e (web)`, which drives the panel in this release, once it has
+      # been seen to serve it, rather than build the binaries, or the panel,
+      # again. Kept a week, as the panel is.
+      - name: Upload the release's binaries
+        uses: actions/upload-artifact@v6
+        with:
+          name: binaries
+          path: |
+            target/${{ env.TARGET }}/release/flayer
+            target/${{ env.TARGET }}/release/mind
+          if-no-files-found: error
+          retention-days: 7
+
+  # The panel end to end (apps/web/e2e): the release `build (cli)` built,
+  # with the panel `test (web)` built in it, serving a workspace the suite
+  # builds with its commands, driven in Chromium and WebKit. Nothing is
+  # built here: the binaries and the panel driven are the ones a release
+  # ships. Linux alone, which Playwright's WebKit runs on with the
+  # libraries `--with-deps` installs; macOS and Windows are out of its
+  # scope. A failed test's trace, and the report, are uploaded.
+  #
+  # The `if` is spelled out for the reason given above `build-core`: the
+  # implicit `success()` looks at every job upstream, not only `build-cli`,
+  # so test-cross gated off would skip this job too, and a skipped required
+  # check passes. `!cancelled()` rather than `always()`, so cancelling the
+  # run stops twenty minutes of browsers as well, which `always()` would
+  # keep running.
+  e2e-web:
+    name: e2e (web)
+    needs: build-cli
+    if: >-
+      !cancelled() &&
+      needs.build-cli.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+
+      - name: Install Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: apps/web/.node-version
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Install the panel's dependencies
+        run: make web/install
+
+      # Into node_modules, at the version the lockfile's Playwright names,
+      # with the system libraries each needs, which only this step installs
+      # with sudo.
+      - name: Install the browsers
+        run: make web/e2e/browsers WITH_DEPS=1
+
+      # Outside the checkout, so nothing the suite runs is in the
+      # repository; an artifact keeps no file mode, so they are made
+      # executable again.
+      - name: Download the release's binaries
+        uses: actions/download-artifact@v7
+        with:
+          name: binaries
+          path: ${{ runner.temp }}/binaries
+
+      - name: Make the binaries executable
+        run: chmod +x "$RUNNER_TEMP/binaries/flayer" "$RUNNER_TEMP/binaries/mind"
+
+      - name: Run the panel end to end
+        run: make web/e2e/run E2E_BIN="$RUNNER_TEMP/binaries"
+
+      - name: Upload the traces of what failed
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-traces
+          path: |
+            apps/web/test-results
+            apps/web/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
 
   build-server:
     name: build (server)
