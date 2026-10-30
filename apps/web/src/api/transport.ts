@@ -33,8 +33,12 @@ export interface Preview {
   lines: string[]
 }
 
-/** A task that ran: its lines, and what running them produced. */
-export interface Run {
+/**
+ * A task that ran: its lines, and what running them produced, each line's
+ * own run among it (the generated `Run`). What a run is answered with, and
+ * each entry of the transcript.
+ */
+export interface Ran {
   lines: string[]
   outcome: Outcome
 }
@@ -92,7 +96,7 @@ export interface Transport {
    * for its outcome.
    */
   send(task: Task, mode: 'preview'): Promise<Preview>
-  send(task: Task, mode: 'run'): Promise<Run>
+  send(task: Task, mode: 'run'): Promise<Ran>
 
   /**
    * Be told whenever what the panel shows may have changed, or how the

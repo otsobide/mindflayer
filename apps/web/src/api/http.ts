@@ -1,7 +1,7 @@
 /*
  * The one file allowed to use `fetch` and `EventSource` (see eslint.config.ts).
  */
-import { TransportError, type Answer, type LiveEvent, type Preview, type Query, type Run, type Task, type Transport } from './transport'
+import { TransportError, type Answer, type LiveEvent, type Preview, type Query, type Ran, type Task, type Transport } from './transport'
 
 /**
  * Sent with every request.
@@ -36,7 +36,7 @@ export function httpTransport(): Transport {
     send(task: Task, mode: 'preview' | 'run') {
       return mode === 'preview'
         ? post<Preview>('/api/commands/preview', task)
-        : post<Run>('/api/commands', task)
+        : post<Ran>('/api/commands', task)
     },
 
     subscribe(listener) {
