@@ -1,9 +1,9 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Page } from '@playwright/test'
 import { succeed, type Places } from './environment.ts'
 import { ASSIGNED, OFFERED } from './fixture.ts'
-import { expect, test } from './panel.ts'
+import { expect, test, tree } from './panel.ts'
 
 /*
  * Assigning from the matrix, held to the disk and to the CLI: a workspace of
@@ -21,26 +21,6 @@ const FOLDERS = ['.claude/skills', '.agents/skills']
 /** The box of the offered skill in `project`, by what it says it is. */
 function box(page: Page, project: string) {
   return page.getByRole('checkbox', { name: new RegExp(`^skill ${OFFERED.name} from ${OFFERED.origin} in ${project}(;|$)`) })
-}
-
-/** Every file under `root` but its `.mind`, by its route, with what it holds. */
-function tree(root: string): Record<string, string> {
-  const found: Record<string, string> = {}
-  const walk = (folder: string) => {
-    for (const name of readdirSync(folder)) {
-      const path = join(folder, name)
-      if (name === '.mind') {
-        continue
-      }
-      if (statSync(path).isDirectory()) {
-        walk(path)
-      } else {
-        found[relative(root, path)] = readFileSync(path, 'utf8')
-      }
-    }
-  }
-  walk(root)
-  return found
 }
 
 /** Whether `project` holds a copy of the offered skill where each agent reads one. */

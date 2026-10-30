@@ -3,13 +3,13 @@
  * through its launch link as a person opens it, and what the CLI says of the
  * same workspace, to hold the page to.
  */
-import { cpSync, mkdtempSync } from 'node:fs'
-import { join } from 'node:path'
+import { cpSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { test as base, expect, type Page } from '@playwright/test'
 import type { Envelope } from '../src/api/generated/Envelope'
 import type { Listing } from '../src/api/generated/Listing'
 import { given, run, serve, type Places } from './environment.ts'
-import { assignable, changeable } from './fixture.ts'
+import { assignable, changeable, updatable } from './fixture.ts'
 
 /** The server under test, as the link it printed says. */
 export interface Served {
@@ -103,9 +103,10 @@ export interface Own extends Panel {
 /**
  * What a test's own workspace is built as: `changeable`, for the links and
  * unlinks, unless the spec says `assignable`, for the matrix
- * (`test.use({ building: 'assignable' })`).
+ * (`test.use({ building: 'assignable' })`), or `updatable`, for updating
+ * and removing.
  */
-const BUILDERS = { changeable, assignable }
+const BUILDERS = { changeable, assignable, updatable }
 
 export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, own: Own, building: keyof typeof BUILDERS }>({
   building: ['changeable', { option: true }],
@@ -181,4 +182,28 @@ export function listing(): Listing {
   expect(envelope.version).toBe(2)
   expect(envelope.warnings).toEqual([])
   return envelope.data
+}
+
+/**
+ * Every file under `root` but its `.mind`, by its route, with what it
+ * holds: what a project holds, to hold what the panel left in one to what
+ * the same lines left in its twin.
+ */
+export function tree(root: string): Record<string, string> {
+  const found: Record<string, string> = {}
+  const walk = (folder: string) => {
+    for (const name of readdirSync(folder)) {
+      const path = join(folder, name)
+      if (name === '.mind') {
+        continue
+      }
+      if (statSync(path).isDirectory()) {
+        walk(path)
+      } else {
+        found[relative(root, path)] = readFileSync(path, 'utf8')
+      }
+    }
+  }
+  walk(root)
+  return found
 }
