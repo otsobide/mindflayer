@@ -113,6 +113,7 @@ impl Admission<'_> {
             | Task::Validate { holder }
             | Task::Targets { holder, .. }
             | Task::Settings { holder, .. }
+            | Task::Toggled { holder, .. }
             | Task::Update { holder, .. } => *holder = self.holder(holder)?,
             Task::Install { projects, .. } | Task::Uninstall { projects, .. } => {
                 for project in projects {

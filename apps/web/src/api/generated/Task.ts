@@ -4,6 +4,7 @@ import type { Holder } from "./Holder";
 import type { Kind } from "./Kind";
 import type { Mark } from "./Mark";
 import type { Share } from "./Share";
+import type { Toggles } from "./Toggles";
 
 /**
  * Work a front end asked for, as the command it is.
@@ -26,4 +27,4 @@ agents: AgentsLine | null,
 /**
  * The share mode, when it or `edit_tracked` changes.
  */
-share: Share | null, edit_tracked: boolean, } | { "type": "update", holder: Holder, reference: string | null, } | { "type": "install", projects: Array<string>, kind: Kind, name: string, from: string | null, } | { "type": "uninstall", projects: Array<string>, kind: Kind, name: string, } | { "type": "adopt", project: string, kind: Kind, name: string, } | { "type": "open_install" } | { "type": "apply_install", changes: Array<Task>, } | { "type": "refresh" };
+share: Share | null, edit_tracked: boolean, } | { "type": "toggled", holder: Holder, was: Toggles, now: Toggles, } | { "type": "update", holder: Holder, reference: string | null, } | { "type": "install", projects: Array<string>, kind: Kind, name: string, from: string | null, } | { "type": "uninstall", projects: Array<string>, kind: Kind, name: string, } | { "type": "adopt", project: string, kind: Kind, name: string, } | { "type": "open_install" } | { "type": "apply_install", changes: Array<Task>, } | { "type": "refresh" };

@@ -228,6 +228,24 @@ pub enum Task {
         share: Option<Share>,
         edit_tracked: bool,
     },
+    /// What a project's toggles amount to, turned from `was`, what its
+    /// settings say, to `now`, what the toggles say: the
+    /// [`Settings`](Task::Settings) task [`Task::settings`] builds, whose
+    /// lines these are, as the TUI's toggles' are.
+    ///
+    /// How the panel changes a project's agents and share mode: it sends
+    /// the toggles as they stand, never the lines' agents, so the order a
+    /// project names them in, and what unticking every one asks, is said by
+    /// the one function, never again in TypeScript. `was` is what the
+    /// panel read in the snapshot, as the TUI's is what it read when the
+    /// form opened: each line names the agents and the mode outright, so a
+    /// `was` the disk has moved on from changes which lines run, never what
+    /// a line sets.
+    Toggled {
+        holder: Holder,
+        was: Toggles,
+        now: Toggles,
+    },
     /// `… update --yes [<kind:name>]`: what is installed in a project, or
     /// the one artifact named, brought up to date and put back where a copy
     /// has gone; `flayer update --all --yes [<kind:name>]` for the
@@ -528,6 +546,8 @@ impl Task {
                 }
                 lines
             }
+            Task::Toggled { holder, was, now } => Task::settings(holder.clone(), was, now)
+                .map_or_else(Vec::new, |settings| settings.commands()),
             Task::Targets {
                 holder,
                 kind,
@@ -616,6 +636,7 @@ impl Task {
                 | Task::Minds { .. }
                 | Task::Marks { .. }
                 | Task::Settings { .. }
+                | Task::Toggled { .. }
                 | Task::Targets { .. }
                 | Task::Update { .. }
                 | Task::Install { .. }

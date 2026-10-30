@@ -12,7 +12,7 @@ use crate::{Cli, FlayerCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 31] = [
+const TAGS: [&str; 32] = [
     "init_workspace",
     "init_project",
     "link",
@@ -37,6 +37,7 @@ const TAGS: [&str; 31] = [
     "gather",
     "targets",
     "settings",
+    "toggled",
     "update",
     "install",
     "uninstall",
@@ -237,6 +238,16 @@ fn every(value: &str) -> Vec<Task> {
                 share: Some(Share::Shared),
                 edit_tracked: false,
             },
+            Task::Toggled {
+                holder: holder.clone(),
+                was: toggles(&[Agent::OpenCode, Agent::Claude], Share::Shared, false),
+                now: toggles(&[Agent::Codex, Agent::Claude], Share::Local, true),
+            },
+            Task::Toggled {
+                holder: holder.clone(),
+                was: toggles(&[Agent::Codex], Share::Local, false),
+                now: toggles(&[], Share::Local, false),
+            },
         ]);
     }
     tasks
@@ -425,6 +436,49 @@ fn marks_sent_as_json_make_the_lines_the_minds_screen_makes_for_the_same_selecti
         assert_eq!(sent.cautions(), screen.task().unwrap().cautions());
     }
     assert_eq!(marked(&screen(&[])).commands(), Vec::<Vec<String>>::new());
+}
+
+#[test]
+fn toggles_sent_as_json_make_the_lines_the_task_module_builds_from_them() {
+    let holder = Holder::Project(String::from("alpha"));
+    let was = toggles(&[Agent::OpenCode, Agent::Claude], Share::Shared, false);
+    let now = toggles(&[Agent::Codex, Agent::Claude], Share::Local, true);
+
+    let sent: Task = serde_json::from_value(serde_json::json!({
+        "type": "toggled",
+        "holder": {"type": "project", "entry": "alpha"},
+        "was": {"agents": ["opencode", "claude"], "share": "shared", "edit_tracked": false},
+        "now": {"agents": ["codex", "claude"], "share": "local", "edit_tracked": true},
+    }))
+    .unwrap();
+
+    assert_eq!(
+        sent.commands(),
+        [
+            owned(&["mind", "-C", "alpha", "agents", "--yes", "claude", "codex"]),
+            owned(&[
+                "mind",
+                "-C",
+                "alpha",
+                "share",
+                "--yes",
+                "--edit-tracked",
+                "local"
+            ]),
+        ]
+    );
+    assert_eq!(
+        sent.commands(),
+        Task::settings(holder.clone(), &was, &now)
+            .unwrap()
+            .commands()
+    );
+    let unchanged = Task::Toggled {
+        holder,
+        was: was.clone(),
+        now: was,
+    };
+    assert_eq!(unchanged.commands(), Vec::<Vec<String>>::new());
 }
 
 #[test]

@@ -4,11 +4,11 @@
 use std::fs;
 use std::path::Path;
 
-use mindflayer_core::{Kind, MindProject};
+use mindflayer_core::{Agent, Kind, MindProject, Share};
 use tempfile::TempDir;
 
 use super::*;
-use crate::task::{shell, Mark, MindsChange};
+use crate::task::{shell, Mark, MindsChange, Toggles};
 
 /// A workspace at `work` linking `alpha` under it and `beside` next to it,
 /// and loading `library`, next to it too: nothing above any of them, so
@@ -78,6 +78,34 @@ fn a_project_held_by_its_entry_is_named_to_the_command_by_its_folder() {
             "mind -C {} add skill deploy 'Ship it'",
             text(&alpha)
         )]
+    );
+}
+
+#[test]
+fn a_project_s_toggles_are_held_to_its_entry_and_named_by_its_folder() {
+    let (_dir, workspace) = fixture();
+    let alpha = text(&workspace.root().join("alpha"));
+    let toggles = |agents: &[Agent], share| Toggles {
+        agents: agents.to_vec(),
+        share,
+        edit_tracked: false,
+    };
+    let toggled = |entry: &str| Task::Toggled {
+        holder: Holder::Project(entry.to_owned()),
+        was: toggles(&[Agent::Claude], Share::Shared),
+        now: toggles(&[Agent::Codex, Agent::Claude], Share::Local),
+    };
+
+    assert_eq!(
+        lines(&workspace, &toggled("alpha")),
+        [
+            format!("mind -C {alpha} agents --yes claude codex"),
+            format!("mind -C {alpha} share --yes local"),
+        ]
+    );
+    assert_eq!(
+        code(admitted(&workspace, &toggled("beta"))),
+        "not_registered"
     );
 }
 
