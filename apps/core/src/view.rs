@@ -82,6 +82,11 @@ pub struct Snapshot {
     pub agents: Vec<Agent>,
     /// Every state an artifact can stand in, in report order.
     pub states: Vec<State>,
+    /// Every state a box of an offer ([`Snapshot::boxes`]) can stand in, in
+    /// report order ([`State::of_boxes`]): `states` but `authored`, which no
+    /// offer is. What a legend of the boxes lists, so a front end leaves
+    /// out no state by its name.
+    pub box_states: Vec<State>,
     /// Every health a project can be in, in report order: what a front end
     /// sorts and filters its projects by, so it orders none of its own.
     pub healths: Vec<Health>,
@@ -955,6 +960,7 @@ impl Snapshot {
             kinds: Kind::ALL.to_vec(),
             agents: Agent::ALL.to_vec(),
             states: State::ALL.to_vec(),
+            box_states: State::of_boxes(),
             healths: Health::ALL.to_vec(),
             summary: Summary::of(&projects, &library, &shelf),
             library,

@@ -75,7 +75,8 @@ describe('the matrix', () => {
   })
 
   it('says each state a box stands in, as core says it, by an icon and in its words', async () => {
-    const { page } = await render('/assign', fixture('assigning'))
+    const snapshot = fixture('assigning')
+    const { page } = await render('/assign', snapshot)
 
     const web = box(page, 'skill', 'review', 'workspace', 'web')
     expect(web.attributes('aria-label')).toBe('skill review from workspace in web; edited')
@@ -87,7 +88,10 @@ describe('the matrix', () => {
     expect(deploy.attributes('aria-checked')).toBe('false')
     expect(deploy.attributes('data-state')).toBe('current')
     expect(box(page, 'skill', 'deploy', 'load:../team', 'api').attributes('aria-checked')).toBe('true')
-    expect(texts(page, '[data-testid="legend"] li')).toEqual(expect.arrayContaining(['current', 'outdated', 'edited', 'foreign']))
+    // The states core says a box can stand in, and only those: no offer is
+    // a project's own work, so a box is never `authored`.
+    expect(texts(page, '[data-testid="legend-state"]')).toEqual(snapshot.box_states)
+    expect(snapshot.states.filter(state => !snapshot.box_states.includes(state))).toEqual(['authored'])
   })
 
   it('turned round by project, has a row a project and a column an offer, the origins along the top', async () => {

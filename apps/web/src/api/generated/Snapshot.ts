@@ -43,6 +43,13 @@ agents: Array<Agent>,
  */
 states: Array<State>, 
 /**
+ * Every state a box of an offer ([`Snapshot::boxes`]) can stand in, in
+ * report order ([`State::of_boxes`]): `states` but `authored`, which no
+ * offer is. What a legend of the boxes lists, so a front end leaves
+ * out no state by its name.
+ */
+box_states: Array<State>, 
+/**
  * Every health a project can be in, in report order: what a front end
  * sorts and filters its projects by, so it orders none of its own.
  */

@@ -244,6 +244,14 @@ const EXPECTED: &str = r#"{
     "foreign",
     "authored"
   ],
+  "box_states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign"
+  ],
   "healths": [
     "ok",
     "attention",

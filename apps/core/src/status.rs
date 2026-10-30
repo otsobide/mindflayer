@@ -251,6 +251,21 @@ impl State {
         }
     }
 
+    /// Every state a box of an offer can stand in, in report order: each
+    /// that [`State::of_standing`] says of some standing, which leaves out
+    /// `authored`, since no offer is a project's own work. What a legend of
+    /// the boxes lists, so a front end leaves out no state by its name.
+    pub fn of_boxes() -> Vec<State> {
+        State::ALL
+            .into_iter()
+            .filter(|state| {
+                Standing::ALL
+                    .into_iter()
+                    .any(|standing| State::of_standing(standing) == Some(*state))
+            })
+            .collect()
+    }
+
     /// Whether every copy of what was installed is where it was put, as it
     /// was put there: what `missed` says of a rule only when it holds.
     fn whole(self) -> bool {

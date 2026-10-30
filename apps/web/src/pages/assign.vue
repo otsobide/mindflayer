@@ -592,7 +592,7 @@ function commands(snapshot: Snapshot) {
             class="w-fit max-w-full"
             :label="byProject ? 'Every project against every offer' : 'Every offer against every project'"
             :corner="byProject ? 'project \\ offer' : 'offer \\ project'"
-            :states="snapshot.states"
+            :states="snapshot.box_states"
             :rows="rows"
             :lines="lines"
             :columns="columns"
@@ -636,9 +636,10 @@ function commands(snapshot: Snapshot) {
               marked, not applied yet
             </li>
             <li
-              v-for="state in snapshot.states"
+              v-for="state in snapshot.box_states"
               :key="state"
               class="flex items-center gap-1"
+              data-testid="legend-state"
             >
               <UIcon
                 :name="stateLook(state).icon"

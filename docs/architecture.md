@@ -1699,10 +1699,14 @@ read, built and ordered in core from the read types the commands print:
   its `origin`; and each entry's boxes of them that are not empty
   (`boxes`, `view::Boxes`), in the registry's order: for each offer of a
   name the project holds something of or records, the state of the name
-  and whether its box is ticked (`view::HeldBox`), and each kind none of
-  its boxes can be asked about, by the code a plan locks one by
-  (`view::Closed`: `no_target` from `install::receives`, or why its entry
-  opens no project). Told by the install screen's own functions, over the
+  and whether its box is ticked (`view::HeldBox`), every state one can
+  stand in listed apart (`box_states`, `State::of_boxes`: what
+  `State::of_standing` says of some `install::Standing`, so `states` but
+  `authored`, which no offer is), for a legend of the boxes to list rather
+  than leave a state out by its name, and each kind none of its boxes can
+  be asked about, by the code a plan locks one by (`view::Closed`:
+  `no_target` from `install::receives`, or why its entry opens no
+  project). Told by the install screen's own functions, over the
   offers read once rather than once a project (`install::survey_among`,
   then `install::holding`), so the panel's matrix opens on the boxes the
   screen opens on, and each box asked as the snapshot shows it plans
@@ -5014,7 +5018,8 @@ ninth a scan beside it, each a file under `src/pages`:
   offer under a heading for its origin and a column a project, or turned
   round by project, a row a project and the origins in a band over the
   offers' columns. Each box is ticked where `boxes` says, with the icon of
-  its name's state over its corner, and one of a kind its project can take
+  its name's state over its corner, each state in `box_states` said in the
+  legend below, and one of a kind its project can take
   none of is closed, saying why. Kind, origin and text filter the offers and
   the agent the projects, whichever way round, in the address. The boxes
   marked are planned, and applied ([its changes](#its-changes)).

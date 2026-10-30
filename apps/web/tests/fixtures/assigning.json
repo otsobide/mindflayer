@@ -4,6 +4,14 @@
     "codex",
     "opencode"
   ],
+  "box_states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign"
+  ],
   "boxes": [
     {
       "closed": [],

@@ -13,6 +13,33 @@ fn a_state_is_serialized_as_its_slug() {
 }
 
 #[test]
+fn a_box_of_an_offer_stands_in_every_state_but_authored() {
+    assert_eq!(
+        State::of_boxes(),
+        [
+            State::Current,
+            State::Outdated,
+            State::Edited,
+            State::Missing,
+            State::Orphaned,
+            State::Foreign,
+        ]
+    );
+}
+
+#[test]
+fn every_standing_says_a_state_of_its_own_but_absent() {
+    let mut said: Vec<State> = Standing::ALL
+        .into_iter()
+        .filter_map(State::of_standing)
+        .collect();
+    said.sort_unstable();
+    said.dedup();
+
+    assert_eq!(said.len(), Standing::ALL.len() - 1);
+}
+
+#[test]
 fn every_state_has_a_slug_of_its_own() {
     let mut slugs: Vec<&str> = State::ALL.iter().map(|state| state.slug()).collect();
     slugs.sort_unstable();

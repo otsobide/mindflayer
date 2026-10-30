@@ -61,7 +61,7 @@ import { stateLook } from './StateBadge.vue'
 const props = defineProps<{
   /** The grid's name, for whoever cannot see it. */
   label: string
-  /** Every state a box can stand in, as the snapshot lists them, whose icons it draws. */
+  /** Every state a box can stand in, as the snapshot lists them (`box_states`), whose icons it draws. */
   states: State[]
   /** What the column of row names is headed by. */
   corner: string
