@@ -107,6 +107,7 @@ export type CoreCode =
   | "contents_route_unfit"
   | "contents_outside"
   | "contents_missing"
+  | "contents_name_unfit"
   | "contents_not_a_file"
   | "contents_cycle"
   | "contents_unreadable"

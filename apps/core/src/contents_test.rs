@@ -506,6 +506,71 @@ fn a_link_out_back_up_or_nowhere_is_listed_with_why_and_never_followed() {
         .any(|entry| entry.path.contains("id_ed25519")));
 }
 
+/// A name holding a `\\` is no part of a route ([`place`] refuses it), so it
+/// is listed with why rather than as a file to ask for, and a folder of
+/// such a name is not walked.
+#[cfg(unix)]
+#[test]
+fn a_name_holding_a_backslash_is_listed_with_why_and_never_opened() {
+    let (_dir, project) = fixture();
+    let skill = skill_folder(&project, "deploy");
+    fs::write(skill.join("a\\b.md"), "x\n").unwrap();
+    fs::create_dir_all(skill.join("odd\\folder")).unwrap();
+    fs::write(skill.join("odd\\folder").join("inside.md"), "y\n").unwrap();
+
+    let files = Files::of_project(&project, "deploy").unwrap();
+
+    assert_eq!(
+        refusals(&files),
+        [
+            ("SKILL.md", None),
+            ("a\\b.md", Some("contents_name_unfit")),
+            ("odd\\folder", Some("contents_name_unfit")),
+            ("references", None),
+            ("references/guide.md", None),
+        ]
+    );
+    let odd = &files.entries[1];
+    assert_eq!((odd.folder, odd.size), (false, None));
+    assert_eq!(
+        code(Contents::of_project(&project, "deploy", "a\\b.md")),
+        "contents_route_unfit"
+    );
+    // Every route listed as one to ask for is one a file is read by.
+    for entry in files
+        .entries
+        .iter()
+        .filter(|entry| !entry.folder && entry.refused.is_none())
+    {
+        Contents::of_project(&project, "deploy", &entry.path).unwrap();
+    }
+}
+
+/// A name that is not UTF-8 has no spelling a file is asked for by: listed
+/// as near as UTF-8 writes it, with why. Linux alone, whose file systems
+/// take any bytes in a name, where macOS's refuse one that is not UTF-8.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_name_that_is_not_utf8_is_listed_with_why_and_never_opened() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let (_dir, project) = fixture();
+    let skill = skill_folder(&project, "deploy");
+    fs::write(skill.join(OsStr::from_bytes(b"notes-\xff.md")), "x\n").unwrap();
+
+    let files = Files::of_project(&project, "deploy").unwrap();
+
+    assert_eq!(
+        refusals(&files),
+        [
+            ("SKILL.md", None),
+            ("notes-\u{fffd}.md", Some("contents_name_unfit")),
+            ("references", None),
+            ("references/guide.md", None),
+        ]
+    );
+}
+
 /// A folder linked from inside the holder is walked as the folder it leads
 /// to, under the route of the link.
 #[cfg(unix)]

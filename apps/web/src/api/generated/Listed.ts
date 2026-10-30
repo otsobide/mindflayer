@@ -7,7 +7,10 @@ import type { Said } from "./Said";
 export type Listed = { 
 /**
  * Its route from the artifact's folder, `/` separated, as [`Contents`]
- * takes it; a rule's own file name.
+ * takes it; a rule's own file name. One whose name no route spells is
+ * refused (`contents_name_unfit`) and listed by that name as near as
+ * UTF-8 writes it, which another entry's can match: a refused entry is
+ * shown, never asked for.
  */
 path: string, 
 /**

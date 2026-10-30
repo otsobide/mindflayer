@@ -27,9 +27,9 @@
 //! What an artifact holds is listed the same way ([`Files`]): every file and
 //! folder by its route, a link judged by the same check before it is
 //! followed, one leading out of the holder or back into a folder above it
-//! listed with why and never followed, and no more than [`FILES_CAP`] of
-//! them, so a front end can show a skill's tree and ask for each file in it
-//! by the route it lists.
+//! listed with why and never followed, as is one whose name no route
+//! spells, and no more than [`FILES_CAP`] of them, so a front end can show
+//! a skill's tree and ask for each file in it by the route it lists.
 //!
 //! Rules in core, as every rule about a path is: the server carries what this
 //! answers and the panel draws it, and neither could disagree with the other
@@ -153,7 +153,10 @@ pub struct Files {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct Listed {
     /// Its route from the artifact's folder, `/` separated, as [`Contents`]
-    /// takes it; a rule's own file name.
+    /// takes it; a rule's own file name. One whose name no route spells is
+    /// refused (`contents_name_unfit`) and listed by that name as near as
+    /// UTF-8 writes it, which another entry's can match: a refused entry is
+    /// shown, never asked for.
     pub path: String,
     /// Whether it is a folder, whose files are listed after it.
     pub folder: bool,
@@ -217,6 +220,8 @@ pub enum ContentsError {
     },
     #[error("{path}: no such file")]
     Missing { path: PathBuf },
+    #[error("{path} has a name no route spells, one that is not UTF-8 or holds a `\\`, so it is not opened")]
+    NameUnfit { path: PathBuf },
     #[error("{path}: not a file")]
     NotAFile { path: PathBuf },
     #[error("{path} leads back to {resolved}, a folder it is in, so it is not followed")]
@@ -233,6 +238,7 @@ codes!(ContentsError {
     Self::Route { .. } => "contents_route_unfit",
     Self::Outside { .. } => "contents_outside",
     Self::Missing { .. } => "contents_missing",
+    Self::NameUnfit { .. } => "contents_name_unfit",
     Self::NotAFile { .. } => "contents_not_a_file",
     Self::Cycle { .. } => "contents_cycle",
     Self::Unreadable { .. } => "contents_unreadable",
@@ -606,6 +612,16 @@ impl Walk {
                 format!("{route}/{shown}")
             };
             let named = path.join(&name);
+            // Listed only by a route a file is then asked for by, which
+            // `place` takes a part at a time: a name that is not UTF-8
+            // would be listed by a spelling no file has, and one holding a
+            // `\` by one `place` refuses, so either is a button that can
+            // only fail. Refused before it is followed, and a folder of
+            // either never walked, since every route below it would be one.
+            if !name.to_str().is_some_and(install::is_folder_name) {
+                self.refuse(route, ContentsError::NameUnfit { path: named });
+                continue;
+            }
             // The resolved folder from here on, never the one named: a link
             // put in its place after it was checked is not followed.
             let target = match held(&resolved.join(&name), &self.bound) {

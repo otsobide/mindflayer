@@ -4281,9 +4281,13 @@ as a file of it is refused; a link further down that leads out is listed
 with why and never followed, nor is one leading back into a folder it is
 in (`contents_cycle`) or to nothing (`contents_missing`), so one bad link
 hides nothing else and costs no walk without end. Nothing of where a
-refused link leads is listed, only its path in the reason. #67 left the
-listing for later; it sits beside the reading, in one module, so the two
-cannot hold a file to different bounds.
+refused link leads is listed, only its path in the reason. A name no route
+spells, one that is not UTF-8 or that holds a `\`, which `place` refuses as
+a part of a route, is listed with why too (`contents_name_unfit`), by its
+name as near as UTF-8 writes it, and a folder of one is not walked: listed
+as a file, it would be a button whose answer could only be a refusal. #67
+left the listing for later; it sits beside the reading, in one module, so
+the two cannot hold a file to different bounds.
 
 It is the one way a file's contents reach the browser. `show` would be a
 second: it prints an artifact whole, read through every link on the way,

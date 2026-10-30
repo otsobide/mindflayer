@@ -38,7 +38,9 @@ function named(entry: Listed): string {
     A list of every entry in the order core lists them, a folder before what
     it holds, each drawn in by how deep it is and named in full for a screen
     reader. A file is a button that asks for its text, never a link to it:
-    no file of an artifact is served as itself.
+    no file of an artifact is served as itself. Keyed by place, not route:
+    a refused entry whose name no route spells is listed as near as UTF-8
+    writes it, which another entry's can match.
   -->
   <ul
     class="flex flex-col rounded-lg border border-default py-1 font-mono text-xs"
@@ -46,8 +48,8 @@ function named(entry: Listed): string {
     data-testid="files"
   >
     <li
-      v-for="entry in files.entries"
-      :key="entry.path"
+      v-for="(entry, index) in files.entries"
+      :key="index"
       data-testid="entry"
     >
       <div
