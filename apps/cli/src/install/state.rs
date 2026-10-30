@@ -156,37 +156,6 @@ pub struct Target {
 }
 
 impl Target {
-    /// When several offers of one name are in the project (they share its
-    /// one folder, so standing alone says each of them is), keep the box of
-    /// the one whose copy is there, as `current` tells, and clear the rest;
-    /// the first, if none matches because the copy was changed since.
-    pub fn settle(&mut self, current: impl Fn(&Candidate) -> bool) {
-        let mut held: Vec<usize> = Vec::new();
-        for (index, row) in self.rows.iter().enumerate() {
-            if row.was && !row.foreign() && !held.iter().any(|&seen| self.rows[seen].same(row)) {
-                held.push(index);
-            }
-        }
-        for first in held {
-            let same: Vec<usize> = (0..self.rows.len())
-                .filter(|&index| self.rows[index].same(&self.rows[first]))
-                .collect();
-            if same.len() < 2 {
-                continue;
-            }
-            let chosen = same
-                .iter()
-                .copied()
-                .find(|&index| current(&self.rows[index].candidate))
-                .unwrap_or(same[0]);
-            for index in same {
-                let row = &mut self.rows[index];
-                row.was = index == chosen;
-                row.checked = row.was;
-            }
-        }
-    }
-
     pub fn new(project: MindProject, picked_by: String, candidates: Vec<Candidate>) -> Self {
         Self {
             project,
