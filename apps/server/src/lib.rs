@@ -10,6 +10,7 @@
 mod api;
 mod auth;
 mod backend;
+mod events;
 mod guard;
 mod log;
 mod panel;
@@ -19,5 +20,6 @@ mod transcript;
 mod writer;
 
 pub use backend::{Backend, Refusal, Watched};
+pub use events::{Event, Events, Subscription, CAPACITY};
 pub use panel::Panel;
 pub use server::{Listening, Server};
