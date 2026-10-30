@@ -173,12 +173,12 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
         ),
         (
             "a holder by its path",
-            json!({"type": "update", "holder": {"type": "project", "entry": alpha}, "reference": null}),
+            json!({"type": "update", "holder": {"type": "project", "entry": alpha}, "reference": null, "force": false}),
             "not_registered",
         ),
         (
             "one project of two",
-            json!({"type": "uninstall", "projects": ["alpha", "gamma"], "kind": "skill", "name": "alpha"}),
+            json!({"type": "uninstall", "projects": ["alpha", "gamma"], "kind": "skill", "name": "alpha", "force": false}),
             "not_registered",
         ),
         (
@@ -233,7 +233,7 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
         (
             "an editor in a batch",
             json!({"type": "apply_install", "changes": [
-                {"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "alpha"},
+                {"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "alpha", "force": false},
                 {"type": "edit", "holder": {"type": "workspace"}, "kind": "skill", "name": "x"},
             ]}),
             "opens_editor",
@@ -365,6 +365,7 @@ fn a_line_that_fails_says_so_with_its_code() {
             "kind": "skill",
             "name": "missing",
             "everywhere": false,
+            "yes": true,
         })))
         .unwrap();
 
@@ -398,6 +399,7 @@ fn the_transcript_holds_the_lines_that_changed_something_and_no_read() {
             "kind": "skill",
             "name": "missing",
             "everywhere": false,
+            "yes": true,
         })))
         .unwrap();
 
@@ -843,12 +845,20 @@ fn a_preview_says_what_its_lines_take_away_for_the_panel_to_confirm() {
         (
             json!({
                 "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
-                "name": "deploy", "everywhere": true,
+                "name": "deploy", "everywhere": true, "yes": true,
             }),
             json!([
                 {"line": 0, "caution": "removes", "message": removes},
                 {"line": 0, "caution": "uninstalls", "message": uninstalls},
             ]),
+        ),
+        // Its dry run, which takes nothing.
+        (
+            json!({
+                "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
+                "name": "deploy", "everywhere": true, "yes": false,
+            }),
+            json!([]),
         ),
         // Its `mind init`, its `flayer link` and its `flayer unlink`.
         (
@@ -887,7 +897,7 @@ fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
     let preview = backend
         .preview(&task(json!({
             "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
-            "name": "deploy", "everywhere": false,
+            "name": "deploy", "everywhere": false, "yes": true,
         })))
         .unwrap_or_else(|refusal| panic!("{refusal:?}"));
 
@@ -1338,7 +1348,7 @@ fn a_plan_is_answered_with_the_tasks_that_carry_it_out_and_changes_nothing() {
                     "name": "deploy",
                     "from": "load:../team",
                 },
-                {"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "deploy"},
+                {"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "deploy", "force": false},
             ],
             "conflicts": [],
             "locked": [],
@@ -1671,7 +1681,7 @@ fn a_task_reaching_somebodys_copy_is_refused_by_its_line_and_writes_nothing() {
     let ledger = recorded(&home);
 
     for change in [
-        json!({"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "review"}),
+        json!({"type": "uninstall", "projects": ["alpha"], "kind": "skill", "name": "review", "force": false}),
         json!({
             "type": "install", "projects": ["alpha"], "kind": "skill", "name": "review",
             "from": "workspace",
@@ -1693,4 +1703,312 @@ fn a_task_reaching_somebodys_copy_is_refused_by_its_line_and_writes_nothing() {
     }
     assert_eq!(files(dir.path()), before);
     assert_eq!(recorded(&home), ledger);
+}
+
+// ---------------------------------------------------------------------------
+// What an update would do, and the tasks the page of updates sends
+// ---------------------------------------------------------------------------
+
+/// Under the folder it returns: a workspace at `home` with the skills
+/// `lint`, `review` and `old` of its own, linking `alpha` and `beta`, each a
+/// repository given `mind init`: both received `lint`, changed in the
+/// library since, `beta`'s copy of it in Claude's folder edited by hand;
+/// `alpha` received `review`, its copy in `.agents/skills` deleted since;
+/// and `beta` received `old`, removed from the library alone since. Its
+/// second value is `home`.
+fn updating() -> (TempDir, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir_all(&home).unwrap();
+    flayer(&home, &["init"]).unwrap();
+    for (name, description) in [
+        ("lint", "Tidy the code"),
+        ("review", "Review a change"),
+        ("old", "Done the old way"),
+    ] {
+        flayer(&home, &["add", "skill", name, description]).unwrap();
+    }
+    for (project, installs) in [("alpha", &["lint", "review"]), ("beta", &["lint", "old"])] {
+        let root = home.join(project);
+        fs::create_dir(&root).unwrap();
+        new_project(&root);
+        flayer(&home, &["link", project]).unwrap();
+        for name in installs {
+            let installed = flayer(&home, &["install", "-p", project, name]).unwrap();
+            assert!(installed.ok, "{installed:?}");
+        }
+    }
+    let changed = |file: &Path, line: &str| {
+        let text = fs::read_to_string(file).unwrap();
+        fs::write(file, format!("{text}\n{line}\n")).unwrap();
+    };
+    changed(
+        &own_directory_for(&home, Kind::Skill).join("lint/SKILL.md"),
+        "Run the formatter first.",
+    );
+    changed(
+        &home.join("beta/.claude/skills/lint/SKILL.md"),
+        "Our own way.",
+    );
+    fs::remove_dir_all(home.join("alpha/.agents/skills/review")).unwrap();
+    let removed = flayer(&home, &["remove", "--yes", "skill:old"]).unwrap();
+    assert!(removed.stdout.starts_with("removed"), "{removed:?}");
+    (dir, home)
+}
+
+#[test]
+fn what_an_update_would_do_is_answered_as_core_surveys_it_and_changes_nothing() {
+    let (dir, home) = updating();
+    let backend = backend(&home);
+    let before = files(dir.path());
+
+    let answer = backend.query(query(json!({"type": "updates"}))).unwrap();
+
+    assert_eq!(files(dir.path()), before);
+    assert_eq!(
+        answer["states"],
+        json!([
+            {"state": "outdated", "count": 1},
+            {"state": "edited", "count": 1},
+            {"state": "missing", "count": 1},
+            {"state": "orphaned", "count": 1},
+        ])
+    );
+    assert_eq!(answer["writes"], true);
+    let listed: Vec<(&str, &str, &str, &str)> = answer["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|project| {
+            project["installations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(move |pending| {
+                    (
+                        project["entry"].as_str().unwrap(),
+                        pending["name"].as_str().unwrap(),
+                        pending["state"].as_str().unwrap(),
+                        pending["does"].as_str().unwrap(),
+                    )
+                })
+        })
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            ("alpha", "lint", "outdated", "refresh"),
+            ("alpha", "review", "missing", "put_back"),
+            ("beta", "lint", "edited", "leave"),
+            ("beta", "old", "orphaned", "orphaned"),
+        ]
+    );
+    let left: Vec<&Value> = answer["projects"][1]["installations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|pending| &pending["left"]["code"])
+        .collect();
+    assert_eq!(left, [&json!("edited"), &json!("no_longer_offered")]);
+}
+
+/// Asked of the default workspace before anything has made it: nothing to
+/// update, and nothing made to say so, as a dry run of `update --all`.
+#[test]
+fn what_an_update_would_do_in_a_home_where_nothing_is_made_is_nothing_and_makes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir_all(&home).unwrap();
+    let backend = PanelBackend::launch(&home, &Lookup::at_home(Some(&home))).unwrap();
+
+    let answer = backend.query(query(json!({"type": "updates"}))).unwrap();
+
+    assert_eq!(answer["projects"], json!([]));
+    assert_eq!(answer["writes"], false);
+    assert_eq!(answer["unread"], json!([]));
+    assert!(!home.join(FLAYER_DIR).exists(), "asking made the workspace");
+}
+
+#[test]
+fn a_query_of_what_an_update_would_do_takes_no_field() {
+    let refused = serde_json::from_value::<Query>(json!({"type": "updates", "all": true}));
+
+    assert!(refused.is_err(), "{refused:?}");
+}
+
+/// Each change the page of updates and the page of one of the library's own
+/// offer, as the browser sends it, is the line somebody would type for it,
+/// each project named by the folder its entry points at; and what takes
+/// something away, a forced update, an uninstall, forced or not, and a
+/// removal told yes, is asked about first, while a removal's dry run is
+/// not.
+#[test]
+fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_takes() {
+    let (_dir, home) = updating();
+    let backend = backend(&home);
+    let alpha = under(&home, &["alpha"]);
+    let beta = under(&home, &["beta"]);
+    let project = |entry: &str| json!({"type": "project", "entry": entry});
+
+    for (sent, line, confirm) in [
+        (
+            json!({"type": "update", "holder": {"type": "workspace"}, "reference": null, "force": false}),
+            String::from("flayer update --all --yes"),
+            Vec::new(),
+        ),
+        (
+            json!({"type": "update", "holder": project("alpha"), "reference": null, "force": false}),
+            format!("mind -C {alpha} update --yes"),
+            Vec::new(),
+        ),
+        (
+            json!({"type": "update", "holder": project("alpha"), "reference": "skill:lint", "force": false}),
+            format!("mind -C {alpha} update --yes skill:lint"),
+            Vec::new(),
+        ),
+        (
+            json!({"type": "update", "holder": project("beta"), "reference": "skill:lint", "force": true}),
+            format!("mind -C {beta} update --yes --force skill:lint"),
+            vec!["forces"],
+        ),
+        (
+            json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old", "force": false}),
+            format!("flayer uninstall -p {beta} skill:old"),
+            vec!["uninstalls"],
+        ),
+        (
+            json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old", "force": true}),
+            format!("flayer uninstall -p {beta} --force skill:old"),
+            vec!["uninstalls", "forces"],
+        ),
+        (
+            json!({"type": "uninstall_orphaned", "holder": {"type": "workspace"}}),
+            String::from("flayer uninstall --all-projects --orphaned"),
+            vec!["uninstalls"],
+        ),
+        (
+            json!({
+                "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
+                "name": "lint", "everywhere": true, "yes": false,
+            }),
+            String::from("flayer remove --everywhere skill:lint"),
+            Vec::new(),
+        ),
+        (
+            json!({
+                "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
+                "name": "lint", "everywhere": true, "yes": true,
+            }),
+            String::from("flayer remove --everywhere --yes skill:lint"),
+            vec!["removes", "uninstalls"],
+        ),
+    ] {
+        let preview = backend.preview(&task(sent.clone())).unwrap();
+
+        assert_eq!(preview.lines, [line], "{sent}");
+        let asked: Vec<&str> = preview
+            .confirm
+            .iter()
+            .map(|confirm| confirm["caution"].as_str().unwrap())
+            .collect();
+        assert_eq!(asked, confirm, "{sent}");
+    }
+}
+
+/// Updating every project from the panel leaves what `flayer update --all
+/// --yes` leaves, in two workspaces made alike: the outdated copy and the
+/// one gone written from the library, the edited one left as it was, and
+/// the edit said by the code an install refuses it with.
+#[test]
+fn updating_every_project_from_the_panel_leaves_what_the_cli_leaves() {
+    let (_typed, typed) = updating();
+    let (_panel, panel) = updating();
+
+    let cli = flayer(&typed, &["update", "--all", "--yes"]).unwrap();
+    let ran = backend(&panel)
+        .run(task(json!({
+            "type": "update", "holder": {"type": "workspace"}, "reference": null, "force": false,
+        })))
+        .unwrap();
+
+    assert!(!cli.ok);
+    assert!(!ran.ok);
+    let run = &ran.runs[0];
+    assert_eq!(run.stdout, cli.stdout);
+    assert_eq!(run.stderr, cli.stderr);
+    assert!(run
+        .stderr
+        .iter()
+        .any(|line| line.code == Some("edited") && line.text.contains("beta")));
+    let state = |home: &Path| {
+        files(home)
+            .into_iter()
+            .filter_map(|(path, bytes)| {
+                let route = path.strip_prefix(home).unwrap().to_path_buf();
+                let kept = !route.components().any(|part| {
+                    [".git", MIND_DIR, FLAYER_DIR]
+                        .contains(&part.as_os_str().to_str().unwrap_or(""))
+                });
+                kept.then_some((route, bytes))
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
+    assert_eq!(state(&panel), state(&typed));
+    let edited = fs::read_to_string(panel.join("beta/.claude/skills/lint/SKILL.md")).unwrap();
+    assert!(edited.contains("Our own way."), "{edited}");
+    let after = backend(&panel)
+        .query(query(json!({"type": "updates"})))
+        .unwrap();
+    assert_eq!(after["states"][0], json!({"state": "outdated", "count": 0}));
+    assert_eq!(after["states"][2], json!({"state": "missing", "count": 0}));
+}
+
+/// A copy changed since it was installed that nothing offers any more, as
+/// removing it from the library leaves one: core says it needs forcing,
+/// an uninstall not forced leaves it and says so by the code an install
+/// refuses an edit with, and the forced one the page of updates sends then
+/// takes it out.
+#[test]
+fn an_edited_copy_nothing_offers_any_more_is_taken_out_by_the_forced_uninstall_core_asks_for() {
+    let (_dir, home) = updating();
+    let copy = home.join("beta/.claude/skills/old");
+    let text = fs::read_to_string(copy.join("SKILL.md")).unwrap();
+    fs::write(copy.join("SKILL.md"), format!("{text}\nOur own way.\n")).unwrap();
+    let backend = backend(&home);
+
+    let answer = backend.query(query(json!({"type": "updates"}))).unwrap();
+    let old = &answer["projects"][1]["installations"][1];
+    assert_eq!(
+        (&old["name"], &old["state"], &old["does"], &old["forced"]),
+        (
+            &json!("old"),
+            &json!("edited"),
+            &json!("orphaned"),
+            &json!(true)
+        ),
+        "{answer}"
+    );
+
+    let uninstall = |force| {
+        task(json!({
+            "type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old",
+            "force": force,
+        }))
+    };
+    let left = backend.run(uninstall(false)).unwrap();
+    assert!(!left.ok, "{left:?}");
+    assert!(
+        left.runs[0]
+            .stderr
+            .iter()
+            .any(|line| line.code == Some("edited")),
+        "{left:?}"
+    );
+    assert!(copy.exists());
+    let taken = backend.run(uninstall(true)).unwrap();
+    assert!(taken.ok, "{taken:?}");
+    assert!(!copy.exists());
+    let after = backend.query(query(json!({"type": "updates"}))).unwrap();
+    assert_eq!(after["states"][3], json!({"state": "orphaned", "count": 0}));
+    assert_eq!(after["states"][1], json!({"state": "edited", "count": 1}));
 }

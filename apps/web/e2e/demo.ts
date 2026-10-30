@@ -31,6 +31,13 @@ export const SHOWN = 'mobile-app'
 export const ARTIFACT = 'api-conventions'
 
 /**
+ * The skill of the library's own whose removal everywhere the tour shows
+ * the dry run of: installed in `data-pipeline`, whose copy would go, and in
+ * `infra`, whose copy was edited, and would be left.
+ */
+export const REMOVED = 'deploy-checklist'
+
+/**
  * Who the repositories' commits are by, and when: fixed, so a regenerated
  * shelf shows the same commits. Neither the person running it nor their git
  * configuration: no system or global file is read.
@@ -126,6 +133,10 @@ description: Ships a service from staging to production one checked step at a ti
 const DEPLOY_CHECKLIST_SINCE = `${DEPLOY_CHECKLIST}6. Keep the previous build ready to roll back to for an hour.
 `
 
+/** The checklist as the infra team changed their own copy of it, by hand. */
+const DEPLOY_CHECKLIST_INFRA = `${DEPLOY_CHECKLIST}6. Page the on-call engineer before the ramp starts.
+`
+
 const RELEASE_NOTES = `---
 name: release-notes
 description: Drafts release notes from the pull requests merged since the last tag. Use when cutting a release.
@@ -161,7 +172,9 @@ const SECRETS = `# Keep secrets out of the repository
  *   `infra`, `data-pipeline` and `admin-console`, each a repository given
  *   `mind init`, with what each works with installed from both;
  * - `release-notes` and `deploy-checklist` changed where they came from
- *   since, so their installs are outdated;
+ *   since, so their installs are outdated, but for `infra`'s copy of the
+ *   checklist, which `infra` keeps where Claude reads its skills and
+ *   changed by hand with `mind edit` before, so it is edited;
  * - `design-system`, a mind project, and `playground`, a repository, sit in
  *   the workspace unlinked, for Discover to find.
  */
@@ -204,8 +217,8 @@ export function build(at: Places): void {
     ['billing-api', ['--agents', 'claude,codex'], ['skill:api-conventions', 'skill:code-review', 'rule:git/commits', 'rule:security/secrets']],
     ['storefront', ['--agents', 'claude,opencode', '--shared'], ['skill:api-conventions', 'skill:commit-style', 'skill:release-notes', 'rule:git/commits']],
     [SHOWN, [], ['skill:code-review', 'skill:commit-style', 'skill:release-notes', 'rule:git/commits', 'rule:style/comments']],
-    ['infra', ['--agents', 'claude'], ['skill:deploy-checklist', 'rule:security/secrets']],
-    ['data-pipeline', ['--agents', 'codex'], ['skill:code-review', 'rule:git/commits']],
+    ['infra', ['--agents', 'claude', '--skills', '.claude/skills'], ['skill:deploy-checklist', 'rule:security/secrets']],
+    ['data-pipeline', ['--agents', 'codex'], ['skill:code-review', 'skill:deploy-checklist', 'rule:git/commits']],
     ['admin-console', ['--agents', 'claude,opencode', '--shared'], ['skill:api-conventions', 'skill:commit-style', 'rule:git/commits']]
   ]
   for (const [name, options, installs] of projects) {
@@ -228,6 +241,11 @@ export function build(at: Places): void {
     }
   }
   succeed(at, 'mind', join(at.workspace, 'billing-api'), ['add', 'skill', 'run-migrations', 'Applies and rolls back the database migrations'])
+  // `infra` keeps its skills where Claude reads them, so its copy of the
+  // checklist is its own to edit, and it did: edited, which an update
+  // leaves alone.
+  write(join(drafts, 'infra-deploy-checklist.md'), DEPLOY_CHECKLIST_INFRA)
+  succeed(at, 'mind', join(at.workspace, 'infra'), ['edit', 'skill:deploy-checklist', '--editor', `cp ${join(drafts, 'infra-deploy-checklist.md')}`])
 
   // A day later: the team improved its release notes, gathered again, and
   // the deploy checklist grew a step, which leaves their installs behind.

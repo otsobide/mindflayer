@@ -247,6 +247,8 @@ export type CoreCode =
   | "unknown_template"
   | "template_wrong_kind"
   | "template_read_failed"
+  | "no_longer_offered"
+  | "origin_unknown"
   | "target_misplaced"
   | "marker_left_over"
   | "create_failed"

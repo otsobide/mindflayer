@@ -1844,8 +1844,11 @@ said opens, every warning, note and error under the line that said it, with
 its code. The panel links projects, from the folder you type above the
 projects table or from what **Discover** finds, relinks one that moved,
 unlinks one from its page, changes a project's agents and share mode,
-migrates a project an older Mindflayer made, and installs and uninstalls
-skills and rules from **Assign**; everything else is still a command away.
+migrates a project an older Mindflayer made, installs and uninstalls
+skills and rules from **Assign**, brings what is installed up to date and
+takes out what nothing offers from **Updates**, and removes one of the
+library's own everywhere, its dry run first; everything else is still a
+command away.
 
 **The transcript**, in every page's header, lists every task the session
 ran, from this tab or any other, each line with what it printed, and
@@ -1865,8 +1868,9 @@ with nothing linked, nothing of its own or nothing gathered names the
 commands that would change that.
 
 **Projects** lists every entry the workspace links: its name, path, agents
-and share mode, how many of each kind it holds, its health, and why an entry
-that opens nothing does not. The health is one word for the whole project:
+and share mode, how many of each kind it holds, how many of what it was
+given are `outdated`, a badge linking to **Updates**, its health, and why an
+entry that opens nothing does not. The health is one word for the whole project:
 `ok`; `attention` when something asks for a command (an install outdated,
 edited, missing or orphaned, something one of its agents never reads, a
 folder its targets name that no install uses, copies of one name that
@@ -1947,6 +1951,16 @@ stays a link, opened in a tab of its own. No file is ever served as itself,
 and a link in the skill that leads out of the folder the library keeps its
 kind in is listed with why and never followed.
 
+At the bottom, **See what removing it everywhere does** runs the dry run of
+`flayer remove --everywhere <kind:name>`, which deletes nothing, and shows
+what it said: each project's copy that would go, with how it stands, a copy
+changed since it was installed that would stay, somebody's own of the name,
+which is never touched, and the library's copy. Only then does **Remove
+everywhere** run the same line with `--yes`, a confirmation since it deletes
+the artifact and uninstalls its copies, and go back to the library. The
+panel never removes the library's copy alone, which would leave each copy
+installed from it orphaned.
+
 **The shelf** lists everything gathered, filtered by kind or by name,
 summary or origin, each with the commit it was taken at, when, and its
 origin as `--from` takes it: the address it came from, with `#` and the
@@ -1986,6 +2000,30 @@ asked of a project from two places (`wanted_twice`). **Apply** shows the
 lines, a confirmation when one uninstalls, and runs them as one batch, the
 install screen's; **Clear the marks** forgets them. A matrix of hundreds
 of offers and projects draws only what fits on screen.
+
+**Updates** is what `flayer update --all` would do, before it is told
+`--yes`: every installation an update says something of, under its state,
+`outdated`, `edited`, `missing` and `orphaned`, each counted, with its
+project, its origin as `--from` takes it, and what an update does with it:
+writes it again from its origin (`refresh`), puts back the copies named
+(`put_back`), or leaves it, saying why in core's words and by a code, a copy
+changed since it was installed (`edited`), an origin that offers it no more
+(`no_longer_offered`), or one installed before origins were kept that two
+places offer (`origin_unknown`), which `install --from` settles. An entry
+that opens no project is said above. **Update all** runs `flayer update
+--all --yes`, each project offers its own `mind -C <project> update --yes`
+where an update writes something, and each row its change: **Update**, the
+same line naming it; **Force update** for an edited copy, the line with
+`--force`, a confirmation since it writes over the change; and
+**Uninstall** for one nothing offers any more, `flayer uninstall -p
+<project> <kind:name>`, beside **Uninstall every orphaned one**, `flayer
+uninstall --all-projects --orphaned`. One nothing offers that was changed
+since it was installed, as removing it everywhere leaves one, stands as
+`edited`, and neither uninstall takes it out: its row offers **Force
+uninstall**, the line with `--force`, a confirmation since the change goes
+with it. Each line is shown first, as everywhere in the panel, and the
+page is drawn again from what it changed: an edited copy an update left is
+still listed, with why.
 
 **It follows the disk.** A change made from a terminal, the TUI or an
 editor shows in the panel within a moment, without a reload: a skill edited,

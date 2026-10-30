@@ -18,6 +18,9 @@ import library from './fixtures/library.json'
 import planned from './fixtures/plans.json'
 import scan from './fixtures/scan.json'
 import unmade from './fixtures/unmade.json'
+import updated from './fixtures/updated.json'
+import surveyed from './fixtures/updates.json'
+import updating from './fixtures/updating.json'
 import workspace from './fixtures/workspace.json'
 
 /**
@@ -28,12 +31,15 @@ import workspace from './fixtures/workspace.json'
  * `candidates` is `workspace` with more beside its projects, the one the
  * scan in tests/fixtures/scan.json looked through: two projects and two
  * repositories nobody linked, `old`, linked and moved since, and `legacy`,
- * linked, which a `mind.toml` marks; and `assigning`, a workspace to assign
+ * linked, which a `mind.toml` marks; `assigning`, a workspace to assign
  * in, which the matrix draws: one name offered from two places, the shelf,
  * a copy of each state an install stands in, a project nothing can go into
- * and an entry that opens none.
+ * and an entry that opens none; and `updating`, a workspace to update,
+ * which the page of updates draws beside tests/fixtures/updates.json: an
+ * installation outdated, edited, missing and orphaned, and an entry that
+ * opens none.
  */
-const FIXTURES = { workspace, unmade, candidates, assigning }
+const FIXTURES = { workspace, unmade, candidates, assigning, updating }
 
 export type Fixture = keyof typeof FIXTURES
 
@@ -82,6 +88,15 @@ export function scans(): Answered[] {
  */
 export function plans(): Answered[] {
   return structuredClone(planned) as unknown as Answered[]
+}
+
+/**
+ * What the updating fixture's server answers when its page of updates asks
+ * what updating every project would do (tests/fixtures/updates.json).
+ * Copied, so a test may change its copy.
+ */
+export function updates(): Answered[] {
+  return structuredClone(surveyed) as unknown as Answered[]
 }
 
 /** `value` with every object's keys in one order, to compare as text. */
@@ -148,6 +163,18 @@ export function commanded(): Commanded[] {
  */
 export function applying(): Commanded[] {
   return structuredClone(applied) as unknown as Commanded[]
+}
+
+/**
+ * What the updating fixture's server answers when each change its page of
+ * updates offers is previewed and run, each on the workspace as it was
+ * built (tests/fixtures/updated.json): every project updated, one, one
+ * installation in one, an edited one forced, an orphaned one uninstalled,
+ * an orphaned one edited since uninstalled forced, and every orphaned one
+ * taken out. Copied, so a test may change its copy.
+ */
+export function updatings(): Commanded[] {
+  return structuredClone(updated) as unknown as Commanded[]
 }
 
 /** A task as `send` was handed it, and how. */

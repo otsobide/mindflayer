@@ -266,6 +266,19 @@ impl State {
             .collect()
     }
 
+    /// Whether an artifact standing so asks for a command: an update, a
+    /// forced one, or an uninstall. What makes a project's health
+    /// `attention`, and what an update's survey of a workspace lists
+    /// (`update::Updates`), so the two never disagree about which states
+    /// want doing. Matched with no wildcard, so a state added does not
+    /// compile until it says.
+    pub const fn asks_for_a_command(self) -> bool {
+        match self {
+            State::Outdated | State::Edited | State::Missing | State::Orphaned => true,
+            State::Current | State::Foreign | State::Authored => false,
+        }
+    }
+
     /// Whether every copy of what was installed is where it was put, as it
     /// was put there: what `missed` says of a rule only when it holds.
     fn whole(self) -> bool {

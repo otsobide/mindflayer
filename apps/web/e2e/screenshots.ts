@@ -25,7 +25,7 @@ import { homedir, tmpdir, userInfo } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium, type Browser, type Page } from '@playwright/test'
-import { ARTIFACT, SHOWN, WORKSPACE, build } from './demo.ts'
+import { ARTIFACT, REMOVED, SHOWN, WORKSPACE, build } from './demo.ts'
 import { built, marked, serve, type Places, type Serving } from './environment.ts'
 
 const web = fileURLToPath(new URL('..', import.meta.url))
@@ -151,7 +151,11 @@ const ASSIGNED = [
   'skill api-conventions from workspace in admin-console'
 ]
 
-/** The tour, in the order it is taken: the last three run a command and ask about another. */
+/**
+ * The tour, in the order it is taken: of the last four, three run a command
+ * and ask about another, and the last runs a dry run, which changes
+ * nothing, after the transcript is taken.
+ */
 const TOUR: Shot[] = [
   {
     name: 'overview',
@@ -206,6 +210,13 @@ const TOUR: Shot[] = [
     }
   },
   {
+    // What an update would do: what is outdated, and the edited copy it
+    // leaves, with why.
+    name: 'updates',
+    path: '/updates',
+    ready: async page => page.getByTestId('state-edited').getByTestId('row').first().waitFor()
+  },
+  {
     name: 'discover',
     path: `/discover?${new URLSearchParams({ root: workspace })}`,
     ready: async (page) => {
@@ -251,6 +262,23 @@ const TOUR: Shot[] = [
       if (said.length === 0 || said.some(word => word.trim() !== 'ok')) {
         throw new Error(`the panel's link did not run cleanly: ${said.join(', ')}`)
       }
+    }
+  },
+  {
+    // Removing one of the library's own everywhere, its dry run read
+    // first: what goes from each project, the edited copy it leaves, and
+    // the library's copy. Never run.
+    name: 'remove',
+    path: `/artifact?${new URLSearchParams({ kind: 'skill', name: REMOVED })}`,
+    ready: async (page) => {
+      await page.getByTestId('remove-dry').click()
+      const dialog = page.getByRole('dialog')
+      await dialog.getByTestId('run').click()
+      await dialog.waitFor({ state: 'hidden' })
+      await page.getByTestId('remove-said').waitFor()
+      // The toast saying it ran would cover what it said: gone first.
+      await page.getByText(`Ran flayer remove --everywhere skill:${REMOVED}`, { exact: true }).waitFor({ state: 'hidden', timeout: 30_000 })
+      await page.getByTestId('remove-yes').scrollIntoViewIfNeeded()
     }
   }
 ]

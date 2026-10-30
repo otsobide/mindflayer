@@ -988,6 +988,7 @@ impl App {
                             kind,
                             name: name.clone(),
                             everywhere: true,
+                            yes: true,
                         },
                     }
                 });
@@ -998,6 +999,7 @@ impl App {
                         kind,
                         name,
                         everywhere: false,
+                        yes: true,
                     },
                     also,
                     back: Box::new(Mode::Browse),
@@ -1091,6 +1093,7 @@ impl App {
         let task = Task::Update {
             holder: member.holder(),
             reference,
+            force: false,
         };
         (Mode::Browse, Step::Run(task))
     }
@@ -1690,6 +1693,7 @@ impl App {
                 | Task::ApplyInstall { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
+                | Task::UninstallOrphaned { .. }
                 | Task::Update { .. }
                 | Task::Minds { .. },
                 _,

@@ -1,0 +1,123 @@
+[
+  {
+    "answer": {
+      "projects": [
+        {
+          "entry": "api",
+          "installations": [
+            {
+              "copies": [],
+              "does": "refresh",
+              "forced": false,
+              "kind": "skill",
+              "left": null,
+              "name": "lint",
+              "origin": "workspace",
+              "state": "outdated"
+            },
+            {
+              "copies": [
+                ".agents/skills/review"
+              ],
+              "does": "put_back",
+              "forced": false,
+              "kind": "skill",
+              "left": null,
+              "name": "review",
+              "origin": "workspace",
+              "state": "missing"
+            },
+            {
+              "copies": [],
+              "does": "refresh",
+              "forced": false,
+              "kind": "rule",
+              "left": null,
+              "name": "git/commits",
+              "origin": "workspace",
+              "state": "outdated"
+            }
+          ],
+          "name": "api",
+          "writes": true
+        },
+        {
+          "entry": "web",
+          "installations": [
+            {
+              "copies": [],
+              "does": "orphaned",
+              "forced": false,
+              "kind": "skill",
+              "left": {
+                "code": "no_longer_offered",
+                "message": "skill `format` in web is no longer offered by workspace, so an update leaves it as it is; uninstalling it takes it out"
+              },
+              "name": "format",
+              "origin": "workspace",
+              "state": "orphaned"
+            },
+            {
+              "copies": [
+                ".claude/skills/lint"
+              ],
+              "does": "leave",
+              "forced": true,
+              "kind": "skill",
+              "left": {
+                "code": "edited",
+                "message": "skill `lint` in web was changed since it was installed, at .claude/skills/lint, so an update leaves it alone, every copy of it; forcing the update writes over the change"
+              },
+              "name": "lint",
+              "origin": "workspace",
+              "state": "edited"
+            },
+            {
+              "copies": [],
+              "does": "orphaned",
+              "forced": true,
+              "kind": "skill",
+              "left": {
+                "code": "no_longer_offered",
+                "message": "skill `release` in web is no longer offered by workspace, so an update leaves it as it is; it was changed since it was installed, so only a forced uninstall takes it out"
+              },
+              "name": "release",
+              "origin": "workspace",
+              "state": "edited"
+            }
+          ],
+          "name": "web",
+          "writes": false
+        }
+      ],
+      "states": [
+        {
+          "count": 2,
+          "state": "outdated"
+        },
+        {
+          "count": 2,
+          "state": "edited"
+        },
+        {
+          "count": 1,
+          "state": "missing"
+        },
+        {
+          "count": 1,
+          "state": "orphaned"
+        }
+      ],
+      "unread": [
+        {
+          "code": "not_a_project",
+          "message": "/home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+        }
+      ],
+      "writes": true
+    },
+    "query": {
+      "type": "updates"
+    }
+  }
+]

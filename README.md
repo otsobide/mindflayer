@@ -72,10 +72,11 @@ read.
 ### Projects
 
 Every project the workspace links, with its agents, whether it is shared or
-kept local, what it holds and one word for its health. Sort, filter, or link
-another by its path.
+kept local, what it holds, how much of it has fallen behind where it came
+from, and one word for its health. Sort, filter, or link another by its
+path.
 
-![The projects table, with each project's agents, share mode, counts and health](docs/images/projects.png)
+![The projects table, with each project's agents, share mode, counts, what is outdated and health](docs/images/projects.png)
 
 ### A project
 
@@ -98,6 +99,15 @@ body rendered, every file it carries, what `validate` says of it and where
 it is installed.
 
 ![A skill of the library's own: its projects, its front matter and its body](docs/images/artifact.png)
+
+Removing one starts with what removing it everywhere would do: the copy
+that goes from each project, and one changed by hand, which stays. Only
+then is it removed, out of every project first and then the library, so no
+copy installed as it was is left behind with nothing to update it from. A
+copy changed by hand stays as it is, with nothing offering it any more,
+until a forced uninstall from Updates takes it out.
+
+![Removing a skill of the library's own: the dry run says which project's copy goes and which edited copy stays, before anything is removed](docs/images/remove.png)
 
 ### The shelf and its sources
 
@@ -122,6 +132,19 @@ hand, or one name asked of a project from two places. **Apply** runs the
 lines, shown first.
 
 ![The matrix: the library's and the shelf's skills and rules against six projects, a box ticked and another unticked, and the two lines that will run](docs/images/assign.png)
+
+### Updates
+
+What updating every project would do, before it does it: the copies behind
+where they came from, those changed by hand, those gone missing and those
+nothing offers any more, each with where it came from and what an update
+does with it, or why it leaves it alone. **Update all**, one project, or
+one skill or rule. A copy somebody changed is never written over unless you
+force it, which asks first; what nothing offers any more is uninstalled,
+one or all at once, and a copy of it changed by hand only by forcing its
+uninstall, which asks first too.
+
+![The page of updates: skills behind where they came from in three projects, and a copy changed by hand that an update leaves alone, with why](docs/images/updates.png)
 
 ### Discover
 

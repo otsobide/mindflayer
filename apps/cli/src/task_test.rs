@@ -12,7 +12,7 @@ use crate::{Cli, FlayerCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 33] = [
+const TAGS: [&str; 34] = [
     "init_workspace",
     "init_project",
     "link",
@@ -41,6 +41,7 @@ const TAGS: [&str; 33] = [
     "update",
     "install",
     "uninstall",
+    "uninstall_orphaned",
     "adopt",
     "migrate",
     "open_install",
@@ -138,6 +139,7 @@ fn every(value: &str) -> Vec<Task> {
             projects: vec![owned()],
             kind: Kind::Rule,
             name: owned(),
+            force: false,
         },
         Task::Adopt {
             project: owned(),
@@ -160,10 +162,24 @@ fn every(value: &str) -> Vec<Task> {
             kind: Kind::Skill,
             name: owned(),
             everywhere: true,
+            yes: true,
+        },
+        Task::Remove {
+            holder: Holder::Workspace,
+            kind: Kind::Rule,
+            name: owned(),
+            everywhere: true,
+            yes: false,
         },
         Task::Update {
             holder: Holder::Workspace,
             reference: None,
+            force: false,
+        },
+        Task::Update {
+            holder: Holder::Workspace,
+            reference: None,
+            force: true,
         },
     ];
     tasks.push(Task::ApplyInstall {
@@ -172,6 +188,14 @@ fn every(value: &str) -> Vec<Task> {
             .filter(|task| matches!(task, Task::Install { .. } | Task::Uninstall { .. }))
             .cloned()
             .collect(),
+    });
+    // After the batch, which the install screen and the matrix send
+    // unforced: forced, from the page of updates, it is one line alone.
+    tasks.push(Task::Uninstall {
+        projects: vec![owned(), String::from("plain")],
+        kind: Kind::Skill,
+        name: owned(),
+        force: true,
     });
     for (at, holder) in holders(value).into_iter().enumerate() {
         let kind = Kind::ALL[at % Kind::ALL.len()];
@@ -203,13 +227,18 @@ fn every(value: &str) -> Vec<Task> {
                 kind,
                 name: owned(),
                 everywhere: false,
+                yes: at % 2 == 0,
             },
             Task::Validate {
+                holder: holder.clone(),
+            },
+            Task::UninstallOrphaned {
                 holder: holder.clone(),
             },
             Task::Update {
                 holder: holder.clone(),
                 reference: Some(owned()),
+                force: at % 2 == 1,
             },
         ]);
         // A project's settings, never the workspace's: its own reach agents
@@ -508,6 +537,147 @@ fn a_migration_is_a_dry_run_until_it_is_told_and_only_then_a_write() {
     );
     assert!(migrate(true).writes());
     assert_eq!(migrate(true).cautions(), Vec::new());
+}
+
+/// What the panel's page of one of the library's own shows before it asks:
+/// removing it everywhere as a dry run, which writes and takes nothing, then
+/// the same line told `--yes`, which takes it out of every project and
+/// deletes it, and is asked about for both.
+#[test]
+fn a_removal_is_a_dry_run_until_it_is_told_and_only_then_asked_about() {
+    let remove = |everywhere, yes| Task::Remove {
+        holder: Holder::Workspace,
+        kind: Kind::Skill,
+        name: String::from("lint"),
+        everywhere,
+        yes,
+    };
+
+    assert_eq!(
+        remove(true, false).commands(),
+        [line("flayer remove --everywhere skill:lint")]
+    );
+    assert!(!remove(true, false).writes());
+    assert_eq!(remove(true, false).cautions(), Vec::new());
+    assert_eq!(
+        remove(true, true).commands(),
+        [line("flayer remove --everywhere --yes skill:lint")]
+    );
+    assert!(remove(true, true).writes());
+    assert_eq!(
+        remove(true, true).cautions(),
+        [(0, Caution::Removes), (0, Caution::Uninstalls)]
+    );
+    assert_eq!(
+        remove(false, false).commands(),
+        [line("flayer remove skill:lint")]
+    );
+}
+
+/// Taking out what nothing offers any more, from every project the
+/// workspace links or from one, as somebody would type it: asked about
+/// first, since it takes copies away.
+#[test]
+fn what_nothing_offers_is_taken_out_of_every_project_or_of_one() {
+    let orphans = |holder| Task::UninstallOrphaned { holder };
+
+    for (task, said) in [
+        (
+            orphans(Holder::Workspace),
+            "flayer uninstall --all-projects --orphaned",
+        ),
+        (
+            orphans(Holder::Project(String::from("/work/alpha"))),
+            "mind -C /work/alpha uninstall --orphaned",
+        ),
+        (
+            orphans(Holder::Elsewhere(String::from("/work/alpha"))),
+            "mind -W . -C /work/alpha uninstall --orphaned",
+        ),
+    ] {
+        assert_eq!(task.commands(), [line(said)], "{task:?}");
+        assert!(task.writes(), "{task:?}");
+        assert_eq!(task.cautions(), [(0, Caution::Uninstalls)], "{task:?}");
+        assert_eq!(task.refusal(), None, "{task:?}");
+    }
+}
+
+/// One artifact taken out of projects, as somebody would type it, and
+/// forced only when asked: what the page of updates sends for a copy
+/// changed since it was installed that nothing offers any more, which an
+/// uninstall not forced leaves. Asked about first either way, and for the
+/// edit too when forced.
+#[test]
+fn an_uninstall_is_the_line_the_cli_takes_and_forced_only_when_asked() {
+    let uninstall = |projects: &[&str], force| Task::Uninstall {
+        projects: owned(projects),
+        kind: Kind::Skill,
+        name: String::from("-lint"),
+        force,
+    };
+
+    for (task, said, cautions) in [
+        (
+            uninstall(&["/work/alpha"], false),
+            "flayer uninstall -p /work/alpha skill:-lint",
+            vec![(0, Caution::Uninstalls)],
+        ),
+        (
+            uninstall(&["/work/alpha", "-odd"], true),
+            "flayer uninstall -p /work/alpha -p ./-odd --force skill:-lint",
+            vec![(0, Caution::Uninstalls), (0, Caution::Forces)],
+        ),
+    ] {
+        assert_eq!(task.commands(), [line(said)], "{task:?}");
+        assert!(task.writes(), "{task:?}");
+        assert_eq!(task.cautions(), cautions, "{task:?}");
+        assert_eq!(task.refusal(), None, "{task:?}");
+    }
+}
+
+/// What the panel's page of updates asks for, each the line somebody would
+/// type: every project, one, one artifact in one, and that one forced,
+/// which alone is asked about first.
+#[test]
+fn an_update_is_the_line_the_cli_takes_and_forced_only_when_asked() {
+    let update = |holder, reference: Option<&str>, force| Task::Update {
+        holder,
+        reference: reference.map(str::to_owned),
+        force,
+    };
+    let alpha = || Holder::Project(String::from("/work/alpha"));
+
+    for (task, said, cautions) in [
+        (
+            update(Holder::Workspace, None, false),
+            "flayer update --all --yes",
+            Vec::new(),
+        ),
+        (
+            update(alpha(), None, false),
+            "mind -C /work/alpha update --yes",
+            Vec::new(),
+        ),
+        (
+            update(alpha(), Some("skill:lint"), false),
+            "mind -C /work/alpha update --yes skill:lint",
+            Vec::new(),
+        ),
+        (
+            update(alpha(), Some("skill:lint"), true),
+            "mind -C /work/alpha update --yes --force skill:lint",
+            vec![(0, Caution::Forces)],
+        ),
+        (
+            update(Holder::Workspace, Some("-odd"), true),
+            "flayer update --all --yes --force -- -odd",
+            vec![(0, Caution::Forces)],
+        ),
+    ] {
+        assert_eq!(task.commands(), [line(said)], "{task:?}");
+        assert!(task.writes(), "{task:?}");
+        assert_eq!(task.cautions(), cautions, "{task:?}");
+    }
 }
 
 #[test]
@@ -1072,6 +1242,7 @@ fn a_refused_task_names_the_line_it_is_refused_for() {
                 projects: owned(&["alpha"]),
                 kind: Kind::Skill,
                 name: String::from("deploy"),
+                force: false,
             },
             Task::OpenInstall,
         ],
@@ -1186,12 +1357,22 @@ fn a_task_is_asked_about_for_each_of_its_lines_that_takes_something_away() {
     for task in values.flat_map(every) {
         let expected = match &task {
             Task::Remove {
-                everywhere: false, ..
+                everywhere: false,
+                yes: true,
+                ..
             } => vec![(0, Caution::Removes)],
             Task::Remove {
-                everywhere: true, ..
+                everywhere: true,
+                yes: true,
+                ..
             } => vec![(0, Caution::Removes), (0, Caution::Uninstalls)],
-            Task::Uninstall { .. } => vec![(0, Caution::Uninstalls)],
+            Task::Uninstall { force: true, .. } => {
+                vec![(0, Caution::Uninstalls), (0, Caution::Forces)]
+            }
+            Task::Uninstall { force: false, .. } | Task::UninstallOrphaned { .. } => {
+                vec![(0, Caution::Uninstalls)]
+            }
+            Task::Update { force: true, .. } => vec![(0, Caution::Forces)],
             Task::Unlink { .. } => vec![(0, Caution::Unlinks)],
             Task::Unload { .. } | Task::UnloadHere { .. } => vec![(0, Caution::Unloads)],
             // `mind -C <path> init`, `flayer link` and `flayer unlink`.

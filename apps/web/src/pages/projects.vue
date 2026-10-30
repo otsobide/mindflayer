@@ -11,6 +11,7 @@ import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
 import HealthBadge from '@/components/HealthBadge.vue'
 import LinkForm from '@/components/LinkForm.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
+import { stateLook } from '@/components/StateBadge.vue'
 import { useSnapshot } from '@/api/snapshot'
 import { first, useQueryChange } from '@/address'
 import { projectLink } from '@/routes'
@@ -36,6 +37,17 @@ type Column = 'name' | 'path' | 'health' | `kind:${Kind}`
 function count(tally: Tally, kind: Kind): number {
   return tally.kinds.find(counted => counted.kind === kind)?.count ?? 0
 }
+
+/**
+ * How many of what a project was given are behind where they came from, as
+ * its tally counts them: what an update writes again, which the badge
+ * beside it says and the page of updates lists.
+ */
+function outdated(tally: Tally): number {
+  return tally.states.find(counted => counted.state === 'outdated')?.count ?? 0
+}
+
+const OUTDATED = stateLook('outdated')
 
 /** What a row is called: its name, or its entry when it opens no project. */
 function title(project: Project): string {
@@ -235,7 +247,7 @@ function clear() {
               data-testid="table"
             >
               <caption class="sr-only">
-                Every entry the workspace links, with its agents, how it shares, what it holds of each kind and how it stands. A column with a button sorts by it.
+                Every entry the workspace links, with its agents, how it shares, what it holds of each kind, how much of what it was given is outdated, and how it stands. A column with a button sorts by it.
               </caption>
               <thead class="bg-elevated/40 font-mono text-xs text-muted">
                 <tr>
@@ -293,6 +305,12 @@ function clear() {
                         aria-hidden="true"
                       />
                     </button>
+                  </th>
+                  <th
+                    scope="col"
+                    class="px-3 py-2 font-medium"
+                  >
+                    outdated
                   </th>
                   <th
                     scope="col"
@@ -378,6 +396,30 @@ function clear() {
                     :data-testid="`count-${kind}`"
                   >
                     {{ count(project.tally, kind) }}
+                  </td>
+                  <td
+                    class="px-3 py-2"
+                    data-testid="outdated"
+                  >
+                    <RouterLink
+                      v-if="outdated(project.tally) > 0"
+                      :to="{ path: '/updates', hash: '#state-outdated' }"
+                      class="inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-primary"
+                    >
+                      <UBadge
+                        :color="OUTDATED.color"
+                        :icon="OUTDATED.icon"
+                        :label="`${outdated(project.tally)} outdated`"
+                        variant="subtle"
+                        size="sm"
+                        class="font-mono tabular-nums"
+                        data-testid="outdated-badge"
+                      />
+                    </RouterLink>
+                    <span
+                      v-else
+                      class="font-mono text-xs text-dimmed"
+                    >none</span>
                   </td>
                   <td class="px-3 py-2">
                     <HealthBadge :health="project.health" />
