@@ -694,6 +694,78 @@ const EXPECTED: &str = r#"{
       "origin": "https://github.com/acme/skills"
     }
   ],
+  "offers": [
+    {
+      "kind": "skill",
+      "name": "review",
+      "summary": "Read it",
+      "place": "workspace",
+      "origin": "workspace"
+    },
+    {
+      "kind": "skill",
+      "name": "notes",
+      "summary": "Take them",
+      "place": "loaded",
+      "origin": "load:../team"
+    },
+    {
+      "kind": "skill",
+      "name": "lint",
+      "summary": "Tidy it",
+      "place": "shelf",
+      "origin": "https://github.com/acme/skills"
+    },
+    {
+      "kind": "rule",
+      "name": "commits",
+      "summary": "Write them well",
+      "place": "workspace",
+      "origin": "workspace"
+    }
+  ],
+  "boxes": [
+    {
+      "entry": "api",
+      "closed": [],
+      "held": [
+        {
+          "kind": "skill",
+          "name": "review",
+          "origin": "workspace",
+          "state": "current",
+          "ticked": true
+        },
+        {
+          "kind": "rule",
+          "name": "commits",
+          "origin": "workspace",
+          "state": "current",
+          "ticked": true
+        }
+      ]
+    },
+    {
+      "entry": "gone",
+      "closed": [
+        {
+          "kind": "skill",
+          "why": {
+            "code": "not_a_project",
+            "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        },
+        {
+          "kind": "rule",
+          "why": {
+            "code": "not_a_project",
+            "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        }
+      ],
+      "held": []
+    }
+  ],
   "known": [
     {
       "name": "hub",

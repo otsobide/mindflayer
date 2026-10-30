@@ -119,6 +119,47 @@ fn edited(
 /// What `origin` says for the workspace's own artifacts.
 pub const WORKSPACE_ORIGIN: &str = "workspace";
 
+/// Which of the three places offers something to install: what `gather
+/// list --json` says of an offer as its `place`, and a snapshot of each it
+/// lists ([`crate::view::Offered`]).
+///
+/// Declaration order is the order [`survey`] offers them in: what the
+/// workspace keeps for its projects before what it found elsewhere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Place {
+    /// One of the workspace's own.
+    Workspace,
+    /// One of the own of a workspace it loads.
+    Loaded,
+    /// Gathered onto its shelf.
+    Shelf,
+}
+
+impl Place {
+    /// The word it is written as.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Place::Workspace => "workspace",
+            Place::Loaded => "loaded",
+            Place::Shelf => "shelf",
+        }
+    }
+}
+
+/// By its slug, for the reason a kind is: one spelling, which a renamed
+/// variant cannot change.
+impl Serialize for Place {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// Which of the three places offers something to install.
+    Place by slug { Workspace, Loaded, Shelf }
+}
+
 /// Where something that can be installed would be copied from.
 #[derive(Debug, Clone)]
 pub enum Offer {
@@ -162,7 +203,7 @@ impl Serialize for Offer {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         #[derive(Serialize)]
         struct Placed<T> {
-            place: &'static str,
+            place: Place,
             #[serde(flatten)]
             held: T,
             origin: String,
@@ -189,7 +230,7 @@ impl Serialize for Offer {
         let origin = redacted(&self.origin()).into_owned();
         match self {
             Offer::Shelf(gathered) => Placed {
-                place: "shelf",
+                place: Place::Shelf,
                 held: gathered,
                 origin,
             }
@@ -200,7 +241,7 @@ impl Serialize for Offer {
                 summary,
                 path,
             } => Placed {
-                place: "workspace",
+                place: Place::Workspace,
                 held: Own {
                     kind: *kind,
                     name,
@@ -218,7 +259,7 @@ impl Serialize for Offer {
                 entry,
                 workspace,
             } => Placed {
-                place: "loaded",
+                place: Place::Loaded,
                 held: Load {
                     kind: *kind,
                     name,
@@ -235,6 +276,15 @@ impl Serialize for Offer {
 }
 
 impl Offer {
+    /// Which place offers it.
+    pub fn place(&self) -> Place {
+        match self {
+            Offer::Workspace { .. } => Place::Workspace,
+            Offer::Loaded { .. } => Place::Loaded,
+            Offer::Shelf(_) => Place::Shelf,
+        }
+    }
+
     pub fn name(&self) -> &str {
         match self {
             Offer::Shelf(gathered) => &gathered.name,

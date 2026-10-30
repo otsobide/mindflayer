@@ -234,6 +234,23 @@ impl State {
         }
     }
 
+    /// How a name core stands as `standing` beside an offer of it reads,
+    /// as the install screen and the panel's matrix say it of the offer's
+    /// box: none for one the project neither holds nor records, whose box
+    /// is empty. Matched with no wildcard, so a standing added does not
+    /// compile until it says which state it is.
+    pub const fn of_standing(standing: Standing) -> Option<State> {
+        match standing {
+            Standing::Absent => None,
+            Standing::Current => Some(State::Current),
+            Standing::Outdated => Some(State::Outdated),
+            Standing::Edited => Some(State::Edited),
+            Standing::Missing => Some(State::Missing),
+            Standing::Orphaned => Some(State::Orphaned),
+            Standing::Foreign => Some(State::Foreign),
+        }
+    }
+
     /// Whether every copy of what was installed is where it was put, as it
     /// was put there: what `missed` says of a rule only when it holds.
     fn whole(self) -> bool {

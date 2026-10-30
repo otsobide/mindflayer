@@ -4,6 +4,7 @@
     "codex",
     "opencode"
   ],
+  "boxes": [],
   "format": 1,
   "healths": [
     "ok",
@@ -41,6 +42,7 @@
     ]
   },
   "loaded": [],
+  "offers": [],
   "projects": [],
   "shelf": [],
   "sources": [],

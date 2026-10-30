@@ -6,14 +6,17 @@ mod common;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::slice;
 
 use common::{repository, skill};
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Candidate, Cell, Change, Plan};
 use mindflayer_core::ledger::Ledger;
+use mindflayer_core::resolve::{Reason, Resolved};
+use mindflayer_core::view::Snapshot;
 use mindflayer_core::{
-    create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Share, MIND_DIR,
-    SETTINGS_FILE,
+    create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Share, State,
+    MIND_DIR, SETTINGS_FILE,
 };
 use tempfile::TempDir;
 
@@ -637,4 +640,181 @@ fn a_bare_name_two_kinds_are_offered_as_from_one_origin_is_locked_for_the_refere
 
     assert_eq!(plan.changes, []);
     assert_eq!(codes(&plan), (vec![], vec!["offered_as_kinds"]));
+}
+
+// ---------------------------------------------------------------------------
+// The boxes a snapshot shows
+// ---------------------------------------------------------------------------
+
+impl Fixture {
+    /// The workspace as a front end reads it.
+    fn snapshot(&self) -> Snapshot {
+        let resolved = Resolved {
+            workspace: FlayerWorkspace::open(self.workspace.root()).unwrap(),
+            reason: Reason::Explicit,
+        };
+        Snapshot::of(&resolved, None)
+    }
+
+    /// Each box of `kind` `name` in the project at `entry`, as a snapshot
+    /// shows it: by the origin of each offer, its state and whether it is
+    /// ticked, none for an empty one.
+    fn shown(&self, entry: &str, name: &str) -> Vec<(String, Option<State>, bool)> {
+        let snapshot = self.snapshot();
+        let boxes = snapshot
+            .boxes
+            .iter()
+            .find(|boxes| boxes.entry == entry)
+            .unwrap();
+        snapshot
+            .offers
+            .iter()
+            .filter(|offered| offered.kind == Kind::Skill && offered.name == name)
+            .map(|offered| {
+                let held = boxes.held.iter().find(|held| {
+                    held.kind == offered.kind
+                        && held.name == offered.name
+                        && held.origin == offered.origin
+                });
+                (
+                    offered.origin.clone(),
+                    held.map(|held| held.state),
+                    held.is_some_and(|held| held.ticked),
+                )
+            })
+            .collect()
+    }
+}
+
+/// A snapshot ticks the box the install screen ticks, each of its offers
+/// standing as the name does: so the panel, which draws the snapshot, and
+/// the screen, which surveys each project, open on the same boxes.
+#[test]
+fn a_snapshot_ticks_the_boxes_the_install_screen_ticks() {
+    let fixture = given(&["alpha", "beta", "gamma", "delta"]);
+    fixture.install(0, "deploy", "load:../team");
+    let theirs = fixture.projects[1].root().join(".claude/skills/deploy");
+    fs::create_dir_all(&theirs).unwrap();
+    fs::write(theirs.join("SKILL.md"), skill("deploy", "Mine")).unwrap();
+    fixture.install(2, "deploy", "workspace");
+    fixture.edit(2, "deploy");
+    fixture.install(3, "deploy", "workspace");
+    fs::remove_dir_all(fixture.projects[3].root().join(".claude/skills/deploy")).unwrap();
+
+    let current = Some(State::Current);
+    assert_eq!(
+        fixture.shown("alpha", "deploy"),
+        [
+            (String::from("workspace"), current, false),
+            (String::from("load:../team"), current, true),
+        ]
+    );
+    let foreign = Some(State::Foreign);
+    assert_eq!(
+        fixture.shown("beta", "deploy"),
+        [
+            (String::from("workspace"), foreign, true),
+            (String::from("load:../team"), foreign, true),
+        ]
+    );
+    let edited = Some(State::Edited);
+    assert_eq!(
+        fixture.shown("gamma", "deploy"),
+        [
+            (String::from("workspace"), edited, true),
+            (String::from("load:../team"), edited, false),
+        ]
+    );
+    let missing = Some(State::Missing);
+    assert_eq!(
+        fixture.shown("delta", "deploy"),
+        [
+            (String::from("workspace"), missing, false),
+            (String::from("load:../team"), missing, false),
+        ]
+    );
+    for (project, entry) in ["alpha", "beta", "gamma", "delta"].into_iter().enumerate() {
+        let screen: Vec<(String, bool)> = fixture
+            .shown(entry, "deploy")
+            .into_iter()
+            .map(|(origin, _, ticked)| (origin, ticked))
+            .collect();
+        assert_eq!(screen, fixture.held(project), "{entry}");
+    }
+}
+
+/// Each box asked to be as the snapshot shows it asks for nothing: a box a
+/// matrix leaves as it opened is no change, whatever stands in it,
+/// somebody's copy and an edited one included. Each on its own, as a front
+/// end sends only the boxes somebody changed: somebody's copy ticks every
+/// offer of its name, which asked for all at once is a name asked of a
+/// project from two places.
+#[test]
+fn each_box_asked_as_a_snapshot_shows_it_plans_nothing() {
+    let fixture = given(&["alpha", "beta", "gamma"]);
+    fixture.install(0, "deploy", "load:../team");
+    let theirs = fixture.projects[1].root().join(".agents/skills/deploy");
+    fs::create_dir_all(&theirs).unwrap();
+    fs::write(theirs.join("SKILL.md"), skill("deploy", "Mine")).unwrap();
+    fixture.install(2, "deploy", "workspace");
+    fixture.edit(2, "deploy");
+    let snapshot = fixture.snapshot();
+
+    let mut asked = 0;
+    for boxes in &snapshot.boxes {
+        for offered in &snapshot.offers {
+            let ticked = boxes.held.iter().any(|held| {
+                held.kind == offered.kind
+                    && held.name == offered.name
+                    && held.origin == offered.origin
+                    && held.ticked
+            });
+            let shown = Cell::of(
+                &boxes.entry,
+                offered.kind,
+                &offered.name,
+                &offered.origin,
+                ticked,
+            );
+            assert_eq!(
+                fixture.planned(slice::from_ref(&shown)),
+                Plan::default(),
+                "{shown:?}"
+            );
+            asked += 1;
+        }
+    }
+    assert_eq!(asked, 3 * 2, "{snapshot:?}");
+}
+
+/// A kind a project has nowhere to put closes its boxes, by the code a
+/// plan locks one of them by: the panel says why before anything is asked.
+#[test]
+fn a_kind_a_project_has_nowhere_to_put_closes_its_boxes_by_the_code_a_plan_locks_them_by() {
+    let mut fixture = given(&["alpha"]);
+    let root = fixture.dir.path().join("home").join("bare");
+    fs::create_dir(&root).unwrap();
+    let (bare, _) =
+        MindProject::init_settings(&root, &[], Share::Shared, &Directories::default()).unwrap();
+    fixture.workspace.link(&bare).unwrap();
+    let snapshot = fixture.snapshot();
+
+    let boxes = snapshot
+        .boxes
+        .iter()
+        .find(|boxes| boxes.entry == "bare")
+        .unwrap();
+    let closed: Vec<(Kind, &str)> = boxes
+        .closed
+        .iter()
+        .map(|closed| (closed.kind, closed.why.code))
+        .collect();
+    assert_eq!(
+        closed,
+        [(Kind::Skill, "no_target"), (Kind::Rule, "no_target")]
+    );
+    assert_eq!(boxes.held, []);
+    let plan = fixture.planned(&[cell("bare", "skill:deploy", "workspace", true)]);
+    assert_eq!(codes(&plan), (vec![], vec!["no_target"]));
+    assert_eq!(plan.locked[0].why, boxes.closed[0].why);
 }
