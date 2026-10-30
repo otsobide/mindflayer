@@ -359,9 +359,12 @@ These are easy to break from a single file without noticing.
   no terminal does not run is one list, `task::Refusal`, read off the
   parsed command by a match with no wildcard (`Refusal::of_mind`,
   `of_flayer`), so a new command says whether it is refused before it
-  compiles; a task is refused for its lines (`Task::refusal`). The TUI
-  refuses only its screens and `ui`, which would hold it until a Ctrl-C the
-  screen keeps for itself. What a line takes away, which a front end with
+  compiles; a task is refused for its lines (`Task::refusal`). `edit` is
+  refused in an editor and with `--contents -`, standard input, and run
+  with `--contents FILE` (`Refusal::of_edit`); no task builds that line,
+  so a browser names no file to read. The TUI refuses only its screens,
+  `ui`, which would hold it until a Ctrl-C the screen keeps for itself, and
+  standard input, which is the screen's own keys. What a line takes away, which a front end with
   no terminal asks somebody to confirm before it runs it, is one list too,
   `task::Caution`, read the same way (`Caution::of_mind`, `of_flayer`,
   `task::cautions`), and the panel's backend says it of the lines it
@@ -612,7 +615,8 @@ These are easy to break from a single file without noticing.
   and a lifecycle change looks only where the project authors
   (`Catalog::discover_authored`), so it never reaches one. Core's lifecycle
   changes see to the record of the copy the change reached, and only that
-  copy's (D-04): `finish_edit` keeps it, so the copy reads as edited; `rename`
+  copy's (D-04): `finish_edit` and `replace_contents` keep it, so the copy
+  reads as edited; `rename`
   carries it to the new name and place (`Ledger::renamed_copy`, dropping it
   only when another installation holds the new name); `remove` uninstalls the
   copy, dropping its record (`Ledger::uninstalled_copy`); and `add` drops a
@@ -662,8 +666,10 @@ These are easy to break from a single file without noticing.
   `lifecycle::find_to_change`, which refuses such a rule as received rather
   than as nothing.
 - **Strict when writing, lenient when reading.** A skill's front matter is
-  the Agent Skills format. `mind add`, `rename`, `install` and `flayer adopt`
-  refuse a name or description that breaks its rules, all through
+  the Agent Skills format. `mind add`, `rename`, `install`, `flayer adopt`
+  and `edit --contents` (`lifecycle::replace_contents`, which also refuses
+  a name other than the skill's folder, pointing at `rename`) refuse a name
+  or description that breaks its rules, all through
   `artifact::strict_issues`
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
@@ -673,7 +679,9 @@ These are easy to break from a single file without noticing.
   untouched. A rule's front matter is optional (`rule::RuleManifest`): read
   only when its fences hold a YAML mapping, and whatever it leaves unread is a
   warning, never a reason to hide the rule. `mind add --template` refuses that
-  same list (`artifact::rule_issues`) for the rule it is about to write.
+  same list (`artifact::rule_issues`) for the rule it is about to write, and
+  `edit --contents` refuses it, and a rule with nothing to say, for the one
+  it is given (`artifact::rule_text_issues`), before a byte is written.
 - **Loaded and gathered content is untrusted.**
   - So is a task's every value, which a browser will fill in: it reaches
     its command as that value, never as an option or a command. The task
@@ -705,6 +713,14 @@ These are easy to break from a single file without noticing.
     (`contents::Files`): a link further down that leads out, back into a
     folder it is in, or to nothing is listed with why and never followed,
     and a listing stops at `contents::FILES_CAP`.
+  - An artifact's file given its contents whole (`edit --contents`,
+    `lifecycle::replace_contents`) is written only inside the folder its
+    holder keeps the kind in once its links are followed (`copy::followed`,
+    `edit_leads_outside` otherwise), at the path it resolves to, through a
+    temporary renamed onto it, and with `--if-unchanged` only over what the
+    hash given was taken of (`edit_stale`). The front end reads what it
+    was given, a file or standard input, and hands core the bytes, which
+    core alone judges; core never reads standard input.
   - An installed name must be one folder name for a skill
     (`install::is_folder_name`), and for a rule a route held to the name
     rules, which never climbs out (`install::is_installable_name`).

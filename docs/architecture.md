@@ -401,7 +401,13 @@ so the block and those files never disagree on it.
   past them. A rule `mind add` writes from a template is refused for whatever
   its front matter would leave unread (`artifact::rule_issues`), which reading
   only warns about ([Templates live inside the
-  markers](#templates-live-inside-the-markers)).
+  markers](#templates-live-inside-the-markers)). `edit --contents` writes
+  what it is given whole, so it asks the same of it before a byte is
+  written: a skill's through `artifact::strict_issues`, a rule's through
+  `artifact::rule_text_issues`, which is `rule_issues` and having nothing to
+  say ([contents given whole](#contents-given-whole)). An editor's edit is
+  not refused anything: the file is written by the time Mindflayer sees it,
+  and `edit` says what it broke.
 - **Warned about** when gathering, which takes the skill anyway, as the
   agentskills.io client guide advises for skills written for other agents. The
   shelf is a record of what a source holds, and leaving a skill off it would
@@ -422,7 +428,8 @@ so the block and those files never disagree on it.
 A variant on `Kind`, its folder and layout, a variant on `Declared`, a
 constructor on `Artifact`, and an arm in every match on the kind (discovery
 and discovering the shelf, `create`, `lifecycle::load` and `lifecycle::rename`,
-the refusal in `gather`, what `install` holds a copy to, and where the
+what `lifecycle::replace_contents` holds contents to, the refusal in
+`gather`, what `install` holds a copy to, and where the
 [target table](#agents-and-where-each-kind-reaches-them) puts it for each
 agent), which the compiler lists, since the matches are exhaustive. Reports need nothing:
 columns, labels and counts are all driven from `Kind::ALL` and from what the
@@ -3935,9 +3942,11 @@ is left to the command, which refuses it with a reason of its own.
 
 That refusal is one part of a list every front end shares (`task::Refusal`):
 what a front end with no terminal of its own, the panel's server, does not
-run. A screen of its own; `edit` in every form, which hands the terminal to
-an editor, until #81 gives it one that takes the contents; `activate`, which
-prints code for a shell; `gather git`, the network for as long as it
+run. A screen of its own; `edit` in an editor, which hands the terminal to
+one, and `edit --contents -`, which reads standard input, the terminal's
+too, where a file given in its place runs ([contents given
+whole](#contents-given-whole)); `activate`, which prints code for a shell;
+`gather git`, the network for as long as it
 takes, until #112 brings to the server the progress and the cancel only a
 screen has now; and `show`, which prints an artifact whole, read through any
 link on the way, as a terminal's user may ask of their own disk, where a
@@ -3945,14 +3954,16 @@ front end without one reads a file at a time, held to its holder
 ([what a browser may name](#what-a-browser-may-name)). And `ui`, which
 serves the panel until Ctrl-C, so a front end that ran it as a line would
 wait on it for good. The TUI has a terminal, so of the list it refuses only
-the screens, and `ui`, since the screen takes Ctrl-C as a key and nothing
-would stop it. The list is of commands as the parsers read them, not as they
-are spelled, so `mind flayer minds` is refused as `flayer minds` is, and it
+the screens, `ui`, since the screen takes Ctrl-C as a key and nothing would
+stop it, and standard input, which is the screen's keys, read in raw mode,
+where no key ends it. The list is of commands as the parsers read them, not
+as they are spelled, so `mind flayer minds` is refused as `flayer minds` is, and it
 is a match over every command with no wildcard, so a new command does not
 compile until it says whether it is refused. A task is refused for the first
 of its lines that is (`Task::refusal`), whichever variant it is, and each
 refusal has a code of its own (`opens_screen`, `opens_editor`,
-`prints_shell_code`, `gather_unwatched`, `show_unheld`, `serves_panel`),
+`reads_stdin`, `prints_shell_code`, `gather_unwatched`, `show_unheld`,
+`serves_panel`),
 held to the rules core's codes are ([a code for what went
 wrong](#a-code-for-what-went-wrong)). A list of tasks was the alternative,
 and it would leave out a line no task builds: a front end that runs lines it
@@ -7328,6 +7339,8 @@ whether an install of it stays recorded. The CLI finishes the edit even when
 the editor fails: one that writes the file and then exits non-zero, as vim
 does on `:cq`, has changed the copy all the same. Nothing is written to the
 ledger either way, so nothing is scrubbed out of it for the error to carry.
+An edit with its contents given whole sees to the record the same way
+([contents given whole](#contents-given-whole)).
 
 The record seen to is the one held by the workspace the command resolved,
 the one its templates come from, and each change is given it for the same
@@ -7338,6 +7351,78 @@ workspace that never installed anything must not get a database because
 something in a project changed; core opens it only when it is there. Another
 workspace that links the same project keeps its own, an [open
 question](#open-questions).
+
+### Contents given whole
+
+The panel has no editor to run, and a script has the text already, so
+`edit` also takes what the artifact is to hold: `mind edit deploy
+--contents draft.md`, or `-` for standard input, at either level. The CLI
+reads the bytes, a file typed from the directory the command works in as
+every path a command takes is, and `lifecycle::replace_contents` decides
+what may be written. Core never reads standard input, as it never reads the
+environment, and taking the bytes rather than a path keeps whatever reads
+them (the CLI now, the panel's backend through a file of its own, #82) from
+deciding anything about them.
+
+- **Held to the rules a write is, before a byte is written.** An editor's
+  edit is checked after the fact, since the editor has written the file by
+  then; contents given whole are checked first, so what does not pass is
+  never on disk. A skill's must be one Mindflayer would write
+  (`artifact::strict_issues`): front matter that reads, a name and a
+  description that pass. A rule's must say something, and its front matter
+  must read whole (`artifact::rule_text_issues`), as a template's must.
+  The rest of the file is the writer's, written as given; what `validate`
+  only warns about is said after, as for an editor's edit. Not a list of
+  its own: a rule that changes for one write changes for every one.
+- **A name stays where its folder is.** A skill's manifest naming it other
+  than its folder is refused (`edit_name_changed`) with the command that
+  changes both, `rename`, rather than written: a name changed in one place
+  is a skill an agent finds by one and not the other, and moving the folder
+  to match would be a rename nobody asked for by that name. Compared with
+  the folder, not with what the manifest said before, so contents that put
+  right a manifest whose name had drifted from its folder are taken.
+- **Only over what was read.** `--if-unchanged <sha256>` names what the file
+  held when the contents were made from it, by `hash::bytes`, the recipe
+  every hash of a file is. A file that holds anything else now was changed
+  by somebody else since, and is not written over (`edit_stale`). The
+  panel's editor (#82) is to send it with every save, so a change made in
+  an editor while the page was open is refused rather than lost. Without
+  it the write crosses whatever came first, as an editor's does.
+- **Where the artifact is kept, and nowhere else.** The file is followed
+  through its links with `copy::followed`, the check a copy and a read for
+  the panel make, and written only when it lies in the folder its holder
+  keeps the kind in (`edit_leads_outside` otherwise), at the path it
+  resolves to, so a link swapped in after the check is not written through.
+  That folder rather than the holder's root, which for the workspace's own
+  may be a home: a repository can link a skill's `SKILL.md` to
+  `~/.bashrc`, and the panel would otherwise replace it with a skill. A
+  project's skill linked to a file elsewhere in its repository is refused
+  too, and edited where it leads; reading it for the panel is held to the
+  project's root, and a write is the narrower of the two.
+- **Through a temporary renamed onto it**, as every file Mindflayer replaces
+  is (`replace_bytes_unresolved`), named for the run and ending in `.tmp`:
+  an agent reading the file finds the old contents or the new, and a skill's
+  folder holds nothing new an agent would load as one. Contents the same as
+  the file's write nothing, and say so.
+- **The record as an edit leaves it.** An installed copy replaced holds
+  something other than was installed, and reads as edited (D-04), from the
+  same function `finish_edit` asks (`Record::Kept`). Like an edit, a rename
+  or a removal, it takes no lock: what changes is the artifact's file, not
+  anything the workspace keeps, and its ledger is only read ([open
+  questions](#open-questions)).
+- **Taken by the CLI, judged by core.** `--contents` names a file or `-`
+  (`parse::Editing::given`), conflicts with `--editor`, and
+  `--if-unchanged` needs it; one struct for both binaries' `edit`, so the
+  two levels cannot come to take them differently.
+
+`edit` without `--contents` stays on the list of lines a front end with no
+terminal refuses (`opens_editor`), and so does `--contents -`, which reads
+standard input (`reads_stdin`): the server's is the terminal `flayer ui` was
+started from, and the TUI's is the screen's own keys. A file runs, from
+either ([every change is a command
+line](#every-change-is-a-command-line)). No task builds such a line: a
+browser names no file to read, and the panel's editor (#82) hands the
+backend text, which it writes to a file of its own and names.
 
 ## Scanning
 
@@ -7490,7 +7575,8 @@ panel runs them while both do. Three things keep two writers from undoing each
 other, and none of them makes a reader wait for the workspace.
 
 - **A temporary of its own.** A file Mindflayer replaces (a marker, the
-  `SKILL.md` a rename rewrites, git's exclude file) is written whole into a
+  `SKILL.md` a rename rewrites, an artifact's file `edit --contents`
+  replaces, git's exclude file) is written whole into a
   temporary beside it and renamed into place (`replace_file`). The temporary
   was `flayer.toml.tmp`, one name for every writer: two at once wrote into one
   file, either could rename the other's half into place, and the second rename
@@ -8573,7 +8659,13 @@ just listed.
   removal drops or a rename carries is that install's, which leaves its copy
   unrecorded or the renamed one recorded as the install wrote it. Taking the
   lock for the change itself, where there is no editor to wait for, would
-  close it for `add`, `rename` and `remove`.
+  close it for `add`, `rename`, `remove` and `edit --contents`, whose
+  contents are written in one step. That would not close a second window,
+  `--if-unchanged`'s: the file is hashed and then the temporary renamed
+  onto it, and a write by an editor between the two, which takes no lock
+  of Mindflayer's, is written over. Nothing short of the editor's
+  cooperation closes it; it is as wide as reading a file and renaming
+  another onto it.
 - **Two first writers making one workspace.** `init` makes a marker with
   `create_new` and then fills it, so a second writer making the same
   workspace at that moment (two first commands in a home with no
