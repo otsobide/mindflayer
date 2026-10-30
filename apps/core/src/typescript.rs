@@ -35,14 +35,17 @@ use ts_rs::{Config, ExportError, TypeVisitor, TS};
 use crate::code;
 use crate::contents::{self, Contents};
 use crate::reading::{Shown, Validation};
+use crate::update::Updates;
 use crate::view::{Listing, Snapshot};
 
 /// Every type core hands a front end whole, each with every type it names:
-/// the snapshot, an artifact's files and a file's contents, which the panel
-/// queries; what `list`, `show` and `validate` print, which a script reads;
-/// and every code core gives, which a front end compares a code with.
+/// the snapshot, an artifact's files and a file's contents, and what an
+/// update of every project would do, which the panel queries; what `list`,
+/// `show` and `validate` print, which a script reads; and every code core
+/// gives, which a front end compares a code with.
 pub fn roots(visitor: &mut impl TypeVisitor) {
     visitor.visit::<Snapshot>();
+    visitor.visit::<Updates>();
     visitor.visit::<Listing>();
     visitor.visit::<Shown>();
     visitor.visit::<Validation>();

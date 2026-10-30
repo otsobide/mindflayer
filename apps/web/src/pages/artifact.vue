@@ -12,6 +12,7 @@ import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
 import FileTree from '@/components/FileTree.vue'
 import IssueList from '@/components/IssueList.vue'
 import MarkdownBody from '@/components/MarkdownBody.vue'
+import RemoveOffer from '@/components/RemoveOffer.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import StateBadge from '@/components/StateBadge.vue'
 import { holding } from '@/library'
@@ -446,6 +447,11 @@ function withheld(contents: Contents): string {
               </p>
             </div>
           </section>
+
+          <RemoveOffer
+            :kind="held.kind"
+            :name="held.name"
+          />
         </template>
       </SnapshotGate>
     </template>

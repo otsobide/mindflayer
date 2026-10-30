@@ -1,14 +1,9 @@
-<script setup lang="ts">
-import { computed } from 'vue'
+<script lang="ts">
 import type { BadgeProps } from '@nuxt/ui'
 import type { State } from '@/api/generated/State'
 
-const props = defineProps<{
-  /** None for a row that stands in no state: one whose only copy does not read. */
-  state: State | null
-}>()
-
-interface Look {
+/** How a state is drawn: a colour and an icon, beside its word. */
+export interface Look {
   color: BadgeProps['color']
   icon: string
 }
@@ -29,7 +24,25 @@ const LOOKS: Partial<Record<State, Look>> = {
 
 const PLAIN: Look = { color: 'neutral', icon: 'i-lucide-circle' }
 
-const look = computed(() => (props.state === null ? PLAIN : LOOKS[props.state] ?? PLAIN))
+/**
+ * How `state` looks, a badge's or a box's in the matrix alike, so a state
+ * reads the same wherever it is drawn: plain for none, and for a state no
+ * look is given to.
+ */
+export function stateLook(state: State | null): Look {
+  return state === null ? PLAIN : LOOKS[state] ?? PLAIN
+}
+</script>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const props = defineProps<{
+  /** None for a row that stands in no state: one whose only copy does not read. */
+  state: State | null
+}>()
+
+const look = computed(() => stateLook(props.state))
 </script>
 
 <template>

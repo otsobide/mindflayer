@@ -148,16 +148,21 @@ under `apps/` with its own `Makefile`:
   workspace keeps (`known`), creating and changing artifacts, and moving a
   workspace's own into its library and a project from its `mind.toml` or
   `settings.json` to a `settings.toml` (`migrate`), bringing what was
-  installed up to date with where it came from (`update`), installing one
+  installed up to date with where it came from, and what doing so in every
+  project would do and why it would leave what it leaves, as a read
+  (`update`, `update::Updates`), installing one
   artifact into several projects at once, or taking it, or whatever nothing
-  offers any more, out of them (`assign`), removing one of the
+  offers any more, out of them (`assign`), planning what a selection of
+  boxes ticked and unticked amounts to, which offer of a name each project
+  holds, and what clashes or is locked, as a read (`install::plan`,
+  `install::holding`), removing one of the
   workspace's own from every project it links before the library
   (`everywhere`), and bringing a skill somebody keeps in a project's agents'
   folders into the library, its copies recorded as installed from there
   (`adopt`), the stable code each of its errors gives (`code`), the
-  snapshot every front end reads a workspace through, with what it counts
-  and each project's health, and the part of it `list --json` prints
-  (`view`), every path a snapshot reads that a front end watches for a
+  snapshot every front end reads a workspace through, with what it counts,
+  each project's health, and every offer with each project's box of it,
+  and the part of it `list --json` prints (`view`), every path a snapshot reads that a front end watches for a
   change, each with the holder it is of (`watch`), one file of an artifact
   read as text for
   the panel, cut at its front matter when it is the one the artifact is
@@ -223,12 +228,19 @@ under `apps/` with its own `Makefile`:
   its views (`settle`), `src/api/commands.ts` the runner every change goes
   through (`useRunner`: a task previewed, shown, confirmed when it takes
   something away, and run), `src/api/transcript.ts` the query of the
-  server's transcript, and `src/api/scan.ts` the query of a scan, asked for
-  by hand. `src/pages/` holds one
+  server's transcript, `src/api/scan.ts` the query of a scan, asked for
+  by hand, `src/api/plan.ts` the queries of a plan of the boxes marked
+  on the matrix and of the lines it runs (`usePlan`, `usePreview`), and
+  `src/api/updates.ts` the query of what an update of every project would
+  do (`useUpdates`).
+  `src/pages/` holds one
   page per route (file routes): the overview (`index`), the projects
   (`projects`), a project's page (`project`, which `src/routes.ts` names by
   its entry in the query), what could be linked (`discover`, the folders it
-  scans in the query), the library (`library`), one of its own
+  scans in the query), the matrix of offers against projects (`assign`,
+  its filters and which way round it is in the query), what an update
+  would do (`updates`), the library
+  (`library`), one of its own
   (`artifact`, named by its kind and name in the query), the shelf
   (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
   the query a page keeps its state in, `src/library.ts` finds the projects
@@ -242,12 +254,16 @@ under `apps/` with its own `Makefile`:
   (`FileTree`), the ledger's latest actions (`ActivityFeed`),
   `SnapshotGate`, which draws a page once the snapshot is answered, the
   folder to link (`LinkForm`), a project's agents and share toggles
-  (`SettingsForm`) and its migration, dry run first (`MigrateOffer`), and
+  (`SettingsForm`) and its migration, dry run first (`MigrateOffer`), the
+  removal of one of the library's own everywhere, dry run first
+  (`RemoveOffer`), the
+  matrix's grid, drawn a screen at a time (`AssignGrid`), and
   what the runner draws beside the pages:
   `CommandRunner`, which makes it and says how each task ended in a toast,
   the task shown before it runs (`CommandDialog`), what the last run said
   (`WarningsDrawer`) and the transcript (`TranscriptDrawer`).
-  `src/stores/` holds Pinia's UI state,
+  `src/stores/` holds Pinia's UI state, the boxes marked on the matrix
+  among it (`marks.ts`),
   `src/query.ts` the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
   colour mode, and `src/overrides/` what replaces two pieces of the
   libraries for the CSP. `src/*.d.ts` are written by the Vite plugins and
@@ -290,7 +306,13 @@ These are easy to break from a single file without noticing.
   received nowhere (`ProjectStatus::missed`). Which kind a name typed bare
   is, to install or take out, is core's (`install::offered_typed`,
   `uninstall_typed`), and so is what a render of rules warns of
-  (`Rendered::warnings_of`). Where an agent reads
+  (`Rendered::warnings_of`). Every rule of a batch of boxes is core's
+  plan's (`install::plan`, `Plan::of`): which offer of a name a project
+  holds (`install::holding`), that an offer ticked in place of another
+  replaces it, one line an offer and one a name, kind by kind, and that two
+  offers of one name clash and a change to somebody's or an edited copy is
+  locked, by the code the command refuses it with (`Standing::refused`).
+  Where an agent reads
   (`Agent::reads`) is kept apart from where it is sent a copy: OpenCode reads
   `.claude/skills` and is sent nothing there. Which folders a project is read
   from is core's too (`Catalog::folders`), and so are the names at a
@@ -322,7 +344,8 @@ These are easy to break from a single file without noticing.
   the thread changes where they run, not what they are. The install screen applies the same way, in the TUI or
   opened by `flayer install` (`install::apply`): its marks are the
   `flayer install` and `flayer uninstall` lines they amount to
-  (`Screen::task`), each run whatever came of the others
+  (`Screen::task`), as core plans them (`install::Plan::of`), each change
+  the task that runs it (`Task::from`), each run whatever came of the others
   (`Task::chained`), so its transcript runs again. A batch a screen builds
   from its marks or its toggles is built in the task module, from what was
   marked (`Task::minds`, from each folder's `MindsChange`) or what the
@@ -403,7 +426,12 @@ These are easy to break from a single file without noticing.
   `ENVELOPE_VERSION`, and every URL in it, an error's message included,
   goes out through `url::redacted`. What a front end reads beside it is
   only what it cannot hold: a scan (the panel's `Query::Scan`, asked for
-  by hand and answered with the backend's `Scanned`), and which workspace
+  by hand and answered with the backend's `Scanned`), a plan of boxes
+  (`Query::Plan`, answered with the backend's `Planned`, core's plan with
+  each change the task that runs it, which the panel sends back as one
+  `apply_install`, never a task of its own), what an update of every
+  project would do (`Query::Updates`, answered with core's
+  `update::Updates`), and which workspace
   a project's own lines consult (`docs/architecture.md`, "The read
   model").
 - **Every error has a stable code.** Each public error type in core,
@@ -419,7 +447,10 @@ These are easy to break from a single file without noticing.
   only its type, never renamed nor moved to another condition, and named
   for the condition in snake_case. A variant
   that only carries another error of core's, adding where or what came of
-  it, takes that error's code (`carried`). A new error type joins
+  it, takes that error's code (`carried`), and one that says another's
+  condition in words of its own echoes that one's code (`echoed`), as
+  `update::Left` says an edit left alone by `install::Refused`'s
+  `edited`. A new error type joins
   `code::ALL`; `code_test.rs` holds no two codes alike and finds a type
   that derives `Error` and never joined.
 - **Failures are collected, not raised.** One unreadable artifact or stale
@@ -655,7 +686,9 @@ These are easy to break from a single file without noticing.
     names something on the disk, in a match over every variant with no
     wildcard: a project or a loaded workspace by its entry as the marker
     spells it, which the backend turns into the absolute folder it resolves
-    to for the line's one `-C` or `-p`, and a folder not linked yet, or one
+    to for the line's one `-C` or `-p` (and each project a plan's boxes
+    name, held to it by `Admission::selection` before core plans), and a
+    folder not linked yet, or one
     a scan is to look under, by an absolute, normalized path outside every
     `.mindflayer`, verbatim. The
     browser supplies no `-C`, `--home`, `-W` or agent home: the backend runs
@@ -894,7 +927,16 @@ These are easy to break from a single file without noticing.
   one the snapshot carries (`summary`, a project's `tally`), every verdict
   one core gave (a project's `health`, whether it `migrates`), and every
   word a scan's answer gives (what each folder `offers`, the entry a moved
-  one left), every order the snapshot's
+  one left), every batch of boxes a plan core made (`Query::Plan`: its
+  tasks, what clashes and what is locked), every box of the matrix as the
+  snapshot says it stands (`offers`, and each project's `boxes`: which
+  offer of a name it holds, by `install::holding`, how the name stands,
+  and each kind it can take none of), never told from a copy's origin,
+  every installation an update says something of as core surveyed it
+  (`Query::Updates`: its state, what an update does with it, the copies
+  that names, why it is left, by a code, and how many stand in each
+  state), never told from the snapshot's states,
+  and every order the snapshot's
   (`kinds`, `states`, `healths`, the registry's). A count or a verdict a
   view needs is added to `view::Snapshot` in core, never worked out from
   the lists, and a kind core adds reaches every view with no change
@@ -1033,24 +1075,37 @@ These are easy to break from a single file without noticing.
   of the library's own is answered with (`library.json`, every files and
   contents query an artifact's page asks), what scanning the folder of the
   workspace `candidates.json` is a snapshot of is answered with
-  (`scan.json`), and what previewing and running
-  a few tasks in turn is (`commands.json`). `tests/panel.ts` reads them and
+  (`scan.json`), what previewing and running
+  a few tasks in turn is (`commands.json`), and, of a workspace built for
+  the matrix (`assigning.json`), what planning a few selections of its
+  boxes is answered with (`plans.json`) and what applying the first is
+  (`applied.json`), and, of a workspace built to update (`updating.json`),
+  what asking what an update would do is answered with (`updates.json`)
+  and each change its page offers, previewed and run each on the
+  workspace as built (`updated.json`). `tests/panel.ts` reads them and
   mounts the panel at an address, answering its queries with them, and a
   task with its preview and its run, told finished on the stream before
   it is answered, as the server tells it (`commanding`); a test about
   something no fixture holds changes its own copy. A test that needs a
   page of its own adds a route to `render`.
   `dist.test.ts` builds the panel in a process of its own, into a temporary
-  folder under `node_modules`, and leaves `dist/` alone. `licences.test.ts`
+  folder under `node_modules`, and leaves `dist/` alone. `matrix.test.ts`
+  holds the matrix of 50 projects by 200 offers to 100 rows in the
+  document and times its first render, which it holds to 300 ms: vitest
+  runs it alone once every other suite is done (`test.projects` in
+  `vite.config.ts`), since a render timed beside them times the runner's
+  load too. `licences.test.ts`
   reads every installed package's licence: a new one outside its list of
   GPL-3.0-compatible licences fails it.
 - The browser suite is `apps/web/e2e/<area>.spec.ts`, in Playwright, on
   the real `flayer ui`: the debug build, or the binaries `E2E_BIN` names,
   as CI names the release. It serves a workspace `e2e/fixture.ts` builds
   with the real commands, each made to exit 0 with no warning, and
-  nothing written by hand but the folders `mind init` runs in; a state
-  only a hand edit, a removed folder or a git source makes is left to the
-  views' suites and their fixtures. Every process it starts goes through
+  nothing written by hand but the folders `mind init` runs in and, beside
+  the workspace, the drafts an `--editor` copies in (`fixture.draft`), as
+  an editor saves one, for `flayer edit` and `mind edit` to change an
+  artifact with; a state only a hand edit, a removed folder or a git
+  source makes is left to the views' suites and their fixtures. Every process it starts goes through
   `e2e/environment.ts` (`run`, `pinned`, `environment`), and the config
   starts the server the same way, from the fixture's folder. A spec reads
   the server from `served`, what the CLI says from `listing()`, `flayer
@@ -1059,7 +1114,9 @@ These are easy to break from a single file without noticing.
   an uncaught error on its page (`watch`), and `csp.spec.ts` holds the watch
   to seeing one. No spec changes the shared workspace: a test that changes
   something takes a workspace and a `flayer ui` of its own (`own`, built by
-  `changeable` beside a copy of it and served by `serve`, through
+  `changeable`, or what the spec's `building` names, `assignable` for the
+  matrix's or `updatable` for updating and removing, beside a copy of it
+  and served by `serve`, through
   `environment.ts` as every process is), and holds what the panel left to
   what the same command leaves in the copy.
 - The tests of the panel's types are core's and the CLI's

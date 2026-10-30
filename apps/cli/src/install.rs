@@ -168,11 +168,15 @@ pub fn build(
         for kind in Kind::ALL {
             candidates.extend(install::survey(workspace, ledger, &project, kind)?);
         }
+        // Which offer of each name the project holds, as core says: one box
+        // a name, however many places offer it.
+        let held = install::holding(workspace, ledger, &project, &candidates)?;
         let picked_by = workspace.naming(&project);
         let mut target = Target::new(project, picked_by, candidates);
-        // Which of several offers of one name is the copy the project holds.
-        let project = target.project.clone();
-        target.settle(|candidate| install::is_current(workspace, ledger, &project, candidate));
+        for (row, held) in target.rows.iter_mut().zip(held) {
+            row.was = held;
+            row.checked = held;
+        }
         targets.push(target);
     }
     Ok(Screen::new(targets))

@@ -27,6 +27,7 @@
 //! is core's, so a second front end taking tasks from outside asks the same
 //! questions and gets the same answers.
 
+use mindflayer_core::install::Cell;
 use mindflayer_core::policy::{self, PolicyError};
 use mindflayer_core::{FlayerWorkspace, Member};
 
@@ -114,7 +115,8 @@ impl Admission<'_> {
             | Task::Targets { holder, .. }
             | Task::Settings { holder, .. }
             | Task::Toggled { holder, .. }
-            | Task::Update { holder, .. } => *holder = self.holder(holder)?,
+            | Task::Update { holder, .. }
+            | Task::UninstallOrphaned { holder } => *holder = self.holder(holder)?,
             Task::Install { projects, .. } | Task::Uninstall { projects, .. } => {
                 for project in projects {
                     *project = self.project(project)?;
@@ -130,6 +132,23 @@ impl Admission<'_> {
             }
         }
         Ok(admitted)
+    }
+
+    /// Every project `selection` names, each box's by its entry, one the
+    /// workspace's registry holds: what a plan the panel asks for may name
+    /// (the backend's `Query::Plan`), as a task's projects may.
+    ///
+    /// Asked here, before core plans, as of every value a browser sends,
+    /// though core's plan refuses an entry it does not link as well: one
+    /// walk over what a browser sent holds it to the policy, whichever
+    /// reader it is for. Nothing is spelled again, since a plan runs no
+    /// line: the tasks it hands back name each project by its entry, and are
+    /// admitted when they come back to run.
+    pub fn selection(&self, selection: &[Cell]) -> Result<(), PolicyError> {
+        for cell in selection {
+            policy::linked(self.workspace, &cell.project)?;
+        }
+        Ok(())
     }
 
     /// `holder`, a project's by the folder its entry points at.

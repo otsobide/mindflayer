@@ -4,6 +4,89 @@
     "codex",
     "opencode"
   ],
+  "box_states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign"
+  ],
+  "boxes": [
+    {
+      "closed": [],
+      "entry": "api",
+      "held": [
+        {
+          "kind": "skill",
+          "name": "review",
+          "origin": "workspace",
+          "state": "current",
+          "ticked": true
+        },
+        {
+          "kind": "rule",
+          "name": "git/commits",
+          "origin": "workspace",
+          "state": "current",
+          "ticked": true
+        }
+      ]
+    },
+    {
+      "closed": [],
+      "entry": "web",
+      "held": [
+        {
+          "kind": "skill",
+          "name": "lint",
+          "origin": "workspace",
+          "state": "outdated",
+          "ticked": true
+        },
+        {
+          "kind": "skill",
+          "name": "review",
+          "origin": "workspace",
+          "state": "edited",
+          "ticked": true
+        }
+      ]
+    },
+    {
+      "closed": [],
+      "entry": "docs",
+      "held": [
+        {
+          "kind": "skill",
+          "name": "review",
+          "origin": "workspace",
+          "state": "current",
+          "ticked": true
+        }
+      ]
+    },
+    {
+      "closed": [
+        {
+          "kind": "skill",
+          "why": {
+            "code": "not_a_project",
+            "message": "/home/you/Projects/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        },
+        {
+          "kind": "rule",
+          "why": {
+            "code": "not_a_project",
+            "message": "/home/you/Projects/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        }
+      ],
+      "entry": "gone",
+      "held": []
+    }
+  ],
   "format": 1,
   "healths": [
     "ok",
@@ -184,6 +267,50 @@
       "offers": 0,
       "origin": "load:../team",
       "path": "/home/you/team"
+    }
+  ],
+  "offers": [
+    {
+      "kind": "skill",
+      "name": "lint",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "Tidy the code before a commit"
+    },
+    {
+      "kind": "skill",
+      "name": "review",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "Read a change before it lands"
+    },
+    {
+      "kind": "skill",
+      "name": "format",
+      "origin": "https://github.com/acme/skills",
+      "place": "shelf",
+      "summary": "Format the code the way the team does"
+    },
+    {
+      "kind": "skill",
+      "name": "triage",
+      "origin": "https://github.com/acme/skills",
+      "place": "shelf",
+      "summary": "Sort new issues by what they need"
+    },
+    {
+      "kind": "rule",
+      "name": "git/commits",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "Write commit messages that say why"
+    },
+    {
+      "kind": "rule",
+      "name": "style/comments",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "Comment the why, not the what"
     }
   ],
   "projects": [

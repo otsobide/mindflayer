@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { Health } from '@/api/generated/Health'
-import { commanding, fixture, render, unmount } from './panel'
+import { answering, answers, commanded, commanding, fixture, plans, render, unmount, updates } from './panel'
 
 /** Every `<style>` element anything adds while a test runs, which the CSP would refuse. */
 let styles: Element[]
@@ -58,7 +58,7 @@ function everyLook() {
 }
 
 describe('the views', () => {
-  it.each(['/', '/projects', '/projects?sort=name', '/projects?sort=name&order=desc', '/project?entry=api', '/project?entry=docs', '/project?entry=gone', '/library', '/library?kind=rule', '/artifact?kind=skill&name=review&file=SKILL.md', '/artifact?kind=rule&name=style/comments', '/shelf', '/shelf?kind=skill', '/sources', '/discover', '/discover?root=%2Fhome%2Fyou%2FProjects'])(
+  it.each(['/', '/projects', '/projects?sort=name', '/projects?sort=name&order=desc', '/project?entry=api', '/project?entry=docs', '/project?entry=gone', '/library', '/library?kind=rule', '/artifact?kind=skill&name=review&file=SKILL.md', '/artifact?kind=rule&name=style/comments', '/shelf', '/shelf?kind=skill', '/sources', '/discover', '/discover?root=%2Fhome%2Fyou%2FProjects', '/assign', '/assign?by=project'])(
     '%s draws every icon from the bundle and adds no style element',
     async (path) => {
       const { page } = await render(path, everyLook())
@@ -67,6 +67,24 @@ describe('the views', () => {
       expect(styles).toEqual([])
     }
   )
+})
+
+describe('the matrix, with a plan of what was marked', () => {
+  it('draws every icon from the bundle, every lock and clash among them, and adds no style element', async () => {
+    const { transport } = answering(fixture('assigning'), plans())
+    const { page } = await render('/assign', transport)
+
+    for (const cell of (plans()[2]!.query as { selection: { project: string, reference: string, origin: string }[] }).selection) {
+      const label = `${cell.reference.replace(':', ' ')} from ${cell.origin} in ${cell.project}`
+      await page.findAll('[data-testid="box"]').find(each => each.attributes('aria-label')!.split('; ')[0] === label)!.trigger('click')
+    }
+    await flushPromises()
+
+    expect(page.findAll('[data-held="locked"]')).not.toHaveLength(0)
+    expect(page.findAll('[data-held="conflict"]')).not.toHaveLength(0)
+    drawsEveryIcon(page)
+    expect(styles).toEqual([])
+  })
 })
 
 describe('what a project an older marker marks offers', () => {
@@ -78,6 +96,32 @@ describe('what a project an older marker marks offers', () => {
     await flushPromises()
     document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
     await vi.waitFor(() => expect(page.find('[data-testid="migrate-yes"]').exists()).toBe(true))
+
+    drawsEveryIcon(page)
+    expect(styles).toEqual([])
+  })
+})
+
+describe('the page of updates', () => {
+  it('draws every icon from the bundle, every state listed, and adds no style element', async () => {
+    const { transport } = answering(fixture('updating'), updates())
+    const { page } = await render('/updates', transport)
+
+    expect(page.findAll('[data-testid="row"]')).not.toHaveLength(0)
+    drawsEveryIcon(page)
+    expect(styles).toEqual([])
+  })
+})
+
+describe('one of the library\'s own, about to be removed', () => {
+  it('draws every icon from the bundle, its dry run shown, and adds no style element', async () => {
+    const { transport } = commanding(fixture('workspace'), commanded(), answers())
+    const { page } = await render('/artifact?kind=skill&name=review', transport)
+
+    await page.get('[data-testid="remove-dry"]').trigger('click')
+    await flushPromises()
+    document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await vi.waitFor(() => expect(page.find('[data-testid="remove-yes"]').exists()).toBe(true))
 
     drawsEveryIcon(page)
     expect(styles).toEqual([])

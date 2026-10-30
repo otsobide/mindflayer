@@ -2,10 +2,12 @@
  * The workspace the panel is served over, built as somebody would build it:
  * a command at a time, with the binaries under test, so what the panel draws
  * is what those commands made and `flayer list --json` says of it. Nothing is
- * written by hand but the folders `mind init` is run in, as `mkdir` would.
+ * written by hand but the folders `mind init` is run in, as `mkdir` would,
+ * and, outside the workspace, the text an `--editor` copies in, as an editor
+ * would save it.
  */
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { succeed, type Places } from './environment.ts'
 
 /** The workspace's own, each as `flayer add` takes it: kind, name, description. */
@@ -73,4 +75,89 @@ export function changeable(at: Places): void {
     succeed(at, 'mind', folder, ['init'])
   }
   succeed(at, 'flayer', at.workspace, ['link', 'drafts'])
+}
+
+/** The skill `assignable`'s loaded workspace offers, and where from as `--from` takes it. */
+export const OFFERED = { name: 'notes', origin: 'load:../team' } as const
+
+/** The projects `assignable` links, each for Claude and Codex. */
+export const ASSIGNED = ['alpha', 'beta'] as const
+
+/**
+ * A workspace for the spec that assigns from the matrix, which no other
+ * spec reads: `team`, a workspace beside it whose own skill `notes` it
+ * loads, and `alpha` and `beta`, each made by `mind init` for Claude and
+ * Codex and linked, holding nothing yet.
+ *
+ * Offered from a loaded workspace rather than from the shelf, which only a
+ * gather from a git source fills, and the suite builds nothing a git
+ * source makes: a load is the other place an offer comes from beside the
+ * workspace's own, and is installed with `--from` as one from the shelf is.
+ */
+export function assignable(at: Places): void {
+  const team: Places = { ...at, workspace: join(dirname(at.workspace), 'team') }
+  succeed(at, 'flayer', at.scratch, ['init', team.workspace], 'none')
+  succeed(team, 'flayer', team.workspace, ['add', 'skill', OFFERED.name, 'Keep notes as the team does'])
+  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'flayer', at.workspace, ['load', '../team'])
+  for (const name of ASSIGNED) {
+    const folder = join(at.workspace, name)
+    mkdirSync(folder)
+    succeed(at, 'mind', folder, ['init', '--agents', 'claude,codex'])
+    succeed(at, 'flayer', at.workspace, ['link', name])
+  }
+}
+
+/** The skill `updatable`'s library holds, and both its projects received. */
+export const UPDATED = 'lint' as const
+
+/**
+ * The projects `updatable` links: `alpha`, for Claude and Codex, whose copy
+ * is as it was installed, and `beta`, for Claude, whose copy was edited
+ * since.
+ */
+export const UPDATING = ['alpha', 'beta'] as const
+
+/** What `flayer add` writes for the skill `lint`, a line added below. */
+function lint(line: string): string {
+  return `---\nname: ${UPDATED}\ndescription: Tidy the code before a commit\n---\n\n# ${UPDATED}\n\n${line}\n`
+}
+
+/** The library's `lint` once the team learned something, which leaves what was installed of it behind. */
+export const LINT_SINCE = lint('Run the formatter before the linter.')
+
+/**
+ * `text` saved where an `--editor` copies it from, beside the workspace
+ * rather than in it, under `name`: what an editor would save, and the one
+ * file a spec or a builder writes by hand. Its path, for the `cp` an
+ * `--editor` runs.
+ */
+export function draft(at: Places, name: string, text: string): string {
+  const path = join(dirname(at.workspace), 'drafts', name)
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, text)
+  return path
+}
+
+/**
+ * A workspace for the spec that updates and removes from the panel, which
+ * no other spec reads: its library holds the skill `lint`, installed into
+ * `alpha` and `beta`, and `beta`, which authors its skills in Claude's
+ * folder, where its copy is installed too, had that copy edited since with
+ * `mind edit`, an `--editor` copying a draft in, as an editor saves one.
+ *
+ * Edited with the command rather than written into by hand: `mind edit`
+ * reaches only what a project authors, so `beta` authors where Claude
+ * reads, and the edit keeps the copy's record, which it then stands as
+ * edited against.
+ */
+export function updatable(at: Places): void {
+  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'flayer', at.workspace, ['add', 'skill', UPDATED, 'Tidy the code before a commit'])
+  const [alpha, beta] = UPDATING
+  project(at, alpha, ['--agents', 'claude,codex'])
+  project(at, beta, ['--agents', 'claude', '--skills', '.claude/skills'])
+  succeed(at, 'flayer', at.workspace, ['install', '-p', alpha, '-p', beta, `skill:${UPDATED}`])
+  const edited = draft(at, 'beta-lint.md', lint('Our own way: lint before every push.'))
+  succeed(at, 'mind', join(at.workspace, beta), ['edit', `skill:${UPDATED}`, '--editor', `cp ${edited}`])
 }

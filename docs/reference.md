@@ -1017,8 +1017,10 @@ to date.
 
 Two shelves can offer `commit-style`, but a project has one directory of that
 name, so ticking one unticks the other rather than letting both apply and the
-second win quietly. A skill and a rule of one name are two things, and keep a
-box each.
+second win quietly. The one ticked when the screen opens is the one the
+project's copy was installed from, as the workspace recorded it, even when
+that copy is behind both places or edited since. A skill and a rule of one
+name are two things, and keep a box each.
 
 The screen offers the workspace's own skills and rules too, first and marked
 `[workspace]`: that is how something written once for every project reaches
@@ -1841,8 +1843,11 @@ says how it went; when it failed, or said a warning, the drawer of what it
 said opens, every warning, note and error under the line that said it, with
 its code. The panel links projects, from the folder you type above the
 projects table or from what **Discover** finds, relinks one that moved,
-unlinks one from its page, changes a project's agents and share mode, and
-migrates a project an older Mindflayer made; everything else is still a
+unlinks one from its page, changes a project's agents and share mode,
+migrates a project an older Mindflayer made, installs and uninstalls
+skills and rules from **Assign**, brings what is installed up to date and
+takes out what nothing offers from **Updates**, and removes one of the
+library's own everywhere, its dry run first; everything else is still a
 command away.
 
 **The transcript**, in every page's header, lists every task the session
@@ -1863,8 +1868,9 @@ with nothing linked, nothing of its own or nothing gathered names the
 commands that would change that.
 
 **Projects** lists every entry the workspace links: its name, path, agents
-and share mode, how many of each kind it holds, its health, and why an entry
-that opens nothing does not. The health is one word for the whole project:
+and share mode, how many of each kind it holds, how many of what it was
+given are `outdated`, a badge linking to **Updates**, its health, and why an
+entry that opens nothing does not. The health is one word for the whole project:
 `ok`; `attention` when something asks for a command (an install outdated,
 edited, missing or orphaned, something one of its agents never reads, a
 folder its targets name that no install uses, copies of one name that
@@ -1945,6 +1951,16 @@ stays a link, opened in a tab of its own. No file is ever served as itself,
 and a link in the skill that leads out of the folder the library keeps its
 kind in is listed with why and never followed.
 
+At the bottom, **See what removing it everywhere does** runs the dry run of
+`flayer remove --everywhere <kind:name>`, which deletes nothing, and shows
+what it said: each project's copy that would go, with how it stands, a copy
+changed since it was installed that would stay, somebody's own of the name,
+which is never touched, and the library's copy. Only then does **Remove
+everywhere** run the same line with `--yes`, a confirmation since it deletes
+the artifact and uninstalls its copies, and go back to the library. The
+panel never removes the library's copy alone, which would leave each copy
+installed from it orphaned.
+
 **The shelf** lists everything gathered, filtered by kind or by name,
 summary or origin, each with the commit it was taken at, when, and its
 origin as `--from` takes it: the address it came from, with `#` and the
@@ -1954,6 +1970,60 @@ commit last gathered and what it supplied, and below them what happened
 lately: the latest gathers, installs, uninstalls, relinks and adoptions the
 ledger logged, newest first, with every URL in them shown without
 credentials. An empty shelf names `flayer gather git`.
+
+**Assign** is a matrix of everything there is to install against every
+project: a row for each skill and rule the library, a loaded workspace or
+the shelf offers, under a heading for where it comes from, its origin as
+`--from` takes it, and a column for each project, or turned round, **by
+project**, with the origins over the columns. A box is ticked where the
+project holds that offer, as `flayer install` would leave it: of two
+places offering one name, the one its install came from, and every one
+when somebody else's copy of the name is there. An icon over a box says
+how the name stands in the project (`current`, `outdated`, `edited`,
+`missing`, `orphaned`, `foreign`), and a box of a kind the project can take
+none of, as a project naming no agent, is closed and says why. Type to
+filter the offers by name, summary or origin, show one kind or one origin,
+or the projects one agent works in; the address keeps all of it, and which
+way round it is.
+
+Press a box, or move to it with the arrow keys and press Space, to mark it
+the other way round, and again to take the mark away. Whatever is marked
+is planned at once, and the plan shows below: the lines that carry it out,
+one `flayer install -p ... --from <origin> <kind:name>` for each offer
+ticked, with every project ticking it, and one `flayer uninstall -p ...
+<kind:name>` for each name unticked, an offer ticked in place of another of
+its name replacing it rather than taking it out first; and what it holds
+back, each on its box and listed with its code: a box whose name is
+somebody's copy (`foreign`) or one changed since it was installed
+(`edited`), which only `--force` on the command line reaches, and one name
+asked of a project from two places (`wanted_twice`). **Apply** shows the
+lines, a confirmation when one uninstalls, and runs them as one batch, the
+install screen's; **Clear the marks** forgets them. A matrix of hundreds
+of offers and projects draws only what fits on screen.
+
+**Updates** is what `flayer update --all` would do, before it is told
+`--yes`: every installation an update says something of, under its state,
+`outdated`, `edited`, `missing` and `orphaned`, each counted, with its
+project, its origin as `--from` takes it, and what an update does with it:
+writes it again from its origin (`refresh`), puts back the copies named
+(`put_back`), or leaves it, saying why in core's words and by a code, a copy
+changed since it was installed (`edited`), an origin that offers it no more
+(`no_longer_offered`), or one installed before origins were kept that two
+places offer (`origin_unknown`), which `install --from` settles. An entry
+that opens no project is said above. **Update all** runs `flayer update
+--all --yes`, each project offers its own `mind -C <project> update --yes`
+where an update writes something, and each row its change: **Update**, the
+same line naming it; **Force update** for an edited copy, the line with
+`--force`, a confirmation since it writes over the change; and
+**Uninstall** for one nothing offers any more, `flayer uninstall -p
+<project> <kind:name>`, beside **Uninstall every orphaned one**, `flayer
+uninstall --all-projects --orphaned`. One nothing offers that was changed
+since it was installed, as removing it everywhere leaves one, stands as
+`edited`, and neither uninstall takes it out: its row offers **Force
+uninstall**, the line with `--force`, a confirmation since the change goes
+with it. Each line is shown first, as everywhere in the panel, and the
+page is drawn again from what it changed: an edited copy an update left is
+still listed, with why.
 
 **It follows the disk.** A change made from a terminal, the TUI or an
 editor shows in the panel within a moment, without a reload: a skill edited,
@@ -1970,8 +2040,12 @@ Every page works from the keyboard and says every state in words, never by
 colour alone. The API under it is there for a script holding the token as a
 Bearer token: `POST /api/query` for a read (`{"type": "snapshot"}` answers
 what the panel draws, `{"type": "files", ...}` what one artifact holds,
-`{"type": "contents", ...}` one file of it, as text, and `{"type": "scan",
-"roots": ["/home/you/Projects"], "depth": null}` what Discover lists), `POST
+`{"type": "contents", ...}` one file of it, as text, `{"type": "scan",
+"roots": ["/home/you/Projects"], "depth": null}` what Discover lists, and
+`{"type": "plan", "selection": [{"project": "alpha", "reference":
+"skill:deploy", "origin": "workspace", "wanted": true}]}` what boxes of a
+project and an offer, ticked or not, amount to: the tasks that carry them
+out, beside what clashes and what is locked, with nothing run), `POST
 /api/commands/preview` for the lines a task is and what of them the panel
 asks you to confirm (`{"lines": [...], "confirm": [...]}`), `POST
 /api/commands` to run them, which asks nobody, `GET

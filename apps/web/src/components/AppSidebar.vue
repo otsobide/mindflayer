@@ -22,6 +22,8 @@ const links = computed<NavigationMenuItem[]>(() => [
     active: route.path === '/project' || undefined
   },
   { label: 'Discover', icon: 'i-lucide-radar', to: '/discover' },
+  { label: 'Assign', icon: 'i-lucide-grid-3x3', to: '/assign' },
+  { label: 'Updates', icon: 'i-lucide-circle-arrow-up', to: '/updates' },
   {
     label: 'Library',
     icon: 'i-lucide-library-big',

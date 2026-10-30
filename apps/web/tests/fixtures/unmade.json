@@ -4,6 +4,15 @@
     "codex",
     "opencode"
   ],
+  "box_states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign"
+  ],
+  "boxes": [],
   "format": 1,
   "healths": [
     "ok",
@@ -41,6 +50,7 @@
     ]
   },
   "loaded": [],
+  "offers": [],
   "projects": [],
   "shelf": [],
   "sources": [],

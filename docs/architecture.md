@@ -1484,11 +1484,29 @@ type derives `Serialize` from the start:
   --json` prints of the snapshot (`view::Listing`), and what `show` and
   `validate` say of each artifact (`reading::Shown`, `reading::Validation`
   and its `Checked`).
+- **Planned for the panel by #78**: a box of a selection
+  (`install::Cell`, which the panel sends, and so reads too, refusing a
+  field it does not name), and what a selection amounts to
+  (`install::Plan`, its `Change`, `Conflict` and `Locked`), each name by
+  the field, a kind by its slug, an origin, a cell's or an install's,
+  through `url::serialize_redacted`, and why a box clashes or is locked as a
+  `code::Said`. The panel is answered with the backend's `Planned`, each
+  change the task that runs it, so a `Change` is tagged as a task is, its
+  type beside its fields.
+- **Surveyed for the panel by #80**: what an update of every project
+  would do (`update::Updates`, each project's `ProjectUpdates` and each
+  installation's `Pending`), a new read type rather than `update::Plan`
+  made to serialize: the plan holds what applying it came to, its errors
+  and the candidates it writes from, none a reader is given. What an update
+  does is a word (`update::Does`, by its slug, said in TypeScript from the
+  serializer's own function), a copy a route from its project, an origin
+  through `url::serialize_redacted_option`, and why one is left a
+  `code::Said` of `update::Left`.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
-  a change of agents would do (`update::Plan`, `reapply::Plan`). Each
-  derives `Serialize` in the change that first hands it to one, under the
-  same rule.
+  a change of agents would do as each plans it (`update::Plan`,
+  `reapply::Plan`). Each derives `Serialize` in the change that first hands
+  it to one, under the same rule.
 
 Each one a crate's `typescript::roots` names (what the panel reads, and
 what `list`, `show` and `validate` print), and what it names, has
@@ -1683,7 +1701,33 @@ read, built and ordered in core from the read types the commands print:
   names `gather list --json` prints an offer from the shelf by, rather than
   a shape of the snapshot's own; working the origin out in the panel, from
   the address and the branch, was the other way, which would have put the
-  rule for `--from` in TypeScript.
+  rule for `--from` in TypeScript;
+- everything there is to install (`offers`, `view::Offered`), from
+  wherever it is offered, kind by kind in the order an install screen
+  lists it, each with its `place` (`workspace`, `loaded` or `shelf`) and
+  its `origin`; and each entry's boxes of them that are not empty
+  (`boxes`, `view::Boxes`), in the registry's order: for each offer of a
+  name the project holds something of or records, the state of the name
+  and whether its box is ticked (`view::HeldBox`), every state one can
+  stand in listed apart (`box_states`, `State::of_boxes`: what
+  `State::of_standing` says of some `install::Standing`, so `states` but
+  `authored`, which no offer is), for a legend of the boxes to list rather
+  than leave a state out by its name, and each kind none of its boxes can
+  be asked about, by the code a plan locks one by (`view::Closed`:
+  `no_target` from `install::receives`, or why its entry opens no
+  project). Told by the install screen's own functions, over the
+  offers read once rather than once a project (`install::survey_among`,
+  then `install::holding`), so the panel's matrix opens on the boxes the
+  screen opens on, and each box asked as the snapshot shows it plans
+  nothing, which a test holds it to. The offers rather than the library,
+  the shelf and the loads put together by the panel: only core's list
+  leaves out a name no copy can be filed under, and reads what each loaded
+  workspace offers, which nothing else in a snapshot lists. In the snapshot
+  rather than a query of its own, as the scan is: the boxes are of what the
+  workspace holds, which every live update reads again, and the survey
+  they need hashes no copy the report does not hash already; the rest is a
+  look at each offer's place in each folder a project installs in
+  ([open questions](#open-questions)).
 
 One value rather than each front end putting its view together from the
 reports, as the TUI did until #62: which unreadable file is which artifact's,
@@ -1778,7 +1822,12 @@ listed for its rules. Reading every kind for the health alone was the
 other way, which would weigh a failure the reply says nowhere.
 
 What a front end reads beside the snapshot is what no snapshot holds: a scan,
-and which workspace `mind` consults from each project, which depends on the
+a plan of the boxes somebody ticked and unticked, asked for each time they
+change and never kept beside the snapshot (`Query::Plan`, [a batch is
+planned in core](#a-batch-is-planned-in-core)), what an update of every
+project would do (`Query::Updates`, [bringing what was installed up to
+date](#bringing-what-was-installed-up-to-date)), and which workspace `mind`
+consults from each project, which depends on the
 front end's own `-W`, activation and home, and which the TUI asks to know
 when a row's lines need `-W .` ([the TUI looks where it was
 told](#the-tui-looks-where-it-was-told)). The screen is the snapshot laid
@@ -2446,7 +2495,9 @@ written before is named differently now.
 A project has one directory per artifact name in each target, so two shelf
 entries offering `commit-style` cannot both be installed. The screen settles
 it by unticking the other rather than letting both apply and the second win: a
-conflict resolved where somebody can see it happening.
+conflict resolved where somebody can see it happening. A plan handed both
+says so rather than choosing ([a batch is planned in
+core](#a-batch-is-planned-in-core)).
 
 ### An edited copy is left alone
 
@@ -2595,7 +2646,35 @@ The CLI lays it out (`commands/update.rs`): a line for each installation
 written, `updated`, `put back ... at`, or `updated ..., writing over the
 change at`, then, for a project's rules, what the render said of the rules
 it wrote (`Rendered::warnings_of_update`), but no edit it kept, which the
-update says itself. `flayer update` takes `-p` once for each project or
+update says itself.
+
+A front end reads the same plan of every project the workspace links as
+one value (`update::Updates`, #80), the panel's page of updates: each
+installation an update says something of, every one not current, by
+project in the registry's order and each directory once, with its kind,
+name and origin, its state as `status` says it, what an update does with
+it as a word (`update::Does`, the step without what it names), the copies
+that step names as routes from the project, for one it leaves, why
+(`update::Left`, as a `Said`), and whether a change reaches it only forced
+(`forced`): a copy changed since it was installed, which an update not
+forced leaves and, once nothing offers it, an uninstall not forced leaves
+too, so the panel sends `--force` by core's word rather than telling the
+refusal its change would meet from the state and the step. Beside them,
+how many stand in each state that asks for a command
+(`State::asks_for_a_command`, the rule a
+project's `attention` is told by), whether updating every project, and
+each one, writes anything, and each entry that opens no project. Why it
+leaves one is core's words with a code, so the panel says it as core does
+and acts on the code: an edit left alone goes by the code an install
+refuses an edited copy with (`edited`, echoed rather than given again,
+since a code names one condition wherever it is met), and an offer gone
+and a place no copy tells have codes of their own (`no_longer_offered`,
+`origin_unknown`), no install being refused for either. A read, as the dry
+run is, and a query of its own rather than a part of the snapshot: telling
+what an update does reads where each installation came from again, which
+the snapshot, read again on every change, has no need of. The CLI keeps
+its own words for the same three, in the past tense once it has run; the
+panel's are present, since they describe what an update would do. `flayer update` takes `-p` once for each project or
 `--all`, refusing neither given, and `mind update` the project it is in,
 through the workspace that manages it, as `mind install` does. Both resolve
 it as a read, so neither makes the default workspace in home, not even with
@@ -2795,6 +2874,102 @@ is asked; when none of them has it, that is the typo it is for one project,
 and refused as one. A batch of one project, named or the only one linked, is
 said exactly as one install was before.
 
+### A batch is planned in core
+
+Ticking boxes is how both front ends assign: the install screen's, each a
+project's row of an offer, and the panel's matrix (#79), each a project and
+an offer. What the boxes ticked and unticked amount to is planned in one
+place, core's `install::plan` (#78,
+[D-18](#d-18-the-panel-writes-by-running-commands)), which is where every
+rule of a batch lives: neither front end holds one, and the panel holds none
+in TypeScript.
+
+- **Which offer of a name a project holds** (`install::holding`): one box a
+  name, the one its installation came from as the ledger records it
+  (`install::offered_for`), however many places offer the name. Among
+  several that a record from before origins were kept may have come from,
+  or when nothing it came from offers it any more, the one whose content
+  its copy is (`install::is_current`), then the first. Somebody's copy
+  ticks every offer's box, being there whichever is asked for and moved by
+  none, and an installation whose every copy has gone ticks none, for
+  ticking it to put them back. By the record before the content: the
+  content alone, which told it until #78, ticked the first offer for an
+  installation outdated or edited since, which is no offer's content, so
+  the screen ticked the first place's box whichever it came from, and the
+  panel, which reads where each came from off the snapshot, would have
+  drawn another box than the screen.
+- **What a selection amounts to** (`install::Plan::of`): each box as it
+  stands (`install::Asked`: its cell, its project's standing of the name,
+  and whether the project holds it from there), one project's boxes of one
+  name planned together, since the project has one copy of a name in each
+  folder it installs in. One offer asked for, and not held from there, is
+  installed from there, and a held one asked away beside it is replaced by
+  that install rather than taken out first, which would leave the project
+  without it were the install to fail. With none asked for, a held one asked
+  away takes the name out, by its name. The changes are the lines the
+  commands take already (`install::Change`): each offer's install one line
+  with a `-p` for each project asking it, always with `--from`, each name's
+  uninstall another, kind by kind in `Kind::ALL`'s order, each where the
+  first box asking it is, so the screen runs the lines it ran before.
+- **What cannot be planned is said, never guessed.** Two offers of one name
+  asked of one project, or one box asked both ways, is a `Conflict`
+  (`install::Clash`: `wanted_twice`, `asked_both_ways`), and nothing of the
+  name is planned in that project. A change to somebody's copy, or to one
+  edited since, is `Locked`, by the code the command would refuse it with
+  (`Standing::refused`: `foreign` and `edited`, `install::Refused`'s), rather
+  than by a second code for one condition. The other projects go ahead.
+- **A read.** `install::plan` opens the ledger through `ledger_for_reading`,
+  takes no lock, writes nothing and makes no default workspace. It reads
+  each box against the offers its project is surveyed for, by its origin
+  as printed, and, where none of them is from there, against what the
+  ledger records, so an installation nothing offers any more is asked away
+  by the origin the snapshot says it came from. It plans from that origin
+  too, so a credential typed into a box neither splits one offer into two
+  nor reaches a line. A box the disk cannot be
+  asked about is locked by why, before the rest: a project that does not
+  open, an offer its origin does not make (`not_offered`, or what
+  `install::receives` says when the project has nowhere to put the kind,
+  `no_target`), and a bare name two kinds are offered as from its origin
+  (`offered_as_kinds`). One asked for holds back the boxes of its name in
+  its project, each asking a change locked by the same why, as an edited
+  copy holds back its name's: planned without it, a held offer asked away
+  beside it would be taken out rather than replaced, which a load that
+  stopped opening or a gathered entry gone since the snapshot would do as
+  much as a typo. A project the workspace does not link refuses the whole
+  plan, as a `-p` that picks nothing refuses its whole line.
+
+The install screen plans through the same function, from the standings it
+surveyed when it opened (`Screen::task`): every box that disagrees with how
+it started, each project named as its lines name it
+(`FlayerWorkspace::naming`), the box an offer ticked in its place unticked
+asked away all the same, for core to see it replaced. Its keys still hold a
+box somebody's or edited, and untick another offer of a name when one is
+ticked, which is what the screen shows; neither is a rule of the batch,
+which core says again of whatever it is handed. The panel asks the CLI's
+backend (`Query::Plan`), whose answer is each change as the task that runs
+it (`Planned`, by `Task::from`), for the panel to send back as one
+`apply_install`, as the screen applies its marks: it never builds a task of
+its own. Leaving the plan in the screen's `install/state.rs`, where the
+rules lived until #78, was the alternative, rejected: the panel would have
+had to spell them again in TypeScript, or go without a matrix.
+
+The panel's matrix (#79) marks boxes as the screen does, and holds less:
+it opens on the boxes the snapshot ticks (`boxes`, [the read
+model](#the-read-model)), and sends only the boxes somebody changed, each
+marked the other way round from what it shows, in the order marked, a box
+marked back being no mark. It unticks nothing of its own when another offer
+of a name is ticked: ticking it alone asks for that offer, which core plans
+as the install that replaces the one held, and ticking a second asks for
+two, which core says clash (`wanted_twice`). Nor does it hold a box
+somebody's or edited: marked, the plan locks it, by `foreign` or `edited`,
+and the panel draws the lock on the box and says why below, before anything
+runs. Sending every box as it shows, rather than those changed, was the
+other way, and would ask core about hundreds of boxes to plan a few, and
+every offer of a name somebody's copy ticks would clash with the others. A
+box of a kind its project can take none of, which the snapshot closes, is
+the one it never marks: the plan would lock it by the same code
+(`no_target`), which the snapshot says already.
+
 ### Taking out what nothing offers
 
 An orphaned installation, one whose origin no longer offers it, stays as the
@@ -2839,6 +3014,13 @@ names rather than the command line.
 - **No ledger is made to say so.** The ledger is opened to write only when
   there is one, as an update opens it: with none, nothing was installed to
   be orphaned.
+
+The panel's page of updates runs it for every project the workspace links
+(`Task::UninstallOrphaned` of the workspace, `flayer uninstall
+--all-projects --orphaned`), or `mind uninstall --orphaned` for one, never
+forced, asked about first as every uninstall is. An edited copy it leaves
+is taken out from its own row, by the forced uninstall core says it needs
+(`update::Pending::forced`), asked about for the edit too.
 
 ### What no copy holds
 
@@ -3358,7 +3540,8 @@ parts needs a terminal:
   holds nothing but the loop for that reason.
 
 What is marked is applied as the command lines it amounts to
-(`Screen::task`), kind by kind: a
+(`Screen::task`), as core plans them ([a batch is planned in
+core](#a-batch-is-planned-in-core)), kind by kind: a
 `flayer install -p <project>... --from <origin> <kind:name>` for each offer
 ticked, with a `-p` for each project ticked to take it, and a
 `flayer uninstall -p <project>... <kind:name>` for each artifact unticked,
@@ -3415,9 +3598,11 @@ screen keeps two columns however many kinds there are; and rather than every
 kind in one list, where a skill and a rule of one name would sit side by side
 as two boxes for what reads as one thing. A row is one kind and name, so
 ticking one offer unticks another of the same kind and name, and leaves a
-rule of a skill's name alone. Which offer of a rule the project holds is the
-one its record came from (`install::is_current`), since nothing in a project
-holds a rule's bytes alone to compare. A project offered nothing of the kind
+rule of a skill's name alone. Which offer of a name the project holds is
+core's to say (`install::holding`): the one its record came from, a rule's
+as a skill's, since nothing in a project holds a rule's bytes alone to
+compare, and a skill's copy may be behind both places or edited since. A
+project offered nothing of the kind
 shown says what core says it cannot take (`install::receives`), or where that
 kind comes from: a rule from the workspace's own or a load, never the shelf.
 A row whose box cannot move says why: somebody's, which nothing of
@@ -4322,6 +4507,13 @@ of it a browser may name.
   few names in each, opens markers and the ledger to read, and writes
   nothing, so nothing outside the workspace is reached that a command would
   not read.
+- **A plan only of linked projects** (`Query::Plan`): each box's project
+  an entry of the registry, held by `Admission::selection` as a task's
+  projects are, before core plans, which holds it to the same entries
+  again. A plan is a read, and runs nothing: the tasks it answers with name
+  each project by the entry its box named it by, and are admitted as any
+  task's when they come back to be previewed and run. A reference or an
+  origin is a value, which nothing offers when it is not one.
 - **What no front end without a terminal runs** is refused by
   `Task::refusal`, naming the line ([every change is a command
   line](#every-change-is-a-command-line)).
@@ -4728,7 +4920,7 @@ What the panel sends and is answered with is said once, in Rust, and the
 panel compiles against TypeScript written from it (#70): the snapshot and
 everything it holds, an artifact's files and a file's contents, what
 `list`, `show` and `validate`
-print, a query, a task, what a scan and a run produced, the envelope a
+print, a query, a task, what a scan, a plan and a run produced, the envelope a
 reading command's `--json` prints, and every code core and the CLI give. That
 TypeScript is the contract, the panel's side of [the read
 model](#the-read-model): `apps/web/src/api/generated`, a file a type,
@@ -4831,15 +5023,18 @@ where serde's are, and the feature only reads them.
 
 ### Its views
 
-Seven pages draw the snapshot ([the read model](#the-read-model)), and an
-eighth a scan beside it, each a file under `src/pages`:
+Eight pages draw the snapshot ([the read model](#the-read-model)), a ninth
+a scan beside it and a tenth what an update would do, each a file under
+`src/pages`:
 
 - **The overview** (`/`) names the workspace, where it is and why that one,
   counts what it holds from the snapshot's `summary`, a card for every kind
   in `kinds`, lists every failure the snapshot collected under what it is
   about, and names the commands that would fill what is empty.
 - **The projects** (`/projects`) are a table of every entry in the
-  registry's order, with a column for every kind, sorted and filtered.
+  registry's order, with a column for every kind, and one badging how many
+  of what each was given are `outdated`, from its `tally`, a link to the
+  page of updates; sorted and filtered.
 - **A project's page** (`/project?entry=...`) groups what one holds by
   kind, each artifact with its state, a badge in a slot for each of the
   project's agents, its origin, its targets, what does not read and what
@@ -4854,6 +5049,30 @@ eighth a scan beside it, each a file under `src/pages`:
   `flayer relink` that would. The folders and the depth are the address's,
   so a reload scans the same again; with none, the page starts from the
   workspace's own folder, and scans nothing until asked.
+- **Assign** (`/assign?kind=...&origin=...&agent=...&q=...&by=project`) is
+  the matrix (#79): every offer in `offers` against every project, a row an
+  offer under a heading for its origin and a column a project, or turned
+  round by project, a row a project and the origins in a band over the
+  offers' columns. Each box is ticked where `boxes` says, with the icon of
+  its name's state over its corner, each state in `box_states` said in the
+  legend below, and one of a kind its project can take none of is closed,
+  saying why. Kind, origin and text filter the offers and the agent the
+  projects, whichever way round, in the address. The boxes marked are
+  planned, and applied ([its changes](#its-changes)).
+- **Updates** (`/updates`) draws core's survey of what updating every
+  project would do (`Query::Updates`): a section for each state it
+  counts, in its order, listing each installation in that state, project
+  by project, with its origin, what an update does with it, the copies
+  that names, and why it leaves one it leaves, by its code; above them,
+  each project with an update of its own where an update writes
+  something, and each entry that opens no project. Which state a row is
+  under is a filter of what core listed; what each step word is called,
+  and which change it offers, is drawn, as a state's look is, a step core
+  adds shown by its word with none. A state's section is reached by its
+  hash (`#state-outdated`, the projects table's badge), which the page
+  scrolls to itself once the section is drawn, since the router scrolls to
+  none and the section waits on two queries: once for each hash, so a live
+  update drawing it again leaves where somebody scrolled since.
 - **The library** (`/library?kind=...`) has a page for each kind in `kinds`,
   the first when none is named, listing the workspace's own of it, filtered
   by name or summary, each with the projects holding a copy and how each
@@ -4862,8 +5081,9 @@ eighth a scan beside it, each a file under `src/pages`:
 - **One of the library's own** (`/artifact?kind=...&name=...`) shows its
   front matter as a table, its body rendered, its files, each opening as
   text (`&file=...`), what `validate` says of it, and the projects holding a
-  copy, each with its state, agents and targets. Named in the query, as a
-  project is, since a rule's name is a route.
+  copy, each with its state, agents and targets, and below, its removal
+  everywhere, dry run first ([its changes](#its-changes)). Named in the
+  query, as a project is, since a rule's name is a route.
 - **The shelf** (`/shelf`) lists what was gathered, filtered by kind, by
   name, summary or origin, each with its `origin`, the commit it was taken
   at and when.
@@ -4925,8 +5145,11 @@ turns each into what Vue Query is to ask for again, never a read of its own
 and never a scan: `changed` marks the snapshot stale, and what was read of
 an artifact in a holder among its scopes; `resync` and `command_finished`
 mark all of those, since a command can change what nothing watches. Those
-queries are named by the first word of their key (`markStale`), rather than
-every query marked, for one asked for by hand: a scan (`src/api/scan.ts`,
+queries, and the matrix's plan and the preview of its lines, which are of
+the disk as it stands (`src/api/plan.ts`, keyed `plan` and `preview`), and
+what an update would do, which is too (`src/api/updates.ts`, keyed
+`updates`), are named by the first word of their key (`markStale`), rather
+than every query marked, for one asked for by hand: a scan (`src/api/scan.ts`,
 keyed `scan`) reads the disk far past what is watched, and an event asking
 for it again would run one on every change, every command and every tab
 shown again. A scan is never stale on its own either, so neither a page
@@ -4959,6 +5182,24 @@ is waiting until then, and says why when the server refused.
   keeps, only chooses what to draw of what the snapshot lists. A sort by
   name or path compares the words as the browser collates them, and one by
   a kind's count compares numbers.
+- **The matrix is drawn a screen at a time.** Its rows and its columns
+  are both virtualized (`AssignGrid.vue`, with `@tanstack/vue-virtual`,
+  which Nuxt UI's table virtualizes with already, so no package came with
+  it), each laid out from the one size every row and every column has, so
+  nothing is measured: a matrix of hundreds of offers by hundreds of
+  projects holds a screen's worth of boxes, and a scroller nothing has laid
+  out, as in a test, counts as the window. Each icon a box shows is drawn
+  once from the bundle and shown in every box by an SVG `<use>`, and one
+  listener on the grid serves every box's press, focus and key, since a
+  component or a listener for each of a screen's boxes was most of what
+  drawing one cost. `tests/matrix.test.ts` holds a matrix of 50 projects by
+  200 offers to at most 100 rows in the document, and its first render to
+  300 ms, run by vitest after every other suite (`test.projects`, by
+  `groupOrder`), since beside them it timed whatever else the runner was
+  busy with. It is a grid from the keyboard: `role="grid"` with each row
+  and cell saying its place among all of them, the arrows moving a box at a
+  time over the groups' headings, Home, End and the page keys further, and
+  one box in the tab order, the last moved to.
 - **A kind core adds reaches every view untouched**
   ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show)): a
   card, a column and a group each come from `kinds`, and a test adds one
@@ -5101,6 +5342,38 @@ What the pages offer:
   agents in, and that unticking every one asks `agents remove` of them all,
   is said once. Offered only where `migrates` is false: a project an older
   marker marks changes no setting until it is moved.
+- **The boxes marked on the matrix**, each as the plan takes it (`Cell`),
+  kept in Pinia while they are not applied (`src/stores/marks.ts`), since
+  only the browser knows them, and asked of the plan whenever they change
+  (`usePlan`): the page draws the lines its tasks are as the server
+  previews them (`usePreview`, the preview the runner asks for again once
+  Apply is pressed), every lock and clash on its box and listed with its
+  code, and nothing it works out itself ([a batch is planned in
+  core](#a-batch-is-planned-in-core)). **Apply** sends the tasks back as one
+  `apply_install`, as they came, and is offered only while the plan is of
+  the boxes marked now and runs something; once it ran, the marks are done
+  with, and the boxes are drawn again from what it changed.
+- **An update, from the page of updates**: of every project, `flayer
+  update --all --yes`; of one, where an update writes something, `mind -C
+  <project> update --yes`; and of one installation, the same line naming
+  it, each the `update` task the TUI's `u` sends. What nothing offers any
+  more offers its uninstall, `flayer uninstall -p <project> <kind:name>`,
+  and the page all of them at once (`Task::UninstallOrphaned`, `flayer
+  uninstall --all-projects --orphaned`, never forced), both asked about as
+  an uninstall is. Which change a row offers is read off the step core
+  gave it, a word at a time, and whether it is forced off core's `forced`
+  (`update::Pending`): an edited copy, which an update not forced leaves
+  and, once nothing offers it, an uninstall not forced leaves too, offers
+  either with `force`, the line's `--force`, which the preview makes a
+  confirmation by `Caution::Forces`, never a question of the panel's. The
+  command still refuses whatever the disk says by the time it runs.
+- **A removal, from the page of one of the library's own**, everywhere and
+  never the library's copy alone, which would leave each copy installed
+  from it orphaned: the dry run first, `flayer remove --everywhere
+  <kind:name>` (`Task::Remove` without `yes`), whose report the page shows
+  once it ran, then the same line with `--yes`, offered only then and
+  asked about for what it removes and uninstalls, after which the page
+  goes back to the library. As a migration is, below.
 - **A migration, for a project an older marker marks**, the dry run first,
   `flayer migrate -p <project>`, whose report the page shows once it ran,
   then the migration, the same line with `--yes`, offered only then. The
@@ -5109,9 +5382,11 @@ What the pages offer:
   mode are the command's own, every agent and shared for a `mind.toml`,
   for the toggles to change once it has moved.
 
-The preview and the run are Vue Query mutations, and the transcript and the
-scan queries, so what the server answered lives where every answer does;
-which drawer is open is Pinia's, beside the sidebar's state.
+The preview and the run are Vue Query mutations, and the transcript, the
+scan, the plan and the matrix's preview of its lines queries, so what the
+server answered lives where every answer does; which drawer is open is
+Pinia's, beside the sidebar's state, and so are the boxes marked on the
+matrix.
 
 ### Its fixtures come from Rust
 
@@ -5135,7 +5410,20 @@ dry run and run, which the runner's, the transcript's and the pages' tests
 answer their tasks from (`commanding`), and `scan.json` what scanning the
 folder of the workspace `candidates.json` is a snapshot of is answered
 with, which the page of what could be linked is drawn from, beside that
-snapshot, so the two describe one workspace. So
+snapshot, so the two describe one workspace. `assigning.json` is a
+workspace built for the matrix, one name offered from the library and a
+loaded workspace, the shelf, a copy current, outdated, edited and
+somebody's, a project nothing can go into and an entry that opens none;
+`plans.json` what the backend plans for a few selections of its boxes, as
+the matrix sends them, a change, a replacement, and a clash and two locks
+beside a change; and `applied.json` what applying the first is previewed
+and run as. `updating.json` is a workspace built to update, an installation
+outdated, edited, missing and orphaned, a rule among them, and an entry that
+opens none; `updates.json` what asking what an update would do there is
+answered with; and `updated.json` each change its page offers, previewed and
+run each on the workspace as it was built, so each is answered as the first
+thing run there. `commands.json` ends with a removal everywhere of one of
+the library's own, its dry run first, which that page sends. So
 the panel's tests render what core says rather than what a person drew,
 and a field the snapshot adds, renames or fills differently reaches them.
 What differs between runs is pinned: the temporary folder reads as
@@ -5274,6 +5562,38 @@ browsers over one server: a change to the shared fixture would move what
 the overview counts under a test reading it, and the second browser would
 find its project linked already.
 
+`e2e/updates.spec.ts` takes `updatable`: the library's `lint`, installed
+into two projects, one of which authors its skills in Claude's folder and
+had its copy edited with `mind edit`, an `--editor` copying a draft in, as
+an editor saves one. The library's `lint` changed the same way while the
+projects table is open has to show the other project outdated, by the
+stream rather than a reload; the page of updates has to list it and the
+edited copy with why; **Update all** has to run `flayer update --all --yes`,
+shown first, after which the badge is gone and the edited copy still
+listed with its reason, which the run's own warning says by its code too;
+and removing `lint` has to show its dry run, then take it out of the one
+project and leave the edited copy, confirmed first. Each leaves the
+projects as the same lines leave them in the twin. The edit is made with
+the commands too: `mind edit` reaches only what a project authors, so the
+project authors where Claude reads, and the edit keeps the copy's record,
+against which it then stands as edited. The drafts the `--editor` copies in
+are the one thing a builder or a spec writes by hand, beside the workspace
+rather than in it, and never in a home.
+
+A spec says what its own workspace is built as (`building`): the matrix's
+(`e2e/assign.spec.ts`) takes `assignable`, a workspace loading `team`
+beside it, whose own skill it offers, and linking two projects for Claude
+and Codex. The skill, ticked into both, has to be copied where each agent
+reads it, in each; unticked out of one, confirmed, gone from there alone;
+each batch's line shown before it runs; and the same lines, typed into the
+copy, have to leave both projects holding the same files. From a load
+rather than the shelf, which only a gather from a git source fills, and the
+suite builds nothing a git source makes; an offer from the shelf is
+installed with `--from` as one from a load is, and the views' suites draw
+one from their fixture. That the ledger a batch leaves is the one its
+lines leave run in the CLI, every hash and action logged, is the backend
+suite's to hold (`backend_test.rs`), which reads it.
+
 No page may log a violation of the CSP. Each engine fires
 `securitypolicyviolation` and words its own console messages, and a
 message the browser rather than a script logs may not reach Playwright, so
@@ -5312,7 +5632,9 @@ some local and some shared, for different agents; a library of two skills
 and three rules, with bodies to render; a shelf gathered from a repository
 beside the workspace, made with the git binary under a fixed author and
 date and no configuration of the user's; installs from both, three of them
-outdated, one by a second gather and one by an edit of the library's own;
+outdated, two by a second gather and one by an edit of the library's own,
+and one edited, `infra`'s copy of that same skill, which `infra` keeps
+where Claude reads its skills and changed with `mind edit` before;
 a rule stating `paths`, so a project's page warns that two of its agents
 never read it; and two repositories nobody linked, for Discover. Every
 change is a command; the files written by hand are the repositories'
@@ -5333,8 +5655,13 @@ is in, as a person's does, and the overview says `above` rather than that
 
 The tour is Playwright's library driving Chromium, not a spec: Playwright's
 runner would run the pages side by side, while the tour visits them once,
-in order: the preview of linking what Discover marked, then, once that has
-run, an unlink asked about and cancelled, and the transcript. Chromium
+in order: the matrix with a box ticked and another unticked, the plan's
+lines below them, never applied; the page of updates, its edited copy left
+with why; the preview of linking what Discover marked, then, once that has
+run, an unlink asked about and cancelled, and the transcript; and last the
+dry run of removing one of the library's own everywhere, which changes
+nothing, taken after the transcript it would otherwise join, once the toast
+saying it ran has gone from over what it said. Chromium
 alone, since the images are the same in WebKit, which does not run
 everywhere. The viewport is 1440 by 900, wide enough for a project's table
 with every column beside the sidebar (1280 cut its targets short), at a
@@ -6908,7 +7235,9 @@ ledger without making it, and `everywhere::apply` does it.
 The TUI's confirmation for `d` on one of the workspace's own offers a second
 yes, `e`, which runs `flayer remove --everywhere --yes`, and shows the line
 each key runs; on a project's own, which was installed nowhere, it keeps the
-one yes.
+one yes. The panel removes one of the workspace's own only everywhere, and
+shows the dry run first, `Task::Remove` without `yes` being the line
+without `--yes` ([its changes](#its-changes)).
 
 ### A record must not outlive the copy it is about
 
@@ -7901,6 +8230,69 @@ just listed.
   whose views show them, so that each is printed as the view that needs it
   reads it. #73 draws the loads, the sources and the history from the
   snapshot, and prints none of them: a `--json` for each was no part of it.
+- **A plan says no agent a change reaches.** The issue that brought plans
+  into core (#78) counted which agents a change reaches among a batch's
+  rules, but the install screen held none: an install reaches every
+  folder `install::targets` gives when it runs, and a project's agents are
+  the snapshot's. A plan saying it of each change would be a second
+  reading of the targets beside the install's own, which could come to
+  disagree with it. The matrix (#79) went without: each project names its
+  agents beside its column, and filters by them, and once a batch ran, a
+  project's page says which of them read each copy. A line of the plan
+  naming the agents it reaches is still the one thing the matrix shows
+  only after a run.
+- **An installation nothing offers any more holds the box of its name's
+  offer.** A name the project holds ticks one of its offers' boxes
+  (`install::holding`), so one installed from a place that no longer
+  offers it ticks the box of another place offering the name, as the
+  screen always has, so that unticking it takes it out. Asking for that
+  offer alone is then asking for what is so, and changes nothing; asked
+  for with the origin it came from asked away, by the box the snapshot's
+  `origin` gives it, it is installed in its place. The matrix (#79) gives
+  such an installation no box of its own: its rows are what an install
+  offers (`offers`), and one whose name nothing offers is the project's
+  page's and the page of updates', which lists it under `orphaned` with
+  its uninstall, and all of them with `uninstall --orphaned` (#80), rather
+  than a box of the matrix's: a box is an offer to tick, and nothing
+  offers it.
+- **The page of updates reads the plan again on every change.** It is a
+  query of its own, as the matrix's plan is, followed by the live updates
+  while the page is open, so a change anywhere reads where every
+  installation came from again. Folding it into the snapshot was the
+  other way, every page paying for it; one change of a large workspace
+  reading it twice, once in the snapshot's states and once here, is the
+  price, and the two can disagree for the moment between their reads,
+  which a row reading one state on the projects table and another here
+  would show.
+- **A row is forced by core's word, not told from its state.** An edited
+  copy nothing offers any more steps as `orphaned` and stands as `edited`,
+  and only a forced uninstall takes it out, as removing one of the
+  library's own everywhere leaves one. The panel could have told that from
+  the two words, which would be a rule of core's, which refusal an
+  uninstall meets, spelled again in TypeScript; core says it instead
+  (`Pending::forced`), and the uninstall task takes `force` as the update
+  task does, behind the same confirmation. `--orphaned` stays unforced,
+  leaving such a copy to its row, where it is read before it goes.
+- **The panel removes one of the library's own everywhere or not at
+  all.** Removing the library's copy alone, which the CLI and the TUI
+  still offer, would leave every copy installed from it orphaned, which
+  the page of updates would then list; the dry run says what removing it
+  everywhere leaves, and offering the other removal beside it would be a
+  second button that leaves more behind.
+- **Every snapshot surveys every offer in every project.** The boxes are
+  told as the install screen tells them, an offer's place looked at in
+  each folder a project installs in, so a live update of a workspace of
+  hundreds of offers and projects reads that many places again, on every
+  page and not only the matrix's. A query of its own, asked by the matrix
+  alone as the scan is asked by its page, was the other way, at the price
+  of a second read the live updates follow and a second answer that could
+  disagree with the snapshot drawn beside it; a workspace that makes the
+  survey slow would move it there.
+- **The benchmark times happy-dom.** The matrix's first render is held to
+  300 ms in the panel's own suite, which lays nothing out and builds its
+  document in JavaScript, so it is slower than a browser at the same work
+  and says nothing of painting. The browser suite times nothing; a bound
+  there would be one more number a runner's load moves.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has
@@ -7996,7 +8388,9 @@ just listed.
   print a `Status` and a `Known`, and `gather list` its `Offer`s, which no
   root names, so the panel has no type for them yet; nor does `scan --json`
   have one for its envelope's `Scan`, the panel reading each `Found` inside
-  the backend's own answer (`Scanned`). Each joins a crate's
+  the backend's own answer (`Scanned`), nor core's `install::Plan` and its
+  `Change`, a plan reaching the panel as the backend's `Planned`, its
+  changes the tasks that run them. Each joins a crate's
   `typescript::roots` when a view reads it, so that the folder holds what
   the panel compiles against, and no more.
 - **The page of what could be linked links, and unlinks nothing.** The

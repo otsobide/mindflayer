@@ -52,6 +52,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/assign': RouteRecordInfo<
+      '/assign',
+      '/assign',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/discover': RouteRecordInfo<
       '/discover',
       '/discover',
@@ -94,6 +101,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/updates': RouteRecordInfo<
+      '/updates',
+      '/updates',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
   }
 
   /**
@@ -126,6 +140,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/artifact.vue': {
       routes:
         | '/artifact'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/assign.vue': {
+      routes:
+        | '/assign'
       views:
         | never
       pathParamNames:
@@ -174,6 +196,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/sources.vue': {
       routes:
         | '/sources'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/updates.vue': {
+      routes:
+        | '/updates'
       views:
         | never
       pathParamNames:

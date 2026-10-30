@@ -142,7 +142,8 @@
       },
       "kind": "skill",
       "name": "lint",
-      "type": "remove"
+      "type": "remove",
+      "yes": true
     }
   },
   {
@@ -328,6 +329,92 @@
     "task": {
       "project": "legacy",
       "type": "migrate",
+      "yes": true
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer remove --everywhere skill:review"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer remove --everywhere skill:review"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer remove --everywhere skill:review",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "would remove review from api, where it is current\nwould leave review in web, where it is edited, at .claude/skills/review\nwould remove review from docs, where it is current\nwould remove review from old, where it is current\nwould remove skill review from /home/you/Projects/.mindflayer/library/skills/review and the 3 files in it\nnothing removed: add --yes to go ahead\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "everywhere": true,
+      "holder": {
+        "type": "workspace"
+      },
+      "kind": "skill",
+      "name": "review",
+      "type": "remove",
+      "yes": false
+    }
+  },
+  {
+    "preview": {
+      "confirm": [
+        {
+          "caution": "removes",
+          "line": 0,
+          "message": "deletes an artifact: its folder and everything in it, or its file"
+        },
+        {
+          "caution": "uninstalls",
+          "line": 0,
+          "message": "takes copies Mindflayer installed out of projects"
+        }
+      ],
+      "lines": [
+        "flayer remove --everywhere --yes skill:review"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer remove --everywhere --yes skill:review"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer remove --everywhere --yes skill:review",
+            "error": null,
+            "ok": true,
+            "stderr": [
+              {
+                "code": null,
+                "text": "note: nothing offers review in web any more; `flayer uninstall -p web review --force` takes it out"
+              }
+            ],
+            "stdout": "removed review from api\nleft review in web, where it is edited, at .claude/skills/review\nremoved review from docs\nremoved review from old\nremoved skill review from /home/you/Projects/.mindflayer/library/skills/review\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "everywhere": true,
+      "holder": {
+        "type": "workspace"
+      },
+      "kind": "skill",
+      "name": "review",
+      "type": "remove",
       "yes": true
     }
   }

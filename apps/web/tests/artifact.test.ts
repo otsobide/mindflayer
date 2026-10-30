@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { Contents } from '@/api/generated/Contents'
 import type { Files } from '@/api/generated/Files'
 import { artifactLink } from '@/routes'
-import { answering, answers, fixture, render, texts, unmount, type Answered } from './panel'
+import { answering, answers, commanded, commanding, fixture, render, texts, unmount, type Answered, type Commanded } from './panel'
 
 afterEach(unmount)
 
@@ -212,6 +212,55 @@ describe('one of the library\'s own', () => {
     expect(router.currentRoute.value.fullPath).toBe(router.resolve(artifactLink('rule', 'git/commits')).fullPath)
     expect(page.get('[data-testid="artifact"] h1').text()).toBe('git/commits')
     expect(page.get('[data-testid="sidebar"] nav a[aria-current="page"]').text()).toBe('Library')
+  })
+})
+
+describe('removing one of the library\'s own', () => {
+  /** Removing `review` everywhere, as the CLI's suite previewed and ran it: the dry run, then the removal. */
+  const [DRY, YES] = commanded().filter(each => each.task.type === 'remove' && 'name' in each.task && each.task.name === 'review') as [Commanded, Commanded]
+
+  it('shows what removing it everywhere does first, as the dry run said it, and asks before the removal', async () => {
+    const { sent, transport } = commanding(fixture('workspace'), commanded(), answers())
+    const { page, router } = await render(at('skill', 'review'), transport)
+
+    expect(page.find('[data-testid="remove-yes"]').exists()).toBe(false)
+    await page.get('[data-testid="remove-dry"]').trigger('click')
+    await flushPromises()
+    expect(sent).toEqual([{ task: DRY.task, mode: 'preview' }])
+    expect([...document.body.querySelectorAll('[data-testid="command"]')].map(each => each.textContent)).toEqual(DRY.preview.lines.map(line => `$ ${line}`))
+    expect(document.body.querySelectorAll('[data-testid="caution"]')).toHaveLength(0)
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await vi.waitFor(() => expect(page.find('[data-testid="remove-said"]').exists()).toBe(true))
+    expect(page.get('[data-testid="remove-said"]').text()).toBe(DRY.ran.outcome.runs[0]!.stdout.trim())
+
+    await page.get('[data-testid="remove-yes"]').trigger('click')
+    await flushPromises()
+    expect(sent.at(-1)).toEqual({ task: YES.task, mode: 'preview' })
+    expect([...document.body.querySelectorAll('[data-testid="caution"]')].map(each => each.textContent?.replace(/\s+/g, ' ').trim()))
+      .toEqual(YES.preview.confirm.map(each => `${each.caution}: ${each.message}`))
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await flushPromises()
+
+    expect(sent.filter(each => each.mode === 'run')).toEqual([{ task: DRY.task, mode: 'run' }, { task: YES.task, mode: 'run' }])
+    await vi.waitFor(() => expect(router.currentRoute.value.fullPath).toBe('/library?kind=skill'))
+  })
+
+  it('removes nothing when the removal is cancelled', async () => {
+    const { sent, transport } = commanding(fixture('workspace'), commanded(), answers())
+    const { page } = await render(at('skill', 'review'), transport)
+    await page.get('[data-testid="remove-dry"]').trigger('click')
+    await flushPromises()
+    document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await vi.waitFor(() => expect(page.find('[data-testid="remove-yes"]').exists()).toBe(true))
+
+    await page.get('[data-testid="remove-yes"]').trigger('click')
+    await flushPromises()
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('cancel')
+    document.body.querySelector<HTMLElement>('[data-testid="cancel"]')!.click()
+    await flushPromises()
+
+    expect(sent.filter(each => each.mode === 'run')).toEqual([{ task: DRY.task, mode: 'run' }])
+    expect(page.find('[data-testid="remove-said"]').exists()).toBe(true)
   })
 })
 

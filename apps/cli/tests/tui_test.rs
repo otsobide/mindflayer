@@ -733,6 +733,7 @@ fn u_updates_the_project_or_the_artifact_under_the_cursor_and_shows_what_it_said
         Some(Task::Update {
             holder: Holder::Project(String::from("alpha")),
             reference: None,
+            force: false,
         })
     );
     assert_eq!(project.unwrap().describe(), "mind -C alpha update --yes");
@@ -746,6 +747,7 @@ fn u_updates_the_project_or_the_artifact_under_the_cursor_and_shows_what_it_said
         Task::Update {
             holder: Holder::Project(String::from("beta")),
             reference: Some(String::from("skill:commit-style")),
+            force: false,
         }
     );
     assert_eq!(
@@ -1876,6 +1878,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Skill,
             name: String::from("deploy"),
             everywhere: false,
+            yes: true,
         },
         Task::Add {
             holder: Holder::Workspace,
@@ -1894,6 +1897,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Rule,
             name: String::from("style"),
             everywhere: false,
+            yes: true,
         },
         Task::InitProject,
         Task::LinkHere,
@@ -1917,6 +1921,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Skill,
             name: String::from("deploy"),
             everywhere: false,
+            yes: true,
         },
         Task::Add {
             holder: Holder::Elsewhere(String::from("-odd")),
@@ -1956,20 +1961,24 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
         Task::Update {
             holder: Holder::Project(String::from("alpha")),
             reference: None,
+            force: false,
         },
         Task::Update {
             holder: Holder::Elsewhere(String::from("-odd")),
             reference: Some(String::from("rule:git/no-force-push")),
+            force: true,
         },
         Task::Update {
             holder: Holder::Workspace,
             reference: Some(String::from("skill:commit-style")),
+            force: false,
         },
         Task::Remove {
             holder: Holder::Workspace,
             kind: Kind::Rule,
             name: String::from("git/no-force-push"),
             everywhere: true,
+            yes: true,
         },
         Task::Install {
             projects: vec![String::from("alpha"), String::from("-odd")],
@@ -1987,6 +1996,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             projects: vec![String::from("-odd"), String::from("./alpha")],
             kind: Kind::Rule,
             name: String::from("git/no-force-push"),
+            force: false,
         },
     ];
 
@@ -2059,6 +2069,7 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
         projects: vec![String::from("../collapse")],
         kind: Kind::Rule,
         name: String::from("git/commits"),
+        force: false,
     };
 
     assert_eq!(
@@ -2133,6 +2144,7 @@ fn an_install_task_installs_into_every_project_it_names_and_an_uninstall_takes_i
             projects: projects.clone(),
             kind: Kind::Skill,
             name: String::from("deploy"),
+            force: false,
         },
     );
 
@@ -2699,6 +2711,7 @@ fn d_on_the_workspaces_own_offers_to_remove_it_everywhere_with_e() {
             kind: Kind::Skill,
             name: String::from("commit-style"),
             everywhere: true,
+            yes: true,
         })
     );
     assert!(!own_directory_for(dir.path(), Kind::Skill)

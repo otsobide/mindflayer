@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Serialize, Serializer};
 
-use super::{left_out_names, recorded_copy, Offer};
+use super::{left_out_names, recorded_copy, Offer, Refused};
 use crate::agents_md::{self, AgentsMd, Section};
 use crate::artifact::Artifact;
 use crate::copy;
@@ -62,6 +62,21 @@ pub enum Standing {
 }
 
 impl Standing {
+    /// Every standing, from absent to foreign: what the states a box of an
+    /// offer can stand in are read from ([`State::of_boxes`]), each through
+    /// the one function that says it.
+    ///
+    /// [`State::of_boxes`]: crate::status::State::of_boxes
+    pub const ALL: [Standing; 7] = [
+        Standing::Absent,
+        Standing::Current,
+        Standing::Outdated,
+        Standing::Edited,
+        Standing::Missing,
+        Standing::Orphaned,
+        Standing::Foreign,
+    ];
+
     /// Whether the project holds it, which is what a checkbox shows:
     /// anything it holds by that name, but not an installation a copy of
     /// which has gone. Its box opens empty, for marking it to put every copy
@@ -75,7 +90,27 @@ impl Standing {
     /// Whether Mindflayer may write over it or remove it without being
     /// forced: never over somebody's, nor over a copy somebody edited.
     pub fn ours(self) -> bool {
-        !matches!(self, Standing::Foreign | Standing::Edited)
+        self.refused().is_none()
+    }
+
+    /// Why an install or an uninstall reaching it writes nothing, when one
+    /// does unforced: what [`Installed::refused`] and [`Removed::refused`]
+    /// say of it once it has run, said before, so that a front end
+    /// planning a batch ([`super::plan`]) holds a box back by the code the
+    /// command would give, rather than by a second code for one condition.
+    ///
+    /// [`Installed::refused`]: super::Installed::refused
+    /// [`Removed::refused`]: super::Removed::refused
+    pub fn refused(self) -> Option<Refused> {
+        match self {
+            Standing::Foreign => Some(Refused::Foreign),
+            Standing::Edited => Some(Refused::Edited),
+            Standing::Absent
+            | Standing::Current
+            | Standing::Outdated
+            | Standing::Missing
+            | Standing::Orphaned => None,
+        }
     }
 
     /// The word it is said in: what `status` says of an installation that

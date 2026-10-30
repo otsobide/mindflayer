@@ -46,9 +46,11 @@ use crate::settings::Share;
 use crate::url::redacted;
 use crate::workspace::{same_directory, FlayerWorkspace, Loaded, MindProject, WorkspaceError};
 
+mod plan;
 pub mod rules;
 mod standing;
 
+pub use plan::{holding, plan, Asked, Cell, Change, Clash, Conflict, Locked, Plan, PlanError};
 pub use standing::Standing;
 pub(crate) use standing::{Found, Surveyed};
 
@@ -117,6 +119,47 @@ fn edited(
 /// What `origin` says for the workspace's own artifacts.
 pub const WORKSPACE_ORIGIN: &str = "workspace";
 
+/// Which of the three places offers something to install: what `gather
+/// list --json` says of an offer as its `place`, and a snapshot of each it
+/// lists ([`crate::view::Offered`]).
+///
+/// Declaration order is the order [`survey`] offers them in: what the
+/// workspace keeps for its projects before what it found elsewhere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Place {
+    /// One of the workspace's own.
+    Workspace,
+    /// One of the own of a workspace it loads.
+    Loaded,
+    /// Gathered onto its shelf.
+    Shelf,
+}
+
+impl Place {
+    /// The word it is written as.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Place::Workspace => "workspace",
+            Place::Loaded => "loaded",
+            Place::Shelf => "shelf",
+        }
+    }
+}
+
+/// By its slug, for the reason a kind is: one spelling, which a renamed
+/// variant cannot change.
+impl Serialize for Place {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+#[cfg(feature = "ts")]
+crate::typescript::words! {
+    /// Which of the three places offers something to install.
+    Place by slug { Workspace, Loaded, Shelf }
+}
+
 /// Where something that can be installed would be copied from.
 #[derive(Debug, Clone)]
 pub enum Offer {
@@ -160,7 +203,7 @@ impl Serialize for Offer {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         #[derive(Serialize)]
         struct Placed<T> {
-            place: &'static str,
+            place: Place,
             #[serde(flatten)]
             held: T,
             origin: String,
@@ -187,7 +230,7 @@ impl Serialize for Offer {
         let origin = redacted(&self.origin()).into_owned();
         match self {
             Offer::Shelf(gathered) => Placed {
-                place: "shelf",
+                place: Place::Shelf,
                 held: gathered,
                 origin,
             }
@@ -198,7 +241,7 @@ impl Serialize for Offer {
                 summary,
                 path,
             } => Placed {
-                place: "workspace",
+                place: Place::Workspace,
                 held: Own {
                     kind: *kind,
                     name,
@@ -216,7 +259,7 @@ impl Serialize for Offer {
                 entry,
                 workspace,
             } => Placed {
-                place: "loaded",
+                place: Place::Loaded,
                 held: Load {
                     kind: *kind,
                     name,
@@ -233,6 +276,15 @@ impl Serialize for Offer {
 }
 
 impl Offer {
+    /// Which place offers it.
+    pub fn place(&self) -> Place {
+        match self {
+            Offer::Workspace { .. } => Place::Workspace,
+            Offer::Loaded { .. } => Place::Loaded,
+            Offer::Shelf(_) => Place::Shelf,
+        }
+    }
+
     pub fn name(&self) -> &str {
         match self {
             Offer::Shelf(gathered) => &gathered.name,
@@ -692,6 +744,30 @@ pub fn survey(
     project: &MindProject,
     kind: Kind,
 ) -> Result<Vec<Candidate>, InstallError> {
+    // Nothing is read of what is offered for a project that can take none
+    // of it.
+    if receives(project, kind).is_err() {
+        return Ok(Vec::new());
+    }
+    survey_among(
+        workspace,
+        ledger,
+        project,
+        kind,
+        &offers(workspace, ledger, kind)?,
+    )
+}
+
+/// [`survey`], against `offers`, every offer of `kind` as [`offers`] reads
+/// them: for a reader surveying every project a workspace links, which reads
+/// what is offered once rather than once a project, as a snapshot does.
+pub(crate) fn survey_among(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    kind: Kind,
+    offers: &[Offer],
+) -> Result<Vec<Candidate>, InstallError> {
     // A rule reaches a project marked by its settings through the block of
     // its `AGENTS.md` rather than as a copy in a folder (D-03), so how one
     // stands there is told by the ledger and that block.
@@ -699,7 +775,7 @@ pub fn survey(
         if rules::receives(project).is_err() {
             return Ok(Vec::new());
         }
-        return rules::survey(workspace, ledger, project, offers(workspace, ledger, kind)?);
+        return rules::survey(workspace, ledger, project, offers);
     }
     let Ok(targets) = targets(project, kind) else {
         return Ok(Vec::new());
@@ -707,12 +783,11 @@ pub fn survey(
     let entry = project_entry(workspace, project);
     let recorded = ledger.copies(&entry, kind)?;
     let records = ledger.records(&entry, kind)?;
-    let offers = offers(workspace, ledger, kind)?;
     // Once a name: every offer of one name stands as the one installation
     // the project has of it, whichever of them it came from.
     let mut said: Vec<(String, Standing)> = Vec::new();
     let mut candidates = Vec::with_capacity(offers.len());
-    for offer in &offers {
+    for offer in offers {
         let standing = match said.iter().find(|(name, _)| name == offer.name()) {
             Some((_, standing)) => *standing,
             None => {
@@ -724,7 +799,7 @@ pub fn survey(
                     kind,
                     offer.name(),
                     &recorded,
-                    record.map(|record| (record, &offers[..])),
+                    record.map(|record| (record, offers)),
                 );
                 said.push((offer.name().to_owned(), standing));
                 standing

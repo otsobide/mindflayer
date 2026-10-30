@@ -1,0 +1,757 @@
+{
+  "agents": [
+    "claude",
+    "codex",
+    "opencode"
+  ],
+  "box_states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign"
+  ],
+  "boxes": [
+    {
+      "closed": [],
+      "entry": "api",
+      "held": [
+        {
+          "kind": "skill",
+          "name": "lint",
+          "origin": "workspace",
+          "state": "outdated",
+          "ticked": true
+        },
+        {
+          "kind": "skill",
+          "name": "review",
+          "origin": "workspace",
+          "state": "missing",
+          "ticked": false
+        },
+        {
+          "kind": "rule",
+          "name": "git/commits",
+          "origin": "workspace",
+          "state": "outdated",
+          "ticked": true
+        }
+      ]
+    },
+    {
+      "closed": [],
+      "entry": "web",
+      "held": [
+        {
+          "kind": "skill",
+          "name": "lint",
+          "origin": "workspace",
+          "state": "edited",
+          "ticked": true
+        }
+      ]
+    },
+    {
+      "closed": [
+        {
+          "kind": "skill",
+          "why": {
+            "code": "not_a_project",
+            "message": "/home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        },
+        {
+          "kind": "rule",
+          "why": {
+            "code": "not_a_project",
+            "message": "/home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        }
+      ],
+      "entry": "gone",
+      "held": []
+    }
+  ],
+  "format": 1,
+  "healths": [
+    "ok",
+    "attention",
+    "broken",
+    "stale"
+  ],
+  "history": [
+    {
+      "action": "install",
+      "at": 1792850760,
+      "detail": "release into web",
+      "outcome": "ok",
+      "target": "web"
+    },
+    {
+      "action": "install",
+      "at": 1792850700,
+      "detail": "format into web",
+      "outcome": "ok",
+      "target": "web"
+    },
+    {
+      "action": "install",
+      "at": 1792850640,
+      "detail": "lint into web",
+      "outcome": "ok",
+      "target": "web"
+    },
+    {
+      "action": "install",
+      "at": 1792850580,
+      "detail": "git/commits into api",
+      "outcome": "ok",
+      "target": "api"
+    },
+    {
+      "action": "install",
+      "at": 1792850520,
+      "detail": "review into api",
+      "outcome": "ok",
+      "target": "api"
+    },
+    {
+      "action": "install",
+      "at": 1792850460,
+      "detail": "lint into api",
+      "outcome": "ok",
+      "target": "api"
+    }
+  ],
+  "kinds": [
+    "skill",
+    "rule"
+  ],
+  "known": [
+    {
+      "default": false,
+      "in_use": true,
+      "name": "Updating",
+      "path": "/home/you/Updating",
+      "projects": 3,
+      "remembered": false,
+      "stale": null,
+      "stale_projects": 1
+    }
+  ],
+  "library": {
+    "artifacts": [
+      {
+        "agents": [],
+        "issues": [],
+        "kind": "skill",
+        "name": "lint",
+        "origin": null,
+        "state": null,
+        "summary": "Tidy the code before a commit",
+        "targets": [
+          ".mindflayer/library/skills/lint"
+        ],
+        "unread": null
+      },
+      {
+        "agents": [],
+        "issues": [],
+        "kind": "skill",
+        "name": "review",
+        "origin": null,
+        "state": null,
+        "summary": "Read a change before it lands",
+        "targets": [
+          ".mindflayer/library/skills/review"
+        ],
+        "unread": null
+      },
+      {
+        "agents": [],
+        "issues": [],
+        "kind": "rule",
+        "name": "git/commits",
+        "origin": null,
+        "state": null,
+        "summary": "Write commit messages that say why",
+        "targets": [
+          ".mindflayer/library/rules/git/commits.md"
+        ],
+        "unread": null
+      }
+    ],
+    "directories": [
+      {
+        "kind": "skill",
+        "path": ".mindflayer/library/skills"
+      },
+      {
+        "kind": "rule",
+        "path": ".mindflayer/library/rules"
+      }
+    ],
+    "failures": [],
+    "holders": [
+      {
+        "entry": "api",
+        "kind": "skill",
+        "name": "lint"
+      },
+      {
+        "entry": "web",
+        "kind": "skill",
+        "name": "lint"
+      },
+      {
+        "entry": "api",
+        "kind": "skill",
+        "name": "review"
+      },
+      {
+        "entry": "api",
+        "kind": "rule",
+        "name": "git/commits"
+      }
+    ],
+    "origin": "workspace",
+    "templates": [
+      {
+        "kind": "skill",
+        "name": "full",
+        "origin": null
+      }
+    ]
+  },
+  "loaded": [],
+  "offers": [
+    {
+      "kind": "skill",
+      "name": "lint",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "Tidy the code before a commit"
+    },
+    {
+      "kind": "skill",
+      "name": "review",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "Read a change before it lands"
+    },
+    {
+      "kind": "rule",
+      "name": "git/commits",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "Write commit messages that say why"
+    }
+  ],
+  "projects": [
+    {
+      "agents": [
+        "claude",
+        "codex"
+      ],
+      "artifacts": [
+        {
+          "agents": [
+            "claude",
+            "codex"
+          ],
+          "issues": [],
+          "kind": "skill",
+          "name": "lint",
+          "origin": "workspace",
+          "state": "outdated",
+          "summary": "Tidy the code before a commit",
+          "targets": [
+            ".agents/skills/lint",
+            ".claude/skills/lint"
+          ],
+          "unread": null
+        },
+        {
+          "agents": [
+            "claude"
+          ],
+          "issues": [],
+          "kind": "skill",
+          "name": "review",
+          "origin": "workspace",
+          "state": "missing",
+          "summary": "Read a change before it lands",
+          "targets": [
+            ".agents/skills/review",
+            ".claude/skills/review"
+          ],
+          "unread": null
+        },
+        {
+          "agents": [
+            "claude",
+            "codex"
+          ],
+          "issues": [],
+          "kind": "rule",
+          "name": "git/commits",
+          "origin": "workspace",
+          "state": "outdated",
+          "summary": null,
+          "targets": [
+            "AGENTS.md"
+          ],
+          "unread": null
+        }
+      ],
+      "directories": [
+        {
+          "kind": "skill",
+          "path": "skills"
+        },
+        {
+          "kind": "rule",
+          "path": "rules"
+        }
+      ],
+      "entry": "api",
+      "failures": [],
+      "health": "attention",
+      "id": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5",
+      "marker": "settings.toml",
+      "migrates": false,
+      "misplaced": [],
+      "missed": [],
+      "name": "api",
+      "path": "/home/you/Updating/api",
+      "settings": {
+        "agents": [
+          "claude",
+          "codex"
+        ],
+        "edit_tracked": false,
+        "share": "local",
+        "targets": []
+      },
+      "stale": null,
+      "tally": {
+        "kinds": [
+          {
+            "count": 2,
+            "kind": "skill"
+          },
+          {
+            "count": 1,
+            "kind": "rule"
+          }
+        ],
+        "states": [
+          {
+            "count": 0,
+            "state": "current"
+          },
+          {
+            "count": 2,
+            "state": "outdated"
+          },
+          {
+            "count": 0,
+            "state": "edited"
+          },
+          {
+            "count": 1,
+            "state": "missing"
+          },
+          {
+            "count": 0,
+            "state": "orphaned"
+          },
+          {
+            "count": 0,
+            "state": "foreign"
+          },
+          {
+            "count": 0,
+            "state": "authored"
+          }
+        ],
+        "total": 3
+      },
+      "templates": [
+        {
+          "kind": "skill",
+          "name": "full",
+          "origin": null
+        }
+      ],
+      "unreached": []
+    },
+    {
+      "agents": [
+        "claude",
+        "opencode"
+      ],
+      "artifacts": [
+        {
+          "agents": [
+            "claude",
+            "opencode"
+          ],
+          "issues": [],
+          "kind": "skill",
+          "name": "format",
+          "origin": "workspace",
+          "state": "orphaned",
+          "summary": "Format the code the way the team does",
+          "targets": [
+            ".agents/skills/format",
+            ".claude/skills/format"
+          ],
+          "unread": null
+        },
+        {
+          "agents": [
+            "claude",
+            "opencode"
+          ],
+          "issues": [],
+          "kind": "skill",
+          "name": "lint",
+          "origin": "workspace",
+          "state": "edited",
+          "summary": "Tidy the code before a commit",
+          "targets": [
+            ".agents/skills/lint",
+            ".claude/skills/lint"
+          ],
+          "unread": null
+        },
+        {
+          "agents": [
+            "claude",
+            "opencode"
+          ],
+          "issues": [],
+          "kind": "skill",
+          "name": "release",
+          "origin": "workspace",
+          "state": "edited",
+          "summary": "Cut a release the way the team does",
+          "targets": [
+            ".agents/skills/release",
+            ".claude/skills/release"
+          ],
+          "unread": null
+        }
+      ],
+      "directories": [
+        {
+          "kind": "skill",
+          "path": "skills"
+        },
+        {
+          "kind": "rule",
+          "path": "rules"
+        }
+      ],
+      "entry": "web",
+      "failures": [
+        {
+          "code": "copies_diverged",
+          "message": "the copies of `lint` at /home/you/Updating/web/.agents/skills/lint and /home/you/Updating/web/.claude/skills/lint differ, so the agents reading them do not all load the same skill"
+        },
+        {
+          "code": "copies_diverged",
+          "message": "the copies of `release` at /home/you/Updating/web/.agents/skills/release and /home/you/Updating/web/.claude/skills/release differ, so the agents reading them do not all load the same skill"
+        }
+      ],
+      "health": "attention",
+      "id": "0123456789abcdef0123456789abcdef",
+      "marker": "settings.toml",
+      "migrates": false,
+      "misplaced": [],
+      "missed": [],
+      "name": "web",
+      "path": "/home/you/Updating/web",
+      "settings": {
+        "agents": [
+          "claude",
+          "opencode"
+        ],
+        "edit_tracked": false,
+        "share": "shared",
+        "targets": []
+      },
+      "stale": null,
+      "tally": {
+        "kinds": [
+          {
+            "count": 3,
+            "kind": "skill"
+          },
+          {
+            "count": 0,
+            "kind": "rule"
+          }
+        ],
+        "states": [
+          {
+            "count": 0,
+            "state": "current"
+          },
+          {
+            "count": 0,
+            "state": "outdated"
+          },
+          {
+            "count": 2,
+            "state": "edited"
+          },
+          {
+            "count": 0,
+            "state": "missing"
+          },
+          {
+            "count": 1,
+            "state": "orphaned"
+          },
+          {
+            "count": 0,
+            "state": "foreign"
+          },
+          {
+            "count": 0,
+            "state": "authored"
+          }
+        ],
+        "total": 3
+      },
+      "templates": [
+        {
+          "kind": "skill",
+          "name": "full",
+          "origin": null
+        }
+      ],
+      "unreached": []
+    },
+    {
+      "agents": [],
+      "artifacts": [],
+      "directories": [],
+      "entry": "gone",
+      "failures": [],
+      "health": "stale",
+      "id": null,
+      "marker": null,
+      "migrates": false,
+      "misplaced": [],
+      "missed": [],
+      "name": null,
+      "path": "/home/you/Updating/gone",
+      "settings": null,
+      "stale": {
+        "code": "not_a_project",
+        "message": "/home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+      },
+      "tally": {
+        "kinds": [
+          {
+            "count": 0,
+            "kind": "skill"
+          },
+          {
+            "count": 0,
+            "kind": "rule"
+          }
+        ],
+        "states": [
+          {
+            "count": 0,
+            "state": "current"
+          },
+          {
+            "count": 0,
+            "state": "outdated"
+          },
+          {
+            "count": 0,
+            "state": "edited"
+          },
+          {
+            "count": 0,
+            "state": "missing"
+          },
+          {
+            "count": 0,
+            "state": "orphaned"
+          },
+          {
+            "count": 0,
+            "state": "foreign"
+          },
+          {
+            "count": 0,
+            "state": "authored"
+          }
+        ],
+        "total": 0
+      },
+      "templates": [],
+      "unreached": []
+    }
+  ],
+  "shelf": [],
+  "sources": [],
+  "states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign",
+    "authored"
+  ],
+  "summary": {
+    "held": {
+      "kinds": [
+        {
+          "count": 5,
+          "kind": "skill"
+        },
+        {
+          "count": 1,
+          "kind": "rule"
+        }
+      ],
+      "states": [
+        {
+          "count": 0,
+          "state": "current"
+        },
+        {
+          "count": 2,
+          "state": "outdated"
+        },
+        {
+          "count": 2,
+          "state": "edited"
+        },
+        {
+          "count": 1,
+          "state": "missing"
+        },
+        {
+          "count": 1,
+          "state": "orphaned"
+        },
+        {
+          "count": 0,
+          "state": "foreign"
+        },
+        {
+          "count": 0,
+          "state": "authored"
+        }
+      ],
+      "total": 6
+    },
+    "library": {
+      "kinds": [
+        {
+          "count": 2,
+          "kind": "skill"
+        },
+        {
+          "count": 1,
+          "kind": "rule"
+        }
+      ],
+      "states": [
+        {
+          "count": 0,
+          "state": "current"
+        },
+        {
+          "count": 0,
+          "state": "outdated"
+        },
+        {
+          "count": 0,
+          "state": "edited"
+        },
+        {
+          "count": 0,
+          "state": "missing"
+        },
+        {
+          "count": 0,
+          "state": "orphaned"
+        },
+        {
+          "count": 0,
+          "state": "foreign"
+        },
+        {
+          "count": 0,
+          "state": "authored"
+        }
+      ],
+      "total": 3
+    },
+    "projects": 2,
+    "shelf": {
+      "kinds": [
+        {
+          "count": 0,
+          "kind": "skill"
+        },
+        {
+          "count": 0,
+          "kind": "rule"
+        }
+      ],
+      "states": [
+        {
+          "count": 0,
+          "state": "current"
+        },
+        {
+          "count": 0,
+          "state": "outdated"
+        },
+        {
+          "count": 0,
+          "state": "edited"
+        },
+        {
+          "count": 0,
+          "state": "missing"
+        },
+        {
+          "count": 0,
+          "state": "orphaned"
+        },
+        {
+          "count": 0,
+          "state": "foreign"
+        },
+        {
+          "count": 0,
+          "state": "authored"
+        }
+      ],
+      "total": 0
+    },
+    "stale": 1
+  },
+  "warnings": [],
+  "workspace": {
+    "made": true,
+    "name": "Updating",
+    "path": "/home/you/Updating",
+    "reason": "above"
+  }
+}

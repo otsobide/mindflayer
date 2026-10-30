@@ -10,7 +10,8 @@ use std::path::{Path, PathBuf};
 
 use mindflayer_core::copy;
 use mindflayer_core::install::{self, Edits, Installed, Standing};
-use mindflayer_core::update::{self, Applied, Plan, Step};
+use mindflayer_core::status::State;
+use mindflayer_core::update::{self, Applied, Does, Plan, Step, Updates};
 use mindflayer_core::{
     claude_rules, create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger,
     MindProject, Reference, Share,
@@ -765,4 +766,193 @@ fn a_rule_copied_into_a_project_a_mind_toml_marks_is_updated_as_its_copy() {
         fs::read_to_string(copy).unwrap(),
         "Never force-push, ever.\n"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Every project at once, as a front end reads it
+// ---------------------------------------------------------------------------
+
+/// `alpha` holding a skill of each state an update says something of, and
+/// one current, `beta` holding only a current one, and `gone`, linked and
+/// removed since.
+fn surveyed() -> Given {
+    let given = given_with(&["alpha", "beta", "gone"], Share::Shared);
+    for name in ["current", "edited", "missing", "orphaned", "outdated"] {
+        given.skill(name);
+        given.install(Kind::Skill, name);
+    }
+    given.install_into(&given.projects[1], Kind::Skill, "current");
+    type_into(&given.offered("outdated").join("SKILL.md"));
+    type_into(&given.offered("edited").join("SKILL.md"));
+    type_into(&given.copies("edited")[1].join("SKILL.md"));
+    fs::remove_dir_all(&given.copies("missing")[0]).unwrap();
+    fs::remove_dir_all(given.offered("orphaned")).unwrap();
+    fs::remove_dir_all(given.projects[2].root()).unwrap();
+    given
+}
+
+#[test]
+fn every_project_is_surveyed_for_what_an_update_does_and_why_it_leaves_what_it_leaves() {
+    let given = surveyed();
+
+    let updates = Updates::read(&given.workspace).unwrap();
+
+    let json = serde_json::to_value(&updates).unwrap();
+    assert_eq!(
+        json["projects"],
+        serde_json::json!([{
+            "entry": "alpha",
+            "name": "alpha",
+            "installations": [
+                {
+                    "kind": "skill",
+                    "name": "edited",
+                    "origin": "workspace",
+                    "state": "edited",
+                    "does": "leave",
+                    "copies": [".claude/skills/edited"],
+                    "left": {
+                        "code": "edited",
+                        "message": "skill `edited` in alpha was changed since it was installed, \
+                            at .claude/skills/edited, so an update leaves it alone, every copy \
+                            of it; forcing the update writes over the change",
+                    },
+                    "forced": true,
+                },
+                {
+                    "kind": "skill",
+                    "name": "missing",
+                    "origin": "workspace",
+                    "state": "missing",
+                    "does": "put_back",
+                    "copies": [".agents/skills/missing"],
+                    "left": null,
+                    "forced": false,
+                },
+                {
+                    "kind": "skill",
+                    "name": "orphaned",
+                    "origin": "workspace",
+                    "state": "orphaned",
+                    "does": "orphaned",
+                    "copies": [],
+                    "left": {
+                        "code": "no_longer_offered",
+                        "message": "skill `orphaned` in alpha is no longer offered by \
+                            workspace, so an update leaves it as it is; uninstalling it takes \
+                            it out",
+                    },
+                    "forced": false,
+                },
+                {
+                    "kind": "skill",
+                    "name": "outdated",
+                    "origin": "workspace",
+                    "state": "outdated",
+                    "does": "refresh",
+                    "copies": [],
+                    "left": null,
+                    "forced": false,
+                },
+            ],
+            "writes": true,
+        }])
+    );
+    assert_eq!(
+        json["states"],
+        serde_json::json!([
+            {"state": "outdated", "count": 1},
+            {"state": "edited", "count": 1},
+            {"state": "missing", "count": 1},
+            {"state": "orphaned", "count": 1},
+        ])
+    );
+    assert_eq!(json["writes"], true);
+    let unread = json["unread"].as_array().unwrap();
+    assert_eq!(unread.len(), 1, "{json}");
+    assert_eq!(unread[0]["code"], "not_a_project", "{json}");
+}
+
+#[test]
+fn surveying_every_project_writes_nothing() {
+    let given = surveyed();
+    let ledger = given.workspace.ledger_path();
+    let before = fs::read(&ledger).unwrap();
+    let missing = &given.copies("missing")[0];
+
+    Updates::read(&given.workspace).unwrap();
+
+    assert_eq!(fs::read(&ledger).unwrap(), before);
+    assert!(!missing.exists());
+}
+
+/// What an update leaves alone and has nothing to write from is listed, yet
+/// writes nothing: `update --all --yes` would only say it.
+#[test]
+fn a_workspace_whose_every_installation_is_left_writes_nothing() {
+    let given = given();
+    let offer = given.skill("deploy");
+    given.install(Kind::Skill, "deploy");
+    type_into(&given.copies("deploy")[1].join("SKILL.md"));
+    fs::remove_dir_all(offer).unwrap();
+
+    let updates = Updates::read(&given.workspace).unwrap();
+
+    assert!(!updates.writes);
+    assert!(!updates.projects[0].writes);
+    let pending = &updates.projects[0].installations[0];
+    assert_eq!(
+        serde_json::to_value(pending).unwrap()["left"]["code"],
+        "no_longer_offered"
+    );
+}
+
+/// An edited copy nothing offers any more is orphaned, as an update steps
+/// it, and still edited, as it stands: taken out only by a forced
+/// uninstall, which it says it needs, as it says the forced update an
+/// edited one still offered needs.
+#[test]
+fn an_edited_copy_is_said_to_need_forcing_whether_or_not_anything_offers_it() {
+    let given = given();
+    for name in ["kept", "dropped"] {
+        given.skill(name);
+        given.install(Kind::Skill, name);
+        type_into(&given.copies(name)[1].join("SKILL.md"));
+    }
+    fs::remove_dir_all(given.offered("dropped")).unwrap();
+
+    let updates = Updates::read(&given.workspace).unwrap();
+
+    let said: Vec<(&str, State, Does, bool)> = updates.projects[0]
+        .installations
+        .iter()
+        .map(|pending| {
+            (
+                pending.name.as_str(),
+                pending.state,
+                pending.does,
+                pending.forced,
+            )
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            ("dropped", State::Edited, Does::Orphaned, true),
+            ("kept", State::Edited, Does::Leave, true),
+        ]
+    );
+}
+
+#[test]
+fn a_workspace_with_nothing_to_update_lists_no_project_and_counts_none() {
+    let given = given();
+    given.skill("deploy");
+    given.install(Kind::Skill, "deploy");
+
+    let updates = Updates::read(&given.workspace).unwrap();
+
+    assert!(updates.projects.is_empty());
+    assert!(!updates.writes);
+    assert!(updates.states.iter().all(|counted| counted.count == 0));
 }

@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { Kind } from '@/api/generated/Kind'
 import type { Snapshot } from '@/api/generated/Snapshot'
-import { fixture, render, texts, unmount } from './panel'
+import type { Does } from '@/api/generated/Does'
+import type { Updates } from '@/api/generated/Updates'
+import { answering, fixture, render, texts, unmount, updates } from './panel'
 
 afterEach(unmount)
 
@@ -58,6 +60,13 @@ describe('a kind core adds', () => {
     expect(page.find('[data-testid="no-match"]').exists()).toBe(true)
   })
 
+  it('gets a filter of the matrix', async () => {
+    const { page } = await render('/assign?kind=mcp', withAKindMore())
+
+    expect(page.get('[data-testid="filter-kind-mcp"]').attributes('aria-pressed')).toBe('true')
+    expect(page.find('[data-testid="no-match"]').exists()).toBe(true)
+  })
+
   it('gets a page of the library, counted as the snapshot counts it', async () => {
     const { page } = await render('/library?kind=mcp', withAKindMore())
 
@@ -100,5 +109,30 @@ describe('a kind core adds', () => {
     unmount()
     const docs = await render('/project?entry=docs', withAKindMore())
     expect(texts(docs.page, '[data-testid="kind-mcp"] code')).toContain('$ flayer -W /home/you/Projects install -p docs mcp:<NAME>')
+  })
+})
+
+describe('a kind, and a step, core adds', () => {
+  it('reach the page of updates, each said by its word, with no change offered for a step it knows none for', async () => {
+    const answered = updates()
+    const [api] = (answered[0]!.answer as Updates).projects
+    api!.installations.push({
+      kind: MCP,
+      name: 'github',
+      origin: 'workspace',
+      state: 'outdated',
+      does: 'resync' as Does,
+      copies: ['.mcp.json'],
+      left: null,
+      forced: false
+    })
+
+    const { page } = await render('/updates', answering(fixture('updating'), answered).transport)
+
+    const row = page.findAll('[data-testid="state-outdated"] [data-testid="row"]')
+      .find(each => each.get('[data-testid="name"]').text() === 'github')!
+    expect(row.text()).toContain('mcp')
+    expect(row.get('[data-testid="does"]').text()).toBe('resync: resync')
+    expect(row.find('[data-testid="change"]').exists()).toBe(false)
   })
 })

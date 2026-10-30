@@ -31,6 +31,13 @@
 //!   path policy as a folder to link is, and is only read: it is asked for
 //!   by hand ([`Query::Scan`]), never with the snapshot, which a live update
 //!   reads again on every change.
+//! - **A plan names only linked projects**, each box's by its entry, held
+//!   to the path policy as a task's projects are, and is only read: what
+//!   the boxes ticked amount to is core's to say ([`Query::Plan`]), and
+//!   nothing runs until its tasks are sent back.
+//! - **What an update would do is only read** ([`Query::Updates`]): the
+//!   dry run of `flayer update --all`, core's, naming nothing a browser
+//!   sent; an update runs only as the task the panel sends for it.
 //! - **A file reaches the browser only as text inside JSON**, held to its
 //!   holder once its links are followed, and never larger than core's cap
 //!   ([`Contents`]): the one way a file's contents leave, since `show` is
@@ -47,8 +54,10 @@ use std::sync::{Arc, Mutex, PoisonError};
 use mindflayer_core::code::Said;
 use mindflayer_core::contents::{Contents, Files};
 use mindflayer_core::gather::Watch;
+use mindflayer_core::install::{self, Cell, Conflict, Locked};
 use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindflayer_core::scan::{self, Order, DEFAULT_DEPTH};
+use mindflayer_core::update::Updates;
 use mindflayer_core::view::Snapshot;
 use mindflayer_core::{paths, policy, watch};
 use mindflayer_core::{FlayerWorkspace, Found, MindProject, Scan, FLAYER_CONFIG, FLAYER_DIR};
@@ -69,7 +78,10 @@ use crate::{CliError, Lookup, Warning};
 /// "workspace"}, "reference": "skill:deploy"}`, `{"type": "contents",
 /// "holder": {"type": "workspace"}, "reference": "skill:deploy", "file":
 /// "SKILL.md"}`, `{"type": "scan", "roots": ["/home/you/Work"], "depth":
-/// null}`. A field a query does not have is refused, as a task's is.
+/// null}`, `{"type": "plan", "selection": [{"project": "alpha",
+/// "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`,
+/// `{"type": "updates"}`. A field a query does not have is refused, as a
+/// task's is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -105,6 +117,30 @@ pub enum Query {
         roots: Vec<String>,
         depth: Option<usize>,
     },
+    /// What `selection`, boxes of projects and offers ticked or not,
+    /// amounts to ([`Planned`]): core's plan of it ([`install::plan`]), the
+    /// one place the rules of a batch live, each change as the task that
+    /// runs it, beside what clashes and what is locked.
+    ///
+    /// A read, as marking a box on the install screen is: nothing runs
+    /// until the panel sends the tasks back, to be previewed and run as any
+    /// task is.
+    /// Each project a box names is an entry the workspace links, held to
+    /// the path policy as a task's projects are
+    /// ([`Admission::selection`]).
+    Plan { selection: Vec<Cell> },
+    /// What updating every project the workspace links would do ([`Updates`]):
+    /// each installation an update says something of, how it stands, what
+    /// an update does with it, and why it leaves one it leaves, every copy
+    /// edited since left alone, as `flayer update --all` says without
+    /// `--yes`.
+    ///
+    /// A query of its own, asked for by the page of updates, rather than a
+    /// part of the snapshot: telling what an update does reads where each
+    /// installation came from again, past what the snapshot reads, and a
+    /// live update reads the snapshot again on every change. Nothing in it
+    /// is sent by the browser, so nothing is held to the path policy.
+    Updates {},
 }
 
 /// What a scan the panel asked for found ([`Query::Scan`]): what `flayer
@@ -203,6 +239,40 @@ impl Scanned {
             untraced: scan.untraced.clone(),
             truncated: scan.truncated,
             warnings: scan_warned(scan),
+        }
+    }
+}
+
+/// What a selection the panel asked to plan amounts to ([`Query::Plan`]):
+/// core's plan of it ([`install::Plan`]), each change in it the task that
+/// runs it.
+///
+/// Tasks rather than core's changes, so the panel sends back what it was
+/// handed, never a task it puts together itself: the `install` and
+/// `uninstall` tasks, each a project by the entry its box named it by, which
+/// the backend turns into the folder the registry resolves as it does any
+/// task's. Sent as one `apply_install`, as the install screen applies its
+/// marks, each line runs whatever came of the ones before.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Planned {
+    /// Each `install` and `uninstall` that carries the selection out, in
+    /// the order to run them.
+    pub tasks: Vec<Task>,
+    /// Boxes of one name in one project that cannot all be as asked, none
+    /// of which is planned.
+    pub conflicts: Vec<Conflict>,
+    /// Boxes whose change is held back, each by the code the command would
+    /// refuse it with, or why the project could not be asked about it.
+    pub locked: Vec<Locked>,
+}
+
+impl From<install::Plan> for Planned {
+    fn from(plan: install::Plan) -> Self {
+        Planned {
+            tasks: plan.changes.into_iter().map(Task::from).collect(),
+            conflicts: plan.conflicts,
+            locked: plan.locked,
         }
     }
 }
@@ -441,6 +511,22 @@ impl Backend for PanelBackend {
                 };
                 let scanned = Scanned::of(&workspace, &scan::scan(&workspace, &request));
                 Ok(serde_json::to_value(scanned).expect("a scan serializes"))
+            }
+            Query::Plan { selection } => {
+                Admission {
+                    workspace: &workspace,
+                    lookup: &self.lookup,
+                }
+                .selection(&selection)
+                .map_err(|error| refused(error.code(), error))?;
+                let plan = install::plan(&workspace, &selection)
+                    .map_err(|error| refused(error.code(), error))?;
+                Ok(serde_json::to_value(Planned::from(plan)).expect("a plan serializes"))
+            }
+            Query::Updates {} => {
+                let updates =
+                    Updates::read(&workspace).map_err(|error| refused(error.code(), error))?;
+                Ok(serde_json::to_value(updates).expect("what an update would do serializes"))
             }
         }
     }

@@ -37,10 +37,10 @@ use crate::agent::Agent;
 use crate::artifact::ValidationIssue;
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::code::Said;
-use crate::install::{self, LoadFailure, Offer};
+use crate::install::{self, LoadFailure, Offer, Place};
 use crate::kind::Kind;
 use crate::known::{self, KnownWorkspace};
-use crate::ledger::{Entry, Gathered, InstallRecord, LedgerError, Source};
+use crate::ledger::{Entry, Gathered, InstallRecord, Ledger, LedgerError, Source};
 use crate::lifecycle;
 use crate::paths;
 use crate::relink;
@@ -82,6 +82,11 @@ pub struct Snapshot {
     pub agents: Vec<Agent>,
     /// Every state an artifact can stand in, in report order.
     pub states: Vec<State>,
+    /// Every state a box of an offer ([`Snapshot::boxes`]) can stand in, in
+    /// report order ([`State::of_boxes`]): `states` but `authored`, which no
+    /// offer is. What a legend of the boxes lists, so a front end leaves
+    /// out no state by its name.
+    pub box_states: Vec<State>,
     /// Every health a project can be in, in report order: what a front end
     /// sorts and filters its projects by, so it orders none of its own.
     pub healths: Vec<Health>,
@@ -99,6 +104,12 @@ pub struct Snapshot {
     pub shelf: Vec<Shelved>,
     /// Every source the shelf is filled from, by URL.
     pub sources: Vec<ShelfSource>,
+    /// Everything there is to install, from wherever it is offered: what
+    /// a front end that assigns lays its offers out by.
+    pub offers: Vec<Offered>,
+    /// How each entry in the registry stands with every offer, in the
+    /// order `projects` lists them: what each of its boxes shows.
+    pub boxes: Vec<Boxes>,
     /// Every workspace this machine knows ([`crate::known`]), this one
     /// among them.
     pub known: Vec<KnownWorkspace>,
@@ -492,25 +503,14 @@ impl Health {
             || !project.unreached.is_empty()
             || !project.missed.is_empty()
             || !project.misplaced.is_empty()
-            || project
-                .artifacts
-                .iter()
-                .any(|held| held.state.is_some_and(asks_for_a_command) || !held.issues.is_empty());
+            || project.artifacts.iter().any(|held| {
+                held.state.is_some_and(State::asks_for_a_command) || !held.issues.is_empty()
+            });
         if attention {
             Health::Attention
         } else {
             Health::Ok
         }
-    }
-}
-
-/// Whether an artifact standing in `state` asks for a command: an update,
-/// a forced one, or an uninstall. Matched with no wildcard, so a state
-/// added does not compile until it says.
-fn asks_for_a_command(state: State) -> bool {
-    match state {
-        State::Outdated | State::Edited | State::Missing | State::Orphaned => true,
-        State::Current | State::Foreign | State::Authored => false,
     }
 }
 
@@ -619,6 +619,196 @@ impl ShelfSource {
     }
 }
 
+/// One thing there is to install, from one place: a row of the install
+/// screen turned round by artifact, and of the panel's matrix (#79).
+///
+/// Told by core's own list of what an install offers ([`install::survey`]),
+/// rather than put together by a front end from the library, the shelf and
+/// the loads: only that list leaves out a name no copy can be filed under,
+/// and reads what each loaded workspace offers, which nothing else in a
+/// snapshot lists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Offered {
+    pub kind: Kind,
+    pub name: String,
+    /// The one line a listing shows.
+    pub summary: Option<String>,
+    /// Which place offers it.
+    pub place: Place,
+    /// Where it is offered from, as `--from` takes it and an install of it
+    /// records it: what a box of it names its offer by.
+    #[serde(serialize_with = "crate::url::serialize_redacted")]
+    pub origin: String,
+}
+
+impl Offered {
+    fn of(offer: &Offer) -> Offered {
+        Offered {
+            kind: offer.kind(),
+            name: offer.name().to_owned(),
+            summary: offer.summary().map(str::to_owned),
+            place: offer.place(),
+            origin: offer.origin(),
+        }
+    }
+}
+
+/// How one entry in the registry stands with every offer ([`Offered`]):
+/// what each of its boxes shows, told as the install screen tells it, by
+/// [`install::survey`] and [`install::holding`], so the panel ticks the box
+/// the screen ticks.
+///
+/// A box neither listed in `held` nor of a kind in `closed` is empty: the
+/// project holds nothing of its name, and records no installation of it.
+/// Only the boxes that are not are listed, a project holding a few of the
+/// hundreds offered.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Boxes {
+    /// The entry, as [`Project::entry`] spells it.
+    pub entry: String,
+    /// Each kind none of its boxes can be asked about, and why, by the code
+    /// a plan locks one by: every kind of an entry that opens no project,
+    /// and each a project has nowhere to put ([`install::receives`]), or
+    /// could not be surveyed for.
+    pub closed: Vec<Closed>,
+    /// Each box of a name it holds something of or records, kind by kind,
+    /// in the order of [`Snapshot::offers`].
+    pub held: Vec<HeldBox>,
+}
+
+/// A kind none of a project's boxes of can be asked about, and why.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Closed {
+    pub kind: Kind,
+    pub why: Said,
+}
+
+/// A box of an offer whose name a project holds something of, or records
+/// an installation of: how the name stands, and whether the box is ticked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct HeldBox {
+    pub kind: Kind,
+    pub name: String,
+    /// The offer's, as [`Offered::origin`] says it.
+    #[serde(serialize_with = "crate::url::serialize_redacted")]
+    pub origin: String,
+    /// How the name stands in the project, as every offer of it stands
+    /// ([`State::of_standing`]): never `authored`, which no offer is.
+    pub state: State,
+    /// Whether the box is ticked ([`install::holding`]): the offer the
+    /// installation came from, every offer of a name somebody's copy holds,
+    /// and none of one whose every copy has gone, for ticking it to put
+    /// them back.
+    pub ticked: bool,
+}
+
+/// What `workspace` offers, read once, and how each of `members` stands with
+/// it: [`Snapshot::offers`] and [`Snapshot::boxes`].
+///
+/// A ledger that will not open, or a shelf that will not read, is said among
+/// the snapshot's warnings already, so it offers nothing here, rather than
+/// saying it again in every project.
+fn boxes(workspace: &FlayerWorkspace, members: &[Member]) -> (Vec<Offered>, Vec<Boxes>) {
+    let ledger = workspace.ledger_for_reading().ok();
+    let offers: Vec<(Kind, Vec<Offer>)> = Kind::ALL
+        .into_iter()
+        .map(|kind| {
+            let offers = ledger
+                .as_ref()
+                .and_then(|ledger| install::offers(workspace, ledger, kind).ok())
+                .unwrap_or_default();
+            (kind, offers)
+        })
+        .collect();
+    let offered = offers
+        .iter()
+        .flat_map(|(_, offers)| offers.iter().map(Offered::of))
+        .collect();
+    let boxes = members
+        .iter()
+        .map(|member| {
+            let entry = paths::as_route(&member.entry);
+            match (&member.project, &ledger) {
+                (Ok(project), Some(ledger)) => {
+                    Boxes::of(entry, workspace, ledger, project, &offers)
+                }
+                (Err(error), _) => Boxes {
+                    entry,
+                    closed: Kind::ALL
+                        .into_iter()
+                        .map(|kind| Closed {
+                            kind,
+                            why: Said::of(error.code(), error),
+                        })
+                        .collect(),
+                    held: Vec::new(),
+                },
+                (Ok(_), None) => Boxes {
+                    entry,
+                    closed: Vec::new(),
+                    held: Vec::new(),
+                },
+            }
+        })
+        .collect();
+    (offered, boxes)
+}
+
+impl Boxes {
+    /// How `project`, linked as `entry`, stands with `offers`, every offer
+    /// of each kind, read against `ledger`.
+    fn of(
+        entry: String,
+        workspace: &FlayerWorkspace,
+        ledger: &Ledger,
+        project: &MindProject,
+        offers: &[(Kind, Vec<Offer>)],
+    ) -> Boxes {
+        let mut boxes = Boxes {
+            entry,
+            closed: Vec::new(),
+            held: Vec::new(),
+        };
+        for (kind, offers) in offers {
+            let kind = *kind;
+            let read = install::receives(project, kind)
+                .and_then(|()| install::survey_among(workspace, ledger, project, kind, offers))
+                .and_then(|candidates| {
+                    let ticked = install::holding(workspace, ledger, project, &candidates)
+                        .map_err(install::InstallError::from)?;
+                    Ok((candidates, ticked))
+                });
+            let (candidates, ticked) = match read {
+                Ok(read) => read,
+                Err(error) => {
+                    boxes.closed.push(Closed {
+                        kind,
+                        why: Said::of(error.code(), &error),
+                    });
+                    continue;
+                }
+            };
+            for (candidate, ticked) in candidates.iter().zip(ticked) {
+                let Some(state) = State::of_standing(candidate.standing) else {
+                    continue;
+                };
+                boxes.held.push(HeldBox {
+                    kind,
+                    name: candidate.name().to_owned(),
+                    origin: candidate.origin(),
+                    state,
+                    ticked,
+                });
+            }
+        }
+        boxes
+    }
+}
+
 /// The holders a listing reads, each as a snapshot holds it, read for the
 /// kinds the listing asks for: what `list --json` prints.
 ///
@@ -698,6 +888,7 @@ impl Snapshot {
                 Some((settings.id.clone(), member.root.clone()))
             })
             .collect();
+        let (offers, boxes) = boxes(workspace, &members);
         let projects: Vec<Project> = members
             .into_iter()
             .map(|member| Project::of_member(member, workspace, &Kind::ALL))
@@ -758,6 +949,7 @@ impl Snapshot {
             kinds: Kind::ALL.to_vec(),
             agents: Agent::ALL.to_vec(),
             states: State::ALL.to_vec(),
+            box_states: State::of_boxes(),
             healths: Health::ALL.to_vec(),
             summary: Summary::of(&projects, &library, &shelf),
             library,
@@ -765,6 +957,8 @@ impl Snapshot {
             loaded,
             shelf,
             sources,
+            offers,
+            boxes,
             known: known.workspaces,
             history,
             warnings,

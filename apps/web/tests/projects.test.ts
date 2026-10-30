@@ -50,6 +50,21 @@ describe('the projects table', () => {
     )
   })
 
+  it('badges what each project holds outdated, as its tally counts it, linking to the updates', async () => {
+    const snapshot = fixture('updating')
+
+    const { page } = await render('/projects', snapshot)
+
+    const rows = page.findAll('[data-testid="row"]')
+    snapshot.projects.forEach((project, index) => {
+      const outdated = project.tally.states.find(counted => counted.state === 'outdated')?.count ?? 0
+      const cell = rows[index]!.get('[data-testid="outdated"]')
+      expect(cell.text(), title(project)).toBe(outdated > 0 ? `${outdated} outdated` : 'none')
+    })
+    expect(texts(page, '[data-testid="outdated-badge"]')).toEqual(['2 outdated'])
+    expect(page.get('[data-testid="outdated"] a').attributes('href')).toBe('/updates#state-outdated')
+  })
+
   it('links each row to its project\'s page', async () => {
     const { page } = await render('/projects', fixture('workspace'))
 

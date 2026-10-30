@@ -289,6 +289,72 @@ fn a_skill_offered_changed_since_it_was_installed_is_marked_outdated_and_stays_t
 }
 
 #[test]
+fn the_screen_opens_with_the_place_an_installation_came_from_ticked_though_its_copy_is_behind_both()
+{
+    let dir = workspace_with_own();
+    let team = dir.path().join("team");
+    fs::create_dir(&team).unwrap();
+    flayer(&team, &["init"]).unwrap();
+    flayer(
+        &team,
+        &[
+            "add",
+            "skill",
+            "commit-style",
+            "How the team writes commits",
+        ],
+    )
+    .unwrap();
+    flayer(dir.path(), &["load", "team"]).unwrap();
+    flayer(
+        dir.path(),
+        &[
+            "install",
+            "-p",
+            "alpha",
+            "--from",
+            "load:team",
+            "skill:commit-style",
+        ],
+    )
+    .unwrap();
+    // The team moves on, so alpha's copy is behind where it came from and
+    // is neither place's content, which the screen told it by until #78:
+    // that ticked the workspace's own, listed first.
+    let manifest = own_directory_for(&team, Kind::Skill).join("commit-style/SKILL.md");
+    let since = fs::read_to_string(&manifest).unwrap() + "Since.\n";
+    fs::write(&manifest, since).unwrap();
+    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let ledger = workspace.ledger_for_reading().unwrap();
+
+    let mut screen = screen_for(&workspace, &ledger);
+
+    let alpha = &screen.targets[listed(&screen, "alpha")];
+    let ticked: Vec<(String, bool)> = alpha
+        .rows
+        .iter()
+        .filter(|row| row.candidate.name() == "commit-style")
+        .map(|row| (row.candidate.origin(), row.checked))
+        .collect();
+    assert_eq!(
+        ticked,
+        [
+            (String::from("workspace"), false),
+            (String::from("load:team"), true)
+        ]
+    );
+    assert_eq!(screen.counts(), (0, 0));
+    screen.cursor = listed(&screen, "alpha");
+    let drawn = rendered(&screen);
+    let lines: Vec<&str> = drawn.lines().collect();
+    let at = lines
+        .iter()
+        .position(|line| line.contains("[x] commit-style  (outdated"))
+        .unwrap_or_else(|| panic!("{drawn}"));
+    assert!(lines[at + 1].contains("[load:team]"), "{drawn}");
+}
+
+#[test]
 fn a_skill_changed_since_it_was_installed_is_shown_but_not_touched() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     installed(dir.path(), &workspace, &ledger);

@@ -10,11 +10,17 @@ import App from '@/App.vue'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { TransportError, type LiveEvent, type Preview, type Query, type Ran, type Task, type Transport } from '@/api/transport'
 import { createPanel } from '@/panel'
+import applied from './fixtures/applied.json'
+import assigning from './fixtures/assigning.json'
 import candidates from './fixtures/candidates.json'
 import commands from './fixtures/commands.json'
 import library from './fixtures/library.json'
+import planned from './fixtures/plans.json'
 import scan from './fixtures/scan.json'
 import unmade from './fixtures/unmade.json'
+import updated from './fixtures/updated.json'
+import surveyed from './fixtures/updates.json'
+import updating from './fixtures/updating.json'
 import workspace from './fixtures/workspace.json'
 
 /**
@@ -25,9 +31,15 @@ import workspace from './fixtures/workspace.json'
  * `candidates` is `workspace` with more beside its projects, the one the
  * scan in tests/fixtures/scan.json looked through: two projects and two
  * repositories nobody linked, `old`, linked and moved since, and `legacy`,
- * linked, which a `mind.toml` marks.
+ * linked, which a `mind.toml` marks; `assigning`, a workspace to assign
+ * in, which the matrix draws: one name offered from two places, the shelf,
+ * a copy of each state an install stands in, a project nothing can go into
+ * and an entry that opens none; and `updating`, a workspace to update,
+ * which the page of updates draws beside tests/fixtures/updates.json: an
+ * installation outdated, edited, missing and orphaned, and an entry that
+ * opens none.
  */
-const FIXTURES = { workspace, unmade, candidates }
+const FIXTURES = { workspace, unmade, candidates, assigning, updating }
 
 export type Fixture = keyof typeof FIXTURES
 
@@ -64,6 +76,27 @@ export function answers(): Answered[] {
  */
 export function scans(): Answered[] {
   return structuredClone(scan) as unknown as Answered[]
+}
+
+/**
+ * What the assigning fixture's server answers when its matrix plans a few
+ * selections of boxes (tests/fixtures/plans.json), each in the order the
+ * boxes were marked: `format` into `api` and `docs`, the library's `deploy`
+ * in place of the team's in `api`, and a selection that clashes and is
+ * locked beside a change that goes ahead. Copied, so a test may change its
+ * copy.
+ */
+export function plans(): Answered[] {
+  return structuredClone(planned) as unknown as Answered[]
+}
+
+/**
+ * What the updating fixture's server answers when its page of updates asks
+ * what updating every project would do (tests/fixtures/updates.json).
+ * Copied, so a test may change its copy.
+ */
+export function updates(): Answered[] {
+  return structuredClone(surveyed) as unknown as Answered[]
 }
 
 /** `value` with every object's keys in one order, to compare as text. */
@@ -122,6 +155,28 @@ export function commanded(): Commanded[] {
   return structuredClone(commands) as unknown as Commanded[]
 }
 
+/**
+ * What the assigning fixture's server answers when the plan of `format`
+ * into `api` and `docs` is applied, its tasks sent back as one batch
+ * (tests/fixtures/applied.json): its preview, and its run. Copied, so a
+ * test may change its copy.
+ */
+export function applying(): Commanded[] {
+  return structuredClone(applied) as unknown as Commanded[]
+}
+
+/**
+ * What the updating fixture's server answers when each change its page of
+ * updates offers is previewed and run, each on the workspace as it was
+ * built (tests/fixtures/updated.json): every project updated, one, one
+ * installation in one, an edited one forced, an orphaned one uninstalled,
+ * an orphaned one edited since uninstalled forced, and every orphaned one
+ * taken out. Copied, so a test may change its copy.
+ */
+export function updatings(): Commanded[] {
+  return structuredClone(updated) as unknown as Commanded[]
+}
+
 /** A task as `send` was handed it, and how. */
 export interface Sent {
   task: Task
@@ -129,15 +184,15 @@ export interface Sent {
 }
 
 /**
- * A transport answering queries as `answering` does, and each task of
- * `known` as the server answered it: its preview, and its run, told as
+ * A transport answering queries as `answering` does, with `answered`
+ * when given, and each task of `known` as the server answered it: its preview, and its run, told as
  * started and finished on the stream before it is answered, as the server
  * tells them, and kept in the transcript. Any other task is refused with a
  * code, as the backend refuses one. Each task sent is written down, and
  * `finishing` holds a run's finish back until the test lets it go.
  */
-export function commanding(snapshot: Snapshot = fixture('workspace'), known: Commanded[] = commanded()) {
-  const { queries, transport } = answering(snapshot)
+export function commanding(snapshot: Snapshot = fixture('workspace'), known: Commanded[] = commanded(), answered?: Answered[]) {
+  const { queries, transport } = answering(snapshot, answered)
   const sent: Sent[] = []
   const ran: Ran[] = []
   const listeners: ((event: LiveEvent) => void)[] = []

@@ -6,7 +6,7 @@ import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
 import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
-import { answering, commanded, commanding, fixture, render, unmount, type Fixture } from './panel'
+import { answering, answers, commanded, commanding, fixture, plans, render, unmount, updates, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -59,6 +59,12 @@ const PAGES: [string, Fixture][] = [
   ['/discover', 'unmade'],
   ['/discover?root=%2Fhome%2Fyou%2FProjects', 'candidates'],
   ['/discover?root=Projects', 'workspace'],
+  ['/assign', 'assigning'],
+  ['/assign?by=project', 'assigning'],
+  ['/assign?q=nowhere', 'assigning'],
+  ['/assign', 'workspace'],
+  ['/assign', 'unmade'],
+  ['/projects', 'updating'],
   ['/nowhere', 'workspace']
 ]
 
@@ -106,6 +112,65 @@ describe('the page of what could be linked', () => {
     await flushPromises()
 
     expect(document.querySelector('[data-testid="writes-into"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('the matrix', () => {
+  it('passes axe with boxes marked, and the plan of them drawn, held back and clashing', async () => {
+    const { transport } = answering(fixture('assigning'), plans())
+    await render('/assign', transport)
+
+    const [, , heldBack] = plans()
+    for (const cell of (heldBack!.query as { selection: { project: string, reference: string, origin: string }[] }).selection) {
+      const label = `${cell.reference.replace(':', ' ')} from ${cell.origin} in ${cell.project}`
+      const box = [...document.querySelectorAll<HTMLElement>('[data-testid="box"]')]
+        .find(each => each.getAttribute('aria-label')!.split('; ')[0] === label)!
+      box.click()
+      await flushPromises()
+    }
+
+    expect(document.querySelector('[data-testid="lock"]')).not.toBeNull()
+    expect(document.querySelector('[data-testid="conflict"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('the page of updates', () => {
+  it('passes axe with every state listed, and with nothing to update', async () => {
+    const { transport } = answering(fixture('updating'), updates())
+    await render('/updates', transport)
+
+    expect(document.querySelector('[data-testid="state-edited"] [data-testid="row"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+    unmount()
+
+    const nothing = updates()
+    Object.assign(nothing[0]!.answer as object, { projects: [], unread: [], writes: false })
+    await render('/updates', answering(fixture('workspace'), nothing).transport)
+
+    expect(document.querySelector('[data-testid="nothing"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+  })
+
+  it('passes axe once what an update would do could not be read', async () => {
+    await render('/updates', answering(fixture('workspace'), []).transport)
+
+    expect(document.querySelector('[data-testid="updates-unread"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('one of the library\'s own, about to be removed', () => {
+  it('passes axe with what removing it everywhere would do shown', async () => {
+    const { transport } = commanding(fixture('workspace'), commanded(), answers())
+    await render('/artifact?kind=skill&name=review', transport)
+
+    document.querySelector<HTMLElement>('[data-testid="remove-dry"]')!.click()
+    await flushPromises()
+    document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="remove-said"]')).not.toBeNull())
+
     expect(await violations()).toEqual([])
   })
 })

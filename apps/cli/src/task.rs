@@ -27,6 +27,7 @@
 //! command of exactly these words ([`shell`]).
 
 use clap::Parser as _;
+use mindflayer_core::install::Change;
 use mindflayer_core::url::redacted;
 use mindflayer_core::{codes, Agent, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER};
 use serde::{Deserialize, Serialize};
@@ -170,12 +171,15 @@ pub enum Task {
     /// `… remove --yes <kind:name>`: asked about before it gets here, which is
     /// what the `--yes` says. `flayer remove --everywhere --yes <kind:name>`
     /// when `everywhere`, one of the workspace's own taken out of every
-    /// project it links first.
+    /// project it links first. Without `yes`, the dry run, which deletes
+    /// nothing and says what would go, each project's copy with how it
+    /// stands when `everywhere`: what the panel shows before it asks.
     Remove {
         holder: Holder,
         kind: Kind,
         name: String,
         everywhere: bool,
+        yes: bool,
     },
     /// `flayer validate`, everything; `mind validate`, one project.
     Validate { holder: Holder },
@@ -253,10 +257,13 @@ pub enum Task {
     /// `… update --yes [<kind:name>]`: what is installed in a project, or
     /// the one artifact named, brought up to date and put back where a copy
     /// has gone; `flayer update --all --yes [<kind:name>]` for the
-    /// workspace's own row, in every project it links.
+    /// workspace's own row, in every project it links. With `force`, `--yes
+    /// --force`, writing over a copy changed since it was installed too,
+    /// which the line is then asked about for ([`Caution::Forces`]).
     Update {
         holder: Holder,
         reference: Option<String>,
+        force: bool,
     },
     /// `flayer install -p <project>... [--from <origin>] <kind:name>`: one
     /// offer into each project named, by what picks it out
@@ -280,12 +287,24 @@ pub enum Task {
     },
     /// `flayer uninstall -p <project>... <kind:name>`: one artifact taken
     /// back out of each project named, whichever place its copy came from,
-    /// each named as an install's are, by what `naming` gives.
+    /// each named as an install's are, by what `naming` gives. With
+    /// `force`, `--force`, taking out a copy changed since it was installed
+    /// too, which the line is then asked about for ([`Caution::Forces`]):
+    /// never from the install screen, whose marks leave an edit to a command
+    /// line, and from the panel only for the copy core says needs it.
     Uninstall {
         projects: Vec<String>,
         kind: Kind,
         name: String,
+        force: bool,
     },
+    /// `… uninstall --orphaned`: every installation in a project that
+    /// nothing offers any more where it came from, taken back out of it;
+    /// `flayer uninstall --all-projects --orphaned` for the workspace's own
+    /// row, out of every project it links, as an update reaches them. Never
+    /// forced: one changed since it was installed is left, every copy of it,
+    /// for a command line that says `--force` once somebody has looked.
+    UninstallOrphaned { holder: Holder },
     /// `flayer adopt -p <project> --yes <kind:name>`: somebody's skill in
     /// the project's agents' folders brought into the workspace's library,
     /// its copies recorded as installed from there: asked about before it
@@ -321,6 +340,42 @@ pub enum Task {
     ApplyInstall { changes: Vec<Task> },
     /// Read the disk again.
     Refresh,
+}
+
+/// The task that runs one change core planned for a batch of boxes
+/// ([`Plan`](mindflayer_core::install::Plan)): `flayer install` of the
+/// offer from where it is, or `flayer uninstall` of the name, from each
+/// project the change names, spelled as the boxes named them.
+///
+/// Here, beside the tasks it becomes, so the install screen and the panel
+/// turn a plan into lines one way: core plans with no task of its own,
+/// since a task is a front end's.
+impl From<Change> for Task {
+    fn from(change: Change) -> Task {
+        match change {
+            Change::Install {
+                projects,
+                kind,
+                name,
+                from,
+            } => Task::Install {
+                projects,
+                kind,
+                name,
+                from: Some(from),
+            },
+            Change::Uninstall {
+                projects,
+                kind,
+                name,
+            } => Task::Uninstall {
+                projects,
+                kind,
+                name,
+                force: false,
+            },
+        }
+    }
 }
 
 /// What one directory's mark on the minds screen asks of the workspace, when
@@ -485,13 +540,16 @@ impl Task {
                 kind,
                 name,
                 everywhere,
+                yes,
             } => {
-                let command: &[&str] = if *everywhere {
-                    &["remove", "--everywhere", "--yes"]
-                } else {
-                    &["remove", "--yes"]
-                };
-                vec![at(holder, command, &[&qualified(*kind, name)])]
+                let mut command = vec!["remove"];
+                if *everywhere {
+                    command.push("--everywhere");
+                }
+                if *yes {
+                    command.push("--yes");
+                }
+                vec![at(holder, &command, &[&qualified(*kind, name)])]
             }
             Task::Validate { holder } => vec![at(holder, &["validate"], &[])],
             Task::Minds { init, link, unlink } => {
@@ -579,16 +637,23 @@ impl Task {
                 }
                 None => vec![at(holder, &["targets", "reset", "--yes"], &[kind.folder()])],
             },
-            // Never forced: an edit is somebody's work, and the screen
-            // leaves it to a command line that says `--force`, as the install
-            // screen does.
-            Task::Update { holder, reference } => {
+            // Forced only when asked: an edit is somebody's work, so the
+            // TUI never forces, leaving it to a command line that says
+            // `--force` as the install screen does, and the panel asks first,
+            // since the line says what it writes over.
+            Task::Update {
+                holder,
+                reference,
+                force,
+            } => {
                 let named: Vec<&str> = reference.iter().map(String::as_str).collect();
+                let forced: &[&str] = if *force { &["--force"] } else { &[] };
                 match holder {
                     Holder::Workspace => {
-                        vec![words(&["flayer", "update", "--all", "--yes"], &named)]
+                        let head = [&["flayer", "update", "--all", "--yes"], forced].concat();
+                        vec![words(&head, &named)]
                     }
-                    _ => vec![at(holder, &["update", "--yes"], &named)],
+                    _ => vec![at(holder, &[&["update", "--yes"], forced].concat(), &named)],
                 }
             }
             Task::Install {
@@ -608,11 +673,22 @@ impl Task {
                 projects,
                 kind,
                 name,
+                force,
             } => {
-                let head = picking(&["flayer", "uninstall"], projects);
+                let mut head = picking(&["flayer", "uninstall"], projects);
+                if *force {
+                    head.push(String::from("--force"));
+                }
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
             }
+            Task::UninstallOrphaned { holder } => match holder {
+                Holder::Workspace => vec![words(
+                    &["flayer", "uninstall", "--all-projects", "--orphaned"],
+                    &[],
+                )],
+                _ => vec![at(holder, &["uninstall", "--orphaned"], &[])],
+            },
             // `--yes` before the name, as `remove` has it, so a name a
             // `--` has to keep from being read as a flag leaves it a flag.
             Task::Adopt {
@@ -658,7 +734,7 @@ impl Task {
                 | Task::Add { .. }
                 | Task::Edit { .. }
                 | Task::Rename { .. }
-                | Task::Remove { .. }
+                | Task::Remove { yes: true, .. }
                 | Task::Gather { .. }
                 | Task::Minds { .. }
                 | Task::Marks { .. }
@@ -668,6 +744,7 @@ impl Task {
                 | Task::Update { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
+                | Task::UninstallOrphaned { .. }
                 | Task::Adopt { .. }
                 | Task::Migrate { yes: true, .. }
                 | Task::ApplyInstall { .. }

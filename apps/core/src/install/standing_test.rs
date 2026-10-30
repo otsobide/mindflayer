@@ -60,6 +60,21 @@ fn only_somebodys_work_and_an_edit_are_not_mindflayers_to_change() {
 }
 
 #[test]
+fn what_is_not_mindflayers_to_change_is_refused_by_the_code_a_change_reaching_it_gives() {
+    assert_eq!(Standing::Foreign.refused(), Some(Refused::Foreign));
+    assert_eq!(Standing::Edited.refused(), Some(Refused::Edited));
+    for standing in [
+        Standing::Absent,
+        Standing::Current,
+        Standing::Outdated,
+        Standing::Missing,
+        Standing::Orphaned,
+    ] {
+        assert_eq!(standing.refused(), None, "{standing:?}");
+    }
+}
+
+#[test]
 fn an_installation_with_a_copy_gone_is_not_shown_as_held() {
     // Its box opens empty, for marking it to put every copy back.
     assert!(!Standing::Missing.present());

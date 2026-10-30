@@ -1,0 +1,42 @@
+[
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer install -p /home/you/Assign/api -p /home/you/Assign/docs --from https://github.com/acme/skills skill:format"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer install -p /home/you/Assign/api -p /home/you/Assign/docs --from https://github.com/acme/skills skill:format"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer install -p /home/you/Assign/api -p /home/you/Assign/docs --from https://github.com/acme/skills skill:format",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "installed format into api, from https://github.com/acme/skills\ninstalled format into docs, from https://github.com/acme/skills\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "changes": [
+        {
+          "from": "https://github.com/acme/skills",
+          "kind": "skill",
+          "name": "format",
+          "projects": [
+            "api",
+            "docs"
+          ],
+          "type": "install"
+        }
+      ],
+      "type": "apply_install"
+    }
+  }
+]

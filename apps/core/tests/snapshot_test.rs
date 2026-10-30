@@ -244,6 +244,14 @@ const EXPECTED: &str = r#"{
     "foreign",
     "authored"
   ],
+  "box_states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign"
+  ],
   "healths": [
     "ok",
     "attention",
@@ -692,6 +700,78 @@ const EXPECTED: &str = r#"{
       "revision": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3",
       "directory": "github.com-acme-skills",
       "origin": "https://github.com/acme/skills"
+    }
+  ],
+  "offers": [
+    {
+      "kind": "skill",
+      "name": "review",
+      "summary": "Read it",
+      "place": "workspace",
+      "origin": "workspace"
+    },
+    {
+      "kind": "skill",
+      "name": "notes",
+      "summary": "Take them",
+      "place": "loaded",
+      "origin": "load:../team"
+    },
+    {
+      "kind": "skill",
+      "name": "lint",
+      "summary": "Tidy it",
+      "place": "shelf",
+      "origin": "https://github.com/acme/skills"
+    },
+    {
+      "kind": "rule",
+      "name": "commits",
+      "summary": "Write them well",
+      "place": "workspace",
+      "origin": "workspace"
+    }
+  ],
+  "boxes": [
+    {
+      "entry": "api",
+      "closed": [],
+      "held": [
+        {
+          "kind": "skill",
+          "name": "review",
+          "origin": "workspace",
+          "state": "current",
+          "ticked": true
+        },
+        {
+          "kind": "rule",
+          "name": "commits",
+          "origin": "workspace",
+          "state": "current",
+          "ticked": true
+        }
+      ]
+    },
+    {
+      "entry": "gone",
+      "closed": [
+        {
+          "kind": "skill",
+          "why": {
+            "code": "not_a_project",
+            "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        },
+        {
+          "kind": "rule",
+          "why": {
+            "code": "not_a_project",
+            "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        }
+      ],
+      "held": []
     }
   ],
   "known": [

@@ -60,7 +60,7 @@ use crate::exclude::{self, ExcludeError};
 use crate::frontmatter::FrontMatterError;
 use crate::gather::git::GitError;
 use crate::gather::{self, GatherError, Leftover, ScrubFailure};
-use crate::install::{rules, InstallError, LoadFailure, Refused};
+use crate::install::{rules, Clash, InstallError, LoadFailure, PlanError, Refused};
 use crate::kind::UnknownKind;
 use crate::ledger::LedgerError;
 use crate::lifecycle::LifecycleError;
@@ -73,7 +73,7 @@ use crate::resolve::ResolveError;
 use crate::scan::ScanFailure;
 use crate::status::StatusFailure;
 use crate::template::TemplateError;
-use crate::update::UpdateError;
+use crate::update::{Left, UpdateError};
 use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
 
 /// Give an error type its `code()` and its `CODES`.
@@ -214,6 +214,8 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("gather::git::GitError", GitError::CODES),
     ("install::InstallError", InstallError::CODES),
     ("install::LoadFailure", LoadFailure::CODES),
+    ("install::plan::Clash", Clash::CODES),
+    ("install::plan::PlanError", PlanError::CODES),
     ("install::Refused", Refused::CODES),
     ("install::rules::Warning", rules::Warning::CODES),
     ("install::rules::Withheld", rules::Withheld::CODES),
@@ -233,6 +235,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("scan::ScanFailure", ScanFailure::CODES),
     ("status::StatusFailure", StatusFailure::CODES),
     ("template::TemplateError", TemplateError::CODES),
+    ("update::Left", Left::CODES),
     ("update::UpdateError", UpdateError::CODES),
     ("workspace::MisplacedTarget", MisplacedTarget::CODES),
     ("workspace::ProjectWarning", ProjectWarning::CODES),

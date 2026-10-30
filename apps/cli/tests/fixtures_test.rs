@@ -37,14 +37,16 @@ const HOME: &str = "/home";
 
 /// The id each project reads as, by its route from the workspace, in place
 /// of the random one `mind init` gave it: the workspace's own, then those
-/// [`candidates`] makes, which only some fixtures build.
-const IDS: [(&str, &str); 6] = [
+/// [`candidates`] makes and the one only [`assigning`] has, which only some
+/// fixtures build.
+const IDS: [(&str, &str); 7] = [
     ("api", "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5"),
     ("web", "0123456789abcdef0123456789abcdef"),
     ("docs", "fedcba9876543210fedcba9876543210"),
     ("blog", "b10b10b10b10b10b10b10b10b10b10b1"),
     ("drafts", "d4af7ed4af7ed4af7ed4af7ed4af7ed4"),
     ("archive/old", "01d01d01d01d01d01d01d01d01d01d01"),
+    ("bare", "ba4eba4eba4eba4eba4eba4eba4eba4e"),
 ];
 
 /// The first time the ledger keeps, in seconds since the epoch: an
@@ -174,6 +176,180 @@ fn workspace(home: &Path) -> PathBuf {
     fs::remove_dir_all(&team).unwrap();
 
     shelve(&root);
+    pin_times(&root);
+    root
+}
+
+/// `you/Assign`, a workspace to assign artifacts in, which the panel's
+/// matrix draws, built as somebody would build it:
+///
+/// - its library holds the skills `deploy` and `review` and the rule
+///   `git/commits`;
+/// - it loads `team`, beside it, whose own `deploy` and `notes` it offers
+///   too, so `deploy` is offered from two places;
+/// - its shelf holds `format` and `triage`, gathered from one source;
+/// - `api`, for Claude and Codex, received the team's `deploy` and the
+///   library's `review`, as they were written;
+/// - `web`, for Claude and OpenCode and shared, received `review`, one copy
+///   of which was edited since, and keeps a `triage` of its own by hand in
+///   Claude's folder, which ticks every offer of the name;
+/// - `docs`, for Codex, received the team's `notes`, changed there since;
+/// - `bare` names no agent, written by hand, since no command leaves a
+///   project with none: nothing can be installed into it;
+/// - `gone` was linked, and its folder has gone since.
+fn assigning(home: &Path) -> PathBuf {
+    let root = home.join("Assign");
+    let team = home.join("team");
+    for workspace in [&root, &team] {
+        fs::create_dir_all(workspace).unwrap();
+        flayer(workspace, &["init"]).unwrap();
+    }
+    for (kind, name, description) in [
+        ("skill", "deploy", "Ship the service"),
+        ("skill", "review", "Read a change before it lands"),
+        ("rule", "git/commits", "Write commit messages that say why"),
+    ] {
+        flayer(&root, &["add", kind, name, description]).unwrap();
+    }
+    for (name, description) in [
+        ("deploy", "Ship it the team's way"),
+        ("notes", "Keep notes as the team does"),
+    ] {
+        flayer(&team, &["add", "skill", name, description]).unwrap();
+    }
+    flayer(&root, &["load", "../team"]).unwrap();
+    shelve(&root);
+
+    project(&root, "api", &["--agents", "claude,codex"]);
+    let installed = flayer(
+        &root,
+        &[
+            "install",
+            "-p",
+            "api",
+            "--from",
+            "load:../team",
+            "skill:deploy",
+        ],
+    )
+    .unwrap();
+    assert!(installed.ok, "{installed:?}");
+    install(&root, "api", &["skill:review"]);
+
+    project(&root, "web", &["--agents", "claude,opencode", "--shared"]);
+    install(&root, "web", &["skill:review"]);
+    let web = root.join("web");
+    let review = web.join(".claude/skills/review/SKILL.md");
+    let text = fs::read_to_string(&review).unwrap();
+    fs::write(&review, format!("{text}\nAsk for a second pair of eyes.\n")).unwrap();
+    write_files(
+        &web,
+        &[(
+            ".claude/skills/triage/SKILL.md",
+            &skill_file("triage", "Our own way to sort issues"),
+        )],
+    );
+
+    project(&root, "docs", &["--agents", "codex"]);
+    install(&root, "docs", &["skill:notes"]);
+    let notes = own_directory_for(&team, Kind::Skill).join("notes/SKILL.md");
+    let text = fs::read_to_string(&notes).unwrap();
+    fs::write(&notes, format!("{text}\nDate every note.\n")).unwrap();
+
+    project(&root, "bare", &[]);
+    let settings = root.join("bare").join(MIND_DIR).join(SETTINGS_FILE);
+    let text = fs::read_to_string(&settings).unwrap();
+    let agents = "agents = [\"claude\", \"codex\", \"opencode\"]";
+    assert!(text.contains(agents), "{text}");
+    fs::write(&settings, text.replace(agents, "agents = []")).unwrap();
+
+    project(&root, "gone", &[]);
+    fs::remove_dir_all(root.join("gone")).unwrap();
+
+    pin_times(&root);
+    root
+}
+
+/// `you/Updating`, a workspace whose projects hold an installation of each
+/// state an update says something of, which the panel's page of updates
+/// draws, built as somebody would build it:
+///
+/// - its library holds the skills `lint`, `review` and `format` and the
+///   rule `git/commits`;
+/// - `api`, for Claude and Codex, received `lint`, `review` and
+///   `git/commits`: `lint` and `git/commits` changed in the library since,
+///   so outdated, and `review`'s copy in `.agents/skills` deleted since, so
+///   missing;
+/// - `web`, for Claude and OpenCode and shared, received `lint`, its copy
+///   in Claude's folder edited since, `format`, removed from the library
+///   alone since, so orphaned, and `release`, its copy edited too, then
+///   removed from every project and the library, which leaves that copy
+///   edited with nothing offering it any more;
+/// - `gone` was linked, and its folder has gone since.
+fn updating(home: &Path) -> PathBuf {
+    let root = home.join("Updating");
+    fs::create_dir_all(&root).unwrap();
+    flayer(&root, &["init"]).unwrap();
+    for (kind, name, description) in [
+        ("skill", "lint", "Tidy the code before a commit"),
+        ("skill", "review", "Read a change before it lands"),
+        ("skill", "format", "Format the code the way the team does"),
+        ("skill", "release", "Cut a release the way the team does"),
+        ("rule", "git/commits", "Write commit messages that say why"),
+    ] {
+        flayer(&root, &["add", kind, name, description]).unwrap();
+    }
+
+    project(&root, "api", &["--agents", "claude,codex"]);
+    install(
+        &root,
+        "api",
+        &["skill:lint", "skill:review", "rule:git/commits"],
+    );
+    project(&root, "web", &["--agents", "claude,opencode", "--shared"]);
+    install(
+        &root,
+        "web",
+        &["skill:lint", "skill:format", "skill:release"],
+    );
+
+    let changed = |file: &Path, line: &str| {
+        let text = fs::read_to_string(file).unwrap();
+        fs::write(file, format!("{text}\n{line}\n")).unwrap();
+    };
+    changed(
+        &own_directory_for(&root, Kind::Skill).join("lint/SKILL.md"),
+        "Run the formatter first.",
+    );
+    changed(
+        &own_directory_for(&root, Kind::Rule).join("git/commits.md"),
+        "Name the issue a commit is for.",
+    );
+    changed(
+        &root.join("web/.claude/skills/lint/SKILL.md"),
+        "Our own way: lint before every push.",
+    );
+    changed(
+        &root.join("web/.claude/skills/release/SKILL.md"),
+        "Our own way: tag from main only.",
+    );
+    fs::remove_dir_all(root.join("api/.agents/skills/review")).unwrap();
+    // The library's copy alone: what was installed from it is left behind.
+    let removed = flayer(&root, &["remove", "--yes", "skill:format"]).unwrap();
+    assert!(removed.stdout.starts_with("removed"), "{removed:?}");
+    // Everywhere, as the panel removes one: the edited copy is left.
+    let removed = flayer(&root, &["remove", "--everywhere", "--yes", "skill:release"]).unwrap();
+    assert!(
+        removed.ok
+            && removed
+                .stdout
+                .contains("left release in web, where it is edited"),
+        "{removed:?}"
+    );
+
+    project(&root, "gone", &[]);
+    fs::remove_dir_all(root.join("gone")).unwrap();
+
     pin_times(&root);
     root
 }
@@ -547,7 +723,7 @@ fn write_what_previewing_and_running_a_few_tasks_is_answered_with() {
         json!({"type": "validate", "holder": {"type": "project", "entry": "docs"}}),
         json!({
             "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
-            "name": "lint", "everywhere": true,
+            "name": "lint", "everywhere": true, "yes": true,
         }),
     ] {
         run(sent);
@@ -583,6 +759,16 @@ fn write_what_previewing_and_running_a_few_tasks_is_answered_with() {
         }),
         json!({"type": "migrate", "project": "legacy", "yes": false}),
         json!({"type": "migrate", "project": "legacy", "yes": true}),
+        // What the page of one of the library's own sends: its removal
+        // everywhere, the dry run first.
+        json!({
+            "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
+            "name": "review", "everywhere": true, "yes": false,
+        }),
+        json!({
+            "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
+            "name": "review", "everywhere": true, "yes": true,
+        }),
     ] {
         run(sent);
     }
@@ -590,9 +776,11 @@ fn write_what_previewing_and_running_a_few_tasks_is_answered_with() {
     let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
     let json = pinned(&json, dir.path(), Some(&root));
     assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
-    for (index, ok) in [true, true, false, true, true, true, true, true, true]
-        .into_iter()
-        .enumerate()
+    for (index, ok) in [
+        true, true, false, true, true, true, true, true, true, true, true,
+    ]
+    .into_iter()
+    .enumerate()
     {
         assert_eq!(
             answers[index]["ran"]["outcome"]["ok"], ok,
@@ -600,4 +788,291 @@ fn write_what_previewing_and_running_a_few_tasks_is_answered_with() {
         );
     }
     write("commands", &json);
+}
+
+/// The workspace [`assigning`] builds, as the panel is answered with it:
+/// what its matrix draws.
+#[test]
+fn write_the_snapshot_of_a_workspace_to_assign_in() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = assigning(&home);
+
+    let json = answered(&root, &Lookup::default());
+
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    let snapshot: Value = serde_json::from_str(&json).unwrap();
+    let states: Vec<&str> = snapshot["boxes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|boxes| boxes["held"].as_array().unwrap())
+        .map(|held| held["state"].as_str().unwrap())
+        .collect();
+    for state in ["current", "outdated", "edited", "foreign"] {
+        assert!(states.contains(&state), "{state}: {json}");
+    }
+    write("assigning", &json);
+}
+
+/// A box of [`assigning`]'s matrix, as the panel sends it in a plan.
+fn cell(project: &str, reference: &str, origin: &str, wanted: bool) -> Value {
+    json!({"project": project, "reference": reference, "origin": origin, "wanted": wanted})
+}
+
+/// The shelf's origin, as `--from` takes it.
+const SHELF: &str = SOURCE;
+
+/// `format`, from the shelf, into `api` and `docs`: what the panel's
+/// matrix asks first, and what [`write_what_applying_a_plan_is_answered_with`]
+/// runs.
+fn format_into_two() -> Value {
+    json!([
+        cell("api", "skill:format", SHELF, true),
+        cell("docs", "skill:format", SHELF, true),
+    ])
+}
+
+/// What the panel is answered with when it plans boxes of the workspace
+/// [`assigning`] builds: each query as the matrix sends it, the boxes in
+/// the order they were marked, and the answer.
+///
+/// `format` into two projects, which is one install; the library's
+/// `deploy` in place of the team's in `api`, which replaces it; and every
+/// way a box somebody can mark is held back, beside a change that goes
+/// ahead: `deploy` asked of `docs` from both places that offer it, which
+/// clashes, and `web`'s edited `review` and its own `triage` asked away,
+/// which are locked. Not `bare`'s, which the snapshot says no box of can
+/// be asked, so the matrix marks none.
+#[test]
+fn write_what_planning_boxes_of_a_workspace_to_assign_in_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = assigning(&home);
+    let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+    let before = fs::read(root.join(FLAYER_DIR).join("mindflayer.db")).unwrap();
+
+    let answers: Vec<Value> = [
+        format_into_two(),
+        json!([cell("api", "skill:deploy", "workspace", true)]),
+        json!([
+            cell("api", "skill:format", SHELF, true),
+            cell("docs", "skill:deploy", "workspace", true),
+            cell("docs", "skill:deploy", "load:../team", true),
+            cell("web", "skill:review", "workspace", false),
+            cell("web", "skill:triage", SHELF, false),
+        ]),
+    ]
+    .into_iter()
+    .map(|selection| asked(&backend, json!({"type": "plan", "selection": selection})))
+    .collect();
+
+    assert_eq!(
+        fs::read(root.join(FLAYER_DIR).join("mindflayer.db")).unwrap(),
+        before,
+        "a plan wrote to the ledger"
+    );
+    let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    let [simple, replaced, held_back] = &answers[..] else {
+        panic!("{json}")
+    };
+    assert_eq!(
+        simple["answer"]["tasks"].as_array().unwrap().len(),
+        1,
+        "{json}"
+    );
+    assert_eq!(
+        replaced["answer"]["tasks"][0]["from"], "workspace",
+        "{json}"
+    );
+    let held_back = &held_back["answer"];
+    assert_eq!(
+        held_back["conflicts"][0]["why"]["code"], "wanted_twice",
+        "{json}"
+    );
+    let locked: Vec<&str> = held_back["locked"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|locked| locked["why"]["code"].as_str().unwrap())
+        .collect();
+    assert_eq!(locked, ["edited", "foreign"], "{json}");
+    write("plans", &json);
+}
+
+/// What the panel is answered with when it applies the plan of `format`
+/// into two projects of the workspace [`assigning`] builds: the plan's
+/// tasks sent back as one `apply_install`, its preview, and what its run is
+/// answered with, as [`write_what_previewing_and_running_a_few_tasks_is_answered_with`]
+/// writes each.
+#[test]
+fn write_what_applying_a_plan_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = assigning(&home);
+    let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+    let planned = asked(
+        &backend,
+        json!({"type": "plan", "selection": format_into_two()}),
+    );
+
+    let sent = json!({"type": "apply_install", "changes": planned["answer"]["tasks"]});
+    let task: Task = serde_json::from_value(sent.clone()).unwrap();
+    let preview = backend
+        .preview(&task)
+        .unwrap_or_else(|refusal| panic!("{sent}: {}: {}", refusal.code, refusal.message));
+    let outcome = backend.run(task).unwrap();
+    assert!(outcome.ok, "{outcome:?}");
+    let ran = json!({"lines": preview.lines, "outcome": outcome});
+    let answers = vec![json!({"task": sent, "preview": preview, "ran": ran})];
+
+    let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    write("applied", &json);
+}
+
+/// The workspace [`updating`] builds, as the panel is answered with it:
+/// what its page of updates and its projects table draw.
+#[test]
+fn write_the_snapshot_of_a_workspace_to_update() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = updating(&home);
+
+    let json = answered(&root, &Lookup::default());
+
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    let snapshot: Value = serde_json::from_str(&json).unwrap();
+    let states: Vec<&str> = snapshot["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|project| project["artifacts"].as_array().unwrap())
+        .filter_map(|held| held["state"].as_str())
+        .collect();
+    for state in ["outdated", "edited", "missing", "orphaned"] {
+        assert!(states.contains(&state), "{state}: {json}");
+    }
+    write("updating", &json);
+}
+
+/// What the panel is answered with when its page of updates asks what
+/// updating every project of the workspace [`updating`] builds would do:
+/// the query as the page sends it, and the answer.
+#[test]
+fn write_what_asking_what_an_update_would_do_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = updating(&home);
+    let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+    let before = fs::read(root.join(FLAYER_DIR).join("mindflayer.db")).unwrap();
+
+    let answers = vec![asked(&backend, json!({"type": "updates"}))];
+
+    assert_eq!(
+        fs::read(root.join(FLAYER_DIR).join("mindflayer.db")).unwrap(),
+        before,
+        "asking wrote to the ledger"
+    );
+    let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    let does: Vec<&str> = answers[0]["answer"]["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|project| project["installations"].as_array().unwrap())
+        .map(|pending| pending["does"].as_str().unwrap())
+        .collect();
+    for step in ["refresh", "put_back", "leave", "orphaned"] {
+        assert!(does.contains(&step), "{step}: {json}");
+    }
+    let forced: Vec<(&str, &str)> = answers[0]["answer"]["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|project| project["installations"].as_array().unwrap())
+        .filter(|pending| pending["forced"] == true)
+        .map(|pending| {
+            (
+                pending["name"].as_str().unwrap(),
+                pending["does"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        forced,
+        [("lint", "leave"), ("release", "orphaned")],
+        "{json}"
+    );
+    write("updates", &json);
+}
+
+/// What the panel is answered with when its page of updates previews and
+/// runs each change it offers, each on the workspace [`updating`] builds as
+/// it was built, so each is answered as the first thing run there: every
+/// project updated, one, one installation in one, an edited one forced,
+/// an orphaned one uninstalled, an orphaned one edited since uninstalled
+/// forced, and every orphaned one taken out. Each task as the page sends
+/// it, its preview, and what its run is answered with.
+#[test]
+fn write_what_each_change_the_page_of_updates_sends_is_answered_with() {
+    let project = |entry: &str| json!({"type": "project", "entry": entry});
+    let sent = [
+        json!({"type": "update", "holder": {"type": "workspace"}, "reference": null, "force": false}),
+        json!({"type": "update", "holder": project("api"), "reference": null, "force": false}),
+        json!({"type": "update", "holder": project("api"), "reference": "skill:lint", "force": false}),
+        json!({"type": "update", "holder": project("web"), "reference": "skill:lint", "force": true}),
+        json!({"type": "uninstall", "projects": ["web"], "kind": "skill", "name": "format", "force": false}),
+        json!({"type": "uninstall", "projects": ["web"], "kind": "skill", "name": "release", "force": true}),
+        json!({"type": "uninstall_orphaned", "holder": {"type": "workspace"}}),
+    ];
+
+    let mut answers = Vec::new();
+    let mut written = Vec::new();
+    for sent in sent {
+        let dir = TempDir::new().unwrap();
+        let home = dir.path().join("you");
+        let root = updating(&home);
+        let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+        let task: Task = serde_json::from_value(sent.clone()).unwrap();
+        let preview = backend
+            .preview(&task)
+            .unwrap_or_else(|refusal| panic!("{sent}: {}: {}", refusal.code, refusal.message));
+        let outcome = backend.run(task).unwrap();
+        let ran = json!({"lines": preview.lines, "outcome": outcome});
+        let answer = json!({"task": sent, "preview": preview, "ran": ran});
+        let json = serde_json::to_string(&answer).unwrap();
+        let json = pinned(&json, dir.path(), Some(&root));
+        assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+        written.push(serde_json::from_str::<Value>(&json).unwrap());
+        answers.push(answer);
+    }
+
+    // Every project leaves the edited copy, and says so by its code; it and
+    // every orphaned one taken out say `gone` would not open, beside what
+    // they did.
+    let said = answers[0]["ran"]["outcome"]["runs"][0]["stderr"].to_string();
+    assert!(said.contains("\"edited\""), "{said}");
+    for (index, ok) in [false, true, true, true, true, true, false]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(
+            answers[index]["ran"]["outcome"]["ok"], ok,
+            "{index}: {}",
+            answers[index]
+        );
+    }
+    let forced = answers[5]["ran"]["outcome"]["runs"][0]["stdout"].as_str();
+    assert_eq!(forced, Some("removed release from web\n"));
+    let taken = answers[6]["ran"]["outcome"]["runs"][0]["stdout"].as_str();
+    assert_eq!(taken, Some("removed format from web\n"));
+    let json = serde_json::to_string_pretty(&written).unwrap() + "\n";
+    write("updated", &json);
 }
