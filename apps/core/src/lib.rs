@@ -25,6 +25,7 @@ pub mod config_entry;
 pub mod contents;
 pub mod copy;
 pub mod create;
+pub mod draft;
 pub mod everywhere;
 pub mod exclude;
 pub mod frontmatter;

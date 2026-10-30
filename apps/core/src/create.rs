@@ -98,7 +98,7 @@ fn scaffold(
 /// every byte built.
 ///
 /// Apart from writing it so that a front end can ask what `add` would make
-/// of an artifact as it is typed, and be told
+/// of an artifact as it is typed ([`crate::draft::added`]), and be told
 /// what writing it would be told, from the same checks rather than a copy
 /// of them; and so that whatever a template could break is found before a
 /// folder is made, as it always was.
@@ -146,6 +146,57 @@ pub(crate) fn plan(
 }
 
 impl Scaffold {
+    /// The folder a skill would be, or the file a rule would: what is
+    /// already there refuses it.
+    pub(crate) fn path(&self) -> &Path {
+        match self {
+            Scaffold::Skill { folder, .. } => folder,
+            Scaffold::Rule { file, .. } => file,
+        }
+    }
+
+    /// What would refuse it once it came to be written, as far as can be
+    /// told without writing: something already where it goes, which is left
+    /// alone. Told again by the write itself, with `create_new`, since the
+    /// disk can change in between.
+    pub(crate) fn taken(&self) -> Option<CreateError> {
+        let path = self.path();
+        fs::symlink_metadata(path)
+            .is_ok()
+            .then(|| CreateError::Exists {
+                path: path.to_path_buf(),
+            })
+    }
+
+    /// The artifact it would be once written in `project`, read from what
+    /// it would hold as discovery reads it from the disk: what `validate`
+    /// would then say of it.
+    pub(crate) fn read_as(&self, project: &MindProject) -> Result<Artifact, CreateError> {
+        match self {
+            Scaffold::Skill { folder, files } => {
+                let Layout::Directory { manifest } = Kind::Skill.layout() else {
+                    unreachable!("a skill is a directory");
+                };
+                let source = files
+                    .iter()
+                    .find(|(route, _)| route == Path::new(manifest))
+                    .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
+                    .unwrap_or_default();
+                Ok(Artifact::skill_holding(
+                    folder.clone(),
+                    project.root(),
+                    &source,
+                )?)
+            }
+            Scaffold::Rule { name, file, text } => Ok(Artifact::rule_holding(
+                file.clone(),
+                name.clone(),
+                project.root(),
+                text,
+            )),
+        }
+    }
+
     /// Write it into `project`, and load it back.
     fn place(self, project: &MindProject) -> Result<Artifact, CreateError> {
         match self {

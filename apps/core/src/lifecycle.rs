@@ -456,11 +456,8 @@ pub fn replace_contents(
             given: given.to_owned(),
         });
     }
-    let directory = inside(project, target)?;
-    fit(target, contents)?;
-
     let file = target.file();
-    let resolved = written_at(workspace, project, target, &directory)?;
+    let resolved = replaceable(workspace, project, target, contents)?;
 
     // The resolved path from here on, never the one checked: a link put in
     // its place since would otherwise be written through.
@@ -492,6 +489,29 @@ pub fn replace_contents(
         changed: true,
         copy,
     })
+}
+
+/// Where `contents` given whole for `target` in `project` would be written,
+/// once every rule [`replace_contents`] holds them to before it reads the
+/// file has passed: the target inside its kind's folder, the contents fit
+/// for it ([`fit`]), and the file leading nowhere it may not be written
+/// ([`written_at`]). In that order, so a refusal is the one the write
+/// would give.
+///
+/// Apart from the write so that what it would be refused for can be asked
+/// before anything is sent to be written ([`crate::draft::edited`]), by the
+/// same checks rather than a copy of them. What the file holds now, and so
+/// whether it is still what an edit was made from, is the write's alone to
+/// tell, at the moment it writes.
+pub(crate) fn replaceable(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    target: &Target,
+    contents: &[u8],
+) -> Result<PathBuf, LifecycleError> {
+    let directory = inside(project, target)?;
+    fit(target, contents)?;
+    written_at(workspace, project, target, &directory)
 }
 
 /// Where `target`'s file in `project` leads once its links are followed,
