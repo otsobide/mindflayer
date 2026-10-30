@@ -147,6 +147,12 @@ pub const LIBRARY_DIR: &str = "library";
 /// project, a finished copy is moved into place by a rename.
 pub const SCRATCH_DIR: &str = "tmp";
 
+/// Where a workspace's scratch folder is from its root, a folder at a time:
+/// the one place [`FlayerWorkspace::scratch_dir`] and
+/// [`FlayerWorkspace::scratch_route`] both read it from, so the file a front
+/// end writes and the route its line names cannot come apart.
+const SCRATCH: [&str; 2] = [FLAYER_DIR, SCRATCH_DIR];
+
 /// The `.gitignore` a local project's `.mind` is given: `*`, which keeps out
 /// of git everything in the folder, this file included, as a Python venv
 /// ignores itself.
@@ -1329,7 +1335,15 @@ impl FlayerWorkspace {
     /// `.mind/tmp`, even for a project's artifact: a cloned repository can
     /// bring that folder, or a link in its place, with it.
     pub fn scratch_dir(&self) -> PathBuf {
-        self.flayer_dir().join(SCRATCH_DIR)
+        self.root.join(PathBuf::from_iter(SCRATCH))
+    }
+
+    /// The workspace's scratch folder ([`scratch_dir`](Self::scratch_dir))
+    /// as a route from its root, `/` separated: how a command line run from
+    /// the root names a file there, which a front end spells with no
+    /// workspace at hand, as the panel's save does its line.
+    pub fn scratch_route() -> String {
+        SCRATCH.join("/")
     }
 
     /// Where artifacts gathered from elsewhere live, one folder per kind.

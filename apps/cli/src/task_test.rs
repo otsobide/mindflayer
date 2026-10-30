@@ -1514,11 +1514,15 @@ fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_
         alpha.commands(),
         [[&["flayer", "edit", "-p", "alpha"][..], &edit].concat()]
     );
-    let folder = std::path::Path::new(FLAYER_DIR).join(SCRATCH_DIR);
     let named = &mindflayer_core::hash::bytes(text.as_bytes())[..16];
+    assert_eq!(scratch_name(text), format!("edit-{named}.md"));
     assert_eq!(
-        std::path::Path::new(&route),
-        folder.join(format!("edit-{named}.md"))
+        route,
+        format!(
+            "{}/{}",
+            FlayerWorkspace::scratch_route(),
+            scratch_name(text)
+        )
     );
     assert_ne!(scratch_route("another text"), route);
     for task in [own, alpha] {

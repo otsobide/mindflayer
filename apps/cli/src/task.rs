@@ -29,9 +29,8 @@
 use clap::Parser as _;
 use mindflayer_core::install::Change;
 use mindflayer_core::url::redacted;
-use mindflayer_core::workspace::SCRATCH_DIR;
 use mindflayer_core::{
-    codes, hash, Agent, Kind, Share, DEFAULT_SUBDIRECTORY, FLAYER_DIR, QUALIFIER,
+    codes, hash, Agent, FlayerWorkspace, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -1259,9 +1258,10 @@ fn at(holder: &Holder, command: &[&str], positionals: &[&str]) -> Vec<String> {
 }
 
 /// Where a save's `text` is put for its line to read, as a route from the
-/// workspace's root, `/` separated: a file in the workspace's scratch
-/// folder (`FlayerWorkspace::scratch_dir`) named by the first sixteen hex
-/// digits of the SHA-256 of what it holds.
+/// workspace's root, `/` separated: the file [`scratch_name`] names, in the
+/// workspace's scratch folder as core spells its route
+/// ([`FlayerWorkspace::scratch_route`]), so the file a front end writes
+/// there ([`FlayerWorkspace::scratch_dir`]) is the one the line reads.
 ///
 /// By what it holds rather than by a name drawn for the run, so the line a
 /// preview shows is the line that runs, a preview and a run being two
@@ -1272,8 +1272,19 @@ fn at(holder: &Holder, command: &[&str], positionals: &[&str]) -> Vec<String> {
 /// than in the system's temporary folder, where another user could read
 /// what is about to be written.
 pub fn scratch_route(text: &str) -> String {
+    format!(
+        "{}/{}",
+        FlayerWorkspace::scratch_route(),
+        scratch_name(text)
+    )
+}
+
+/// The name of the file a save's `text` is put in, in the workspace's
+/// scratch folder ([`scratch_route`]): `edit-`, the first sixteen hex
+/// digits of the SHA-256 of what it holds, and `.md`.
+pub fn scratch_name(text: &str) -> String {
     let named = &hash::bytes(text.as_bytes())[..16];
-    format!("{FLAYER_DIR}/{SCRATCH_DIR}/edit-{named}.md")
+    format!("edit-{named}.md")
 }
 
 /// `words` as owned words.

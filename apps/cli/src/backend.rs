@@ -631,9 +631,10 @@ impl Backend for PanelBackend {
     fn run(&self, task: Task) -> Result<Outcome, Refusal> {
         let plan = self.plan(&task)?;
         let _scratch = match &task {
-            Task::Save { text, .. } => {
-                Some(Scratch::put(&self.root, text).map_err(|error| refused(error.code(), error))?)
-            }
+            Task::Save { text, .. } => Some(
+                Scratch::put(&self.workspace()?, text)
+                    .map_err(|error| refused(error.code(), error))?,
+            ),
             _ => None,
         };
         let watch = Watch::new();
@@ -689,7 +690,9 @@ impl Backend for PanelBackend {
 }
 
 /// A save's text, in the file its line reads it from
-/// ([`task::scratch_route`]), for as long as this is held: taken away when
+/// ([`task::scratch_route`]): the workspace's scratch folder as core has it
+/// ([`FlayerWorkspace::scratch_dir`]), the file named by the text
+/// ([`task::scratch_name`]). Held for as long as this is: taken away when
 /// it is dropped, whatever came of the line.
 ///
 /// Made with `create_new`, in a folder made with `create_dir`, never
@@ -708,26 +711,24 @@ struct Scratch {
 }
 
 impl Scratch {
-    /// `text`, put where the line saving it reads it from, in the workspace
-    /// at `root`.
-    fn put(root: &Path, text: &str) -> Result<Scratch, CliError> {
-        let path = root.join(task::scratch_route(text));
+    /// `text`, put where the line saving it reads it from, in `workspace`.
+    fn put(workspace: &FlayerWorkspace, text: &str) -> Result<Scratch, CliError> {
+        let folder = workspace.scratch_dir();
+        let path = folder.join(task::scratch_name(text));
         let unwritable = |source| CliError::Scratch {
             path: path.clone(),
             source,
         };
-        if let Some(folder) = path.parent() {
-            match fs::create_dir(folder) {
-                Err(error) if error.kind() != io::ErrorKind::AlreadyExists => {
-                    return Err(unwritable(error))
-                }
-                _ => {}
+        match fs::create_dir(&folder) {
+            Err(error) if error.kind() != io::ErrorKind::AlreadyExists => {
+                return Err(unwritable(error))
             }
-            if !fs::symlink_metadata(folder).is_ok_and(|found| found.is_dir()) {
-                return Err(unwritable(io::Error::other(
-                    "its folder is a link or no folder, and nothing is written through one",
-                )));
-            }
+            _ => {}
+        }
+        if !fs::symlink_metadata(&folder).is_ok_and(|found| found.is_dir()) {
+            return Err(unwritable(io::Error::other(
+                "its folder is a link or no folder, and nothing is written through one",
+            )));
         }
         match OpenOptions::new().write(true).create_new(true).open(&path) {
             Ok(mut file) => {

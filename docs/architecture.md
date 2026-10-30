@@ -5442,7 +5442,9 @@ core says of them, never by a rule of the panel's (#82).
   Its line is `flayer edit [-p <project>] --contents <file> --if-unchanged
   <hash> <kind:name>`, the file the workspace's scratch file for the text:
   `.mindflayer/tmp/edit-<the first sixteen hex digits of its SHA-256>.md`,
-  a route from the root the lines run from (`task::scratch_route`). The
+  a route from the root the lines run from (`task::scratch_route`, the
+  folder's route core's, `FlayerWorkspace::scratch_route`, the one
+  `FlayerWorkspace::scratch_dir` is made of, where the backend writes). The
   workspace's command at either level, `-p` naming a project, so the route
   reads from where the lines run. Named by what it holds rather than drawn
   for the run, so the line the preview shows is the line that runs, a
