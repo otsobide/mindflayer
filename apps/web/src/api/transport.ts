@@ -9,6 +9,7 @@ import type { Query } from './generated/Query'
 import type { Scanned } from './generated/Scanned'
 import type { Snapshot } from './generated/Snapshot'
 import type { Task } from './generated/Task'
+import type { Updates } from './generated/Updates'
 
 /*
  * What the panel sends and is answered with is the backend's, generated
@@ -28,6 +29,7 @@ export interface Answers {
   contents: Contents
   scan: Scanned
   plan: Planned
+  updates: Updates
 }
 
 /** What `query` is answered with. */

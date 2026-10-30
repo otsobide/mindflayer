@@ -11,7 +11,8 @@ import type { Holder } from "./Holder";
  * "holder": {"type": "workspace"}, "reference": "skill:deploy", "file":
  * "SKILL.md"}`, `{"type": "scan", "roots": ["/home/you/Work"], "depth":
  * null}`, `{"type": "plan", "selection": [{"project": "alpha",
- * "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`.
- * A field a query does not have is refused, as a task's is.
+ * "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`,
+ * `{"type": "updates"}`. A field a query does not have is refused, as a
+ * task's is.
  */
-export type Query = { "type": "snapshot", } | { "type": "files", holder: Holder, reference: string, } | { "type": "contents", holder: Holder, reference: string, file: string, } | { "type": "scan", roots: Array<string>, depth: number | null, } | { "type": "plan", selection: Array<Cell>, };
+export type Query = { "type": "snapshot", } | { "type": "files", holder: Holder, reference: string, } | { "type": "contents", holder: Holder, reference: string, file: string, } | { "type": "scan", roots: Array<string>, depth: number | null, } | { "type": "plan", selection: Array<Cell>, } | { "type": "updates", };

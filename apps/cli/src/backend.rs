@@ -35,6 +35,9 @@
 //!   to the path policy as a task's projects are, and is only read: what
 //!   the boxes ticked amount to is core's to say ([`Query::Plan`]), and
 //!   nothing runs until its tasks are sent back.
+//! - **What an update would do is only read** ([`Query::Updates`]): the
+//!   dry run of `flayer update --all`, core's, naming nothing a browser
+//!   sent; an update runs only as the task the panel sends for it.
 //! - **A file reaches the browser only as text inside JSON**, held to its
 //!   holder once its links are followed, and never larger than core's cap
 //!   ([`Contents`]): the one way a file's contents leave, since `show` is
@@ -54,6 +57,7 @@ use mindflayer_core::gather::Watch;
 use mindflayer_core::install::{self, Cell, Conflict, Locked};
 use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindflayer_core::scan::{self, Order, DEFAULT_DEPTH};
+use mindflayer_core::update::Updates;
 use mindflayer_core::view::Snapshot;
 use mindflayer_core::{paths, policy, watch};
 use mindflayer_core::{FlayerWorkspace, Found, MindProject, Scan, FLAYER_CONFIG, FLAYER_DIR};
@@ -75,8 +79,9 @@ use crate::{CliError, Lookup, Warning};
 /// "holder": {"type": "workspace"}, "reference": "skill:deploy", "file":
 /// "SKILL.md"}`, `{"type": "scan", "roots": ["/home/you/Work"], "depth":
 /// null}`, `{"type": "plan", "selection": [{"project": "alpha",
-/// "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`.
-/// A field a query does not have is refused, as a task's is.
+/// "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`,
+/// `{"type": "updates"}`. A field a query does not have is refused, as a
+/// task's is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -124,6 +129,18 @@ pub enum Query {
     /// the path policy as a task's projects are
     /// ([`Admission::selection`]).
     Plan { selection: Vec<Cell> },
+    /// What updating every project the workspace links would do ([`Updates`]):
+    /// each installation an update says something of, how it stands, what
+    /// an update does with it, and why it leaves one it leaves, every copy
+    /// edited since left alone, as `flayer update --all` says without
+    /// `--yes`.
+    ///
+    /// A query of its own, asked for by the page of updates, rather than a
+    /// part of the snapshot: telling what an update does reads where each
+    /// installation came from again, past what the snapshot reads, and a
+    /// live update reads the snapshot again on every change. Nothing in it
+    /// is sent by the browser, so nothing is held to the path policy.
+    Updates {},
 }
 
 /// What a scan the panel asked for found ([`Query::Scan`]): what `flayer
@@ -505,6 +522,11 @@ impl Backend for PanelBackend {
                 let plan = install::plan(&workspace, &selection)
                     .map_err(|error| refused(error.code(), error))?;
                 Ok(serde_json::to_value(Planned::from(plan)).expect("a plan serializes"))
+            }
+            Query::Updates {} => {
+                let updates =
+                    Updates::read(&workspace).map_err(|error| refused(error.code(), error))?;
+                Ok(serde_json::to_value(updates).expect("what an update would do serializes"))
             }
         }
     }
