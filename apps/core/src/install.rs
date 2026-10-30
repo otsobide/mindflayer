@@ -50,7 +50,7 @@ mod plan;
 pub mod rules;
 mod standing;
 
-pub use plan::holding;
+pub use plan::{holding, Asked, Cell, Change, Clash, Conflict, Locked, Plan};
 pub use standing::Standing;
 pub(crate) use standing::{Found, Surveyed};
 

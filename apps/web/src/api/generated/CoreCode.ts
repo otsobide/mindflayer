@@ -173,6 +173,8 @@ export type CoreCode =
   | "install_user_scope"
   | "load_name_unsafe"
   | "load_route_unsafe"
+  | "wanted_twice"
+  | "asked_both_ways"
   | "foreign"
   | "edited"
   | "not_installed"
