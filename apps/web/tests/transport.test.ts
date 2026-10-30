@@ -52,12 +52,35 @@ describe('the HTTP transport', () => {
   })
 
   it('previews a task without running it', async () => {
-    const sent = serve(() => json(200, { lines: ['flayer install demo -p app'] }))
+    const sent = serve(() => json(200, { lines: ['flayer install demo -p app'], confirm: [] }))
 
     const preview = await httpTransport().send(INSTALL, 'preview')
 
     expect(sent.map(request => request.url)).toEqual(['/api/commands/preview'])
-    expect(preview.lines).toEqual(['flayer install demo -p app'])
+    expect(preview).toEqual({ lines: ['flayer install demo -p app'], confirm: [] })
+  })
+
+  it('asks for the transcript with a GET, the cookie and no body', async () => {
+    const ran = [{ lines: ['flayer link /work/blog'], outcome: { ok: true, runs: [] } }]
+    const sent = serve(() => json(200, ran))
+
+    const transcript = await httpTransport().transcript()
+
+    expect(transcript).toEqual(ran)
+    const [{ url, init }] = sent as [Sent]
+    expect(url).toBe('/api/transcript')
+    expect(init.method).toBe('GET')
+    expect(init.credentials).toBe('same-origin')
+    expect(init.body).toBeUndefined()
+  })
+
+  it('keeps the code the backend refused a task with', async () => {
+    serve(() => json(422, { error: 'the path is relative', code: 'path_relative' }))
+
+    const refused = await httpTransport().send(INSTALL, 'preview').catch((error: unknown) => error)
+
+    expect(refused).toBeInstanceOf(TransportError)
+    expect(refused).toMatchObject({ status: 422, message: 'the path is relative', code: 'path_relative' })
   })
 
   it('runs a task and answers with its lines and outcome', async () => {
@@ -76,7 +99,7 @@ describe('the HTTP transport', () => {
     const refused = await httpTransport().query({ type: 'snapshot' }).catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(TransportError)
-    expect(refused).toMatchObject({ status: 404, message: 'no such endpoint: POST /api/nothing' })
+    expect(refused).toMatchObject({ status: 404, message: 'no such endpoint: POST /api/nothing', code: undefined })
   })
 
   it('says how to get the token when the server asks for it', async () => {

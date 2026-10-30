@@ -79,6 +79,7 @@ export function answering(snapshot: Snapshot, answered: Answered[] = answers()) 
         : Promise.reject(new TransportError(422, `not_found: nothing answers ${asked}`))
     },
     send: () => new Promise(() => {}),
+    transcript: () => Promise.resolve([]),
     subscribe: () => () => {}
   } as unknown as Transport
   return { queries, transport }
@@ -89,6 +90,7 @@ export function refusing(error: Error): Transport {
   return {
     query: () => Promise.reject(error),
     send: () => new Promise(() => {}),
+    transcript: () => Promise.reject(error),
     subscribe: () => () => {}
   } as unknown as Transport
 }
