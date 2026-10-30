@@ -6,7 +6,7 @@ import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
 import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
-import { answering, commanded, commanding, fixture, plans, render, unmount, type Fixture } from './panel'
+import { answering, commanded, commanding, fixture, plans, render, unmount, updates, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -131,6 +131,31 @@ describe('the matrix', () => {
 
     expect(document.querySelector('[data-testid="lock"]')).not.toBeNull()
     expect(document.querySelector('[data-testid="conflict"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('the page of updates', () => {
+  it('passes axe with every state listed, and with nothing to update', async () => {
+    const { transport } = answering(fixture('updating'), updates())
+    await render('/updates', transport)
+
+    expect(document.querySelector('[data-testid="state-edited"] [data-testid="row"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+    unmount()
+
+    const nothing = updates()
+    Object.assign(nothing[0]!.answer as object, { projects: [], unread: [], writes: false })
+    await render('/updates', answering(fixture('workspace'), nothing).transport)
+
+    expect(document.querySelector('[data-testid="nothing"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+  })
+
+  it('passes axe once what an update would do could not be read', async () => {
+    await render('/updates', answering(fixture('workspace'), []).transport)
+
+    expect(document.querySelector('[data-testid="updates-unread"]')).not.toBeNull()
     expect(await violations()).toEqual([])
   })
 })
