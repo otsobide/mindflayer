@@ -1701,9 +1701,10 @@ second copy of it could check it ([open questions](#open-questions)).
 - **No scan.** What could be linked is a walk of the disk, bounded but not
   free, and a snapshot is what a [live update](#live-updates) rebuilds
   every time something changes. So the scan is a query of its own, run when somebody
-  asks (#77), which the TUI runs beside the snapshot. A test counts the
-  scans its thread runs, with a counter only a test build has, and finds
-  none.
+  asks, which the TUI runs beside the snapshot and the panel's page of what
+  could be linked asks for by hand (`Query::Scan`, [its
+  views](#its-views)). A test counts the scans its thread runs, with a
+  counter only a test build has, and finds none.
 - **Its names are a contract**, as a report's are ([the read types
   serialize](#the-read-types-serialize)), under a version of its own,
   `view::FORMAT`, carried as `format`: the snapshot is no command's report,
@@ -3864,7 +3865,14 @@ not a project yet, then one `flayer link` and one `flayer unlink`, each with
 every path at once. So the screen needed `link` and `unlink` to take several
 paths, and they take them **all or nothing**: every path is checked before any
 entry is written, so a refused one leaves the registry as it was rather than
-half changed by a command that reports failure.
+half changed by a command that reports failure. The batch is built in the
+task module (`Task::minds`), from each directory's path and what its mark
+asks (`MindsChange`), and the panel's marks are built into lines by the same
+function ([its changes](#its-changes)): that a directory made a project is
+then linked is the batch's rule, which a front end spelling it again could
+break, leaving a folder made a project and never linked. What a directory a
+scan found offers to be marked for, linked as it is or made a project
+first, is one function too (`MindsChange::of_found`).
 
 ### The agents and share toggles
 
@@ -3878,7 +3886,11 @@ after them, so a toggle does not reorder the settings. A line cannot name no
 agent at all, so unticking every one becomes `agents remove` of every one
 named, which the command refuses for its own reason, in the form: the rule
 that a project names an agent is core's, and the screen does not say it a
-second time.
+second time. Which lines the toggles amount to is said in the task module
+(`Task::settings`, from what the settings said and what the toggles say,
+`task::Toggles`), not on the screen, where it was born: the panel's toggles
+send both, and the same function builds their lines ([its
+changes](#its-changes)).
 
 ### Where a project installs skills
 
@@ -4264,7 +4276,7 @@ of it a browser may name.
   take one.
 - **A folder not linked yet by a path that reads the same from anywhere**
   (`policy::path`). What `link`, `load`, `init` and the minds screen's marks
-  name must be absolute (`path_relative`, or `path_url` for a `file:///etc`),
+  name, the panel's marks among them, must be absolute (`path_relative`, or `path_url` for a `file:///etc`),
   spelled exactly as normalizing it would spell it, with no `.` or `..` part
   and no doubled or trailing separator (`path_unnormalized`), and outside
   every `.mindflayer`, as spelled and once its links are followed, as far
@@ -4274,6 +4286,13 @@ of it a browser may name.
   to make or a workspace to load. The path goes to the command verbatim, so
   the preview shows the folder the command acts on. A mark to unlink, or
   what `mind unload` takes out, must be one an entry points at too.
+- **A scan only under the folders the browser names** (`Query::Scan`), each
+  held to the same rule as a folder to link, and refused with its code
+  otherwise before anything is walked; none named is the workspace's root,
+  as for `flayer scan`. A scan is a read: it lists folders and looks at a
+  few names in each, opens markers and the ledger to read, and writes
+  nothing, so nothing outside the workspace is reached that a command would
+  not read.
 - **What no front end without a terminal runs** is refused by
   `Task::refusal`, naming the line ([every change is a command
   line](#every-change-is-a-command-line)).
@@ -4627,10 +4646,13 @@ per file under `src/pages`. It holds no rules, any more than the server
 does: what a valid task is, or what a project has, is core's to say, and the
 panel asks. It shows an overview, the projects and a project's page, drawn
 from the snapshot (#72), and the library, one of its own, the shelf and the
-sources (#73), the second reading an artifact's files besides, in a frame of
-a sidebar and a header ([its views](#its-views)). It changes things by
-running tasks the server previews first, a link and an unlink so far, and
-shows a transcript of every run (#76, [its changes](#its-changes)).
+sources (#73), the second reading an artifact's files besides, and a page
+of what could be linked, from a scan it asks for by hand (#77), in a frame
+of a sidebar and a header ([its views](#its-views)). It changes things by
+running tasks the server previews first, linking, relinking and unlinking
+projects, changing a project's agents and share mode and migrating one an
+older marker marks, and shows a transcript of every run (#76, #77, [its
+changes](#its-changes)).
 
 ### One way out: the transport
 
@@ -4677,8 +4699,8 @@ What the panel sends and is answered with is said once, in Rust, and the
 panel compiles against TypeScript written from it (#70): the snapshot and
 everything it holds, an artifact's files and a file's contents, what
 `list`, `show` and `validate`
-print, a query, a task, what a run produced, the envelope a reading
-command's `--json` prints, and every code core and the CLI give. That
+print, a query, a task, what a scan and a run produced, the envelope a
+reading command's `--json` prints, and every code core and the CLI give. That
 TypeScript is the contract, the panel's side of [the read
 model](#the-read-model): `apps/web/src/api/generated`, a file a type,
 written by ts-rs, committed so a fresh clone type-checks without cargo, and
@@ -4717,10 +4739,14 @@ confirm are the generated `Confirm` and a change's scopes the generated
   serializer, never derived from the Rust variants, for the reason the
   serializer is written by hand ([the read types
   serialize](#the-read-types-serialize)). A word (a kind, an agent, a
-  state, a share mode, the rule that chose a workspace, a marker's file) is
+  state, a share mode, the rule that chose a workspace, a marker's file,
+  why a scan found a directory worth linking) is
   the union of its words, written by `typescript::words!` from the function
   the serializer calls, on every variant, matched with no wildcard so a
-  variant added does not compile until it is in the union. Deriving each
+  variant added does not compile until it is in the union. A word whose
+  type's name another's already has in TypeScript is declared under a name
+  of its own (`as "ScanReason",`, for the scan's `Reason`), since both
+  crates write into one folder, a file to a name. Deriving each
   with its variants renamed to their words was the other way, which spells
   every word twice and ties the TypeScript to the variants again. A
   `ValidationIssue` is a union of one record per code, `{ code:
@@ -4776,8 +4802,8 @@ where serde's are, and the feature only reads them.
 
 ### Its views
 
-Seven pages draw the snapshot ([the read model](#the-read-model)), each a
-file under `src/pages`:
+Seven pages draw the snapshot ([the read model](#the-read-model)), and an
+eighth a scan beside it, each a file under `src/pages`:
 
 - **The overview** (`/`) names the workspace, where it is and why that one,
   counts what it holds from the snapshot's `summary`, a card for every kind
@@ -4788,7 +4814,17 @@ file under `src/pages`:
 - **A project's page** (`/project?entry=...`) groups what one holds by
   kind, each artifact with its state, a badge in a slot for each of the
   project's agents, its origin, its targets, what does not read and what
-  `validate` says, and what its agents never read above.
+  `validate` says, and what its agents never read above; below, its agents
+  and share toggles (`SettingsForm.vue`), or, for one an older marker
+  marks, its migration (`MigrateOffer.vue`).
+- **What could be linked** (`/discover?root=...&depth=...`) scans the
+  folders typed, one a line, and lists what `flayer scan --suggest` finds
+  there in its order: what a relink would follow, then what is not linked,
+  each with its reason, the command's words for why and a box to mark it,
+  then what is linked already, and the entries no scan can follow, with the
+  `flayer relink` that would. The folders and the depth are the address's,
+  so a reload scans the same again; with none, the page starts from the
+  workspace's own folder, and scans nothing until asked.
 - **The library** (`/library?kind=...`) has a page for each kind in `kinds`,
   the first when none is named, listing the workspace's own of it, filtered
   by name or summary, each with the projects holding a copy and how each
@@ -4861,9 +4897,13 @@ and never a scan: `changed` marks the snapshot stale, and what was read of
 an artifact in a holder among its scopes; `resync` and `command_finished`
 mark all of those, since a command can change what nothing watches. Those
 queries are named by the first word of their key (`markStale`), rather than
-every query marked, for one asked for by hand: a scan (#77) reads the disk
-far past what is watched, and an event asking for it again would run one on
-every change, every command and every tab shown again. While the
+every query marked, for one asked for by hand: a scan (`src/api/scan.ts`,
+keyed `scan`) reads the disk far past what is watched, and an event asking
+for it again would run one on every change, every command and every tab
+shown again. A scan is never stale on its own either, so neither a page
+opened again nor the window coming back into focus walks the disk: the page
+asks again when it is told to scan, and after a run of its own, which
+changed what the scan found linked. While the
 server says it is `watching`, an answer stays fresh until one of those
 marks it (`staleTime` of `Infinity`), so a page asks for nothing on
 opening. Otherwise, before the server has said and while it is
@@ -4990,13 +5030,46 @@ was let go.
   a line the panel wrote. It holds reads too, a `validate`, where what
   `flayer ui` prints when it stops holds only what changed something.
 
-The pages offer two tasks so far, so that each part of this is something
-somebody uses: the projects page links the folder typed above its table,
-sent as typed for the path policy to hold, and a project's page unlinks it,
-which is a confirmation, then goes back to the projects. The preview and the
-run are Vue Query mutations, and the transcript a query, so what the server
-answered lives where every answer does; which drawer is open is Pinia's,
-beside the sidebar's state.
+What the pages offer:
+
+- **A link, from the projects page**, of the folder typed above its table,
+  sent as typed for the path policy to hold.
+- **An unlink, from a project's page**, which is a confirmation, in the
+  CLI's words that nothing on disk is deleted, then goes back to the
+  projects.
+- **The folders marked on the page of what could be linked**, sent as
+  their marks (`Task::Marks`: each folder's path and what the scan said it
+  offers), never as the batch: the task module builds the minds screen's
+  batch from them (`Task::minds`), a `mind -C <path> init` for each
+  repository that is not a project yet and one `flayer link` of them all,
+  so the same marks are the same lines on either front end, which a test
+  of the backend holds the screen and the panel to. That `mind init`
+  writes into each such repository first is said on the page before
+  anything is asked, and its line is shown before it runs. The scan is
+  asked for again once the run is over.
+- **A relink of what the scan found moved**, by the entry it moved from, as
+  the marker spells it, which the backend names beside it (`moved_from`),
+  matching the scan's `moved` to the entry by the directory each names, as
+  the minds screen does: the scan spells `moved` as `flayer link` would take
+  it, which a path outside the workspace spells differently from the entry.
+- **A project's agents and share mode**, from its toggles, sent as they
+  stand beside what its settings said (`Task::Toggled`), never as the
+  lines' agents: `Task::settings` turns the two into the `agents` and
+  `share` lines, as for the TUI's toggles, so the order a project names its
+  agents in, and that unticking every one asks `agents remove` of them all,
+  is said once. Offered only where `migrates` is false: a project an older
+  marker marks changes no setting until it is moved.
+- **A migration, for a project an older marker marks**, the dry run first,
+  `flayer migrate -p <project>`, whose report the page shows once it ran,
+  then the migration, the same line with `--yes`, offered only then. The
+  workspace's command rather than `mind migrate` in the project, so what it
+  carries is what the workspace on screen records; the agents and share
+  mode are the command's own, every agent and shared for a `mind.toml`,
+  for the toggles to change once it has moved.
+
+The preview and the run are Vue Query mutations, and the transcript and the
+scan queries, so what the server answered lives where every answer does;
+which drawer is open is Pinia's, beside the sidebar's state.
 
 ### Its fixtures come from Rust
 
@@ -5010,8 +5083,12 @@ the library's own, its files and each file of them, with what the backend
 answers, which the test transport answers from (`tests/panel.ts`), and
 `commands.json` what previewing and running a few tasks in turn is
 answered with, a link, an unlink to confirm, a `validate` that fails with a
-code and a removal everywhere, which the runner's, the transcript's and the
-pages' tests answer their tasks from (`commanding`). So
+code, a removal everywhere, then what the page of what could be linked and
+a project's page send, folders marked, a relink, toggles and a migration's
+dry run and run, which the runner's, the transcript's and the pages' tests
+answer their tasks from (`commanding`), and `scan.json` what scanning the
+workspace's folder is answered with, folders beside its projects that a
+scan finds, which the page of what could be linked is drawn from. So
 the panel's tests render what core says rather than what a person drew,
 and a field the snapshot adds, renames or fills differently reaches them.
 What differs between runs is pinned: the temporary folder reads as
@@ -5141,8 +5218,11 @@ starts as the config starts the suite's (`serve`, in
 Ctrl-C a person would. A project linked from the panel, its line shown
 first, has to leave `flayer.toml` exactly as `flayer link` leaves the
 copy's; an unlink has to ask, focused on Cancel, leave the marker as it
-was when told no, and then leave it as `flayer unlink` leaves the copy's.
-Of its own, since the suite runs its tests side by side and in two
+was when told no, and then leave it as `flayer unlink` leaves the copy's;
+and the project a scan of the workspace's folder suggests, marked on the
+page of what could be linked, has to be linked by the line it shows, scanned
+again as linked, appear in the projects table, and leave the marker as
+`flayer link` leaves the copy's (`e2e/discover.spec.ts`). Of its own, since the suite runs its tests side by side and in two
 browsers over one server: a change to the shared fixture would move what
 the overview counts under a test reading it, and the second browser would
 find its project linked already.
@@ -6851,8 +6931,9 @@ can have one, in a home nobody has created yet.
 
 What it reports is spelled to be typed. Each one found carries the route
 `flayer link` takes for it from where the request says (`Request::from`):
-the directory `flayer scan` runs in, and the workspace root for the TUI,
-whose lines run there. A directory inside gets the route from there; one
+the directory `flayer scan` runs in, and the workspace root for the TUI
+and the panel, whose lines run there; the panel links by each one's path
+all the same, which is what its path policy takes. A directory inside gets the route from there; one
 outside, its path, rather than a route that climbs out with `..`, which reads
 right from one directory only. A project marked by its settings carries the
 id they name it by ([D-09](#d-09-project-settings-live-in-the-project)),
@@ -6943,13 +7024,16 @@ reason says why it was worth linking once and nothing now. The minds screen
 and the link form read their scan in that order and show what is not linked
 unsorted (the screen lists every project linked after it, by its entry),
 each found row with the words `flayer scan --suggest` uses (one helper in
-the CLI says them for the command and both screens), so the screen cannot
-rank differently from the command it shows. A project found moved says
+the CLI says them for the command, both screens and the panel), so the
+screen cannot rank differently from the command it shows. The panel's page
+of what could be linked reads the same scan, through its backend, in the
+same order ([its views](#its-views)). A project found moved says
 `moved` on the screens as in the command: its reason is its id, which ranks
 it first, but what it wants is a relink, and a row offering it as the
 project most worth linking would have it linked beside the entry it left
-stale. A suggestion links nothing, makes nothing a project, and reads as any
-scan does: no marker, no ledger and no workspace written.
+stale; the panel offers it nothing to mark, only the relink. A suggestion
+links nothing, makes nothing a project, and reads as any scan does: no
+marker, no ledger and no workspace written.
 
 ## Writers at the same time
 
@@ -7782,11 +7866,30 @@ just listed.
   `PLAYWRIGHT_BROWSERS_PATH` finds its browsers through it. Nor does the
   suite run on macOS or Windows: the webServer's command is a POSIX
   shell's line.
-- **What no view reads has no TypeScript.** `status`, `scan` and
-  `workspaces` print a `Status`, a `Scan` and a `Known`, and `gather list`
-  its `Offer`s, which no root names, so the panel has no type for them yet.
-  Each joins a crate's `typescript::roots` when a view reads it, so that the
-  folder holds what the panel compiles against, and no more.
+- **What no view reads has no TypeScript.** `status` and `workspaces`
+  print a `Status` and a `Known`, and `gather list` its `Offer`s, which no
+  root names, so the panel has no type for them yet; nor does `scan --json`
+  have one for its envelope's `Scan`, the panel reading each `Found` inside
+  the backend's own answer (`Scanned`). Each joins a crate's
+  `typescript::roots` when a view reads it, so that the folder holds what
+  the panel compiles against, and no more.
+- **The page of what could be linked links, and unlinks nothing.** The
+  minds screen unticks a linked project to unlink it in the same batch as
+  what it links; the page lists those linked as linked and nothing more, so
+  several are unlinked one at a time, from each project's page. The marks
+  it sends could hold an unlink, which the backend admits as the screen's,
+  so a box on a linked row is all it would take.
+- **A migration from the panel takes the command's agents and share mode.**
+  `--agents` and `--local` are not offered, so a project a `mind.toml` marks
+  moves with every agent and shared, as it was committed, and its toggles
+  then change both, which carries its copies a second time. Toggles on the
+  migration, sent with it, would move it once.
+- **The toggles start from what the snapshot read.** `was` is the settings
+  as the panel last read them, which a change made elsewhere since, and not
+  yet streamed, leaves behind: the lines still name the agents and the mode
+  outright, so what a line sets is what the toggles say, but a line may run
+  that sets what the disk says already, or one be left out. The form starts
+  again from what the snapshot says whenever it reads the settings again.
 - **`list --json` reads twice.** Its warnings and exit status are those of
   the listing, read as the text reads it, and its data a read of the
   snapshot's beside it, so a file changed between the two can be a warning
@@ -8033,9 +8136,11 @@ just listed.
   refuses, at the price of rewriting links somebody made.
 - **Migrating from a screen.** The TUI has no key for `flayer migrate
   --library`, nor for moving a project to its settings, which run only from
-  the command line; its header names the second's command where a project
+  the command line and, the second, from a project's page in the panel
+  (`Task::Migrate`); its header names the second's command where a project
   needs it. A key producing a migration's two lines, the dry run and then
-  `--yes`, would bring each to the TUI the way every other change gets there.
+  `--yes`, the panel's task, would bring each to the TUI the way every other
+  change gets there.
 - **A project's move stopped by a crash.** A migration that fails puts back
   what it had done, but one whose process is killed part way puts nothing
   back: copies it placed are recorded nowhere, and read as somebody's, and
