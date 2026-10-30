@@ -203,6 +203,9 @@ describe('unlinking a project from its page', () => {
     expect(sent).toEqual([{ task: unlink.task, mode: 'preview' }])
     expect([...document.body.querySelectorAll('[data-testid="caution"]')].map(each => each.textContent?.replace(/\s+/g, ' ').trim()))
       .toEqual(unlink.preview.confirm.map(each => `${each.caution}: ${each.message}`))
+    // That it forgets, and deletes nothing: the CLI's words, which the page
+    // says no other way.
+    expect(document.body.querySelector('[data-testid="caution"]')?.textContent).toContain('nothing on disk is deleted')
     document.body.querySelector<HTMLElement>('[data-testid="cancel"]')!.click()
     await flushPromises()
     expect(sent.filter(each => each.mode === 'run')).toEqual([])
