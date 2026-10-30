@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { useRunner, type Runner } from '@/api/commands'
 import { useSnapshot } from '@/api/snapshot'
-import type { Ran, Task } from '@/api/transport'
+import { TransportError, type Ran, type Task, type Transport } from '@/api/transport'
 import { useShell } from '@/stores/shell'
 import { commanded, commanding, render, unmount } from './panel'
 
@@ -262,6 +262,40 @@ describe('what a run said', () => {
 
     const icons = findAll('[data-testid="said"] [data-testid="line"] [data-icon]').map(icon => icon.getAttribute('data-icon'))
     expect(icons).toEqual(['i-lucide-triangle-alert', 'i-lucide-info'])
+  })
+
+  it('is still the last run that answered after a later run is refused, or never answers', async () => {
+    const { transport } = commanding()
+    let failing = new TransportError(422, 'another writer holds the workspace', 'workspace_busy')
+    const refusing = {
+      ...transport,
+      send(task: Task, mode: 'preview' | 'run') {
+        if (mode === 'preview') {
+          return transport.send(task, mode)
+        }
+        return task.type === 'link' ? Promise.reject(failing) : transport.send(task, mode)
+      }
+    } as Transport
+    await render('/harness', refusing, HARNESS)
+
+    const { answer: validated } = await ask(VALIDATE.task)
+    await click('[data-testid="run"]')
+    await validated
+    useShell().warningsOpen = false
+
+    for (const failure of [failing, new TransportError(500, 'the server failed'), new TransportError(0, 'the server stopped')]) {
+      failing = failure
+      const { answer: linked } = await ask(LINK.task)
+      await click('[data-testid="run"]')
+      expect(await linked).toBeUndefined()
+
+      useShell().warningsOpen = true
+      await flushPromises()
+      expect(find('[data-testid="nothing-ran"]')).toBeNull()
+      expect(findAll('[data-testid="said"] [data-testid="run"] code').map(text)).toEqual(VALIDATE.ran.outcome.runs.map(run => `$ ${run.command}`))
+      useShell().warningsOpen = false
+      await flushPromises()
+    }
   })
 
   it('leaves the drawer closed after a run that went well and said nothing', async () => {

@@ -1,5 +1,5 @@
 import { computed, inject, provide, type ComputedRef, type InjectionKey } from 'vue'
-import { useMutation } from '@tanstack/vue-query'
+import { useMutation, useMutationState } from '@tanstack/vue-query'
 import { useSettle } from './live'
 import { useTransport, type Preview, type Ran, type Task } from './transport'
 
@@ -39,7 +39,13 @@ export interface Runner {
   run(): Promise<void>
   /** No: let it go, nothing run. */
   cancel(): void
-  /** What the last run was answered with, for the warnings drawer. */
+  /**
+   * What the last run that answered was answered with, for the warnings
+   * drawer: not the run mutation's own answer, which Vue Query clears as the
+   * next run starts and leaves cleared when that one fails, so a later
+   * refusal would leave the drawer an earlier run's toast opens saying
+   * nothing has run.
+   */
   said: ComputedRef<Ran | undefined>
 }
 
@@ -91,7 +97,16 @@ export function provideRunner(say: Say): Runner {
   })
   const running = useMutation({
     mutationKey: ['run'],
-    mutationFn: (task: Task) => settle(() => transport.send(task, 'run'))
+    mutationFn: (task: Task) => settle(() => transport.send(task, 'run')),
+    // Each run's answer is kept for as long as the tab is open, not the five
+    // minutes after the next run starts that Vue Query keeps one by default:
+    // the drawer may be opened on the last that answered at any time, and a
+    // tab runs few enough for every answer to cost nothing kept.
+    gcTime: Infinity
+  })
+  const answered = useMutationState({
+    filters: { mutationKey: ['run'], status: 'success' },
+    select: mutation => mutation.state.data as Ran
   })
 
   /** Who is waiting on what is shown, to be told how it ended. */
@@ -151,7 +166,7 @@ export function provideRunner(say: Say): Runner {
         end(undefined)
       }
     },
-    said: computed(() => running.data.value)
+    said: computed(() => answered.value.at(-1))
   }
   provide(runnerKey, runner)
   return runner
