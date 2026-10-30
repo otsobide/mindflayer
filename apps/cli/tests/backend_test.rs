@@ -1812,6 +1812,23 @@ fn what_an_update_would_do_is_answered_as_core_surveys_it_and_changes_nothing() 
     assert_eq!(left, [&json!("edited"), &json!("no_longer_offered")]);
 }
 
+/// Asked of the default workspace before anything has made it: nothing to
+/// update, and nothing made to say so, as a dry run of `update --all`.
+#[test]
+fn what_an_update_would_do_in_a_home_where_nothing_is_made_is_nothing_and_makes_nothing() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir_all(&home).unwrap();
+    let backend = PanelBackend::launch(&home, &Lookup::at_home(Some(&home))).unwrap();
+
+    let answer = backend.query(query(json!({"type": "updates"}))).unwrap();
+
+    assert_eq!(answer["projects"], json!([]));
+    assert_eq!(answer["writes"], false);
+    assert_eq!(answer["unread"], json!([]));
+    assert!(!home.join(FLAYER_DIR).exists(), "asking made the workspace");
+}
+
 #[test]
 fn a_query_of_what_an_update_would_do_takes_no_field() {
     let refused = serde_json::from_value::<Query>(json!({"type": "updates", "all": true}));
