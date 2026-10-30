@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import axe from 'axe-core'
+import { defineComponent, h } from 'vue'
+import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
+import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
 import { answering, commanded, commanding, fixture, render, unmount, type Fixture } from './panel'
 
@@ -88,6 +91,22 @@ describe('a page over a workspace the server cannot watch all of', () => {
  */
 const OVER: axe.ElementContext = { include: [document.body], exclude: [['[data-aria-hidden="true"]']] }
 
+let runner: Runner
+
+/**
+ * The projects page, drawn by a page of the test's own that hands the test
+ * the panel's runner, to run a task no page offers: the failed validate
+ * whose drawer is checked.
+ */
+const Harness = defineComponent({
+  setup() {
+    runner = useRunner()
+    return () => h(Projects)
+  }
+})
+
+const HARNESS = [{ path: '/harness', component: Harness }]
+
 describe('what the runner draws over a page', () => {
   it('passes axe with a confirmation open', async () => {
     const { transport } = commanding()
@@ -101,10 +120,26 @@ describe('what the runner draws over a page', () => {
   })
 
   it('passes axe with the transcript open, and with what a failed run said', async () => {
-    const { ran, transport } = commanding()
     const tasks = commanded()
+    const validate = tasks[2]!
+    // Every way the drawer draws a run beside the fixture's failed one, a
+    // line said with a code: a note and why a line could not run, and a
+    // line that said nothing beside its output.
+    const more = [
+      {
+        command: 'mind -C /home/you/Projects/docs list',
+        stdout: '',
+        stderr: [{ code: null, text: 'note: nothing keeps its copies out of git' }],
+        error: { code: 'workspace_busy', message: 'another writer holds the workspace' },
+        ok: false
+      },
+      { command: 'mind -C /home/you/Projects/docs status', stdout: 'docs: nothing installed\n', stderr: [], error: null, ok: true }
+    ]
+    validate.ran.outcome.runs.push(...more)
+    validate.ran.lines.push(...more.map(run => run.command))
+    const { ran, transport } = commanding(undefined, tasks)
     ran.push(...tasks.map(each => each.ran))
-    await render('/projects', transport)
+    await render('/harness', transport, HARNESS)
 
     document.querySelector<HTMLElement>('[data-testid="open-transcript"]')!.click()
     await flushPromises()
@@ -115,6 +150,17 @@ describe('what the runner draws over a page', () => {
     useShell().warningsOpen = true
     await flushPromises()
     expect(document.querySelector('[data-testid="nothing-ran"]')).not.toBeNull()
+    expect(await violations(OVER)).toEqual([])
+
+    useShell().warningsOpen = false
+    await flushPromises()
+    const asked = runner.ask(validate.task)
+    await flushPromises()
+    document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+    await asked
+    await flushPromises()
+    expect(useShell().warningsOpen).toBe(true)
+    expect(document.querySelectorAll('[data-testid="said"] [data-testid="run"]')).toHaveLength(validate.ran.outcome.runs.length)
     expect(await violations(OVER)).toEqual([])
   })
 })
