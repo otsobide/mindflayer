@@ -1091,6 +1091,7 @@ impl App {
         let task = Task::Update {
             holder: member.holder(),
             reference,
+            force: false,
         };
         (Mode::Browse, Step::Run(task))
     }

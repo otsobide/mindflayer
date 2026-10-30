@@ -254,10 +254,13 @@ pub enum Task {
     /// `… update --yes [<kind:name>]`: what is installed in a project, or
     /// the one artifact named, brought up to date and put back where a copy
     /// has gone; `flayer update --all --yes [<kind:name>]` for the
-    /// workspace's own row, in every project it links.
+    /// workspace's own row, in every project it links. With `force`, `--yes
+    /// --force`, writing over a copy changed since it was installed too,
+    /// which the line is then asked about for ([`Caution::Forces`]).
     Update {
         holder: Holder,
         reference: Option<String>,
+        force: bool,
     },
     /// `flayer install -p <project>... [--from <origin>] <kind:name>`: one
     /// offer into each project named, by what picks it out
@@ -615,16 +618,23 @@ impl Task {
                 }
                 None => vec![at(holder, &["targets", "reset", "--yes"], &[kind.folder()])],
             },
-            // Never forced: an edit is somebody's work, and the screen
-            // leaves it to a command line that says `--force`, as the install
-            // screen does.
-            Task::Update { holder, reference } => {
+            // Forced only when asked: an edit is somebody's work, so the
+            // TUI never forces, leaving it to a command line that says
+            // `--force` as the install screen does, and the panel asks first,
+            // since the line says what it writes over.
+            Task::Update {
+                holder,
+                reference,
+                force,
+            } => {
                 let named: Vec<&str> = reference.iter().map(String::as_str).collect();
+                let forced: &[&str] = if *force { &["--force"] } else { &[] };
                 match holder {
                     Holder::Workspace => {
-                        vec![words(&["flayer", "update", "--all", "--yes"], &named)]
+                        let head = [&["flayer", "update", "--all", "--yes"], forced].concat();
+                        vec![words(&head, &named)]
                     }
-                    _ => vec![at(holder, &["update", "--yes"], &named)],
+                    _ => vec![at(holder, &[&["update", "--yes"], forced].concat(), &named)],
                 }
             }
             Task::Install {

@@ -733,6 +733,7 @@ fn u_updates_the_project_or_the_artifact_under_the_cursor_and_shows_what_it_said
         Some(Task::Update {
             holder: Holder::Project(String::from("alpha")),
             reference: None,
+            force: false,
         })
     );
     assert_eq!(project.unwrap().describe(), "mind -C alpha update --yes");
@@ -746,6 +747,7 @@ fn u_updates_the_project_or_the_artifact_under_the_cursor_and_shows_what_it_said
         Task::Update {
             holder: Holder::Project(String::from("beta")),
             reference: Some(String::from("skill:commit-style")),
+            force: false,
         }
     );
     assert_eq!(
@@ -1956,14 +1958,17 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
         Task::Update {
             holder: Holder::Project(String::from("alpha")),
             reference: None,
+            force: false,
         },
         Task::Update {
             holder: Holder::Elsewhere(String::from("-odd")),
             reference: Some(String::from("rule:git/no-force-push")),
+            force: true,
         },
         Task::Update {
             holder: Holder::Workspace,
             reference: Some(String::from("skill:commit-style")),
+            force: false,
         },
         Task::Remove {
             holder: Holder::Workspace,

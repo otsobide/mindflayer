@@ -173,7 +173,7 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
         ),
         (
             "a holder by its path",
-            json!({"type": "update", "holder": {"type": "project", "entry": alpha}, "reference": null}),
+            json!({"type": "update", "holder": {"type": "project", "entry": alpha}, "reference": null, "force": false}),
             "not_registered",
         ),
         (

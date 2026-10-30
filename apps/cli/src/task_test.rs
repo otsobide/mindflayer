@@ -164,6 +164,12 @@ fn every(value: &str) -> Vec<Task> {
         Task::Update {
             holder: Holder::Workspace,
             reference: None,
+            force: false,
+        },
+        Task::Update {
+            holder: Holder::Workspace,
+            reference: None,
+            force: true,
         },
     ];
     tasks.push(Task::ApplyInstall {
@@ -210,6 +216,7 @@ fn every(value: &str) -> Vec<Task> {
             Task::Update {
                 holder: holder.clone(),
                 reference: Some(owned()),
+                force: at % 2 == 1,
             },
         ]);
         // A project's settings, never the workspace's: its own reach agents
@@ -508,6 +515,51 @@ fn a_migration_is_a_dry_run_until_it_is_told_and_only_then_a_write() {
     );
     assert!(migrate(true).writes());
     assert_eq!(migrate(true).cautions(), Vec::new());
+}
+
+/// What the panel's page of updates asks for, each the line somebody would
+/// type: every project, one, one artifact in one, and that one forced,
+/// which alone is asked about first.
+#[test]
+fn an_update_is_the_line_the_cli_takes_and_forced_only_when_asked() {
+    let update = |holder, reference: Option<&str>, force| Task::Update {
+        holder,
+        reference: reference.map(str::to_owned),
+        force,
+    };
+    let alpha = || Holder::Project(String::from("/work/alpha"));
+
+    for (task, said, cautions) in [
+        (
+            update(Holder::Workspace, None, false),
+            "flayer update --all --yes",
+            Vec::new(),
+        ),
+        (
+            update(alpha(), None, false),
+            "mind -C /work/alpha update --yes",
+            Vec::new(),
+        ),
+        (
+            update(alpha(), Some("skill:lint"), false),
+            "mind -C /work/alpha update --yes skill:lint",
+            Vec::new(),
+        ),
+        (
+            update(alpha(), Some("skill:lint"), true),
+            "mind -C /work/alpha update --yes --force skill:lint",
+            vec![(0, Caution::Forces)],
+        ),
+        (
+            update(Holder::Workspace, Some("-odd"), true),
+            "flayer update --all --yes --force -- -odd",
+            vec![(0, Caution::Forces)],
+        ),
+    ] {
+        assert_eq!(task.commands(), [line(said)], "{task:?}");
+        assert!(task.writes(), "{task:?}");
+        assert_eq!(task.cautions(), cautions, "{task:?}");
+    }
 }
 
 #[test]
@@ -1192,6 +1244,7 @@ fn a_task_is_asked_about_for_each_of_its_lines_that_takes_something_away() {
                 everywhere: true, ..
             } => vec![(0, Caution::Removes), (0, Caution::Uninstalls)],
             Task::Uninstall { .. } => vec![(0, Caution::Uninstalls)],
+            Task::Update { force: true, .. } => vec![(0, Caution::Forces)],
             Task::Unlink { .. } => vec![(0, Caution::Unlinks)],
             Task::Unload { .. } | Task::UnloadHere { .. } => vec![(0, Caution::Unloads)],
             // `mind -C <path> init`, `flayer link` and `flayer unlink`.
