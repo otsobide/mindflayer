@@ -1229,3 +1229,29 @@ fn a_caution_says_what_it_takes_in_a_word_and_in_words() {
         "makes the workspace forget a project, though nothing on disk is deleted"
     );
 }
+
+#[test]
+fn a_change_core_plans_is_the_install_or_uninstall_task_that_runs_it() {
+    let install = Change::Install {
+        projects: owned(&["alpha", "./beta"]),
+        kind: Kind::Rule,
+        name: String::from("git/commits"),
+        from: String::from("load:../team"),
+    };
+    let uninstall = Change::Uninstall {
+        projects: owned(&["alpha"]),
+        kind: Kind::Skill,
+        name: String::from("deploy"),
+    };
+
+    assert_eq!(
+        Task::from(install).commands(),
+        [line(
+            "flayer install -p alpha -p ./beta --from load:../team rule:git/commits"
+        )]
+    );
+    assert_eq!(
+        Task::from(uninstall).commands(),
+        [line("flayer uninstall -p alpha skill:deploy")]
+    );
+}

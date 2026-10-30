@@ -21,7 +21,7 @@
 //! `tab` shows the next kind, which means the same either way round, so the
 //! two cannot share it.
 
-use mindflayer_core::install::{self, Candidate, Standing};
+use mindflayer_core::install::{self, Asked, Candidate, Cell, Plan, Standing};
 use mindflayer_core::{Kind, MindProject};
 use ratatui::crossterm::event::KeyCode;
 
@@ -391,74 +391,54 @@ impl Screen {
         self.pending().is_empty()
     }
 
-    /// Everything marked, as the command lines it amounts to: an install of
-    /// each offer into every project ticked to take it, and an uninstall of
-    /// each artifact from every project unticked, kind by kind, each line
-    /// where the first box it holds is found going down the projects.
+    /// Everything marked, as the command lines it amounts to: each box that
+    /// disagrees with how it started, as it stands, planned by core
+    /// ([`install::Plan::of`]), the panel's batch's one planner, and each
+    /// change it plans the `Install` or `Uninstall` task that runs it.
     ///
-    /// A line an offer rather than a line a box, since `flayer install` and
-    /// `flayer uninstall` take a `-p` for each project, which is how the
-    /// screen turned round marks one: either way round, one artifact's
-    /// ticks are one line. An install always says `--from`, though a name
-    /// one place offers needs none: the box is one offer, and its line
-    /// names that one, so it installs what was ticked or nothing when run
-    /// again after a second place starts to offer the name, and whether a
-    /// name needs it is core's to say ([`install::offered`]), not the
-    /// screen's to work out again. An uninstall is of the name, whichever
-    /// offer the copy came from, as the command takes it.
+    /// So the screen decides none of the batch's rules, only which boxes
+    /// are ticked: that each offer ticked is one `flayer install` line with
+    /// a `-p` for each project, always with `--from`, and each name unticked
+    /// one `flayer uninstall` line of the name, kind by kind; and that an
+    /// offer ticked in the place of another of its name replaces it rather
+    /// than taking it out, the box the one ticked unticked
+    /// ([`Row::superseded`]) asked away all the same, for core to see it is
+    /// replaced. A box this screen holds, somebody's or one edited since,
+    /// never moves, so nothing it plans is locked or clashes.
     pub fn task(&self) -> Task {
-        let mut changes: Vec<Task> = Vec::new();
-        for kind in Kind::ALL {
-            for (target, row, what) in self.pending() {
-                let target = &self.targets[target];
-                let candidate = &target.rows[row].candidate;
-                if candidate.kind() != kind {
-                    continue;
-                }
-                let name = candidate.name();
-                let origin = candidate.origin();
-                let same = |change: &Task| match (what, change) {
-                    (
-                        Pending::Install,
-                        Task::Install {
-                            kind: of,
-                            name: called,
-                            from: Some(from),
-                            ..
-                        },
-                    ) => *of == kind && called == name && *from == origin,
-                    (
-                        Pending::Remove,
-                        Task::Uninstall {
-                            kind: of,
-                            name: called,
-                            ..
-                        },
-                    ) => *of == kind && called == name,
-                    _ => false,
-                };
-                let project = target.picked_by.clone();
-                match changes.iter_mut().find(|change| same(change)) {
-                    Some(Task::Install { projects, .. } | Task::Uninstall { projects, .. }) => {
-                        projects.push(project);
-                    }
-                    _ => changes.push(match what {
-                        Pending::Install => Task::Install {
-                            projects: vec![project],
-                            kind,
-                            name: name.to_owned(),
-                            from: Some(origin),
-                        },
-                        Pending::Remove => Task::Uninstall {
-                            projects: vec![project],
-                            kind,
-                            name: name.to_owned(),
-                        },
-                    }),
-                }
-            }
+        let asked: Vec<Asked> = self
+            .targets
+            .iter()
+            .flat_map(|target| {
+                target
+                    .rows
+                    .iter()
+                    .filter(|row| row.checked != row.was)
+                    .map(|row| {
+                        let candidate = &row.candidate;
+                        Asked {
+                            cell: Cell::of(
+                                &target.picked_by,
+                                candidate.kind(),
+                                candidate.name(),
+                                &candidate.origin(),
+                                row.checked,
+                            ),
+                            kind: candidate.kind(),
+                            name: candidate.name().to_owned(),
+                            standing: candidate.standing,
+                            held: row.was,
+                        }
+                    })
+            })
+            .collect();
+        Task::ApplyInstall {
+            changes: Plan::of(&asked)
+                .changes
+                .into_iter()
+                .map(Task::from)
+                .collect(),
         }
-        Task::ApplyInstall { changes }
     }
 
     /// Feed it a key.
