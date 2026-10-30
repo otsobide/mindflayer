@@ -7,6 +7,7 @@ import type { Offered } from '@/api/generated/Offered'
 import type { Project } from '@/api/generated/Project'
 import type { Said } from '@/api/generated/Said'
 import type { Snapshot } from '@/api/generated/Snapshot'
+import { useRunner } from '@/api/commands'
 import { usePlan, usePreview } from '@/api/plan'
 import { useSnapshot } from '@/api/snapshot'
 import { TransportError, type Task } from '@/api/transport'
@@ -97,7 +98,7 @@ const { data: planned, error: refused, isFetching: planning, isPlaceholderData }
 /** The plan of the boxes marked now, none while it is asked for or when nothing is marked. */
 const plan = computed(() => (selection.value.length > 0 && !isPlaceholderData.value ? planned.value : undefined))
 
-/** The batch the plan's tasks are, sent back as they came, as the install screen applies its marks. */
+/** The batch the plan's tasks are, sent back as they came: the install screen's apply. */
 const batch = computed<Task | undefined>(() => (plan.value && plan.value.tasks.length > 0
   ? { type: 'apply_install', changes: plan.value.tasks }
   : undefined))
@@ -228,6 +229,24 @@ function toggle(line: number, column: number) {
   const asked = { project: named(project), reference: reference(offered), origin: offered.origin }
   const now = marks.find(asked)?.wanted ?? ticked(asked)
   marks.mark({ ...asked, wanted: !now }, ticked(asked))
+}
+
+const runner = useRunner()
+const { busy } = runner
+
+/**
+ * Apply what the plan says, its tasks sent back as one batch, shown before
+ * it runs; once it ran, the marks are done with, and the matrix is drawn
+ * again from what the run changed.
+ */
+async function apply() {
+  if (!batch.value) {
+    return
+  }
+  const ran = await runner.ask(batch.value)
+  if (ran) {
+    marks.clear()
+  }
 }
 
 /** Why a plan or its preview was refused, with its code. */
@@ -456,8 +475,17 @@ function commands(snapshot: Snapshot) {
                   color="neutral"
                   variant="outline"
                   size="sm"
+                  :disabled="busy"
                   data-testid="clear-marks"
                   @click="marks.clear()"
+                />
+                <UButton
+                  label="Apply"
+                  icon="i-lucide-play"
+                  size="sm"
+                  :disabled="busy || !batch"
+                  data-testid="apply"
+                  @click="apply"
                 />
               </div>
             </div>

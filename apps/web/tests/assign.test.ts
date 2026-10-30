@@ -4,7 +4,7 @@ import type { Cell } from '@/api/generated/Cell'
 import type { Offered } from '@/api/generated/Offered'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import type { Query } from '@/api/transport'
-import { answering, fixture, plans, render, texts, unmount } from './panel'
+import { answering, applying, commanding, fixture, plans, render, texts, unmount, type Answered } from './panel'
 
 afterEach(unmount)
 
@@ -237,7 +237,7 @@ describe('marking boxes', () => {
     expect(box(page, 'skill', 'format', 'https://github.com/acme/skills', 'api').attributes('data-held')).toBeUndefined()
   })
 
-  it('says why a plan was refused, with its code, and shows nothing to run', async () => {
+  it('says why a plan was refused, with its code, and applies nothing', async () => {
     const { transport } = answering(fixture('assigning'), [])
     const { page } = await render('/assign', transport)
 
@@ -246,5 +246,35 @@ describe('marking boxes', () => {
 
     expect(page.get('[data-testid="plan-refused"]').text()).toContain('not_found')
     expect(page.findAll('[data-testid="line"]')).toHaveLength(0)
+    expect(page.get('[data-testid="apply"]').attributes('disabled')).toBeDefined()
+  })
+})
+
+describe('applying a plan', () => {
+  it('shows the lines the plan\'s tasks are, sends them back as one batch, and clears the marks once it ran', async () => {
+    const [simple] = selections()
+    const [applied] = applying()
+    const answered: Answered[] = plans()
+    const { sent, transport } = commanding(fixture('assigning'), applying(), answered)
+    const { page } = await render('/assign', transport)
+
+    for (const cell of simple!) {
+      await box(page, 'skill', 'format', cell.origin, cell.project).trigger('click')
+    }
+    await flushPromises()
+    expect(texts(page, '[data-testid="line"]')).toEqual(applied!.preview.lines.map(line => `$ ${line}`))
+
+    await page.get('[data-testid="apply"]').trigger('click')
+    await flushPromises()
+    const dialog = document.querySelector('[role="dialog"]')!
+    expect([...dialog.querySelectorAll('[data-testid="command"]')].map(line => line.textContent!.trim()))
+      .toEqual(applied!.preview.lines.map(line => `$ ${line}`))
+    ;(dialog.querySelector('[data-testid="run"]') as HTMLElement).click()
+    await flushPromises()
+
+    expect(sent.filter(each => each.mode === 'run').map(each => each.task)).toEqual([applied!.task])
+    expect(applied!.task).toEqual({ type: 'apply_install', changes: (answered[0]!.answer as { tasks: unknown[] }).tasks })
+    expect(page.find('[data-testid="plan"]').exists()).toBe(false)
+    expect(box(page, 'skill', 'format', simple![0]!.origin, 'api').attributes('data-changed')).toBeUndefined()
   })
 })

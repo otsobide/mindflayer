@@ -10,6 +10,7 @@ import App from '@/App.vue'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { TransportError, type LiveEvent, type Preview, type Query, type Ran, type Task, type Transport } from '@/api/transport'
 import { createPanel } from '@/panel'
+import applied from './fixtures/applied.json'
 import assigning from './fixtures/assigning.json'
 import candidates from './fixtures/candidates.json'
 import commands from './fixtures/commands.json'
@@ -137,6 +138,16 @@ export interface Commanded {
  */
 export function commanded(): Commanded[] {
   return structuredClone(commands) as unknown as Commanded[]
+}
+
+/**
+ * What the assigning fixture's server answers when the plan of `format`
+ * into `api` and `docs` is applied, its tasks sent back as one batch
+ * (tests/fixtures/applied.json): its preview, and its run. Copied, so a
+ * test may change its copy.
+ */
+export function applying(): Commanded[] {
+  return structuredClone(applied) as unknown as Commanded[]
 }
 
 /** A task as `send` was handed it, and how. */
