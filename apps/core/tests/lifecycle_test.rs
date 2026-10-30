@@ -690,6 +690,31 @@ fn contents_made_from_what_the_file_no_longer_holds_are_refused() {
     assert_eq!(fs::read_to_string(&manifest).unwrap(), SHIP);
 }
 
+#[test]
+fn a_hash_that_is_no_sha256_is_refused_rather_than_called_stale() {
+    let (dir, project) = project();
+    create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+    let manifest = dir.path().join("skills/deploy/SKILL.md");
+    let held = fs::read(&manifest).unwrap();
+    let read = hash::bytes(&held);
+
+    // The line `sha256sum` prints is the hash and the file's name after it.
+    let printed = format!("{read}  skills/deploy/SKILL.md");
+    for given in ["nope", "0a", printed.as_str()] {
+        let error = replace(&project, "deploy", SHIP.as_bytes(), Some(given)).unwrap_err();
+
+        assert_eq!(error.code(), "edit_hash_malformed", "{error}");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "`{given}` is not a SHA-256, which is 64 hex digits and nothing else, so \
+                 nothing was written"
+            )
+        );
+        assert_eq!(fs::read(&manifest).unwrap(), held);
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn a_manifest_leading_out_of_where_its_kind_is_kept_is_never_written_through() {

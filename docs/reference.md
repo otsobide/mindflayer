@@ -2518,8 +2518,10 @@ to read, with a name and a description `add` would take, and the name has
 to be its folder's, since `rename` is what changes the two together; a rule
 has to say something, and its front matter, if it has any, to read whole.
 `--if-unchanged` takes the SHA-256 of what the file held when the contents
-were made from it, as `sha256sum` prints it, and refuses to write over a
-change made since:
+were made from it, its 64 hex digits alone, which `sha256sum` prints
+before the file's name (`sha256sum FILE | cut -d' ' -f1` prints them
+alone), and refuses to write over a change made since; a value that is no
+SHA-256 is refused as one:
 
 ```
 $ mind edit deploy --contents draft.md

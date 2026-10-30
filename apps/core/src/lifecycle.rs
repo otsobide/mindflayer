@@ -426,8 +426,11 @@ pub fn finish_edit(
 ///
 /// `expect`, when given, is the SHA-256 of what the file held when it was
 /// read ([`hash::bytes`]): a file that holds anything else now was changed
-/// by somebody else since, and is not written over. Without it, the write
-/// is the caller's to keep from crossing another, as an editor's is.
+/// by somebody else since, and is not written over. One that is no SHA-256
+/// at all ([`hash::is_digest`]) is refused before anything is read, rather
+/// than said to be what the file no longer holds, which would send its
+/// writer to read again a file nobody changed. Without it, the write is the
+/// caller's to keep from crossing another, as an editor's is.
 ///
 /// Written where the artifact is kept and nowhere else: the file is
 /// followed through its links, and one leading out of where it may be
@@ -448,6 +451,11 @@ pub fn replace_contents(
     contents: &[u8],
     expect: Option<&str>,
 ) -> Result<Edited, LifecycleError> {
+    if let Some(given) = expect.filter(|given| !hash::is_digest(given)) {
+        return Err(LifecycleError::HashMalformed {
+            given: given.to_owned(),
+        });
+    }
     let directory = inside(project, target)?;
     fit(target, contents)?;
 
@@ -1085,6 +1093,10 @@ pub enum LifecycleError {
         name: String,
         issues: Vec<ValidationIssue>,
     },
+    /// The hash the contents given whole were said to be made from is no
+    /// SHA-256 at all, so no file could hold what it is the hash of.
+    #[error("`{given}` is not a SHA-256, which is 64 hex digits and nothing else, so nothing was written")]
+    HashMalformed { given: String },
     /// The file no longer holds what the contents given whole were made
     /// from: somebody else changed it since it was read.
     #[error("{path}: changed since it was read, its SHA-256 now {found} and not {expected}, so it is not written over; read it again")]
@@ -1131,6 +1143,7 @@ codes!(LifecycleError {
     Self::Unparsed { .. } => "edit_front_matter_unreadable",
     Self::NameChanged { .. } => "edit_name_changed",
     Self::ContentsUnfit { .. } => "edit_contents_unfit",
+    Self::HashMalformed { .. } => "edit_hash_malformed",
     Self::Stale { .. } => "edit_stale",
     Self::LeadsOut { .. } => "edit_leads_outside",
     Self::Io { .. } => "change_failed",

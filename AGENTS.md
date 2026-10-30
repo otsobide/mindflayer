@@ -723,7 +723,8 @@ These are easy to break from a single file without noticing.
     a home perhaps, told by that folder rather than by the holder, a
     `MindProject` either way. It goes through a temporary renamed onto it,
     and with `--if-unchanged` only over what the hash given was taken of
-    (`edit_stale`). The front end reads what it
+    (`edit_stale`), a value that is no SHA-256 refused as one
+    (`hash::is_digest`, `edit_hash_malformed`) rather than called stale. The front end reads what it
     was given, a file or standard input, and hands core the bytes, which
     core alone judges; core never reads standard input.
   - An installed name must be one folder name for a skill

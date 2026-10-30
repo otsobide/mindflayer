@@ -7384,10 +7384,15 @@ deciding anything about them.
 - **Only over what was read.** `--if-unchanged <sha256>` names what the file
   held when the contents were made from it, by `hash::bytes`, the recipe
   every hash of a file is. A file that holds anything else now was changed
-  by somebody else since, and is not written over (`edit_stale`). The
-  panel's editor (#82) is to send it with every save, so a change made in
-  an editor while the page was open is refused rather than lost. Without
-  it the write crosses whatever came first, as an editor's does.
+  by somebody else since, and is not written over (`edit_stale`). A value
+  that is no SHA-256 at all, 64 hex digits in either case
+  (`hash::is_digest`), is refused as one before anything is read
+  (`edit_hash_malformed`): compared, it could only be called stale, which
+  sends its writer to read again a file nobody changed, and the line
+  `sha256sum` prints, the file's name after the digits, is one such value.
+  The panel's editor (#82) is to send it with every save, so a change made
+  in an editor while the page was open is refused rather than lost.
+  Without it the write crosses whatever came first, as an editor's does.
 - **Where the artifact is kept, and nowhere else.** The file is followed
   through its links once, as `copy::followed` follows them for a copy and a
   read for the panel, and written at the path it resolves to, so a link

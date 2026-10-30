@@ -209,6 +209,7 @@ export type CoreCode =
   | "edit_front_matter_unreadable"
   | "edit_name_changed"
   | "edit_contents_unfit"
+  | "edit_hash_malformed"
   | "edit_stale"
   | "edit_leads_outside"
   | "change_failed"
