@@ -121,16 +121,20 @@ impl DebounceEventHandler for Handler {
     }
 }
 
-/// What sets and drops the system's watches, each on one folder alone: the
-/// debouncer, or a test's stand-in for it.
+/// What sets and drops the system's watches: the debouncer, or a test's
+/// stand-in for it.
+///
+/// Handed the mode rather than deciding it, so a test sees what the watcher
+/// asks for, each folder on its own, which nothing on the stream shows: a
+/// change further down is no path's either way.
 trait Watches {
-    fn watch(&mut self, folder: &Path) -> notify::Result<()>;
+    fn watch(&mut self, folder: &Path, mode: RecursiveMode) -> notify::Result<()>;
     fn unwatch(&mut self, folder: &Path) -> notify::Result<()>;
 }
 
 impl Watches for Debouncer<RecommendedWatcher, RecommendedCache> {
-    fn watch(&mut self, folder: &Path) -> notify::Result<()> {
-        Debouncer::watch(self, folder, RecursiveMode::NonRecursive)
+    fn watch(&mut self, folder: &Path, mode: RecursiveMode) -> notify::Result<()> {
+        Debouncer::watch(self, folder, mode)
     }
 
     fn unwatch(&mut self, folder: &Path) -> notify::Result<()> {
@@ -243,7 +247,7 @@ impl<W: Watches> State<W> {
             if self.watched.contains(folder) {
                 continue;
             }
-            match self.watches.watch(folder) {
+            match self.watches.watch(folder, RecursiveMode::NonRecursive) {
                 Ok(()) => {
                     self.watched.insert(folder.clone());
                 }

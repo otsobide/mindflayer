@@ -27,25 +27,29 @@ fn tree() -> TempDir {
 
 /// The acceptance's test on the path list: every folder watched is one the
 /// list names, or the folder above one, each on its own; nothing below a
-/// folder named is, however deep the tree there goes.
+/// folder named is, however deep the tree there goes, and no watch is a
+/// recursive one, which would cover the whole tree under the project's
+/// folder, watched for its `AGENTS.md`.
 #[test]
 fn only_the_folders_named_and_those_above_them_are_watched() {
     let dir = tree();
     let root = dir.path();
     let skills = root.join("skills");
-    let list = [
+    let list = Arc::new(Mutex::new(vec![
         watched(&skills, "project"),
         watched(&skills.join("deploy"), "project"),
         watched(&root.join("AGENTS.md"), "project"),
         watched(&root.join(".claude").join("skills"), "project"),
-    ];
+    ]));
+    let mut state = state(Stand::default(), &list, &Events::new());
 
-    let plan = Plan::of(&list, Path::is_dir);
+    state.apply(&list.lock().unwrap().clone(), &[]);
 
     assert_eq!(
-        plan.folders,
-        BTreeSet::from([root.to_path_buf(), skills.clone(), skills.join("deploy")])
+        state.watches.set,
+        [root.to_path_buf(), skills.clone(), skills.join("deploy")]
     );
+    assert!(state.watches.recursive.is_empty());
 }
 
 /// The scopes a change to `path` reaches under `plan`, by their names.
@@ -113,16 +117,21 @@ fn a_change_to_a_folder_above_paths_named_reaches_their_scopes() {
 #[derive(Default)]
 struct Stand {
     set: Vec<PathBuf>,
+    /// Each of them asked for with everything below it.
+    recursive: Vec<PathBuf>,
     dropped: Vec<PathBuf>,
     room: Option<usize>,
 }
 
 impl Watches for Stand {
-    fn watch(&mut self, folder: &Path) -> notify::Result<()> {
+    fn watch(&mut self, folder: &Path, mode: RecursiveMode) -> notify::Result<()> {
         if self.room.is_some_and(|room| self.set.len() >= room) {
             return Err(notify::Error::new(ErrorKind::MaxFilesWatch).add_path(folder.into()));
         }
         self.set.push(folder.to_path_buf());
+        if mode == RecursiveMode::Recursive {
+            self.recursive.push(folder.to_path_buf());
+        }
         Ok(())
     }
 

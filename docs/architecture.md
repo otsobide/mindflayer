@@ -4355,7 +4355,10 @@ project is watched for its marker coming back.
   what a skill keeps in folders of its own: a recursive watch costs one of
   the system's watches for every folder under it. A test of core's list
   holds it to that over a fixture with all of those, and one of the
-  server's to watching only the folders named and the one above each.
+  server's to watching only the folders named and the one above each,
+  none of them recursively, which it sees in the mode the watcher asks
+  the system for: nothing on the stream would show it, since a change
+  further down is no path's either way.
 - **What is not there yet is named all the same**, a project's
   `.claude/skills` before its first install, and watched from the nearest
   folder above it that is, for its being made. That rule is the watcher's,
