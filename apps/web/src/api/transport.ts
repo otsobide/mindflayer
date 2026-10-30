@@ -1,5 +1,6 @@
 import { inject, type InjectionKey } from 'vue'
 import type { Contents } from './generated/Contents'
+import type { Files } from './generated/Files'
 import type { Outcome } from './generated/Outcome'
 import type { Query } from './generated/Query'
 import type { Snapshot } from './generated/Snapshot'
@@ -19,6 +20,7 @@ export type { Outcome, Query, Task }
  */
 export interface Answers {
   snapshot: Snapshot
+  files: Files
   contents: Contents
 }
 

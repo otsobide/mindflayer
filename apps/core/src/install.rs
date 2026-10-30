@@ -267,12 +267,9 @@ impl Offer {
     /// the ledger hands none back.
     pub fn origin(&self) -> String {
         match self {
-            Offer::Shelf(gathered) => match &gathered.source.reference {
-                Some(reference) => format!("{}#{reference}", gathered.source.url),
-                None => gathered.source.url.clone(),
-            },
+            Offer::Shelf(gathered) => gathered.source.origin(),
             Offer::Workspace { .. } => String::from(WORKSPACE_ORIGIN),
-            Offer::Loaded { entry, .. } => format!("{LOADED_PREFIX}{entry}"),
+            Offer::Loaded { entry, .. } => loaded_origin(entry),
         }
     }
 
@@ -309,6 +306,14 @@ impl Offer {
 /// What a loaded workspace's origin starts with.
 pub const LOADED_PREFIX: &str = "load:";
 
+/// The origin of what the workspace loaded as `entry` offers, the entry as
+/// its marker spells it: written once, for an offer and for a listing of
+/// the loads alike ([`crate::view::LoadedWorkspace`]), so what a listing
+/// says `--from` takes is what an install from that load records.
+pub fn loaded_origin(entry: &str) -> String {
+    format!("{LOADED_PREFIX}{entry}")
+}
+
 /// `from` as `--from` should match it: when it is a path, typed relative to
 /// `base` (bare or after `load:`) to a workspace `workspace` loads, that
 /// workspace's origin; otherwise `from` as it is, and always for the word
@@ -327,10 +332,7 @@ pub fn resolve_from(workspace: &FlayerWorkspace, base: &Path, from: &str) -> Str
         .into_iter()
         .find(|loaded| paths::normalize(&loaded.root) == path || same_place(&loaded.root, &path))
         .and_then(|loaded| paths::to_config_string(&loaded.entry))
-        .map_or_else(
-            || from.to_owned(),
-            |entry| format!("{LOADED_PREFIX}{entry}"),
-        )
+        .map_or_else(|| from.to_owned(), |entry| loaded_origin(&entry))
 }
 
 /// Whether a declared name is one plain folder name, and so safe to join onto
@@ -930,7 +932,7 @@ fn places(workspace: &FlayerWorkspace, loads: &[Loaded], record: &InstallRecord)
 fn load_origin(loaded: &Loaded) -> String {
     let entry = paths::to_config_string(&loaded.entry)
         .unwrap_or_else(|| loaded.entry.display().to_string());
-    format!("{LOADED_PREFIX}{entry}")
+    loaded_origin(&entry)
 }
 
 /// The block of `project`'s `AGENTS.md` that a rule's copies are told by;
@@ -1029,6 +1031,28 @@ pub(crate) fn offered_for<'a>(record: &InstallRecord, offers: &'a [Offer]) -> Ve
             (None, None) => !matches!(offer, Offer::Shelf(_)),
         })
         .collect()
+}
+
+/// Whether the installation `record` came from the library copy, `library`,
+/// as far as the ledger tells: what it records of where it came from
+/// matches that ([`offered_for`]), and nothing offered from `elsewhere`.
+///
+/// A record names its origin, and one naming the workspace's own came from
+/// the library. One from before origins were kept may have come from the
+/// workspace's own or from any workspace it loads, and is taken for the
+/// library's only while no loaded workspace offers its name: while one
+/// does, removing the library copy leaves it offered, and taking a copy out
+/// that may be that one's would be a guess. One rule for removing one of
+/// the workspace's own everywhere ([`crate::everywhere`]) and for the
+/// projects a snapshot says hold a copy of it ([`crate::view::LibraryHolder`]),
+/// so the two never name different projects.
+pub(crate) fn from_the_library(
+    record: &InstallRecord,
+    library: &Offer,
+    elsewhere: &[Offer],
+) -> bool {
+    !offered_for(record, std::slice::from_ref(library)).is_empty()
+        && offered_for(record, elsewhere).is_empty()
 }
 
 /// The one candidate called `name` that `from` names, among what `project`

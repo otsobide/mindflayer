@@ -39,7 +39,7 @@ use crate::catalog::Reference;
 use crate::code::codes;
 use crate::gather::Scrub;
 use crate::install::{self, Edits, Found, InstallError, Offer, Removed, Standing};
-use crate::ledger::{InstallRecord, Ledger, LedgerError};
+use crate::ledger::{Ledger, LedgerError};
 use crate::lifecycle::{self, LifecycleError, Target};
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
@@ -232,7 +232,7 @@ fn plan_with(
         }
         let surveyed = install::surveyed_one(workspace, ledger, &project, kind, &name, &offers)?;
         let (standing, step) = match surveyed {
-            Some(surveyed) if from_the_library(&surveyed.record, &library, &elsewhere) => {
+            Some(surveyed) if install::from_the_library(&surveyed.record, &library, &elsewhere) => {
                 let step = match surveyed.standing {
                     Standing::Edited => Step::Leave(surveyed.found(Found::Edited)),
                     _ => Step::Uninstall,
@@ -259,20 +259,4 @@ fn plan_with(
         copies,
         unread,
     })
-}
-
-/// Whether the installation `record` came from the library copy, `library`,
-/// as far as the ledger tells: what it records of where it came from
-/// matches that ([`install::offered_for`]), and nothing offered from
-/// `elsewhere`.
-///
-/// A record names its origin, and one naming the workspace's own came from
-/// the library. One from before origins were kept may have come from the
-/// workspace's own or from any workspace it loads, and is taken for the
-/// library's only while no loaded workspace offers its name: while one
-/// does, removing the library copy leaves it offered, and taking a copy out
-/// that may be that one's would be a guess.
-fn from_the_library(record: &InstallRecord, library: &Offer, elsewhere: &[Offer]) -> bool {
-    !install::offered_for(record, std::slice::from_ref(library)).is_empty()
-        && install::offered_for(record, elsewhere).is_empty()
 }

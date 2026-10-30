@@ -11,12 +11,16 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ActivityFeed: typeof import('./components/ActivityFeed.vue')['default']
     AgentBadges: typeof import('./components/AgentBadges.vue')['default']
     AppHeader: typeof import('./components/AppHeader.vue')['default']
     AppLogo: typeof import('./components/AppLogo.vue')['default']
     AppSidebar: typeof import('./components/AppSidebar.vue')['default']
     CommandHint: typeof import('./components/CommandHint.vue')['default']
+    FileTree: typeof import('./components/FileTree.vue')['default']
     HealthBadge: typeof import('./components/HealthBadge.vue')['default']
+    IssueList: typeof import('./components/IssueList.vue')['default']
+    MarkdownBody: typeof import('./components/MarkdownBody.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SnapshotGate: typeof import('./components/SnapshotGate.vue')['default']

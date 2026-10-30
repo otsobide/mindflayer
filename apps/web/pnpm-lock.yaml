@@ -187,6 +187,12 @@ importers:
       '@vueuse/core':
         specifier: ^14.4.0
         version: 14.4.0(vue@3.5.44(typescript@6.0.3))
+      entities:
+        specifier: ^7.0.1
+        version: 7.0.1
+      marked:
+        specifier: ^17.0.6
+        version: 17.0.6
       pinia:
         specifier: ^4.1.0
         version: 4.1.0(@vue/devtools-api@8.2.1)(typescript@6.0.3)(vue@3.5.44(typescript@6.0.3))

@@ -30,6 +30,8 @@
       }
     ],
     "failures": [],
+    "holders": [],
+    "origin": "workspace",
     "templates": [
       {
         "kind": "skill",

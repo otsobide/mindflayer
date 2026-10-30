@@ -50,7 +50,7 @@ make web/lint             # ESLint, its style included; make web/fmt fixes that
 make web/build            # vue-tsc, then apps/web/dist, which the server embeds
 make web/types            # write the types from Rust into src/api/generated, then vue-tsc
 make web/types/check      # cargo and git only (CI): fail when they are not the ones committed
-make web/fixtures         # write the snapshots the views' tests render, from Rust (cargo only)
+make web/fixtures         # write the snapshots and answers the views' tests render, from Rust (cargo only)
 make web/fixtures/check   # cargo and git only (CI): fail when they are not the ones committed
 make web/typecheck        # vue-tsc alone
 make web/test PNPM='npx --yes pnpm@12.15.0'
@@ -117,7 +117,9 @@ under `apps/` with its own `Makefile`:
   snapshot every front end reads a workspace through, with what it counts
   and each project's health, and the part of it `list --json` prints
   (`view`), one file of an artifact read as text for
-  the panel (`contents`), which paths and entries a request from outside
+  the panel, cut at its front matter when it is the one the artifact is
+  read from, and every file it holds listed (`contents`), which paths and
+  entries a request from outside
   may name (`policy`), and what `show` and `validate` say of each
   artifact (`reading`). Its only I/O is files, and it never reads the
   environment. Under its `ts` feature, `typescript` gives what it hands a
@@ -167,14 +169,24 @@ under `apps/` with its own `Makefile`:
   Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
   too. `src/api/transport.ts` is the `Transport` interface and `useTransport`,
   and `src/api/http.ts` its HTTP implementation, `src/api/snapshot.ts` the
-  one query of the snapshot every view reads. `src/pages/` holds one page
-  per route (file routes): the overview (`index`), the projects
-  (`projects`) and a project's page (`project`, which `src/routes.ts`
-  names by its entry in the query). `src/components/` holds the frame
+  one query of the snapshot every view reads, and `src/api/artifact.ts` the
+  queries of an artifact's files and of one file. `src/pages/` holds one
+  page per route (file routes): the overview (`index`), the projects
+  (`projects`), a project's page (`project`, which `src/routes.ts` names by
+  its entry in the query), the library (`library`), one of its own
+  (`artifact`, named by its kind and name in the query), the shelf
+  (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
+  the query a page keeps its state in, `src/library.ts` finds the projects
+  holding one of the library's own, `src/markdown.ts` draws a skill's
+  markdown from its tokens, and `src/time.ts` says the ledger's times.
+  `src/components/` holds the frame
   (`AppSidebar`, `AppHeader`, `AppLogo`) and the views' pieces: the badges
   of a state, a health and the agents, a count, the warnings panel, the
-  commands an empty state names, and `SnapshotGate`, which draws a page
-  once the snapshot is answered. `src/stores/` holds Pinia's UI state,
+  commands an empty state names, what is wrong with an artifact
+  (`IssueList`), a rendered body (`MarkdownBody`), an artifact's files
+  (`FileTree`), the ledger's latest actions (`ActivityFeed`), and
+  `SnapshotGate`, which draws a page once the snapshot is answered.
+  `src/stores/` holds Pinia's UI state,
   `src/query.ts` the Vue Query client, `src/theme.ts` the palette, `src/color-mode.ts` the
   colour mode, and `src/overrides/` what replaces two pieces of the
   libraries for the CSP. `src/*.d.ts` are written by the Vite plugins and
@@ -571,7 +583,11 @@ These are easy to break from a single file without noticing.
     `copy::followed`, the check `copy::tree` makes, so one leading out of its
     holder is refused: a project's root, or the folder the workspace keeps
     its own of that kind in, whose root may be a home. It is the only way: `show`, which prints an artifact
-    whole through any link, is on the `Refusal` list (`show_unheld`).
+    whole through any link, is on the `Refusal` list (`show_unheld`). What
+    an artifact holds is listed in the same module, to the same bound
+    (`contents::Files`): a link further down that leads out, back into a
+    folder it is in, or to nothing is listed with why and never followed,
+    and a listing stops at `contents::FILES_CAP`.
   - An installed name must be one folder name for a skill
     (`install::is_folder_name`), and for a rule a route held to the name
     rules, which never climbs out (`install::is_installable_name`).
@@ -776,8 +792,16 @@ These are easy to break from a single file without noticing.
   (`kinds`, `states`, `healths`, the registry's). A count or a verdict a
   view needs is added to `view::Snapshot` in core, never worked out from
   the lists, and a kind core adds reaches every view with no change
-  (`tests/kinds.test.ts`). Every page passes axe (`tests/a11y.test.ts`),
-  works from the keyboard, and never says a state by colour alone.
+  (`tests/kinds.test.ts`). So is a word it compares or shows: an origin as
+  `--from` takes it (each shelf row's, source's and load's `origin`, and
+  `library.origin`), never put together from an address and a branch, and
+  an artifact's front matter, which core cuts from the file
+  (`contents::Manifest`). So is which projects hold a copy of one of the
+  library's own (`library.holders`, by `install::from_the_library`, the
+  rule `flayer remove --everywhere` follows), never told by comparing a
+  copy's origin, which an install from before origins were kept lacks. Every
+  page passes axe (`tests/a11y.test.ts`), works from the keyboard, and never
+  says a state by colour alone.
 - **The panel's types are written from Rust, and are its contract.** Every
   type core and the CLI hand the panel, or take from it, derives
   `ts_rs::TS` beside serde's derive under the `ts` feature
@@ -800,9 +824,15 @@ These are easy to break from a single file without noticing.
   by Iconify's offline build (`src/overrides/iconify.ts`), the palette is
   declared in `main.css` while Nuxt UI's colours plugin is a stub
   (`src/overrides/colors.ts`), and the colour mode switches by class
-  (`src/color-mode.ts`). `tests/dist.test.ts` builds the panel and checks
-  it; `tests/shell.test.ts` and `tests/views.test.ts` fail on any `<style>`
-  element added at run time, and on an icon the bundle lacks.
+  (`src/color-mode.ts`). What somebody else wrote, a skill's markdown, is
+  drawn element by element from marked's tokens (`src/markdown.ts`), never
+  put on the page as HTML: raw HTML shows as text, no element gets a style
+  or an event, no image loads, and a link keeps its address only to another
+  site or a mail address, never to an artifact's file
+  (`tests/markdown.test.ts`, `tests/artifact.test.ts`).
+  `tests/dist.test.ts` builds the panel and checks it; `tests/shell.test.ts`
+  and `tests/views.test.ts` fail on any `<style>` element added at run
+  time, and on an icon the bundle lacks.
 - **Activating prints, and writes nothing.** `flayer activate` prints core's
   code (`activate::script`), and nothing on stdout when it fails, so `eval`
   runs nothing. Nor does it remember the workspace in the default one's
@@ -885,8 +915,10 @@ These are easy to break from a single file without noticing.
   by hand: `apps/cli/tests/fixtures_test.rs`, under the `ts` feature,
   builds the workspaces by running the commands and writes what the
   panel's backend answers (`make web/fixtures`), with the temporary folder
-  as `/home`, fixed ids and pinned times. `tests/panel.ts` reads them and
-  mounts the panel at an address, answering its queries with one; a test
+  as `/home`, fixed ids and pinned times, and beside them what opening each
+  of the library's own is answered with (`library.json`, every files and
+  contents query an artifact's page asks). `tests/panel.ts` reads them and
+  mounts the panel at an address, answering its queries with them; a test
   about something no fixture holds changes its own copy.
   `dist.test.ts` builds the panel in a process of its own, into a temporary
   folder under `node_modules`, and leaves `dist/` alone. `licences.test.ts`

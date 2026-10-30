@@ -24,6 +24,12 @@ name: string | null,
  */
 offers: number, 
 /**
+ * What `--from` takes for what it offers, and what an install of one
+ * of them records as its origin: the first spelling's, for a second
+ * spelling of one workspace, as its offers are.
+ */
+origin: string, 
+/**
  * Why it would not open, when it would not.
  */
 error: Said | null, };

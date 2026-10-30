@@ -23,6 +23,17 @@ function withAKindMore(): Snapshot {
   for (const project of snapshot.projects) {
     project.tally.kinds.push({ kind: MCP, count: project.entry === 'api' ? 1 : 0 })
   }
+  snapshot.library.artifacts.push({
+    kind: MCP,
+    name: 'linear',
+    summary: 'Issues in Linear',
+    state: null,
+    agents: [],
+    origin: null,
+    targets: ['.mindflayer/library/mcp/linear.json'],
+    issues: [],
+    unread: null
+  })
   snapshot.projects[0]!.artifacts.push({
     kind: MCP,
     name: 'github',
@@ -38,6 +49,24 @@ function withAKindMore(): Snapshot {
 }
 
 describe('a kind core adds', () => {
+  it('gets a filter of the shelf, counted as the snapshot counts it', async () => {
+    const { page } = await render('/shelf?kind=mcp', withAKindMore())
+
+    const filter = page.get('[data-testid="filter-kind-mcp"]')
+    expect(filter.attributes('aria-pressed')).toBe('true')
+    expect(filter.get('[data-testid="kind-count"]').text()).toBe('0')
+    expect(page.find('[data-testid="no-match"]').exists()).toBe(true)
+  })
+
+  it('gets a page of the library, counted as the snapshot counts it', async () => {
+    const { page } = await render('/library?kind=mcp', withAKindMore())
+
+    const link = page.get('[data-testid="kind-mcp"]')
+    expect(link.attributes('aria-current')).toBe('page')
+    expect(link.get('[data-testid="kind-count"]').text()).toBe('2')
+    expect(texts(page, '[data-testid="name"]')).toEqual(['linear'])
+  })
+
   it('gets a card on the overview, counted as the snapshot counts it', async () => {
     const { page } = await render('/', withAKindMore())
 

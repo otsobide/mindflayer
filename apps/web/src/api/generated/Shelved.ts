@@ -3,12 +3,19 @@ import type { Kind } from "./Kind";
 import type { Source } from "./Source";
 
 /**
- * One gathered artifact, and the source it came from.
+ * One artifact gathered onto the shelf, with what `--from` takes for it.
  *
- * What it serializes to is a contract, as a status report's is: each field
- * by its name.
+ * The ledger's row with its origin beside it, as `gather list --json`
+ * prints an offer from the shelf: the same names, so a script reading
+ * either reads one shape. Beside the row rather than in it, since an offer
+ * flattens the row beside an origin of its own.
  */
-export type Gathered = { kind: Kind, name: string, 
+export type Shelved = { 
+/**
+ * Where it came from, as `--from` takes it and an install of it
+ * records it ([`Source::origin`]).
+ */
+origin: string, kind: Kind, name: string, 
 /**
  * Where it sits, relative to the workspace root, `/` separated.
  */

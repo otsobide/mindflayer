@@ -5,8 +5,9 @@ import type { Holder } from "./Holder";
  * A read the panel asks for.
  *
  * Tagged as a task is, by its name in snake_case beside its fields:
- * `{"type": "snapshot"}`, `{"type": "contents", "holder": {"type":
- * "workspace"}, "reference": "skill:deploy", "file": "SKILL.md"}`. A field
- * a query does not have is refused, as a task's is.
+ * `{"type": "snapshot"}`, `{"type": "files", "holder": {"type":
+ * "workspace"}, "reference": "skill:deploy"}`, `{"type": "contents",
+ * "holder": {"type": "workspace"}, "reference": "skill:deploy", "file":
+ * "SKILL.md"}`. A field a query does not have is refused, as a task's is.
  */
-export type Query = { "type": "snapshot", } | { "type": "contents", holder: Holder, reference: string, file: string, };
+export type Query = { "type": "snapshot", } | { "type": "files", holder: Holder, reference: string, } | { "type": "contents", holder: Holder, reference: string, file: string, };
