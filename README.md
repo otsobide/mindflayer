@@ -1867,6 +1867,17 @@ lately: the latest gathers, installs, uninstalls, relinks and adoptions the
 ledger logged, newest first, with every URL in them shown without
 credentials. An empty shelf names `flayer gather git`.
 
+**It follows the disk.** A change made from a terminal, the TUI or an
+editor shows in the panel within a moment, without a reload: a skill edited,
+a project linked, an install. The server watches what the workspace's
+snapshot reads, its marker, its ledger, its library and its shelf, and in
+each project its marker, the files its agents read and the folders it keeps
+skills and rules in, each folder on its own and never a whole repository,
+and tells every open tab when something there changed, which then reads the
+workspace again. When the system will not let it watch everything, which on
+Linux is the limit `fs.inotify.max_user_watches` sets, each page says so
+above what it shows, with a button that reads everything again.
+
 Every page works from the keyboard and says every state in words, never by
 colour alone. So far the panel only shows: changing things from it comes with
 the [next milestone](https://github.com/otsobide/mindflayer/milestones). The
@@ -1874,8 +1885,11 @@ API under it is there for a script holding the token as a Bearer token:
 `POST /api/query` for a read (`{"type": "snapshot"}` answers what the panel
 draws, `{"type": "files", ...}` what one artifact holds, and `{"type":
 "contents", ...}` one file of it, as text), `POST /api/commands/preview` for
-the lines a task is, `POST /api/commands` to run them, and `GET
-/api/transcript` for everything the session ran.
+the lines a task is, `POST /api/commands` to run them, `GET
+/api/transcript` for everything the session ran, and `GET /api/events` for
+what happens as it happens, as server-sent events: `changed` when something
+watched changed, `command_started` and `command_finished` around each run,
+and `resync` when everything should be read again.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
