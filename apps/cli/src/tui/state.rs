@@ -105,15 +105,16 @@ impl Workspace {
 
     /// Where the scan found the project `member`'s entry was, moved: the one
     /// unlinked directory holding the id the workspace last saw there, as
-    /// `flayer scan` says it (`moved`). Matched by the directory each names
-    /// rather than by spelling, since the entry is spelled as the marker
-    /// has it and the scan's route as `flayer link` would take it.
+    /// `flayer scan` says it (`moved`). Matched by core's
+    /// `scan::moved_from`, as the panel's backend matches it, since the
+    /// entry is spelled as the marker has it and the scan's route as
+    /// `flayer link` would take it.
     pub fn moved_to(&self, member: &Member) -> Option<&Unlinked> {
         self.unlinked.iter().find(|unlinked| {
             unlinked
                 .moved
-                .as_ref()
-                .is_some_and(|old| paths::normalize(&self.root.join(old)) == member.root)
+                .as_deref()
+                .is_some_and(|old| scan::moved_from(old, &self.root, &member.root))
         })
     }
 }

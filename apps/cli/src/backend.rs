@@ -155,7 +155,7 @@ pub struct Suggestion {
     /// it left stale.
     pub offers: Option<MindsChange>,
     /// The entry it moved from, as the marker spells it, which a relink
-    /// names: matched by the directory each names, as the minds screen
+    /// names: matched by core's `scan::moved_from`, as the minds screen
     /// matches it, since the scan spells `moved` as `flayer link` would
     /// take it. None when it did not move.
     pub moved_from: Option<String>,
@@ -166,10 +166,9 @@ impl Scanned {
     fn of(workspace: &FlayerWorkspace, scan: &Scan) -> Scanned {
         let members = workspace.members();
         let left = |moved: &str| {
-            let root = paths::normalize(&workspace.root().join(moved));
             members
                 .iter()
-                .find(|member| member.root == root)
+                .find(|member| scan::moved_from(moved, workspace.root(), &member.root))
                 .and_then(|member| paths::to_config_string(&member.entry))
         };
         let found = scan

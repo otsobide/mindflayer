@@ -534,6 +534,21 @@ fn route(directory: &Path, from: &Path) -> String {
         .unwrap_or_else(|| directory.display().to_string())
 }
 
+/// Whether `moved`, the entry a scan spelling routes from `from` says a
+/// directory moved from ([`Found::moved`]), is the one whose project was at
+/// `root`, where the registry resolves an entry ([`crate::Member::root`]).
+///
+/// Matched by the directory each names rather than by spelling, since
+/// `moved` is spelled as [`route`] spells it, by its path for a folder
+/// outside `from`, and an entry as the marker has it, by a route climbing
+/// out of the workspace for the same folder. One answer for the minds
+/// screen, which offers the relink on an entry's row, and the panel's
+/// backend, which names the entry a relink follows: the same match written
+/// in each would let one offer a link where the other offers a relink.
+pub fn moved_from(moved: &str, from: &Path, root: &Path) -> bool {
+    paths::normalize(&from.join(moved)) == root
+}
+
 /// The directories directly inside `directory`, in name order, leaving out
 /// hidden ones and symlinks.
 fn subdirectories(directory: &Path) -> Result<Vec<PathBuf>, io::Error> {

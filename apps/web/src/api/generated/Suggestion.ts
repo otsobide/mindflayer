@@ -24,7 +24,7 @@ why: string | null,
 offers: MindsChange | null, 
 /**
  * The entry it moved from, as the marker spells it, which a relink
- * names: matched by the directory each names, as the minds screen
+ * names: matched by core's `scan::moved_from`, as the minds screen
  * matches it, since the scan spells `moved` as `flayer link` would
  * take it. None when it did not move.
  */

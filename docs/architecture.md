@@ -3943,7 +3943,8 @@ nothing, under the workspace or the folders `flayer minds` was given, the
 screen says the line that names the directory by hand. The scan's match and
 the stale row are told apart by the directory each names, not by spelling,
 since the entry is spelled as the marker has it and the scan's route as
-`flayer link` would take it. A key of its own rather than a second answer
+`flayer link` would take it: by core's `scan::moved_from`, which the panel's
+backend asks too, so the two never disagree on which entry moved. A key of its own rather than a second answer
 to `U`'s question: unlinking drops the entry and leaves what was installed
 recorded under a route nothing is at, and the pane says both keys, so the
 choice is made seeing where the project went.
@@ -5054,9 +5055,10 @@ What the pages offer:
   asked for again once the run is over.
 - **A relink of what the scan found moved**, by the entry it moved from, as
   the marker spells it, which the backend names beside it (`moved_from`),
-  matching the scan's `moved` to the entry by the directory each names, as
-  the minds screen does: the scan spells `moved` as `flayer link` would take
-  it, which a path outside the workspace spells differently from the entry.
+  matching the scan's `moved` to the entry by the directory each names
+  through the function the minds screen matches by (`scan::moved_from`):
+  the scan spells `moved` as `flayer link` would take it, which a path
+  outside the workspace spells differently from the entry.
 - **A project's agents and share mode**, from its toggles, sent as they
   stand beside what its settings said (`Task::Toggled`), never as the
   lines' agents: `Task::settings` turns the two into the `agents` and
