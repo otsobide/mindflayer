@@ -1972,8 +1972,12 @@ Every page works from the keyboard and says every state in words, never by
 colour alone. The API under it is there for a script holding the token as a
 Bearer token: `POST /api/query` for a read (`{"type": "snapshot"}` answers
 what the panel draws, `{"type": "files", ...}` what one artifact holds,
-`{"type": "contents", ...}` one file of it, as text, and `{"type": "scan",
-"roots": ["/home/you/Projects"], "depth": null}` what Discover lists), `POST
+`{"type": "contents", ...}` one file of it, as text, `{"type": "scan",
+"roots": ["/home/you/Projects"], "depth": null}` what Discover lists, and
+`{"type": "plan", "selection": [{"project": "alpha", "reference":
+"skill:deploy", "origin": "workspace", "wanted": true}]}` what boxes of a
+project and an offer, ticked or not, amount to: the tasks that carry them
+out, beside what clashes and what is locked, with nothing run), `POST
 /api/commands/preview` for the lines a task is and what of them the panel
 asks you to confirm (`{"lines": [...], "confirm": [...]}`), `POST
 /api/commands` to run them, which asks nobody, `GET
