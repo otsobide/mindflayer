@@ -249,8 +249,12 @@ async function take(browser: Browser, served: Serving, mode: 'light' | 'dark', s
         await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))
       })
       // The page as the image will show it, every word on it and every
-      // attribute, a placeholder's or a link's included.
-      const shown = `${page.url()}\n${await page.content()}\n${await page.evaluate(() => document.body.innerText)}`
+      // attribute, a placeholder's or a link's included, and what each
+      // field holds: neither the markup nor the text carries a value typed
+      // or bound into a field, as v-model binds Discover's folders, which
+      // start as the workspace's own when the address names none.
+      const fields = await page.evaluate(() => [...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select')].map(field => field.value))
+      const shown = [page.url(), await page.content(), await page.evaluate(() => document.body.innerText), ...fields].join('\n')
       const found = leaks(shown, served.token)
       if (found.length > 0) {
         throw new Error(`the ${shot.name} page shows ${found.join(', ')}, so it is not written`)

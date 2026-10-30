@@ -5345,12 +5345,15 @@ mode is picked through the cookie the panel keeps it in (`src/preferences.ts`),
 light for the tour and dark as well for the project's page, which the README
 shows in a `<picture>` that follows the reader's.
 
-Before an image is written, the page is read, its URL, its markup and its
-text, for this account's home, a path under any other home but `/home/you`
-(the reference's stand-in, which the panel's own placeholders use), the
-account's name as a folder of a path, and the launch token, and any of
-them fails the run: the name only as a folder, since as a bare word it
-would be found in a page that says `root` or `admin` of something else. A
+Before an image is written, the page is read, its URL, its markup, its
+text and what each of its fields holds (a value bound into a field is in
+neither the markup nor the text, and Discover's folders start as the
+workspace's own), for this account's home, a path under any other home
+but `/home/you` (the reference's stand-in, which the panel's own
+placeholders use), the account's name as a folder of a path, and the
+launch token, and any of them fails the run: the name only as a folder,
+since as a bare word it would be found in a page that says `root` or
+`admin` of something else. A
 page that threw, could not read the workspace, or says it cannot watch it
 fails too, as does an image over 300 KB, which regenerating would add to
 the history each time; each is near half that. Neither CI nor an aggregate
