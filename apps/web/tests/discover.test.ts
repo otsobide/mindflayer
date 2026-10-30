@@ -115,6 +115,22 @@ describe('the page of what could be linked', () => {
     expect(page.find('[data-testid="scanned"]').exists()).toBe(true)
   })
 
+  it('takes a depth emptied, or one the address cannot read as a whole number, for core\'s own', async () => {
+    const { queries, transport } = answering(fixture('workspace'))
+    const { page, router } = await render(`/discover?root=${encodeURIComponent(ROOT)}&depth=abc`, transport)
+    const input = page.get('[data-testid="scan-depth"] input, input[data-testid="scan-depth"]')
+
+    for (const typed of ['2', '']) {
+      await input.setValue(typed)
+      await input.trigger('blur')
+      await page.get('[data-testid="scan-form"]').trigger('submit')
+      await flushPromises()
+    }
+
+    expect(scansAsked(queries).map(query => query.type === 'scan' && query.depth)).toEqual([null, 2, null])
+    expect(router.currentRoute.value.query.depth).toBeUndefined()
+  })
+
   it('is never scanned again by what the server streams, only by asking', async () => {
     const { queries, tell, transport } = commanding()
     const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)

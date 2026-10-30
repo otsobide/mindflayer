@@ -17,14 +17,24 @@ const change = useQueryChange()
 const runner = useRunner()
 const { busy } = runner
 
+/**
+ * How many levels down `value` says, or none for core's own depth: what an
+ * emptied depth field holds, which Reka's number field makes `undefined`,
+ * and what a `?depth=` that is not a whole number says, rather than a `NaN`
+ * kept in the address and sent as `null` only because JSON has no `NaN`.
+ */
+function levels(value: number | string | null | undefined): number | null {
+  const number = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value
+  return typeof number === 'number' && Number.isSafeInteger(number) && number >= 0 ? number : null
+}
+
 // What was asked is the address's (src/address.ts), `?root=/home/you/Work
 // &root=/srv/git&depth=2`, so a reload or a link scans the same folders
 // again. No folder named is nothing asked: the page scans only once
 // somebody asks, never on its own.
 const asked = computed<Asked | undefined>(() => {
   const roots = every(route.query.root)
-  const depth = first(route.query.depth)
-  return roots.length === 0 ? undefined : { roots, depth: depth === undefined ? null : Number(depth) }
+  return roots.length === 0 ? undefined : { roots, depth: levels(first(route.query.depth)) }
 })
 
 const { data: snapshot } = useSnapshot()
@@ -37,8 +47,8 @@ const { data: scanned, error, isFetching, refetch, forget, stale } = useScan(ask
  * let through a folder the CLI would refuse, or refuse one it takes.
  */
 const roots = ref('')
-/** How many levels down, none for core's own depth. */
-const depth = ref<number | null>(null)
+/** How many levels down, none for core's own depth, read through `levels`. */
+const depth = ref<number | null | undefined>(null)
 
 // What the address asked, or the workspace's own folder while it asks
 // nothing, as `flayer scan` with no folder looks there: a starting point
@@ -58,7 +68,7 @@ watch([asked, () => snapshot.value?.workspace.path], ([now, path]) => {
  * an earlier set of folders, which whatever was linked since has changed.
  */
 function scan() {
-  const wanted: Asked = { roots: roots.value.split('\n').filter(line => line !== ''), depth: depth.value }
+  const wanted: Asked = { roots: roots.value.split('\n').filter(line => line !== ''), depth: levels(depth.value) }
   if (JSON.stringify(wanted) === JSON.stringify(asked.value)) {
     void refetch()
   } else {
