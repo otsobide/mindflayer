@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { defineComponent, h } from 'vue'
 import { useRunner, type Runner } from '@/api/commands'
@@ -118,9 +118,13 @@ describe('a task the panel runs', () => {
     await click('[data-testid="run"]')
     await asked
 
-    const toast = text(document.body.querySelector('[data-slot="root"][data-state="open"]') ?? document.body)
-    expect(toast).toContain(`Ran ${LINK.ran.lines[0]}`)
-    expect(toast).toContain(LINK.ran.outcome.runs[0]!.stdout.trim())
+    // A toast is drawn on a later tick than the run's answer, later still
+    // on a slow machine, so it is waited for rather than read at once.
+    await vi.waitFor(() => {
+      const toast = text(document.body.querySelector('[data-slot="root"][data-state="open"]') ?? document.body)
+      expect(toast).toContain(`Ran ${LINK.ran.lines[0]}`)
+      expect(toast).toContain(LINK.ran.outcome.runs[0]!.stdout.trim())
+    })
   })
 
   it('is let go with nothing run when somebody says no', async () => {
@@ -145,8 +149,10 @@ describe('a task the panel runs', () => {
 
     expect(sent).toEqual([{ task, mode: 'preview' }])
     expect(find('[data-testid="preview"]')).toBeNull()
-    expect(text(document.body)).toContain('Nothing ran')
-    expect(text(document.body)).toContain('(not_found)')
+    await vi.waitFor(() => {
+      expect(text(document.body)).toContain('Nothing ran')
+      expect(text(document.body)).toContain('(not_found)')
+    })
   })
 
   it('is over once the stream says it finished and the views have read the workspace again', async () => {

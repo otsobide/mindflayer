@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { Project } from '@/api/generated/Project'
 import { commanded, commanding, fixture, render, texts, unmount } from './panel'
@@ -213,7 +213,8 @@ describe('linking a project from the table', () => {
 
     expect(sent).toEqual([{ task: { type: 'link', path: 'Projects/../blog/' }, mode: 'preview' }])
     expect(document.body.querySelector('[data-testid="preview"]')).toBeNull()
-    expect(document.body.textContent).toContain('Nothing ran')
+    // The toast is drawn on a later tick than the refusal, so it is waited for.
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Nothing ran'))
     expect((page.get('input[data-testid="link-path"]').element as HTMLInputElement).value).toBe('Projects/../blog/')
   })
 
