@@ -1692,7 +1692,29 @@ read, built and ordered in core from the read types the commands print:
   names `gather list --json` prints an offer from the shelf by, rather than
   a shape of the snapshot's own; working the origin out in the panel, from
   the address and the branch, was the other way, which would have put the
-  rule for `--from` in TypeScript.
+  rule for `--from` in TypeScript;
+- everything there is to install (`offers`, `view::Offered`), from
+  wherever it is offered, kind by kind in the order an install screen
+  lists it, each with its `place` (`workspace`, `loaded` or `shelf`) and
+  its `origin`; and each entry's boxes of them that are not empty
+  (`boxes`, `view::Boxes`), in the registry's order: for each offer of a
+  name the project holds something of or records, the state of the name
+  and whether its box is ticked (`view::HeldBox`), and each kind none of
+  its boxes can be asked about, by the code a plan locks one by
+  (`view::Closed`: `no_target` from `install::receives`, or why its entry
+  opens no project). Told by the install screen's own functions, over the
+  offers read once rather than once a project (`install::survey_among`,
+  then `install::holding`), so the panel's matrix opens on the boxes the
+  screen opens on, and each box asked as the snapshot shows it plans
+  nothing, which a test holds it to. The offers rather than the library,
+  the shelf and the loads put together by the panel: only core's list
+  leaves out a name no copy can be filed under, and reads what each loaded
+  workspace offers, which nothing else in a snapshot lists. In the snapshot
+  rather than a query of its own, as the scan is: the boxes are of what the
+  workspace holds, which every live update reads again, and the survey
+  they need hashes no copy the report does not hash already; the rest is a
+  look at each offer's place in each folder a project installs in
+  ([open questions](#open-questions)).
 
 One value rather than each front end putting its view together from the
 reports, as the TUI did until #62: which unreadable file is which artifact's,
@@ -2887,6 +2909,23 @@ it (`Planned`, by `Task::from`), for the panel to send back as one
 its own. Leaving the plan in the screen's `install/state.rs`, where the
 rules lived until #78, was the alternative, rejected: the panel would have
 had to spell them again in TypeScript, or go without a matrix.
+
+The panel's matrix (#79) marks boxes as the screen does, and holds less:
+it opens on the boxes the snapshot ticks (`boxes`, [the read
+model](#the-read-model)), and sends only the boxes somebody changed, each
+marked the other way round from what it shows, in the order marked, a box
+marked back being no mark. It unticks nothing of its own when another offer
+of a name is ticked: ticking it alone asks for that offer, which core plans
+as the install that replaces the one held, and ticking a second asks for
+two, which core says clash (`wanted_twice`). Nor does it hold a box
+somebody's or edited: marked, the plan locks it, by `foreign` or `edited`,
+and the panel draws the lock on the box and says why below, before anything
+runs. Sending every box as it shows, rather than those changed, was the
+other way, and would ask core about hundreds of boxes to plan a few, and
+every offer of a name somebody's copy ticks would clash with the others. A
+box of a kind its project can take none of, which the snapshot closes, is
+the one it never marks: the plan would lock it by the same code
+(`no_target`), which the snapshot says already.
 
 ### Taking out what nothing offers
 
@@ -4934,8 +4973,8 @@ where serde's are, and the feature only reads them.
 
 ### Its views
 
-Seven pages draw the snapshot ([the read model](#the-read-model)), and an
-eighth a scan beside it, each a file under `src/pages`:
+Eight pages draw the snapshot ([the read model](#the-read-model)), and a
+ninth a scan beside it, each a file under `src/pages`:
 
 - **The overview** (`/`) names the workspace, where it is and why that one,
   counts what it holds from the snapshot's `summary`, a card for every kind
@@ -4970,6 +5009,16 @@ eighth a scan beside it, each a file under `src/pages`:
 - **The shelf** (`/shelf`) lists what was gathered, filtered by kind, by
   name, summary or origin, each with its `origin`, the commit it was taken
   at and when.
+- **Assign** (`/assign?kind=...&origin=...&agent=...&q=...&by=project`) is
+  the matrix (#79): every offer in `offers` against every project, a row an
+  offer under a heading for its origin and a column a project, or turned
+  round by project, a row a project and the origins in a band over the
+  offers' columns. Each box is ticked where `boxes` says, with the icon of
+  its name's state over its corner, and one of a kind its project can take
+  none of is closed, saying why. Kind, origin and text filter the offers and
+  the agent the projects, whichever way round, in the address. The boxes
+  marked are planned, and applied ([its changes](#its-changes)).
+
 - **The sources** (`/sources`) lists where the shelf is filled from, each
   with its `origin`, branch, folder, commit and what it supplied, and the
   latest actions the ledger logged (`history`), newest first.
@@ -5028,8 +5077,10 @@ turns each into what Vue Query is to ask for again, never a read of its own
 and never a scan: `changed` marks the snapshot stale, and what was read of
 an artifact in a holder among its scopes; `resync` and `command_finished`
 mark all of those, since a command can change what nothing watches. Those
-queries are named by the first word of their key (`markStale`), rather than
-every query marked, for one asked for by hand: a scan (`src/api/scan.ts`,
+queries, and the matrix's plan and the preview of its lines, which are of
+the disk as it stands (`src/api/plan.ts`, keyed `plan` and `preview`), are
+named by the first word of their key (`markStale`), rather than every query
+marked, for one asked for by hand: a scan (`src/api/scan.ts`,
 keyed `scan`) reads the disk far past what is watched, and an event asking
 for it again would run one on every change, every command and every tab
 shown again. A scan is never stale on its own either, so neither a page
@@ -5062,6 +5113,24 @@ is waiting until then, and says why when the server refused.
   keeps, only chooses what to draw of what the snapshot lists. A sort by
   name or path compares the words as the browser collates them, and one by
   a kind's count compares numbers.
+- **The matrix is drawn a screen at a time.** Its rows and its columns
+  are both virtualized (`AssignGrid.vue`, with `@tanstack/vue-virtual`,
+  which Nuxt UI's table virtualizes with already, so no package came with
+  it), each laid out from the one size every row and every column has, so
+  nothing is measured: a matrix of hundreds of offers by hundreds of
+  projects holds a screen's worth of boxes, and a scroller nothing has laid
+  out, as in a test, counts as the window. Each icon a box shows is drawn
+  once from the bundle and shown in every box by an SVG `<use>`, and one
+  listener on the grid serves every box's press, focus and key, since a
+  component or a listener for each of a screen's boxes was most of what
+  drawing one cost. `tests/matrix.test.ts` holds a matrix of 50 projects by
+  200 offers to at most 100 rows in the document, and its first render to
+  300 ms, run by vitest after every other suite (`test.projects`, by
+  `groupOrder`), since beside them it timed whatever else the runner was
+  busy with. It is a grid from the keyboard: `role="grid"` with each row
+  and cell saying its place among all of them, the arrows moving a box at a
+  time over the groups' headings, Home, End and the page keys further, and
+  one box in the tab order, the last moved to.
 - **A kind core adds reaches every view untouched**
   ([D-21](#d-21-the-panels-views-follow-the-capabilities-they-show)): a
   card, a column and a group each come from `kinds`, and a test adds one
@@ -5204,6 +5273,17 @@ What the pages offer:
   agents in, and that unticking every one asks `agents remove` of them all,
   is said once. Offered only where `migrates` is false: a project an older
   marker marks changes no setting until it is moved.
+- **The boxes marked on the matrix**, each as the plan takes it (`Cell`),
+  kept in Pinia while they are not applied (`src/stores/marks.ts`), since
+  only the browser knows them, and asked of the plan whenever they change
+  (`usePlan`): the page draws the lines its tasks are as the server
+  previews them (`usePreview`, the preview the runner asks for again once
+  Apply is pressed), every lock and clash on its box and listed with its
+  code, and nothing it works out itself ([a batch is planned in
+  core](#a-batch-is-planned-in-core)). **Apply** sends the tasks back as one
+  `apply_install`, as they came, and is offered only while the plan is of
+  the boxes marked now and runs something; once it ran, the marks are done
+  with, and the boxes are drawn again from what it changed.
 - **A migration, for a project an older marker marks**, the dry run first,
   `flayer migrate -p <project>`, whose report the page shows once it ran,
   then the migration, the same line with `--yes`, offered only then. The
@@ -5212,9 +5292,11 @@ What the pages offer:
   mode are the command's own, every agent and shared for a `mind.toml`,
   for the toggles to change once it has moved.
 
-The preview and the run are Vue Query mutations, and the transcript and the
-scan queries, so what the server answered lives where every answer does;
-which drawer is open is Pinia's, beside the sidebar's state.
+The preview and the run are Vue Query mutations, and the transcript, the
+scan, the plan and the matrix's preview of its lines queries, so what the
+server answered lives where every answer does; which drawer is open is
+Pinia's, beside the sidebar's state, and so are the boxes marked on the
+matrix.
 
 ### Its fixtures come from Rust
 
@@ -5238,7 +5320,14 @@ dry run and run, which the runner's, the transcript's and the pages' tests
 answer their tasks from (`commanding`), and `scan.json` what scanning the
 folder of the workspace `candidates.json` is a snapshot of is answered
 with, which the page of what could be linked is drawn from, beside that
-snapshot, so the two describe one workspace. So
+snapshot, so the two describe one workspace. `assigning.json` is a
+workspace built for the matrix, one name offered from the library and a
+loaded workspace, the shelf, a copy current, outdated, edited and
+somebody's, a project nothing can go into and an entry that opens none;
+`plans.json` what the backend plans for a few selections of its boxes, as
+the matrix sends them, a change, a replacement, and a clash and two locks
+beside a change; and `applied.json` what applying the first is previewed
+and run as. So
 the panel's tests render what core says rather than what a person drew,
 and a field the snapshot adds, renames or fills differently reaches them.
 What differs between runs is pinned: the temporary folder reads as
@@ -5377,6 +5466,20 @@ browsers over one server: a change to the shared fixture would move what
 the overview counts under a test reading it, and the second browser would
 find its project linked already.
 
+A spec says what its own workspace is built as (`building`): the matrix's
+(`e2e/assign.spec.ts`) takes `assignable`, a workspace loading `team`
+beside it, whose own skill it offers, and linking two projects for Claude
+and Codex. The skill, ticked into both, has to be copied where each agent
+reads it, in each; unticked out of one, confirmed, gone from there alone;
+each batch's line shown before it runs; and the same lines, typed into the
+copy, have to leave both projects holding the same files. From a load
+rather than the shelf, which only a gather from a git source fills, and the
+suite builds nothing a git source makes; an offer from the shelf is
+installed with `--from` as one from a load is, and the views' suites draw
+one from their fixture. That the ledger a batch leaves is the one its
+lines leave run in the CLI, every hash and action logged, is the backend
+suite's to hold (`backend_test.rs`), which reads it.
+
 No page may log a violation of the CSP. Each engine fires
 `securitypolicyviolation` and words its own console messages, and a
 message the browser rather than a script logs may not reach Playwright, so
@@ -5436,8 +5539,10 @@ is in, as a person's does, and the overview says `above` rather than that
 
 The tour is Playwright's library driving Chromium, not a spec: Playwright's
 runner would run the pages side by side, while the tour visits them once,
-in order: the preview of linking what Discover marked, then, once that has
-run, an unlink asked about and cancelled, and the transcript. Chromium
+in order: the matrix with a box ticked and another unticked, the plan's
+lines below them, never applied; the preview of linking what Discover
+marked, then, once that has run, an unlink asked about and cancelled, and
+the transcript. Chromium
 alone, since the images are the same in WebKit, which does not run
 everywhere. The viewport is 1440 by 900, wide enough for a project's table
 with every column beside the sidebar (1280 cut its targets short), at a
@@ -8010,7 +8115,11 @@ just listed.
   folder `install::targets` gives when it runs, and a project's agents are
   the snapshot's. A plan saying it of each change would be a second
   reading of the targets beside the install's own, which could come to
-  disagree with it; the matrix (#79) may want it all the same.
+  disagree with it. The matrix (#79) went without: each project names its
+  agents beside its column, and filters by them, and once a batch ran, a
+  project's page says which of them read each copy. A line of the plan
+  naming the agents it reaches is still the one thing the matrix shows
+  only after a run.
 - **An installation nothing offers any more holds the box of its name's
   offer.** A name the project holds ticks one of its offers' boxes
   (`install::holding`), so one installed from a place that no longer
@@ -8018,8 +8127,25 @@ just listed.
   screen always has, so that unticking it takes it out. Asking for that
   offer alone is then asking for what is so, and changes nothing; asked
   for with the origin it came from asked away, by the box the snapshot's
-  `origin` gives it, it is installed in its place. Whether the matrix
-  (#79) gives such an installation a box of its own is left to it.
+  `origin` gives it, it is installed in its place. The matrix (#79) gives
+  such an installation no box of its own: its rows are what an install
+  offers (`offers`), and one whose name nothing offers is the project's
+  page's and `uninstall --orphaned`'s, which an updates view (#80) may
+  draw a box for.
+- **Every snapshot surveys every offer in every project.** The boxes are
+  told as the install screen tells them, an offer's place looked at in
+  each folder a project installs in, so a live update of a workspace of
+  hundreds of offers and projects reads that many places again, on every
+  page and not only the matrix's. A query of its own, asked by the matrix
+  alone as the scan is asked by its page, was the other way, at the price
+  of a second read the live updates follow and a second answer that could
+  disagree with the snapshot drawn beside it; a workspace that makes the
+  survey slow would move it there.
+- **The benchmark times happy-dom.** The matrix's first render is held to
+  300 ms in the panel's own suite, which lays nothing out and builds its
+  document in JavaScript, so it is slower than a browser at the same work
+  and says nothing of painting. The browser suite times nothing; a bound
+  there would be one more number a runner's load moves.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has

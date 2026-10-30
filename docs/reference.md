@@ -1843,9 +1843,9 @@ says how it went; when it failed, or said a warning, the drawer of what it
 said opens, every warning, note and error under the line that said it, with
 its code. The panel links projects, from the folder you type above the
 projects table or from what **Discover** finds, relinks one that moved,
-unlinks one from its page, changes a project's agents and share mode, and
-migrates a project an older Mindflayer made; everything else is still a
-command away.
+unlinks one from its page, changes a project's agents and share mode,
+migrates a project an older Mindflayer made, and installs and uninstalls
+skills and rules from **Assign**; everything else is still a command away.
 
 **The transcript**, in every page's header, lists every task the session
 ran, from this tab or any other, each line with what it printed, and
@@ -1956,6 +1956,36 @@ commit last gathered and what it supplied, and below them what happened
 lately: the latest gathers, installs, uninstalls, relinks and adoptions the
 ledger logged, newest first, with every URL in them shown without
 credentials. An empty shelf names `flayer gather git`.
+
+**Assign** is a matrix of everything there is to install against every
+project: a row for each skill and rule the library, a loaded workspace or
+the shelf offers, under a heading for where it comes from, its origin as
+`--from` takes it, and a column for each project, or turned round, **by
+project**, with the origins over the columns. A box is ticked where the
+project holds that offer, as `flayer install` would leave it: of two
+places offering one name, the one its install came from, and every one
+when somebody else's copy of the name is there. An icon over a box says
+how the name stands in the project (`current`, `outdated`, `edited`,
+`missing`, `orphaned`, `foreign`), and a box of a kind the project can take
+none of, as a project naming no agent, is closed and says why. Type to
+filter the offers by name, summary or origin, show one kind or one origin,
+or the projects one agent works in; the address keeps all of it, and which
+way round it is.
+
+Press a box, or move to it with the arrow keys and press Space, to mark it
+the other way round, and again to take the mark away. Whatever is marked
+is planned at once, and the plan shows below: the lines that carry it out,
+one `flayer install -p ... --from <origin> <kind:name>` for each offer
+ticked, with every project ticking it, and one `flayer uninstall -p ...
+<kind:name>` for each name unticked, an offer ticked in place of another of
+its name replacing it rather than taking it out first; and what it holds
+back, each on its box and listed with its code: a box whose name is
+somebody's copy (`foreign`) or one changed since it was installed
+(`edited`), which only `--force` on the command line reaches, and one name
+asked of a project from two places (`wanted_twice`). **Apply** shows the
+lines, a confirmation when one uninstalls, and runs them as one batch, the
+install screen's; **Clear the marks** forgets them. A matrix of hundreds
+of offers and projects draws only what fits on screen.
 
 **It follows the disk.** A change made from a terminal, the TUI or an
 editor shows in the panel within a moment, without a reload: a skill edited,
