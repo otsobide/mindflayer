@@ -694,6 +694,30 @@ pub fn survey(
     project: &MindProject,
     kind: Kind,
 ) -> Result<Vec<Candidate>, InstallError> {
+    // Nothing is read of what is offered for a project that can take none
+    // of it.
+    if receives(project, kind).is_err() {
+        return Ok(Vec::new());
+    }
+    survey_among(
+        workspace,
+        ledger,
+        project,
+        kind,
+        &offers(workspace, ledger, kind)?,
+    )
+}
+
+/// [`survey`], against `offers`, every offer of `kind` as [`offers`] reads
+/// them: for a reader surveying every project a workspace links, which reads
+/// what is offered once rather than once a project, as a snapshot does.
+pub(crate) fn survey_among(
+    workspace: &FlayerWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    kind: Kind,
+    offers: &[Offer],
+) -> Result<Vec<Candidate>, InstallError> {
     // A rule reaches a project marked by its settings through the block of
     // its `AGENTS.md` rather than as a copy in a folder (D-03), so how one
     // stands there is told by the ledger and that block.
@@ -701,7 +725,7 @@ pub fn survey(
         if rules::receives(project).is_err() {
             return Ok(Vec::new());
         }
-        return rules::survey(workspace, ledger, project, offers(workspace, ledger, kind)?);
+        return rules::survey(workspace, ledger, project, offers);
     }
     let Ok(targets) = targets(project, kind) else {
         return Ok(Vec::new());
@@ -709,12 +733,11 @@ pub fn survey(
     let entry = project_entry(workspace, project);
     let recorded = ledger.copies(&entry, kind)?;
     let records = ledger.records(&entry, kind)?;
-    let offers = offers(workspace, ledger, kind)?;
     // Once a name: every offer of one name stands as the one installation
     // the project has of it, whichever of them it came from.
     let mut said: Vec<(String, Standing)> = Vec::new();
     let mut candidates = Vec::with_capacity(offers.len());
-    for offer in &offers {
+    for offer in offers {
         let standing = match said.iter().find(|(name, _)| name == offer.name()) {
             Some((_, standing)) => *standing,
             None => {
@@ -726,7 +749,7 @@ pub fn survey(
                     kind,
                     offer.name(),
                     &recorded,
-                    record.map(|record| (record, &offers[..])),
+                    record.map(|record| (record, offers)),
                 );
                 said.push((offer.name().to_owned(), standing));
                 standing
