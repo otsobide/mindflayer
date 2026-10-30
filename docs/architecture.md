@@ -3817,8 +3817,8 @@ and since the loop goes on reading the terminal, a question ssh asks there is
 raced for its answer, as the [open questions](#open-questions) say under
 Private repositories. The lines are still the task's command lines, as
 `App::lines` gives every task (`flayer init` first on the [default
-workspace](#the-default-workspace) before it is made), parsed and run by
-`execute`: the thread changes where they run, not what they are.
+workspace](#the-default-made-only-by-a-write) before it is made), parsed and
+run by `execute`: the thread changes where they run, not what they are.
 
 They go through a `Runner` on the way, which is the real parsers and commands
 unless `App::runner` holds a stand-in. A gather from a repository on the local
