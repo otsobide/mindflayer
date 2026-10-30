@@ -17,10 +17,10 @@ import { h, type VNode, type VNodeChild } from 'vue'
  *   reads as markup and never runs or styles anything.
  * - No element gets a `style` or an event attribute, and no class but the
  *   panel's own.
- * - A link to another site stays a link, opened in a tab of its own with no
- *   referrer. Any other, to a file of the skill's above all, is its text
- *   alone: the panel never links to an artifact's file, and a `javascript:`
- *   or `data:` URL never reaches an attribute.
+ * - A link to another site or a mail address stays a link, opened in a tab
+ *   of its own with no referrer. Any other, to a file of the skill's above
+ *   all, is its text alone: the panel never links to an artifact's file,
+ *   and a `javascript:` or `data:` URL never reaches an attribute.
  * - An image is never loaded: its description is shown in its place. The
  *   CSP would refuse one from another site, and one beside the skill is a
  *   file the server does not serve.

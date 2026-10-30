@@ -825,10 +825,11 @@ These are easy to break from a single file without noticing.
   drawn element by element from marked's tokens (`src/markdown.ts`), never
   put on the page as HTML: raw HTML shows as text, no element gets a style
   or an event, no image loads, and a link keeps its address only to another
-  site, never to an artifact's file (`tests/markdown.test.ts`,
-  `tests/artifact.test.ts`). `tests/dist.test.ts` builds the panel and checks
-  it; `tests/shell.test.ts` and `tests/views.test.ts` fail on any `<style>`
-  element added at run time, and on an icon the bundle lacks.
+  site or a mail address, never to an artifact's file
+  (`tests/markdown.test.ts`, `tests/artifact.test.ts`).
+  `tests/dist.test.ts` builds the panel and checks it; `tests/shell.test.ts`
+  and `tests/views.test.ts` fail on any `<style>` element added at run
+  time, and on an icon the bundle lacks.
 - **Activating prints, and writes nothing.** `flayer activate` prints core's
   code (`activate::script`), and nothing on stdout when it fails, so `eval`
   runs nothing. Nor does it remember the workspace in the default one's

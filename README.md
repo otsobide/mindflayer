@@ -1851,10 +1851,10 @@ is; what `validate` says of it; and the projects holding a copy, with the
 state, agents and targets of each, or the `flayer install` that would put it
 in one. What a skill holds is somebody else's, so the panel shows it and
 never runs it: HTML in a `SKILL.md` is shown as the markup it is, an image is
-named rather than loaded, and only a link to another site stays a link,
-opened in a tab of its own. No file is ever served as itself, and a link in
-the skill that leads out of the folder the library keeps its kind in is
-listed with why and never followed.
+named rather than loaded, and only a link to another site or a mail address
+stays a link, opened in a tab of its own. No file is ever served as itself,
+and a link in the skill that leads out of the folder the library keeps its
+kind in is listed with why and never followed.
 
 **The shelf** lists everything gathered, filtered by kind or by name,
 summary or origin, each with the commit it was taken at, when, and its

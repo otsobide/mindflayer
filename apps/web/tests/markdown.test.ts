@@ -48,7 +48,7 @@ describe('markdown somebody else wrote', () => {
     ])
   })
 
-  it('links only to another site, in a tab of its own, and never to a file beside the skill', () => {
+  it('links only to another site or a mail address, in a tab of its own, and never to a file beside the skill', () => {
     const page = draw([
       '[the guide](https://example.com/guide)',
       '[a reference](references/guide.md)',
