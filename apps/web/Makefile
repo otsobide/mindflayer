@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := build
-.PHONY: install build build/if-node test lint fmt types types/export types/check fixtures fixtures/check typecheck dev e2e e2e/run e2e/browsers clean
+.PHONY: install build build/if-node test lint fmt types types/export types/check fixtures fixtures/check typecheck dev e2e e2e/run e2e/browsers screenshots screenshots/run clean
 
 # pnpm at the version package.json's packageManager pins. Where it is not on
 # the PATH and corepack is not set up, name it some other way:
@@ -157,6 +157,21 @@ e2e: build ## Build the panel and the debug binaries, then run the end-to-end su
 # ARGS go to `playwright test`: a spec, `-g <title>`, `--debug`, `--ui`.
 e2e/run: $(INSTALLED) ## Run the end-to-end suite on the flayer and mind in E2E_BIN, in BROWSERS
 	MINDFLAYER_E2E_BIN='$(E2E_BIN)' node e2e/run.ts $(addprefix --project=,$(BROWSERS)) $(ARGS)
+
+# The README's screenshots, in ../../docs/images: the demo workspace
+# e2e/demo.ts builds with the commands, served by the binaries' `flayer ui`
+# and taken in Chromium by e2e/screenshots.ts, which fails on a page showing
+# a home's path, the account's name or the launch token, and on an image
+# over its budget. Chromium alone, which `make e2e/browsers
+# BROWSERS=chromium` downloads: the images are the same in any engine, and
+# WebKit does not run everywhere. Neither part of `test` nor of CI: the
+# images are taken when what the panel shows changes, and committed.
+screenshots: build ## Build the panel and the debug binaries, then take the README's screenshots into docs/images
+	cargo build -p mindflayer-cli
+	$(MAKE) screenshots/run
+
+screenshots/run: $(INSTALLED) ## Take the README's screenshots with the flayer and mind in E2E_BIN
+	MINDFLAYER_E2E_BIN='$(E2E_BIN)' node e2e/screenshots.ts
 
 clean: ## Remove the built panel, what the end-to-end suite wrote and the tools' caches, keeping node_modules
 	rm -rf dist test-results playwright-report node_modules/.cache node_modules/.vite node_modules/.tmp

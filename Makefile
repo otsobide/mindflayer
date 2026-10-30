@@ -68,6 +68,15 @@ lint/em-dash: ## Fail if a tracked file holds an em dash
 		exit $$status; \
 	fi
 
+# The README's screenshots are taken from the panel, never by hand: the
+# panel and the binaries built, then every page of its tour taken over a
+# demo workspace (apps/web/e2e/screenshots.ts). "docs" is no app, so this
+# does not collide with the <app>/<target> rules above. It needs Node, pnpm
+# and Playwright's Chromium (`make web/e2e/browsers BROWSERS=chromium`).
+.PHONY: docs/screenshots
+docs/screenshots: ## Build the panel and the binaries, then take the README's screenshots into docs/images
+	$(MAKE) -C apps/web screenshots
+
 .PHONY: run
 run: ## Run the CLI (pass args via ARGS="list")
 	$(MAKE) -C apps/cli run ARGS="$(ARGS)"

@@ -7,7 +7,7 @@
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 /**
  * The variables that lead a command to a real workspace or a real agent
@@ -82,6 +82,24 @@ export function given(): Places {
     }
   }
   return places(scratch, bin)
+}
+
+/**
+ * The folder above `folder`, itself included, that holds a `.mind` or a
+ * `.mindflayer`, if one does: resolving walks up the tree before it looks
+ * at a home, so a workspace built under such a folder could reach it.
+ * Here rather than in the driver, so that whatever else builds a workspace
+ * in the temporary folder refuses the same.
+ */
+export function marked(folder: string): string | undefined {
+  for (let at = folder; ; at = dirname(at)) {
+    if (existsSync(join(at, '.mind')) || existsSync(join(at, '.mindflayer'))) {
+      return at
+    }
+    if (dirname(at) === at) {
+      return undefined
+    }
+  }
 }
 
 /** The path of the binary called `name` in `bin`. */
@@ -168,10 +186,12 @@ export function succeed(at: Places, name: 'flayer' | 'mind', directory: string, 
 /**
  * `flayer ui` as a person starts it over the workspace `at` names, on a
  * port the system picks, with nothing opened: what the config starts the
- * suite's server with, and `serve` a spec's own.
+ * suite's server with, and `serve` a spec's own. With `workspace` `none` it
+ * names none, and finds the one it is started in, as a person's does: what
+ * the screenshots show, from a folder no other workspace is above.
  */
-export function ui(at: Places): string[] {
-  return ['ui', '--no-open', '--port', '0', '-C', at.workspace, ...pinned(at, 'fixture')]
+export function ui(at: Places, workspace: 'fixture' | 'none' = 'fixture'): string[] {
+  return ['ui', '--no-open', '--port', '0', '-C', at.workspace, ...pinned(at, workspace)]
 }
 
 /** A `flayer ui` a spec started, and how to stop it. */
@@ -195,8 +215,8 @@ const LINK = /^(?<origin>http:\/\/127\.0\.0\.1:\d+)\/\?token=(?<token>[0-9a-f]+)
  * of its own, which no other spec reads. Its stdout is read, never
  * printed, so the token stays out of the log.
  */
-export function serve(at: Places): Promise<Serving> {
-  const child = spawn(binary(at.bin, 'flayer'), ui(at), {
+export function serve(at: Places, workspace: 'fixture' | 'none' = 'fixture'): Promise<Serving> {
+  const child = spawn(binary(at.bin, 'flayer'), ui(at, workspace), {
     cwd: at.workspace,
     env: environment(at),
     stdio: ['ignore', 'pipe', 'pipe']

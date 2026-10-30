@@ -1,15 +1,17 @@
 //! The examples in `examples/`: a workspace of their own, holding two skills
 //! and two rules, that any workspace can load and install from without
-//! gathering anything first, and the README's walk-through of them, held to
-//! what the commands print.
+//! gathering anything first, and the reference's walk-through of them
+//! (`docs/reference.md`), held to what the commands print.
 
 mod common;
 
 use common::*;
 
-/// The README, read when this suite compiles, so that changing it rebuilds
-/// the suite holding its walk-through to the commands.
-const README: &str = include_str!("../../../README.md");
+/// The reference, read when this suite compiles, so that changing it
+/// rebuilds the suite holding its walk-through to the commands. The
+/// README tours the panel and shows no command's output: the literal
+/// examples are the reference's.
+const REFERENCE: &str = include_str!("../../../docs/reference.md");
 
 /// `examples/` in this repository, used where it is rather than copied: what a
 /// person loads is the folder in their clone, so that is the folder held to
@@ -27,7 +29,7 @@ fn text(path: &Path) -> String {
 }
 
 /// `Projects`, a workspace linking its project `collapse`, a repository as
-/// the README's is.
+/// the reference's is.
 fn projects() -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
     let projects = dir.path().join("Projects");
@@ -183,8 +185,8 @@ fn a_workspace_loads_the_examples_and_installs_commit_style_with_its_reference()
     );
     assert!(installed.ok, "{:?}", installed.stderr);
     let source = examples().join("skills/commit-style");
-    // Where the README says the copies are: one for Claude, one Codex and
-    // OpenCode share.
+    // Where the reference says the copies are: one for Claude, one Codex
+    // and OpenCode share.
     for folder in [".claude/skills", ".agents/skills"] {
         let copy = projects.join("collapse").join(folder).join("commit-style");
         for file in ["SKILL.md", "references/examples.md"] {
@@ -198,7 +200,7 @@ fn a_workspace_loads_the_examples_and_installs_commit_style_with_its_reference()
 }
 
 #[test]
-fn a_workspace_loads_the_examples_and_installs_their_rules_where_the_readme_says() {
+fn a_workspace_loads_the_examples_and_installs_their_rules_where_the_reference_says() {
     let (_dir, projects) = projects();
     let collapse = projects.join("collapse");
 
@@ -240,7 +242,7 @@ fn a_workspace_loads_the_examples_and_installs_their_rules_where_the_readme_says
 }
 
 #[test]
-fn the_readme_walks_through_the_examples_as_the_commands_print_them() {
+fn the_reference_walks_through_the_examples_as_the_commands_print_them() {
     let (_dir, projects) = projects();
 
     let (listed, loaded, installed, ruled) = leaving_examples_alone(|examples| {
@@ -252,13 +254,13 @@ fn the_readme_walks_through_the_examples_as_the_commands_print_them() {
             flayer(&projects, &["install", "-p", "collapse", "git/commits"]).unwrap(),
         )
     });
-    // The README shows stdout alone, which is all there is to show only when
-    // nothing was said on stderr.
+    // The reference shows stdout alone, which is all there is to show only
+    // when nothing was said on stderr.
     for outcome in [&listed, &loaded, &installed, &ruled] {
         assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
     }
 
-    // This machine's paths, written the README's way: the clone in
+    // This machine's paths, written the reference's way: the clone in
     // ~/src/mindflayer and the workspace in ~/Projects, in the home of `you`.
     // The entry is read back rather than worked out, since where no route
     // from the workspace reaches the clone, another drive say, it is absolute.
@@ -285,12 +287,12 @@ fn the_readme_walks_through_the_examples_as_the_commands_print_them() {
         ),
     ];
 
-    // A checkout on Windows may have given the README CRLF line endings.
-    let readme = README.replace("\r\n", "\n");
+    // A checkout on Windows may have given the reference CRLF line endings.
+    let reference = REFERENCE.replace("\r\n", "\n");
     for block in blocks {
         assert!(
-            readme.contains(&format!("\n```\n{block}```\n")),
-            "the README should show, in a block of its own:\n{block}"
+            reference.contains(&format!("\n```\n{block}```\n")),
+            "docs/reference.md should show, in a block of its own:\n{block}"
         );
     }
 }

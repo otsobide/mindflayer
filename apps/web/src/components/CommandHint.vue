@@ -18,8 +18,8 @@ export interface Command {
  * not this one for a panel launched with `-W` or on an activated workspace,
  * nor from a project linked from beside the workspace, which a walk up from
  * the project never meets; `mind` there consults another one or none. So a
- * project's line is a `flayer` one naming it with `-p`, as the README's own
- * do, rather than a `mind` one typed from its folder.
+ * project's line is a `flayer` one naming it with `-p`, as the reference's
+ * own do, rather than a `mind` one typed from its folder.
  */
 export function flayer(workspace: Workspace, words: string): string {
   return `flayer -W ${workspace.path} ${words}`

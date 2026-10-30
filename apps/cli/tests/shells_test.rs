@@ -23,7 +23,7 @@ use common::*;
 
 /// What every script starts with: a prompt to change, `state` to say what
 /// activating has changed so far, and `activate_flayer` to do it the way
-/// the README says to.
+/// the reference says to.
 const PRELUDE: &str = r#"PS1='$ '
 defined() {
     if typeset -f "$1" >/dev/null 2>&1; then printf yes; else printf no; fi

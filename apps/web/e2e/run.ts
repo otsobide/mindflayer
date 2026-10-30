@@ -20,27 +20,15 @@
  * workspace could reach theirs.
  */
 import { spawn } from 'node:child_process'
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, join, relative, resolve } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { built, cleared, handed, places, type Places } from './environment.ts'
+import { built, cleared, handed, marked, places, type Places } from './environment.ts'
 import { build } from './fixture.ts'
 
 const web = fileURLToPath(new URL('..', import.meta.url))
-
-/** The folder above `folder`, itself included, that holds a `.mind` or a `.mindflayer`, if one does. */
-function marked(folder: string): string | undefined {
-  for (let at = folder; ; at = dirname(at)) {
-    if (existsSync(join(at, '.mind')) || existsSync(join(at, '.mindflayer'))) {
-      return at
-    }
-    if (dirname(at) === at) {
-      return undefined
-    }
-  }
-}
 
 /**
  * Everything under `folder` and the folder itself, each with its size and
