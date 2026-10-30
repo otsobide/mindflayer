@@ -372,6 +372,37 @@ fn write_the_snapshot_of_a_workspace_holding_something_of_everything() {
     write("workspace", &json);
 }
 
+/// The workspace [`workspace`] builds, with [`candidates`] beside its
+/// projects and `old` [`moved`], as the panel is answered with it: the one
+/// [`write_what_scanning_the_workspace_is_answered_with`] scans, so the
+/// page of what could be linked draws a snapshot and a scan of one
+/// workspace, and a project's page draws `legacy`, which a `mind.toml`
+/// marks, as core reads it rather than as a test would draw it.
+#[test]
+fn write_the_snapshot_of_a_workspace_with_more_to_find() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = workspace(&home);
+    candidates(&root);
+    moved(&root);
+    // Again, for what `candidates` installed.
+    pin_times(&root);
+
+    let json = answered(&root, &Lookup::default());
+
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    let snapshot: Value = serde_json::from_str(&json).unwrap();
+    let legacy = snapshot["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|project| project["entry"] == "legacy")
+        .unwrap_or_else(|| panic!("{json}"));
+    assert_eq!(legacy["migrates"], true, "{json}");
+    write("candidates", &json);
+}
+
 /// What opening each of the library's own asks, as the panel's page of one
 /// asks it, with what the backend answers: its files, then each file of
 /// them, the one it is read from among them, every query of every one, in

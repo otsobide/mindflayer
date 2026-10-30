@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { Health } from '@/api/generated/Health'
-import { commanding, fixture, render, unmount, withLegacy } from './panel'
+import { commanding, fixture, render, unmount } from './panel'
 
 /** Every `<style>` element anything adds while a test runs, which the CSP would refuse. */
 let styles: Element[]
@@ -71,7 +71,7 @@ describe('the views', () => {
 
 describe('what a project an older marker marks offers', () => {
   it('draws every icon from the bundle, its dry run shown, and adds no style element', async () => {
-    const { transport } = commanding(withLegacy())
+    const { transport } = commanding(fixture('candidates'))
     const { page } = await render('/project?entry=legacy', transport)
 
     await page.get('[data-testid="migrate-dry"]').trigger('click')

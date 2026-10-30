@@ -9,8 +9,9 @@ import { answering, commanded, commanding, fixture, render, scans, texts, unmoun
  * (tests/fixtures/scan.json): the workspace's folder, with two projects
  * nobody linked, two repositories that are not projects yet, a project
  * moved from the entry pointing at it, and the entry `gone`, whose id the
- * ledger never learned. What it sends is held to the tasks the CLI's suite
- * previewed and ran (tests/fixtures/commands.json).
+ * ledger never learned. Drawn beside the snapshot of the workspace it
+ * scanned (the `candidates` fixture). What it sends is held to the tasks
+ * the CLI's suite previewed and ran (tests/fixtures/commands.json).
  */
 
 afterEach(unmount)
@@ -46,7 +47,7 @@ function checkbox(route: string): HTMLElement {
 
 describe('the page of what could be linked', () => {
   it('scans nothing until asked, and starts from the workspace\'s own folder', async () => {
-    const { queries, transport } = answering(fixture('workspace'))
+    const { queries, transport } = answering(fixture('candidates'))
 
     const { page } = await render('/discover', transport)
 
@@ -56,7 +57,7 @@ describe('the page of what could be linked', () => {
   })
 
   it('scans the folders typed, one a line, as typed, and keeps them in the address', async () => {
-    const { queries, transport } = answering(fixture('workspace'))
+    const { queries, transport } = answering(fixture('candidates'))
     const { page, router } = await render('/discover', transport)
 
     await page.get('textarea[data-testid="scan-roots"]').setValue(`${ROOT}\n\n/srv/git `)
@@ -68,7 +69,7 @@ describe('the page of what could be linked', () => {
   })
 
   it('opens with the scan the address names, as after a reload, and lists what it found in its order', async () => {
-    const { queries, transport } = answering(fixture('workspace'))
+    const { queries, transport } = answering(fixture('candidates'))
 
     const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)
 
@@ -85,7 +86,7 @@ describe('the page of what could be linked', () => {
   })
 
   it('walks the disk again when Scan is pressed, never drawing what an earlier visit was answered with', async () => {
-    const { queries, transport } = answering(fixture('workspace'))
+    const { queries, transport } = answering(fixture('candidates'))
     const { page, router } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)
 
     // Away, then back by the sidebar's link, which names no folder: the
@@ -102,7 +103,7 @@ describe('the page of what could be linked', () => {
   })
 
   it('walks the disk again for folders scanned earlier in the same visit', async () => {
-    const { queries, transport } = answering(fixture('workspace'))
+    const { queries, transport } = answering(fixture('candidates'))
     const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)
 
     for (const typed of ['/srv/git', ROOT]) {
@@ -116,7 +117,7 @@ describe('the page of what could be linked', () => {
   })
 
   it('takes a depth emptied, or one the address cannot read as a whole number, for core\'s own', async () => {
-    const { queries, transport } = answering(fixture('workspace'))
+    const { queries, transport } = answering(fixture('candidates'))
     const { page, router } = await render(`/discover?root=${encodeURIComponent(ROOT)}&depth=abc`, transport)
     const input = page.get('[data-testid="scan-depth"] input, input[data-testid="scan-depth"]')
 
@@ -132,7 +133,7 @@ describe('the page of what could be linked', () => {
   })
 
   it('is never scanned again by what the server streams, only by asking', async () => {
-    const { queries, tell, transport } = commanding()
+    const { queries, tell, transport } = commanding(fixture('candidates'))
     const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)
 
     tell({ type: 'changed', scopes: [{ type: 'workspace' }] })
@@ -146,7 +147,7 @@ describe('the page of what could be linked', () => {
   })
 
   it('says why the server refused a scan, with its code', async () => {
-    const { transport } = answering(fixture('workspace'), [])
+    const { transport } = answering(fixture('candidates'), [])
 
     const { page } = await render('/discover?root=Projects', transport)
 
@@ -159,7 +160,7 @@ describe('the page of what could be linked', () => {
     const answer = answered[0]!.answer as Scanned
     answer.warnings = [{ text: '/home/you/wrok: cannot be listed: No such file or directory (os error 2)', code: 'scan_folder_unlisted' }]
     answer.found = []
-    const { transport } = answering(fixture('workspace'), answered)
+    const { transport } = answering(fixture('candidates'), answered)
 
     const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)
 
@@ -172,7 +173,7 @@ describe('the page of what could be linked', () => {
 
 describe('linking what a scan found', () => {
   it('sends the marks the minds screen builds its batch from, shows the lines the server previewed, and scans again after', async () => {
-    const { queries, sent, transport } = commanding()
+    const { queries, sent, transport } = commanding(fixture('candidates'))
     const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)
     expect(page.get('[data-testid="link-marked"]').attributes('disabled')).toBeDefined()
 
@@ -196,7 +197,7 @@ describe('linking what a scan found', () => {
   })
 
   it('relinks a project the scan found moved, by the entry it left, to where it is now', async () => {
-    const { sent, transport } = commanding()
+    const { sent, transport } = commanding(fixture('candidates'))
     const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)
 
     await page.get('[data-testid="relink"]').trigger('click')
@@ -208,7 +209,7 @@ describe('linking what a scan found', () => {
   })
 
   it('offers nothing to mark for what is linked, or for a project found moved', async () => {
-    const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, fixture('workspace'))
+    const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, fixture('candidates'))
 
     const marked = texts(page, '[data-testid="suggestion"] label')
     for (const route of ['api', 'docs', 'legacy', 'web', 'archive/old']) {
@@ -219,7 +220,7 @@ describe('linking what a scan found', () => {
 
 describe('the frame', () => {
   it('lights Discover in the sidebar, and the projects page links to it', async () => {
-    const { page, router } = await render('/discover', fixture('workspace'))
+    const { page, router } = await render('/discover', fixture('candidates'))
 
     expect(page.get('[data-testid="sidebar"] nav a[aria-current="page"]').text()).toBe('Discover')
 

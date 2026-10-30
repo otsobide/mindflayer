@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import type { Project } from '@/api/generated/Project'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { projectLink } from '@/routes'
-import { commanded, commanding, fixture, render, texts, unmount, withLegacy } from './panel'
+import { commanded, commanding, fixture, render, texts, unmount } from './panel'
 
 afterEach(unmount)
 
@@ -282,7 +282,7 @@ describe('migrating a project an older marker marks', () => {
   const [DRY, YES] = commanded().filter(each => each.task.type === 'migrate') as [ReturnType<typeof commanded>[number], ReturnType<typeof commanded>[number]]
 
   it('shows the dry run first, as it ran, and offers the migration only once it has been read', async () => {
-    const snapshot = withLegacy()
+    const snapshot = fixture('candidates')
     const { sent, transport } = commanding(snapshot)
     const { page } = await render('/project?entry=legacy', transport)
 
@@ -309,7 +309,7 @@ describe('migrating a project an older marker marks', () => {
   })
 
   it('is offered for a project an older marker marks alone', async () => {
-    const { page, router } = await render('/project?entry=legacy', withLegacy())
+    const { page, router } = await render('/project?entry=legacy', fixture('candidates'))
     expect(page.find('[data-testid="migrate"]').exists()).toBe(true)
     expect(page.find('[data-testid="settings-form"]').exists()).toBe(false)
 

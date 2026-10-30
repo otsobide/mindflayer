@@ -5084,8 +5084,12 @@ The views' tests render the snapshots in `apps/web/tests/fixtures`, which a
 test of the CLI writes (`apps/cli/tests/fixtures_test.rs`): it builds a
 workspace by running the commands, installing, editing a copy, changing
 the library, removing a linked folder, and reads it through the panel's
-backend as the server answers it, beside a home where nothing is made.
-Beside them, `library.json` holds every query an artifact's page asks of
+backend as the server answers it, beside a home where nothing is made, and
+beside the same workspace with more to find (`candidates.json`): projects
+and repositories nobody linked, a project moved from its entry, and one a
+`mind.toml` marks, linked, whose page offers the migration. A project like
+that one drawn by hand from another in the snapshot was the other way,
+whose counts said what its emptied lists did not hold. Beside them, `library.json` holds every query an artifact's page asks of
 the library's own, its files and each file of them, with what the backend
 answers, which the test transport answers from (`tests/panel.ts`), and
 `commands.json` what previewing and running a few tasks in turn is
@@ -5094,8 +5098,9 @@ code, a removal everywhere, then what the page of what could be linked and
 a project's page send, folders marked, a relink, toggles and a migration's
 dry run and run, which the runner's, the transcript's and the pages' tests
 answer their tasks from (`commanding`), and `scan.json` what scanning the
-workspace's folder is answered with, folders beside its projects that a
-scan finds, which the page of what could be linked is drawn from. So
+folder of the workspace `candidates.json` is a snapshot of is answered
+with, which the page of what could be linked is drawn from, beside that
+snapshot, so the two describe one workspace. So
 the panel's tests render what core says rather than what a person drew,
 and a field the snapshot adds, renames or fills differently reaches them.
 What differs between runs is pinned: the temporary folder reads as

@@ -10,6 +10,7 @@ import App from '@/App.vue'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { TransportError, type LiveEvent, type Preview, type Query, type Ran, type Task, type Transport } from '@/api/transport'
 import { createPanel } from '@/panel'
+import candidates from './fixtures/candidates.json'
 import commands from './fixtures/commands.json'
 import library from './fixtures/library.json'
 import scan from './fixtures/scan.json'
@@ -20,9 +21,13 @@ import workspace from './fixtures/workspace.json'
  * The snapshots in tests/fixtures, which `make web/fixtures` writes from
  * workspaces a test of the CLI builds by running the commands
  * (apps/cli/tests/fixtures_test.rs): `workspace` holds something of
- * everything a view shows, `unmade` is a home where nothing is made.
+ * everything a view shows, `unmade` is a home where nothing is made, and
+ * `candidates` is `workspace` with more beside its projects, the one the
+ * scan in tests/fixtures/scan.json looked through: two projects and two
+ * repositories nobody linked, `old`, linked and moved since, and `legacy`,
+ * linked, which a `mind.toml` marks.
  */
-const FIXTURES = { workspace, unmade }
+const FIXTURES = { workspace, unmade, candidates }
 
 export type Fixture = keyof typeof FIXTURES
 
@@ -33,30 +38,6 @@ export type Fixture = keyof typeof FIXTURES
  */
 export function fixture(name: Fixture): Snapshot {
   return structuredClone(FIXTURES[name]) as unknown as Snapshot
-}
-
-/**
- * The workspace fixture with `legacy` linked beside its projects, which a
- * `mind.toml` marks, as the CLI's suite linked it to migrate
- * (tests/fixtures/commands.json): a project no snapshot fixture holds, so
- * this copy holds it, made from `web` with what such a project lacks.
- */
-export function withLegacy(): Snapshot {
-  const snapshot = fixture('workspace')
-  const web = snapshot.projects.find(project => project.entry === 'web')!
-  snapshot.projects.push({
-    ...structuredClone(web),
-    entry: 'legacy',
-    name: 'legacy',
-    path: '/home/you/Projects/legacy',
-    marker: 'mind.toml',
-    migrates: true,
-    id: null,
-    agents: [],
-    settings: null,
-    artifacts: []
-  })
-  return snapshot
 }
 
 /** A query, and what the server answers it with. */

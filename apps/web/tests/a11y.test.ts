@@ -6,7 +6,7 @@ import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
 import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
-import { answering, commanded, commanding, fixture, render, unmount, withLegacy, type Fixture } from './panel'
+import { answering, commanded, commanding, fixture, render, unmount, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -39,6 +39,7 @@ const PAGES: [string, Fixture][] = [
   ['/project?entry=docs', 'workspace'],
   ['/project?entry=gone', 'workspace'],
   ['/project?entry=nowhere', 'workspace'],
+  ['/project?entry=legacy', 'candidates'],
   ['/library', 'workspace'],
   ['/library?kind=rule', 'workspace'],
   ['/library?kind=rule&q=nowhere', 'workspace'],
@@ -56,7 +57,7 @@ const PAGES: [string, Fixture][] = [
   ['/sources', 'unmade'],
   ['/discover', 'workspace'],
   ['/discover', 'unmade'],
-  ['/discover?root=%2Fhome%2Fyou%2FProjects', 'workspace'],
+  ['/discover?root=%2Fhome%2Fyou%2FProjects', 'candidates'],
   ['/discover?root=Projects', 'workspace'],
   ['/nowhere', 'workspace']
 ]
@@ -83,7 +84,7 @@ describe('a project\'s toggles', () => {
 
 describe('a project an older marker marks', () => {
   it('passes axe with what migrating it would do shown', async () => {
-    const { transport } = commanding(withLegacy())
+    const { transport } = commanding(fixture('candidates'))
     await render('/project?entry=legacy', transport)
 
     document.querySelector<HTMLElement>('[data-testid="migrate-dry"]')!.click()
@@ -97,7 +98,7 @@ describe('a project an older marker marks', () => {
 
 describe('the page of what could be linked', () => {
   it('passes axe with folders marked, one a repository mind init writes into', async () => {
-    await render('/discover?root=%2Fhome%2Fyou%2FProjects', fixture('workspace'))
+    await render('/discover?root=%2Fhome%2Fyou%2FProjects', fixture('candidates'))
 
     for (const box of document.querySelectorAll<HTMLElement>('[data-testid="suggestion"] [role="checkbox"]')) {
       box.click()

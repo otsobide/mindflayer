@@ -1009,8 +1009,9 @@ These are easy to break from a single file without noticing.
   panel's backend answers (`make web/fixtures`), with the temporary folder
   as `/home`, fixed ids and pinned times, and beside them what opening each
   of the library's own is answered with (`library.json`, every files and
-  contents query an artifact's page asks), what scanning the workspace's
-  folder is answered with (`scan.json`), and what previewing and running
+  contents query an artifact's page asks), what scanning the folder of the
+  workspace `candidates.json` is a snapshot of is answered with
+  (`scan.json`), and what previewing and running
   a few tasks in turn is (`commands.json`). `tests/panel.ts` reads them and
   mounts the panel at an address, answering its queries with them, and a
   task with its preview and its run, told finished on the stream before
