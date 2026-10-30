@@ -1896,7 +1896,10 @@ works in it, any other git repository. Tick the ones you want and press
 **Link what is marked**: the panel shows the lines first, a `mind -C <path>
 init` for each repository that is not a mind project yet, which it names
 before you ask since it writes into the repository, then one `flayer link`
-of them all, the same lines the TUI's minds screen runs for the same marks.
+of them all, the batch the TUI's minds screen runs for the same marks. The
+panel names each folder by its absolute path, where the minds screen names
+one inside the workspace by its route from there, so the lines read
+differently and act on the same folders.
 A project that moved, which the scan tells by its id, the one the workspace
 last saw where the entry it left points, offers **Relink** instead, `flayer
 relink <old> <new>`, which keeps what was installed into it; an entry whose id the workspace never

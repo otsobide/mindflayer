@@ -310,7 +310,9 @@ These are easy to break from a single file without noticing.
   the panel sends its marks and its toggles (`Task::Marks`,
   `Task::Toggled`) for the same function to build, never the batch: one
   rule for which lines they are, which `backend_test` holds the minds
-  screen and the panel to. What a front end with
+  screen and the panel to, the same folders for the same marks, though the
+  panel names a folder inside the workspace by its absolute path where the
+  screen names it by its route. What a front end with
   no terminal does not run is one list, `task::Refusal`, read off the
   parsed command by a match with no wildcard (`Refusal::of_mind`,
   `of_flayer`), so a new command says whether it is refused before it

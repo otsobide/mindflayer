@@ -1074,7 +1074,9 @@ fn a_scan_names_the_entry_a_moved_project_left_for_its_relink() {
 /// The panel's link batch is the minds screen's: for the same directories
 /// marked, the lines the backend previews for what the panel sends are the
 /// lines the screen's task is, each directory by its path, from a scan of a
-/// folder outside the workspace, where both spell it so.
+/// folder outside the workspace, where both spell it so. Inside it they
+/// spell a folder apart, and the batch is the same folder for folder
+/// ([`inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_folder`]).
 #[test]
 fn the_panels_link_batch_is_the_minds_screens_for_the_same_selection() {
     let dir = workspace_with_candidates();
@@ -1134,4 +1136,91 @@ fn the_panels_link_batch_is_the_minds_screens_for_the_same_selection() {
             ),
         ]
     );
+}
+
+/// Inside the workspace the two spell a folder apart: the screen by the
+/// route the scan gives from the root, where its lines run, and the panel
+/// by its path, which is all the path policy lets a browser name. The same
+/// batch all the same, folder for folder, and run, each leaves the
+/// workspace linking the same entries, the repository made a project first.
+#[test]
+fn inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_folder() {
+    let panel = workspace_with_candidates();
+    let screened = workspace_with_candidates();
+    let backend = backend(panel.path());
+
+    // Every directory found and not linked, marked as the scan offers it,
+    // under the workspace's own folder, where the page starts.
+    let answer = backend
+        .query(query(json!({"type": "scan", "roots": [], "depth": null})))
+        .unwrap();
+    let marks: Vec<Value> = answer["found"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|suggestion| !suggestion["offers"].is_null())
+        .map(|suggestion| json!({"path": suggestion["found"]["path"], "change": suggestion["offers"]}))
+        .collect();
+    assert_eq!(marks.len(), 2, "{answer}");
+    let marked = task(json!({"type": "marks", "marks": marks}));
+    let previewed = backend.preview(&marked).unwrap().lines;
+
+    // The same ones ticked on the screen, in a workspace laid out the same.
+    let mut app = tui::minds(screened.path(), &[], &Lookup::default()).unwrap();
+    for _ in 0..2 {
+        press_key(&mut app, KeyCode::Char(' '));
+        press_key(&mut app, KeyCode::Down);
+    }
+    let Mode::Minds(screen) = &app.mode else {
+        panic!("{:?}", app.mode)
+    };
+    let ticked = screen.task().unwrap();
+    let Task::Minds { init, link, unlink } = &ticked else {
+        panic!("{ticked:?}")
+    };
+    assert_eq!(link, &["gamma", "repo"]);
+    // Each route read from the root the screen's lines run from.
+    let spelled = |routes: &[String]| -> Vec<String> {
+        routes
+            .iter()
+            .map(|route| under(panel.path(), &[route]))
+            .collect()
+    };
+    let by_path = Task::Minds {
+        init: spelled(init),
+        link: spelled(link),
+        unlink: spelled(unlink),
+    };
+    let by_path: Vec<String> = by_path
+        .commands()
+        .iter()
+        .map(|line| mindflayer_cli::task::shell(line))
+        .collect();
+    assert_eq!(previewed, by_path);
+
+    let outcome = backend.run(marked).unwrap();
+    assert!(outcome.ok, "{outcome:?}");
+    tui::step(&mut app, ticked);
+    tui::wait(&mut app);
+
+    let entries = |dir: &Path| -> Vec<PathBuf> {
+        FlayerWorkspace::open(dir)
+            .unwrap()
+            .members()
+            .into_iter()
+            .map(|member| member.entry)
+            .collect()
+    };
+    assert_eq!(entries(panel.path()), entries(screened.path()));
+    assert_eq!(
+        entries(panel.path()),
+        ["alpha", "beta", "gamma", "repo"].map(PathBuf::from)
+    );
+    for dir in [panel.path(), screened.path()] {
+        assert!(
+            MindProject::is_marked(&dir.join("repo")),
+            "{}",
+            dir.display()
+        );
+    }
 }

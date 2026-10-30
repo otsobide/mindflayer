@@ -5048,8 +5048,15 @@ What the pages offer:
   offers), never as the batch: the task module builds the minds screen's
   batch from them (`Task::minds`), a `mind -C <path> init` for each
   repository that is not a project yet and one `flayer link` of them all,
-  so the same marks are the same lines on either front end, which a test
-  of the backend holds the screen and the panel to. That `mind init`
+  so the same marks are the same batch on either front end, which a test
+  of the backend holds the screen and the panel to. The words differ for a
+  folder inside the workspace, which the panel names by its absolute path,
+  all the path policy takes from a browser, and the minds screen by the
+  scan's route from the root, where its lines run: the same folders, which
+  the test runs both on and finds linked alike, and the same words for one
+  outside it, where both name it by its path. Turning the panel's path into
+  the route was the other way, and would have shown a preview naming a
+  folder by what reads right from one directory only. That `mind init`
   writes into each such repository first is said on the page before
   anything is asked, and its line is shown before it runs. The scan is
   asked for again once the run is over.

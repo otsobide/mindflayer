@@ -194,7 +194,11 @@ pub enum Task {
     /// How the panel links what a scan found: it sends its marks, never the
     /// batch, so that a directory made a project is then linked, with the
     /// rest, by the one function that says so, and the same marks make the
-    /// same lines on either front end. [`Minds`](Task::Minds) taken from a
+    /// same lines on either front end: the same words where both spell a
+    /// folder alike, and the same batch folder for folder inside the
+    /// workspace, where the panel names one by its path, all the path
+    /// policy takes, and the minds screen by its route from the root.
+    /// [`Minds`](Task::Minds) taken from a
     /// browser was the other way, which would hold the panel to spelling
     /// that rule again in TypeScript, and could leave a folder made a
     /// project and never linked.
