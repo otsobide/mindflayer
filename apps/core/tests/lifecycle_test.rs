@@ -731,6 +731,128 @@ fn a_manifest_linked_to_a_file_where_its_kind_is_kept_is_written_through() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_folder_the_kind_is_kept_under_linked_out_of_the_project_is_never_written_through() {
+    // `.claude` linked to an agent's own home, as a repository can link it:
+    // the skills folder under it, and every manifest there, leads out.
+    let dir = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    std::os::unix::fs::symlink(home.path(), dir.path().join(".claude")).unwrap();
+    let directories = Directories::default().with(Kind::Skill, ".claude/skills");
+    let (project, _) =
+        MindProject::init_settings(dir.path(), &Agent::ALL, Share::Shared, &directories).unwrap();
+    let theirs = "---\nname: deploy\ndescription: The user's own\n---\n";
+    write(home.path(), "skills/deploy/SKILL.md", theirs);
+
+    let error = replace(&project, "deploy", SHIP.as_bytes(), None).unwrap_err();
+
+    assert!(matches!(error, LifecycleError::LeadsOut { .. }), "{error}");
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "{} leads to {}, outside {}, so it is not written",
+            project
+                .root()
+                .join(".claude/skills/deploy/SKILL.md")
+                .display(),
+            fs::canonicalize(home.path())
+                .unwrap()
+                .join("skills/deploy/SKILL.md")
+                .display(),
+            project.root().display()
+        )
+    );
+    assert_eq!(
+        fs::read_to_string(home.path().join("skills/deploy/SKILL.md")).unwrap(),
+        theirs
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_manifest_linked_to_another_skills_is_never_written_through() {
+    let (dir, project) = project();
+    create(&project, Kind::Skill, "ship", "Ship it").unwrap();
+    let theirs = fs::read_to_string(dir.path().join("skills/ship/SKILL.md")).unwrap();
+    fs::create_dir_all(dir.path().join("skills/deploy")).unwrap();
+    std::os::unix::fs::symlink(
+        "../ship/SKILL.md",
+        dir.path().join("skills/deploy/SKILL.md"),
+    )
+    .unwrap();
+
+    // Named for the folder it is in, and so fit for it, but `ship`'s would
+    // then call it `deploy`.
+    let error = replace(&project, "deploy", SHIP.as_bytes(), None).unwrap_err();
+
+    let LifecycleError::LeadsOut { directory, .. } = &error else {
+        panic!("{error}");
+    };
+    assert_eq!(directory, &dir.path().join("skills/deploy"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("skills/ship/SKILL.md")).unwrap(),
+        theirs
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn the_workspaces_own_are_held_to_the_folder_they_are_kept_in_and_not_its_root() {
+    // A library kept in a repository of dotfiles and linked in, outside the
+    // workspace's root, which may be a home: written there, as a read of it
+    // for the panel reads it there.
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let own = workspace.own();
+    let dotfiles = TempDir::new().unwrap();
+    let folder = own.directory_for(Kind::Skill).unwrap();
+    fs::create_dir_all(folder.parent().unwrap()).unwrap();
+    fs::create_dir(dotfiles.path().join("skills")).unwrap();
+    std::os::unix::fs::symlink(dotfiles.path().join("skills"), &folder).unwrap();
+    create(&own, Kind::Skill, "deploy", "Ship it").unwrap();
+
+    let replaced = lifecycle::replace_contents(
+        Some(&workspace),
+        &own,
+        &find(&own, "deploy").unwrap(),
+        SHIP.as_bytes(),
+        None,
+    )
+    .unwrap();
+
+    assert!(replaced.changed);
+    assert_eq!(
+        fs::read_to_string(dotfiles.path().join("skills/deploy/SKILL.md")).unwrap(),
+        SHIP
+    );
+
+    // A manifest leading out of that folder is refused, into the root too.
+    write(dir.path(), "notes.md", "Mine.\n");
+    fs::create_dir(folder.join("review")).unwrap();
+    std::os::unix::fs::symlink(dir.path().join("notes.md"), folder.join("review/SKILL.md"))
+        .unwrap();
+    let review = "---\nname: review\ndescription: Reads the diff\n---\n";
+
+    let error = lifecycle::replace_contents(
+        Some(&workspace),
+        &own,
+        &find(&own, "review").unwrap(),
+        review.as_bytes(),
+        None,
+    )
+    .unwrap_err();
+
+    let LifecycleError::LeadsOut { directory, .. } = &error else {
+        panic!("{error}");
+    };
+    assert_eq!(directory, &folder);
+    assert_eq!(
+        fs::read_to_string(dir.path().join("notes.md")).unwrap(),
+        "Mine.\n"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The ledger's records
 // ---------------------------------------------------------------------------

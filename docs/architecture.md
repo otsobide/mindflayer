@@ -7389,16 +7389,26 @@ deciding anything about them.
   an editor while the page was open is refused rather than lost. Without
   it the write crosses whatever came first, as an editor's does.
 - **Where the artifact is kept, and nowhere else.** The file is followed
-  through its links with `copy::followed`, the check a copy and a read for
-  the panel make, and written only when it lies in the folder its holder
-  keeps the kind in (`edit_leads_outside` otherwise), at the path it
-  resolves to, so a link swapped in after the check is not written through.
-  That folder rather than the holder's root, which for the workspace's own
-  may be a home: a repository can link a skill's `SKILL.md` to
-  `~/.bashrc`, and the panel would otherwise replace it with a skill. A
-  project's skill linked to a file elsewhere in its repository is refused
-  too, and edited where it leads; reading it for the panel is held to the
-  project's root, and a write is the narrower of the two.
+  through its links once, as `copy::followed` follows them for a copy and a
+  read for the panel, and written at the path it resolves to, so a link
+  swapped in after the check is not written through, only when that lies
+  inside each of three folders (`lifecycle::written_at`,
+  `edit_leads_outside` otherwise). The folder its holder keeps the kind
+  in: a repository can link a skill's `SKILL.md` to `~/.bashrc`, and the
+  panel would otherwise replace it with a skill. A skill's own folder, so
+  a manifest linked to a sibling's is not rewritten under a name that
+  folder does not have. And a project's root, which a read of it for the
+  panel is held to: a kind's folder, or `.claude` above it, linked out of
+  the repository, to the user's own `~/.claude` say, would otherwise carry
+  the write along. Not the root of the workspace's own, which may be a
+  home: what is in the folder the workspace keeps its own of a kind in
+  (`FlayerWorkspace::own`, of a kind `own_kinds` gives it) is held to that
+  folder alone, as a read of it is. Told by the folder, since the holder
+  is a `MindProject` either way, so whatever reaches the library's folder
+  is held as the library is, and a project's folder anywhere else to the
+  project's root. A project's skill linked to a file elsewhere in its
+  repository is refused too, and edited where it leads: a write reaches
+  nothing a read of it for the panel does not, and less.
 - **Through a temporary renamed onto it**, as every file Mindflayer replaces
   is (`replace_bytes_unresolved`), named for the run and ending in `.tmp`:
   an agent reading the file finds the old contents or the new, and a skill's

@@ -2529,8 +2529,11 @@ error: the contents given for `deploy` call it `ship`: a skill's name is its fol
 ```
 
 The file is replaced through a temporary renamed onto it, and only where
-the project keeps that kind: a `SKILL.md` that links out of the skills
-folder is refused rather than written through.
+the project keeps that kind, inside the project: a `SKILL.md` that links
+out of its skill's folder or the skills folder is refused rather than
+written through, and so is one under a folder linked out of the project,
+as `.claude` can be. The workspace's own are held to the folder it keeps
+them in, which may be linked elsewhere.
 
 What `flayer install` put in an agent's folder is not changed from the
 project: `edit`, `rename` and `remove` refuse a skill found only where its

@@ -714,11 +714,16 @@ These are easy to break from a single file without noticing.
     folder it is in, or to nothing is listed with why and never followed,
     and a listing stops at `contents::FILES_CAP`.
   - An artifact's file given its contents whole (`edit --contents`,
-    `lifecycle::replace_contents`) is written only inside the folder its
-    holder keeps the kind in once its links are followed (`copy::followed`,
-    `edit_leads_outside` otherwise), at the path it resolves to, through a
-    temporary renamed onto it, and with `--if-unchanged` only over what the
-    hash given was taken of (`edit_stale`). The front end reads what it
+    `lifecycle::replace_contents`) is followed through its links once and
+    written at the path it resolves to, only when that lies inside the
+    folder its holder keeps the kind in, a skill's own folder and a
+    project's root (`lifecycle::written_at`, `edit_leads_outside`
+    otherwise), so never anywhere a read of it for the panel would not
+    reach. The library is held to its kind's folder alone, its root being
+    a home perhaps, told by that folder rather than by the holder, a
+    `MindProject` either way. It goes through a temporary renamed onto it,
+    and with `--if-unchanged` only over what the hash given was taken of
+    (`edit_stale`). The front end reads what it
     was given, a file or standard input, and hands core the bytes, which
     core alone judges; core never reads standard input.
   - An installed name must be one folder name for a skill

@@ -34,7 +34,6 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
 use crate::code::codes;
-use crate::copy;
 use crate::create::{create, create_from, CreateError};
 use crate::frontmatter;
 use crate::gather::Scrub;
@@ -431,14 +430,10 @@ pub fn finish_edit(
 /// is the caller's to keep from crossing another, as an editor's is.
 ///
 /// Written where the artifact is kept and nowhere else: the file is
-/// followed through its links ([`copy::followed`], the check a copy makes),
-/// and one leading out of the folder its holder keeps the kind in is
-/// refused rather than written through. That folder, not the holder's
-/// root: the workspace's own are a holder whose root may be a home, and a
-/// skill linked to a file a repository's author chose (`~/.bashrc`) would
-/// otherwise be replaced with whatever the panel sent. What is written is a
-/// temporary beside the file, renamed onto it, so an agent reading it finds
-/// the old contents or the new, never half of each.
+/// followed through its links, and one leading out of where it may be
+/// written ([`written_at`]) is refused rather than written through. What
+/// is written is a temporary beside the file, renamed onto it, so an agent
+/// reading it finds the old contents or the new, never half of each.
 ///
 /// The record stays as [`finish_edit`] leaves it (D-04): an installed copy
 /// replaced holds something other than was installed, and reads as edited.
@@ -457,22 +452,7 @@ pub fn replace_contents(
     fit(target, contents)?;
 
     let file = target.file();
-    let bound = fs::canonicalize(&directory).map_err(|source| LifecycleError::Io {
-        path: directory.clone(),
-        source,
-    })?;
-    let (resolved, inside) =
-        copy::followed(&file, &[bound]).map_err(|source| LifecycleError::Io {
-            path: file.clone(),
-            source,
-        })?;
-    if !inside {
-        return Err(LifecycleError::LeadsOut {
-            path: file,
-            resolved,
-            directory,
-        });
-    }
+    let resolved = written_at(workspace, project, target, &directory)?;
 
     // The resolved path from here on, never the one checked: a link put in
     // its place since would otherwise be written through.
@@ -503,6 +483,76 @@ pub fn replace_contents(
     Ok(Edited {
         changed: true,
         copy,
+    })
+}
+
+/// Where `target`'s file in `project` leads once its links are followed,
+/// when contents given whole may be written there: inside the project's
+/// root, the folder `directory` it keeps the kind in, and a skill's own
+/// folder. Resolved once and held to every one of them, where
+/// [`crate::copy::followed`] asks whether a path lies in any of its
+/// bounds; by components, as it compares, so `/work/app-old` is not inside
+/// `/work/app`.
+///
+/// Each for a reason of its own. The root, as a read of a project's file
+/// for the panel is held to it ([`crate::contents`]): a kind's folder, or
+/// a folder above it such as `.claude`, linked out of the repository would
+/// otherwise carry the write along, into an agent's own home among other
+/// places. Not for the workspace's own ([`library`]), whose root may be a
+/// home with every secret of its user inside it: their folder alone bounds
+/// them, as it bounds a read of them. The kind's folder, so a manifest
+/// linked to a file elsewhere (`~/.bashrc`, in the workspace's own) is not
+/// replaced with a skill. And a skill's own folder, so a manifest linked to
+/// a sibling's is not rewritten under a name that folder does not have.
+/// The widest first, so a refusal names the most the file leads out of.
+fn written_at(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    target: &Target,
+    directory: &Path,
+) -> Result<PathBuf, LifecycleError> {
+    let root = (!library(workspace, target.kind, directory)).then(|| project.root());
+    // Matched on the layout, so a kind kept another way says what bounds it.
+    let own = match target.kind.layout() {
+        Layout::Directory { .. } => Some(target.path.as_path()),
+        Layout::Files { .. } => None,
+    };
+    let canonical = |path: &Path| {
+        fs::canonicalize(path).map_err(|source| LifecycleError::Io {
+            path: path.to_path_buf(),
+            source,
+        })
+    };
+    let file = target.file();
+    let resolved = canonical(&file)?;
+    for bound in root.into_iter().chain([directory]).chain(own) {
+        if !resolved.starts_with(canonical(bound)?) {
+            return Err(LifecycleError::LeadsOut {
+                path: file,
+                resolved,
+                directory: bound.to_path_buf(),
+            });
+        }
+    }
+    Ok(resolved)
+}
+
+/// Whether `directory`, where a holder keeps `kind`, is the folder
+/// `workspace` keeps its own of that kind in ([`FlayerWorkspace::own`]),
+/// of a kind it keeps apart from a project at its root
+/// ([`FlayerWorkspace::own_kinds`]): the library, as a read of it for the
+/// panel finds it ([`crate::contents`]).
+///
+/// Told by the folder, since the holder is a [`MindProject`] either way:
+/// what is in the library's folder is held as the library is, whichever
+/// holder reached it, and a project's folder anywhere else to the
+/// project's root. One at the workspace's root keeping a kind where the
+/// library does holds what is there itself, by `own_kinds`, and is held to
+/// its root too. With no workspace there is no library to be.
+fn library(workspace: Option<&FlayerWorkspace>, kind: Kind, directory: &Path) -> bool {
+    workspace.is_some_and(|workspace| {
+        workspace.own().directory_for(kind).as_deref() == Some(directory)
+            && workspace.own_kinds().contains(&kind)
     })
 }
 
@@ -1043,8 +1093,9 @@ pub enum LifecycleError {
         expected: String,
         found: String,
     },
-    /// The file leads, through a link, out of the folder its kind is kept
-    /// in, where contents given whole are not written.
+    /// The file leads, through a link, out of `directory`, one of the
+    /// folders contents given whole are written inside: the project's
+    /// root, the folder its kind is kept in, or a skill's own.
     #[error("{path} leads to {resolved}, outside {directory}, so it is not written")]
     LeadsOut {
         path: PathBuf,
