@@ -12,7 +12,7 @@ use crate::{Cli, FlayerCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 32] = [
+const TAGS: [&str; 33] = [
     "init_workspace",
     "init_project",
     "link",
@@ -42,6 +42,7 @@ const TAGS: [&str; 32] = [
     "install",
     "uninstall",
     "adopt",
+    "migrate",
     "open_install",
     "apply_install",
     "refresh",
@@ -142,6 +143,14 @@ fn every(value: &str) -> Vec<Task> {
             project: owned(),
             kind: Kind::Skill,
             name: owned(),
+        },
+        Task::Migrate {
+            project: owned(),
+            yes: false,
+        },
+        Task::Migrate {
+            project: owned(),
+            yes: true,
         },
         Task::OpenInstall,
         Task::Refresh,
@@ -479,6 +488,26 @@ fn toggles_sent_as_json_make_the_lines_the_task_module_builds_from_them() {
         now: was,
     };
     assert_eq!(unchanged.commands(), Vec::<Vec<String>>::new());
+}
+
+#[test]
+fn a_migration_is_a_dry_run_until_it_is_told_and_only_then_a_write() {
+    let migrate = |yes| Task::Migrate {
+        project: String::from("legacy"),
+        yes,
+    };
+
+    assert_eq!(
+        migrate(false).commands(),
+        [owned(&["flayer", "migrate", "-p", "legacy"])]
+    );
+    assert!(!migrate(false).writes());
+    assert_eq!(
+        migrate(true).commands(),
+        [owned(&["flayer", "migrate", "-p", "legacy", "--yes"])]
+    );
+    assert!(migrate(true).writes());
+    assert_eq!(migrate(true).cautions(), Vec::new());
 }
 
 #[test]

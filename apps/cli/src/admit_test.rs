@@ -201,6 +201,24 @@ fn each_project_an_install_names_is_named_by_its_folder() {
         name: String::from("deploy"),
     };
     assert_eq!(code(admitted(&workspace, &unknown)), "not_registered");
+    assert_eq!(
+        lines(
+            &workspace,
+            &Task::Migrate {
+                project: String::from("../beside"),
+                yes: true,
+            }
+        ),
+        [format!(
+            "flayer migrate -p {} --yes",
+            text(&dir.path().join("beside"))
+        )]
+    );
+    let unknown = Task::Migrate {
+        project: String::from("gamma"),
+        yes: false,
+    };
+    assert_eq!(code(admitted(&workspace, &unknown)), "not_registered");
 }
 
 #[test]

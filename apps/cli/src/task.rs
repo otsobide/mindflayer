@@ -292,6 +292,21 @@ pub enum Task {
         kind: Kind,
         name: String,
     },
+    /// `flayer migrate -p <project> [--yes]`: one project the workspace
+    /// links moved from an older marker, a `mind.toml` or a
+    /// `settings.json`, to a `settings.toml`, what the workspace records of
+    /// it carried along; without `yes`, the dry run, which writes nothing
+    /// and says what would move. The project is named as an install's are,
+    /// by what `naming` gives.
+    ///
+    /// The workspace's command, as an install's is, so what it carries is
+    /// what the workspace on screen records: `mind migrate` in the project
+    /// finds a workspace by walking up, which misses one linking the
+    /// project from beside it. The agents and the share mode are left to
+    /// the command, every agent and shared for a `mind.toml`, as a project
+    /// committed by design was, and what a `settings.json` names for one,
+    /// for `mind agents` and `mind share` to change once it is moved.
+    Migrate { project: String, yes: bool },
     /// Open the install screen, which is what `flayer install` opens.
     OpenInstall,
     /// What the install screen marked, as the `Install` and `Uninstall`
@@ -606,6 +621,14 @@ impl Task {
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
             }
+            Task::Migrate { project, yes } => {
+                let mut head = picking(&["flayer", "migrate"], std::slice::from_ref(project));
+                if *yes {
+                    head.push(String::from("--yes"));
+                }
+                let head: Vec<&str> = head.iter().map(String::as_str).collect();
+                vec![words(&head, &[])]
+            }
             Task::ApplyInstall { changes } => changes.iter().flat_map(Task::commands).collect(),
             Task::OpenInstall => vec![words(&["flayer", "install"], &[])],
             Task::Refresh => Vec::new(),
@@ -642,6 +665,7 @@ impl Task {
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
                 | Task::Adopt { .. }
+                | Task::Migrate { yes: true, .. }
                 | Task::ApplyInstall { .. }
         )
     }

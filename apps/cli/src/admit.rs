@@ -12,8 +12,8 @@
 //!   the folder it points at, absolute, in the one `-C` the line has, with
 //!   `-W .` in front where `mind` would otherwise consult another workspace
 //!   about it, as the TUI decides for its rows.
-//! - **Each project an install, an uninstall or an adoption names** is an
-//!   entry too, and becomes the `-p` of the same folder.
+//! - **Each project an install, an uninstall, an adoption or a migration
+//!   names** is an entry too, and becomes the `-p` of the same folder.
 //! - **An entry `unlink`, `unload` or `relink` takes** is one the marker
 //!   holds, and goes to the command as the marker spells it, which is what
 //!   those commands take an entry by.
@@ -120,7 +120,9 @@ impl Admission<'_> {
                     *project = self.project(project)?;
                 }
             }
-            Task::Adopt { project, .. } => *project = self.project(project)?,
+            Task::Adopt { project, .. } | Task::Migrate { project, .. } => {
+                *project = self.project(project)?;
+            }
             Task::ApplyInstall { changes } => {
                 for change in changes {
                     *change = self.task(change)?;
