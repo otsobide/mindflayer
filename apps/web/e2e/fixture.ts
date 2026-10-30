@@ -15,6 +15,9 @@ export const LIBRARY = [
   ['rule', 'git/commits', 'Write commit messages that say why']
 ] as const
 
+/** The projects it links, each by its entry. */
+export const PROJECTS = ['api', 'web'] as const
+
 /**
  * `workspace`, holding something of each thing the views compare with the
  * listing:
