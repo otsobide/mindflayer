@@ -64,6 +64,7 @@ const PAGES: [string, Fixture][] = [
   ['/assign?q=nowhere', 'assigning'],
   ['/assign', 'workspace'],
   ['/assign', 'unmade'],
+  ['/projects', 'updating'],
   ['/nowhere', 'workspace']
 ]
 
