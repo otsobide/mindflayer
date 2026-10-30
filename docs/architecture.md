@@ -4973,7 +4973,11 @@ was let go.
   warning's or error's for a code it knows no icon for, and a note's for a
   line with none. The toast offers it for a run that said only notes. A
   refused run, or one whose answer never came, is a toast too, the second
-  naming the transcript, which says what did run.
+  naming the transcript, which says what did run. Either leaves the drawer
+  on the last run that answered, so an earlier toast still opens what that
+  run said: the drawer reads the last answered run in Vue Query's mutation
+  cache, kept while the tab is open, since the run mutation's own answer is
+  cleared as the next run starts and stays cleared when it fails.
 - **The transcript is the server's.** Every page's header opens it
   (`TranscriptDrawer.vue`): every task the session ran, from any tab or
   script holding the token, each line with what it printed, read from `GET
