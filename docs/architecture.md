@@ -5000,6 +5000,16 @@ ninth a scan beside it, each a file under `src/pages`:
   `flayer relink` that would. The folders and the depth are the address's,
   so a reload scans the same again; with none, the page starts from the
   workspace's own folder, and scans nothing until asked.
+- **Assign** (`/assign?kind=...&origin=...&agent=...&q=...&by=project`) is
+  the matrix (#79): every offer in `offers` against every project, a row an
+  offer under a heading for its origin and a column a project, or turned
+  round by project, a row a project and the origins in a band over the
+  offers' columns. Each box is ticked where `boxes` says, with the icon of
+  its name's state over its corner, each state in `box_states` said in the
+  legend below, and one of a kind its project can take none of is closed,
+  saying why. Kind, origin and text filter the offers and the agent the
+  projects, whichever way round, in the address. The boxes marked are
+  planned, and applied ([its changes](#its-changes)).
 - **The library** (`/library?kind=...`) has a page for each kind in `kinds`,
   the first when none is named, listing the workspace's own of it, filtered
   by name or summary, each with the projects holding a copy and how each
@@ -5013,17 +5023,6 @@ ninth a scan beside it, each a file under `src/pages`:
 - **The shelf** (`/shelf`) lists what was gathered, filtered by kind, by
   name, summary or origin, each with its `origin`, the commit it was taken
   at and when.
-- **Assign** (`/assign?kind=...&origin=...&agent=...&q=...&by=project`) is
-  the matrix (#79): every offer in `offers` against every project, a row an
-  offer under a heading for its origin and a column a project, or turned
-  round by project, a row a project and the origins in a band over the
-  offers' columns. Each box is ticked where `boxes` says, with the icon of
-  its name's state over its corner, each state in `box_states` said in the
-  legend below, and one of a kind its project can take
-  none of is closed, saying why. Kind, origin and text filter the offers and
-  the agent the projects, whichever way round, in the address. The boxes
-  marked are planned, and applied ([its changes](#its-changes)).
-
 - **The sources** (`/sources`) lists where the shelf is filled from, each
   with its `origin`, branch, folder, commit and what it supplied, and the
   latest actions the ledger logged (`history`), newest first.
