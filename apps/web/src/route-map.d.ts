@@ -66,6 +66,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/edit': RouteRecordInfo<
+      '/edit',
+      '/edit',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/library': RouteRecordInfo<
       '/library',
       '/library',
@@ -156,6 +163,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/discover.vue': {
       routes:
         | '/discover'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/edit.vue': {
+      routes:
+        | '/edit'
       views:
         | never
       pathParamNames:

@@ -6,7 +6,7 @@ import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
 import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
-import { answering, answers, commanded, commanding, fixture, plans, render, unmount, updates, type Fixture } from './panel'
+import { answering, answers, commanded, commanding, drafts, fixture, plans, render, unmount, updates, validated, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -50,6 +50,7 @@ const PAGES: [string, Fixture][] = [
   ['/artifact?kind=rule&name=git/commits', 'workspace'],
   ['/artifact?kind=rule&name=style/comments', 'workspace'],
   ['/artifact?kind=skill&name=nowhere', 'workspace'],
+  ['/edit?kind=skill&name=nowhere', 'workspace'],
   ['/shelf', 'workspace'],
   ['/shelf?kind=rule', 'workspace'],
   ['/shelf', 'unmade'],
@@ -170,6 +171,19 @@ describe('one of the library\'s own, about to be removed', () => {
     await flushPromises()
     document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
     await vi.waitFor(() => expect(document.querySelector('[data-testid="remove-said"]')).not.toBeNull())
+
+    expect(await violations()).toEqual([])
+  })
+})
+
+describe('authoring in the library', () => {
+  it('passes axe in the editor, with what validate would say of the text drawn', async () => {
+    const { page } = await render('/edit?kind=skill&name=review', answering(fixture('workspace'), [...answers(), ...drafts()]).transport)
+    const { EditorView } = await import('@codemirror/view')
+    const view = EditorView.findFromDOM(page.get('[data-testid="editor"]').element.shadowRoot!.querySelector<HTMLElement>('.cm-editor')!)!
+
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: validated.text } })
+    await vi.waitFor(() => expect(document.querySelectorAll('[data-testid="issue"]')).toHaveLength(2))
 
     expect(await violations()).toEqual([])
   })

@@ -63,7 +63,14 @@ export default defineConfig({
   build: {
     // Nothing inlined as a data: URL: the CSP's default-src 'self' refuses
     // those for fonts and images alike, so every asset is a file of its own.
-    assetsInlineLimit: 0
+    assetsInlineLimit: 0,
+    // The editor's page is one chunk of some 530 kB: CodeMirror, and the
+    // languages markdown can hold, HTML with its CSS and JavaScript among
+    // them, which @codemirror/lang-markdown imports whether or not a code
+    // block asks for one. Loaded only when somebody opens the editor, from
+    // the server on the same machine, so the default warning at 500 kB,
+    // meant for a page fetched over a network, would warn of nothing.
+    chunkSizeWarningLimit: 600
   },
   server: {
     host: '127.0.0.1',
