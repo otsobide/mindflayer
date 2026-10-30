@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    ActivityFeed: typeof import('./components/ActivityFeed.vue')['default']
     AgentBadges: typeof import('./components/AgentBadges.vue')['default']
     AppHeader: typeof import('./components/AppHeader.vue')['default']
     AppLogo: typeof import('./components/AppLogo.vue')['default']

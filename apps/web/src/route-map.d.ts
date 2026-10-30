@@ -80,6 +80,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/sources': RouteRecordInfo<
+      '/sources',
+      '/sources',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
   }
 
   /**
@@ -144,6 +151,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/shelf.vue': {
       routes:
         | '/shelf'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/sources.vue': {
+      routes:
+        | '/sources'
       views:
         | never
       pathParamNames:

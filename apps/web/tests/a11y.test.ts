@@ -46,6 +46,8 @@ const PAGES: [string, Fixture][] = [
   ['/shelf', 'workspace'],
   ['/shelf?kind=rule', 'workspace'],
   ['/shelf', 'unmade'],
+  ['/sources', 'workspace'],
+  ['/sources', 'unmade'],
   ['/nowhere', 'workspace']
 ]
 
