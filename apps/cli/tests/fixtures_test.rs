@@ -1,6 +1,7 @@
-//! The snapshots the panel's tests render from, and the answers to what its
-//! page of an artifact asks, written from the real thing: workspaces built
-//! by running the commands, read through the panel's backend as the server
+//! The snapshots the panel's tests render from, the answers to what its
+//! page of an artifact asks, and what previewing and running a few tasks is
+//! answered with, written from the real thing: workspaces built by running
+//! the commands, read and changed through the panel's backend as the server
 //! answers it, and written into the panel's `tests/fixtures` (`make
 //! web/fixtures`), committed beside its tests.
 //!
@@ -382,4 +383,53 @@ fn write_the_snapshot_of_a_home_where_nothing_is_made() {
     let json = pinned(&json, dir.path(), None);
     assert!(!home.join(FLAYER_DIR).exists(), "the read made a workspace");
     write("unmade", &json);
+}
+
+/// What the panel is answered with when it previews and runs each of a few
+/// tasks in turn on the workspace [`workspace`] builds, with `blog` made a
+/// project beside the others and not linked: each task as the panel sends
+/// it, its preview, and what its run is answered with, its lines and what
+/// they produced, as the server sends both.
+///
+/// A link, which asks nothing; an unlink, which the panel has somebody
+/// confirm; a validate of `docs`, which fails and says why with codes; and
+/// a removal everywhere, which takes two things away.
+#[test]
+fn write_what_previewing_and_running_a_few_tasks_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = workspace(&home);
+    let blog = root.join("blog");
+    fs::create_dir(&blog).unwrap();
+    gix::init(&blog).expect("initialize a repository");
+    mind(&blog, &["init"]).unwrap();
+    let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+
+    let tasks = [
+        json!({"type": "link", "path": blog.to_str().unwrap()}),
+        json!({"type": "unlink", "entry": "gone"}),
+        json!({"type": "validate", "holder": {"type": "project", "entry": "docs"}}),
+        json!({
+            "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
+            "name": "lint", "everywhere": true,
+        }),
+    ];
+    let mut answers = Vec::new();
+    for sent in tasks {
+        let task: Task = serde_json::from_value(sent.clone()).unwrap();
+        let preview = backend
+            .preview(&task)
+            .unwrap_or_else(|refusal| panic!("{sent}: {}: {}", refusal.code, refusal.message));
+        let outcome = backend.run(task).unwrap();
+        let ran = json!({"lines": preview.lines, "outcome": outcome});
+        answers.push(json!({"task": sent, "preview": preview, "ran": ran}));
+    }
+
+    let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    for (index, ok) in [true, true, false, true].into_iter().enumerate() {
+        assert_eq!(answers[index]["ran"]["outcome"]["ok"], ok, "{json}");
+    }
+    write("commands", &json);
 }
