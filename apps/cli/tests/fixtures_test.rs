@@ -1038,6 +1038,46 @@ fn write_what_each_change_the_page_of_loads_sends_is_answered_with() {
     write("loads", &json);
 }
 
+/// What the panel is answered with when its header switches from the
+/// workspace [`assigning`] builds, in the home [`acquainted`] with it: what
+/// it may switch to, asked as the header opens; then, switched to `kit`,
+/// what the switch is answered with, the snapshot of `kit`, which the
+/// overview draws next, and what it may switch to from there; and a switch
+/// to `old`, listed but gone since, which is refused.
+#[test]
+fn write_what_switching_from_a_workspace_to_assign_in_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = assigning(&home);
+    acquainted(&home);
+    let backend = PanelBackend::launch(&root, &at_home(&home)).unwrap();
+    let workspaces = json!({"type": "workspaces"});
+    let switch = |name: &str| json!({"path": home.join(name).to_str().unwrap()});
+
+    let before = asked(&backend, workspaces.clone());
+    let refused = backend
+        .switch(serde_json::from_value(switch("old")).unwrap())
+        .expect_err("a workspace gone since is switched to");
+    let to_kit = switch("kit");
+    let switched = backend
+        .switch(serde_json::from_value(to_kit.clone()).unwrap())
+        .unwrap_or_else(|refusal| panic!("{}: {}", refusal.code, refusal.message));
+    let snapshot = backend.query(Query::Snapshot {}).unwrap();
+    let after = asked(&backend, workspaces);
+
+    assert_eq!(refused.code, "not_a_workspace");
+    assert_eq!(snapshot["workspace"]["reason"], "explicit");
+    let answer = json!({
+        "workspaces": before,
+        "switched": {"to": to_kit, "answer": switched, "snapshot": snapshot, "workspaces": after},
+        "refused": {"to": switch("old"), "error": refused.message, "code": refused.code},
+    });
+    let json = serde_json::to_string_pretty(&answer).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    write("switches", &json);
+}
+
 /// The workspace [`updating`] builds, as the panel is answered with it:
 /// what its page of updates and its projects table draw.
 #[test]
