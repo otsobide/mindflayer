@@ -166,6 +166,8 @@
     {
       "default": false,
       "in_use": true,
+      "loadable": false,
+      "loaded_as": null,
       "name": "Assign",
       "path": "/home/you/Assign",
       "projects": 5,

@@ -133,6 +133,8 @@
     {
       "default": false,
       "in_use": true,
+      "loadable": false,
+      "loaded_as": null,
       "name": "Updating",
       "path": "/home/you/Updating",
       "projects": 3,

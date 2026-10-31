@@ -11,6 +11,7 @@ use std::slice;
 
 use mindflayer_core::assign;
 use mindflayer_core::install::{self, Edits};
+use mindflayer_core::known;
 use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
 use mindflayer_core::reapply::{self, Change};
 use mindflayer_core::resolve::{Inputs, Intent, Reason};
@@ -783,7 +784,9 @@ const EXPECTED: &str = r#"{
       "in_use": true,
       "projects": 2,
       "stale_projects": 1,
-      "stale": null
+      "stale": null,
+      "loaded_as": null,
+      "loadable": false
     }
   ],
   "history": [
@@ -1147,6 +1150,89 @@ fn what_a_workspace_loads_is_listed_on_its_own_as_the_snapshot_lists_it() {
 
     assert_eq!(LoadedWorkspace::of(&workspace), snapshot.loaded);
     assert_eq!(snapshot.loaded[0].offers, 1);
+}
+
+/// Which of the workspaces this machine knows the one a snapshot is of
+/// could load is core's to say, beside each: not itself, which a load
+/// refuses; not one it loads already, by the entry it loads it by; not one
+/// that would not open; any other, the default in home among them.
+#[test]
+fn each_workspace_this_machine_knows_says_whether_this_one_loads_it_and_could() {
+    let fixture = fixture();
+    let home = fixture.dir.path().join("home");
+    FlayerWorkspace::init(&home).unwrap();
+    let kit = fixture.dir.path().join("kit");
+    let old = fixture.dir.path().join("old");
+    FlayerWorkspace::init(&kit).unwrap();
+    FlayerWorkspace::init(&old).unwrap();
+    for root in [&fixture.hub, &fixture.dir.path().join("team"), &kit, &old] {
+        known::remember(Some(&home), &FlayerWorkspace::open(root).unwrap()).unwrap();
+    }
+    fs::remove_dir_all(&old).unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, Some(&home)))
+        .unwrap()
+        .unwrap();
+
+    let stood: Vec<(String, bool, Option<&str>, bool)> = snapshot
+        .known
+        .iter()
+        .map(|known| {
+            (
+                known
+                    .workspace
+                    .path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+                known.workspace.in_use,
+                known.loaded_as.as_deref(),
+                known.loadable,
+            )
+        })
+        .collect();
+    assert_eq!(
+        stood,
+        [
+            (String::from("home"), false, None, true),
+            (String::from("hub"), true, None, false),
+            (String::from("team"), false, Some("../team"), false),
+            (String::from("kit"), false, None, true),
+            (String::from("old"), false, None, false),
+        ]
+    );
+    assert!(snapshot.known[4].workspace.stale.is_some());
+}
+
+/// A workspace loaded by a second spelling of its folder is loaded all the
+/// same, by the first entry that spells it.
+#[test]
+fn a_workspace_loaded_by_another_spelling_is_said_to_be_loaded_by_the_first() {
+    let fixture = fixture();
+    let home = fixture.dir.path().join("home");
+    FlayerWorkspace::init(&home).unwrap();
+    let team = fixture.dir.path().join("team");
+    known::remember(Some(&home), &FlayerWorkspace::open(&team).unwrap()).unwrap();
+    let marker = fixture.hub.join(FLAYER_DIR).join("flayer.toml");
+    let text = fs::read_to_string(&marker).unwrap();
+    fs::write(
+        &marker,
+        text.replacen("\"../team\"", "\"./../team\", \"../team\"", 1),
+    )
+    .unwrap();
+
+    let snapshot = Snapshot::read(&naming(&fixture.hub, Some(&home)))
+        .unwrap()
+        .unwrap();
+
+    let team = snapshot
+        .known
+        .iter()
+        .find(|known| known.workspace.name.as_deref() == Some("team"))
+        .unwrap_or_else(|| panic!("{:?}", snapshot.known));
+    assert_eq!(team.loaded_as.as_deref(), Some("./../team"));
+    assert!(!team.loadable);
 }
 
 /// Each origin a snapshot lists beside what is offered is what `--from`
