@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useShell } from '@/stores/shell'
+import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 
 defineProps<{
   title: string
@@ -23,6 +24,7 @@ const shell = useShell()
     </template>
 
     <template #right>
+      <WorkspaceSwitcher />
       <slot />
       <UTooltip text="Transcript: every task this session ran">
         <UButton

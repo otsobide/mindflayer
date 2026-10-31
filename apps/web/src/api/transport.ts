@@ -9,15 +9,19 @@ import type { Planned } from './generated/Planned'
 import type { Query } from './generated/Query'
 import type { Scanned } from './generated/Scanned'
 import type { Snapshot } from './generated/Snapshot'
+import type { Switch } from './generated/Switch'
+import type { Switchable } from './generated/Switchable'
 import type { Task } from './generated/Task'
 import type { Updates } from './generated/Updates'
 
 /*
  * What the panel sends and is answered with is the backend's, generated
  * from Rust into `generated/` (make web/types): a read for core to answer
- * (`Query`), a change (`Task`) and what running one produced (`Outcome`).
+ * (`Query`), a change (`Task`), what running one produced (`Outcome`), and
+ * the workspace to act on from now on (`Switch`), answered with its row of
+ * what may be switched to (`Switchable`).
  */
-export type { Outcome, Query, Task }
+export type { Outcome, Query, Switch, Switchable, Task }
 
 /**
  * What each query is answered with, by its `type`. Every query names its
@@ -32,6 +36,7 @@ export interface Answers {
   plan: Planned
   updates: Updates
   validate: Judged
+  workspaces: Switchable[]
 }
 
 /** What `query` is answered with. */
@@ -68,6 +73,12 @@ export interface Ran {
  *   run, and stopped, however that went;
  * - `resync`: something may have been missed, as on connecting, so
  *   everything is asked for again;
+ * - `switched`: the server acts on another workspace since, from this tab
+ *   or another, so everything is asked for again and nothing shown of the
+ *   one before is kept;
+ * - each of those two with `switches`, how many switches the server has
+ *   taken since it started, by which a tab that missed one, its stream let
+ *   go while it was hidden or fallen behind, learns of it on its resync;
  * - `watching` and `unwatched`: whether everything the server was told to
  *   watch is, and why not, when a change there shows only once asked for
  *   by hand.
@@ -82,7 +93,8 @@ export type LiveEvent
   = | { type: 'changed', scopes: Holder[] }
     | { type: 'command_started', lines: string[] }
     | { type: 'command_finished', lines: string[] }
-    | { type: 'resync' }
+    | { type: 'resync', switches: number }
+    | { type: 'switched', switches: number }
     | { type: 'watching' }
     | { type: 'unwatched', reason: string }
 
@@ -93,7 +105,7 @@ export type Unsubscribe = () => void
  * How the panel reaches the front end behind it, and the only way it does.
  *
  * An interface rather than the HTTP calls themselves, so a desktop shell can
- * answer the same four calls without a server (D-17), and so authentication
+ * answer the same five calls without a server (D-17), and so authentication
  * lives in exactly one place: the implementation. Every request the panel
  * makes goes through one of these; a lint rule keeps `fetch` out of every
  * other file.
@@ -109,6 +121,15 @@ export interface Transport {
    */
   send(task: Task, mode: 'preview'): Promise<Preview>
   send(task: Task, mode: 'run'): Promise<Ran>
+
+  /**
+   * Act on another workspace from now on: one the answer to the
+   * `workspaces` query lists, by its path as listed, which the server
+   * holds to that list read again, refusing any other. Queued behind every
+   * task sent before it, and answered with its row once it is taken, which
+   * the stream then tells every tab (`switched`).
+   */
+  switch(to: Switch): Promise<Switchable>
 
   /**
    * Every task the session ran, oldest first, each with what it produced:

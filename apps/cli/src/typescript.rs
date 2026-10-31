@@ -13,16 +13,16 @@ use std::path::PathBuf;
 use mindflayer_core::typescript::{docs, lines, CoreCode};
 use ts_rs::{Config, TypeVisitor, TS};
 
-use crate::backend::{Confirm, Outcome, Planned, Query, Scanned};
+use crate::backend::{Confirm, Outcome, Planned, Query, Scanned, Switch};
 use crate::render::Envelope;
 use crate::task::Task;
 use crate::CODES;
 
 /// Every type the CLI hands the panel whole, or takes from it, each with
-/// every type it names: a query and a task, which the panel sends; what a
-/// scan, a plan, a preview and a run are answered with, the last two what
-/// to confirm and what it produced; the envelope a reading command's
-/// `--json` prints; and every code either crate gives.
+/// every type it names: a query, a task and a switch, which the panel
+/// sends; what a scan, a plan, a preview and a run are answered with, the
+/// last two what to confirm and what it produced; the envelope a reading
+/// command's `--json` prints; and every code either crate gives.
 pub fn roots(visitor: &mut impl TypeVisitor) {
     visitor.visit::<Query>();
     visitor.visit::<Task>();
@@ -30,6 +30,7 @@ pub fn roots(visitor: &mut impl TypeVisitor) {
     visitor.visit::<Planned>();
     visitor.visit::<Confirm>();
     visitor.visit::<Outcome>();
+    visitor.visit::<Switch>();
     visitor.visit::<Envelope<'static, ()>>();
     visitor.visit::<Code>();
 }

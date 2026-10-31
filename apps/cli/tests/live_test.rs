@@ -29,7 +29,10 @@ async fn watching(root: &Path) -> (Arc<PanelBackend>, Watcher, Events, Subscript
     let mut subscription = events.subscribe();
     let named = Arc::clone(&backend);
     let watcher = Watcher::start(move || named.watched_paths(), events.clone());
-    assert_eq!(next(&mut subscription).await, Some(Event::Resync));
+    assert_eq!(
+        next(&mut subscription).await,
+        Some(Event::Resync { switches: 0 })
+    );
     assert_eq!(next(&mut subscription).await, Some(Event::Watching));
     (backend, watcher, events, subscription)
 }

@@ -141,6 +141,16 @@ where it is.
 
 ![Loaded workspaces: the platform team's workspace loaded, with its two skills, and the workspaces this machine knows, one of which can still be loaded](docs/images/loads.png)
 
+### Switching workspace
+
+The header of every page names the workspace the panel works on and how it
+was found. Press it to see every workspace this machine knows, and the one
+you started the panel on, and switch to another without restarting: every
+page then shows that one, and every command the panel runs names it with
+`-W`, so the transcript says which workspace each line ran against.
+
+![The header's workspace menu open: the demo's workspace in use, found above, and the default and the platform team's workspaces to switch to](docs/images/switcher.png)
+
 ### The shelf and its sources
 
 The shelf holds what was gathered from git repositories, each skill with
@@ -190,7 +200,8 @@ in, then the rest. Tick them and link them in one go.
 
 The panel changes nothing behind your back. Whatever you ask for, it first
 shows the command lines it will run, exactly as you could type them in the
-workspace's folder, and runs nothing until you press Run.
+workspace's folder, each naming the workspace with `-W`, and runs nothing
+until you press Run.
 
 ![The preview of linking the two repositories: a mind init, then a flayer link](docs/images/preview.png)
 

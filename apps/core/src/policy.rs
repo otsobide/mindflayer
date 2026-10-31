@@ -20,6 +20,11 @@
 //!   marker, its ledger, its library and the clones it gathered, none of
 //!   which is a project to make or link. A path that leads into one through
 //!   a link is refused as one inside it.
+//! - **A workspace to switch to is named by its path as a list of core's
+//!   spells it** ([`switched`]): one of the workspaces this machine knows,
+//!   or the one the front end was launched on ([`crate::known::switchable`]),
+//!   matched character for character against that list and never opened as
+//!   given, so a front end that stays on one workspace goes to no other.
 //!
 //! Each refusal has a code, as every error core gives does
 //! ([`crate::code`]), and the front end runs nothing of a task one of its
@@ -33,7 +38,9 @@ use thiserror::Error;
 
 use crate::code::codes;
 use crate::install;
+use crate::known::Switchable;
 use crate::paths;
+use crate::resolve::Reason;
 use crate::workspace::{FlayerWorkspace, Loaded, Member, WorkspaceError, FLAYER_DIR};
 
 /// Why a value a request holds is not one it may name.
@@ -47,6 +54,11 @@ pub enum PolicyError {
     Unnormalized { given: String, normal: String },
     #[error("`{given}` is inside a `.mindflayer`, which holds a workspace's own files: name a folder outside it")]
     InMindflayer { given: String },
+    /// A workspace to switch to that no list of what may be switched to
+    /// holds, by the path it spells: a typo, a list read before it changed,
+    /// or a path somebody put together, none of which is gone to.
+    #[error("`{given}` is none of the workspaces this machine knows, nor the one the panel was launched on: only one of those is switched to")]
+    Unlisted { given: String },
     /// An entry no registry holds, or a path no entry points at: the
     /// workspace's own error for an unlink or an unload of one, since it is
     /// the condition they meet too.
@@ -59,6 +71,7 @@ codes!(PolicyError {
     Self::Relative { .. } => "path_relative",
     Self::Unnormalized { .. } => "path_unnormalized",
     Self::InMindflayer { .. } => "path_in_mindflayer",
+    Self::Unlisted { .. } => "switch_unlisted",
 } carried {
     Self::Workspace(error) => error,
 });
@@ -173,6 +186,32 @@ pub fn loaded_path(workspace: &FlayerWorkspace, given: &str) -> Result<PathBuf, 
         .into());
     }
     Ok(path)
+}
+
+/// The workspace `given` names among `listed`, what [`crate::known::switchable`]
+/// lists, opened, with the rule it is chosen by once switched to: what a
+/// front end that stays on one workspace goes to when asked to go to
+/// another.
+///
+/// By the path the list spells it by, character for character, rather than
+/// by where `given` leads: a path a request sent is never opened, nor
+/// followed through a link, so nothing but a listed workspace is reached,
+/// and `given` names nothing else for being another spelling of it. One
+/// listed that does not open is refused with why it does not, never made:
+/// a workspace is made by `flayer init`, and a list read a moment ago may
+/// name one that has gone since. The one in use is taken, a switch to it
+/// changing nothing, as a load of one loaded already changes nothing.
+pub fn switched(
+    listed: &[Switchable],
+    given: &str,
+) -> Result<(FlayerWorkspace, Reason), PolicyError> {
+    let row = listed
+        .iter()
+        .find(|row| row.workspace.path.to_str() == Some(given))
+        .ok_or_else(|| PolicyError::Unlisted {
+            given: given.to_owned(),
+        })?;
+    Ok((FlayerWorkspace::open(&row.workspace.path)?, row.reason))
 }
 
 /// `path` as a command line's words hold it: a path the registry resolved,

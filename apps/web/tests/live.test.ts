@@ -106,7 +106,7 @@ describe('live updates', () => {
     expect(asked(queries, 'snapshot')).toBe(before)
     await tell({ type: 'command_finished', lines: ['flayer link beta'] })
     expect(asked(queries, 'snapshot')).toBe(before + 1)
-    await tell({ type: 'resync' })
+    await tell({ type: 'resync', switches: 0 })
     expect(asked(queries, 'snapshot')).toBe(before + 2)
   })
 
@@ -141,7 +141,7 @@ describe('live updates', () => {
     for (const event of [
       { type: 'changed', scopes: [workspace] },
       { type: 'command_finished', lines: ['flayer link beta'] },
-      { type: 'resync' }
+      { type: 'resync', switches: 0 }
     ] as LiveEvent[]) {
       for (const key of [['snapshot'], files, scan]) {
         client.setQueryData(key, {})
@@ -163,7 +163,7 @@ describe('live updates', () => {
       [{ type: 'changed', scopes: [workspace] }, false],
       [{ type: 'command_started', lines: ['flayer link beta'] }, false],
       [{ type: 'command_finished', lines: ['flayer link beta'] }, true],
-      [{ type: 'resync' }, true]
+      [{ type: 'resync', switches: 0 }, true]
     ] as [LiveEvent, boolean][]) {
       client.setQueryData(['transcript'], [])
       await tell(event)
@@ -283,6 +283,130 @@ describe('a run the panel sends', () => {
 
     await new Promise(resolve => setTimeout(resolve, 20))
     expect(client.getQueryState(['snapshot'])?.isInvalidated).toBe(false)
+    stop()
+  })
+})
+
+describe('a switch the panel sends', () => {
+  const SWITCHED = { path: '/home/you/kit' }
+
+  it('lets go of every answer once the stream says it was taken, and counts it', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { live, settleSwitch, stop } = listen(transport, client, document, 60_000)
+    client.setQueryData(['snapshot'], { workspace: 'before' })
+    client.setQueryData(['scan', {}], { found: [] })
+    let over = false
+
+    const settled = settleSwitch(() => Promise.resolve(SWITCHED)).then((answer) => {
+      over = true
+      return answer
+    })
+    await flushPromises()
+    expect(over).toBe(false)
+    expect(live.switches).toBe(0)
+    await tell({ type: 'switched', switches: 1 })
+
+    expect(await settled).toBe(SWITCHED)
+    expect(live.switches).toBe(1)
+    expect(client.getQueryData(['snapshot'])).toBeUndefined()
+    expect(client.getQueryData(['scan', {}])).toBeUndefined()
+    stop()
+  })
+
+  it('lets go once, when the stream said it was taken before the answer came', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { live, settleSwitch, stop } = listen(transport, client, document, 60_000)
+
+    const settled = settleSwitch(async () => {
+      await tell({ type: 'switched', switches: 1 })
+      return SWITCHED
+    })
+
+    expect(await settled).toBe(SWITCHED)
+    expect(live.switches).toBe(1)
+    stop()
+  })
+
+  it('lets go itself when the stream says nothing in time', async () => {
+    const { transport } = streaming()
+    const client = createQueryClient()
+    const { live, settleSwitch, stop } = listen(transport, client, document, 10)
+    client.setQueryData(['snapshot'], { workspace: 'before' })
+
+    expect(await settleSwitch(() => Promise.resolve(SWITCHED))).toBe(SWITCHED)
+
+    expect(live.switches).toBe(1)
+    expect(client.getQueryData(['snapshot'])).toBeUndefined()
+    stop()
+  })
+
+  it('refused, lets go of nothing', async () => {
+    const { transport } = streaming()
+    const client = createQueryClient()
+    const { live, settleSwitch, stop } = listen(transport, client, document, 10)
+    client.setQueryData(['snapshot'], { workspace: 'before' })
+    const refusal = new TransportError(422, 'none of the workspaces this machine knows', 'switch_unlisted')
+
+    await expect(settleSwitch(() => Promise.reject(refusal))).rejects.toBe(refusal)
+
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(live.switches).toBe(0)
+    expect(client.getQueryData(['snapshot'])).toEqual({ workspace: 'before' })
+    stop()
+  })
+})
+
+describe('a switch the stream did not tell', () => {
+  it('is let go of once the tab is shown again, by the count its resync carries', async () => {
+    const { subscriptions, transport, tell } = streaming()
+    const client = createQueryClient()
+    const { live, stop } = listen(transport, client)
+    await tell({ type: 'resync', switches: 2 })
+    client.setQueryData(['snapshot'], { workspace: 'before' })
+
+    shown('hidden')
+    // Another tab switches, told on every stream open: none of this tab's.
+    await tell({ type: 'switched', switches: 3 })
+    expect(live.switches).toBe(0)
+    shown('visible')
+    await tell({ type: 'resync', switches: 3 })
+
+    expect(subscriptions).toEqual({ taken: 2, let: 1 })
+    expect(live.switches).toBe(1)
+    expect(client.getQueryData(['snapshot'])).toBeUndefined()
+    stop()
+  })
+
+  it('is let go of once, when the stream still held it behind the resync that counted it', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { live, stop } = listen(transport, client)
+    await tell({ type: 'resync', switches: 0 })
+
+    // Fallen behind past a switch, then told what the stream still held.
+    await tell({ type: 'resync', switches: 1 })
+    await tell({ type: 'switched', switches: 1 })
+    expect(live.switches).toBe(1)
+    await tell({ type: 'switched', switches: 2 })
+
+    expect(live.switches).toBe(2)
+    stop()
+  })
+
+  it('is no switch when the resync counts what the tab heard: only marked stale', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { live, stop } = listen(transport, client)
+    await tell({ type: 'resync', switches: 1 })
+    client.setQueryData(['snapshot'], { workspace: 'same' })
+
+    await tell({ type: 'resync', switches: 1 })
+
+    expect(live.switches).toBe(0)
+    expect(client.getQueryData(['snapshot'])).toEqual({ workspace: 'same' })
+    expect(client.getQueryState(['snapshot'])?.isInvalidated).toBe(true)
     stop()
   })
 })

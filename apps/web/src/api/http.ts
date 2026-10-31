@@ -1,7 +1,7 @@
 /*
  * The one file allowed to use `fetch` and `EventSource` (see eslint.config.ts).
  */
-import { TransportError, type Answer, type LiveEvent, type Preview, type Query, type Ran, type Task, type Transport } from './transport'
+import { TransportError, type Answer, type LiveEvent, type Preview, type Query, type Ran, type Switch, type Switchable, type Task, type Transport } from './transport'
 
 /**
  * Sent with every request.
@@ -19,8 +19,8 @@ const HEADERS = {
 
 /**
  * The transport for a panel the local server serves, over HTTP: the server's
- * query, preview and commands endpoints, its transcript and its event
- * stream, all under `/api`.
+ * query, preview, commands and switch endpoints, its transcript and its
+ * event stream, all under `/api`.
  *
  * Relative URLs, so the panel talks to whichever server sent it, on
  * whatever port it took, or to the Vite dev server that proxies `/api` to
@@ -37,6 +37,10 @@ export function httpTransport(): Transport {
       return mode === 'preview'
         ? post<Preview>('/api/commands/preview', task)
         : post<Ran>('/api/commands', task)
+    },
+
+    switch(to: Switch) {
+      return post<Switchable>('/api/switch', to)
     },
 
     transcript() {
