@@ -4231,10 +4231,10 @@ The panel's whole API is six endpoints, the first four
 - `POST /api/commands/preview`: the command lines a task is, and what of them
   the panel has somebody confirm first, with nothing run.
 - `POST /api/commands`: run a task; the reply is its lines and its outcome.
+- `GET /api/transcript`: every task the session ran, with what each produced.
 - `POST /api/switch`: have the backend act on something else from now on,
   which only it can say it may; the reply is the backend's JSON for what
   it acts on then ([switching what it acts on](#switching-what-it-acts-on)).
-- `GET /api/transcript`: every task the session ran, with what each produced.
 - `GET /api/events`: what happens as it happens, a change on disk or a run
   starting and finishing, as server-sent events ([live
   updates](#live-updates)).
