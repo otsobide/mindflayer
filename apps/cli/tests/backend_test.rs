@@ -11,7 +11,7 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::*;
-use mindflayer_cli::backend::{Outcome, PanelBackend, Query};
+use mindflayer_cli::backend::{Outcome, PanelBackend, Query, Switch};
 use mindflayer_cli::task::{naming, shell, Caution};
 use mindflayer_core::watch;
 use mindflayer_server::{Backend, Refusal};
@@ -2408,4 +2408,253 @@ fn a_save_whose_scratch_folder_is_a_link_is_refused_and_writes_nothing_where_it_
     assert!(refused.message.contains("is a link"), "{}", refused.message);
     assert_eq!(fs::read_dir(&commands).unwrap().count(), 0);
     assert_eq!(fs::read_to_string(&manifest).unwrap(), read);
+}
+
+// ---------------------------------------------------------------------------
+// Switching to another workspace
+// ---------------------------------------------------------------------------
+
+/// What a browser sends to switch, read as the server reads it.
+fn switch(sent: Value) -> Switch {
+    serde_json::from_value(sent.clone()).unwrap_or_else(|error| panic!("{sent}: {error}"))
+}
+
+/// The backend over `root`, launched there, at `home`, with `root` found
+/// above where it starts, as `flayer ui` run in it finds it.
+fn launched_knowing(home: &Path, root: &Path) -> PanelBackend {
+    PanelBackend::launch(root, &Lookup::at_home(Some(home))).unwrap()
+}
+
+/// The path, name, and whether in use, launched on and offered, of each
+/// workspace the backend may switch to.
+fn offered(backend: &PanelBackend) -> Vec<(String, bool, bool, bool)> {
+    let answer = backend.query(query(json!({"type": "workspaces"}))).unwrap();
+    answer
+        .as_array()
+        .unwrap_or_else(|| panic!("{answer}"))
+        .iter()
+        .map(|row| {
+            (
+                row["name"].as_str().unwrap_or("").to_owned(),
+                row["in_use"] == true,
+                row["launched"] == true,
+                row["switchable"] == true,
+            )
+        })
+        .collect()
+}
+
+/// The workspace a snapshot is of, and the rule it says chose it.
+fn snapshot_of(backend: &PanelBackend) -> (Value, Value) {
+    let snapshot = backend.query(query(json!({"type": "snapshot"}))).unwrap();
+    (
+        snapshot["workspace"]["path"].clone(),
+        snapshot["workspace"]["reason"].clone(),
+    )
+}
+
+#[test]
+fn what_may_be_switched_to_is_every_known_workspace_and_the_launch() {
+    let (_dir, home, root) = knowing();
+    let backend = launched_knowing(&home, &root);
+
+    assert_eq!(
+        offered(&backend),
+        [
+            (String::from("home"), false, false, true),
+            (String::from("Projects"), true, true, false),
+            (String::from("team"), false, false, true),
+        ]
+    );
+}
+
+#[test]
+fn a_query_of_what_may_be_switched_to_takes_no_field() {
+    let refused = serde_json::from_value::<Query>(json!({"type": "workspaces", "path": "/"}));
+
+    assert!(refused.is_err(), "{refused:?}");
+}
+
+/// Switched to a workspace this machine knows, every read is of it, every
+/// line names it, every run lands in it, what is watched is its own, and
+/// the snapshot says it was named, as `-W` names it; switched back to the
+/// launch, the rule that chose it at launch.
+#[test]
+fn a_switch_to_a_known_workspace_is_what_every_query_preview_and_run_acts_on() {
+    let (dir, home, root) = knowing();
+    let team = dir.path().join("team");
+    let backend = launched_knowing(&home, &root);
+    let kept = backend.clone();
+    let path = |root: &Path| json!(root.to_str().unwrap());
+
+    let answer = backend
+        .switch(&switch(json!({"path": team.to_str().unwrap()})))
+        .unwrap();
+
+    assert_eq!(answer["path"], path(&team));
+    assert_eq!(answer["in_use"], true);
+    assert_eq!(answer["reason"], "explicit");
+    assert_eq!(snapshot_of(&backend), (path(&team), json!("explicit")));
+    assert_eq!(kept.root(), team, "a clone acts on another");
+    let validate = json!({"type": "validate", "holder": {"type": "workspace"}});
+    assert_eq!(
+        backend.preview(&task(validate.clone())).unwrap().lines,
+        [format!("flayer -W {} validate", team.display())]
+    );
+    let add = json!({
+        "type": "add", "holder": {"type": "workspace"}, "kind": "skill",
+        "name": "minutes", "description": "Take the minutes", "template": null,
+    });
+    let ran = backend.run(task(add)).unwrap();
+    assert!(ran.ok, "{ran:?}");
+    assert!(
+        team.join(".mindflayer/library/skills/minutes").is_dir(),
+        "{ran:?}"
+    );
+    assert!(!root.join(".mindflayer/library/skills/minutes").exists());
+    let watched = backend.watched_paths();
+    assert!(watched.iter().any(|each| each.path.starts_with(&team)));
+    assert!(
+        !watched.iter().any(|each| each.path.starts_with(&root)),
+        "{watched:?}"
+    );
+
+    backend
+        .switch(&switch(json!({"path": root.to_str().unwrap()})))
+        .unwrap();
+    assert_eq!(snapshot_of(&backend), (path(&root), json!("above")));
+    assert_eq!(
+        backend.preview(&task(validate)).unwrap().lines,
+        [format!("flayer -W {} validate", root.display())]
+    );
+}
+
+/// The server's test the issue names: a path no list holds, however it is
+/// spelled, a value starting with a dash among them, is refused with a
+/// code, and nothing is switched; the next read and the next line are of
+/// the workspace before, and the disk is as it was.
+#[test]
+fn a_switch_to_a_path_outside_the_list_is_refused_and_nothing_is_switched() {
+    let (dir, home, root) = knowing();
+    let stranger = dir.path().join("stranger");
+    fs::create_dir_all(&stranger).unwrap();
+    flayer(&stranger, &["init"]).unwrap();
+    let team = dir.path().join("team");
+    let backend = launched_knowing(&home, &root);
+    let before = files(dir.path());
+    let team = team.to_str().unwrap();
+
+    for sent in [
+        // A workspace, but one nothing remembers.
+        stranger.to_str().unwrap().to_owned(),
+        // A listed one, spelled otherwise.
+        format!("{team}/"),
+        format!("{team}/.mindflayer"),
+        under(dir.path(), &["home", "..", "team"]),
+        String::from("team"),
+        String::from("../team"),
+        // Values that start with a dash.
+        String::from("--yes"),
+        String::from("-W"),
+        String::from("--workspace=/"),
+        String::from("-C/"),
+        // Nothing at all, and somewhere else entirely.
+        String::new(),
+        String::from("/"),
+        String::from("file:///etc"),
+    ] {
+        let refused = backend.switch(&switch(json!({"path": sent})));
+
+        assert_eq!(
+            refused.as_ref().map_err(|refusal| refusal.code),
+            Err("switch_unlisted"),
+            "{sent:?}: {refused:?}"
+        );
+    }
+    assert_eq!(
+        snapshot_of(&backend),
+        (json!(root.to_str().unwrap()), json!("above"))
+    );
+    assert_eq!(
+        backend
+            .preview(&task(json!({"type": "shelf"})))
+            .unwrap()
+            .lines,
+        [format!("flayer -W {} gather list", root.display())]
+    );
+    assert_eq!(files(dir.path()), before);
+}
+
+#[test]
+fn a_switch_carrying_anything_but_a_path_is_refused() {
+    for sent in [
+        json!({"path": "/", "workspace": "/"}),
+        json!({"path": "/", "home": "/"}),
+        json!({"type": "load", "path": "/"}),
+        json!({}),
+        json!({"path": ["/"]}),
+    ] {
+        assert!(
+            serde_json::from_value::<Switch>(sent.clone()).is_err(),
+            "{sent}"
+        );
+    }
+}
+
+/// A workspace the list names that will not open, gone since, is refused
+/// with why it will not, never made, and nothing is switched.
+#[test]
+fn a_known_workspace_that_does_not_open_is_refused_and_never_made() {
+    let (dir, home, root) = knowing();
+    let team = dir.path().join("team");
+    let backend = launched_knowing(&home, &root);
+    fs::remove_dir_all(team.join(FLAYER_DIR)).unwrap();
+
+    assert_eq!(
+        offered(&backend)[2],
+        (String::new(), false, false, false),
+        "listed, and offered nothing"
+    );
+    let refused = backend.switch(&switch(json!({"path": team.to_str().unwrap()})));
+
+    assert_eq!(
+        refused.as_ref().map_err(|refusal| refusal.code),
+        Err("not_a_workspace"),
+        "{refused:?}"
+    );
+    assert!(!team.join(FLAYER_DIR).exists(), "it was made");
+    assert_eq!(
+        snapshot_of(&backend),
+        (json!(root.to_str().unwrap()), json!("above"))
+    );
+}
+
+/// Switched to a workspace that has gone since, the panel can still read
+/// where it may go, and go back.
+#[test]
+fn a_workspace_gone_since_it_was_switched_to_can_still_be_left() {
+    let (dir, home, root) = knowing();
+    let team = dir.path().join("team");
+    let backend = launched_knowing(&home, &root);
+    backend
+        .switch(&switch(json!({"path": team.to_str().unwrap()})))
+        .unwrap();
+    fs::remove_dir_all(team.join(FLAYER_DIR)).unwrap();
+
+    let snapshot = backend.query(query(json!({"type": "snapshot"})));
+    assert_eq!(
+        snapshot.as_ref().map_err(|refusal| refusal.code),
+        Err("not_a_workspace")
+    );
+    assert!(offered(&backend)
+        .iter()
+        .any(|row| row.0 == "Projects" && row.3));
+    backend
+        .switch(&switch(json!({"path": root.to_str().unwrap()})))
+        .unwrap();
+
+    assert_eq!(
+        snapshot_of(&backend),
+        (json!(root.to_str().unwrap()), json!("above"))
+    );
 }

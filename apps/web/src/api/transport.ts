@@ -9,6 +9,7 @@ import type { Planned } from './generated/Planned'
 import type { Query } from './generated/Query'
 import type { Scanned } from './generated/Scanned'
 import type { Snapshot } from './generated/Snapshot'
+import type { Switchable } from './generated/Switchable'
 import type { Task } from './generated/Task'
 import type { Updates } from './generated/Updates'
 
@@ -32,6 +33,7 @@ export interface Answers {
   plan: Planned
   updates: Updates
   validate: Judged
+  workspaces: Switchable[]
 }
 
 /** What `query` is answered with. */
