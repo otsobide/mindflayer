@@ -258,7 +258,8 @@ under `apps/` with its own `Makefile`:
   (`IssueList`), a rendered body (`MarkdownBody`), an artifact's files
   (`FileTree`), the ledger's latest actions (`ActivityFeed`),
   `SnapshotGate`, which draws a page once the snapshot is answered, the
-  folder to link (`LinkForm`), a project's agents and share toggles
+  folder to link (`LinkForm`), the path of a workspace to load
+  (`LoadForm`), a project's agents and share toggles
   (`SettingsForm`) and its migration, dry run first (`MigrateOffer`), the
   removal of one of the library's own everywhere, dry run first
   (`RemoveOffer`), its rename (`RenameForm`), the editor, CodeMirror in a
