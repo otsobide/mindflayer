@@ -164,6 +164,18 @@
   ],
   "known": [
     {
+      "default": true,
+      "in_use": false,
+      "loadable": true,
+      "loaded_as": null,
+      "name": "you",
+      "path": "/home/you",
+      "projects": 0,
+      "remembered": false,
+      "stale": null,
+      "stale_projects": 0
+    },
+    {
       "default": false,
       "in_use": true,
       "loadable": false,
@@ -171,9 +183,45 @@
       "name": "Assign",
       "path": "/home/you/Assign",
       "projects": 5,
-      "remembered": false,
+      "remembered": true,
       "stale": null,
       "stale_projects": 1
+    },
+    {
+      "default": false,
+      "in_use": false,
+      "loadable": false,
+      "loaded_as": "../team",
+      "name": "team",
+      "path": "/home/you/team",
+      "projects": 0,
+      "remembered": true,
+      "stale": null,
+      "stale_projects": 0
+    },
+    {
+      "default": false,
+      "in_use": false,
+      "loadable": true,
+      "loaded_as": null,
+      "name": "kit",
+      "path": "/home/you/kit",
+      "projects": 0,
+      "remembered": true,
+      "stale": null,
+      "stale_projects": 0
+    },
+    {
+      "default": false,
+      "in_use": false,
+      "loadable": false,
+      "loaded_as": null,
+      "name": null,
+      "path": "/home/you/old",
+      "projects": 0,
+      "remembered": true,
+      "stale": "/home/you/old: not a flayer workspace (no .mindflayer/flayer.toml)",
+      "stale_projects": 0
     }
   ],
   "library": {
