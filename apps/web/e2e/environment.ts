@@ -6,8 +6,8 @@
  * from here, so none of them can start a command some other way.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, lstatSync, readdirSync } from 'node:fs'
+import { dirname, join, relative } from 'node:path'
 
 /**
  * The variables that lead a command to a real workspace or a real agent
@@ -100,6 +100,23 @@ export function marked(folder: string): string | undefined {
       return undefined
     }
   }
+}
+
+/**
+ * Everything under `folder` and the folder itself, each with its size and
+ * when it last changed: a file written and removed again still changes the
+ * folder it was in. What a home is held to once the server has stopped,
+ * the run's by the driver and one of a test's own by its fixture
+ * (panel.ts).
+ */
+export function look(folder: string): string[] {
+  const seen = [`. ${lstatSync(folder).mtimeMs}`]
+  for (const entry of readdirSync(folder, { recursive: true, withFileTypes: true })) {
+    const path = join(entry.parentPath, entry.name)
+    const stat = lstatSync(path)
+    seen.push(`${relative(folder, path)} ${entry.isDirectory() ? 'folder' : `${stat.size} bytes`} ${stat.mtimeMs}`)
+  }
+  return seen.sort()
 }
 
 /** The path of the binary called `name` in `bin`. */

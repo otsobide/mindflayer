@@ -38,6 +38,10 @@
 //! - **What an update would do is only read** ([`Query::Updates`]): the
 //!   dry run of `flayer update --all`, core's, naming nothing a browser
 //!   sent; an update runs only as the task the panel sends for it.
+//! - **A draft is only judged** ([`Query::Validate`]): what core says of an
+//!   artifact a form or the editor is about to send, by the checks the
+//!   command makes and in its words, with what `validate` would say of it;
+//!   nothing is written until the task that writes it is sent.
 //! - **A file reaches the browser only as text inside JSON**, held to its
 //!   holder once its links are followed, and never larger than core's cap
 //!   ([`Contents`]): the one way a file's contents leave, since `show` is
@@ -48,11 +52,14 @@
 //! task runs.
 
 use std::fmt::Display;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use mindflayer_core::code::Said;
 use mindflayer_core::contents::{Contents, Files};
+use mindflayer_core::draft;
 use mindflayer_core::gather::Watch;
 use mindflayer_core::install::{self, Cell, Conflict, Locked};
 use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
@@ -60,14 +67,16 @@ use mindflayer_core::scan::{self, Order, DEFAULT_DEPTH};
 use mindflayer_core::update::Updates;
 use mindflayer_core::view::Snapshot;
 use mindflayer_core::{paths, policy, watch};
-use mindflayer_core::{FlayerWorkspace, Found, MindProject, Scan, FLAYER_CONFIG, FLAYER_DIR};
+use mindflayer_core::{
+    FlayerWorkspace, Found, Kind, MindProject, Reference, Scan, FLAYER_CONFIG, FLAYER_DIR,
+};
 use mindflayer_server::{Backend, Preview, Refusal, Watched};
 use serde::{Deserialize, Serialize};
 
 use crate::admit::Admission;
 use crate::commands::project::{scan_warned, worth_linking};
 use crate::commands::{run_line, Ran};
-use crate::task::{cautioned, shell, Caution, Holder, MindsChange, Task};
+use crate::task::{self, cautioned, shell, Caution, Holder, MindsChange, Task};
 use crate::tui::state::{transcript, Done};
 use crate::{CliError, Lookup, Warning};
 
@@ -80,8 +89,10 @@ use crate::{CliError, Lookup, Warning};
 /// "SKILL.md"}`, `{"type": "scan", "roots": ["/home/you/Work"], "depth":
 /// null}`, `{"type": "plan", "selection": [{"project": "alpha",
 /// "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`,
-/// `{"type": "updates"}`. A field a query does not have is refused, as a
-/// task's is.
+/// `{"type": "updates"}`, `{"type": "validate", "holder": {"type":
+/// "workspace"}, "draft": {"type": "edit", "reference": "skill:deploy",
+/// "text": "..."}}`. A field a query does not have is refused, as a task's
+/// is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -141,6 +152,36 @@ pub enum Query {
     /// live update reads the snapshot again on every change. Nothing in it
     /// is sent by the browser, so nothing is held to the path policy.
     Updates {},
+    /// What core says of `draft`, an artifact a command is about to write
+    /// in `holder` ([`draft::Judged`]): why the command would write nothing, in its
+    /// words, and what `validate` would say of it once written, in its own.
+    ///
+    /// How the panel's forms and editor judge what is typed as it is typed,
+    /// by core's rules and never a copy of them in TypeScript: only a read,
+    /// as a plan is, which writes nothing, and a draft judged fit is still
+    /// held to the same rules by the line that writes it. The holder is held
+    /// to the path policy as a read of an artifact's is.
+    Validate { holder: Holder, draft: Draft },
+}
+
+/// An artifact a command is about to write, as the panel asks core to judge
+/// it ([`Query::Validate`]): tagged as a query is, `{"type": "add", ...}`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Draft {
+    /// What `add` would write, by the fields an `add` task carries: a
+    /// template by its name, as `--template` takes it.
+    Add {
+        kind: Kind,
+        name: String,
+        description: String,
+        template: Option<String>,
+    },
+    /// What `edit --contents` would write into the artifact `reference`
+    /// names, `kind:name`, given `text` whole: its `SKILL.md`, or a rule's
+    /// file.
+    Edit { reference: String, text: String },
 }
 
 /// What a scan the panel asked for found ([`Query::Scan`]): what `flayer
@@ -528,6 +569,34 @@ impl Backend for PanelBackend {
                     Updates::read(&workspace).map_err(|error| refused(error.code(), error))?;
                 Ok(serde_json::to_value(updates).expect("what an update would do serializes"))
             }
+            // The holder a line would change, by the workspace on screen,
+            // which a line of the panel's names as it runs, so the templates
+            // offered and the records consulted are that one's.
+            Query::Validate { holder, draft } => {
+                let holder = linked(&workspace, holder)?.unwrap_or_else(|| workspace.own());
+                let judged = match draft {
+                    Draft::Add {
+                        kind,
+                        name,
+                        description,
+                        template,
+                    } => draft::added(
+                        Some(&workspace),
+                        &holder,
+                        kind,
+                        &name,
+                        &description,
+                        template.as_deref(),
+                    ),
+                    Draft::Edit { reference, text } => draft::edited(
+                        Some(&workspace),
+                        &holder,
+                        &Reference::parse(&reference),
+                        &text,
+                    ),
+                };
+                Ok(serde_json::to_value(judged).expect("a judgement serializes"))
+            }
         }
     }
 
@@ -555,8 +624,19 @@ impl Backend for PanelBackend {
     /// Planned again rather than trusted to the preview the server asked
     /// for first: the plan is of the disk as the run meets it, and the
     /// trait promises no preview came first.
+    ///
+    /// A save's text is put where its line reads it before the line runs,
+    /// and taken away once the lines have run, whatever came of them
+    /// ([`Scratch`]): the browser sends the text, never a path.
     fn run(&self, task: Task) -> Result<Outcome, Refusal> {
         let plan = self.plan(&task)?;
+        let _scratch = match &task {
+            Task::Save { text, .. } => Some(
+                Scratch::put(&self.workspace()?, text)
+                    .map_err(|error| refused(error.code(), error))?,
+            ),
+            _ => None,
+        };
         let watch = Watch::new();
         let mut runs: Vec<Run> = Vec::new();
         for words in &plan.lines {
@@ -606,6 +686,77 @@ impl Backend for PanelBackend {
                 scope: scope(watched.scope),
             })
             .collect()
+    }
+}
+
+/// A save's text, in the file its line reads it from
+/// ([`task::scratch_route`]): the workspace's scratch folder as core has it
+/// ([`FlayerWorkspace::scratch_dir`]), the file named by the text
+/// ([`task::scratch_name`]). Held for as long as this is: taken away when
+/// it is dropped, whatever came of the line.
+///
+/// Made with `create_new`, in a folder made with `create_dir`, never
+/// `create_dir_all`, so no `.mindflayer` is made where there is none, which
+/// a line of the panel's would then take for a workspace. The folder is
+/// looked at once it is there, and a link in its place refuses the save:
+/// `create_dir` says a link is there as it says a folder is, and
+/// `create_new` refuses a link only as the file itself, following one in
+/// the folder's place, which a cloned workspace can bring to an agent's own
+/// folder. A file already there under the name is taken as it is when it
+/// holds the text exactly, as one an interrupted run left would, the name
+/// being the text's hash; anything else there refuses the save, and is left
+/// as it is.
+struct Scratch {
+    path: PathBuf,
+}
+
+impl Scratch {
+    /// `text`, put where the line saving it reads it from, in `workspace`.
+    fn put(workspace: &FlayerWorkspace, text: &str) -> Result<Scratch, CliError> {
+        let folder = workspace.scratch_dir();
+        let path = folder.join(task::scratch_name(text));
+        let unwritable = |source| CliError::Scratch {
+            path: path.clone(),
+            source,
+        };
+        match fs::create_dir(&folder) {
+            Err(error) if error.kind() != io::ErrorKind::AlreadyExists => {
+                return Err(unwritable(error))
+            }
+            _ => {}
+        }
+        if !fs::symlink_metadata(&folder).is_ok_and(|found| found.is_dir()) {
+            return Err(unwritable(io::Error::other(
+                "its folder is a link or no folder, and nothing is written through one",
+            )));
+        }
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                // Held from here, so a write that fails halfway takes away
+                // what it wrote.
+                let scratch = Scratch { path: path.clone() };
+                file.write_all(text.as_bytes())
+                    .and_then(|()| file.sync_all())
+                    .map_err(unwritable)?;
+                Ok(scratch)
+            }
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                let held = fs::symlink_metadata(&path).is_ok_and(|found| found.is_file())
+                    && fs::read(&path).is_ok_and(|held| held == text.as_bytes());
+                if held {
+                    Ok(Scratch { path })
+                } else {
+                    Err(unwritable(error))
+                }
+            }
+            Err(error) => Err(unwritable(error)),
+        }
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
     }
 }
 

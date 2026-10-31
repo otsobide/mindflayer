@@ -12,7 +12,7 @@ use crate::{Cli, FlayerCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 34] = [
+const TAGS: [&str; 35] = [
     "init_workspace",
     "init_project",
     "link",
@@ -27,6 +27,7 @@ const TAGS: [&str; 34] = [
     "add",
     "show",
     "edit",
+    "save",
     "rename",
     "remove",
     "validate",
@@ -215,6 +216,15 @@ fn every(value: &str) -> Vec<Task> {
                 holder: holder.clone(),
                 kind,
                 name: owned(),
+            },
+            // Its text reaches no line, only the route named by its hash,
+            // so it is not one of the values a line is held to.
+            Task::Save {
+                holder: holder.clone(),
+                kind,
+                name: owned(),
+                text: String::from("---\nname: plain\n---\n"),
+                hash: owned(),
             },
             Task::Rename {
                 holder: holder.clone(),
@@ -1141,6 +1151,11 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_sh
         ("mind edit --editor true deploy", Refusal::Editor),
         ("flayer edit -p alpha deploy", Refusal::Editor),
         ("mind flayer edit deploy", Refusal::Editor),
+        ("mind edit --contents - deploy", Refusal::Input),
+        (
+            "flayer edit -p alpha --contents - --if-unchanged 0a deploy",
+            Refusal::Input,
+        ),
         ("flayer activate", Refusal::Shell),
         ("mind flayer activate --shell fish work", Refusal::Shell),
         (
@@ -1206,6 +1221,9 @@ fn a_front_end_with_no_terminal_runs_everything_else() {
         "mind flayer link alpha",
         "flayer which",
         "mind status --json",
+        // An edit that takes its contents from a file, held to core's
+        // rules as any edit's are, opens nothing.
+        "mind edit --contents draft.md deploy",
         // Not a line either parser takes, which running it says, in the
         // parser's words.
         "flayer frobnicate",
@@ -1230,6 +1248,33 @@ fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
         };
 
         assert_eq!(task.refusal(), expected, "{task:?}");
+    }
+}
+
+/// `edit` opens an editor, or reads standard input, each of which only a
+/// terminal gives, unless it is given a file to take the contents from:
+/// that line runs, wherever it is spelled and however it names the file,
+/// at either level.
+#[test]
+fn edit_runs_without_a_terminal_only_when_its_contents_are_a_files() {
+    for said in [
+        "mind edit --contents draft.md deploy",
+        "mind -C alpha edit --contents=/tmp/draft.md --if-unchanged 0a rule:style",
+        "mind edit deploy --contents ./-",
+        "flayer edit --contents draft.md deploy",
+        "flayer edit -p alpha --contents draft.md --if-unchanged 0a deploy",
+        "mind flayer edit --contents draft.md deploy",
+    ] {
+        assert_eq!(refused(&line(said)), None, "{said}");
+    }
+    for (said, refusal) in [
+        ("mind edit deploy", Refusal::Editor),
+        ("flayer edit --editor true deploy", Refusal::Editor),
+        ("mind edit --contents - deploy", Refusal::Input),
+        ("mind flayer edit --contents=- deploy", Refusal::Input),
+        ("flayer edit -p alpha deploy --contents -", Refusal::Input),
+    ] {
+        assert_eq!(refused(&line(said)), Some(refusal), "{said}");
     }
 }
 
@@ -1260,6 +1305,7 @@ fn a_refusal_says_why_by_a_code_of_its_own() {
     let codes: Vec<&str> = [
         Refusal::Screen,
         Refusal::Editor,
+        Refusal::Input,
         Refusal::Shell,
         Refusal::Unwatched,
         Refusal::Unheld,
@@ -1435,4 +1481,53 @@ fn a_change_core_plans_is_the_install_or_uninstall_task_that_runs_it() {
         Task::from(uninstall).commands(),
         [line("flayer uninstall -p alpha skill:deploy")]
     );
+}
+
+/// The text, never a path: what a save reads is the workspace's scratch file
+/// named by what the text holds, from the workspace's root, at either level,
+/// held to the hash it was read with.
+#[test]
+fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_was_read_with() {
+    let text = "---\nname: deploy\ndescription: Ship it\n---\n";
+    let hash = mindflayer_core::hash::bytes(b"before");
+    let route = scratch_route(text);
+    let save = |holder| Task::Save {
+        holder,
+        kind: Kind::Skill,
+        name: String::from("deploy"),
+        text: String::from(text),
+        hash: hash.clone(),
+    };
+
+    let own = save(Holder::Workspace);
+    let alpha = save(Holder::Project(String::from("alpha")));
+
+    let edit = [
+        "--contents",
+        &route,
+        "--if-unchanged",
+        &hash,
+        "skill:deploy",
+    ];
+    assert_eq!(own.commands(), [[&["flayer", "edit"][..], &edit].concat()]);
+    assert_eq!(
+        alpha.commands(),
+        [[&["flayer", "edit", "-p", "alpha"][..], &edit].concat()]
+    );
+    let named = &mindflayer_core::hash::bytes(text.as_bytes())[..16];
+    assert_eq!(scratch_name(text), format!("edit-{named}.md"));
+    assert_eq!(
+        route,
+        format!(
+            "{}/{}",
+            FlayerWorkspace::scratch_route(),
+            scratch_name(text)
+        )
+    );
+    assert_ne!(scratch_route("another text"), route);
+    for task in [own, alpha] {
+        assert!(task.writes(), "{task:?}");
+        assert_eq!(task.refusal(), None, "{task:?}");
+        assert_eq!(task.cautions(), [], "{task:?}");
+    }
 }

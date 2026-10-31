@@ -66,9 +66,30 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/edit': RouteRecordInfo<
+      '/edit',
+      '/edit',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/library': RouteRecordInfo<
       '/library',
       '/library',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/loads': RouteRecordInfo<
+      '/loads',
+      '/loads',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/new': RouteRecordInfo<
+      '/new',
+      '/new',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -161,9 +182,33 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/edit.vue': {
+      routes:
+        | '/edit'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/library.vue': {
       routes:
         | '/library'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/loads.vue': {
+      routes:
+        | '/loads'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/new.vue': {
+      routes:
+        | '/new'
       views:
         | never
       pathParamNames:

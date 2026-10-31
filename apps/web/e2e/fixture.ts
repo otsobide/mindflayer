@@ -161,3 +161,45 @@ export function updatable(at: Places): void {
   const edited = draft(at, 'beta-lint.md', lint('Our own way: lint before every push.'))
   succeed(at, 'mind', join(at.workspace, beta), ['edit', `skill:${UPDATED}`, '--editor', `cp ${edited}`])
 }
+
+/** The skill `authorable`'s library holds, which the editor changes. */
+export const AUTHORED = 'review' as const
+
+/**
+ * A workspace for the spec that authors in the library from the panel,
+ * which no other spec reads: its library holds the skill `review`, as
+ * `flayer add` writes it, and nothing else.
+ */
+export function authorable(at: Places): void {
+  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'flayer', at.workspace, ['add', 'skill', AUTHORED, 'Read a change before it lands'])
+}
+
+/** The workspace `loadable` loads from the panel, by its entry once loaded, and the skill it offers. */
+export const LOADED = { name: 'notes', entry: '../team', description: 'Keep notes as the team does' } as const
+
+/** The skill of its own `loadable` offers, whatever it loads. */
+export const OWN = 'review' as const
+
+/**
+ * A workspace for the spec that loads and unloads from the panel, which no
+ * other spec reads, in a home of its own, made the default workspace first,
+ * so that each `flayer init` after it remembers the workspace it makes:
+ * `team`, beside the workspace, holding the skill `notes` of its own, then
+ * the workspace, holding `review` and linking `alpha`, made by `mind init`
+ * for Claude, so the matrix has an offer and a project to draw before
+ * anything is loaded. Nothing loads `team` yet.
+ *
+ * A home of its own rather than the run's, which the driver holds to stay
+ * as it was made, empty: only a default workspace remembers the workspaces
+ * this machine knows, and this one is held to stay as it was made in turn.
+ */
+export function loadable(at: Places): void {
+  succeed(at, 'flayer', at.scratch, ['init', at.home], 'none')
+  const team: Places = { ...at, workspace: join(dirname(at.workspace), 'team') }
+  succeed(at, 'flayer', at.scratch, ['init', team.workspace], 'none')
+  succeed(team, 'flayer', team.workspace, ['add', 'skill', LOADED.name, LOADED.description])
+  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'flayer', at.workspace, ['add', 'skill', OWN, 'Read a change before it lands'])
+  project(at, 'alpha', ['--agents', 'claude'])
+}

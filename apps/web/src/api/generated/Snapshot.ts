@@ -4,7 +4,7 @@ import type { Boxes } from "./Boxes";
 import type { Entry } from "./Entry";
 import type { Health } from "./Health";
 import type { Kind } from "./Kind";
-import type { KnownWorkspace } from "./KnownWorkspace";
+import type { KnownHere } from "./KnownHere";
 import type { Library } from "./Library";
 import type { LoadedWorkspace } from "./LoadedWorkspace";
 import type { Offered } from "./Offered";
@@ -92,9 +92,9 @@ offers: Array<Offered>,
 boxes: Array<Boxes>, 
 /**
  * Every workspace this machine knows ([`crate::known`]), this one
- * among them.
+ * among them, each with whether this one loads it, and could.
  */
-known: Array<KnownWorkspace>, 
+known: Array<KnownHere>, 
 /**
  * The latest actions, newest first, at most [`HISTORY`].
  */

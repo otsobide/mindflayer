@@ -34,6 +34,7 @@ use ts_rs::{Config, ExportError, TypeVisitor, TS};
 
 use crate::code;
 use crate::contents::{self, Contents};
+use crate::draft::Judged;
 use crate::reading::{Shown, Validation};
 use crate::update::Updates;
 use crate::view::{Listing, Snapshot};
@@ -51,6 +52,7 @@ pub fn roots(visitor: &mut impl TypeVisitor) {
     visitor.visit::<Validation>();
     visitor.visit::<contents::Files>();
     visitor.visit::<Contents>();
+    visitor.visit::<Judged>();
     visitor.visit::<CoreCode>();
 }
 

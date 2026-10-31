@@ -168,8 +168,10 @@ under `apps/` with its own `Makefile`:
   the panel, cut at its front matter when it is the one the artifact is
   read from, and every file it holds listed (`contents`), which paths and
   entries a request from outside
-  may name (`policy`), and what `show` and `validate` say of each
-  artifact (`reading`). Its only I/O is files, and it never reads the
+  may name (`policy`), what `show` and `validate` say of each
+  artifact (`reading`), and what core says of one a command is about to
+  write, by the command's own checks and in `validate`'s words, for a
+  front end judging what is typed (`draft`). Its only I/O is files, and it never reads the
   environment. Under its `ts` feature, `typescript` gives what it hands a
   front end TypeScript (the roots its export writes, `words!`,
   `CoreCode`).
@@ -232,7 +234,8 @@ under `apps/` with its own `Makefile`:
   by hand, `src/api/plan.ts` the queries of a plan of the boxes marked
   on the matrix and of the lines it runs (`usePlan`, `usePreview`), and
   `src/api/updates.ts` the query of what an update of every project would
-  do (`useUpdates`).
+  do (`useUpdates`), and `src/api/draft.ts` the query of what core says of
+  a draft as it is typed (`useJudged`).
   `src/pages/` holds one
   page per route (file routes): the overview (`index`), the projects
   (`projects`), a project's page (`project`, which `src/routes.ts` names by
@@ -241,8 +244,10 @@ under `apps/` with its own `Makefile`:
   its filters and which way round it is in the query), what an update
   would do (`updates`), the library
   (`library`), one of its own
-  (`artifact`, named by its kind and name in the query), the shelf
-  (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
+  (`artifact`, named by its kind and name in the query), its editor
+  (`edit`, named the same way), the page adding one (`new`, its kind in
+  the query), the workspaces it loads and those this machine knows
+  (`loads`), the shelf (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
   the query a page keeps its state in, `src/library.ts` finds the projects
   holding one of the library's own, `src/markdown.ts` draws a skill's
   markdown from its tokens, and `src/time.ts` says the ledger's times.
@@ -253,10 +258,13 @@ under `apps/` with its own `Makefile`:
   (`IssueList`), a rendered body (`MarkdownBody`), an artifact's files
   (`FileTree`), the ledger's latest actions (`ActivityFeed`),
   `SnapshotGate`, which draws a page once the snapshot is answered, the
-  folder to link (`LinkForm`), a project's agents and share toggles
+  folder to link (`LinkForm`), the path of a workspace to load
+  (`LoadForm`), a project's agents and share toggles
   (`SettingsForm`) and its migration, dry run first (`MigrateOffer`), the
   removal of one of the library's own everywhere, dry run first
-  (`RemoveOffer`), the
+  (`RemoveOffer`), its rename (`RenameForm`), the editor, CodeMirror in a
+  shadow root of its own (`MarkdownEditor`), what core says of a draft
+  (`DraftVerdict`), the
   matrix's grid, drawn a screen at a time (`AssignGrid`), and
   what the runner draws beside the pages:
   `CommandRunner`, which makes it and says how each task ended in a toast,
@@ -359,9 +367,17 @@ These are easy to break from a single file without noticing.
   no terminal does not run is one list, `task::Refusal`, read off the
   parsed command by a match with no wildcard (`Refusal::of_mind`,
   `of_flayer`), so a new command says whether it is refused before it
-  compiles; a task is refused for its lines (`Task::refusal`). The TUI
-  refuses only its screens and `ui`, which would hold it until a Ctrl-C the
-  screen keeps for itself. What a line takes away, which a front end with
+  compiles; a task is refused for its lines (`Task::refusal`). `edit` is
+  refused in an editor and with `--contents -`, standard input, and run
+  with `--contents FILE` (`Refusal::of_edit`); the one task that builds
+  that line, the panel's save (`Task::Save`, its text and the hash it was
+  read with), names the workspace's scratch file for its text
+  (`task::scratch_route`, by its hash, so the line previewed is the line
+  run), which the backend writes before the line runs and takes away
+  after, whatever came of it (`backend::Scratch`), so a browser names no
+  file to read. The TUI refuses only its screens,
+  `ui`, which would hold it until a Ctrl-C the screen keeps for itself, and
+  standard input, which is the screen's own keys. What a line takes away, which a front end with
   no terminal asks somebody to confirm before it runs it, is one list too,
   `task::Caution`, read the same way (`Caution::of_mind`, `of_flayer`,
   `task::cautions`), and the panel's backend says it of the lines it
@@ -431,7 +447,9 @@ These are easy to break from a single file without noticing.
   each change the task that runs it, which the panel sends back as one
   `apply_install`, never a task of its own), what an update of every
   project would do (`Query::Updates`, answered with core's
-  `update::Updates`), and which workspace
+  `update::Updates`), what core says of a draft about to be written
+  (`Query::Validate`, answered with core's `draft::Judged`), and which
+  workspace
   a project's own lines consult (`docs/architecture.md`, "The read
   model").
 - **Every error has a stable code.** Each public error type in core,
@@ -612,7 +630,8 @@ These are easy to break from a single file without noticing.
   and a lifecycle change looks only where the project authors
   (`Catalog::discover_authored`), so it never reaches one. Core's lifecycle
   changes see to the record of the copy the change reached, and only that
-  copy's (D-04): `finish_edit` keeps it, so the copy reads as edited; `rename`
+  copy's (D-04): `finish_edit` and `replace_contents` keep it, so the copy
+  reads as edited; `rename`
   carries it to the new name and place (`Ledger::renamed_copy`, dropping it
   only when another installation holds the new name); `remove` uninstalls the
   copy, dropping its record (`Ledger::uninstalled_copy`); and `add` drops a
@@ -662,8 +681,10 @@ These are easy to break from a single file without noticing.
   `lifecycle::find_to_change`, which refuses such a rule as received rather
   than as nothing.
 - **Strict when writing, lenient when reading.** A skill's front matter is
-  the Agent Skills format. `mind add`, `rename`, `install` and `flayer adopt`
-  refuse a name or description that breaks its rules, all through
+  the Agent Skills format. `mind add`, `rename`, `install`, `flayer adopt`
+  and `edit --contents` (`lifecycle::replace_contents`, which also refuses
+  a name other than the skill's folder, pointing at `rename`) refuse a name
+  or description that breaks its rules, all through
   `artifact::strict_issues`
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
@@ -673,14 +694,22 @@ These are easy to break from a single file without noticing.
   untouched. A rule's front matter is optional (`rule::RuleManifest`): read
   only when its fences hold a YAML mapping, and whatever it leaves unread is a
   warning, never a reason to hide the rule. `mind add --template` refuses that
-  same list (`artifact::rule_issues`) for the rule it is about to write.
+  same list (`artifact::rule_issues`) for the rule it is about to write, and
+  `edit --contents` refuses it, and a rule with nothing to say, for the one
+  it is given (`artifact::rule_text_issues`), before a byte is written.
 - **Loaded and gathered content is untrusted.**
   - So is a task's every value, which a browser will fill in: it reaches
     its command as that value, never as an option or a command. The task
     module spells each line's own words, and puts a value after the option
     that takes it (`=` when it starts with a dash), behind `./` for a `-C`
     or `-p`, or after a `--` among positionals; a test feeds every variant
-    values that start with a dash.
+    values that start with a dash. A save's text reaches no line at all:
+    the line names the workspace's scratch file for it, in `.mindflayer`
+    (`FlayerWorkspace::scratch_dir`, and `scratch_route` for the line, both
+    core's), which the backend writes with
+    `create_new`, in a folder made with `create_dir` and refused when it is
+    a link, taking a file there under the name only when it holds the text
+    exactly.
   - A task or a query the panel sends names only what core's path policy
     allows (`policy`), which `admit::Admission` asks of every value that
     names something on the disk, in a match over every variant with no
@@ -705,6 +734,20 @@ These are easy to break from a single file without noticing.
     (`contents::Files`): a link further down that leads out, back into a
     folder it is in, or to nothing is listed with why and never followed,
     and a listing stops at `contents::FILES_CAP`.
+  - An artifact's file given its contents whole (`edit --contents`,
+    `lifecycle::replace_contents`) is followed through its links once and
+    written at the path it resolves to, only when that lies inside the
+    folder its holder keeps the kind in, a skill's own folder and a
+    project's root (`lifecycle::written_at`, `edit_leads_outside`
+    otherwise), so never anywhere a read of it for the panel would not
+    reach. The library is held to its kind's folder alone, its root being
+    a home perhaps, told by that folder rather than by the holder, a
+    `MindProject` either way. It goes through a temporary renamed onto it,
+    and with `--if-unchanged` only over what the hash given was taken of
+    (`edit_stale`), a value that is no SHA-256 refused as one
+    (`hash::is_digest`, `edit_hash_malformed`) rather than called stale. The front end reads what it
+    was given, a file or standard input, and hands core the bytes, which
+    core alone judges; core never reads standard input.
   - An installed name must be one folder name for a skill
     (`install::is_folder_name`), and for a rule a route held to the name
     rules, which never climbs out (`install::is_installable_name`).
@@ -935,7 +978,12 @@ These are easy to break from a single file without noticing.
   every installation an update says something of as core surveyed it
   (`Query::Updates`: its state, what an update does with it, the copies
   that names, why it is left, by a code, and how many stand in each
-  state), never told from the snapshot's states,
+  state), never told from the snapshot's states, every judgement of a
+  draft as core gave it (`Query::Validate`: why the command would write
+  nothing, by its code and in its words, and what `validate` would say of
+  it, word for word), never a rule of a name or of front matter spelled in
+  TypeScript, and the hash a save is held to as core gave it with what it
+  read (`contents::Contents::hash`), never one hashed in the browser,
   and every order the snapshot's
   (`kinds`, `states`, `healths`, the registry's). A count or a verdict a
   view needs is added to `view::Snapshot` in core, never worked out from
@@ -944,8 +992,10 @@ These are easy to break from a single file without noticing.
   `--from` takes it (each shelf row's, source's and load's `origin`, and
   `library.origin`), never put together from an address and a branch, and
   an artifact's front matter, which core cuts from the file
-  (`contents::Manifest`). So is which projects hold a copy of one of the
-  library's own (`library.holders`, by `install::from_the_library`, the
+  (`contents::Manifest`). So is which workspace this machine knows the one
+  on screen could load (`known`'s `loadable`, `view::KnownHere`), never
+  told from `in_use`, `stale` and the loads' paths. So is which projects
+  hold a copy of one of the library's own (`library.holders`, by `install::from_the_library`, the
   rule `flayer remove --everywhere` follows), never told by comparing a
   copy's origin, which an install from before origins were kept lacks. Every
   page passes axe (`tests/a11y.test.ts`), works from the keyboard, and never
@@ -972,7 +1022,13 @@ These are easy to break from a single file without noticing.
   by Iconify's offline build (`src/overrides/iconify.ts`), the palette is
   declared in `main.css` while Nuxt UI's colours plugin is a stub
   (`src/overrides/colors.ts`), and the colour mode switches by class
-  (`src/color-mode.ts`). What somebody else wrote, a skill's markdown, is
+  (`src/color-mode.ts`). The editor is CodeMirror in a shadow root of its
+  own (`MarkdownEditor.vue`), where style-mod adopts a constructed sheet
+  (`adoptedStyleSheets`) rather than writing the `<style>` element it
+  writes into a document, and every style CodeMirror sets goes through the
+  CSSOM, never a `style` attribute; its test holds the sheet to being
+  adopted and to no `<style>` in the shadow root, which a document's
+  observer does not see. What somebody else wrote, a skill's markdown, is
   drawn element by element from marked's tokens (`src/markdown.ts`), never
   put on the page as HTML: raw HTML shows as text, no element gets a style
   or an event, no image loads, and a link keeps its address only to another
@@ -1082,7 +1138,12 @@ These are easy to break from a single file without noticing.
   (`applied.json`), and, of a workspace built to update (`updating.json`),
   what asking what an update would do is answered with (`updates.json`)
   and each change its page offers, previewed and run each on the
-  workspace as built (`updated.json`). `tests/panel.ts` reads them and
+  workspace as built (`updated.json`), and, of the first workspace, what
+  judging drafts of the library's own is answered with (`drafts.json`),
+  what `flayer validate` says once one is written, which the editor's
+  verdict is held to word for word (`validated.json`), and each change
+  authoring sends, previewed and run each on the workspace as built
+  (`authored.json`). `tests/panel.ts` reads them and
   mounts the panel at an address, answering its queries with them, and a
   task with its preview and its run, told finished on the stream before
   it is answered, as the server tells it (`commanding`); a test about
@@ -1104,8 +1165,12 @@ These are easy to break from a single file without noticing.
   nothing written by hand but the folders `mind init` runs in and, beside
   the workspace, the drafts an `--editor` copies in (`fixture.draft`), as
   an editor saves one, for `flayer edit` and `mind edit` to change an
-  artifact with; a state only a hand edit, a removed folder or a git
-  source makes is left to the views' suites and their fixtures. Every process it starts goes through
+  artifact with, or `--contents` names; a state only a hand edit, a removed folder or a git
+  source makes is left to the views' suites and their fixtures. A test
+  that changes something builds a workspace of its own (`own`), served
+  with the run's home, or for the loads (`loadable`) with one of its own
+  beside it, whose default workspace knows what it loads, held to stay as
+  it was made as the driver holds the run's. Every process it starts goes through
   `e2e/environment.ts` (`run`, `pinned`, `environment`), and the config
   starts the server the same way, from the fixture's folder. A spec reads
   the server from `served`, what the CLI says from `listing()`, `flayer
@@ -1115,7 +1180,8 @@ These are easy to break from a single file without noticing.
   to seeing one. No spec changes the shared workspace: a test that changes
   something takes a workspace and a `flayer ui` of its own (`own`, built by
   `changeable`, or what the spec's `building` names, `assignable` for the
-  matrix's or `updatable` for updating and removing, beside a copy of it
+  matrix's, `updatable` for updating and removing or `authorable` for
+  editing, adding and renaming in the library, beside a copy of it
   and served by `serve`, through
   `environment.ts` as every process is), and holds what the panel left to
   what the same command leaves in the copy.

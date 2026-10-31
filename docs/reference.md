@@ -232,7 +232,8 @@ and edit by hand, and which an older Mindflayer reads past and keeps. Listing
 never makes the workspace in your home; until something does, it knows no
 flayer, and with `--home ""` there is none to know them. `--json` prints the
 list in the envelope every reading command's `--json` shares, and `w` shows it
-in [the TUI](#the-tui).
+in [the TUI](#the-tui). The [control panel](#control-panel)'s **Loads** page
+lists them too, and loads any of them into the workspace it shows.
 
 ## The two kinds
 
@@ -391,6 +392,9 @@ mind add <KIND> <NAME> <DESCRIPTION> [--template NAME]
                            # create a skill or a rule that validates as written
 mind edit <NAME> [--editor CMD]
                            # open it in $VISUAL or $EDITOR, then check it
+mind edit <NAME> --contents FILE|- [--if-unchanged SHA256]
+                           # replace what it holds with a file, or standard
+                           # input, checked before anything is written
 mind rename <NAME> <NEW>   # folder and declared name together; `mv` for short
 mind remove <NAME> --yes   # delete it; without --yes, say what would go; `rm`
 mind templates [--json]    # what `add --template` can start from here
@@ -1160,7 +1164,8 @@ which is also what `--from` takes, as do the path you gave `load`, from
 wherever you type it, and the workspace's name. Only a loaded workspace's own
 are offered, never what it loads in turn. `flayer unload <path>` forgets it;
 what was already installed from it stays where it is. `mind load <path>` does
-the same from inside a project, into the workspace above it.
+the same from inside a project, into the workspace above it, and the
+[control panel](#control-panel) does both from its **Loads** page.
 
 A loaded workspace is usually somebody else's, so what it offers is read with
 suspicion: a skill whose declared name is not one plain folder name (`..`,
@@ -1817,10 +1822,11 @@ out](architecture.md#what-keeps-other-pages-out)).
 TUI does. It sends a task; the server turns it into the command lines you
 could have typed, shows them before they run, and runs them through the same
 parser, one at a time. A command that would open a screen, an editor or a
-shell is refused, and so is a path outside what the workspace allows, each
-with a reason and a code. The first Ctrl-C lets whatever is running finish,
-a second stops at once, and on the way out it prints every command that
-changed something, with what each said, as the TUI does when it closes:
+shell, or read standard input, is refused, and so is a path outside what
+the workspace allows, each with a reason and a code. The first Ctrl-C lets
+whatever is running finish, a second stops at once, and on the way out it
+prints every command that changed something, with what each said, as the
+TUI does when it closes:
 
 ```
 $ flayer install -p /home/you/Projects/collapse skill:commit-style
@@ -1846,9 +1852,11 @@ projects table or from what **Discover** finds, relinks one that moved,
 unlinks one from its page, changes a project's agents and share mode,
 migrates a project an older Mindflayer made, installs and uninstalls
 skills and rules from **Assign**, brings what is installed up to date and
-takes out what nothing offers from **Updates**, and removes one of the
-library's own everywhere, its dry run first; everything else is still a
-command away.
+takes out what nothing offers from **Updates**, removes one of the
+library's own everywhere, its dry run first, edits, adds and renames the
+library's own, adopts a skill somebody keeps in a project's agents'
+folders, and loads and unloads other workspaces from **Loads**; everything
+else is still a command away.
 
 **The transcript**, in every page's header, lists every task the session
 ran, from this tab or any other, each line with what it printed, and
@@ -1890,7 +1898,11 @@ on the workspace the panel shows wherever you type it, for a project linked
 from outside that workspace too; a workspace not made yet names `flayer init`
 first, since `-W` never makes the one it names. **Unlink**, at the top,
 asks first, and says that the workspace only forgets the project: nothing on
-disk is deleted.
+disk is deleted. A row that reads `foreign`, somebody's own in a folder an
+agent reads, offers **Adopt**, `flayer adopt -p <project> --yes
+<kind:name>` ([a repository that already has .claude/skills](#a-repository-that-already-has-claudeskills)), shown before it runs;
+what Mindflayer will not adopt, a rule or a skill an install could not have
+written, the line refuses, saying why.
 
 Below what it holds, **Agents and sharing** are the project's settings as
 toggles: a box for each agent that works in it, `local` or `shared`, and
@@ -1935,9 +1947,13 @@ and the depth stay in the address, so a reload scans the same again.
 **The library** has a page for each kind, `skill` and `rule`, listing the
 workspace's own with what each is for, which projects hold a copy of it and
 how each copy stands, and what `validate` says of it; type to filter by name
-or summary. Below them are the workspaces it loads, each with where it is,
-how many of its own it offers, what `--from` takes for them (`load:../team`)
-and why one does not open. A kind it holds none of names `flayer add`.
+or summary. A kind it holds none of names `flayer add`.
+**New skill** and **New rule**, at the top, open a page that adds one: its
+name, its description and what it starts from, nothing or one of the
+kind's templates ([from a template](#from-a-template)), judged as you type by what
+`flayer add` would refuse, in its words, and by what `validate` would say
+of it once written. **Add** runs `flayer add [--template <template>] <kind>
+<name> <description>`, shown first, and opens what it added.
 
 **One of the library's own** opens from its name. It shows what its front
 matter declares, as a table, every key in the order written; its body,
@@ -1951,6 +1967,33 @@ stays a link, opened in a tab of its own. No file is ever served as itself,
 and a link in the skill that leads out of the folder the library keeps its
 kind in is listed with why and never followed.
 
+**Edit**, at the top, opens the file it is read from, its `SKILL.md` or a
+rule's file, in an editor in the page, line numbers and markdown with its
+front matter coloured, Ctrl-S to save and Tab to leave it. As you stop
+typing, the text is judged as `flayer edit --contents` would judge it: why
+it would refuse it, in its words (a name other than the skill's folder,
+which `rename` changes, front matter that does not read, or a rule the
+write is held to), and what `validate` would say of it once written, word
+for word as `flayer validate` then prints it. **Save** runs, shown first:
+
+```
+$ flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review
+edited skill review: ok
+```
+
+The browser sends the text, never a path: the file the line names is the
+text, put in the workspace's `.mindflayer/tmp` for the line to read, named
+by the first digits of its SHA-256, and taken away once the line has run,
+whatever came of it. `--if-unchanged` is the SHA-256 of what the file held
+when the editor read it, so a change made to it since, in an editor or from
+a terminal, is never written over: the page says the file changed, and the
+save is refused with `edit_stale`, the file left as the change left it,
+until **Read it again** starts from what it holds now. A copy installed
+from it then reads as outdated, for **Updates** to bring along.
+
+Below its files, **Rename it** runs `flayer rename <kind:name> <new name>`,
+shown first, and opens it under the name it has then.
+
 At the bottom, **See what removing it everywhere does** runs the dry run of
 `flayer remove --everywhere <kind:name>`, which deletes nothing, and shows
 what it said: each project's copy that would go, with how it stands, a copy
@@ -1960,6 +2003,23 @@ everywhere** run the same line with `--yes`, a confirmation since it deletes
 the artifact and uninstalls its copies, and go back to the library. The
 panel never removes the library's copy alone, which would leave each copy
 installed from it orphaned.
+
+**Loads** lists the workspaces this one loads ([loading another
+workspace](#loading-another-workspace)), each with its entry, where it is,
+what `--from` takes for what it offers (`load:../team`), why one does not
+open, and what it offers, each skill and rule by its name and what it is
+for, with a link to **Assign** showing those alone. **Unload** runs `flayer
+unload <entry>`, a confirmation, since the workspace then stops offering
+them; what was installed from it stays where it is. Below are the
+workspaces this machine knows ([the flayers this machine
+knows](#the-flayers-this-machine-knows)), the default first, each saying
+whether it is the default, this workspace, loaded already and by which
+entry, or one that does not open, with how many projects it links. One the
+workspace could load, which is none of this one, one it loads already and
+one that does not open, offers **Load**, `flayer load <path>`; any other is
+loaded by its absolute path, typed below, which the line refuses, saying
+why, when no workspace is there or it is this one. Each is shown first, and
+is the line the TUI's load form runs for the same workspace.
 
 **The shelf** lists everything gathered, filtered by kind or by name,
 summary or origin, each with the commit it was taken at, when, and its
@@ -2491,6 +2551,8 @@ body, below any front matter, which stays front matter. Front matter that
 
 ```bash
 mind edit deploy              # $VISUAL, then $EDITOR, then vi
+mind edit deploy --contents draft.md
+                              # what draft.md holds, checked first
 mind rename deploy ship       # the folder and the `name` inside, together
 mind remove ship              # says what would be deleted, deletes nothing
 mind remove ship --yes        # deletes it
@@ -2503,6 +2565,33 @@ says what it broke. `rename` rewrites the `name` line and nothing else: the
 comments, the key order and the description stay as they were. `remove`
 without `--yes` is a dry run, because it is the one thing here that cannot be
 taken back.
+
+With `--contents`, `edit` opens no editor: what the file holds, or standard
+input with `-`, takes the place of the skill's `SKILL.md` or the rule's
+file, the rest of a skill's folder left as it is. It is checked first, so
+what would break the artifact is never written: a skill's front matter has
+to read, with a name and a description `add` would take, and the name has
+to be its folder's, since `rename` is what changes the two together; a rule
+has to say something, and its front matter, if it has any, to read whole.
+`--if-unchanged` takes the SHA-256 of what the file held when the contents
+were made from it, its 64 hex digits alone, which `sha256sum` prints
+before the file's name (`sha256sum FILE | cut -d' ' -f1` prints them
+alone), and refuses to write over a change made since; a value that is no
+SHA-256 is refused as one:
+
+```
+$ mind edit deploy --contents draft.md
+edited skill deploy: ok
+$ mind edit deploy --contents renamed.md
+error: the contents given for `deploy` call it `ship`: a skill's name is its folder's too, so it is changed with `mind rename`, which moves both, and nothing was written
+```
+
+The file is replaced through a temporary renamed onto it, and only where
+the project keeps that kind, inside the project: a `SKILL.md` that links
+out of its skill's folder or the skills folder is refused rather than
+written through, and so is one under a folder linked out of the project,
+as `.claude` can be. The workspace's own are held to the folder it keeps
+them in, which may be linked elsewhere.
 
 What `flayer install` put in an agent's folder is not changed from the
 project: `edit`, `rename` and `remove` refuse a skill found only where its

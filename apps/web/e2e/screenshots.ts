@@ -8,7 +8,8 @@
  * `flayer ui`, and every page of the tour opened in Chromium at one size
  * and written into docs/images. It runs as the end-to-end suite does
  * (environment.ts): no variable leading to a real workspace or agent home,
- * an empty temporary home, every command pinned. Not a spec, so `make
+ * a temporary home holding only the default workspace the demo makes
+ * there, every command pinned. Not a spec, so `make
  * web/e2e` never runs it, and Playwright's library rather than its runner:
  * the pages are visited once, in order, some after another has changed the
  * workspace.
@@ -20,13 +21,13 @@
  * written the page it shows is read for a home's path, the account's name
  * and the launch token, any of which fails the run.
  */
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir, userInfo } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium, type Browser, type Page } from '@playwright/test'
-import { ARTIFACT, REMOVED, SHOWN, WORKSPACE, build } from './demo.ts'
-import { built, marked, serve, type Places, type Serving } from './environment.ts'
+import { ARTIFACT, LOADED, REMOVED, SHOWN, WORKSPACE, build } from './demo.ts'
+import { built, look, marked, serve, type Places, type Serving } from './environment.ts'
 
 const web = fileURLToPath(new URL('..', import.meta.url))
 
@@ -152,9 +153,10 @@ const ASSIGNED = [
 ]
 
 /**
- * The tour, in the order it is taken: of the last four, three run a command
- * and ask about another, and the last runs a dry run, which changes
- * nothing, after the transcript is taken.
+ * The tour, in the order it is taken: of the last five, three run a command
+ * and ask about another, the fourth runs a dry run, which changes nothing,
+ * after the transcript is taken, and the last loads a workspace, after
+ * every other page is taken without it.
  */
 const TOUR: Shot[] = [
   {
@@ -181,6 +183,35 @@ const TOUR: Shot[] = [
     name: 'artifact',
     path: `/artifact?${new URLSearchParams({ kind: 'skill', name: ARTIFACT })}`,
     ready: async page => page.getByTestId('markdown').waitFor()
+  },
+  {
+    // Its SKILL.md in the editor, a line typed into its front matter that
+    // validate warns of, judged as core judges it, and not saved.
+    name: 'editor',
+    path: `/edit?${new URLSearchParams({ kind: 'skill', name: ARTIFACT })}`,
+    ready: async (page) => {
+      const text = page.getByRole('textbox', { name: `The text of ${ARTIFACT}'s SKILL.md` })
+      await text.click()
+      // Below the fence that opens it: a line further down may wrap.
+      await page.keyboard.press('ControlOrMeta+Home')
+      await page.keyboard.press('End')
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('compatibility: ""')
+      await page.getByTestId('verdict').getByTestId('issue').first().waitFor()
+      await page.getByTestId('judging').waitFor({ state: 'detached' })
+    }
+  },
+  {
+    // One added from the `full` template, typed and judged, not yet added.
+    name: 'new',
+    path: '/new?kind=skill',
+    ready: async (page) => {
+      await page.getByLabel('Name').fill('release-checklist')
+      await page.getByLabel('Description').fill('Walk through what every release needs before it ships')
+      await page.getByRole('radio', { name: /^full/ }).click()
+      await page.getByTestId('writes').waitFor()
+      await page.getByTestId('judging').waitFor({ state: 'detached' })
+    }
   },
   {
     name: 'shelf',
@@ -280,6 +311,21 @@ const TOUR: Shot[] = [
       await page.getByText(`Ran flayer remove --everywhere skill:${REMOVED}`, { exact: true }).waitFor({ state: 'hidden', timeout: 30_000 })
       await page.getByTestId('remove-yes').scrollIntoViewIfNeeded()
     }
+  },
+  {
+    // The platform team's workspace, loaded from the list of those this
+    // machine knows: what it offers, and how each it knows stands.
+    name: 'loads',
+    path: '/loads',
+    ready: async (page) => {
+      await page.getByRole('button', { name: `Load ${LOADED}` }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.getByTestId('run').click()
+      await dialog.waitFor({ state: 'hidden' })
+      await page.getByTestId('load').getByTestId('offer').first().waitFor()
+      // The toast saying it ran would cover what the page shows: gone first.
+      await page.getByText(`Ran flayer load ${join(at.scratch, LOADED)}`, { exact: true }).waitFor({ state: 'hidden', timeout: 30_000 })
+    }
   }
 ]
 
@@ -361,6 +407,7 @@ try {
   mkdirSync(at.home)
   console.error(`note: the demo workspace is ${at.workspace}, and every command's home ${at.home}`)
   build(at)
+  const made = look(at.home)
   served = await serve(at, 'none')
   browser = await chromium.launch()
   mkdirSync(IMAGES, { recursive: true })
@@ -377,11 +424,13 @@ try {
   }
   await browser.close()
   await served.stop()
-  // As the suite's driver holds its home: nothing the demo ran, nor the
-  // server, may have written there.
-  const left = readdirSync(at.home)
-  if (left.length > 0) {
-    throw new Error(`the temporary home ${at.home} is not empty, so something the demo ran wrote there: ${left.join(', ')}`)
+  // As the suite's driver holds its home: nothing the tour ran, nor the
+  // server, may have written there since the demo made the default
+  // workspace in it.
+  const now = look(at.home)
+  const changed = now.filter(line => !made.includes(line))
+  if (changed.length > 0 || now.length !== made.length) {
+    throw new Error(`the temporary home ${at.home} is not as the demo made it, so something the tour ran wrote there: ${changed.join(', ')}`)
   }
   status = 0
 } catch (error) {

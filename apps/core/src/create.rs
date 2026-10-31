@@ -90,6 +90,42 @@ fn scaffold(
     description: &str,
     template: Option<&Template>,
 ) -> Result<Artifact, CreateError> {
+    plan(project, kind, name, description, template)?.place(project)
+}
+
+/// What [`create`] or [`create_from`] would write, worked out and not yet
+/// written: every check made that does not need the disk to say no, and
+/// every byte built.
+///
+/// Apart from writing it so that a front end can ask what `add` would make
+/// of an artifact as it is typed ([`crate::draft::added`]), and be told
+/// what writing it would be told, from the same checks rather than a copy
+/// of them; and so that whatever a template could break is found before a
+/// folder is made, as it always was.
+#[derive(Debug)]
+pub(crate) enum Scaffold {
+    /// A skill: the folder it is, and each file in it by its route.
+    Skill {
+        folder: PathBuf,
+        files: Vec<(PathBuf, Vec<u8>)>,
+    },
+    /// A rule: its one file, and what it holds.
+    Rule {
+        name: String,
+        file: PathBuf,
+        text: String,
+    },
+}
+
+/// Work out what adding `kind` `name`, described as `description`, from
+/// `template` when there is one, would write into `project`.
+pub(crate) fn plan(
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+    description: &str,
+    template: Option<&Template>,
+) -> Result<Scaffold, CreateError> {
     let issues = artifact::name_issues(name);
     if !issues.is_empty() {
         return Err(CreateError::Name {
@@ -104,19 +140,85 @@ fn scaffold(
     // Matched on the kind rather than its layout, so a third kind has to say
     // how it is scaffolded before it compiles.
     match kind {
-        Kind::Skill => create_skill(project, &directory, name, description, template),
-        Kind::Rule => create_rule(project, &directory, name, description, template),
+        Kind::Skill => plan_skill(&directory, name, description, template),
+        Kind::Rule => plan_rule(&directory, name, description, template),
+    }
+}
+
+impl Scaffold {
+    /// The folder a skill would be, or the file a rule would: what is
+    /// already there refuses it.
+    pub(crate) fn path(&self) -> &Path {
+        match self {
+            Scaffold::Skill { folder, .. } => folder,
+            Scaffold::Rule { file, .. } => file,
+        }
+    }
+
+    /// What would refuse it once it came to be written, as far as can be
+    /// told without writing: something already where it goes, which is left
+    /// alone. Told again by the write itself, with `create_new`, since the
+    /// disk can change in between.
+    pub(crate) fn taken(&self) -> Option<CreateError> {
+        let path = self.path();
+        fs::symlink_metadata(path)
+            .is_ok()
+            .then(|| CreateError::Exists {
+                path: path.to_path_buf(),
+            })
+    }
+
+    /// The artifact it would be once written in `project`, read from what
+    /// it would hold as discovery reads it from the disk: what `validate`
+    /// would then say of it.
+    pub(crate) fn read_as(&self, project: &MindProject) -> Result<Artifact, CreateError> {
+        match self {
+            Scaffold::Skill { folder, files } => {
+                let Layout::Directory { manifest } = Kind::Skill.layout() else {
+                    unreachable!("a skill is a directory");
+                };
+                let source = files
+                    .iter()
+                    .find(|(route, _)| route == Path::new(manifest))
+                    .map(|(_, bytes)| String::from_utf8_lossy(bytes).into_owned())
+                    .unwrap_or_default();
+                Ok(Artifact::skill_holding(
+                    folder.clone(),
+                    project.root(),
+                    &source,
+                )?)
+            }
+            Scaffold::Rule { name, file, text } => Ok(Artifact::rule_holding(
+                file.clone(),
+                name.clone(),
+                project.root(),
+                text,
+            )),
+        }
+    }
+
+    /// Write it into `project`, and load it back.
+    fn place(self, project: &MindProject) -> Result<Artifact, CreateError> {
+        match self {
+            Scaffold::Skill { folder, files } => place_skill(project, &folder, &files),
+            Scaffold::Rule { name, file, text } => {
+                if let Some(parent) = file.parent() {
+                    create_dir(parent)?;
+                }
+                write_new(&file, text.as_bytes())?;
+                Ok(Artifact::rule(file, name, project.root())?)
+            }
+        }
     }
 }
 
 /// A skill: its own directory, holding a manifest with front matter.
-fn create_skill(
-    project: &MindProject,
+fn plan_skill(
     directory: &Path,
     name: &str,
     description: &str,
     template: Option<&Template>,
-) -> Result<Artifact, CreateError> {
+) -> Result<Scaffold, CreateError> {
     // Skills are flat. A skill's directory belongs to it, scripts and
     // references included, so a `/` would file one skill inside another's
     // assets, where discovery never looks.
@@ -140,18 +242,30 @@ fn create_skill(
         )],
         Some(template) => from_template(template, manifest, name, description)?,
     };
+    Ok(Scaffold::Skill {
+        folder: directory.join(name),
+        files,
+    })
+}
 
-    create_dir(directory)?;
-    let folder = directory.join(name);
+/// Write a skill's `files` into `folder`, which must not be there yet.
+fn place_skill(
+    project: &MindProject,
+    folder: &Path,
+    files: &[(PathBuf, Vec<u8>)],
+) -> Result<Artifact, CreateError> {
+    if let Some(directory) = folder.parent() {
+        create_dir(directory)?;
+    }
     // `create_dir`, not `create_dir_all`: failing when the folder is already
     // there is the check, with nothing in between for another write to slip
     // into.
-    fs::create_dir(&folder).map_err(|source| match source.kind() {
+    fs::create_dir(folder).map_err(|source| match source.kind() {
         io::ErrorKind::AlreadyExists => CreateError::Exists {
-            path: folder.clone(),
+            path: folder.to_path_buf(),
         },
         _ => CreateError::Write {
-            path: folder.clone(),
+            path: folder.to_path_buf(),
             source,
         },
     })?;
@@ -167,7 +281,7 @@ fn create_skill(
         // The folder was made a moment ago, by this call, so everything in it
         // is this call's: leaving it would be a skill directory with half a
         // skill in it.
-        let _ = fs::remove_dir_all(&folder);
+        let _ = fs::remove_dir_all(folder);
         return Err(error);
     }
 
@@ -217,13 +331,12 @@ fn from_template(
 }
 
 /// A rule: one markdown file, filed wherever its route says.
-fn create_rule(
-    project: &MindProject,
+fn plan_rule(
     directory: &Path,
     name: &str,
     description: &str,
     template: Option<&Template>,
-) -> Result<Artifact, CreateError> {
+) -> Result<Scaffold, CreateError> {
     let Layout::Files { extension } = Kind::Rule.layout() else {
         unreachable!("a rule is a file");
     };
@@ -246,13 +359,11 @@ fn create_rule(
     // The name is a route, so `git/no-force-push` lands in a `git` folder.
     // Every segment has already passed the name check, so none of them is `.`
     // or `..` and the file cannot land outside the rules directory.
-    let file = directory.join(format!("{name}.{extension}"));
-    if let Some(parent) = file.parent() {
-        create_dir(parent)?;
-    }
-    write_new(&file, text.as_bytes())?;
-
-    Ok(Artifact::rule(file, name.to_owned(), project.root())?)
+    Ok(Scaffold::Rule {
+        name: name.to_owned(),
+        file: directory.join(format!("{name}.{extension}")),
+        text,
+    })
 }
 
 /// A rule template filled in, with the description as a heading on top of

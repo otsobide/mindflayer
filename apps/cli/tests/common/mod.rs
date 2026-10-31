@@ -112,6 +112,40 @@ pub fn spawn(binary: &str, dir: &Path, args: &[&str], env: &[(&str, &str)]) -> S
     }
 }
 
+/// [`spawn`], with `input` on its standard input and nothing after it: for
+/// what a command reads from a pipe, as `edit --contents -` does.
+pub fn spawn_fed(
+    binary: &str,
+    dir: &Path,
+    args: &[&str],
+    env: &[(&str, &str)],
+    input: &[u8],
+) -> Spawned {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let home = TempDir::new().unwrap();
+    let mut child = command(binary, dir, args, env, home.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("start the binary");
+    // Dropped once written, so the command reads to its end.
+    child
+        .stdin
+        .take()
+        .expect("its standard input")
+        .write_all(input)
+        .expect("write its standard input");
+    let output = child.wait_with_output().expect("run the binary");
+    Spawned {
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        ok: output.status.success(),
+    }
+}
+
 /// [`spawn`], left running with its stdout and stderr piped: for a command
 /// that goes on until it is stopped, `ui`, whose output is read as it goes.
 pub fn start(binary: &str, dir: &Path, args: &[&str], env: &[(&str, &str)]) -> Started {

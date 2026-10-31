@@ -11,23 +11,26 @@
 //! opening the ledger to do it scrubbed out of it.
 
 use std::fmt::Write as _;
+use std::fs;
+use std::io::{self, Read as _};
 use std::path::Path;
 
 use mindflayer_core::everywhere::{self, EverywhereError, Plan, Step};
 use mindflayer_core::install::{InstallError, Removed};
-use mindflayer_core::lifecycle::{self, Record};
+use mindflayer_core::lifecycle::{self, Edited, Record};
 use mindflayer_core::template::{self, Origin, Template};
 use mindflayer_core::{
     paths, AgentHomes, FlayerWorkspace, Kind, MindProject, Reference, Standing, Target,
     WorkspaceError,
 };
 
+use super::typed;
 use crate::commands::gather::scrubbed;
 use crate::commands::install::{listed, named, render_said, shown, still};
 use crate::commands::update::listed as words_listed;
 use crate::error::deleting;
 use crate::render::{printable, table, verdict};
-use crate::{CliError, Failure, Outcome, Warning};
+use crate::{CliError, Editing, Failure, Given, Outcome, Warning};
 
 /// What a dry run that would delete something ends with.
 const UNREMOVED: &str = "nothing removed: add --yes to go ahead\n";
@@ -63,15 +66,61 @@ pub(crate) fn add_to(
     Ok(scrubbed(&added.scrub).before(outcome))
 }
 
+/// `edit`, at either level: in an editor, or, with `--contents`, by
+/// replacing what the artifact holds with what a file or standard input
+/// does, which core checks before it writes a byte
+/// ([`lifecycle::replace_contents`]). Either way the same is said after:
+/// whether it changed, what `validate` makes of it now, and that an
+/// installed copy stays installed, edited.
+///
+/// A file `--contents` names is typed from `directory`, the one the command
+/// works in, as every path a command takes is, so a line a front end runs
+/// from the workspace's root reads what it names there.
 pub(crate) fn edit_in(
     workspace: Option<&FlayerWorkspace>,
     holder: &MindProject,
     reference: &str,
-    editor: Option<&str>,
+    editing: &Editing,
+    directory: &Path,
 ) -> Result<Outcome, Failure> {
     let target = lifecycle::find_to_change(workspace, holder, &Reference::parse(reference))
         .map_err(CliError::from)?;
-    let edit = lifecycle::start_edit(&target);
+    let finished = match editing.given() {
+        None => open(workspace, holder, &target, editing.editor.as_deref())?,
+        Some(given) => {
+            let contents = read_given(given, directory)?;
+            lifecycle::replace_contents(
+                workspace,
+                holder,
+                &target,
+                &contents,
+                editing.if_unchanged.as_deref(),
+            )
+            .map_err(CliError::from)?
+        }
+    };
+
+    let mut outcome = edited(holder, &target, finished.changed);
+    recorded(&mut outcome, finished.copy, |record| {
+        (record == Record::Kept).then(|| {
+            String::from(
+                "it was installed by `flayer install`, and stays so; edited, it is left alone by \
+                 `flayer install` and `flayer uninstall` unless they are forced",
+            )
+        })
+    });
+    Ok(outcome)
+}
+
+/// Open `target` in `editor`, or the one the environment names, and say
+/// what the edit came to once it is closed.
+fn open(
+    workspace: Option<&FlayerWorkspace>,
+    holder: &MindProject,
+    target: &Target,
+    editor: Option<&str>,
+) -> Result<Edited, Failure> {
+    let edit = lifecycle::start_edit(target);
     let editor = editor.map_or_else(default_editor, str::to_owned);
     let opened = open_in_editor(&editor, edit.file());
     // Finished whatever the editor came to. One that writes the file and then
@@ -86,17 +135,36 @@ pub(crate) fn edit_in(
         }
         return Err(failure);
     }
+    Ok(finished)
+}
 
-    let mut outcome = edited(holder, &target, finished.changed);
-    recorded(&mut outcome, finished.copy, |record| {
-        (record == Record::Kept).then(|| {
-            String::from(
-                "it was installed by `flayer install`, and stays so; edited, it is left alone by \
-                 `flayer install` and `flayer uninstall` unless they are forced",
-            )
-        })
-    });
-    Ok(outcome)
+/// What `--contents` names, read whole: standard input, or a file typed
+/// from `directory`.
+///
+/// Read here rather than in core, which never reads standard input, and
+/// hands the bytes over as they are: whether they are text, and what they
+/// may say, is core's to decide.
+fn read_given(given: Given<'_>, directory: &Path) -> Result<Vec<u8>, CliError> {
+    match given {
+        Given::Input => {
+            let mut contents = Vec::new();
+            io::stdin()
+                .lock()
+                .read_to_end(&mut contents)
+                .map_err(|source| CliError::ContentsUnread {
+                    from: String::from("standard input"),
+                    source,
+                })?;
+            Ok(contents)
+        }
+        Given::File(path) => {
+            let path = typed(directory, path)?;
+            fs::read(&path).map_err(|source| CliError::ContentsUnread {
+                from: path.display().to_string(),
+                source,
+            })
+        }
+    }
 }
 
 pub(crate) fn rename_in(

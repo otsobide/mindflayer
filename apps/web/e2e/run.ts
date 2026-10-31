@@ -20,30 +20,15 @@
  * workspace could reach theirs.
  */
 import { spawn } from 'node:child_process'
-import { lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join, relative, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { built, cleared, handed, marked, places, type Places } from './environment.ts'
+import { built, cleared, handed, look, marked, places, type Places } from './environment.ts'
 import { build } from './fixture.ts'
 
 const web = fileURLToPath(new URL('..', import.meta.url))
-
-/**
- * Everything under `folder` and the folder itself, each with its size and
- * when it last changed: a file written and removed again still changes the
- * folder it was in.
- */
-function look(folder: string): string[] {
-  const seen = [`. ${lstatSync(folder).mtimeMs}`]
-  for (const entry of readdirSync(folder, { recursive: true, withFileTypes: true })) {
-    const path = join(entry.parentPath, entry.name)
-    const stat = lstatSync(path)
-    seen.push(`${relative(folder, path)} ${entry.isDirectory() ? 'folder' : `${stat.size} bytes`} ${stat.mtimeMs}`)
-  }
-  return seen.sort()
-}
 
 /** Run `playwright test` with `options` and `env`, and say how it exited. */
 function playwright(options: string[], env: Record<string, string>): Promise<number> {

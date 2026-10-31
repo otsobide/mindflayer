@@ -12,15 +12,19 @@ import { TransportError, type LiveEvent, type Preview, type Query, type Ran, typ
 import { createPanel } from '@/panel'
 import applied from './fixtures/applied.json'
 import assigning from './fixtures/assigning.json'
+import authoredJson from './fixtures/authored.json'
 import candidates from './fixtures/candidates.json'
 import commands from './fixtures/commands.json'
+import draftsJson from './fixtures/drafts.json'
 import library from './fixtures/library.json'
+import loadsJson from './fixtures/loads.json'
 import planned from './fixtures/plans.json'
 import scan from './fixtures/scan.json'
 import unmade from './fixtures/unmade.json'
 import updated from './fixtures/updated.json'
 import surveyed from './fixtures/updates.json'
 import updating from './fixtures/updating.json'
+import validatedJson from './fixtures/validated.json'
 import workspace from './fixtures/workspace.json'
 
 /**
@@ -99,6 +103,25 @@ export function updates(): Answered[] {
   return structuredClone(surveyed) as unknown as Answered[]
 }
 
+/**
+ * What the workspace fixture's server answers when its editor and its page
+ * adding one of the library's own ask core to judge what is typed
+ * (tests/fixtures/drafts.json): `review` as it is, with two things
+ * `validate` warns of, and with its description emptied; then a skill to
+ * add from nothing and from `full`, one whose name is refused and one whose
+ * name is taken. Copied, so a test may change its copy.
+ */
+export function drafts(): Answered[] {
+  return structuredClone(draftsJson) as unknown as Answered[]
+}
+
+/**
+ * What `flayer validate` said of the workspace fixture's library once
+ * `review` held `text`, the draft it warns of (tests/fixtures/
+ * validated.json): what the editor's verdict is held to, word for word.
+ */
+export const validated: { text: string, said: string } = validatedJson
+
 /** `value` with every object's keys in one order, to compare as text. */
 function sorted(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -175,6 +198,31 @@ export function applying(): Commanded[] {
  */
 export function updatings(): Commanded[] {
   return structuredClone(updated) as unknown as Commanded[]
+}
+
+/**
+ * What the workspace fixture's server answers when each change its pages
+ * of the library and of a project send is previewed and run, each on the
+ * workspace as it was built (tests/fixtures/authored.json): `review` saved
+ * from the editor, then saved again once its file changed on disk since it
+ * was read, which is refused (`edit_stale`); a skill added from `full`;
+ * `lint` renamed `tidy`; and `web`'s `legacy` adopted. Copied, so a test
+ * may change its copy.
+ */
+export function authored(): Commanded[] {
+  return structuredClone(authoredJson) as unknown as Commanded[]
+}
+
+/**
+ * What the assigning fixture's server, in the home whose default workspace
+ * knows it, answers when each change its page of loads sends is previewed
+ * and run, each on the workspace as it was built (tests/fixtures/
+ * loads.json): `kit` loaded by the path the snapshot lists it by, `team`
+ * unloaded by its entry, and the workspace itself loaded, which the line
+ * refuses (`loads_itself`). Copied, so a test may change its copy.
+ */
+export function loadings(): Commanded[] {
+  return structuredClone(loadsJson) as unknown as Commanded[]
 }
 
 /** A task as `send` was handed it, and how. */

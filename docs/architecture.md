@@ -401,7 +401,13 @@ so the block and those files never disagree on it.
   past them. A rule `mind add` writes from a template is refused for whatever
   its front matter would leave unread (`artifact::rule_issues`), which reading
   only warns about ([Templates live inside the
-  markers](#templates-live-inside-the-markers)).
+  markers](#templates-live-inside-the-markers)). `edit --contents` writes
+  what it is given whole, so it asks the same of it before a byte is
+  written: a skill's through `artifact::strict_issues`, a rule's through
+  `artifact::rule_text_issues`, which is `rule_issues` and having nothing to
+  say ([contents given whole](#contents-given-whole)). An editor's edit is
+  not refused anything: the file is written by the time Mindflayer sees it,
+  and `edit` says what it broke.
 - **Warned about** when gathering, which takes the skill anyway, as the
   agentskills.io client guide advises for skills written for other agents. The
   shelf is a record of what a source holds, and leaving a skill off it would
@@ -422,7 +428,8 @@ so the block and those files never disagree on it.
 A variant on `Kind`, its folder and layout, a variant on `Declared`, a
 constructor on `Artifact`, and an arm in every match on the kind (discovery
 and discovering the shelf, `create`, `lifecycle::load` and `lifecycle::rename`,
-the refusal in `gather`, what `install` holds a copy to, and where the
+what `lifecycle::replace_contents` holds contents to, the refusal in
+`gather`, what `install` holds a copy to, and where the
 [target table](#agents-and-where-each-kind-reaches-them) puts it for each
 agent), which the compiler lists, since the matches are exhaustive. Reports need nothing:
 columns, labels and counts are all driven from `Kind::ALL` and from what the
@@ -1502,6 +1509,18 @@ type derives `Serialize` from the start:
   serializer's own function), a copy a route from its project, an origin
   through `url::serialize_redacted_option`, and why one is left a
   `code::Said` of `update::Left`.
+- **Judged for the panel by #82**: what core says of a draft before a
+  command writes it (`draft::Judged`), each issue a `ValidationIssue` as
+  `validate` reads it and why the command would write nothing a
+  `code::Said`; and the hash a file read for the panel carries
+  (`contents::Contents`'s `hash`, by `hash::bytes`), what `edit
+  --if-unchanged` takes, a field added to a type the panel read already.
+- **Told for the panel by #83**: how the workspace a snapshot is of stands
+  with each workspace this machine knows (`view::KnownHere`), the row
+  `flayer workspaces` prints (`KnownWorkspace`) flattened beside the entry
+  it loads it by (`loaded_as`) and whether it could load it (`loadable`),
+  as a shelf row's origin is flattened beside the ledger's row: what one
+  workspace loads is nothing that list of the machine says.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -1690,9 +1709,14 @@ read, built and ordered in core from the read types the commands print:
   ([D-23](#d-23-what-a-project-received-is-an-installed-view));
 - the workspaces it loads, each with how many of its own it offers; its
   shelf and the sources it is filled from; the workspaces this machine
-  knows; the latest actions, newest first (`view::HISTORY`); and the
-  warnings that belong to none of those. Each load, each thing on the shelf
-  (`view::Shelved`) and each source (`view::ShelfSource`) says its
+  knows, each with whether it loads it and by which entry, and whether it
+  could (`view::KnownHere`: one that opens, is not this one, is loaded by no
+  spelling yet and has a path a command line can hold), which only a
+  comparison of where each path leads tells, so a front end offering a load
+  offers what `flayer load` takes; the latest actions, newest first
+  (`view::HISTORY`); and the warnings that belong to none of those. Each
+  load, each thing on the shelf (`view::Shelved`) and each source
+  (`view::ShelfSource`) says its
   `origin`, what `--from` takes for what it offers and what an install of
   that records, each spelled by the one function that spells it for an
   install (`ledger::Source::origin`, `install::loaded_origin`): a second
@@ -1826,7 +1850,9 @@ a plan of the boxes somebody ticked and unticked, asked for each time they
 change and never kept beside the snapshot (`Query::Plan`, [a batch is
 planned in core](#a-batch-is-planned-in-core)), what an update of every
 project would do (`Query::Updates`, [bringing what was installed up to
-date](#bringing-what-was-installed-up-to-date)), and which workspace `mind`
+date](#bringing-what-was-installed-up-to-date)), what core says of a draft
+about to be written (`Query::Validate`, [authoring in the
+library](#authoring-in-the-library)), and which workspace `mind`
 consults from each project, which depends on the
 front end's own `-W`, activation and home, and which the TUI asks to know
 when a row's lines need `-W .` ([the TUI looks where it was
@@ -3255,6 +3281,12 @@ Two spellings of one loaded directory are one source; `load_all`,
 `unload_all` and `unlink_all` rewrite the marker once, for all of the paths or
 none.
 
+The panel loads and unloads from a page of its own by the tasks the TUI's
+load form sends, a workspace this machine knows by its path or any other
+typed, and one loaded by its entry ([its changes](#its-changes)); which of
+those it knows the workspace could load is the snapshot's
+([the read model](#the-read-model)).
+
 ### What keeps an install out of git
 
 A project in local mode
@@ -3935,9 +3967,11 @@ is left to the command, which refuses it with a reason of its own.
 
 That refusal is one part of a list every front end shares (`task::Refusal`):
 what a front end with no terminal of its own, the panel's server, does not
-run. A screen of its own; `edit` in every form, which hands the terminal to
-an editor, until #81 gives it one that takes the contents; `activate`, which
-prints code for a shell; `gather git`, the network for as long as it
+run. A screen of its own; `edit` in an editor, which hands the terminal to
+one, and `edit --contents -`, which reads standard input, the terminal's
+too, where a file given in its place runs ([contents given
+whole](#contents-given-whole)); `activate`, which prints code for a shell;
+`gather git`, the network for as long as it
 takes, until #112 brings to the server the progress and the cancel only a
 screen has now; and `show`, which prints an artifact whole, read through any
 link on the way, as a terminal's user may ask of their own disk, where a
@@ -3945,14 +3979,16 @@ front end without one reads a file at a time, held to its holder
 ([what a browser may name](#what-a-browser-may-name)). And `ui`, which
 serves the panel until Ctrl-C, so a front end that ran it as a line would
 wait on it for good. The TUI has a terminal, so of the list it refuses only
-the screens, and `ui`, since the screen takes Ctrl-C as a key and nothing
-would stop it. The list is of commands as the parsers read them, not as they
-are spelled, so `mind flayer minds` is refused as `flayer minds` is, and it
+the screens, `ui`, since the screen takes Ctrl-C as a key and nothing would
+stop it, and standard input, which is the screen's keys, read in raw mode,
+where no key ends it. The list is of commands as the parsers read them, not
+as they are spelled, so `mind flayer minds` is refused as `flayer minds` is, and it
 is a match over every command with no wildcard, so a new command does not
 compile until it says whether it is refused. A task is refused for the first
 of its lines that is (`Task::refusal`), whichever variant it is, and each
 refusal has a code of its own (`opens_screen`, `opens_editor`,
-`prints_shell_code`, `gather_unwatched`, `show_unheld`, `serves_panel`),
+`reads_stdin`, `prints_shell_code`, `gather_unwatched`, `show_unheld`,
+`serves_panel`),
 held to the rules core's codes are ([a code for what went
 wrong](#a-code-for-what-went-wrong)). A list of tasks was the alternative,
 and it would leave out a line no task builds: a front end that runs lines it
@@ -4514,6 +4550,10 @@ of it a browser may name.
   each project by the entry its box named it by, and are admitted as any
   task's when they come back to be previewed and run. A reference or an
   origin is a value, which nothing offers when it is not one.
+- **A draft only judged** (`Query::Validate`): its holder held as a read
+  of an artifact's is, and nothing written; the text a save sends is a
+  value, which goes to no line but as the file the backend writes it to,
+  named by its hash ([authoring in the library](#authoring-in-the-library)).
 - **What no front end without a terminal runs** is refused by
   `Task::refusal`, naming the line ([every change is a command
   line](#every-change-is-a-command-line)).
@@ -4873,7 +4913,10 @@ of a sidebar and a header ([its views](#its-views)). It changes things by
 running tasks the server previews first, linking, relinking and unlinking
 projects, changing a project's agents and share mode and migrating one an
 older marker marks, and shows a transcript of every run (#76, #77, [its
-changes](#its-changes)).
+changes](#its-changes)). It edits, adds and renames the library's own, and
+adopts somebody's skill from a project's page, judged by core as they are
+typed ([authoring in the library](#authoring-in-the-library), #82), and
+loads and unloads other workspaces from a page of its own (#83).
 
 ### One way out: the transport
 
@@ -5023,8 +5066,8 @@ where serde's are, and the feature only reads them.
 
 ### Its views
 
-Eight pages draw the snapshot ([the read model](#the-read-model)), a ninth
-a scan beside it and a tenth what an update would do, each a file under
+Nine pages draw the snapshot ([the read model](#the-read-model)), a tenth
+a scan beside it and an eleventh what an update would do, each a file under
 `src/pages`:
 
 - **The overview** (`/`) names the workspace, where it is and why that one,
@@ -5076,14 +5119,22 @@ a scan beside it and a tenth what an update would do, each a file under
 - **The library** (`/library?kind=...`) has a page for each kind in `kinds`,
   the first when none is named, listing the workspace's own of it, filtered
   by name or summary, each with the projects holding a copy and how each
-  copy stands, and what `validate` says; and below, every workspace it
-  loads, with what it offers, its `origin` and why it does not open.
+  copy stands, and what `validate` says.
 - **One of the library's own** (`/artifact?kind=...&name=...`) shows its
   front matter as a table, its body rendered, its files, each opening as
   text (`&file=...`), what `validate` says of it, and the projects holding a
   copy, each with its state, agents and targets, and below, its removal
   everywhere, dry run first ([its changes](#its-changes)). Named in the
   query, as a project is, since a rule's name is a route.
+- **Loads** (`/loads`), beside the library and the shelf in the sidebar,
+  the third place an offer comes from, lists every workspace it loads, with
+  its entry, where it is, its `origin`, why it does not open, and what it
+  offers, each with a link to the matrix showing that origin alone; and
+  below, every workspace this machine knows (`known`), each saying in words
+  whether it is the default, this one, loaded and by which entry
+  (`loaded_as`), or one that does not open, with the projects it links as
+  core counts them. It had been a table at the foot of every page of the
+  library, which is a page a kind, where a list of workspaces is of none.
 - **The shelf** (`/shelf`) lists what was gathered, filtered by kind, by
   name, summary or origin, each with its `origin`, the commit it was taken
   at and when.
@@ -5098,10 +5149,14 @@ shelf, is never taken for it, and an install recorded before origins were
 kept, whose copy names no origin, is not left out, which comparing a
 copy's `origin` with `library.origin` in the panel would do. What a source
 supplied is the shelf's rows that name its folder, which no two sources
-share. Both are filters of what the snapshot lists, as a health filter
-is. An origin is shown as core says it, never put together
-from an address and a branch, which would be the rule for `--from` in
-TypeScript ([the read model](#the-read-model)).
+share, and what a load offers the offers of its `origin`, which a second
+spelling of one workspace shares with the first, as it shares its count.
+Each is a filter of what the snapshot lists, as a health filter is; which
+known workspace can be loaded is core's (`loadable`), not the panel's
+reading of `in_use`, `stale` and the loads' paths, which would take two
+spellings of one folder for two. An origin is shown as core says it,
+never put together from an address and a branch, which would be the rule
+for `--from` in TypeScript ([the read model](#the-read-model)).
 
 An artifact's page reads more than the snapshot: its files
 (`Query::Files`), whose answer names the file it is read from, then that
@@ -5374,6 +5429,27 @@ What the pages offer:
   once it ran, then the same line with `--yes`, offered only then and
   asked about for what it removes and uninstalls, after which the page
   goes back to the library. As a migration is, below.
+- **A save, an addition and a rename of one of the library's own, and an
+  adoption from a project's page**, each a task the server previews like
+  any other ([authoring in the library](#authoring-in-the-library)).
+- **A load and an unload, from the page of loads**: a workspace this
+  machine knows by the path the snapshot lists it by, offered only where
+  core says the workspace can load it (`loadable`), or any other by the
+  path typed, sent without the white space around it, which the TUI's form
+  takes off too, for the path policy to hold; and an unload of
+  one it loads by the entry the marker spells it by (`policy::loaded`),
+  one that does not open among them, asked about by `Caution::Unloads`.
+  Each is the task the TUI's load form sends for the same workspace, typed
+  or picked (`Task::Load`, `Task::Unload`), which a test of the backend
+  holds the panel to, line for line and marker for marker. Neither
+  remembers anything: what this machine knows is `flayer init`'s to add,
+  so a workspace loaded by its path joins the list only once `flayer init`
+  runs on it, and a load from the panel never writes in the default
+  workspace's marker ([the workspaces this machine
+  knows](#the-workspaces-this-machine-knows)). `mind load`, into the
+  workspace above a project (`Task::LoadHere`), is no page's: the panel is
+  launched on a workspace, and loads into that one
+  ([open questions](#open-questions)).
 - **A migration, for a project an older marker marks**, the dry run first,
   `flayer migrate -p <project>`, whose report the page shows once it ran,
   then the migration, the same line with `--yes`, offered only then. The
@@ -5387,6 +5463,90 @@ scan, the plan and the matrix's preview of its lines queries, so what the
 server answered lives where every answer does; which drawer is open is
 Pinia's, beside the sidebar's state, and so are the boxes marked on the
 matrix.
+
+### Authoring in the library
+
+The library's own are written from the panel as from a terminal: by `flayer
+edit --contents`, `flayer add`, `flayer rename` and `flayer adopt`, each a
+task the server previews and runs, and judged before they are sent by what
+core says of them, never by a rule of the panel's (#82).
+
+- **Judged by core, as it is typed.** A draft, the text in the editor or
+  what the form adding one holds, is sent as a query (`Query::Validate`,
+  with a `Draft`), once somebody stops typing for a quarter of a second,
+  and answered with core's `draft::Judged`: why the command would write
+  nothing, by the code and in the words it would refuse with, and what
+  `validate` would say of the artifact once written, each issue in its own
+  words. Core calls the command's checks rather than copies of them: the
+  template found as `add` finds it and every check `add` makes before it
+  writes, worked out apart from the write (`create::plan`, `Scaffold`), and
+  every rule `edit --contents` holds contents to before it reads the file
+  (`lifecycle::replaceable`), the hash aside, which only the write can tell.
+  What `validate` would say is the artifact read from the text as discovery
+  reads one from the disk (`Artifact::skill_holding`, `rule_holding`) and
+  judged by `Artifact::validate`, so the panel's list is word for word what
+  `flayer validate` then prints, which a test of the CLI writes beside the
+  panel's fixtures and the panel's test holds it to. A front end checking a
+  name or front matter itself was the other way, and would be a second
+  place for the Agent Skills rules to be spelled.
+- **The text, never a path.** A save is `Task::Save`: the holder, the
+  artifact by its kind and name, the text, and the hash core gave of the
+  file when it was read (`Contents::hash`, `hash::bytes`), never one worked
+  out in TypeScript, where a line ending could tell the text from the file.
+  Its line is `flayer edit [-p <project>] --contents <file> --if-unchanged
+  <hash> <kind:name>`, the file the workspace's scratch file for the text:
+  `.mindflayer/tmp/edit-<the first sixteen hex digits of its SHA-256>.md`,
+  a route from the root the lines run from (`task::scratch_route`, the
+  folder's route core's, `FlayerWorkspace::scratch_route`, the one
+  `FlayerWorkspace::scratch_dir` is made of, where the backend writes). The
+  workspace's command at either level, `-p` naming a project, so the route
+  reads from where the lines run. Named by what it holds rather than drawn
+  for the run, so the line the preview shows is the line that runs, a
+  preview and a run being two requests. The backend writes the text there
+  before the line runs and takes the file away once the lines have run,
+  whatever came of them (`backend::Scratch`): made with `create_new`, in a
+  folder made with `create_dir` inside a `.mindflayer` that is there, so no
+  `.mindflayer` is made, and looked at once it is there, so nothing is
+  written through a link in its place, which a cloned workspace can bring
+  to an agent's own folder: `create_dir` says a link is there as it says a
+  folder is, and `create_new` follows one anywhere but at the file itself.
+  A file already there under the name is taken when it holds the text
+  exactly, as an interrupted run would have left it, and anything else
+  there, or a link, refuses the save (`scratch_unwritable`). In the
+  workspace's `.mindflayer` (`FlayerWorkspace::scratch_dir`), where no agent
+  looks: not the system's temporary folder, where another user could read
+  what is about to be written, nor a project's `.mind/tmp`, which a cloned
+  repository can bring with it, or a link in its place.
+- **Only over what was read.** The editor keeps the hash of the text it
+  started from, and takes the file in again when it changes on disk only
+  while nothing typed would be lost, or once the file holds what the editor
+  does, as after a save. Otherwise it says the file changed and offers to
+  read it again, and a save is refused by the line, `edit_stale`, in core's
+  words, with nothing written over the change. A file is taken in as it
+  is, and stays what was read until something is typed: one whose every
+  line ends in CRLF is read and given back with CRLF, each time it is taken
+  in, and one mixing endings is read a line at any of them and given back
+  with LF once typed in, which CodeMirror's one separator cannot keep.
+- **CodeMirror, held to the CSP.** The editor is CodeMirror 6, drawn in a
+  shadow root of its own (`MarkdownEditor.vue`). Its styles come from
+  style-mod, which writes a `<style>` element into a document, refused by
+  `default-src 'self'`, and adopts a constructed sheet into a shadow root
+  (`adoptedStyleSheets`), which the CSP has no say over: it is built through
+  the CSSOM, as an element's `style` is, and so is every style CodeMirror
+  sets of its own, never a `style` attribute. A nonce was the other way, and
+  would have had the server write one into every page it serves. The
+  panel's colours and font reach it through the custom properties a shadow
+  root inherits; Tab is left to move the focus on, and the text is named for
+  whoever cannot see it. happy-dom adopts the sheet as a browser does, and
+  the panel's test holds it to being there and to no `<style>` element in
+  the shadow root or the page; the end-to-end suite loads the editor under
+  the server's header in both engines.
+- **Adding, from a template or none**, from a page of its own (`/new`), the
+  kind's templates as the snapshot lists them; **renaming**, from the page
+  of one of the library's own; and **adopting**, from the row of a project's
+  page that reads `foreign`, sent as `Task::Adopt` and refused by the line,
+  in core's words, for whatever core does not adopt, a rule among them.
+  Each goes to the page of the name it then has.
 
 ### Its fixtures come from Rust
 
@@ -5423,7 +5583,16 @@ opens none; `updates.json` what asking what an update would do there is
 answered with; and `updated.json` each change its page offers, previewed and
 run each on the workspace as it was built, so each is answered as the first
 thing run there. `commands.json` ends with a removal everywhere of one of
-the library's own, its dry run first, which that page sends. So
+the library's own, its dry run first, which that page sends. `drafts.json`
+holds what judging drafts of the first workspace is answered with, the
+library's `review` as it is, with two things `validate` warns of and with
+its description emptied, and skills to add, one `add` writes and two it
+refuses; `validated.json` what `flayer validate` says of the library once
+`review` holds the draft it warns of, which the editor's verdict is held to
+word for word; and `authored.json` each change authoring sends, previewed
+and run each on the workspace as it was built, a save, a save once the file
+changed on disk since it was read, an addition from a template, a rename
+and an adoption. So
 the panel's tests render what core says rather than what a person drew,
 and a field the snapshot adds, renames or fills differently reaches them.
 What differs between runs is pinned: the temporary folder reads as
@@ -5444,7 +5613,7 @@ would pass its tests while the snapshot moved under it.
 The server's CSP is `default-src 'self'` ([What keeps other pages
 out](#what-keeps-other-pages-out)): nothing from another host, no inline
 script or style, no `data:` URLs. The panel is built to need nothing more,
-though three of its libraries assume otherwise:
+though four of its libraries assume otherwise:
 
 - Geist and Geist Mono come from Fontsource, as files of the build.
 - Icons are Lucide's, bundled: Nuxt UI's own and every one a component
@@ -5462,6 +5631,9 @@ though three of its libraries assume otherwise:
   a program replace, and stops them with a class `main.css` holds instead.
   It also makes dark the default: `index.html` carries the class before any
   script runs, and dark is stored when this browser has chosen nothing.
+- CodeMirror's style-mod writes a `<style>` element into a document, and
+  adopts a constructed sheet into a shadow root, which is where the editor
+  is drawn ([authoring in the library](#authoring-in-the-library)).
 - Vite inlines nothing as a `data:` URL (`assetsInlineLimit: 0`).
 - A skill's markdown is drawn from its tokens, so nothing in it reaches the
   page as HTML, a style or a `data:` URL ([its views](#its-views)).
@@ -5594,6 +5766,21 @@ one from their fixture. That the ledger a batch leaves is the one its
 lines leave run in the CLI, every hash and action logged, is the backend
 suite's to hold (`backend_test.rs`), which reads it.
 
+`e2e/loads.spec.ts` takes `loadable`, the one builder whose workspace is
+served with a home of its own beside it rather than the run's: only a
+default workspace remembers the workspaces this machine knows, and the
+run's home is held to stay empty. The builder makes that default first, so
+each `flayer init` after it remembers the workspace it makes, `team` with a
+skill of its own, then the workspace, holding one and linking a project.
+`team`, loaded from the page's list of what this machine knows by the line
+it shows, has to list its skill, which the matrix then offers; unloaded,
+confirmed first, it has to be offered no more; and the twin, given the
+same two lines, has to hold the same marker after each. A home of a test's
+own is held to stay as it was made once its server has stopped, by the look
+the driver holds the run's with (`look`, in `e2e/environment.ts`), so a
+load that wrote into the default workspace would fail the test that ran
+it.
+
 No page may log a violation of the CSP. Each engine fires
 `securitypolicyviolation` and words its own console messages, and a
 message the browser rather than a script logs may not reach Playwright, so
@@ -5621,9 +5808,10 @@ the machine it was taken on holds, a home's path and an account's name
 among it. `make docs/screenshots` builds the panel and the debug binaries
 as `make web/e2e` does and runs `e2e/screenshots.ts`, which reuses the
 suite's harness (`environment.ts`): every process without the variables
-that lead to a real workspace or agent home, an empty temporary home that
-has to be empty still once the server has stopped, every command naming
-its home, and every agent home empty.
+that lead to a real workspace or agent home, a temporary home holding only
+the default workspace the demo makes there, which has to be as the demo
+made it once the server has stopped, every command naming its home, and
+every agent home empty.
 
 The workspace it shows is `e2e/demo.ts`'s rather than the suite's fixture,
 which is made to be compared and looks it: six projects with plausible
@@ -5636,7 +5824,10 @@ outdated, two by a second gather and one by an edit of the library's own,
 and one edited, `infra`'s copy of that same skill, which `infra` keeps
 where Claude reads its skills and changed with `mind edit` before;
 a rule stating `paths`, so a project's page warns that two of its agents
-never read it; and two repositories nobody linked, for Discover. Every
+never read it; two repositories nobody linked, for Discover; and a home
+made the default workspace before anything else, so it knows the demo's
+workspace and `platform` beside it, a workspace of skills of its own that
+nothing loads, for the tour to load. Every
 change is a command; the files written by hand are the repositories'
 contents, as a person's work is, and each body of the library's own is
 written by `flayer edit --editor 'cp <draft>'`, as an editor saves it.
@@ -5661,7 +5852,9 @@ with why; the preview of linking what Discover marked, then, once that has
 run, an unlink asked about and cancelled, and the transcript; and last the
 dry run of removing one of the library's own everywhere, which changes
 nothing, taken after the transcript it would otherwise join, once the toast
-saying it ran has gone from over what it said. Chromium
+saying it ran has gone from over what it said; and `platform` loaded from
+the page of loads, after every other page is taken without it, so no other
+picture changes with it. Chromium
 alone, since the images are the same in WebKit, which does not run
 everywhere. The viewport is 1440 by 900, wide enough for a project's table
 with every column beside the sidebar (1280 cut its targets short), at a
@@ -5974,7 +6167,10 @@ workspaces forget PATH` takes one out, and `w` in the TUI runs `flayer
 workspaces` and shows what it prints, as `s` shows `flayer gather list`. What
 is known, in which order, and which one is in use are core's (`known::known`,
 fed by `resolve`), so the panel's switcher will read the answer the CLI
-prints.
+prints. Its page of loads reads it already (#83), to offer loading one,
+and whether the workspace on screen loads each and could load it is the
+snapshot's, beside the row the list prints (`view::KnownHere`), since it
+is of that workspace rather than of the machine.
 
 In the default workspace's marker rather than in a file of its own or in the
 ledger. Home is the one place every flayer on a machine can find; its marker
@@ -7328,6 +7524,8 @@ whether an install of it stays recorded. The CLI finishes the edit even when
 the editor fails: one that writes the file and then exits non-zero, as vim
 does on `:cq`, has changed the copy all the same. Nothing is written to the
 ledger either way, so nothing is scrubbed out of it for the error to carry.
+An edit with its contents given whole sees to the record the same way
+([contents given whole](#contents-given-whole)).
 
 The record seen to is the one held by the workspace the command resolved,
 the one its templates come from, and each change is given it for the same
@@ -7338,6 +7536,94 @@ workspace that never installed anything must not get a database because
 something in a project changed; core opens it only when it is there. Another
 workspace that links the same project keeps its own, an [open
 question](#open-questions).
+
+### Contents given whole
+
+The panel has no editor to run, and a script has the text already, so
+`edit` also takes what the artifact is to hold: `mind edit deploy
+--contents draft.md`, or `-` for standard input, at either level. The CLI
+reads the bytes, a file typed from the directory the command works in as
+every path a command takes is, and `lifecycle::replace_contents` decides
+what may be written. Core never reads standard input, as it never reads the
+environment, and taking the bytes rather than a path keeps whatever reads
+them (the CLI, and through it the panel's backend, by a file of its own,
+[#82](#authoring-in-the-library)) from deciding anything about them.
+
+- **Held to the rules a write is, before a byte is written.** An editor's
+  edit is checked after the fact, since the editor has written the file by
+  then; contents given whole are checked first, so what does not pass is
+  never on disk. A skill's must be one Mindflayer would write
+  (`artifact::strict_issues`): front matter that reads, a name and a
+  description that pass. A rule's must say something, and its front matter
+  must read whole (`artifact::rule_text_issues`), as a template's must.
+  The rest of the file is the writer's, written as given; what `validate`
+  only warns about is said after, as for an editor's edit. Not a list of
+  its own: a rule that changes for one write changes for every one.
+- **A name stays where its folder is.** A skill's manifest naming it other
+  than its folder is refused (`edit_name_changed`) with the command that
+  changes both, `rename`, rather than written: a name changed in one place
+  is a skill an agent finds by one and not the other, and moving the folder
+  to match would be a rename nobody asked for by that name. Compared with
+  the folder, not with what the manifest said before, so contents that put
+  right a manifest whose name had drifted from its folder are taken.
+- **Only over what was read.** `--if-unchanged <sha256>` names what the file
+  held when the contents were made from it, by `hash::bytes`, the recipe
+  every hash of a file is. A file that holds anything else now was changed
+  by somebody else since, and is not written over (`edit_stale`). A value
+  that is no SHA-256 at all, 64 hex digits in either case
+  (`hash::is_digest`), is refused as one before anything is read
+  (`edit_hash_malformed`): compared, it could only be called stale, which
+  sends its writer to read again a file nobody changed, and the line
+  `sha256sum` prints, the file's name after the digits, is one such value.
+  The panel's editor sends the one core gave with what it read
+  (`Contents::hash`) with every save, so a change made in an editor while
+  the page was open is refused rather than lost.
+  Without it the write crosses whatever came first, as an editor's does.
+- **Where the artifact is kept, and nowhere else.** The file is followed
+  through its links once, as `copy::followed` follows them for a copy and a
+  read for the panel, and written at the path it resolves to, so a link
+  swapped in after the check is not written through, only when that lies
+  inside each of three folders (`lifecycle::written_at`,
+  `edit_leads_outside` otherwise). The folder its holder keeps the kind
+  in: a repository can link a skill's `SKILL.md` to `~/.bashrc`, and the
+  panel would otherwise replace it with a skill. A skill's own folder, so
+  a manifest linked to a sibling's is not rewritten under a name that
+  folder does not have. And a project's root, which a read of it for the
+  panel is held to: a kind's folder, or `.claude` above it, linked out of
+  the repository, to the user's own `~/.claude` say, would otherwise carry
+  the write along. Not the root of the workspace's own, which may be a
+  home: what is in the folder the workspace keeps its own of a kind in
+  (`FlayerWorkspace::own`, of a kind `own_kinds` gives it) is held to that
+  folder alone, as a read of it is. Told by the folder, since the holder
+  is a `MindProject` either way, so whatever reaches the library's folder
+  is held as the library is, and a project's folder anywhere else to the
+  project's root. A project's skill linked to a file elsewhere in its
+  repository is refused too, and edited where it leads: a write reaches
+  nothing a read of it for the panel does not, and less.
+- **Through a temporary renamed onto it**, as every file Mindflayer replaces
+  is (`replace_bytes_unresolved`), named for the run and ending in `.tmp`:
+  an agent reading the file finds the old contents or the new, and a skill's
+  folder holds nothing new an agent would load as one. Contents the same as
+  the file's write nothing, and say so.
+- **The record as an edit leaves it.** An installed copy replaced holds
+  something other than was installed, and reads as edited (D-04), from the
+  same function `finish_edit` asks (`Record::Kept`). Like an edit, a rename
+  or a removal, it takes no lock: what changes is the artifact's file, not
+  anything the workspace keeps, and its ledger is only read ([open
+  questions](#open-questions)).
+- **Taken by the CLI, judged by core.** `--contents` names a file or `-`
+  (`parse::Editing::given`), conflicts with `--editor`, and
+  `--if-unchanged` needs it; one struct for both binaries' `edit`, so the
+  two levels cannot come to take them differently.
+
+`edit` without `--contents` stays on the list of lines a front end with no
+terminal refuses (`opens_editor`), and so does `--contents -`, which reads
+standard input (`reads_stdin`): the server's is the terminal `flayer ui` was
+started from, and the TUI's is the screen's own keys. A file runs, from
+either ([every change is a command
+line](#every-change-is-a-command-line)). The one task that builds such a
+line, `Task::Save`, names a file the backend writes the text into, never one
+a browser names ([authoring in the library](#authoring-in-the-library)).
 
 ## Scanning
 
@@ -7490,7 +7776,8 @@ panel runs them while both do. Three things keep two writers from undoing each
 other, and none of them makes a reader wait for the workspace.
 
 - **A temporary of its own.** A file Mindflayer replaces (a marker, the
-  `SKILL.md` a rename rewrites, git's exclude file) is written whole into a
+  `SKILL.md` a rename rewrites, an artifact's file `edit --contents`
+  replaces, git's exclude file) is written whole into a
   temporary beside it and renamed into place (`replace_file`). The temporary
   was `flayer.toml.tmp`, one name for every writer: two at once wrote into one
   file, either could rename the other's half into place, and the second rename
@@ -8207,6 +8494,43 @@ just listed.
 
 ## Open questions
 
+- **A known workspace that has gone is offered nothing on the page of
+  loads.** It is listed, with why it does not open, and offers neither a
+  load, which would be refused, nor `flayer workspaces forget`, which
+  would take it off the list: forgetting changes what the machine knows
+  rather than what the workspace on screen offers, and #84's switcher,
+  which reads the same list, may be the place for it.
+- **`mind load` is no page's.** The panel is launched on a workspace and
+  loads into that one; a project's own load into the workspace above it
+  (`Task::LoadHere`), which the TUI offers when it is opened on a project,
+  is admitted by the backend and offered by no page, since no page shows a
+  project no workspace links.
+- **A save's line names a file gone once it ran.** The transcript keeps
+  `flayer edit --contents .mindflayer/tmp/edit-<hash>.md ...` as it ran, and
+  the backend takes the file away after, so the line pasted into a shell
+  reads nothing. Keeping the text beside the transcript, or a line that
+  hands it on standard input, would let it run again, the one at the price
+  of a folder of every text saved, the other of a line no front end without
+  a terminal runs.
+- **The workspace's scratch folder is not reserved.** `.mindflayer/tmp` holds
+  the text a save hands `edit --contents` for as long as the line runs, and
+  nothing stops a workspace's own `directories` naming it, as they may name
+  any folder of `.mindflayer` but the shelf and the cache
+  (`gathered_overlap`): a rules folder there would list the text as a rule
+  for that moment. Refusing it as the shelf is refused would need words for
+  a refusal that is not about gathering.
+- **Two servers saving the same text at once share a file.** The scratch
+  file is named by what it holds, so two `flayer ui` on one workspace saving
+  the same text into it at once write, and take away, one file; the second
+  line then reads nothing, and writes nothing. Each server's runs take
+  turns, so one panel never meets it.
+- **Adopting is offered on every foreign row.** Core adopts only a skill an
+  install could have written, and refuses the rest when the line runs, a
+  rule among them; whether a row can be adopted is not in the snapshot,
+  since telling it means hashing every copy of every foreign row on every
+  change. A word for it, worked out only for a row somebody points at, would
+  let the panel offer adopting only where it can be done.
+
 - **Nothing says when the screenshots are stale.** `make docs/screenshots`
   takes them again, and AGENTS.md asks a change to what the panel shows to
   run it, but no check fails when a page has changed and its image has
@@ -8573,7 +8897,13 @@ just listed.
   removal drops or a rename carries is that install's, which leaves its copy
   unrecorded or the renamed one recorded as the install wrote it. Taking the
   lock for the change itself, where there is no editor to wait for, would
-  close it for `add`, `rename` and `remove`.
+  close it for `add`, `rename`, `remove` and `edit --contents`, whose
+  contents are written in one step. That would not close a second window,
+  `--if-unchanged`'s: the file is hashed and then the temporary renamed
+  onto it, and a write by an editor between the two, which takes no lock
+  of Mindflayer's, is written over. Nothing short of the editor's
+  cooperation closes it; it is as wide as reading a file and renaming
+  another onto it.
 - **Two first writers making one workspace.** `init` makes a marker with
   `create_new` and then fills it, so a second writer making the same
   workspace at that moment (two first commands in a home with no
@@ -9236,10 +9566,13 @@ just listed.
   judged, so a link put in its place afterwards is not followed; a folder on
   that path made a link in the moment between is. A path the policy judged
   outside every `.mindflayer` can likewise be made a link into one before
-  the command runs. Opening each folder on the way without following links
-  would close the first, as `ConfigFile` narrows its own window, at the
-  price of code per platform; the second is a race with somebody who can
-  already write where the command acts.
+  the command runs. The scratch folder a save puts its text in is looked at
+  once it is there, and refused as a link, so one put in its place between
+  that look and the file's making is followed the same way. Opening each
+  folder on the way without following links would close the first and the
+  third, as `ConfigFile` narrows its own window, at the price of code per
+  platform; the second is a race with somebody who can already write where
+  the command acts.
 - **A listing reads an artifact through its links.** The snapshot lists a
   rule with its summary, its first line when it has no front matter, read
   through any link as the catalog follows one, so a rule linked out of its

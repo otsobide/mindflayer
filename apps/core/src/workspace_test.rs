@@ -624,3 +624,43 @@ fn a_share_mode_is_read_back_from_its_name_and_no_other_spelling() {
         "unknown share mode `Local`; expected local or shared"
     );
 }
+
+/// Inside `.mindflayer`, apart from every folder a workspace keeps what it
+/// holds in: its library, its shelf and its cache; and the route a line run
+/// from the root names it by leads there.
+#[test]
+fn a_workspaces_scratch_folder_is_its_own_inside_mindflayer() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+
+    let scratch = workspace.scratch_dir();
+
+    assert_eq!(scratch, dir.path().join(FLAYER_DIR).join(SCRATCH_DIR));
+    assert_eq!(FlayerWorkspace::scratch_route(), ".mindflayer/tmp");
+    assert_eq!(
+        workspace.root().join(FlayerWorkspace::scratch_route()),
+        scratch
+    );
+    let own = workspace.own();
+    let mut kept: Vec<PathBuf> = Kind::ALL
+        .into_iter()
+        .flat_map(|kind| {
+            [
+                own.directory_for(kind).unwrap(),
+                workspace.gathered_dir(kind),
+            ]
+        })
+        .collect();
+    kept.push(workspace.cache_dir());
+    for folder in kept {
+        assert!(
+            !folder.starts_with(&scratch) && !scratch.starts_with(&folder),
+            "{}",
+            folder.display()
+        );
+    }
+    assert!(
+        !scratch.exists(),
+        "nothing makes it until something is put in it"
+    );
+}

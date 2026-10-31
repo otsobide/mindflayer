@@ -128,6 +128,24 @@ pub enum CliError {
     },
     #[error("`{editor}` failed ({status}), so the file is reported on no further")]
     EditorFailed { editor: String, status: String },
+    /// What `edit --contents` names could not be read, so nothing is
+    /// replaced: `from` is the file, or standard input.
+    #[error("{from}: cannot be read, so nothing was replaced: {source}")]
+    ContentsUnread {
+        from: String,
+        #[source]
+        source: io::Error,
+    },
+    /// The text a front end was to hand `edit --contents` could not be put
+    /// in the workspace's scratch folder for the line to read, so the line
+    /// was not run: the folder could not be made, or something other than
+    /// that text is where it goes.
+    #[error("{path}: the text to save cannot be put here for `edit --contents` to read, so nothing was run: {source}")]
+    Scratch {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error("no flayer workspace above {0}; make one with `flayer init` in the directory that holds your projects")]
     NoWorkspaceAbove(PathBuf),
     #[error("{0}: not known, since there is no default workspace to remember it (--home or $MINDFLAYER_HOME names none)")]
@@ -208,6 +226,8 @@ codes!(CliError {
     Self::TargetsWhere => "targets_no_project",
     Self::Editor { .. } => "editor_unstarted",
     Self::EditorFailed { .. } => "editor_failed",
+    Self::ContentsUnread { .. } => "edit_contents_unread",
+    Self::Scratch { .. } => "scratch_unwritable",
     Self::NoWorkspaceAbove(_) => "no_workspace_above",
     Self::NoDefault(_) => "no_default_workspace",
     Self::InstallWhere => "install_no_projects",

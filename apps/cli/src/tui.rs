@@ -355,10 +355,11 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
     // code beside it is for a front end that acts on one, which this does
     // not.
     match run_line(words, base, lookup, watch, |refusal| {
-        matches!(refusal, Refusal::Screen | Refusal::Panel)
+        matches!(refusal, Refusal::Screen | Refusal::Panel | Refusal::Input)
     }) {
         Ran::Refused(Refusal::Screen) => Done::failed(command, SCREEN_IN_A_SCREEN),
         Ran::Refused(Refusal::Panel) => Done::failed(command, PANEL_IN_A_SCREEN),
+        Ran::Refused(Refusal::Input) => Done::failed(command, INPUT_IN_A_SCREEN),
         Ran::Refused(refusal) => Done::failed(command, refusal.to_string()),
         Ran::Done(Ok(outcome)) => Done {
             command,
@@ -378,16 +379,22 @@ pub fn execute(words: &[String], base: &Path, lookup: &Lookup, watch: &Watch) ->
 }
 
 /// Why a command that draws is not run from here: what the TUI refuses of
-/// the list every front end shares ([`Refusal`]), one of the two refusals a
-/// front end with a terminal has. The rest it runs: an editor, given the
+/// the list every front end shares ([`Refusal`]), one of the three refusals
+/// a front end with a terminal has. The rest it runs: an editor, given the
 /// terminal ([`Task::takes_terminal`]), a gather, watched, and `show`,
 /// printed for whoever sits at it.
 const SCREEN_IN_A_SCREEN: &str = "opens a screen of its own, so it is not run from inside this one";
 
-/// Why `ui` is not run from here, the other: it serves until Ctrl-C, and the
+/// Why `ui` is not run from here, the second: it serves until Ctrl-C, and the
 /// screen takes that key as a key, so nothing would ever stop it.
 const PANEL_IN_A_SCREEN: &str =
     "serves the panel until Ctrl-C, which this screen keeps for itself, so it is not run from inside it";
+
+/// Why `edit --contents -` is not run from here, the third: it reads
+/// standard input, the terminal whose keys the screen reads, in raw mode,
+/// where no key ends it.
+const INPUT_IN_A_SCREEN: &str =
+    "reads standard input, the keys this screen reads, so it is not run from inside it";
 
 /// Build the install screen for the workspace at `base`, which is the one on
 /// screen, and the root the lines it amounts to run from once it is applied:

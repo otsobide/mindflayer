@@ -111,8 +111,8 @@ pub struct Snapshot {
     /// order `projects` lists them: what each of its boxes shows.
     pub boxes: Vec<Boxes>,
     /// Every workspace this machine knows ([`crate::known`]), this one
-    /// among them.
-    pub known: Vec<KnownWorkspace>,
+    /// among them, each with whether this one loads it, and could.
+    pub known: Vec<KnownHere>,
     /// The latest actions, newest first, at most [`HISTORY`].
     pub history: Vec<Entry>,
     /// What could not be read and belongs to no project or library: two
@@ -569,6 +569,58 @@ pub struct LoadedWorkspace {
     pub error: Option<Said>,
 }
 
+/// A workspace this machine knows, as `flayer workspaces` lists it, with
+/// how the workspace a snapshot is of stands with it: whether it loads it,
+/// and whether it could.
+///
+/// Beside the row rather than in it, as a shelf row's origin is
+/// ([`Shelved`]): the row is the machine's list, the same whichever
+/// workspace asks, and what one of them loads is nothing that list says.
+/// Told here rather than by a front end from `in_use`, `stale` and
+/// [`Snapshot::loaded`], whose paths it would compare itself: two spellings
+/// of one folder are one workspace, which only a comparison of where each
+/// leads tells.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct KnownHere {
+    #[serde(flatten)]
+    #[cfg_attr(feature = "ts", ts(flatten))]
+    pub workspace: KnownWorkspace,
+    /// The entry this workspace loads it by, when it loads it, as
+    /// [`LoadedWorkspace::entry`] spells it: what `flayer unload` is given.
+    /// The first, when it loads it by more than one spelling.
+    pub loaded_as: Option<String>,
+    /// Whether this workspace can load it: it opens, it is not this one,
+    /// this one loads it by no spelling yet, and its path is text a command
+    /// line can hold. What a front end offers to load, by its `path`, which
+    /// `flayer load` is given as it is.
+    pub loadable: bool,
+}
+
+impl KnownHere {
+    /// `known`, as `workspace`, which loads `loaded`, stands with it.
+    fn of(known: KnownWorkspace, workspace: &FlayerWorkspace, loaded: &[LoadedWorkspace]) -> Self {
+        let loaded_as = loaded
+            .iter()
+            .find(|load| same_directory(&load.path, &known.path))
+            .map(|load| load.entry.clone());
+        // `flayer load` of this one is refused (`loads_itself`), and of one
+        // loaded already changes nothing; one that would not open is no
+        // workspace to load. A path that is not UTF-8 is no word of a
+        // command line, which the path policy refuses rather than spell it
+        // as another folder.
+        let loadable = known.stale.is_none()
+            && loaded_as.is_none()
+            && !same_directory(&known.path, workspace.root())
+            && known.path.to_str().is_some();
+        KnownHere {
+            workspace: known,
+            loaded_as,
+            loadable,
+        }
+    }
+}
+
 /// One artifact gathered onto the shelf, with what `--from` takes for it.
 ///
 /// The ledger's row with its origin beside it, as `gather list --json`
@@ -936,6 +988,11 @@ impl Snapshot {
         // What could not be read of a workspace this machine knows is said
         // in its row, as `stale`.
         let (known, _) = known::known(home, Some(workspace));
+        let known = known
+            .workspaces
+            .into_iter()
+            .map(|known| KnownHere::of(known, workspace, &loaded))
+            .collect();
         let library = Library::of(workspace, &Kind::ALL);
 
         Snapshot {
@@ -959,7 +1016,7 @@ impl Snapshot {
             sources,
             offers,
             boxes,
-            known: known.workspaces,
+            known,
             history,
             warnings,
         }

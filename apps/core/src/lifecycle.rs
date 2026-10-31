@@ -1,5 +1,5 @@
 //! Changing what a project holds: adding to it, finding an artifact by what
-//! somebody typed, renaming it, removing it.
+//! somebody typed, editing it, renaming it, removing it.
 //!
 //! Finding is more forgiving than listing. A skill whose front matter does not
 //! parse is left out of every listing, but it is exactly the one somebody
@@ -37,13 +37,16 @@ use crate::code::codes;
 use crate::create::{create, create_from, CreateError};
 use crate::frontmatter;
 use crate::gather::Scrub;
+use crate::hash;
 use crate::install::{self, InstallError};
 use crate::kind::{Kind, Layout};
 use crate::ledger::Carried;
 use crate::paths;
 use crate::skill::SkillManifest;
 use crate::template::Template;
-use crate::workspace::{replace_file, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{
+    replace_bytes_unresolved, replace_file, FlayerWorkspace, MindProject, WorkspaceError,
+};
 
 /// An artifact found by what somebody typed.
 #[derive(Debug, Clone)]
@@ -396,20 +399,255 @@ pub fn finish_edit(
     edit: Edit,
 ) -> Edited {
     let changed = fs::read(&edit.file).ok() != edit.before;
-    let copy = match workspace.filter(|_| changed) {
-        None => Ok(Record::Untouched),
-        Some(workspace) => install::recorded_at(
-            workspace, project, edit.kind, &edit.name, &edit.path,
-        )
-        .map(|recorded| {
-            if recorded {
-                Record::Kept
-            } else {
-                Record::Untouched
-            }
-        }),
-    };
+    let copy = kept(
+        workspace.filter(|_| changed),
+        project,
+        edit.kind,
+        &edit.name,
+        &edit.path,
+    );
     Edited { changed, copy }
+}
+
+/// Replace what `target` in `project` holds with `contents`, the whole of a
+/// skill's manifest or a rule's file, as an editor would have written it:
+/// the edit for a front end that has no editor to run, or a script that
+/// writes the text itself. `workspace` is the one consulted, as for [`add`].
+///
+/// Held to the rules every write is held to before a byte is written. A
+/// skill's must be one Mindflayer would write ([`artifact::strict_issues`]):
+/// front matter that reads, a name and a description that pass, and the
+/// name its folder has. A different name is refused rather than written,
+/// since a name changed there and not in the folder is a skill no agent
+/// finds by both; [`rename`] changes the two together. A rule's must say
+/// something, and its front matter must read whole
+/// ([`artifact::rule_text_issues`]), as a template's must. Anything else
+/// the file holds is the writer's, written as given.
+///
+/// `expect`, when given, is the SHA-256 of what the file held when it was
+/// read ([`hash::bytes`]): a file that holds anything else now was changed
+/// by somebody else since, and is not written over. One that is no SHA-256
+/// at all ([`hash::is_digest`]) is refused before anything is read, rather
+/// than said to be what the file no longer holds, which would send its
+/// writer to read again a file nobody changed. Without it, the write is the
+/// caller's to keep from crossing another, as an editor's is.
+///
+/// Written where the artifact is kept and nowhere else: the file is
+/// followed through its links, and one leading out of where it may be
+/// written ([`written_at`]) is refused rather than written through. What
+/// is written is a temporary beside the file, renamed onto it, so an agent
+/// reading it finds the old contents or the new, never half of each.
+///
+/// The record stays as [`finish_edit`] leaves it (D-04): an installed copy
+/// replaced holds something other than was installed, and reads as edited.
+/// Contents the same as the file's write nothing, and say so. No lock is
+/// taken, as none is for an edit, a rename or a removal: what changes is
+/// the artifact's file, not anything of the workspace's, whose ledger is
+/// only read.
+pub fn replace_contents(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    target: &Target,
+    contents: &[u8],
+    expect: Option<&str>,
+) -> Result<Edited, LifecycleError> {
+    if let Some(given) = expect.filter(|given| !hash::is_digest(given)) {
+        return Err(LifecycleError::HashMalformed {
+            given: given.to_owned(),
+        });
+    }
+    let file = target.file();
+    let resolved = replaceable(workspace, project, target, contents)?;
+
+    // The resolved path from here on, never the one checked: a link put in
+    // its place since would otherwise be written through.
+    let held = fs::read(&resolved).map_err(|source| LifecycleError::Io {
+        path: file.clone(),
+        source,
+    })?;
+    if let Some(expected) = expect {
+        let found = hash::bytes(&held);
+        if !found.eq_ignore_ascii_case(expected) {
+            return Err(LifecycleError::Stale {
+                path: file,
+                expected: expected.to_owned(),
+                found,
+            });
+        }
+    }
+    if held == contents {
+        return Ok(Edited {
+            changed: false,
+            copy: Ok(Record::Untouched),
+        });
+    }
+    replace_bytes_unresolved(&resolved, contents)
+        .map_err(|(path, source)| LifecycleError::Io { path, source })?;
+
+    let copy = kept(workspace, project, target.kind, &target.name, &target.path);
+    Ok(Edited {
+        changed: true,
+        copy,
+    })
+}
+
+/// Where `contents` given whole for `target` in `project` would be written,
+/// once every rule [`replace_contents`] holds them to before it reads the
+/// file has passed: the target inside its kind's folder, the contents fit
+/// for it ([`fit`]), and the file leading nowhere it may not be written
+/// ([`written_at`]). In that order, so a refusal is the one the write
+/// would give.
+///
+/// Apart from the write so that what it would be refused for can be asked
+/// before anything is sent to be written ([`crate::draft::edited`]), by the
+/// same checks rather than a copy of them. What the file holds now, and so
+/// whether it is still what an edit was made from, is the write's alone to
+/// tell, at the moment it writes.
+pub(crate) fn replaceable(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    target: &Target,
+    contents: &[u8],
+) -> Result<PathBuf, LifecycleError> {
+    let directory = inside(project, target)?;
+    fit(target, contents)?;
+    written_at(workspace, project, target, &directory)
+}
+
+/// Where `target`'s file in `project` leads once its links are followed,
+/// when contents given whole may be written there: inside the project's
+/// root, the folder `directory` it keeps the kind in, and a skill's own
+/// folder. Resolved once and held to every one of them, where
+/// [`crate::copy::followed`] asks whether a path lies in any of its
+/// bounds; by components, as it compares, so `/work/app-old` is not inside
+/// `/work/app`.
+///
+/// Each for a reason of its own. The root, as a read of a project's file
+/// for the panel is held to it ([`crate::contents`]): a kind's folder, or
+/// a folder above it such as `.claude`, linked out of the repository would
+/// otherwise carry the write along, into an agent's own home among other
+/// places. Not for the workspace's own ([`library`]), whose root may be a
+/// home with every secret of its user inside it: their folder alone bounds
+/// them, as it bounds a read of them. The kind's folder, so a manifest
+/// linked to a file elsewhere (`~/.bashrc`, in the workspace's own) is not
+/// replaced with a skill. And a skill's own folder, so a manifest linked to
+/// a sibling's is not rewritten under a name that folder does not have.
+/// The widest first, so a refusal names the most the file leads out of.
+fn written_at(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    target: &Target,
+    directory: &Path,
+) -> Result<PathBuf, LifecycleError> {
+    let root = (!library(workspace, target.kind, directory)).then(|| project.root());
+    // Matched on the layout, so a kind kept another way says what bounds it.
+    let own = match target.kind.layout() {
+        Layout::Directory { .. } => Some(target.path.as_path()),
+        Layout::Files { .. } => None,
+    };
+    let canonical = |path: &Path| {
+        fs::canonicalize(path).map_err(|source| LifecycleError::Io {
+            path: path.to_path_buf(),
+            source,
+        })
+    };
+    let file = target.file();
+    let resolved = canonical(&file)?;
+    for bound in root.into_iter().chain([directory]).chain(own) {
+        if !resolved.starts_with(canonical(bound)?) {
+            return Err(LifecycleError::LeadsOut {
+                path: file,
+                resolved,
+                directory: bound.to_path_buf(),
+            });
+        }
+    }
+    Ok(resolved)
+}
+
+/// Whether `directory`, where a holder keeps `kind`, is the folder
+/// `workspace` keeps its own of that kind in ([`FlayerWorkspace::own`]),
+/// of a kind it keeps apart from a project at its root
+/// ([`FlayerWorkspace::own_kinds`]): the library, as a read of it for the
+/// panel finds it ([`crate::contents`]).
+///
+/// Told by the folder, since the holder is a [`MindProject`] either way:
+/// what is in the library's folder is held as the library is, whichever
+/// holder reached it, and a project's folder anywhere else to the
+/// project's root. One at the workspace's root keeping a kind where the
+/// library does holds what is there itself, by `own_kinds`, and is held to
+/// its root too. With no workspace there is no library to be.
+fn library(workspace: Option<&FlayerWorkspace>, kind: Kind, directory: &Path) -> bool {
+    workspace.is_some_and(|workspace| {
+        workspace.own().directory_for(kind).as_deref() == Some(directory)
+            && workspace.own_kinds().contains(&kind)
+    })
+}
+
+/// Refuse `contents` for `target` unless they are what Mindflayer would
+/// write there: text, and for a skill a manifest that reads, names its
+/// folder and passes the strict rules; for a rule, one that says something
+/// with front matter that reads whole.
+fn fit(target: &Target, contents: &[u8]) -> Result<(), LifecycleError> {
+    let name = target.name.clone();
+    let Ok(text) = std::str::from_utf8(contents) else {
+        return Err(LifecycleError::NotText { name });
+    };
+    // Matched on the kind, so a third one has to say what it is held to.
+    let issues = match target.kind {
+        Kind::Skill => {
+            let unreadable = |reason: String| LifecycleError::Unparsed {
+                name: name.clone(),
+                reason,
+            };
+            let document =
+                frontmatter::split(text).map_err(|error| unreadable(error.to_string()))?;
+            let manifest = SkillManifest::parse(document.front_matter)
+                .map_err(|error| unreadable(error.to_string()))?;
+            // The folder is the name an agent finds it by, so it is what the
+            // manifest has to say, whatever the manifest said before.
+            let folder = target
+                .path
+                .file_name()
+                .map(|folder| folder.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            if manifest.name != folder {
+                return Err(LifecycleError::NameChanged {
+                    name: folder,
+                    to: manifest.name,
+                });
+            }
+            artifact::strict_issues(&manifest, &folder)
+        }
+        Kind::Rule => artifact::rule_text_issues(text),
+    };
+    if issues.is_empty() {
+        Ok(())
+    } else {
+        Err(LifecycleError::ContentsUnfit { name, issues })
+    }
+}
+
+/// What an edit, which leaves the record as it is, did to it: kept when
+/// `workspace` records a copy at `at`, and untouched when it records none
+/// or there is no workspace to ask.
+fn kept(
+    workspace: Option<&FlayerWorkspace>,
+    project: &MindProject,
+    kind: Kind,
+    name: &str,
+    at: &Path,
+) -> Result<Record, InstallError> {
+    let Some(workspace) = workspace else {
+        return Ok(Record::Untouched);
+    };
+    install::recorded_at(workspace, project, kind, name, at).map(|recorded| {
+        if recorded {
+            Record::Kept
+        } else {
+            Record::Untouched
+        }
+    })
 }
 
 /// How many files removing it would delete.
@@ -822,7 +1060,7 @@ fn carried(
     })
 }
 
-/// Why an artifact could not be found, renamed or removed.
+/// Why an artifact could not be found, edited, renamed or removed.
 #[derive(Debug, Error)]
 pub enum LifecycleError {
     #[error("nothing named `{typed}` here")]
@@ -859,6 +1097,43 @@ pub enum LifecycleError {
     Rewrite { path: PathBuf, reason: String },
     #[error("{path}: not inside {directory}, so it is not changed from here")]
     Outside { path: PathBuf, directory: PathBuf },
+    /// Contents given whole ([`replace_contents`]) that are no text, and so
+    /// no manifest or rule any agent reads.
+    #[error("the contents given for `{name}` are not UTF-8 text, so nothing was written")]
+    NotText { name: String },
+    /// A skill's contents given whole whose front matter does not read.
+    #[error("the contents given for `{name}` cannot be read as a skill's, so nothing was written: {reason}")]
+    Unparsed { name: String, reason: String },
+    /// A skill's contents given whole that name it other than its folder.
+    #[error("the contents given for `{name}` call it `{to}`: a skill's name is its folder's too, so it is changed with `mind rename`, which moves both, and nothing was written")]
+    NameChanged { name: String, to: String },
+    /// Contents given whole that break a rule Mindflayer holds a write to.
+    #[error("the contents given for `{name}` break a rule, so nothing was written: {}", issue_list(.issues))]
+    ContentsUnfit {
+        name: String,
+        issues: Vec<ValidationIssue>,
+    },
+    /// The hash the contents given whole were said to be made from is no
+    /// SHA-256 at all, so no file could hold what it is the hash of.
+    #[error("`{given}` is not a SHA-256, which is 64 hex digits and nothing else, so nothing was written")]
+    HashMalformed { given: String },
+    /// The file no longer holds what the contents given whole were made
+    /// from: somebody else changed it since it was read.
+    #[error("{path}: changed since it was read, its SHA-256 now {found} and not {expected}, so it is not written over; read it again")]
+    Stale {
+        path: PathBuf,
+        expected: String,
+        found: String,
+    },
+    /// The file leads, through a link, out of `directory`, one of the
+    /// folders contents given whole are written inside: the project's
+    /// root, the folder its kind is kept in, or a skill's own.
+    #[error("{path} leads to {resolved}, outside {directory}, so it is not written")]
+    LeadsOut {
+        path: PathBuf,
+        resolved: PathBuf,
+        directory: PathBuf,
+    },
     #[error("{path}: cannot be changed: {source}")]
     Io {
         path: PathBuf,
@@ -884,6 +1159,13 @@ codes!(LifecycleError {
     Self::Unreadable { .. } => "rename_front_matter_unreadable",
     Self::Rewrite { .. } => "rename_rewrite_failed",
     Self::Outside { .. } => "change_outside",
+    Self::NotText { .. } => "edit_contents_not_text",
+    Self::Unparsed { .. } => "edit_front_matter_unreadable",
+    Self::NameChanged { .. } => "edit_name_changed",
+    Self::ContentsUnfit { .. } => "edit_contents_unfit",
+    Self::HashMalformed { .. } => "edit_hash_malformed",
+    Self::Stale { .. } => "edit_stale",
+    Self::LeadsOut { .. } => "edit_leads_outside",
     Self::Io { .. } => "change_failed",
 } carried {
     Self::Workspace(error) => error,

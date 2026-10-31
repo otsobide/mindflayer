@@ -11,8 +11,9 @@ const route = useRoute()
 
 // A view is a page under src/pages and a line here. A project's page is
 // reached from the projects, so it lights their line, and one of the
-// library's own lights the library's: `/project` is no child of `/projects`
-// to the router, nor `/artifact` of `/library` (src/routes.ts says why).
+// library's own, its editor and the page adding one light the library's:
+// `/project` is no child of `/projects` to the router, nor `/artifact` of
+// `/library` (src/routes.ts says why).
 const links = computed<NavigationMenuItem[]>(() => [
   { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: '/' },
   {
@@ -28,8 +29,9 @@ const links = computed<NavigationMenuItem[]>(() => [
     label: 'Library',
     icon: 'i-lucide-library-big',
     to: '/library',
-    active: route.path === '/artifact' || undefined
+    active: ['/artifact', '/edit', '/new'].includes(route.path) || undefined
   },
+  { label: 'Loads', icon: 'i-lucide-layers', to: '/loads' },
   { label: 'Shelf', icon: 'i-lucide-package', to: '/shelf' },
   { label: 'Sources', icon: 'i-lucide-git-branch', to: '/sources' }
 ])

@@ -139,12 +139,19 @@ pub const CACHE_DIR: &str = "cache";
 /// wherever it is made.
 pub const LIBRARY_DIR: &str = "library";
 /// Where an install builds its copy before moving it into place, inside a
-/// project's [`MIND_DIR`].
+/// project's [`MIND_DIR`], and a workspace's scratch folder, inside its
+/// [`FLAYER_DIR`] ([`FlayerWorkspace::scratch_dir`]).
 ///
 /// Not beside the copy, because that is a folder agents read, and not in the
 /// system's temporary folder, which can be another filesystem: inside the
 /// project, a finished copy is moved into place by a rename.
 pub const SCRATCH_DIR: &str = "tmp";
+
+/// Where a workspace's scratch folder is from its root, a folder at a time:
+/// the one place [`FlayerWorkspace::scratch_dir`] and
+/// [`FlayerWorkspace::scratch_route`] both read it from, so the file a front
+/// end writes and the route its line names cannot come apart.
+const SCRATCH: [&str; 2] = [FLAYER_DIR, SCRATCH_DIR];
 
 /// The `.gitignore` a local project's `.mind` is given: `*`, which keeps out
 /// of git everything in the folder, this file included, as a Python venv
@@ -1314,6 +1321,29 @@ impl FlayerWorkspace {
     /// Where clones are kept, whether or not it exists yet.
     pub fn cache_dir(&self) -> PathBuf {
         self.flayer_dir().join(CACHE_DIR)
+    }
+
+    /// The workspace's scratch folder ([`SCRATCH_DIR`] in `.mindflayer`),
+    /// whether or not anything has made it yet: where a front end puts what
+    /// it hands a command as a file and takes away after, the panel's text
+    /// for `edit --contents` among it.
+    ///
+    /// The workspace's own, as `.mind/tmp` is a project's, and named alike:
+    /// inside `.mindflayer`, where no agent looks and a workspace keeps what
+    /// is Mindflayer's, never in the system's temporary folder, where
+    /// another user could read what is about to be written. Not a project's
+    /// `.mind/tmp`, even for a project's artifact: a cloned repository can
+    /// bring that folder, or a link in its place, with it.
+    pub fn scratch_dir(&self) -> PathBuf {
+        self.root.join(PathBuf::from_iter(SCRATCH))
+    }
+
+    /// The workspace's scratch folder ([`scratch_dir`](Self::scratch_dir))
+    /// as a route from its root, `/` separated: how a command line run from
+    /// the root names a file there, which a front end spells with no
+    /// workspace at hand, as the panel's save does its line.
+    pub fn scratch_route() -> String {
+        SCRATCH.join("/")
     }
 
     /// Where artifacts gathered from elsewhere live, one folder per kind.

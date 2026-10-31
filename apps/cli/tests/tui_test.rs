@@ -3785,3 +3785,42 @@ fn a_line_that_serves_the_panel_is_not_run_from_the_screen() {
         );
     }
 }
+
+/// A line that reads standard input would read the keys the screen does,
+/// in raw mode, where none ends it, so it is refused, and nothing is
+/// edited; one that reads a file runs.
+#[test]
+fn a_line_that_reads_standard_input_is_not_run_from_the_screen() {
+    let dir = workspace_with_two();
+    let manifest = dir.path().join("alpha/skills/alpha/SKILL.md");
+    let held = fs::read_to_string(&manifest).unwrap();
+    let words =
+        |said: &[&str]| -> Vec<String> { said.iter().map(|word| (*word).to_owned()).collect() };
+
+    let said = ["flayer", "edit", "-p", "alpha", "alpha", "--contents", "-"];
+    let done = tui::execute(&words(&said), dir.path(), &Lookup::default(), &Watch::new());
+
+    assert_eq!(
+        done,
+        Done::failed(
+            said.join(" "),
+            "reads standard input, the keys this screen reads, so it is not run from inside it"
+        )
+    );
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), held);
+
+    let rewritten = skill_file("alpha", "A skill, rewritten");
+    fs::write(dir.path().join("draft.md"), &rewritten).unwrap();
+    let said = [
+        "flayer",
+        "edit",
+        "-p",
+        "alpha",
+        "alpha",
+        "--contents",
+        "draft.md",
+    ];
+    let done = tui::execute(&words(&said), dir.path(), &Lookup::default(), &Watch::new());
+    assert!(done.ok, "{done:?}");
+    assert_eq!(fs::read_to_string(&manifest).unwrap(), rewritten);
+}
