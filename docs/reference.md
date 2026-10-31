@@ -1865,10 +1865,14 @@ away.
 **The transcript**, in every page's header, lists every task the session
 ran, from this tab or any other, each line with what it printed, and
 **Copy as script** copies those lines, one to a line, exactly as they ran:
-pasted into a shell in the workspace's folder, they do it all again, each
-against the workspace it names with `-W`, the one it ran against before a
-switch or after it. What `flayer ui` prints when it stops is the same, but
-for the tasks that only read, such as a `validate`.
+pasted into a shell in the workspace's folder, they do it all again. Each
+names the workspace it ran against with `-W`, before a switch or after it,
+and reads the rest of its words from the folder it is typed in, as any
+line does: the entry an `unlink`, `unload` or `relink` names, or the file
+a save reads. Across a switch, paste the lines run before it in that
+workspace's folder and those after it in the other's. What `flayer ui`
+prints when it stops is the same, but for the tasks that only read, such as
+a `validate`.
 
 **The overview** says which skills and rules your projects have at a
 glance. It names the workspace, where it is and how it was chosen, and counts

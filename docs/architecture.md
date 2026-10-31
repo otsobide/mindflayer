@@ -5433,8 +5433,13 @@ was let go.
   script** copies the lines each task ran, exactly as the server previewed
   and ran them, one to a line, and nothing of the panel's own: pasted into a
   shell in the workspace's folder, where the lines run from, they do it
-  again. A `cd` or a shebang in front was the alternative, and it would be
-  a line the panel wrote. It holds reads too, a `validate`, where what
+  again. Across a switch, each line reaches the workspace it names with
+  `-W` wherever it is pasted, but reads an entry or a scratch file from
+  the folder it is typed in, so the lines of each workspace are pasted in
+  its own folder. A `cd` or a shebang in front was the alternative, and it
+  would be a line the panel wrote; so was a `-C` beside every `-W`, which
+  would make each line longer for the one case of a transcript spanning a
+  switch. It holds reads too, a `validate`, where what
   `flayer ui` prints when it stops holds only what changed something.
 
 What the pages offer:
