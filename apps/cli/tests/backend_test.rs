@@ -1241,6 +1241,124 @@ fn inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_fo
 }
 
 // ---------------------------------------------------------------------------
+// Loading and unloading another workspace
+// ---------------------------------------------------------------------------
+
+/// Under the folder it returns: `home`, made the default workspace, then
+/// beside it `Projects`, linking `alpha`, and `team`, with a skill of its
+/// own, each made by a `flayer init` that remembers it there. Its second
+/// value is `home`, its third `Projects`.
+fn knowing() -> (TempDir, PathBuf, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    let root = dir.path().join("Projects");
+    let team = dir.path().join("team");
+    for workspace in [&home, &root, &team] {
+        fs::create_dir_all(workspace).unwrap();
+        flayer_at_home(workspace, &home, &["init"]).unwrap();
+    }
+    flayer(
+        &team,
+        &["add", "skill", "notes", "Keep notes as the team does"],
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("alpha")).unwrap();
+    new_project(&root.join("alpha"));
+    flayer(&root, &["link", "alpha"]).unwrap();
+    (dir, home, root)
+}
+
+/// What the TUI's load form, opened on `app`, runs once `typed` is typed
+/// into it, or with nothing typed, the first loaded one picked and its
+/// unload confirmed, which it then runs: the task, run as the loop runs it.
+fn loaded_from_the_screen(app: &mut App, typed: Option<&str>) -> Task {
+    press_key(app, KeyCode::Char('L'));
+    assert!(matches!(app.mode, Mode::Loading(_)), "{:?}", app.mode);
+    match typed {
+        Some(typed) => {
+            type_text(app, typed);
+            press_and_run(app, KeyCode::Enter).unwrap()
+        }
+        None => {
+            press_key(app, KeyCode::Enter);
+            assert!(matches!(app.mode, Mode::Confirming(_)), "{:?}", app.mode);
+            press_and_run(app, KeyCode::Char('y')).unwrap()
+        }
+    }
+}
+
+/// Loading one of the workspaces this machine knows from the panel, by the
+/// path the snapshot lists it by, is the task the TUI's load form runs for
+/// that path typed, and unloading it, by the entry the snapshot then lists
+/// it by, the task the form runs for it picked: the same `Task` each time,
+/// so the same lines, and run from the panel each leaves the workspace's
+/// marker as the screen's left it.
+#[test]
+fn loading_and_unloading_from_the_panel_are_the_tuis_tasks_for_the_same_workspace() {
+    let (_dir, home, root) = knowing();
+    let lookup = Lookup::at_home(Some(&home));
+    let backend = PanelBackend::launch(&root, &lookup).unwrap();
+    let mut app =
+        App::new(root.clone(), tui::load(&root, &lookup).unwrap()).with_lookup(lookup.clone());
+    let lines = |task: &Task| -> Vec<String> {
+        task.commands()
+            .iter()
+            .map(|line| mindflayer_cli::task::shell(line))
+            .collect()
+    };
+    let unloaded = registry(&root);
+
+    let snapshot = backend.query(query(json!({"type": "snapshot"}))).unwrap();
+    let known = snapshot["known"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|known| known["name"] == "team")
+        .unwrap_or_else(|| panic!("{snapshot}"));
+    assert_eq!(known["loadable"], true, "{known}");
+    let path = known["path"].as_str().unwrap();
+    let load = task(json!({"type": "load", "path": path}));
+    let previewed = backend.preview(&load).unwrap();
+    let screened = loaded_from_the_screen(&mut app, Some(path));
+
+    assert_eq!(screened, load);
+    assert_eq!(previewed.lines, lines(&screened));
+    assert_eq!(previewed.lines, [format!("flayer load {path}")]);
+    assert!(previewed.confirm.is_empty(), "{:?}", previewed.confirm);
+    let loaded = registry(&root);
+    assert!(loaded.contains("loaded = [\"../team\"]"), "{loaded}");
+
+    let snapshot = backend.query(query(json!({"type": "snapshot"}))).unwrap();
+    let entry = snapshot["loaded"][0]["entry"].as_str().unwrap();
+    let known = snapshot["known"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|known| known["name"] == "team")
+        .unwrap();
+    assert_eq!(known["loaded_as"], entry, "{known}");
+    assert_eq!(known["loadable"], false, "{known}");
+    let unload = task(json!({"type": "unload", "entry": entry}));
+    let previewed = backend.preview(&unload).unwrap();
+    let screened = loaded_from_the_screen(&mut app, None);
+
+    assert_eq!(screened, unload);
+    assert_eq!(previewed.lines, lines(&screened));
+    let asked: Vec<&str> = previewed
+        .confirm
+        .iter()
+        .map(|confirm| confirm["caution"].as_str().unwrap())
+        .collect();
+    assert_eq!(asked, ["unloads"]);
+    assert_eq!(registry(&root), unloaded);
+
+    assert!(backend.run(load).unwrap().ok);
+    assert_eq!(registry(&root), loaded);
+    assert!(backend.run(unload).unwrap().ok);
+    assert_eq!(registry(&root), unloaded);
+}
+
+// ---------------------------------------------------------------------------
 // A plan of boxes ticked and unticked
 // ---------------------------------------------------------------------------
 
