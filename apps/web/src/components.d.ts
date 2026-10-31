@@ -25,6 +25,7 @@ declare module 'vue' {
     HealthBadge: typeof import('./components/HealthBadge.vue')['default']
     IssueList: typeof import('./components/IssueList.vue')['default']
     LinkForm: typeof import('./components/LinkForm.vue')['default']
+    LoadForm: typeof import('./components/LoadForm.vue')['default']
     MarkdownBody: typeof import('./components/MarkdownBody.vue')['default']
     MarkdownEditor: typeof import('./components/MarkdownEditor.vue')['default']
     MigrateOffer: typeof import('./components/MigrateOffer.vue')['default']

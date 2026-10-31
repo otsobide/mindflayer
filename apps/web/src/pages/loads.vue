@@ -3,10 +3,34 @@ import type { KnownHere } from '@/api/generated/KnownHere'
 import type { LoadedWorkspace } from '@/api/generated/LoadedWorkspace'
 import type { Offered } from '@/api/generated/Offered'
 import type { Snapshot } from '@/api/generated/Snapshot'
+import { useRunner } from '@/api/commands'
 import AppHeader from '@/components/AppHeader.vue'
 import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
+import LoadForm from '@/components/LoadForm.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import { assignLink } from '@/routes'
+
+const runner = useRunner()
+const { busy } = runner
+
+/**
+ * Load `known`, by the path the snapshot lists it by: the TUI's load form's
+ * task for that path typed (`flayer load <path>`), offered only where core
+ * says it can be loaded (`loadable`), so neither this workspace, which a
+ * load refuses, nor one it loads already.
+ */
+function loadKnown(known: KnownHere) {
+  void runner.ask({ type: 'load', path: known.path })
+}
+
+/**
+ * Stop offering what `load` offers, by the entry its marker spells it by:
+ * the TUI's task for it picked in the load form (`flayer unload <entry>`),
+ * which the preview makes a question. What was installed from it stays.
+ */
+function unload(load: LoadedWorkspace) {
+  void runner.ask({ type: 'unload', entry: load.entry })
+}
 
 /**
  * What `load` offers, in the order the snapshot lists every offer: those
@@ -102,6 +126,18 @@ function links(known: KnownHere): string {
                   icon="i-lucide-link-2-off"
                   class="font-mono"
                   data-testid="unopened"
+                />
+                <UButton
+                  label="Unload"
+                  icon="i-lucide-unplug"
+                  color="neutral"
+                  variant="outline"
+                  size="xs"
+                  class="ms-auto"
+                  :aria-label="`Unload ${load.name ?? load.entry}`"
+                  :disabled="busy"
+                  data-testid="unload"
+                  @click="unload(load)"
                 />
               </div>
               <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1 text-xs">
@@ -204,7 +240,7 @@ function links(known: KnownHere): string {
               Workspaces this machine knows
             </h2>
             <p class="text-sm text-muted">
-              The default workspace, in your home, remembers each one <code class="font-mono">flayer init</code> makes once the default is made itself.
+              The default workspace, in your home, remembers each one <code class="font-mono">flayer init</code> makes once the default is made itself. Load one to offer its own here, or name any other by its path below.
             </p>
           </div>
 
@@ -300,8 +336,20 @@ function links(known: KnownHere): string {
                   {{ links(known) }}
                 </li>
               </ul>
+              <UButton
+                v-if="known.loadable"
+                label="Load"
+                icon="i-lucide-layers"
+                size="xs"
+                :aria-label="`Load ${known.name ?? known.path}`"
+                :disabled="busy"
+                data-testid="load-known"
+                @click="loadKnown(known)"
+              />
             </li>
           </ul>
+
+          <LoadForm />
         </section>
       </SnapshotGate>
     </template>

@@ -1,8 +1,26 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 import { assignLink } from '@/routes'
-import { fixture, render, texts, unmount } from './panel'
+import { useShell } from '@/stores/shell'
+import { commanding, fixture, loadings, render, texts, unmount, type Commanded } from './panel'
 
 afterEach(unmount)
+
+const [KIT, TEAM, ITSELF] = loadings() as [Commanded, Commanded, Commanded]
+
+/** What the dialog shows: each line, and each caution with its words. */
+function shown() {
+  return {
+    lines: [...document.body.querySelectorAll('[data-testid="command"]')].map(each => each.textContent),
+    cautions: [...document.body.querySelectorAll('[data-testid="caution"]')].map(each => each.textContent?.replace(/\s+/g, ' ').trim())
+  }
+}
+
+/** Run what the dialog shows, and wait for it. */
+async function run() {
+  document.body.querySelector<HTMLElement>('[data-testid="run"]')!.click()
+  await flushPromises()
+}
 
 /*
  * The page of loads, drawn from what the CLI's suite wrote: the workspace
@@ -93,5 +111,101 @@ describe('the workspaces this machine knows', () => {
 
     expect(snapshot.known).toEqual([])
     expect(texts(page.get('[data-testid="no-known"]'), 'code')).toEqual([`$ flayer init ${snapshot.workspace.path}`])
+  })
+})
+
+describe('each change the page of loads sends', () => {
+  it('offers to load each workspace this machine knows only where core says this one can load it', async () => {
+    const snapshot = fixture('assigning')
+
+    const { page } = await render('/loads', snapshot)
+
+    const rows = page.findAll('[data-testid="known-workspace"]')
+    expect(rows.map(row => row.find('[data-testid="load-known"]').exists())).toEqual(snapshot.known.map(known => known.loadable))
+    expect(page.findAll('[data-testid="load-known"]').map(button => button.attributes('aria-label'))).toEqual(['Load you', 'Load kit'])
+  })
+
+  it('loads one by the path the snapshot lists it by: the TUI\'s task for it typed, shown before it runs', async () => {
+    const { sent, transport } = commanding(fixture('assigning'), loadings())
+    const { page } = await render('/loads', transport)
+
+    await page.get('[data-testid="load-known"][aria-label="Load kit"]').trigger('click')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: { type: 'load', path: '/home/you/kit' }, mode: 'preview' }])
+    expect(KIT.task).toEqual({ type: 'load', path: '/home/you/kit' })
+    expect(shown()).toEqual({ lines: KIT.preview.lines.map(line => `$ ${line}`), cautions: [] })
+    expect(document.body.querySelector('[data-testid="run"]')?.textContent?.trim()).toBe('Run')
+
+    await run()
+
+    expect(sent.filter(each => each.mode === 'run')).toEqual([{ task: KIT.task, mode: 'run' }])
+  })
+
+  it('unloads one by the entry its marker spells it by, asked first, as the TUI asks', async () => {
+    const snapshot = fixture('assigning')
+    const { sent, transport } = commanding(snapshot, loadings())
+    const { page } = await render('/loads', transport)
+
+    const unload = page.get('[data-testid="load"] [data-testid="unload"]')
+    expect(unload.attributes('aria-label')).toBe('Unload team')
+    await unload.trigger('click')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: { type: 'unload', entry: snapshot.loaded[0]!.entry }, mode: 'preview' }])
+    expect(TEAM.task).toEqual({ type: 'unload', entry: '../team' })
+    expect(shown()).toEqual({
+      lines: TEAM.preview.lines.map(line => `$ ${line}`),
+      cautions: TEAM.preview.confirm.map(each => `${each.caution}: ${each.message}`)
+    })
+    expect(document.activeElement?.getAttribute('data-testid')).toBe('cancel')
+
+    await run()
+
+    expect(sent.filter(each => each.mode === 'run')).toEqual([{ task: TEAM.task, mode: 'run' }])
+  })
+
+  it('offers to unload one that does not open, the one most worth letting go', async () => {
+    const snapshot = fixture('workspace')
+
+    const { page } = await render('/loads', snapshot)
+
+    expect(snapshot.loaded[0]!.error).not.toBeNull()
+    expect(page.get('[data-testid="load"] [data-testid="unload"]').attributes('aria-label')).toBe(`Unload ${snapshot.loaded[0]!.entry}`)
+  })
+
+  it('loads a path as typed, for the server to hold to the path policy and the line to refuse, saying why by its code', async () => {
+    const { sent, transport } = commanding(fixture('assigning'), loadings())
+    const { page } = await render('/loads', transport)
+    const path = ITSELF.task.type === 'load' ? ITSELF.task.path : ''
+
+    await page.get('input[data-testid="load-path"]').setValue(path)
+    await page.get('[data-testid="load-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: { type: 'load', path }, mode: 'preview' }])
+    expect(shown().lines).toEqual(ITSELF.preview.lines.map(line => `$ ${line}`))
+
+    await run()
+
+    expect(sent.filter(each => each.mode === 'run')).toEqual([{ task: ITSELF.task, mode: 'run' }])
+    await vi.waitFor(() => expect(useShell().warningsOpen).toBe(true))
+    const error = ITSELF.ran.outcome.runs[0]!.error!
+    expect(error.code).toBe('loads_itself')
+    expect(document.body.querySelector('[data-testid="said"]')?.textContent).toContain(error.code)
+    // Kept, to be corrected: the load did not go through.
+    expect((page.get('input[data-testid="load-path"]').element as HTMLInputElement).value).toBe(path)
+  })
+
+  it('empties the field once a typed path was loaded', async () => {
+    const { transport } = commanding(fixture('assigning'), loadings())
+    const { page } = await render('/loads', transport)
+
+    await page.get('input[data-testid="load-path"]').setValue('/home/you/kit')
+    await page.get('[data-testid="load-form"]').trigger('submit')
+    await flushPromises()
+    await run()
+
+    expect((page.get('input[data-testid="load-path"]').element as HTMLInputElement).value).toBe('')
   })
 })
