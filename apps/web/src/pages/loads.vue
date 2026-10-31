@@ -249,8 +249,16 @@ function links(known: KnownHere): string {
             class="flex flex-col items-start gap-2"
             data-testid="no-known"
           >
-            <p class="text-muted">
-              No workspace is made yet, so this machine knows none.
+            <!--
+              Core lists none only while the default is not made and is the
+              one on screen: a workspace `flayer init` made before it is a
+              workspace still, which the default never remembered.
+            -->
+            <p
+              class="text-muted"
+              data-testid="none-known"
+            >
+              The default workspace is not made yet, so it remembers none: load one made before it by its path below.
             </p>
             <CommandHint :commands="making(snapshot.workspace)" />
           </div>

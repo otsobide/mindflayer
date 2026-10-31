@@ -104,13 +104,18 @@ describe('the workspaces this machine knows', () => {
     expect(rows[4]!.get('[data-testid="stale"]').text()).toBe(old.stale)
   })
 
-  it('says a machine knows none while nothing is made, and the command that makes the workspace', async () => {
+  it('says the default remembers none while it is not made, never that no workspace is, and the command that makes it', async () => {
     const snapshot = fixture('unmade')
 
     const { page } = await render('/loads', snapshot)
 
     expect(snapshot.known).toEqual([])
+    expect(snapshot.workspace).toMatchObject({ made: false, reason: 'home' })
+    expect(page.get('[data-testid="none-known"]').text()).toBe(
+      'The default workspace is not made yet, so it remembers none: load one made before it by its path below.'
+    )
     expect(texts(page.get('[data-testid="no-known"]'), 'code')).toEqual([`$ flayer init ${snapshot.workspace.path}`])
+    expect(page.find('[data-testid="load-form"]').exists()).toBe(true)
   })
 })
 
