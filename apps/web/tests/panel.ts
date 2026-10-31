@@ -8,7 +8,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createMemoryHistory, type Router, type RouteRecordRaw } from 'vue-router'
 import App from '@/App.vue'
 import type { Snapshot } from '@/api/generated/Snapshot'
-import { TransportError, type LiveEvent, type Preview, type Query, type Ran, type Task, type Transport } from '@/api/transport'
+import { TransportError, type LiveEvent, type Preview, type Query, type Ran, type Switch, type Switchable, type Task, type Transport } from '@/api/transport'
 import { createPanel } from '@/panel'
 import applied from './fixtures/applied.json'
 import assigning from './fixtures/assigning.json'
@@ -23,6 +23,7 @@ import scan from './fixtures/scan.json'
 import unmade from './fixtures/unmade.json'
 import updated from './fixtures/updated.json'
 import surveyed from './fixtures/updates.json'
+import switchesJson from './fixtures/switches.json'
 import updating from './fixtures/updating.json'
 import validatedJson from './fixtures/validated.json'
 import workspace from './fixtures/workspace.json'
@@ -275,6 +276,78 @@ export function commanding(snapshot: Snapshot = fixture('workspace'), known: Com
     }
   } as unknown as Transport
   return { queries, sent, ran, control, tell, transport: commanding }
+}
+
+/**
+ * What the assigning fixture's server, in the home whose default workspace
+ * knows it and others, answers as its header switches (tests/fixtures/
+ * switches.json): what it may switch to; a switch to `kit`, what it is
+ * answered with, the snapshot of `kit` then and what it may switch to from
+ * there; and a switch to `old`, listed but gone since, refused with its
+ * code.
+ */
+export interface Switches {
+  workspaces: Answered
+  switched: { to: Switch, answer: Switchable, snapshot: Snapshot, workspaces: Answered }
+  refused: { to: Switch, error: string, code: string }
+}
+
+/** The answers tests/fixtures/switches.json holds, copied, so a test may change its copy. */
+export function switches(): Switches {
+  return structuredClone(switchesJson) as unknown as Switches
+}
+
+/**
+ * A transport answering as the assigning fixture's server does as its
+ * header switches: the snapshot and what it may switch to, those of the
+ * workspace in use; a switch to `kit` taken, told on the stream as
+ * `switched` before it is answered, as the server tells it, after which
+ * both are `kit`'s; one to `old` refused as the fixture says; any other as
+ * the server refuses a path no list holds. Each query and each switch
+ * written down; `tell` says something on the stream.
+ */
+export function switching() {
+  const fixtures = switches()
+  let snapshot = fixture('assigning')
+  let listed = fixtures.workspaces.answer
+  const queries: Query[] = []
+  const sent: Switch[] = []
+  const listeners: ((event: LiveEvent) => void)[] = []
+  const tell = (event: LiveEvent) => [...listeners].forEach(listener => listener(event))
+  const transport = {
+    query(query: Query) {
+      queries.push(query)
+      if (query.type === 'snapshot') {
+        return Promise.resolve(structuredClone(snapshot))
+      }
+      if (query.type === 'workspaces') {
+        return Promise.resolve(structuredClone(listed))
+      }
+      return Promise.reject(new TransportError(422, `nothing answers ${query.type}`, 'not_found'))
+    },
+    send: () => new Promise(() => {}),
+    switch(to: Switch) {
+      sent.push({ ...to })
+      if (to.path === fixtures.switched.to.path) {
+        snapshot = fixtures.switched.snapshot
+        listed = fixtures.switched.workspaces.answer
+        tell({ type: 'switched' })
+        return Promise.resolve(structuredClone(fixtures.switched.answer))
+      }
+      if (to.path === fixtures.refused.to.path) {
+        return Promise.reject(new TransportError(422, fixtures.refused.error, fixtures.refused.code))
+      }
+      return Promise.reject(new TransportError(422, `\`${to.path}\` is none of the workspaces this machine knows`, 'switch_unlisted'))
+    },
+    transcript: () => Promise.resolve([]),
+    subscribe(listener: (event: LiveEvent) => void) {
+      listeners.push(listener)
+      return () => {
+        listeners.splice(listeners.indexOf(listener), 1)
+      }
+    }
+  } as unknown as Transport
+  return { transport, queries, sent, tell }
 }
 
 /** A transport refusing every query with `error`. */

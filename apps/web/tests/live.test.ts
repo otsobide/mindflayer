@@ -286,3 +286,74 @@ describe('a run the panel sends', () => {
     stop()
   })
 })
+
+describe('a switch the panel sends', () => {
+  const SWITCHED = { path: '/home/you/kit' }
+
+  it('lets go of every answer once the stream says it was taken, and counts it', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { live, settleSwitch, stop } = listen(transport, client, document, 60_000)
+    client.setQueryData(['snapshot'], { workspace: 'before' })
+    client.setQueryData(['scan', {}], { found: [] })
+    let over = false
+
+    const settled = settleSwitch(() => Promise.resolve(SWITCHED)).then((answer) => {
+      over = true
+      return answer
+    })
+    await flushPromises()
+    expect(over).toBe(false)
+    expect(live.switches).toBe(0)
+    await tell({ type: 'switched' })
+
+    expect(await settled).toBe(SWITCHED)
+    expect(live.switches).toBe(1)
+    expect(client.getQueryData(['snapshot'])).toBeUndefined()
+    expect(client.getQueryData(['scan', {}])).toBeUndefined()
+    stop()
+  })
+
+  it('lets go once, when the stream said it was taken before the answer came', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { live, settleSwitch, stop } = listen(transport, client, document, 60_000)
+
+    const settled = settleSwitch(async () => {
+      await tell({ type: 'switched' })
+      return SWITCHED
+    })
+
+    expect(await settled).toBe(SWITCHED)
+    expect(live.switches).toBe(1)
+    stop()
+  })
+
+  it('lets go itself when the stream says nothing in time', async () => {
+    const { transport } = streaming()
+    const client = createQueryClient()
+    const { live, settleSwitch, stop } = listen(transport, client, document, 10)
+    client.setQueryData(['snapshot'], { workspace: 'before' })
+
+    expect(await settleSwitch(() => Promise.resolve(SWITCHED))).toBe(SWITCHED)
+
+    expect(live.switches).toBe(1)
+    expect(client.getQueryData(['snapshot'])).toBeUndefined()
+    stop()
+  })
+
+  it('refused, lets go of nothing', async () => {
+    const { transport } = streaming()
+    const client = createQueryClient()
+    const { live, settleSwitch, stop } = listen(transport, client, document, 10)
+    client.setQueryData(['snapshot'], { workspace: 'before' })
+    const refusal = new TransportError(422, 'none of the workspaces this machine knows', 'switch_unlisted')
+
+    await expect(settleSwitch(() => Promise.reject(refusal))).rejects.toBe(refusal)
+
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(live.switches).toBe(0)
+    expect(client.getQueryData(['snapshot'])).toEqual({ workspace: 'before' })
+    stop()
+  })
+})

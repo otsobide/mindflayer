@@ -1,6 +1,6 @@
-import { computed, inject, provide, type ComputedRef, type InjectionKey } from 'vue'
+import { computed, inject, provide, watch, type ComputedRef, type InjectionKey } from 'vue'
 import { useMutation, useMutationState } from '@tanstack/vue-query'
-import { useSettle } from './live'
+import { useLive, useSettle } from './live'
 import { useTransport, type Preview, type Ran, type Task } from './transport'
 
 /** A task shown before it runs: what was asked for, and the lines it is. */
@@ -90,6 +90,7 @@ export interface Say {
 export function provideRunner(say: Say): Runner {
   const transport = useTransport()
   const settle = useSettle()
+  const live = useLive()
 
   const previewing = useMutation({
     mutationKey: ['preview'],
@@ -168,6 +169,13 @@ export function provideRunner(say: Say): Runner {
     },
     said: computed(() => answered.value.at(-1))
   }
+  // A task shown is let go once the server switched workspace, from this
+  // tab or another: its lines name the workspace before with `-W`, which
+  // is not where a yes would now run it, and it may name what the next one
+  // has not. One under way is the server's to finish, queued before the
+  // switch, and says how it ended where it ran.
+  watch(() => live.switches, () => runner.cancel())
+
   provide(runnerKey, runner)
   return runner
 }

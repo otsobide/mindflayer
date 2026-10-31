@@ -50,6 +50,7 @@ declare module 'vue' {
     UDashboardPanel: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardPanel.vue')['default']
     UDashboardSidebar: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardSidebar.vue')['default']
     UDashboardSidebarCollapse: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DashboardSidebarCollapse.vue')['default']
+    UDropdownMenu: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/DropdownMenu.vue')['default']
     UEmpty: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Empty.vue')['default']
     UFieldGroup: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/FieldGroup.vue')['default']
     UFormField: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/FormField.vue')['default']
@@ -64,5 +65,6 @@ declare module 'vue' {
     UTooltip: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_e85c15649f14e1fe82b3b91186e361aa/node_modules/@nuxt/ui/dist/runtime/components/Tooltip.vue')['default']
     WarningsDrawer: typeof import('./components/WarningsDrawer.vue')['default']
     WarningsPanel: typeof import('./components/WarningsPanel.vue')['default']
+    WorkspaceSwitcher: typeof import('./components/WorkspaceSwitcher.vue')['default']
   }
 }
