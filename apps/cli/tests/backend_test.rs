@@ -2629,6 +2629,42 @@ fn a_known_workspace_that_does_not_open_is_refused_and_never_made() {
     );
 }
 
+/// A workspace whose root no word of a command line can hold, not UTF-8,
+/// is acted on as it was before every line named it: its lines name no
+/// workspace, run against it all the same, and nothing switches to it.
+#[cfg(unix)]
+#[test]
+fn a_workspace_whose_root_is_not_text_runs_its_lines_naming_none() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().join(OsStr::from_bytes(b"caf\xe9"));
+    fs::create_dir(&root).unwrap();
+    FlayerWorkspace::init(&root).unwrap();
+    let backend = backend(&root);
+    let add = add_to(json!({"type": "workspace"}));
+
+    assert_eq!(
+        backend
+            .preview(&task(add.clone()))
+            .map(|preview| preview.lines),
+        Ok(vec![String::from("flayer add skill deploy 'Ship it'")])
+    );
+    let outcome = backend.run(task(add)).unwrap();
+
+    assert!(outcome.ok, "{outcome:?}");
+    assert_eq!(outcome.runs[0].command, "flayer add skill deploy 'Ship it'");
+    assert!(root
+        .join(".mindflayer/library/skills/deploy/SKILL.md")
+        .is_file());
+    let offered: Vec<_> = offered(&backend)
+        .into_iter()
+        .map(|(_, in_use, launched, switchable)| (in_use, launched, switchable))
+        .collect();
+    assert_eq!(offered, [(true, true, false)]);
+}
+
 /// Switched to a workspace that has gone since, the panel can still read
 /// where it may go, the one in use among it with why it does not open, and
 /// go back.

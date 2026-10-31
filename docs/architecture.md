@@ -4520,9 +4520,14 @@ of it a browser may name.
   workspace's folder, where the panel runs every line. Before the default one is made no
   line names it, since `-W` refuses a folder with no marker: the first
   change makes it, by a `flayer init` of its own, as the TUI does, and
-  every line after that one names it. Any other gone since it was pinned is
-  refused, never made again by a change. So no line reaches another
-  workspace because the disk changed after launch.
+  every line after that one names it. Nor does any line name a workspace
+  whose root is not UTF-8, which no word of a line can hold: its lines run
+  against it all the same, through the `Lookup` each runs with, which
+  names it by the path as it is, as they did before any line named it,
+  rather than every task on it refused for a word only shown; it can only
+  be the launch's, since no switch is offered to one. Any other gone since
+  it was pinned is refused, never made again by a change. So no line
+  reaches another workspace because the disk changed after launch.
 - **Another workspace only by a switch to one core lists**
   (`Query::Workspaces`, `Backend::switch`, `policy::switched`). The
   browser names a workspace by its path as the list of what may be

@@ -18,7 +18,9 @@
 //!   ([`Query::Workspaces`]): a workspace this machine knows, or the
 //!   launch's. Each line it runs names it with `-W`, so a change made
 //!   meanwhile elsewhere on the disk cannot send a line to another, and a
-//!   line copied from the panel reaches the same one.
+//!   line copied from the panel reaches the same one; but for a root that
+//!   is not UTF-8, which no word can hold, and which every line reaches all
+//!   the same through what it runs with.
 //! - **The browser supplies no `-C`, `--home`, `-W` or agent home.** A task
 //!   has no field for them, no value it holds is read as an option, and
 //!   every line runs with the launch's home and agent homes, from the
@@ -541,10 +543,9 @@ impl PanelBackend {
         }
         .task(task)
         .map_err(|error| refused(error.code(), error))?;
-        let named = |lines: Vec<Vec<String>>| -> Result<Vec<Vec<String>>, Refusal> {
-            let root =
-                policy::spelled(workspace.root()).map_err(|error| refused(error.code(), error))?;
-            Ok(lines.iter().map(|line| task::naming(line, &root)).collect())
+        let named = |lines: Vec<Vec<String>>| match workspace.root().to_str() {
+            Some(root) => lines.iter().map(|line| task::naming(line, root)).collect(),
+            None => lines,
         };
         let lines = admitted.commands();
         // As the TUI does: a change to the default before it is made makes
@@ -558,12 +559,18 @@ impl PanelBackend {
         // reaches it pasted anywhere. All but those before it is made: `-W`
         // refuses a folder with no marker, so the default is named by the
         // lines after the `flayer init` that makes it, and a read of it
-        // before then by none, as the TUI's lines find it.
+        // before then by none, as the TUI's lines find it. And all of a
+        // workspace whose root no word of a line can hold, not UTF-8: its
+        // lines run against it all the same, through the lookup, which
+        // holds the path as it is, as they did before any line named it,
+        // rather than every task on it refused for a word only shown. It is
+        // only ever the launch's, since nothing whose path is not text is
+        // offered as a switch.
         let init = Task::InitWorkspace.commands();
         let lines = if workspace.is_made() {
-            named(lines)?
+            named(lines)
         } else if admitted.writes() && !lines.is_empty() && !lines.starts_with(&init) {
-            init.into_iter().chain(named(lines)?).collect()
+            init.into_iter().chain(named(lines)).collect()
         } else {
             lines
         };
