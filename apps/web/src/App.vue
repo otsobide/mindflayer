@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppSidebar from './components/AppSidebar.vue'
+import CommandPalette from './components/CommandPalette.vue'
 import CommandRunner from './components/CommandRunner.vue'
 
 // The sidebar's size and whether it is collapsed go to vueuse's useStorage
@@ -18,6 +19,7 @@ import CommandRunner from './components/CommandRunner.vue'
         <AppSidebar />
         <RouterView />
       </UDashboardGroup>
+      <CommandPalette />
     </CommandRunner>
   </UApp>
 </template>

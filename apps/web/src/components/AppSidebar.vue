@@ -40,7 +40,8 @@ import { storeToRefs } from 'pinia'
 import { useShell } from '@/stores/shell'
 import AppLogo from './AppLogo.vue'
 
-const { sidebarOpen, sidebarCollapsed } = storeToRefs(useShell())
+const shell = useShell()
+const { sidebarOpen, sidebarCollapsed } = storeToRefs(shell)
 const route = useRoute()
 
 const links = computed<NavigationMenuItem[]>(() => VIEWS.map(({ label, icon, to, lights }) => ({
@@ -86,6 +87,42 @@ const address = window.location.host
     </template>
 
     <template #default="{ collapsed }">
+      <!--
+        What opens the command palette, for a pointer or a touch: Ctrl+K,
+        or Cmd+K on a Mac, from the keyboard, which the keys beside it say.
+      -->
+      <UButton
+        :label="collapsed ? undefined : 'Search'"
+        icon="i-lucide-search"
+        color="neutral"
+        variant="outline"
+        :square="collapsed"
+        :block="!collapsed"
+        aria-label="Search: the command palette"
+        aria-keyshortcuts="Control+K Meta+K"
+        class="justify-start"
+        data-testid="open-palette"
+        @click="shell.paletteOpen = true"
+      >
+        <template
+          v-if="!collapsed"
+          #trailing
+        >
+          <span
+            class="ms-auto flex items-center gap-0.5"
+            aria-hidden="true"
+          >
+            <UKbd
+              value="meta"
+              variant="subtle"
+            />
+            <UKbd
+              value="k"
+              variant="subtle"
+            />
+          </span>
+        </template>
+      </UButton>
       <UNavigationMenu
         :items="links"
         :collapsed="collapsed"

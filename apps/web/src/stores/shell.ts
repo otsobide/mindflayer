@@ -17,6 +17,8 @@ export const useShell = defineStore('shell', () => {
   const transcriptOpen = ref(false)
   /** The drawer listing what the last run said beside its output. */
   const warningsOpen = ref(false)
+  /** The command palette, which Ctrl+K or Cmd+K opens over any page. */
+  const paletteOpen = ref(false)
 
-  return { sidebarOpen, sidebarCollapsed, transcriptOpen, warningsOpen }
+  return { sidebarOpen, sidebarCollapsed, transcriptOpen, warningsOpen, paletteOpen }
 })
