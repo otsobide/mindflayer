@@ -199,17 +199,17 @@ in, then the rest. Tick them and link them in one go.
 ### The command palette and the keys
 
 Press Ctrl+K, or Cmd+K on a Mac, on any page, or **Search** at the top of
-the sidebar, and type: every page, project, skill and rule of the library,
-what is on the shelf and where it came from, found by a few letters, a
-typo forgiven, each word narrowing the rest. It acts too: **Install** a
+the sidebar, and type: every page and project, the library's skills and
+rules, what is on the shelf and where it came from, found by a few letters,
+a typo forgiven, each word narrowing the rest. It acts too: **Install** a
 skill or rule, then choose a project that could take it, as ticking its box
 in Assign would; **Update all**; or **Link** the folder whose path you
 typed. Each shows its lines before it runs, like every change below.
 
 ![The command palette over the overview, release typed: the shelf's release-notes, the skills to install, the library's deploy-checklist, and the word offered as a folder to link](docs/images/palette.png)
 
-`?` lists every key the panel answers, and none of them is taken while you
-type in a field or the editor:
+`?` lists every key the panel answers. Neither Ctrl+K nor `?` is taken
+while you type in a field or the editor, whose keys they stay:
 
 | Keys | Where | What they do |
 |---|---|---|
