@@ -13,9 +13,15 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-/** Press `key` where the focus is, or on the window when nothing holds it, as a keyboard would. */
-function press(key: string, modifiers: KeyboardEventInit = {}, at: EventTarget = document.activeElement ?? window) {
-  at.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true, ...modifiers }))
+/**
+ * Press `key` where the focus is, or on the window when nothing holds it, as
+ * a keyboard would; the event, whose default a key the panel takes is kept
+ * from the browser by.
+ */
+function press(key: string, modifiers: KeyboardEventInit = {}, at: EventTarget = document.activeElement ?? window): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true, ...modifiers })
+  at.dispatchEvent(event)
+  return event
 }
 
 /** Wait for what a key or a choice set off: the palette drawn, gone, or a page opened. */
@@ -84,7 +90,7 @@ describe('the command palette', () => {
     expect(document.activeElement).toBe(before)
   })
 
-  it('opens on Cmd+K on a Mac, and on Ctrl+K there too', async () => {
+  it('opens on Cmd+K on a Mac, and on Ctrl+K there too, and closes on Cmd+K from its search', async () => {
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15')
     await render('/', fixture('workspace'))
 
@@ -97,6 +103,28 @@ describe('the command palette', () => {
     press('k', { ctrlKey: true })
     await settled()
     expect(palette()).not.toBeNull()
+
+    expect(press('k', { metaKey: true }).defaultPrevented).toBe(true)
+    await vi.waitFor(() => expect(palette()).toBeNull())
+  })
+
+  it('closes on Ctrl+K from its own search, the key kept from the browser, and gives the focus back where it was', async () => {
+    await render('/projects', fixture('workspace'))
+    const before = document.querySelector<HTMLElement>('[data-testid="sidebar"] nav a[href="/assign"]')!
+    before.focus()
+    await opened()
+    expect(document.activeElement).toBe(palette()!.querySelector('input'))
+
+    // Chromium would put the focus in its own search bar on a Ctrl+K it
+    // was not kept from, and leave the palette open.
+    expect(press('k', { ctrlKey: true }).defaultPrevented).toBe(true)
+    await vi.waitFor(() => expect(palette()).toBeNull())
+    await settled()
+    expect(useShell().paletteOpen).toBe(false)
+    expect(document.activeElement).toBe(before)
+
+    // And opens again on it, its field gone with the focus let go of.
+    await opened()
   })
 
   it('opens from the sidebar, which says its keys', async () => {

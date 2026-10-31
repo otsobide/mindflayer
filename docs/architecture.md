@@ -5756,12 +5756,16 @@ and their changes, and holds no rule of its own:
   an input, a textarea or anything editable has the focus, CodeMirror's
   content among it, which vueuse finds through the editor's shadow root;
   and the panel gives it none while a task is shown or runs, whose
-  question is answered first. vueuse, which Nuxt UI asks what has the
-  focus, hears of the focus moving, and not of the element holding it being
-  taken away, which a browser tells nobody; the palette's search field goes
-  with the palette, so the palette lets go of the focus as it closes,
-  before Reka gives it back, or every shortcut would be passed over as typed
-  into a field that is gone.
+  question is answered first. Ctrl+K alone is told otherwise
+  (`usingInput`), and only while the palette is open: its modal holds the
+  focus, so the field Ctrl+K is pressed in is the palette's own search,
+  where Nuxt UI would pass it to the browser, which in Chromium puts the
+  focus in its own search bar and leaves the palette open. vueuse, which
+  Nuxt UI asks what has the focus, hears of the focus moving, and not of
+  the element holding it being taken away, which a browser tells nobody;
+  the palette's search field goes with the palette, so the palette lets go
+  of the focus as it closes, before Reka gives it back, or every shortcut
+  would be passed over as typed into a field that is gone.
 - **`?` opens the sheet of shortcuts** (`ShortcutSheet.vue`): every key the
   panel answers, the palette's, the dialog's, the matrix's and the
   editor's, under where each applies, its keys spelled out beside them for
@@ -6002,8 +6006,8 @@ suite's to hold (`backend_test.rs`), which reads it.
 `e2e/palette.spec.ts` takes `assignable` too, and drives the palette with
 the keyboard alone once the sidebar's **Search** has the focus: opened by
 its keys, it has to hold the focus through Tab and Shift+Tab,
-name its search field and its list, and give the focus back on Escape;
-then the team's skill, typed and chosen, and one project, typed and
+name its search field and its list, and give the focus back on Escape,
+and on its keys pressed again in its search; then the team's skill, typed and chosen, and one project, typed and
 chosen, have to show the line core's plan of that box runs, Run focused
 since it takes nothing away, which Enter runs. The copies have to be where
 each agent reads them in that project alone, and the copy given the same
@@ -8792,8 +8796,9 @@ just listed.
   guessing from the text, a separator say, would be a second policy.
 - **Ctrl+K is the browser's too.** Some browsers put the focus in their
   search on Ctrl+K; the panel takes it while its page has the focus outside
-  a field, as many web applications do. A key of one's own would leave the
-  browser its own, but keys a person chooses are for later.
+  a field, or the palette is open, as many web applications do. A key of
+  one's own would leave the browser its own, but keys a person chooses are
+  for later.
 - **A field taken away with the focus in it leaves the keys off.** vueuse,
   which Nuxt UI asks what has the focus, is not told when a browser takes
   away the element holding it, so the shortcuts stay passed over as typed

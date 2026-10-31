@@ -55,7 +55,7 @@ const SECTIONS: Section[] = [
       { keys: [['arrowup'], ['arrowdown']], does: 'Move among what it lists' },
       { keys: [['enter']], does: 'Go there, or choose the change: an install lists the projects it can go into' },
       { keys: [['backspace']], does: 'Back from those projects, while nothing is typed' },
-      { keys: [['escape']], does: 'Close it, the focus back where it was' }
+      { keys: [['escape'], ['meta', 'K']], does: 'Close it, the focus back where it was' }
     ]
   },
   {

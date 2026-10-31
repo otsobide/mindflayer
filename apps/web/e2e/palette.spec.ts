@@ -63,6 +63,14 @@ test('a skill installed from the command palette with the keyboard alone is copi
   await expect(palette).toBeHidden()
   await expect(opener).toBeFocused()
 
+  // And on the keys that opened it, pressed in its own search, which the
+  // browser would otherwise take for its own.
+  await page.keyboard.press('ControlOrMeta+K')
+  await expect(search).toBeFocused()
+  await page.keyboard.press('ControlOrMeta+K')
+  await expect(palette).toBeHidden()
+  await expect(opener).toBeFocused()
+
   // The offer, then the project, each typed and chosen with Enter.
   await page.keyboard.press('ControlOrMeta+K')
   await expect(search).toBeFocused()

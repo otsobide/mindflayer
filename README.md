@@ -209,13 +209,14 @@ typed. Each shows its lines before it runs, like every change below.
 ![The command palette over the overview, release typed: the shelf's release-notes, the skills to install, the library's deploy-checklist, and the word offered as a folder to link](docs/images/palette.png)
 
 `?` lists every key the panel answers. Neither Ctrl+K nor `?` is taken
-while you type in a field or the editor, whose keys they stay:
+while you type in a field or the editor, whose keys they stay, but for the
+palette's own search, which Ctrl+K closes:
 
 | Keys | Where | What they do |
 |---|---|---|
 | Ctrl+K, or Cmd+K on a Mac | anywhere | open or close the command palette |
 | `?` | anywhere | show or hide the keyboard shortcuts |
-| ↑ ↓, Enter, Backspace, Esc | the palette | move, choose, go back from the projects to install into, close |
+| ↑ ↓, Enter, Backspace, Esc or Ctrl+K | the palette | move, choose, go back from the projects to install into, close |
 | Tab, Enter, Esc | a change asked about | move between Cancel and Run, press the one focused, cancel |
 | arrows, Page Up and Down, Home and End, Ctrl with Home and End, Space | Assign's matrix | move a box or ten rows, to the end of a row or of the matrix, mark a box |
 | Ctrl+S, or Cmd+S on a Mac, and Tab | the editor | save, shown first, and leave the editor |

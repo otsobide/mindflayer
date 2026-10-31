@@ -43,18 +43,27 @@ const toast = useToast()
 const term = ref('')
 
 // Ctrl+K, or Cmd+K on a Mac, opens it and closes it, the sheet of
-// shortcuts going if it was open. Never while somebody types: Nuxt UI
-// passes over a shortcut while a field or anything editable has the focus,
-// CodeMirror's editor among them, unless it is told otherwise, which this
-// one is not; so the keys stay the field's. Nor while a task is shown or
-// runs, whose dialog holds the focus and is answered first. Both
-// spellings, since Nuxt UI reads `meta` as Ctrl only where the browser says
-// it is no Mac.
+// shortcuts going if it was open. Never while somebody types in a page:
+// Nuxt UI passes over a shortcut while a field or anything editable has the
+// focus, CodeMirror's editor among them, unless it is told otherwise; so
+// the keys stay the field's. It is told otherwise only while the palette is
+// open, whose modal holds the focus, so the field with it is the palette's
+// own search, which would otherwise hand the keys to the browser (Chromium
+// puts the focus in its own search bar) and leave the palette open. Nor
+// while a task is shown or runs, whose dialog holds the focus and is
+// answered first. Both spellings, since Nuxt UI reads `meta` as Ctrl only
+// where the browser says it is no Mac.
 function toggle() {
   shell.shortcutsOpen = false
   open.value = !open.value
 }
-defineShortcuts(computed(() => (busy.value ? {} : { meta_k: toggle, ctrl_k: toggle })))
+defineShortcuts(computed(() => {
+  if (busy.value) {
+    return {}
+  }
+  const shortcut = open.value ? { handler: toggle, usingInput: true } : toggle
+  return { meta_k: shortcut, ctrl_k: shortcut }
+}))
 
 // The search field goes with the palette, and a browser tells nobody when
 // the element with the focus is taken away: vueuse, which Nuxt UI asks what

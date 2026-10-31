@@ -2143,9 +2143,9 @@ offering the same change does:
   line of the form above the projects table, which refuses, saying why,
   anything but the absolute path of a folder.
 
-Each shows its lines before it runs, as every change does. Escape closes the
-palette, and the focus goes back where it was; Backspace, with nothing
-typed, goes back from the projects to install into.
+Each shows its lines before it runs, as every change does. Escape, or Ctrl+K
+again, closes the palette, and the focus goes back where it was; Backspace,
+with nothing typed, goes back from the projects to install into.
 
 **`?` lists the keyboard shortcuts**, every key the panel answers:
 
@@ -2153,7 +2153,7 @@ typed, goes back from the projects to install into.
 |---|---|---|
 | Ctrl+K, or Cmd+K on a Mac | anywhere | open or close the command palette |
 | `?` | anywhere | show or hide the keyboard shortcuts |
-| ↑ and ↓, Enter, Backspace, Esc | the command palette | move, choose, go back from the projects to install into, close |
+| ↑ and ↓, Enter, Backspace, Esc or Ctrl+K | the command palette | move, choose, go back from the projects to install into, close |
 | Tab, Enter, Esc | a change asked about | move between Cancel and Run, press the one focused, cancel with nothing run |
 | the arrows; Page Up and Page Down | **Assign**'s matrix | move one box; ten rows |
 | Home and End; Ctrl+Home and Ctrl+End | **Assign**'s matrix | the first or the last box of the row; of the matrix |
@@ -2162,10 +2162,11 @@ typed, goes back from the projects to install into.
 | Tab | the editor | leave the editor |
 
 Neither Ctrl+K nor `?` is taken while a field or the editor has the focus,
-whose keys they stay (`?` is a character typed there), nor while a change is
-shown or runs, whose question is answered first. Where the browser gives
-Ctrl+K a use of its own, such as its search bar, the panel takes it while
-its page has the focus, outside a field.
+whose keys they stay (`?` is a character typed there), but for the
+palette's own search, which Ctrl+K closes, nor while a change is shown or
+runs, whose question is answered first. Where the browser gives Ctrl+K a
+use of its own, such as its search bar, the panel takes it while its page
+has the focus outside a field, or the palette is open.
 
 **It follows the disk.** A change made from a terminal, the TUI or an
 editor shows in the panel within a moment, without a reload: a skill edited,
