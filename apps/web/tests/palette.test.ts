@@ -163,11 +163,19 @@ describe('the command palette', () => {
     const { page } = await render('/', fixture('workspace'))
     const button = page.get('[data-testid="open-palette"]')
 
-    expect(button.attributes('aria-keyshortcuts')).toBe('Control+K Meta+K')
+    // Off a Mac, Nuxt UI reads Cmd+K as Ctrl+K: Meta+K opens nothing.
+    expect(button.attributes('aria-keyshortcuts')).toBe('Control+K')
     await button.trigger('click')
     await settled()
 
     expect(palette()).not.toBeNull()
+  })
+
+  it('says both its keys from the sidebar on a Mac, where it takes both', async () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15')
+    const { page } = await render('/', fixture('workspace'))
+
+    expect(page.get('[data-testid="open-palette"]').attributes('aria-keyshortcuts')).toBe('Meta+K Control+K')
   })
 
   it('never opens while a field or the editor has the focus, whose keys they stay', async () => {

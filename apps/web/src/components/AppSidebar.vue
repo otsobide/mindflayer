@@ -36,6 +36,7 @@ export const VIEWS: readonly View[] = [
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import type { NavigationMenuItem } from '@nuxt/ui'
+import { useKbd } from '@nuxt/ui/composables'
 import { storeToRefs } from 'pinia'
 import { useShell } from '@/stores/shell'
 import AppLogo from './AppLogo.vue'
@@ -50,6 +51,12 @@ const links = computed<NavigationMenuItem[]>(() => VIEWS.map(({ label, icon, to,
   to,
   active: lights?.includes(route.path) || undefined
 })))
+
+// The keys that open the command palette, as assistive technology is told
+// them: Nuxt UI reads its `meta` as Ctrl off a Mac, so Meta+K (Super) opens
+// nothing there, and only a Mac takes both.
+const { macOS } = useKbd()
+const paletteKeys = computed(() => (macOS.value ? 'Meta+K Control+K' : 'Control+K'))
 
 // Which server this panel came from. Each `flayer ui` takes a port of its
 // own, so two open panels can belong to two different launches.
@@ -99,7 +106,7 @@ const address = window.location.host
         :square="collapsed"
         :block="!collapsed"
         aria-label="Search: the command palette"
-        aria-keyshortcuts="Control+K Meta+K"
+        :aria-keyshortcuts="paletteKeys"
         class="justify-start"
         data-testid="open-palette"
         @click="shell.paletteOpen = true"
