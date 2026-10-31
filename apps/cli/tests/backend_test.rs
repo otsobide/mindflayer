@@ -2630,7 +2630,8 @@ fn a_known_workspace_that_does_not_open_is_refused_and_never_made() {
 }
 
 /// Switched to a workspace that has gone since, the panel can still read
-/// where it may go, and go back.
+/// where it may go, the one in use among it with why it does not open, and
+/// go back.
 #[test]
 fn a_workspace_gone_since_it_was_switched_to_can_still_be_left() {
     let (dir, home, root) = knowing();
@@ -2646,6 +2647,16 @@ fn a_workspace_gone_since_it_was_switched_to_can_still_be_left() {
         snapshot.as_ref().map_err(|refusal| refusal.code),
         Err("not_a_workspace")
     );
+    let listed = backend.query(query(json!({"type": "workspaces"}))).unwrap();
+    let in_use: Vec<&Value> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["in_use"] == true)
+        .collect();
+    assert_eq!(in_use.len(), 1, "{listed}");
+    assert_eq!(in_use[0]["path"], json!(team.to_str().unwrap()));
+    assert!(in_use[0]["stale"].is_string(), "{listed}");
     assert!(offered(&backend)
         .iter()
         .any(|row| row.0 == "Projects" && row.3));

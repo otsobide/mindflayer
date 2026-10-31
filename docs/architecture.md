@@ -5642,7 +5642,9 @@ which one the panel was launched on is the launch's, and a snapshot is of a
 workspace, the same whoever reads it. Each row is an item checked for the
 one in use, saying in words where it is, whether it is the default, the one
 launched on and by which rule, how many projects it links, or why it does
-not open; one core offers no switch to (`switchable`), the one in use, one
+not open, the one in use included, gone since it was switched to, so the
+menu says why every page is refused rather than list it as holding
+nothing; one core offers no switch to (`switchable`), the one in use, one
 that does not open and one whose path is no word of a command line, cannot
 be chosen. So a state is said by the check, the words and whether it can be
 chosen, never by colour.

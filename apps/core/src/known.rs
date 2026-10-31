@@ -237,9 +237,15 @@ pub struct Switchable {
 
 /// Every workspace a front end launched as `launch` says, and on
 /// `in_use` now, may switch to: the ones this machine knows, as [`known`]
-/// lists them, `in_use` among them, then the one it was launched on when it
-/// is none of those, and the default before anything has made it, while it
-/// is the one in use.
+/// lists them, `in_use` among them, then `in_use` when it is not made and
+/// none of those, and the one it was launched on when it is none of them
+/// either.
+///
+/// An `in_use` that is not made is the default before anything has made
+/// it, listed as it will be; or, anywhere else, one gone or broken since
+/// the front end went to it, which it hands over unmade, listed with why
+/// it does not open, as `known` lists one it remembers, and never as a
+/// workspace holding nothing, which is all an unmade one says of itself.
 ///
 /// The one place a front end that stays on one workspace learns where it
 /// may go instead, so it offers no other, and is held to the same list when
@@ -257,14 +263,29 @@ pub fn switchable(
     let listed = |rows: &[KnownWorkspace], root: &Path| {
         rows.iter().any(|row| same_directory(&row.path, root))
     };
-    // `known` marks nothing unmade, but a front end on the default before
-    // anything made it is on it all the same, and says which it is on.
-    if !in_use.is_made() && !listed(&rows, in_use.root()) {
-        rows.push(KnownWorkspace {
-            default: home.is_some_and(|home| same_directory(home, in_use.root())),
-            in_use: true,
-            ..KnownWorkspace::of(in_use)
-        });
+    // `known` marks nothing unmade, but a front end on one is on it all the
+    // same, and says which it is on.
+    if !in_use.is_made() {
+        let root = in_use.root();
+        match rows.iter_mut().find(|row| same_directory(&row.path, root)) {
+            Some(row) => row.in_use = true,
+            None => {
+                let default = home.is_some_and(|home| same_directory(home, root));
+                let row = if default {
+                    KnownWorkspace::of(in_use)
+                } else {
+                    match FlayerWorkspace::open(root) {
+                        Ok(workspace) => KnownWorkspace::of(&workspace),
+                        Err(error) => KnownWorkspace::gone(root.to_path_buf(), &error),
+                    }
+                };
+                rows.push(KnownWorkspace {
+                    default,
+                    in_use: true,
+                    ..row
+                });
+            }
+        }
     }
     if !listed(&rows, launch.root) {
         rows.push(match FlayerWorkspace::open(launch.root) {

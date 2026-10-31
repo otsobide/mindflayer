@@ -622,6 +622,59 @@ fn the_default_nothing_has_made_is_listed_while_it_is_the_one_in_use_and_never_m
 }
 
 #[test]
+fn the_one_in_use_gone_since_it_was_gone_to_is_listed_with_why_and_never_made() {
+    let (dir, home, writing) = home_and_writing();
+    let (elsewhere, _) = FlayerWorkspace::init(dir.path().join("elsewhere")).unwrap();
+    let launch = Launch {
+        root: elsewhere.root(),
+        reason: Reason::Explicit,
+    };
+    fs::remove_dir_all(elsewhere.root().join(FLAYER_DIR)).unwrap();
+    // As a front end that stays on it hands it over once it will not open.
+    let gone = FlayerWorkspace::unmade(elsewhere.root()).unwrap();
+
+    let rows = known::switchable(Some(&home), &launch, &gone);
+
+    assert_eq!(
+        offered(&rows),
+        [
+            (Some("home"), false, false, Reason::Explicit, true),
+            (None, true, true, Reason::Explicit, false),
+        ]
+    );
+    assert_eq!(rows[1].workspace.path, elsewhere.root());
+    assert!(!rows[1].workspace.default);
+    assert!(rows[1].workspace.stale.is_some(), "{:?}", rows[1]);
+
+    // Remembered, it is the row `known` lists with why, marked in use.
+    known::remember(Some(&home), &writing).unwrap();
+    fs::remove_dir_all(writing.root().join(FLAYER_DIR)).unwrap();
+    let gone = FlayerWorkspace::unmade(writing.root()).unwrap();
+
+    let rows = known::switchable(Some(&home), &launch, &gone);
+
+    assert_eq!(
+        offered(&rows),
+        [
+            (Some("home"), false, false, Reason::Explicit, true),
+            (None, true, false, Reason::Explicit, false),
+            (None, false, true, Reason::Explicit, false),
+        ]
+    );
+    assert_eq!(rows[1].workspace.path, writing.root());
+    assert!(rows[1].workspace.remembered);
+    assert!(rows[1].workspace.stale.is_some(), "{:?}", rows[1]);
+    assert!(
+        !writing.root().join(FLAYER_DIR).exists(),
+        "nothing was made"
+    );
+    assert!(
+        !elsewhere.root().join(FLAYER_DIR).exists(),
+        "nothing was made"
+    );
+}
+
+#[test]
 fn what_may_be_switched_to_serializes_each_field_by_its_name() {
     let (_dir, home, writing) = home_and_writing();
     let launch = Launch {
