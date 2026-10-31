@@ -262,6 +262,17 @@ describe('the command palette', () => {
   })
 })
 
+describe('the sheet of shortcuts', () => {
+  it('passes axe open', async () => {
+    await render('/', fixture('workspace'))
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', shiftKey: true, bubbles: true }))
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="shortcuts"]')).not.toBeNull())
+
+    expect(await violations(OVER)).toEqual([])
+  })
+})
+
 let runner: Runner
 
 /**

@@ -42,14 +42,16 @@ const toast = useToast()
 /** What is typed, which the palette searches by. */
 const term = ref('')
 
-// Ctrl+K, or Cmd+K on a Mac, opens it and closes it. Never while somebody
-// types: Nuxt UI passes over a shortcut while a field or anything editable
-// has the focus, CodeMirror's editor among them, unless it is told
-// otherwise, which this one is not; so the keys stay the field's. Nor
-// while a task is shown or runs, whose dialog holds the focus and is
-// answered first. Both spellings, since Nuxt UI reads `meta` as Ctrl only
-// where the browser says it is no Mac.
+// Ctrl+K, or Cmd+K on a Mac, opens it and closes it, the sheet of
+// shortcuts going if it was open. Never while somebody types: Nuxt UI
+// passes over a shortcut while a field or anything editable has the focus,
+// CodeMirror's editor among them, unless it is told otherwise, which this
+// one is not; so the keys stay the field's. Nor while a task is shown or
+// runs, whose dialog holds the focus and is answered first. Both
+// spellings, since Nuxt UI reads `meta` as Ctrl only where the browser says
+// it is no Mac.
 function toggle() {
+  shell.shortcutsOpen = false
   open.value = !open.value
 }
 defineShortcuts(computed(() => (busy.value ? {} : { meta_k: toggle, ctrl_k: toggle })))
@@ -205,6 +207,13 @@ function grouped(snapshot: Snapshot | undefined): CommandPaletteGroup[] {
           description: 'Bring what every project was given up to date with where it came from',
           icon: 'i-lucide-refresh-cw',
           onSelect: choose(() => void runner.ask(UPDATE_ALL))
+        }),
+        plain({
+          label: 'Keyboard shortcuts',
+          description: 'What the keys do in the panel',
+          icon: 'i-lucide-keyboard',
+          kbds: ['?'],
+          onSelect: choose(() => (shell.shortcutsOpen = true))
         })
       ]
     }

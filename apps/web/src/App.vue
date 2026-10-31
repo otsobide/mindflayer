@@ -2,6 +2,7 @@
 import AppSidebar from './components/AppSidebar.vue'
 import CommandPalette from './components/CommandPalette.vue'
 import CommandRunner from './components/CommandRunner.vue'
+import ShortcutSheet from './components/ShortcutSheet.vue'
 
 // The sidebar's size and whether it is collapsed go to vueuse's useStorage
 // (`storage="local"`), which src/preferences.ts points at a cookie of the
@@ -20,6 +21,7 @@ import CommandRunner from './components/CommandRunner.vue'
         <RouterView />
       </UDashboardGroup>
       <CommandPalette />
+      <ShortcutSheet />
     </CommandRunner>
   </UApp>
 </template>

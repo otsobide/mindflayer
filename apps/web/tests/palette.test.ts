@@ -151,7 +151,7 @@ describe('the command palette', () => {
 
     expect(listed()).toEqual([
       { group: 'Pages', entries: VIEWS.map(view => view.label) },
-      { group: 'Actions', entries: ['Update all'] },
+      { group: 'Actions', entries: ['Update all', 'Keyboard shortcuts'] },
       // Every offer some project's box of is neither ticked nor closed:
       // `review`, which every project holds, is not.
       { group: 'Install', entries: ['Install lint skill', 'Install format skill', 'Install triage skill', 'Install git/commits rule', 'Install style/comments rule'] },
@@ -411,5 +411,81 @@ describe('acting from the command palette', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+/** The sheet of shortcuts, while it is open. */
+function sheet(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="dialog"]:has([data-testid="shortcuts"])')
+}
+
+describe('the sheet of shortcuts', () => {
+  it('opens on ?, saying the keys of the palette, a change asked about, the matrix and the editor, and gives the focus back on Escape', async () => {
+    await render('/projects', fixture('workspace'))
+    const before = document.querySelector<HTMLElement>('[data-testid="sidebar"] nav a[href="/assign"]')!
+    before.focus()
+
+    press('?', { shiftKey: true })
+    await settled()
+
+    expect(useShell().shortcutsOpen).toBe(true)
+    const titles = [...sheet()!.querySelectorAll('[data-testid="shortcut-section"] h3')].map(title => title.textContent!.trim())
+    expect(titles).toEqual(['Anywhere but a field or the editor', 'In the command palette', 'Asked about a change', 'On the matrix, in Assign', 'In the editor'])
+    const keys = [...sheet()!.querySelectorAll('[data-testid="keys"] .sr-only')].map(said => said.textContent!.trim())
+    expect(keys.slice(0, 2)).toEqual(['Control K', 'Question mark'])
+    expect(keys).toContain('Control S')
+    expect(sheet()!.getAttribute('aria-labelledby')).toBeTruthy()
+
+    press('Escape')
+    await vi.waitFor(() => expect(sheet()).toBeNull())
+    await settled()
+    expect(document.activeElement).toBe(before)
+  })
+
+  it('never opens while a field or the editor has the focus, where ? is typed', async () => {
+    const { page } = await render('/projects', fixture('workspace'))
+    page.get<HTMLInputElement>('input[data-testid="filter-text"]').element.focus()
+    press('?', { shiftKey: true })
+    await settled()
+    expect(sheet()).toBeNull()
+    unmount()
+
+    const editing = await render('/edit?kind=skill&name=review', answering(fixture('workspace'), [...answers(), ...drafts()]).transport)
+    const content = await vi.waitFor(() => {
+      const found = editing.page.get('[data-testid="editor"]').element.shadowRoot?.querySelector<HTMLElement>('.cm-content')
+      expect(found).toBeTruthy()
+      return found!
+    })
+    content.focus()
+    press('?', { shiftKey: true }, content)
+    await settled()
+    expect(sheet()).toBeNull()
+  })
+
+  it('never opens while a task is shown', async () => {
+    const { transport } = commanding()
+    const { page } = await render('/project?entry=gone', transport)
+    await page.get('[data-testid="unlink"]').trigger('click')
+    await settled()
+
+    press('?', { shiftKey: true })
+    await settled()
+
+    expect(useShell().shortcutsOpen).toBe(false)
+  })
+
+  it('opens from the palette, and gives way to it on Ctrl+K', async () => {
+    await render('/', fixture('workspace'))
+    await opened()
+
+    await search('keyboard')
+    await enter()
+    await vi.waitFor(() => expect(sheet()).not.toBeNull())
+    expect(palette()).toBeNull()
+
+    press('k', { ctrlKey: true })
+    await vi.waitFor(() => expect(palette()).not.toBeNull())
+    await vi.waitFor(() => expect(sheet()).toBeNull())
+    expect(useShell().shortcutsOpen).toBe(false)
   })
 })

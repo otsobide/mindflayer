@@ -35,6 +35,7 @@ declare module 'vue' {
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SettingsForm: typeof import('./components/SettingsForm.vue')['default']
+    ShortcutSheet: typeof import('./components/ShortcutSheet.vue')['default']
     SnapshotGate: typeof import('./components/SnapshotGate.vue')['default']
     StatCard: typeof import('./components/StatCard.vue')['default']
     StateBadge: typeof import('./components/StateBadge.vue')['default']
