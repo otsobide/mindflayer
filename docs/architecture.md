@@ -5721,7 +5721,11 @@ and their changes, and holds no rule of its own:
   health, the library's own and the shelf with their kind, and the
   sources. A choice goes where the link on a page goes, once the palette
   has closed and Reka has given the focus back, so whatever a choice opens
-  next takes the focus from there and gives it back there.
+  next takes the focus from there and gives it back there. Opened again
+  while that close is still drawn, the modal is kept and Reka never says
+  the close ended, so the choice is let go of rather than done at the next
+  close, and every opening draws the palette anew (its key), nothing typed
+  and its field focused.
 - **Its search is Fuse's**, the one Nuxt UI's palette runs, over each
   entry's label, the word beside it and its description: a token search,
   every word typed to be found somewhere (`tokenMatch: 'all'`), each

@@ -65,15 +65,30 @@ defineShortcuts(computed(() => {
   return { meta_k: shortcut, ctrl_k: shortcut }
 }))
 
+/** How many times the palette has opened: its key, so each opening draws it anew. */
+const openings = ref(0)
+
 // The search field goes with the palette, and a browser tells nobody when
 // the element with the focus is taken away: vueuse, which Nuxt UI asks what
 // has the focus, would go on holding the field, and every shortcut would be
 // passed over as typed into it, until something else took the focus. So
 // whatever has it in the palette is let go of as it closes, before Reka
 // gives the focus back where it was.
+//
+// Opened again while its close is still drawn, the modal is kept rather
+// than drawn anew, and Reka never says that close has ended
+// (`after:leave`): what was chosen then would be done at the next close,
+// an Escape long after, over whatever the person had moved on to. So an
+// opening lets go of it, and draws the palette anew, nothing typed, no
+// offer's projects listed, and its field focused, which the close let go of.
 watch(open, (now, was) => {
   if (was && !now && document.activeElement instanceof HTMLElement) {
     document.activeElement.blur()
+  }
+  if (now && !was) {
+    chosen = undefined
+    term.value = ''
+    openings.value += 1
   }
 })
 
@@ -344,6 +359,7 @@ const FUSE = { fuseOptions: { useTokenSearch: true, tokenMatch: 'all' as const, 
   >
     <template #content>
       <UCommandPalette
+        :key="openings"
         v-model:search-term="term"
         :groups="groups"
         :fuse="FUSE"

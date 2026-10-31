@@ -11,6 +11,7 @@ import { answering, answers, applying, commanded, commanding, drafts, fixture, p
 afterEach(() => {
   unmount()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 /**
@@ -64,6 +65,37 @@ function group(heading: string): string[] {
 /** Every entry's label, in the order listed. */
 function entries(): string[] {
   return listed().flatMap(group => group.entries)
+}
+
+/**
+ * Have the palette leave as a browser draws it, which happy-dom does not:
+ * its dialog says it animates in while open and out once closed, so Reka
+ * keeps it while it leaves, until `left` says that has ended.
+ */
+function animating() {
+  const computed = window.getComputedStyle.bind(window)
+  vi.stubGlobal('getComputedStyle', (element: Element, pseudo?: string | null) => {
+    const style = computed(element, pseudo)
+    if (!(element instanceof HTMLElement) || element.getAttribute('role') !== 'dialog') {
+      return style
+    }
+    return new Proxy(style, {
+      get(target, key) {
+        if (key === 'animationName') {
+          return element.dataset.state === 'closed' ? 'leave' : 'enter'
+        }
+        const value: unknown = Reflect.get(target, key, target)
+        return typeof value === 'function' ? value.bind(target) : value
+      }
+    })
+  })
+}
+
+/** End the palette's leave, as a browser says it once it has drawn it. */
+function left() {
+  const ended = new Event('animationend')
+  Object.defineProperty(ended, 'animationName', { value: 'leave' })
+  palette()!.dispatchEvent(ended)
 }
 
 /** Open the palette as a keyboard does, over whatever has the focus. */
@@ -237,6 +269,40 @@ describe('the command palette', () => {
       expect(palette()).toBeNull()
       await settled()
     }
+  })
+
+  it('lets a choice go when it is opened again before it has gone, rather than doing it at the next close, and opens anew', async () => {
+    animating()
+    const { router } = await render('/', fixture('workspace'))
+
+    // Assign chosen, then the palette opened again while it leaves.
+    await opened()
+    await search('assign')
+    press('Enter')
+    await settled()
+    expect(palette()!.dataset.state, 'the palette, still leaving').toBe('closed')
+    await opened()
+    expect(palette()!.dataset.state).toBe('open')
+    expect(palette()!.querySelector('input')!.value).toBe('')
+    expect(document.activeElement).toBe(palette()!.querySelector('input'))
+
+    // Closed with nothing chosen, and gone: Assign is not opened then.
+    press('Escape')
+    await settled()
+    left()
+    await vi.waitFor(() => expect(palette()).toBeNull())
+    await settled()
+    expect(router.currentRoute.value.fullPath).toBe('/')
+
+    // An offer's projects, left by closing, are not what it opens on again.
+    await opened()
+    await search('install lint')
+    await enter()
+    expect(listed().map(each => each.group)).toEqual(['Install lint'])
+    press('Escape')
+    await settled()
+    await opened()
+    expect(listed().map(each => each.group).slice(0, 2)).toEqual(['Pages', 'Actions'])
   })
 
   it('draws what it lists as text, never as HTML', async () => {
