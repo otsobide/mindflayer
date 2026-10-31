@@ -165,6 +165,18 @@ const TOUR: Shot[] = [
     ready: async page => page.getByTestId('cards').waitFor()
   },
   {
+    // The header's switcher open over the overview: the workspace in use,
+    // found above where the panel was launched, and every one this machine
+    // knows to switch to. Nothing is switched.
+    name: 'switcher',
+    path: '/',
+    ready: async (page) => {
+      await page.getByTestId('cards').waitFor()
+      await page.getByTestId('workspace-switcher').click()
+      await page.getByRole('menuitemcheckbox', { checked: true }).waitFor()
+    }
+  },
+  {
     name: 'projects',
     path: '/projects',
     ready: async page => page.getByTestId('row').first().waitFor()
