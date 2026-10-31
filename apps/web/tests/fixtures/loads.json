@@ -1,0 +1,98 @@
+[
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer load /home/you/kit"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer load /home/you/kit"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer load /home/you/kit",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "loaded kit as ../kit: nothing to install yet\n  into the workspace at /home/you/Assign\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "path": "/home/you/kit",
+      "type": "load"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [
+        {
+          "caution": "unloads",
+          "line": 0,
+          "message": "makes the workspace stop offering a loaded workspace's own, though nothing on disk is deleted"
+        }
+      ],
+      "lines": [
+        "flayer unload ../team"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer unload ../team"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer unload ../team",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "unloaded ../team\n  from the workspace at /home/you/Assign\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "entry": "../team",
+      "type": "unload"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer load /home/you/Assign"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer load /home/you/Assign"
+      ],
+      "outcome": {
+        "ok": false,
+        "runs": [
+          {
+            "command": "flayer load /home/you/Assign",
+            "error": {
+              "code": "loads_itself",
+              "message": "/home/you/Assign: a workspace cannot load itself"
+            },
+            "ok": false,
+            "stderr": [],
+            "stdout": ""
+          }
+        ]
+      }
+    },
+    "task": {
+      "path": "/home/you/Assign",
+      "type": "load"
+    }
+  }
+]

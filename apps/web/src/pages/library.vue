@@ -308,140 +308,18 @@ function folder(snapshot: Snapshot, kind: Kind): string | undefined {
           </template>
         </section>
 
-        <section
-          aria-labelledby="loaded-heading"
-          class="flex flex-col gap-3"
-          data-testid="loaded"
+        <p
+          class="text-sm text-muted"
+          data-testid="to-loads"
         >
-          <h2
-            id="loaded-heading"
-            class="text-base font-semibold text-highlighted"
+          <RouterLink
+            to="/loads"
+            class="rounded-sm text-primary hover:underline focus-visible:outline-2 focus-visible:outline-primary"
           >
-            Loaded workspaces
-          </h2>
-
-          <div
-            v-if="snapshot.loaded.length === 0"
-            class="flex flex-col items-start gap-2"
-            data-testid="no-loaded"
-          >
-            <p class="text-muted">
-              It loads no other workspace, whose own it would offer beside its own.
-            </p>
-            <CommandHint
-              :commands="[
-                ...making(snapshot.workspace),
-                { line: flayer(snapshot.workspace, 'load <PATH>'), does: 'offer another workspace\'s own here' }
-              ]"
-            />
-          </div>
-
-          <div
-            v-else
-            class="overflow-x-auto rounded-lg border border-default"
-            tabindex="0"
-            role="region"
-            aria-label="The table of loaded workspaces"
-          >
-            <table class="w-full min-w-max text-left">
-              <caption class="sr-only">
-                Each workspace this one loads: where it is, how many of its own it offers, what --from takes for them, and why one does not open.
-              </caption>
-              <thead class="bg-elevated/40 font-mono text-xs text-muted">
-                <tr>
-                  <th
-                    scope="col"
-                    class="px-3 py-2 font-medium"
-                  >
-                    entry
-                  </th>
-                  <th
-                    scope="col"
-                    class="px-3 py-2 font-medium"
-                  >
-                    path
-                  </th>
-                  <th
-                    scope="col"
-                    class="px-3 py-2 text-right font-medium"
-                  >
-                    offers
-                  </th>
-                  <th
-                    scope="col"
-                    class="px-3 py-2 font-medium"
-                  >
-                    --from
-                  </th>
-                  <th
-                    scope="col"
-                    class="px-3 py-2 font-medium"
-                  >
-                    opens
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-default">
-                <tr
-                  v-for="load in snapshot.loaded"
-                  :key="load.entry"
-                  class="align-top"
-                  data-testid="load"
-                >
-                  <th
-                    scope="row"
-                    class="px-3 py-2 font-normal"
-                  >
-                    <div class="font-medium text-highlighted">
-                      {{ load.name ?? load.entry }}
-                    </div>
-                    <div
-                      v-if="load.name"
-                      class="font-mono text-xs text-dimmed"
-                    >
-                      {{ load.entry }}
-                    </div>
-                  </th>
-                  <td class="max-w-80 px-3 py-2">
-                    <code class="break-all font-mono text-xs text-muted">{{ load.path }}</code>
-                  </td>
-                  <td
-                    class="px-3 py-2 text-right tabular-nums"
-                    data-testid="offers"
-                  >
-                    {{ load.offers }}
-                  </td>
-                  <td class="px-3 py-2">
-                    <code
-                      class="font-mono text-xs"
-                      data-testid="origin"
-                    >{{ load.origin }}</code>
-                  </td>
-                  <td
-                    class="max-w-80 px-3 py-2 text-xs"
-                    data-testid="error"
-                  >
-                    <span
-                      v-if="load.error"
-                      class="flex items-start gap-1.5"
-                    >
-                      <UIcon
-                        name="i-lucide-link-2-off"
-                        class="mt-px size-3.5 shrink-0 text-warning"
-                        aria-hidden="true"
-                      />
-                      <span><span class="font-mono text-warning">{{ load.error.code }}:</span> {{ load.error.message }}</span>
-                    </span>
-                    <span
-                      v-else
-                      class="font-mono text-dimmed"
-                    >yes</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
+            Loads
+          </RouterLink>
+          lists the workspaces it loads, which offer their own beside these.
+        </p>
       </SnapshotGate>
     </template>
   </UDashboardPanel>

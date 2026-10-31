@@ -24,6 +24,9 @@ const EXAMPLES = fileURLToPath(new URL('../../../examples', import.meta.url))
 /** The workspace's folder, under the scratch folder, as the screenshots name it. */
 export const WORKSPACE = 'Projects'
 
+/** The workspace beside the demo's that the tour loads, by its folder's name. */
+export const LOADED = 'platform'
+
 /** The project whose page the tour shows, and whose unlink it asks about. */
 export const SHOWN = 'mobile-app'
 
@@ -176,10 +179,27 @@ const SECRETS = `# Keep secrets out of the repository
  *   checklist, which `infra` keeps where Claude reads its skills and
  *   changed by hand with `mind edit` before, so it is edited;
  * - `design-system`, a mind project, and `playground`, a repository, sit in
- *   the workspace unlinked, for Discover to find.
+ *   the workspace unlinked, for Discover to find;
+ * - the home is the default workspace, made first, so it remembers each
+ *   workspace `flayer init` makes after it: `at.workspace`, and `platform`
+ *   beside it, a workspace of the platform team's own skills, which nothing
+ *   loads yet, for the tour to load.
  */
 export function build(at: Places): void {
   const drafts = join(at.scratch, 'drafts')
+
+  // The default workspace, before any other, which each `flayer init`
+  // after it remembers in; then the platform team's workspace, beside the
+  // demo's, with skills of its own, made by `flayer add`.
+  succeed(at, 'flayer', at.scratch, ['init', at.home], 'none')
+  const platform: Places = { ...at, workspace: join(at.scratch, LOADED) }
+  succeed(at, 'flayer', at.scratch, ['init', platform.workspace], 'none')
+  for (const [name, description] of [
+    ['incident-response', 'Runs an incident from the first page to the write-up'],
+    ['on-call-handoff', 'Hands the pager over with nothing left unsaid']
+  ] as const) {
+    succeed(platform, 'flayer', platform.workspace, ['add', 'skill', name, description])
+  }
 
   // The team's skills, in a repository of their own: two of the examples,
   // and the release notes.

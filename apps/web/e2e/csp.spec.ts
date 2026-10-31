@@ -22,6 +22,7 @@ const PAGES = [
   '/library?kind=rule',
   ...LIBRARY.map(([kind, name]) => `/artifact?${new URLSearchParams({ kind, name })}`),
   '/new?kind=skill',
+  '/loads',
   '/shelf',
   '/sources',
   '/nowhere'

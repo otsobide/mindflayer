@@ -17,6 +17,7 @@ import candidates from './fixtures/candidates.json'
 import commands from './fixtures/commands.json'
 import draftsJson from './fixtures/drafts.json'
 import library from './fixtures/library.json'
+import loadsJson from './fixtures/loads.json'
 import planned from './fixtures/plans.json'
 import scan from './fixtures/scan.json'
 import unmade from './fixtures/unmade.json'
@@ -210,6 +211,18 @@ export function updatings(): Commanded[] {
  */
 export function authored(): Commanded[] {
   return structuredClone(authoredJson) as unknown as Commanded[]
+}
+
+/**
+ * What the assigning fixture's server, in the home whose default workspace
+ * knows it, answers when each change its page of loads sends is previewed
+ * and run, each on the workspace as it was built (tests/fixtures/
+ * loads.json): `kit` loaded by the path the snapshot lists it by, `team`
+ * unloaded by its entry, and the workspace itself loaded, which the line
+ * refuses (`loads_itself`). Copied, so a test may change its copy.
+ */
+export function loadings(): Commanded[] {
+  return structuredClone(loadsJson) as unknown as Commanded[]
 }
 
 /** A task as `send` was handed it, and how. */

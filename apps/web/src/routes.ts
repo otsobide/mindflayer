@@ -38,6 +38,14 @@ export function editLink(kind: Kind, name: string): RouteLocationRaw {
   return { path: '/edit', query: { kind, name } }
 }
 
+/**
+ * The matrix showing the offers of one origin alone, as its filter of
+ * origins shows them: what a loaded workspace offers, by its `origin`.
+ */
+export function assignLink(origin: string): RouteLocationRaw {
+  return { path: '/assign', query: { origin } }
+}
+
 /** Where one of a kind is added to the library: from a template, or from nothing. */
 export function newLink(kind: Kind): RouteLocationRaw {
   return { path: '/new', query: { kind } }

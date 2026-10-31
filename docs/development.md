@@ -170,7 +170,10 @@ reach your workspaces or your agents' folders: Playwright runs without
 `$CODEX_HOME` and `$OPENCODE_CONFIG_DIR`, the server and every command get
 an empty temporary folder as `HOME`, and every command names its workspace
 and gives every agent-home option empty. The suite fails if that home is not
-empty once the server has stopped. Its specs are
+empty once the server has stopped. A test that loads another workspace gets
+a home of its own instead, beside its workspace, whose default workspace
+knows the one it loads, and fails unless that home too is as it was made
+once its server has stopped. Its specs are
 `apps/web/e2e/<area>.spec.ts`, and `make test` leaves them out, since they
 need the browsers and binaries built with the panel. `ARGS` go to
 `playwright test`, and `E2E_BIN` names another folder holding a `flayer` and
@@ -222,13 +225,15 @@ docs/screenshots` builds the panel and the debug binaries, as `make web/e2e`
 does, then runs `apps/web/e2e/screenshots.ts`: it builds a demo workspace by
 running `git`, `flayer` and `mind` (`e2e/demo.ts`: six projects, a library,
 a shelf gathered from a repository beside them, three installs behind
-where they came from, two repositories nobody linked), serves it with
+where they came from, two repositories nobody linked, and a second
+workspace, which the tour loads last), serves it with
 `flayer ui`, and opens each page of the tour in Chromium, in a 1440 by 900
 viewport at a device scale of 1.25, with dates in US English and UTC
 whatever your machine's language and time zone, writing each into
 `docs/images`. It runs as the browser suite does, with no variable that
-leads to your workspaces or your agents' folders, an empty temporary home
-that has to be empty still at the end, and every command naming its home
+leads to your workspaces or your agents' folders, a temporary home holding
+only the default workspace the demo makes there, which has to be as the
+demo made it at the end, and every command naming its home
 and every agent home. The project's page is taken in dark as well, for the
 README's `<picture>`; the rest of the tour is light.
 

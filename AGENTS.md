@@ -246,7 +246,8 @@ under `apps/` with its own `Makefile`:
   (`library`), one of its own
   (`artifact`, named by its kind and name in the query), its editor
   (`edit`, named the same way), the page adding one (`new`, its kind in
-  the query), the shelf (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
+  the query), the workspaces it loads and those this machine knows
+  (`loads`), the shelf (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
   the query a page keeps its state in, `src/library.ts` finds the projects
   holding one of the library's own, `src/markdown.ts` draws a skill's
   markdown from its tokens, and `src/time.ts` says the ledger's times.
@@ -257,7 +258,8 @@ under `apps/` with its own `Makefile`:
   (`IssueList`), a rendered body (`MarkdownBody`), an artifact's files
   (`FileTree`), the ledger's latest actions (`ActivityFeed`),
   `SnapshotGate`, which draws a page once the snapshot is answered, the
-  folder to link (`LinkForm`), a project's agents and share toggles
+  folder to link (`LinkForm`), the path of a workspace to load
+  (`LoadForm`), a project's agents and share toggles
   (`SettingsForm`) and its migration, dry run first (`MigrateOffer`), the
   removal of one of the library's own everywhere, dry run first
   (`RemoveOffer`), its rename (`RenameForm`), the editor, CodeMirror in a
@@ -990,8 +992,10 @@ These are easy to break from a single file without noticing.
   `--from` takes it (each shelf row's, source's and load's `origin`, and
   `library.origin`), never put together from an address and a branch, and
   an artifact's front matter, which core cuts from the file
-  (`contents::Manifest`). So is which projects hold a copy of one of the
-  library's own (`library.holders`, by `install::from_the_library`, the
+  (`contents::Manifest`). So is which workspace this machine knows the one
+  on screen could load (`known`'s `loadable`, `view::KnownHere`), never
+  told from `in_use`, `stale` and the loads' paths. So is which projects
+  hold a copy of one of the library's own (`library.holders`, by `install::from_the_library`, the
   rule `flayer remove --everywhere` follows), never told by comparing a
   copy's origin, which an install from before origins were kept lacks. Every
   page passes axe (`tests/a11y.test.ts`), works from the keyboard, and never
@@ -1162,7 +1166,11 @@ These are easy to break from a single file without noticing.
   the workspace, the drafts an `--editor` copies in (`fixture.draft`), as
   an editor saves one, for `flayer edit` and `mind edit` to change an
   artifact with, or `--contents` names; a state only a hand edit, a removed folder or a git
-  source makes is left to the views' suites and their fixtures. Every process it starts goes through
+  source makes is left to the views' suites and their fixtures. A test
+  that changes something builds a workspace of its own (`own`), served
+  with the run's home, or for the loads (`loadable`) with one of its own
+  beside it, whose default workspace knows what it loads, held to stay as
+  it was made as the driver holds the run's. Every process it starts goes through
   `e2e/environment.ts` (`run`, `pinned`, `environment`), and the config
   starts the server the same way, from the fixture's folder. A spec reads
   the server from `served`, what the CLI says from `listing()`, `flayer

@@ -8,8 +8,8 @@ import { join, relative } from 'node:path'
 import { test as base, expect, type Page } from '@playwright/test'
 import type { Envelope } from '../src/api/generated/Envelope'
 import type { Listing } from '../src/api/generated/Listing'
-import { given, run, serve, type Places } from './environment.ts'
-import { assignable, authorable, changeable, updatable } from './fixture.ts'
+import { given, look, run, serve, type Places } from './environment.ts'
+import { assignable, authorable, changeable, loadable, updatable } from './fixture.ts'
 
 /** The server under test, as the link it printed says. */
 export interface Served {
@@ -104,10 +104,18 @@ export interface Own extends Panel {
  * What a test's own workspace is built as: `changeable`, for the links and
  * unlinks, unless the spec says `assignable`, for the matrix
  * (`test.use({ building: 'assignable' })`), `updatable`, for updating and
- * removing, or `authorable`, for editing, adding and renaming in the
- * library.
+ * removing, `authorable`, for editing, adding and renaming in the
+ * library, or `loadable`, for loading and unloading.
  */
-const BUILDERS = { changeable, assignable, updatable, authorable }
+const BUILDERS = { changeable, assignable, updatable, authorable, loadable }
+
+/**
+ * The builders whose workspace is served with a home of its own, beside
+ * it, rather than the run's: a default workspace there is what remembers
+ * the workspaces this machine knows, and the run's home is held to stay
+ * empty.
+ */
+const HOMED: readonly (keyof typeof BUILDERS)[] = ['loadable']
 
 export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, own: Own, building: keyof typeof BUILDERS }>({
   building: ['changeable', { option: true }],
@@ -138,19 +146,26 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
   },
 
   // Under the run's temporary folder, which the driver removes, and served
-  // with the run's home, which the driver holds to stay as it was made.
+  // with the run's home, which the driver holds to stay as it was made, or
+  // one of its own beside it, held here the same way once the server has
+  // stopped.
   own: async ({ page, building }, use) => {
     const at = given()
     const folder = mkdtempSync(join(at.scratch, 'own-'))
-    const mine: Places = { ...at, workspace: join(folder, 'workspace') }
-    const twin: Places = { ...at, workspace: join(folder, 'twin') }
+    const homed = HOMED.includes(building)
+    const mine: Places = { ...at, workspace: join(folder, 'workspace'), ...(homed ? { home: join(folder, 'home') } : {}) }
+    const twin: Places = { ...mine, workspace: join(folder, 'twin') }
     BUILDERS[building](mine)
     cpSync(mine.workspace, twin.workspace, { recursive: true })
+    const made = homed ? look(mine.home) : undefined
     const server = await serve(mine)
     try {
       await use({ at: mine, twin, served: server, open: (path = '/') => open(page, server, path) })
     } finally {
       await server.stop()
+    }
+    if (made) {
+      expect(look(mine.home), `the home of its own, ${mine.home}, is as it was made`).toEqual(made)
     }
   }
 })

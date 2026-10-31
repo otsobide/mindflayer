@@ -270,6 +270,32 @@ fn assigning(home: &Path) -> PathBuf {
     root
 }
 
+/// `home`, beside what [`assigning`] built in it, made the default
+/// workspace, and what it knows, each remembered by a `flayer init` run on
+/// it, which leaves one made already as it was: `Assign`, `team`, which
+/// `Assign` loads, `kit`, a workspace of its own nothing loads, and `old`,
+/// gone since. So the panel's page of loads has one of each a known
+/// workspace can be: this one, one it loads, one it could, the default
+/// among those, and one that would not open.
+fn acquainted(home: &Path) {
+    flayer_at_home(home, home, &["init"]).unwrap();
+    for name in ["Assign", "team", "kit", "old"] {
+        let root = home.join(name);
+        fs::create_dir_all(&root).unwrap();
+        flayer_at_home(&root, home, &["init"]).unwrap();
+    }
+    fs::remove_dir_all(home.join("old")).unwrap();
+}
+
+/// The lookup a panel launched in `home` reads the workspaces it knows
+/// with: the default one there, and nothing else of the environment's.
+fn at_home(home: &Path) -> Lookup {
+    Lookup {
+        home: Some(home.to_path_buf()),
+        ..Lookup::default()
+    }
+}
+
 /// `you/Updating`, a workspace whose projects hold an installation of each
 /// state an update says something of, which the panel's page of updates
 /// draws, built as somebody would build it:
@@ -790,15 +816,17 @@ fn write_what_previewing_and_running_a_few_tasks_is_answered_with() {
     write("commands", &json);
 }
 
-/// The workspace [`assigning`] builds, as the panel is answered with it:
-/// what its matrix draws.
+/// The workspace [`assigning`] builds, in a home [`acquainted`] with it
+/// and others, as the panel is answered with it: what its matrix draws, and
+/// its page of loads.
 #[test]
 fn write_the_snapshot_of_a_workspace_to_assign_in() {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("you");
     let root = assigning(&home);
+    acquainted(&home);
 
-    let json = answered(&root, &Lookup::default());
+    let json = answered(&root, &at_home(&home));
 
     let json = pinned(&json, dir.path(), Some(&root));
     assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
@@ -813,6 +841,29 @@ fn write_the_snapshot_of_a_workspace_to_assign_in() {
     for state in ["current", "outdated", "edited", "foreign"] {
         assert!(states.contains(&state), "{state}: {json}");
     }
+    let known: Vec<(&str, &Value, bool)> = snapshot["known"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|known| {
+            (
+                known["path"].as_str().unwrap(),
+                &known["loaded_as"],
+                known["loadable"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        known,
+        [
+            ("/home/you", &Value::Null, true),
+            ("/home/you/Assign", &Value::Null, false),
+            ("/home/you/team", &json!("../team"), false),
+            ("/home/you/kit", &Value::Null, true),
+            ("/home/you/old", &Value::Null, false),
+        ],
+        "{json}"
+    );
     write("assigning", &json);
 }
 
@@ -933,6 +984,58 @@ fn write_what_applying_a_plan_is_answered_with() {
     let json = pinned(&json, dir.path(), Some(&root));
     assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
     write("applied", &json);
+}
+
+/// What the panel is answered with when each change its page of loads
+/// sends is previewed and run, each on the workspace [`assigning`] builds,
+/// in the home [`acquainted`] with it, as it was built: `kit` loaded by the
+/// path the snapshot lists it by, `team` unloaded by the entry it is loaded
+/// by, and the workspace itself, typed, which the line refuses. Each task
+/// as the page sends it, its preview, and what its run is answered with.
+#[test]
+fn write_what_each_change_the_page_of_loads_sends_is_answered_with() {
+    let sent = |home: &Path| {
+        [
+            json!({"type": "load", "path": home.join("kit").to_str().unwrap()}),
+            json!({"type": "unload", "entry": "../team"}),
+            json!({"type": "load", "path": home.join("Assign").to_str().unwrap()}),
+        ]
+    };
+
+    let mut answers = Vec::new();
+    let mut written = Vec::new();
+    for index in 0..3 {
+        let dir = TempDir::new().unwrap();
+        let home = dir.path().join("you");
+        let root = assigning(&home);
+        acquainted(&home);
+        let backend = PanelBackend::launch(&root, &at_home(&home)).unwrap();
+        let sent = sent(&home)[index].clone();
+        let task: Task = serde_json::from_value(sent.clone()).unwrap();
+        let preview = backend
+            .preview(&task)
+            .unwrap_or_else(|refusal| panic!("{sent}: {}: {}", refusal.code, refusal.message));
+        let outcome = backend.run(task).unwrap();
+        let ran = json!({"lines": preview.lines, "outcome": outcome});
+        let answer = json!({"task": sent, "preview": preview, "ran": ran});
+        let json = serde_json::to_string(&answer).unwrap();
+        let json = pinned(&json, dir.path(), Some(&root));
+        assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+        written.push(serde_json::from_str::<Value>(&json).unwrap());
+        answers.push(answer);
+    }
+
+    for (index, ok) in [true, true, false].into_iter().enumerate() {
+        assert_eq!(
+            answers[index]["ran"]["outcome"]["ok"], ok,
+            "{index}: {}",
+            answers[index]
+        );
+    }
+    let refused = &answers[2]["ran"]["outcome"]["runs"][0]["error"]["code"];
+    assert_eq!(refused, "loads_itself");
+    let json = serde_json::to_string_pretty(&written).unwrap() + "\n";
+    write("loads", &json);
 }
 
 /// The workspace [`updating`] builds, as the panel is answered with it:

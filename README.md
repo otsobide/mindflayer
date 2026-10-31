@@ -92,7 +92,7 @@ from its row, after which Mindflayer manages it like anything it installed.
 ### The library
 
 The workspace's own skills and rules, each with the projects holding a copy
-and how every copy stands, and the other workspaces it loads.
+and how every copy stands.
 
 ![The library's skills, each with the projects that hold a copy and its state there](docs/images/library.png)
 
@@ -127,6 +127,19 @@ copy changed by hand stays as it is, with nothing offering it any more,
 until a forced uninstall from Updates takes it out.
 
 ![Removing a skill of the library's own: the dry run says which project's copy goes and which edited copy stays, before anything is removed](docs/images/remove.png)
+
+### Loaded workspaces
+
+Another workspace's own skills and rules can be offered to your projects
+beside the library's, read from where that workspace keeps them, so the
+next install takes whatever it holds then. **Loads** lists each workspace
+loaded, with what it offers and a link to assign those, and every workspace
+this machine knows: the default one in your home remembers each that
+`flayer init` makes. **Load** one of those, or name any other by its path;
+**Unload** one, which asks first and leaves what was installed from it
+where it is.
+
+![Loaded workspaces: the platform team's workspace loaded, with its two skills, and the workspaces this machine knows, one of which can still be loaded](docs/images/loads.png)
 
 ### The shelf and its sources
 
