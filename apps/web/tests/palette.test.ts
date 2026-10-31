@@ -320,6 +320,22 @@ describe('acting from the command palette', () => {
     expect(sent).toEqual([])
   })
 
+  it('says so when the plan of a box runs nothing, holding nothing back, and runs nothing', async () => {
+    const cell = { project: 'web', reference: 'skill:format', origin: 'https://github.com/acme/skills', wanted: true }
+    const none: Answered = { query: { type: 'plan', selection: [cell] }, answer: { tasks: [], conflicts: [], locked: [] } }
+    const { sent, transport } = commanding(fixture('assigning'), applying(), [none])
+    await render('/', transport)
+    await opened()
+
+    await search('install format')
+    await enter()
+    await search('web')
+    await enter()
+
+    await vi.waitFor(() => expect(toasts()).toEqual(['Nothing ran The plan of skill:format from https://github.com/acme/skills into web runs nothing.']))
+    expect(sent).toEqual([])
+  })
+
   it('says why a plan was refused, with its code, and runs nothing', async () => {
     const { sent, transport } = commanding(fixture('assigning'), applying(), [])
     const refusing: Transport = {

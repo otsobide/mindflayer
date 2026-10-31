@@ -133,6 +133,12 @@ async function install(offered: Offered, project: Project) {
   for (const why of held) {
     nothingRan(why.message, why.code)
   }
+  // Nothing to run and nothing held back: the box asks for what is so,
+  // since the snapshot the palette listed it from, read when it opened.
+  // Said in the plan's terms, which give no reason of their own.
+  if (held.length === 0) {
+    nothingRan(`The plan of ${offered.kind}:${offered.name} from ${offered.origin} into ${title(project)} runs nothing.`, undefined)
+  }
 }
 
 /** What a project is called: its name, or its entry when it opens no project. */
