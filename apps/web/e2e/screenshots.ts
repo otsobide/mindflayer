@@ -114,6 +114,21 @@ interface Shot {
   ready: (page: Page) => Promise<void>
 }
 
+/**
+ * Wait for the toast saying a line of `binary` ending in `words` ran to
+ * show, then to go, so the image is taken without it over what it shows.
+ * Matched whichever workspace the line names with `-W`, which the panel
+ * puts right after the binary: the line spelled out would be a wait that
+ * passes at once, for a toast that is never there, the day its spelling
+ * changes; and waited for to show first, so a pattern that misses fails
+ * the run rather than leave the toast in the image.
+ */
+async function toastGone(page: Page, binary: string, words: string): Promise<void> {
+  const toast = page.getByText(new RegExp(`^Ran ${literally(binary)} (?:-W .+ )?${literally(words)}$`))
+  await toast.waitFor({ timeout: 30_000 })
+  await toast.waitFor({ state: 'hidden', timeout: 30_000 })
+}
+
 /** Wait until the page is drawn, as the suite's `drawn` does, and every animation settled. */
 async function drawn(page: Page): Promise<void> {
   await page.getByRole('main').first().waitFor()
@@ -320,7 +335,7 @@ const TOUR: Shot[] = [
       await dialog.waitFor({ state: 'hidden' })
       await page.getByTestId('remove-said').waitFor()
       // The toast saying it ran would cover what it said: gone first.
-      await page.getByText(`Ran flayer remove --everywhere skill:${REMOVED}`, { exact: true }).waitFor({ state: 'hidden', timeout: 30_000 })
+      await toastGone(page, 'flayer', `remove --everywhere skill:${REMOVED}`)
       await page.getByTestId('remove-yes').scrollIntoViewIfNeeded()
     }
   },
@@ -336,7 +351,7 @@ const TOUR: Shot[] = [
       await dialog.waitFor({ state: 'hidden' })
       await page.getByTestId('load').getByTestId('offer').first().waitFor()
       // The toast saying it ran would cover what the page shows: gone first.
-      await page.getByText(`Ran flayer load ${join(at.scratch, LOADED)}`, { exact: true }).waitFor({ state: 'hidden', timeout: 30_000 })
+      await toastGone(page, 'flayer', `load ${join(at.scratch, LOADED)}`)
     }
   }
 ]
