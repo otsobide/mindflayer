@@ -2488,7 +2488,7 @@ fn a_switch_to_a_known_workspace_is_what_every_query_preview_and_run_acts_on() {
     let path = |root: &Path| json!(root.to_str().unwrap());
 
     let answer = backend
-        .switch(&switch(json!({"path": team.to_str().unwrap()})))
+        .switch(switch(json!({"path": team.to_str().unwrap()})))
         .unwrap();
 
     assert_eq!(answer["path"], path(&team));
@@ -2520,7 +2520,7 @@ fn a_switch_to_a_known_workspace_is_what_every_query_preview_and_run_acts_on() {
     );
 
     backend
-        .switch(&switch(json!({"path": root.to_str().unwrap()})))
+        .switch(switch(json!({"path": root.to_str().unwrap()})))
         .unwrap();
     assert_eq!(snapshot_of(&backend), (path(&root), json!("above")));
     assert_eq!(
@@ -2563,7 +2563,7 @@ fn a_switch_to_a_path_outside_the_list_is_refused_and_nothing_is_switched() {
         String::from("/"),
         String::from("file:///etc"),
     ] {
-        let refused = backend.switch(&switch(json!({"path": sent})));
+        let refused = backend.switch(switch(json!({"path": sent})));
 
         assert_eq!(
             refused.as_ref().map_err(|refusal| refusal.code),
@@ -2615,7 +2615,7 @@ fn a_known_workspace_that_does_not_open_is_refused_and_never_made() {
         (String::new(), false, false, false),
         "listed, and offered nothing"
     );
-    let refused = backend.switch(&switch(json!({"path": team.to_str().unwrap()})));
+    let refused = backend.switch(switch(json!({"path": team.to_str().unwrap()})));
 
     assert_eq!(
         refused.as_ref().map_err(|refusal| refusal.code),
@@ -2637,7 +2637,7 @@ fn a_workspace_gone_since_it_was_switched_to_can_still_be_left() {
     let team = dir.path().join("team");
     let backend = launched_knowing(&home, &root);
     backend
-        .switch(&switch(json!({"path": team.to_str().unwrap()})))
+        .switch(switch(json!({"path": team.to_str().unwrap()})))
         .unwrap();
     fs::remove_dir_all(team.join(FLAYER_DIR)).unwrap();
 
@@ -2650,7 +2650,7 @@ fn a_workspace_gone_since_it_was_switched_to_can_still_be_left() {
         .iter()
         .any(|row| row.0 == "Projects" && row.3));
     backend
-        .switch(&switch(json!({"path": root.to_str().unwrap()})))
+        .switch(switch(json!({"path": root.to_str().unwrap()})))
         .unwrap();
 
     assert_eq!(

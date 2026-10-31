@@ -204,9 +204,18 @@ fn route<B: Backend>(
     let backend = Arc::new(server.backend);
     let transcript = Transcript::default();
     let watched = Arc::clone(&backend);
+    let watcher = Arc::new(Watcher::start(
+        move || watched.watched_paths(),
+        events.clone(),
+    ));
     let api = Arc::new(Api {
-        writer: Writer::start(Arc::clone(&backend), transcript.clone(), events.clone())?,
-        _watcher: Watcher::start(move || watched.watched_paths(), events.clone()),
+        writer: Writer::start(
+            Arc::clone(&backend),
+            transcript.clone(),
+            events.clone(),
+            Arc::clone(&watcher),
+        )?,
+        _watcher: watcher,
         backend,
         transcript,
         events,
@@ -215,6 +224,7 @@ fn route<B: Backend>(
         .route("/api/query", endpoint(post(api::query::<B>)))
         .route("/api/commands/preview", endpoint(post(api::preview::<B>)))
         .route("/api/commands", endpoint(post(api::commands::<B>)))
+        .route("/api/switch", endpoint(post(api::switch::<B>)))
         .route("/api/transcript", endpoint(get(api::transcript::<B>)))
         .route("/api/events", endpoint(get(api::events::<B>)))
         // The bare prefix and everything under it that names no endpoint,

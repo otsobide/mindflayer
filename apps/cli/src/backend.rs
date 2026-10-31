@@ -14,7 +14,7 @@
 //!
 //! - **It acts on one workspace at a time**, the one the panel was launched
 //!   on, resolved once ([`PanelBackend::launch`]), until it is switched to
-//!   another ([`PanelBackend::switch`]), and only to one core lists
+//!   another ([`Backend::switch`]), and only to one core lists
 //!   ([`Query::Workspaces`]): a workspace this machine knows, or the
 //!   launch's. Each line it runs names it with `-W`, so a change made
 //!   meanwhile elsewhere on the disk cannot send a line to another, and a
@@ -170,7 +170,7 @@ pub enum Query {
     /// those this machine knows and the one it was launched on, each with
     /// whether it is the one in use, the launch's, the rule it is chosen by
     /// once switched to, and whether a switch to it is offered; what
-    /// [`PanelBackend::switch`] is held to.
+    /// [`Backend::switch`] is held to.
     ///
     /// A query of its own rather than a part of the snapshot: which one the
     /// panel was launched on is the launch's, and a snapshot says only what
@@ -436,7 +436,7 @@ pub struct PanelBackend {
     /// always switch back to, by the rule that chose it.
     launch: Pin,
     /// The workspace it acts on now: the launch's, until a switch
-    /// ([`switch`](Self::switch)). Shared by its clones, and read once by
+    /// ([`Backend::switch`]). Shared by its clones, and read once by
     /// each query, preview and run, so none of them meets two.
     pin: Arc<RwLock<Pin>>,
     /// Where to look for workspaces, as the launch decided it: its home and
@@ -485,32 +485,6 @@ impl PanelBackend {
     /// The root of the workspace it acts on now.
     pub fn root(&self) -> PathBuf {
         self.pin().root
-    }
-
-    /// Switch to the workspace `to` names, from now on: one the answer to
-    /// [`Query::Workspaces`] lists, as it is listed when the switch arrives,
-    /// opened and never made ([`policy::switched`]); and answer with its
-    /// row as that list then has it. Nothing is switched when it is
-    /// refused.
-    ///
-    /// What every query, preview and run after it acts on, and what each
-    /// line they run names with `-W`: the launch's home, agent homes and
-    /// all else stay as the launch decided them. The rule it is chosen by
-    /// is the list's, the launch's for the launch's and `-W` for every
-    /// other, which the snapshot then says.
-    pub fn switch(&self, to: &Switch) -> Result<serde_json::Value, Refusal> {
-        let in_use = self.pin().opened_or_not()?;
-        let listed = known::switchable(self.lookup.home.as_deref(), &self.launched(), &in_use);
-        let (workspace, reason) =
-            policy::switched(&listed, &to.path).map_err(|error| refused(error.code(), error))?;
-        *self.pin.write().unwrap_or_else(PoisonError::into_inner) = Pin {
-            root: workspace.root().to_path_buf(),
-            reason,
-        };
-        let row = known::switchable(self.lookup.home.as_deref(), &self.launched(), &workspace)
-            .into_iter()
-            .find(|row| row.workspace.in_use);
-        Ok(serde_json::to_value(row).expect("a row serializes"))
     }
 
     /// The workspace it acts on now, and why.
@@ -617,6 +591,7 @@ impl Backend for PanelBackend {
     type Query = Query;
     type Task = Task;
     type Outcome = Outcome;
+    type Switch = Switch;
 
     fn query(&self, query: Query) -> Result<serde_json::Value, Refusal> {
         let pin = self.pin();
@@ -790,6 +765,32 @@ impl Backend for PanelBackend {
             ok: runs.iter().all(|run| run.ok),
             runs,
         })
+    }
+
+    /// Switch to the workspace `to` names, from now on: one the answer to
+    /// [`Query::Workspaces`] lists, as it is listed when the switch arrives,
+    /// opened and never made ([`policy::switched`]); and answer with its
+    /// row as that list then has it. Nothing is switched when it is
+    /// refused.
+    ///
+    /// What every query, preview and run after it acts on, and what each
+    /// line they run names with `-W`: the launch's home, agent homes and
+    /// all else stay as the launch decided them. The rule it is chosen by
+    /// is the list's, the launch's for the launch's and `-W` for every
+    /// other, which the snapshot then says.
+    fn switch(&self, to: Switch) -> Result<serde_json::Value, Refusal> {
+        let in_use = self.pin().opened_or_not()?;
+        let listed = known::switchable(self.lookup.home.as_deref(), &self.launched(), &in_use);
+        let (workspace, reason) =
+            policy::switched(&listed, &to.path).map_err(|error| refused(error.code(), error))?;
+        *self.pin.write().unwrap_or_else(PoisonError::into_inner) = Pin {
+            root: workspace.root().to_path_buf(),
+            reason,
+        };
+        let row = known::switchable(self.lookup.home.as_deref(), &self.launched(), &workspace)
+            .into_iter()
+            .find(|row| row.workspace.in_use);
+        Ok(serde_json::to_value(row).expect("a row serializes"))
     }
 
     /// Every path core names for a snapshot of the workspace

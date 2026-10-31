@@ -20,12 +20,12 @@ use crate::{Backend, Refusal};
 /// What every handler under `/api` shares.
 pub(crate) struct Api<B: Backend> {
     pub(crate) backend: Arc<B>,
-    pub(crate) writer: Writer<B::Task>,
+    pub(crate) writer: Writer<B>,
     pub(crate) transcript: Transcript,
     pub(crate) events: Events,
-    /// Held for as long as the routes are, and dropped with them, which
-    /// stops it: nothing reads it.
-    pub(crate) _watcher: Watcher,
+    /// Held for as long as the routes are, and by the writer's thread, which
+    /// has it watch anew after a switch; dropped with both, which stops it.
+    pub(crate) _watcher: Arc<Watcher>,
 }
 
 /// `POST /api/query`: a read, answered by the backend.
@@ -88,6 +88,28 @@ pub(crate) async fn commands<B: Backend>(
     };
     match api.writer.run(task).await {
         Ok(Ok(entry)) => Json(entry).into_response(),
+        Ok(Err(refusal)) => refused_by(refusal),
+        Err(message) => error(StatusCode::INTERNAL_SERVER_ERROR, &message),
+    }
+}
+
+/// `POST /api/switch`: act on what the body names from now on, once every
+/// task that arrived before it has run, and say what that is; or, when the
+/// backend refused it, why nothing changed.
+///
+/// On the writer thread, as a run is, so it never lands while a task runs.
+/// Nothing is kept in the transcript, which holds runs to replay: a switch
+/// is no command, and every line the backend runs names what it acts on.
+pub(crate) async fn switch<B: Backend>(
+    State(api): State<Arc<Api<B>>>,
+    body: Result<Json<B::Switch>, JsonRejection>,
+) -> Response {
+    let to = match body {
+        Ok(Json(to)) => to,
+        Err(rejection) => return refused(rejection),
+    };
+    match api.writer.switch(to).await {
+        Ok(Ok(answer)) => Json(answer).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
         Err(message) => error(StatusCode::INTERNAL_SERVER_ERROR, &message),
     }

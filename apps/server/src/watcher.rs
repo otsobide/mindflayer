@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::Duration;
 
@@ -50,9 +50,17 @@ pub const DEBOUNCE: Duration = Duration::from_millis(300);
 ///   [`Event::Unwatched`], the rest kept, and tried again with the next
 ///   change; never a failure of the server. The system's limit on watches
 ///   is the usual one.
+/// - **Asked for again on demand** ([`again`](Self::again)), when what the
+///   backend names changed with no change on disk to say so: it acts on
+///   another workspace since, and the paths of the one before are dropped.
 pub struct Watcher {
-    /// What stops the thread, which holds everything else.
-    stop: Option<mpsc::Sender<Message>>,
+    /// What to watch, asked again after every change and on demand.
+    paths: Arc<dyn Fn() -> Vec<Watched> + Send + Sync>,
+    events: Events,
+    /// What reaches the thread, which holds everything else; none while
+    /// there is no thread, the list having been empty or the system having
+    /// given no watcher.
+    thread: Mutex<Option<mpsc::Sender<Message>>>,
 }
 
 impl Watcher {
@@ -62,52 +70,96 @@ impl Watcher {
     /// The first watches are set before this returns, so a change made as
     /// soon as it has is told. A list with nothing in it costs no watcher
     /// at all, and is said to be watched.
-    pub fn start(paths: impl Fn() -> Vec<Watched> + Send + 'static, events: Events) -> Watcher {
-        let unwatched = |events: &Events, reason: String| {
-            events.publish(Event::Unwatched { reason });
-            Watcher { stop: None }
+    pub fn start(
+        paths: impl Fn() -> Vec<Watched> + Send + Sync + 'static,
+        events: Events,
+    ) -> Watcher {
+        let watcher = Watcher {
+            paths: Arc::new(paths),
+            events,
+            thread: Mutex::new(None),
         };
-        let watched = paths();
+        let watched = (watcher.paths)();
         if watched.is_empty() {
-            events.publish(Event::Watching);
-            return Watcher { stop: None };
+            watcher.events.publish(Event::Watching);
+        } else {
+            *watcher.lock() = watcher.spawn(&watched);
         }
-        let (stop, messages) = mpsc::channel();
-        let debouncer = match new_debouncer(DEBOUNCE, None, Handler(stop.clone())) {
-            Ok(debouncer) => debouncer,
-            Err(error) => return unwatched(&events, format!("nothing can be watched: {error}")),
+        watcher
+    }
+
+    /// Ask for the list again and watch what it names now, dropping every
+    /// watch it no longer asks for, and return once that is done: for a
+    /// backend that acts on something else since, which no change on disk
+    /// says, so whatever the panel reads next, every change to what it
+    /// reads is watched for.
+    ///
+    /// Started now, as at first, when nothing was watched before: the list
+    /// was empty then, or the system gave no watcher, which is tried again.
+    pub fn again(&self) {
+        let mut thread = self.lock();
+        if let Some(sender) = thread.as_ref() {
+            let (done, waited) = mpsc::channel();
+            if sender.send(Message::Again(done)).is_ok() && waited.recv().is_ok() {
+                return;
+            }
+        }
+        let watched = (self.paths)();
+        if !watched.is_empty() {
+            *thread = self.spawn(&watched);
+        }
+    }
+
+    /// The thread that watches `watched`, its first watches set, and what
+    /// reaches it; or none, said, when the system gives no watcher.
+    fn spawn(&self, watched: &[Watched]) -> Option<mpsc::Sender<Message>> {
+        let unwatched = |reason: String| {
+            self.events.publish(Event::Unwatched { reason });
+            None
         };
+        let (sender, messages) = mpsc::channel();
+        let debouncer = match new_debouncer(DEBOUNCE, None, Handler(sender.clone())) {
+            Ok(debouncer) => debouncer,
+            Err(error) => return unwatched(format!("nothing can be watched: {error}")),
+        };
+        let paths = Arc::clone(&self.paths);
         let mut state = State {
             watches: debouncer,
-            paths: Box::new(paths),
+            paths: Box::new(move || paths()),
             plan: Plan::default(),
             watched: BTreeSet::new(),
-            events: events.clone(),
+            events: self.events.clone(),
             said: None,
         };
-        state.apply(&watched, &[]);
+        state.apply(watched, &[]);
         let spawned = thread::Builder::new()
             .name(String::from("mindflayer-watch"))
             .spawn(move || state.run(&messages));
         match spawned {
-            Ok(_) => Watcher { stop: Some(stop) },
-            Err(error) => unwatched(&events, format!("nothing can be watched: {error}")),
+            Ok(_) => Some(sender),
+            Err(error) => unwatched(format!("nothing can be watched: {error}")),
         }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Option<mpsc::Sender<Message>>> {
+        self.thread.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
 impl Drop for Watcher {
     fn drop(&mut self) {
-        if let Some(stop) = &self.stop {
+        if let Some(stop) = self.lock().as_ref() {
             let _ = stop.send(Message::Stop);
         }
     }
 }
 
-/// What the watcher's thread is handed: what the debouncer took in, or the
-/// word to stop.
+/// What the watcher's thread is handed: what the debouncer took in, the
+/// word to ask for the list again, with where to say it has, or the word
+/// to stop.
 enum Message {
     Changes(DebounceEventResult),
+    Again(mpsc::Sender<()>),
     Stop,
 }
 
@@ -160,12 +212,19 @@ impl<W: Watches> State<W> {
     fn run(mut self, messages: &mpsc::Receiver<Message>) {
         // The debouncer holds a sender, so the channel stays open as long as
         // this does: only `Stop` ends it.
-        while let Ok(Message::Changes(changes)) = messages.recv() {
-            match changes {
-                Ok(changes) => self.changed(&changes),
+        loop {
+            match messages.recv() {
+                Ok(Message::Changes(Ok(changes))) => self.changed(&changes),
                 // Its errors say events may have been lost, which only asking
                 // for everything makes good.
-                Err(_) => self.changed_everywhere(),
+                Ok(Message::Changes(Err(_))) => self.changed_everywhere(),
+                // Nothing changed on disk, so nothing is told but how things
+                // are watched, when that changed.
+                Ok(Message::Again(done)) => {
+                    self.again(&[]);
+                    let _ = done.send(());
+                }
+                Ok(Message::Stop) | Err(_) => return,
             }
         }
     }

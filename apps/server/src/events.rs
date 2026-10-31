@@ -36,6 +36,14 @@ pub enum Event {
     CommandStarted { lines: Vec<String> },
     /// They stopped, however that went: the reply to the run says how.
     CommandFinished { lines: Vec<String> },
+    /// The backend acts on something else since ([`Backend::switch`]),
+    /// and what it names is watched: everything is to be asked for again,
+    /// and nothing shown before kept, since it was of what it acted on
+    /// before. Told on the writer thread, once the switch is taken, to
+    /// every subscriber, the tab that asked for it among them.
+    ///
+    /// [`Backend::switch`]: crate::Backend::switch
+    Switched,
     /// The subscriber may have missed something: it has just connected, or
     /// it fell behind. Everything is to be asked for again.
     Resync,
