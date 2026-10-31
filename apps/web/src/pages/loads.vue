@@ -43,7 +43,9 @@ function offered(snapshot: Snapshot, load: LoadedWorkspace): Offered[] {
 
 /**
  * How many projects `known` links, and how many of those open none, both
- * as core counts them, said as `flayer workspaces` says them.
+ * as core counts them, in figures as the page gives its other counts ("2 to
+ * install"), not in `flayer workspaces`' words ("no projects; the default
+ * one"), whose second half the badges beside it say.
  */
 function links(known: KnownHere): string {
   const projects = `${known.projects} project${known.projects === 1 ? '' : 's'}`
