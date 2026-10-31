@@ -1807,8 +1807,9 @@ a script to read; what it prints once it stops (below) follows it there.
 be opened, as on a machine with no display, is a warning, not a failure.
 `mind ui` is the same command from inside a project. Either serves the
 workspace a command run there would use, decided once as it starts, from
-`-C`, `--home`, `-W` and the agent homes: nothing the browser sends changes
-which one.
+`-C`, `--home`, `-W` and the agent homes, until you switch to another this
+machine knows from the header (below): nothing else the browser sends
+changes which one.
 
 It listens on 127.0.0.1 only, on a port the system picks, or the one `--port`
 names. The link carries a token made for this launch, which the browser
@@ -1829,14 +1830,16 @@ prints every command that changed something, with what each said, as the
 TUI does when it closes:
 
 ```
-$ flayer install -p /home/you/Projects/collapse skill:commit-style
+$ flayer -W /home/you/Projects install -p /home/you/Projects/collapse skill:commit-style
 installed commit-style into collapse, from workspace
 ```
 
 **Every change is previewed first.** Whatever you ask the panel to change,
 it asks the server what that is before anything runs, and shows you the
 lines, exactly as the server will run them and as you could type them in
-the workspace's folder: nothing runs until you press Run. A line that takes
+the workspace's folder: nothing runs until you press Run. Each names the
+workspace with `-W` and its path, so it says which workspace it acts on,
+and acts on that one whatever your shell has activated. A line that takes
 something away makes that a question to confirm, saying what each line
 takes in the CLI's own words: `remove --yes`, which deletes an artifact,
 `uninstall` and `remove --everywhere`, which take installed copies out of
@@ -1855,15 +1858,17 @@ skills and rules from **Assign**, brings what is installed up to date and
 takes out what nothing offers from **Updates**, removes one of the
 library's own everywhere, its dry run first, edits, adds and renames the
 library's own, adopts a skill somebody keeps in a project's agents'
-folders, and loads and unloads other workspaces from **Loads**; everything
-else is still a command away.
+folders, loads and unloads other workspaces from **Loads**, and switches
+to another workspace from the header; everything else is still a command
+away.
 
 **The transcript**, in every page's header, lists every task the session
 ran, from this tab or any other, each line with what it printed, and
 **Copy as script** copies those lines, one to a line, exactly as they ran:
-pasted into a shell in the workspace's folder, they do it all again. What
-`flayer ui` prints when it stops is the same, but for the tasks that only
-read, such as a `validate`.
+pasted into a shell in the workspace's folder, they do it all again, each
+against the workspace it names with `-W`, the one it ran against before a
+switch or after it. What `flayer ui` prints when it stops is the same, but
+for the tasks that only read, such as a `validate`.
 
 **The overview** says which skills and rules your projects have at a
 glance. It names the workspace, where it is and how it was chosen, and counts
@@ -1977,7 +1982,7 @@ write is held to), and what `validate` would say of it once written, word
 for word as `flayer validate` then prints it. **Save** runs, shown first:
 
 ```
-$ flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review
+$ flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review
 edited skill review: ok
 ```
 
@@ -2020,6 +2025,30 @@ one that does not open, offers **Load**, `flayer load <path>`; any other is
 loaded by its absolute path, typed below, which the line refuses, saying
 why, when no workspace is there or it is this one. Each is shown first, and
 is the line the TUI's load form runs for the same workspace.
+
+**The header switches workspace.** The header of every page names the
+workspace the panel acts on and how it was chosen: `named with -W`,
+`activated`, `found above` or `default workspace`, as the TUI's header says
+it. Press it for every workspace you may switch to: those this machine
+knows ([the flayers this machine knows](#the-flayers-this-machine-knows)),
+the default first, and the one the panel was launched on, each with where
+it is, whether it is the default or the one in use, which is checked, how
+many projects it links, or why it does not open. Choose one and the panel
+acts on it from then on, without a restart: every page shows it, starting
+from its overview, and every line previewed names it with `-W`, so its
+header then says `named with -W`, but for the one it was launched on,
+which keeps how it was chosen then. Nothing is written: a switch is no
+command, so the transcript has no line for it, and each line in it still
+names the workspace it ran against. Only a workspace on that list can be
+switched to, matched by its path as listed: the server refuses any other
+path a script sends (`switch_unlisted`), and one that does not open, gone
+since the list was read, with why (`not_a_workspace`), never making it. A
+task shown in any tab is let go once the panel switched, since its lines
+name the workspace before, and so are the boxes marked on **Assign**; the
+switch waits for whatever is running to finish first. Launched with `-W`,
+the panel does not read `$MINDFLAYER_WORKSPACE`, as no command does once
+`-W` is given, so an activated workspace is listed then only if this
+machine knows it.
 
 **The shelf** lists everything gathered, filtered by kind or by name,
 summary or origin, each with the commit it was taken at, when, and its
@@ -2105,17 +2134,21 @@ what the panel draws, `{"type": "files", ...}` what one artifact holds,
 `{"type": "plan", "selection": [{"project": "alpha", "reference":
 "skill:deploy", "origin": "workspace", "wanted": true}]}` what boxes of a
 project and an offer, ticked or not, amount to: the tasks that carry them
-out, beside what clashes and what is locked, with nothing run), `POST
+out, beside what clashes and what is locked, with nothing run, and
+`{"type": "workspaces"}` what the header may switch to), `POST
 /api/commands/preview` for the lines a task is and what of them the panel
 asks you to confirm (`{"lines": [...], "confirm": [...]}`), `POST
-/api/commands` to run them, which asks nobody, `GET
+/api/commands` to run them, which asks nobody, `POST /api/switch` with
+`{"path": "/home/you/Notes"}` to switch to a workspace that list holds,
+answered with its row, `GET
 /api/transcript` for everything the session ran, and `GET /api/events` for
 what happens as it happens, as server-sent events: `resync`, to read
 everything again, first and whenever a reader fell behind; right after it
 `watching`, or `unwatched` with a `reason` when the server cannot watch
 everything, and either again whenever that changes; `changed` when something
-watched changed; and `command_started` and `command_finished` around each
-run.
+watched changed; `command_started` and `command_finished` around each
+run; and `switched` once the panel acts on another workspace, to read
+everything again.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,

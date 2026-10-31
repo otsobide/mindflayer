@@ -1852,7 +1852,9 @@ planned in core](#a-batch-is-planned-in-core)), what an update of every
 project would do (`Query::Updates`, [bringing what was installed up to
 date](#bringing-what-was-installed-up-to-date)), what core says of a draft
 about to be written (`Query::Validate`, [authoring in the
-library](#authoring-in-the-library)), and which workspace `mind`
+library](#authoring-in-the-library)), what the panel may switch to, which
+depends on where it was launched (`Query::Workspaces`, [switching
+workspace](#switching-workspace)), and which workspace `mind`
 consults from each project, which depends on the
 front end's own `-W`, activation and home, and which the TUI asks to know
 when a row's lines need `-W .` ([the TUI looks where it was
@@ -4222,13 +4224,16 @@ cannot disagree with the CLI and the TUI about any of them. What it knows is
 HTTP (routes, the token, cache headers, a log line), and none of that would
 differ between two front ends.
 
-The panel's whole API is five endpoints, the first four
+The panel's whole API is six endpoints, the first four
 [D-18](#d-18-the-panel-writes-by-running-commands) in HTTP:
 
 - `POST /api/query`: a read, answered with JSON of the backend's own shape.
 - `POST /api/commands/preview`: the command lines a task is, and what of them
   the panel has somebody confirm first, with nothing run.
 - `POST /api/commands`: run a task; the reply is its lines and its outcome.
+- `POST /api/switch`: have the backend act on something else from now on,
+  which only it can say it may; the reply is the backend's JSON for what
+  it acts on then ([switching what it acts on](#switching-what-it-acts-on)).
 - `GET /api/transcript`: every task the session ran, with what each produced.
 - `GET /api/events`: what happens as it happens, a change on disk or a run
   starting and finishing, as server-sent events ([live
@@ -4242,8 +4247,8 @@ refuses, having read it, is a 422 with the backend's code beside it,
 
 ### Generic over a backend
 
-The server is generic over a `Backend` trait whose `Query`, `Task` and
-`Outcome` are associated types. It deserializes into them, hands them over and
+The server is generic over a `Backend` trait whose `Query`, `Task`,
+`Outcome` and `Switch` are associated types. It deserializes into them, hands them over and
 serializes what comes back, without ever naming one. So the CLI can implement
 `Backend` with its own `Task` and depend on the server, while the server
 depends on no mindflayer crate at all, which `crate_test` checks through
@@ -4294,9 +4299,11 @@ waiting on the same thread.
 
 - **Queries and previews** go to tokio's blocking pool (`spawn_blocking`), as
   many at once as arrive. They only read.
-- **Runs** go to one dedicated `std::thread`, fed by a channel. A channel is
-  first in, first out, so tasks run in the order they arrived, which a lock
-  does not promise whoever waits on it. One thread means two writes never run
+- **Runs** go to one dedicated `std::thread`, fed by a channel, and so do
+  switches, each taking its turn as a task does, so a switch never lands
+  while a run is under way and a task sent after it runs after it. A
+  channel is first in, first out, so tasks run in the order they arrived,
+  which a lock does not promise whoever waits on it. One thread means two writes never run
   side by side, which is the world the commands underneath were written for:
   a CLI, where one command at a time is all there is. It orders the
   panel's own writes and nobody else's: beside a terminal or a TUI writing
@@ -4305,7 +4312,8 @@ waiting on the same thread.
   holds that thread rather than one of the pool's, so the panel goes on
   reading while it waits.
 - **The watcher** is a `std::thread` of its own, which owns the system's
-  watches and asks the backend for its list again after each change
+  watches and asks the backend for its list again after each change, and
+  after a switch, when the writer thread asks it to and waits until it has
   ([live updates](#live-updates)); notify and its debouncer keep a thread
   each beside it. None of them is tokio's, since asking for the list reads
   the disk.
@@ -4499,13 +4507,41 @@ the backend walks a task asking them (`admit::Admission`), one arm per
 variant with no wildcard, so a new task does not compile until it says what
 of it a browser may name.
 
-- **One workspace, pinned at launch.** `PanelBackend::launch` resolves the
-  workspace once, from where the panel was launched and the launch's
-  `Lookup`, as a read resolves it, and names it with `-W` to every line it
-  runs. Before the default one is made it is named by nothing, and the
-  first change makes it, by a `flayer init` of its own, as the TUI does. Any
-  other gone since launch is refused, never made again by a change. So no
-  line reaches another workspace because the disk changed after launch.
+- **One workspace at a time, pinned at launch.** `PanelBackend::launch`
+  resolves the workspace once, from where the panel was launched and the
+  launch's `Lookup`, as a read resolves it, and every line it runs names it
+  with `-W <path>` among its words (`task::naming`, right after the binary,
+  in place of the `-W .` a project consulting another workspace names),
+  so what the panel previews, the transcript keeps and `flayer ui` prints
+  once it stops says which workspace each line reached, and a line pasted
+  into a shell reaches the same one whatever that shell has activated. Its
+  other words are read from where it is typed, as any line's are: an
+  entry `unlink` takes, or the scratch file a save names, from the
+  workspace's folder, where the panel runs every line. Before the default one is made no
+  line names it, since `-W` refuses a folder with no marker: the first
+  change makes it, by a `flayer init` of its own, as the TUI does, and
+  every line after that one names it. Any other gone since it was pinned is
+  refused, never made again by a change. So no line reaches another
+  workspace because the disk changed after launch.
+- **Another workspace only by a switch to one core lists**
+  (`Query::Workspaces`, `Backend::switch`, `policy::switched`). The
+  browser names a workspace by its path as the list of what may be
+  switched to spells it, `known::switchable`: every workspace this
+  machine knows, as `flayer workspaces` lists them, and the one the panel
+  was launched on. The activated one is that one whenever there is one,
+  since an activation wins over walking up and the default, and a `-W`
+  given at launch switches the activation off, as for every command. The
+  backend reads the list again when the switch arrives and matches the
+  path character for character, so another spelling of a listed one, a
+  path through its `.mindflayer`, a relative one or one starting with a
+  dash, is refused (`switch_unlisted`) without anything opened at it; a
+  listed one that will not open, gone since, is refused with why
+  (`not_a_workspace`), never made. Nothing is switched by a refusal. Once
+  taken, the home, the agent homes and everything else stay as the launch
+  decided them, and the snapshot says the rule the list gives it: the
+  launch's for the launch's, `-W` for every other (`Explicit`), since
+  every line names it so from then on. A switch to the one in use changes
+  nothing, as a load of one loaded already changes nothing.
 - **No `-C`, `--home`, `-W` or agent home from the browser.** A task has no
   field for any of them, and no value it holds is read as an option ([every
   change is a command line](#every-change-is-a-command-line)). Each line
@@ -4517,10 +4553,11 @@ of it a browser may name.
   registry, spelled as the marker spells it and the snapshot lists it: not a
   name, which two projects can declare, nor a path the browser joined. The
   backend puts the folder the entry resolves to, absolute, in the line's one
-  `-C` (or its `-p`), and decides itself whether the line says `-W .`, so
-  that read again from the root it consults this workspace, as the TUI
-  decides for its rows: the browser's `project` or `elsewhere` is not
-  taken. An entry `unlink`, `unload` or `relink` is given must be one the
+  `-C` (or its `-p`), and the line names the workspace with `-W` as every
+  line does, so it consults this workspace wherever it is read again: the
+  browser's `project` or `elsewhere` is not taken, and the `-W .` the TUI
+  gives a row whose project consults another is named for the workspace
+  in its place. An entry `unlink`, `unload` or `relink` is given must be one the
   marker holds (`not_registered`, `not_loaded`, the workspace's own codes
   for the condition), and goes to the command as spelled, which is how those
   take one.
@@ -4626,6 +4663,37 @@ The CLI's suite (`backend_test`) drives `PanelBackend` through the trait with
 the JSON a browser would send, malicious shapes in a table, and binds no
 port; the server's own suites cover the transport over a fake backend.
 
+### Switching what it acts on
+
+A front end may keep its backend on one thing at a time and let the panel
+move it to another, as the CLI's keeps one workspace and lets the header
+switch it ([what a browser may name](#what-a-browser-may-name)). The trait
+says so generically: a fourth associated type, `Switch`, which the server
+deserializes `POST /api/switch` into and hands to `Backend::switch`, whose
+answer goes back as the backend's JSON, or a `Refusal`, sent as a 422.
+Which values may be named, and what each means, are the front end's, as a
+task's are: the server knows no workspace, and only carries the request.
+
+It is carried to the backend on the writer thread, behind every run sent
+before it, so it never lands while a line is running, and a task sent after
+it runs against what it switched to. Once it is taken, the writer thread
+has the watcher ask the backend for its paths again and waits until it has
+(`Watcher::again`), which drops every watch the backend no longer names,
+and only then tells every subscriber `switched` ([live
+updates](#live-updates)): so whatever a tab reads on hearing it, a change to
+it is watched for. A backend that panics while it switches may have
+switched before it did, so it is told then too, and the thread lives on; a
+refusal switched nothing, and tells nothing.
+
+A switch is no run: it is kept in no transcript, which holds what can be
+replayed, and every line the CLI's backend runs names its workspace with
+`-W`, so the transcript stays true across a switch without one. A task
+that switches was the other way, which would have put a run with no lines
+in the transcript, and left the server to learn to watch anew after one
+task among the rest. A body of JSON rather than a fourth type would have
+spared the fake backend one, and left the server's suites nothing typed to
+carry.
+
 ### Live updates
 
 The panel shows a change made from a terminal, the TUI or an editor without
@@ -4686,7 +4754,10 @@ project is watched for its marker coming back.
   or renamed away from a parent it watches, and one renamed back within the
   debounce is where it was, with nothing below it watched until each is set
   again. The watches are set before the change is told, so whatever the
-  panel reads on hearing it, any change after it is watched for.
+  panel reads on hearing it, any change after it is watched for. And after
+  a switch, which no change on disk says, with every watch of the paths
+  before dropped, and a watcher started then if the backend named nothing
+  before.
 - **Nothing a read does.** A file opened or closed without a write is no
   change, or a snapshot reading a watched file would set off the next
   snapshot, without end. For the same reason the ledger is named by its
@@ -4721,6 +4792,9 @@ one `data:` line of JSON each, tagged by `type` as a task is:
   the writer thread once its preview passed and once it stopped, however it
   stopped, a refusal or a panic included, the finish once the run is in the
   transcript;
+- `switched`: the backend acts on something else since, from this tab or
+  another, and what it names now is watched; everything is to be read
+  again, and nothing shown before kept;
 - `resync`, first on every stream and again for one that fell behind: the
   channel keeps 64 events (`CAPACITY`) for a subscriber that has not read
   them, and one further behind is told to ask for everything again rather
@@ -4830,7 +4904,8 @@ the same command reached from a project. The workspace is resolved once, as
 the command starts, from its `-C`, `--home`, `-W` and agent homes
 (`PanelBackend::launch`), so one that cannot be used fails the command as
 any would, before anything listens, and nothing the browser sends later
-changes it. The server binds 127.0.0.1 on a port the system picks, or the
+changes it but a switch to one core lists, which keeps everything else the
+launch decided. The server binds 127.0.0.1 on a port the system picks, or the
 one `--port` names, and a port somebody holds fails the command
 (`panel_unbound`) rather than move to another.
 
@@ -4915,8 +4990,10 @@ projects, changing a project's agents and share mode and migrating one an
 older marker marks, and shows a transcript of every run (#76, #77, [its
 changes](#its-changes)). It edits, adds and renames the library's own, and
 adopts somebody's skill from a project's page, judged by core as they are
-typed ([authoring in the library](#authoring-in-the-library), #82), and
-loads and unloads other workspaces from a page of its own (#83).
+typed ([authoring in the library](#authoring-in-the-library), #82),
+loads and unloads other workspaces from a page of its own (#83), and
+switches to another workspace this machine knows from the header of every
+page ([switching workspace](#switching-workspace), #84).
 
 ### One way out: the transport
 
@@ -5548,6 +5625,50 @@ core says of them, never by a rule of the panel's (#82).
   in core's words, for whatever core does not adopt, a rule among them.
   Each goes to the page of the name it then has.
 
+### Switching workspace
+
+The header of every page names the workspace in use and the rule that
+chose it, in the TUI's words for `Reason` (`named with -W`, `activated`,
+`found above`, `default workspace`), from the snapshot's `workspace`
+(`WorkspaceSwitcher.vue`). It opens a menu of what the panel may switch to,
+the backend's `Query::Workspaces`, core's `known::switchable`, asked for
+each time it opens (`src/api/workspaces.ts`) rather than with the snapshot:
+which one the panel was launched on is the launch's, and a snapshot is of a
+workspace, the same whoever reads it. Each row is an item checked for the
+one in use, saying in words where it is, whether it is the default, the one
+launched on and by which rule, how many projects it links, or why it does
+not open; one core offers no switch to (`switchable`), the one in use, one
+that does not open and one whose path is no word of a command line, cannot
+be chosen. So a state is said by the check, the words and whether it can be
+chosen, never by colour.
+
+A choice is sent by its path as the list spells it (`Transport.switch`,
+`POST /api/switch`), and a refusal, `switch_unlisted` for a list read
+before it changed or `not_a_workspace` for one gone since, is a toast with
+its code and changes nothing. The server tells every tab `switched` once it
+is taken, and each lets go of the workspace before then: it resets every
+answer rather than marking it stale (`src/api/live.ts`), so no view draws
+one workspace's projects under the other's name while the new ones come,
+lets a task it shows go, whose lines name the workspace before with `-W`
+(the runner, `src/api/commands.ts`), and forgets the boxes marked on the
+matrix (`src/stores/marks.ts`), which may name projects the next one has
+not. The tab that asked waits for that word as a run waits for its finish
+(`settleSwitch`, beside `settle`), letting go itself after `PATIENCE`
+without it, so it lets go once rather than once for the answer and again
+for the word, then draws the overview of the new workspace; a page on
+another tab stays where it is, and draws what the new workspace has
+there. The menu is drawn where the switcher is rather than
+at the end of the body, so it is inside the page's landmark, which axe asks
+of everything a page holds outside a dialog. The switcher cannot be opened
+while a task is shown or runs.
+
+After a switch, the rule is `-W` for every workspace but the launch's,
+which keeps the rule that chose it at launch: every line the panel runs
+names the workspace so from then on, and nothing else chose it. A line
+the panel previews, the transcript it keeps and the lines `flayer ui`
+prints once it stops each name the workspace they ran against, so the
+transcript stays true across a switch and needs no entry for one.
+
 ### Its fixtures come from Rust
 
 The views' tests render the snapshots in `apps/web/tests/fixtures`, which a
@@ -5781,6 +5902,15 @@ the driver holds the run's with (`look`, in `e2e/environment.ts`), so a
 load that wrote into the default workspace would fail the test that ran
 it.
 
+`e2e/switch.spec.ts` takes the same builder, for the workspaces its home
+knows: the header has to name the workspace and say it was named with
+`-W`, as the server is launched with one, and list the default, `team` and
+the workspace, the last checked; switched to `team`, the overview has to
+draw it, the library its skill and not the workspace's, and the line a
+load previews has to name `team` with `-W`; switched back, the line has to
+name the workspace again. A switch writes nothing, which the home's look
+holds too.
+
 No page may log a violation of the CSP. Each engine fires
 `securitypolicyviolation` and words its own console messages, and a
 message the browser rather than a script logs may not reach Playwright, so
@@ -5997,7 +6127,10 @@ It hands back the workspace with the `Reason` that chose it (`Explicit`,
 workspace asks the answer rather than working it out from paths. `flayer
 which` puts it into words beside the root, and the TUI's header names it for
 every workspace it shows (`named with -W`, `activated`, `found above`,
-`default workspace`). Only for `Home` does the TUI also say there is no
+`default workspace`), as the panel's header does. A switch from the panel's
+header makes it `Explicit` for every workspace but the one the panel was
+launched on ([switching workspace](#switching-workspace)), since each line
+the panel runs names it with `-W` from then on. Only for `Home` does the TUI also say there is no
 workspace here or above: the directory home is can also be named with `-W`,
 activated, or reached walking up from below it. Which workspace a command
 changed is another question, about the workspace rather than the rule, and
@@ -6161,13 +6294,17 @@ workspace, since an unmade one has loaded nothing.
 
 The default workspace keeps a list of the others on the machine, a `known`
 array in its `flayer.toml` beside `projects` and `loaded`, so switching
-between several flayers, in the CLI and the TUI now and in the panel later
-(#84), has somewhere to read them from. `flayer workspaces` lists it, `flayer
+between several flayers, in the CLI, the TUI and the panel's header (#84),
+has somewhere to read them from. `flayer workspaces` lists it, `flayer
 workspaces forget PATH` takes one out, and `w` in the TUI runs `flayer
 workspaces` and shows what it prints, as `s` shows `flayer gather list`. What
 is known, in which order, and which one is in use are core's (`known::known`,
-fed by `resolve`), so the panel's switcher will read the answer the CLI
-prints. Its page of loads reads it already (#83), to offer loading one,
+fed by `resolve`), so the panel's switcher reads the answer the CLI prints,
+with how each stands with the panel beside it: whether it is the one the
+panel was launched on, which is listed whether anything remembers it or
+not, the rule it is chosen by once switched to, and whether a switch to it
+is offered (`known::switchable`), the list a switch is held to
+([what a browser may name](#what-a-browser-may-name)). Its page of loads reads it already (#83), to offer loading one,
 and whether the workspace on screen loads each and could load it is the
 snapshot's, beside the row the list prints (`view::KnownHere`), since it
 is of that workspace rather than of the machine.
@@ -8494,12 +8631,28 @@ just listed.
 
 ## Open questions
 
-- **A known workspace that has gone is offered nothing on the page of
-  loads.** It is listed, with why it does not open, and offers neither a
-  load, which would be refused, nor `flayer workspaces forget`, which
-  would take it off the list: forgetting changes what the machine knows
-  rather than what the workspace on screen offers, and #84's switcher,
-  which reads the same list, may be the place for it.
+- **A known workspace that has gone is offered nothing.** The page of
+  loads and the header's switcher list it, with why it does not open, and
+  offer neither a load nor a switch, which would be refused, nor `flayer
+  workspaces forget`, which would take it off the list. Forgetting changes
+  what the machine knows rather than what the workspace on screen offers,
+  and is a write to the default workspace's marker, which a task of its own
+  would carry; the switcher, whose list is the machine's, may be the place
+  for it.
+- **A task shown before a switch made in another tab.** A tab lets go of
+  the task it shows once the stream tells it `switched`, but one sent to
+  run in the moment between the switch being taken and that word arriving
+  runs against the new workspace, under lines its preview showed naming the
+  old one: the server previews it again on the writer thread, so the
+  transcript and the run's answer say what really ran, but the person
+  agreed to other lines. A preview carrying the workspace it was of, which
+  the run would be held to, would close it, at the price of the server
+  carrying one more thing it cannot read.
+- **The activated workspace beside a `-W` at launch.** A panel launched
+  with `-W` does not read `$MINDFLAYER_WORKSPACE`, as no command does once
+  `-W` is given, so the shell's activated workspace is listed among what it
+  may switch to only when this machine knows it. Listing it would mean
+  reading the variable the launch was told to pass over.
 - **`mind load` is no page's.** The panel is launched on a workspace and
   loads into that one; a project's own load into the workspace above it
   (`Task::LoadHere`), which the TUI offers when it is opened on a project,
@@ -8648,8 +8801,9 @@ just listed.
   workspace's path after `-W`, and a project's page its entry, as the
   registry spells it, after `-p`, `relink` or `unlink`; one a shell would
   split, a space in it, is shown unquoted: quoting is the CLI's
-  (`task::shell`), and these name `-W`, which a task the server previews
-  never carries, so no preview could stand in for them.
+  (`task::shell`). A line the server previews names `-W` too now, quoted,
+  but these are for a shell rather than tasks the panel offers, with `<PATH>`
+  and the like in them, so no preview stands in for them.
 - **The server's replies are spelled twice.** A preview's `{lines,
   confirm}` is the server's `Preview`, a run's `{lines, outcome}` its
   transcript's `Entry`, a refusal's `{error, code}` is built with `json!` in
@@ -8826,11 +8980,11 @@ just listed.
   name would close it.
 - **Which workspace a project's lines consult is not in the snapshot.** The
   TUI asks it beside the snapshot, from its own lookup, to know when a row's
-  lines need `-W .`, and the panel's backend asks it the same way for each
-  holder it admits (`admit::Admission`).
-  Carrying it in the snapshot would make what the snapshot says depend on
-  the front end's `-W` and activation, where now only the list of known
-  workspaces depends on its home.
+  lines need `-W .`; the panel's backend needs it no longer, since every
+  line it runs names the workspace. Carrying it in the snapshot would make
+  what the snapshot says depend on the front end's `-W` and activation,
+  where now only the list of known workspaces depends on its home, which is
+  why what the panel may switch to is a query of its own beside it.
 - **Precedence between projects.** Two projects in one workspace can declare
   the same skill name. Core returns both matches and says nothing about which
   wins, because nothing here yet has to choose. Whatever resolves it (a
