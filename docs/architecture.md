@@ -4799,11 +4799,17 @@ one `data:` line of JSON each, tagged by `type` as a task is:
   transcript;
 - `switched`: the backend acts on something else since, from this tab or
   another, and what it names now is watched; everything is to be read
-  again, and nothing shown before kept;
+  again, and nothing shown before kept. With `switches`, how many the bus
+  has told, this one counted (`Events::switched`);
 - `resync`, first on every stream and again for one that fell behind: the
   channel keeps 64 events (`CAPACITY`) for a subscriber that has not read
   them, and one further behind is told to ask for everything again rather
-  than handed a backlog;
+  than handed a backlog. With `switches` as the latest `switched` said it,
+  taken under the lock a subscription is, so a subscriber hears a switch
+  or is told its count, never neither: how a tab that missed one, its
+  stream let go while hidden, learns of it. A count rather than a word
+  that a switch was missed, which only a bus that knew what each
+  subscriber had heard could say;
 - `watching` or `unwatched` with its `reason`, after `resync` once the
   watcher has said, and again whenever that changes.
 
@@ -5669,10 +5675,18 @@ not. The tab that asked waits for that word as a run waits for its finish
 without it, so it lets go once rather than once for the answer and again
 for the word, then draws the overview of the new workspace; a page on
 another tab stays where it is, and draws what the new workspace has
-there. The menu is drawn where the switcher is rather than
-at the end of the body, so it is inside the page's landmark, which axe asks
-of everything a page holds outside a dialog. The switcher cannot be opened
-while a task is shown or runs.
+there. A tab that missed the word, its stream let go while it was hidden
+or fallen behind, learns of the switch from its next `resync`, which
+carries how many switches the server has taken (`switches`, as every
+`switched` does): a count other than the last it heard is a switch, let
+go of as on hearing the word, and a `switched` the stream still held
+behind a resync that counted it is not let go of twice. Without the
+count, a task shown in a tab hidden through a switch was still shown
+once the tab came back, under lines naming the workspace before, and Run
+ran it in the new one. The menu is drawn where the switcher is rather
+than at the end of the body, so it is inside the page's landmark, which
+axe asks of everything a page holds outside a dialog. The switcher
+cannot be opened while a task is shown or runs.
 
 After a switch, the rule is `-W` for every workspace but the launch's,
 which keeps the rule that chose it at launch: every line the panel runs
@@ -8652,12 +8666,13 @@ just listed.
   would carry; the switcher, whose list is the machine's, may be the place
   for it.
 - **A task shown before a switch made in another tab.** A tab lets go of
-  the task it shows once the stream tells it `switched`, but one sent to
-  run in the moment between the switch being taken and that word arriving
-  runs against the new workspace, under lines its preview showed naming the
-  old one: the server previews it again on the writer thread, so the
-  transcript and the run's answer say what really ran, but the person
-  agreed to other lines. A preview carrying the workspace it was of, which
+  the task it shows once the stream tells it `switched`, or, having missed
+  that, once its next `resync` counts more switches than it heard, as on
+  being shown again; but one sent to run in the moment between the switch
+  being taken and that word arriving runs against the new workspace, under
+  lines its preview showed naming the old one: the server previews it
+  again on the writer thread, so the transcript and the run's answer say
+  what really ran, but the person agreed to other lines. A preview carrying the workspace it was of, which
   the run would be held to, would close it, at the price of the server
   carrying one more thing it cannot read.
 - **The activated workspace beside a `-W` at launch.** A panel launched

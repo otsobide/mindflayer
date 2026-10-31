@@ -314,6 +314,7 @@ export function switching() {
   const sent: Switch[] = []
   const listeners: ((event: LiveEvent) => void)[] = []
   const tell = (event: LiveEvent) => [...listeners].forEach(listener => listener(event))
+  let taken = 0
   const transport = {
     query(query: Query) {
       queries.push(query)
@@ -331,7 +332,8 @@ export function switching() {
       if (to.path === fixtures.switched.to.path) {
         snapshot = fixtures.switched.snapshot
         listed = fixtures.switched.workspaces.answer
-        tell({ type: 'switched' })
+        taken += 1
+        tell({ type: 'switched', switches: taken })
         return Promise.resolve(structuredClone(fixtures.switched.answer))
       }
       if (to.path === fixtures.refused.to.path) {

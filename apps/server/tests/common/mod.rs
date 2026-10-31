@@ -459,7 +459,10 @@ pub async fn subscribe(server: &Listening, auth: Auth<'_>) -> Stream {
 /// everything, and that everything named is watched.
 pub async fn opened(server: &Listening, auth: Auth<'_>) -> Stream {
     let mut stream = subscribe(server, auth).await;
-    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "resync", "switches": 0})
+    );
     assert_eq!(stream.next().await, json!({"type": "watching"}));
     stream
 }

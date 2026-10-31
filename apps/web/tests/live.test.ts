@@ -106,7 +106,7 @@ describe('live updates', () => {
     expect(asked(queries, 'snapshot')).toBe(before)
     await tell({ type: 'command_finished', lines: ['flayer link beta'] })
     expect(asked(queries, 'snapshot')).toBe(before + 1)
-    await tell({ type: 'resync' })
+    await tell({ type: 'resync', switches: 0 })
     expect(asked(queries, 'snapshot')).toBe(before + 2)
   })
 
@@ -141,7 +141,7 @@ describe('live updates', () => {
     for (const event of [
       { type: 'changed', scopes: [workspace] },
       { type: 'command_finished', lines: ['flayer link beta'] },
-      { type: 'resync' }
+      { type: 'resync', switches: 0 }
     ] as LiveEvent[]) {
       for (const key of [['snapshot'], files, scan]) {
         client.setQueryData(key, {})
@@ -163,7 +163,7 @@ describe('live updates', () => {
       [{ type: 'changed', scopes: [workspace] }, false],
       [{ type: 'command_started', lines: ['flayer link beta'] }, false],
       [{ type: 'command_finished', lines: ['flayer link beta'] }, true],
-      [{ type: 'resync' }, true]
+      [{ type: 'resync', switches: 0 }, true]
     ] as [LiveEvent, boolean][]) {
       client.setQueryData(['transcript'], [])
       await tell(event)
@@ -305,7 +305,7 @@ describe('a switch the panel sends', () => {
     await flushPromises()
     expect(over).toBe(false)
     expect(live.switches).toBe(0)
-    await tell({ type: 'switched' })
+    await tell({ type: 'switched', switches: 1 })
 
     expect(await settled).toBe(SWITCHED)
     expect(live.switches).toBe(1)
@@ -320,7 +320,7 @@ describe('a switch the panel sends', () => {
     const { live, settleSwitch, stop } = listen(transport, client, document, 60_000)
 
     const settled = settleSwitch(async () => {
-      await tell({ type: 'switched' })
+      await tell({ type: 'switched', switches: 1 })
       return SWITCHED
     })
 
@@ -354,6 +354,59 @@ describe('a switch the panel sends', () => {
     await new Promise(resolve => setTimeout(resolve, 20))
     expect(live.switches).toBe(0)
     expect(client.getQueryData(['snapshot'])).toEqual({ workspace: 'before' })
+    stop()
+  })
+})
+
+describe('a switch the stream did not tell', () => {
+  it('is let go of once the tab is shown again, by the count its resync carries', async () => {
+    const { subscriptions, transport, tell } = streaming()
+    const client = createQueryClient()
+    const { live, stop } = listen(transport, client)
+    await tell({ type: 'resync', switches: 2 })
+    client.setQueryData(['snapshot'], { workspace: 'before' })
+
+    shown('hidden')
+    // Another tab switches, told on every stream open: none of this tab's.
+    await tell({ type: 'switched', switches: 3 })
+    expect(live.switches).toBe(0)
+    shown('visible')
+    await tell({ type: 'resync', switches: 3 })
+
+    expect(subscriptions).toEqual({ taken: 2, let: 1 })
+    expect(live.switches).toBe(1)
+    expect(client.getQueryData(['snapshot'])).toBeUndefined()
+    stop()
+  })
+
+  it('is let go of once, when the stream still held it behind the resync that counted it', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { live, stop } = listen(transport, client)
+    await tell({ type: 'resync', switches: 0 })
+
+    // Fallen behind past a switch, then told what the stream still held.
+    await tell({ type: 'resync', switches: 1 })
+    await tell({ type: 'switched', switches: 1 })
+    expect(live.switches).toBe(1)
+    await tell({ type: 'switched', switches: 2 })
+
+    expect(live.switches).toBe(2)
+    stop()
+  })
+
+  it('is no switch when the resync counts what the tab heard: only marked stale', async () => {
+    const { transport, tell } = streaming()
+    const client = createQueryClient()
+    const { live, stop } = listen(transport, client)
+    await tell({ type: 'resync', switches: 1 })
+    client.setQueryData(['snapshot'], { workspace: 'same' })
+
+    await tell({ type: 'resync', switches: 1 })
+
+    expect(live.switches).toBe(0)
+    expect(client.getQueryData(['snapshot'])).toEqual({ workspace: 'same' })
+    expect(client.getQueryState(['snapshot'])?.isInvalidated).toBe(true)
     stop()
   })
 })

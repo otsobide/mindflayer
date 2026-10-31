@@ -137,7 +137,7 @@ describe('the page of what could be linked', () => {
     const { page } = await render(`/discover?root=${encodeURIComponent(ROOT)}`, transport)
 
     tell({ type: 'changed', scopes: [{ type: 'workspace' }] })
-    tell({ type: 'resync' })
+    tell({ type: 'resync', switches: 0 })
     await flushPromises()
     expect(scansAsked(queries)).toHaveLength(1)
 

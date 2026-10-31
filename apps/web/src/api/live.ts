@@ -161,6 +161,11 @@ export function listen(transport: Transport, client: QueryClient, page: Document
   const waiting = new Set<(lines: string[], asked: Promise<void>) => void>()
   /** Each switch waiting on the word it was taken, told what letting go set off. */
   const switching = new Set<(asked: Promise<void>) => void>()
+  /**
+   * How many switches the server had taken as the stream last said, by the
+   * count each `switched` and `resync` carries: none before it first says.
+   */
+  let heard: number | undefined
 
   function told(event: LiveEvent) {
     switch (event.type) {
@@ -177,16 +182,29 @@ export function listen(transport: Transport, client: QueryClient, page: Document
         }
         break
       }
-      case 'resync':
-        void markRan(client)
-        break
-      case 'switched': {
-        const asked = switched()
-        for (const taken of switching) {
-          taken(asked)
+      // A count other than the last one heard is a switch this tab missed:
+      // its stream was let go while it was hidden, or fell behind. Let go
+      // of the workspace before as on hearing `switched`, or a task it
+      // shows would be run in the new one under lines naming the old one,
+      // for as long as it stayed hidden.
+      case 'resync': {
+        const missed = heard !== undefined && event.switches !== heard
+        heard = event.switches
+        if (missed) {
+          tellSwitched()
+        } else {
+          void markRan(client)
         }
         break
       }
+      // One a resync counted already is not let go of twice: one the
+      // stream still held behind the resync of a tab that fell behind.
+      case 'switched':
+        if (heard === undefined || event.switches > heard) {
+          heard = event.switches
+          tellSwitched()
+        }
+        break
       case 'command_started':
         break
       case 'watching':
@@ -197,6 +215,15 @@ export function listen(transport: Transport, client: QueryClient, page: Document
         live.state = 'unwatched'
         live.reason = event.reason
         break
+    }
+  }
+
+  // Let go of the workspace before, as `switched` says, and tell every
+  // switch this tab waits on that it was taken.
+  function tellSwitched() {
+    const asked = switched()
+    for (const taken of switching) {
+      taken(asked)
     }
   }
 

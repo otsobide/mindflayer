@@ -34,7 +34,10 @@ async fn the_stream_takes_the_cookie_and_starts_by_asking_for_everything() {
     assert_eq!(stream.header("content-type"), Some("text/event-stream"));
     assert_eq!(stream.header("cache-control"), Some("no-cache"));
     assert!(stream.header("content-security-policy").is_some());
-    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "resync", "switches": 0})
+    );
     // The fake names nothing to watch, which is everything watched.
     assert_eq!(stream.next().await, json!({"type": "watching"}));
 }
@@ -52,10 +55,16 @@ async fn a_stream_that_falls_behind_is_told_to_ask_for_everything_again() {
         });
     }
 
-    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "resync", "switches": 0})
+    );
     assert_eq!(stream.next().await, json!({"type": "watching"}));
     // What it missed, then how things are watched, which may be among it.
-    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "resync", "switches": 0})
+    );
     assert_eq!(stream.next().await, json!({"type": "watching"}));
     // Then the latest the bus kept, in order.
     assert_eq!(
@@ -160,10 +169,13 @@ async fn a_task_whose_lines_are_refused_is_told_to_nobody() {
         json!({ "name": "unlink -rf", "refuse": true }),
     )
     .await;
-    server.events().publish(Event::Resync);
+    server.events().publish(Event::Resync { switches: 0 });
 
     assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "resync", "switches": 0})
+    );
 }
 
 /// A panel showing a run under way waits for its end: one the backend

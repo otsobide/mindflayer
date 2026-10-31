@@ -2048,7 +2048,8 @@ switched to, matched by its path as listed: the server refuses any other
 path a script sends (`switch_unlisted`), and one that does not open, gone
 since the list was read, with why (`not_a_workspace`), never making it. A
 task shown in any tab is let go once the panel switched, since its lines
-name the workspace before, and so are the boxes marked on **Assign**; the
+name the workspace before, in a tab hidden then as soon as it is shown
+again, and so are the boxes marked on **Assign**; the
 switch waits for whatever is running to finish first. Launched with `-W`,
 the panel does not read `$MINDFLAYER_WORKSPACE`, as no command does once
 `-W` is given, so an activated workspace is listed then only if this

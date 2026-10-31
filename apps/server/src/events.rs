@@ -40,13 +40,24 @@ pub enum Event {
     /// and what it names is watched: everything is to be asked for again,
     /// and nothing shown before kept, since it was of what it acted on
     /// before. Told on the writer thread, once the switch is taken, to
-    /// every subscriber, the tab that asked for it among them.
+    /// every subscriber, the tab that asked for it among them
+    /// ([`Events::switched`]), with how many switches were taken since the
+    /// bus was made, this one counted.
     ///
     /// [`Backend::switch`]: crate::Backend::switch
-    Switched,
+    Switched { switches: u64 },
     /// The subscriber may have missed something: it has just connected, or
     /// it fell behind. Everything is to be asked for again.
-    Resync,
+    ///
+    /// With how many switches were taken since the bus was made, as the
+    /// latest [`Switched`](Event::Switched) said: a subscriber that missed
+    /// one, a tab whose stream was let go while it was hidden or one that
+    /// fell behind, learns it from a count other than the one it heard last,
+    /// and lets go of what it shows of what the backend acted on before as
+    /// it would on hearing `Switched`. A count rather than a word that a
+    /// switch happened, which only a bus that knew what each subscriber had
+    /// heard could say.
+    Resync { switches: u64 },
     /// Every path the backend named is watched, so a change to one arrives
     /// as [`Changed`](Event::Changed).
     Watching,
@@ -89,7 +100,28 @@ struct State {
     /// The latest [`Event::Watching`] or [`Event::Unwatched`]; none until
     /// something watches.
     watch: Option<Event>,
+    /// How many switches were told, as the latest [`Event::Switched`] says:
+    /// what every [`Event::Resync`] carries.
+    switches: u64,
     closed: bool,
+}
+
+impl State {
+    /// Send `event`, keeping what a subscriber is told on its own beside
+    /// it; nothing once the bus is closed.
+    fn send(&mut self, sender: &broadcast::Sender<Message>, event: Event) {
+        if self.closed {
+            return;
+        }
+        if event.is_watch() {
+            self.watch = Some(event.clone());
+        }
+        if let Event::Switched { switches } = event {
+            self.switches = switches;
+        }
+        // An error only says nobody is listening, which is no failure.
+        let _ = sender.send(Message::Event(event));
+    }
 }
 
 impl Default for Events {
@@ -111,17 +143,19 @@ impl Events {
 
     /// Tell every subscriber, if there is one; nothing once the bus is
     /// closed. How things are watched is kept besides, for whoever
-    /// subscribes next.
+    /// subscribes next, and so is the count a switch carries.
     pub fn publish(&self, event: Event) {
+        self.lock().send(&self.inner.sender, event);
+    }
+
+    /// Tell every subscriber the backend acts on something else since
+    /// ([`Event::Switched`]), counted one more than the switch before it,
+    /// under the lock a subscription is taken under, so a subscriber hears
+    /// the switch or is told its count by [`Event::Resync`], never neither.
+    pub fn switched(&self) {
         let mut state = self.lock();
-        if state.closed {
-            return;
-        }
-        if event.is_watch() {
-            state.watch = Some(event.clone());
-        }
-        // An error only says nobody is listening, which is no failure.
-        let _ = self.inner.sender.send(Message::Event(event));
+        let switches = state.switches + 1;
+        state.send(&self.inner.sender, Event::Switched { switches });
     }
 
     /// Hear every event from now on, after [`Event::Resync`], since
@@ -132,7 +166,9 @@ impl Events {
         let receiver = self.inner.sender.subscribe();
         let mut pending = VecDeque::new();
         if !state.closed {
-            pending.push_back(Event::Resync);
+            pending.push_back(Event::Resync {
+                switches: state.switches,
+            });
             pending.extend(state.watch.clone());
         }
         Subscription {
@@ -159,9 +195,11 @@ impl Events {
             .unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// How things are watched now, if anything has said.
-    fn watch(&self) -> Option<Event> {
-        self.lock().watch.clone()
+    /// How things are watched now, if anything has said, and how many
+    /// switches were told.
+    fn now(&self) -> (Option<Event>, u64) {
+        let state = self.lock();
+        (state.watch.clone(), state.switches)
     }
 }
 
@@ -178,9 +216,10 @@ impl Subscription {
     /// The next event, waiting for one; none once the bus is closed.
     ///
     /// One that fell behind by more than [`CAPACITY`] is told
-    /// [`Event::Resync`] in place of what it missed, and how things are
-    /// watched again, in case that was among it; then the events the
-    /// channel still holds.
+    /// [`Event::Resync`] in place of what it missed, with the count of
+    /// switches as it stands, and how things are watched again, in case
+    /// either was among it; then the events the channel still holds, a
+    /// switch among them carrying a count no higher than that one.
     pub async fn next(&mut self) -> Option<Event> {
         if let Some(event) = self.pending.pop_front() {
             return Some(event);
@@ -195,8 +234,9 @@ impl Subscription {
                 None
             }
             Err(RecvError::Lagged(_)) => {
-                self.pending.extend(self.events.watch());
-                Some(Event::Resync)
+                let (watch, switches) = self.events.now();
+                self.pending.extend(watch);
+                Some(Event::Resync { switches })
             }
         }
     }

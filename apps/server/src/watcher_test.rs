@@ -170,7 +170,7 @@ async fn told(events: &Events, subscription: &mut Subscription) -> Vec<Event> {
         if event == end {
             return seen;
         }
-        if event != Event::Resync {
+        if !matches!(event, Event::Resync { .. }) {
             seen.push(event);
         }
     }

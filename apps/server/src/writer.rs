@@ -172,7 +172,7 @@ fn switch<B: Backend>(backend: &B, to: B::Switch, watcher: &Watcher, events: &Ev
     let switched = panic::catch_unwind(AssertUnwindSafe(move || backend.switch(to)));
     if !matches!(switched, Ok(Err(_))) {
         watcher.again();
-        events.publish(Event::Switched);
+        events.switched();
     }
     switched.map_err(|_| String::from("the backend panicked while switching"))
 }

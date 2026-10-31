@@ -76,6 +76,9 @@ export interface Ran {
  * - `switched`: the server acts on another workspace since, from this tab
  *   or another, so everything is asked for again and nothing shown of the
  *   one before is kept;
+ * - each of those two with `switches`, how many switches the server has
+ *   taken since it started, by which a tab that missed one, its stream let
+ *   go while it was hidden or fallen behind, learns of it on its resync;
  * - `watching` and `unwatched`: whether everything the server was told to
  *   watch is, and why not, when a change there shows only once asked for
  *   by hand.
@@ -90,8 +93,8 @@ export type LiveEvent
   = | { type: 'changed', scopes: Holder[] }
     | { type: 'command_started', lines: string[] }
     | { type: 'command_finished', lines: string[] }
-    | { type: 'resync' }
-    | { type: 'switched' }
+    | { type: 'resync', switches: number }
+    | { type: 'switched', switches: number }
     | { type: 'watching' }
     | { type: 'unwatched', reason: string }
 

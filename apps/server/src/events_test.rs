@@ -12,6 +12,9 @@ async fn next(subscription: &mut Subscription) -> Option<Event> {
         .expect("an event, or the end, in time")
 }
 
+/// What a subscriber hears first while nothing has switched.
+const RESYNC: Event = Event::Resync { switches: 0 };
+
 fn changed(scope: &str) -> Event {
     Event::Changed {
         scopes: vec![json!(scope)],
@@ -26,7 +29,7 @@ async fn a_subscriber_is_told_to_resync_and_then_every_event_in_order() {
     events.publish(changed("one"));
     events.publish(changed("two"));
 
-    assert_eq!(next(&mut subscription).await, Some(Event::Resync));
+    assert_eq!(next(&mut subscription).await, Some(RESYNC));
     assert_eq!(next(&mut subscription).await, Some(changed("one")));
     assert_eq!(next(&mut subscription).await, Some(changed("two")));
 }
@@ -43,9 +46,9 @@ async fn a_subscriber_is_told_how_things_are_watched_once_something_has_said() {
 
     let mut after = events.subscribe();
 
-    assert_eq!(next(&mut before).await, Some(Event::Resync));
+    assert_eq!(next(&mut before).await, Some(RESYNC));
     assert_eq!(next(&mut before).await, Some(unwatched.clone()));
-    assert_eq!(next(&mut after).await, Some(Event::Resync));
+    assert_eq!(next(&mut after).await, Some(RESYNC));
     assert_eq!(next(&mut after).await, Some(unwatched));
     events.publish(Event::Watching);
     assert_eq!(next(&mut after).await, Some(Event::Watching));
@@ -56,24 +59,59 @@ async fn a_subscriber_that_falls_behind_is_told_to_resync_and_how_things_are_wat
     let events = Events::new();
     events.publish(Event::Watching);
     let mut subscription = events.subscribe();
-    assert_eq!(next(&mut subscription).await, Some(Event::Resync));
+    assert_eq!(next(&mut subscription).await, Some(RESYNC));
     assert_eq!(next(&mut subscription).await, Some(Event::Watching));
 
     for each in 0..CAPACITY + 10 {
         events.publish(changed(&each.to_string()));
     }
 
-    assert_eq!(next(&mut subscription).await, Some(Event::Resync));
+    assert_eq!(next(&mut subscription).await, Some(RESYNC));
     assert_eq!(next(&mut subscription).await, Some(Event::Watching));
     // Then what the channel still holds, the latest it kept.
     assert_eq!(next(&mut subscription).await, Some(changed("10")));
+}
+
+/// A subscriber that missed a switch, subscribing after it, or falling
+/// behind past it, learns of it from the count its resync carries, the
+/// one every switch told carries.
+#[tokio::test]
+async fn every_switch_is_counted_and_a_resync_carries_the_count() {
+    let events = Events::new();
+    let mut heard = events.subscribe();
+    assert_eq!(next(&mut heard).await, Some(RESYNC));
+
+    events.switched();
+    events.switched();
+
+    assert_eq!(
+        next(&mut heard).await,
+        Some(Event::Switched { switches: 1 })
+    );
+    assert_eq!(
+        next(&mut heard).await,
+        Some(Event::Switched { switches: 2 })
+    );
+    let mut after = events.subscribe();
+    assert_eq!(next(&mut after).await, Some(Event::Resync { switches: 2 }));
+
+    events.switched();
+    for each in 0..CAPACITY + 10 {
+        events.publish(changed(&each.to_string()));
+    }
+
+    assert_eq!(
+        next(&mut after).await,
+        Some(Event::Resync { switches: 3 }),
+        "fallen behind past the switch"
+    );
 }
 
 #[tokio::test]
 async fn closing_ends_every_subscription_and_every_one_after() {
     let events = Events::new();
     let mut subscription = events.subscribe();
-    assert_eq!(next(&mut subscription).await, Some(Event::Resync));
+    assert_eq!(next(&mut subscription).await, Some(RESYNC));
 
     events.close();
     events.publish(changed("late"));
@@ -101,7 +139,14 @@ fn each_event_is_tagged_by_its_type_in_snake_case() {
             },
             json!({"type": "command_finished", "lines": ["flayer link beta"]}),
         ),
-        (Event::Resync, json!({"type": "resync"})),
+        (
+            Event::Resync { switches: 2 },
+            json!({"type": "resync", "switches": 2}),
+        ),
+        (
+            Event::Switched { switches: 3 },
+            json!({"type": "switched", "switches": 3}),
+        ),
         (Event::Watching, json!({"type": "watching"})),
         (
             Event::Unwatched {

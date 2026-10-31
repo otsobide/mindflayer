@@ -27,10 +27,17 @@ beforeEach(() => {
 afterEach(() => {
   watching.disconnect()
   unmount()
+  shown('visible')
   expect(styles, 'a <style> the CSP would refuse').toEqual([])
 })
 
 let runner: Runner
+
+/** Show or hide the tab, as the browser does when another is chosen. */
+function shown(state: DocumentVisibilityState) {
+  Object.defineProperty(document, 'visibilityState', { value: state, configurable: true })
+  document.dispatchEvent(new Event('visibilitychange'))
+}
 
 /**
  * A page of the test's own: the switcher, and the panel's runner handed to
@@ -205,11 +212,35 @@ describe('a switch told on the stream', () => {
     expect(runner.asking.value).toBeDefined()
     const before = snapshots(queries)
 
-    tell({ type: 'switched' })
+    tell({ type: 'switched', switches: 1 })
     await flushPromises()
 
     expect(runner.asking.value).toBeUndefined()
     expect(marks.marks).toEqual([])
     expect(snapshots(queries)).toBeGreaterThan(before)
+  })
+
+  it('lets a task shown go once the tab is shown again, when it was hidden as another tab switched', async () => {
+    const [link] = commanded()
+    const { transport, tell } = commanding(fixture('workspace'), [link!])
+    const { page } = await render('/harness', transport, HARNESS)
+    const marks = page.vm.$.appContext.app.runWithContext(() => useMarks())
+    tell({ type: 'resync', switches: 0 })
+    marks.mark({ project: 'api', reference: 'skill:review', origin: 'workspace', wanted: false }, true)
+    void runner.ask(link!.task)
+    await flushPromises()
+    expect(runner.asking.value).toBeDefined()
+
+    shown('hidden')
+    tell({ type: 'switched', switches: 1 })
+    await flushPromises()
+    // Nothing heard while hidden: the task is still shown, as it was.
+    expect(runner.asking.value).toBeDefined()
+    shown('visible')
+    tell({ type: 'resync', switches: 1 })
+    await flushPromises()
+
+    expect(runner.asking.value).toBeUndefined()
+    expect(marks.marks).toEqual([])
   })
 })

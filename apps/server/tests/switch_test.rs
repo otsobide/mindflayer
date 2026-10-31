@@ -30,7 +30,35 @@ async fn a_switch_is_answered_with_what_the_backend_acts_on_and_told_to_every_su
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
     assert_eq!(reply.json(), json!({ "on": "beta" }));
     assert_eq!(*runs.lock().unwrap(), ["switch beta"]);
-    assert_eq!(stream.next().await, json!({"type": "switched"}));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "switched", "switches": 1})
+    );
+}
+
+/// A stream opened after a switch, as a tab's is once it is shown again,
+/// having let go of it while hidden, is told how many there were in its
+/// resync, which is how that tab learns it missed one; and the next switch
+/// is counted after them.
+#[tokio::test]
+async fn a_stream_opened_after_a_switch_is_told_how_many_there_were() {
+    let (server, _) = launch();
+    let token = Auth::Bearer(server.token());
+
+    post(&server, "/api/switch", token, json!({ "to": "beta" })).await;
+    post(&server, "/api/switch", token, json!({ "to": "gamma" })).await;
+    let mut stream = subscribe(&server, token).await;
+
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "resync", "switches": 2})
+    );
+    assert_eq!(stream.next().await, json!({"type": "watching"}));
+    post(&server, "/api/switch", token, json!({ "to": "beta" })).await;
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "switched", "switches": 3})
+    );
 }
 
 /// The test #84 asks of the server: a switch the backend refuses, to a
@@ -49,7 +77,7 @@ async fn a_switch_the_backend_refuses_is_a_422_with_its_code_and_switches_nothin
         json!({ "to": "/etc", "refuse": true }),
     )
     .await;
-    server.events().publish(Event::Resync);
+    server.events().publish(Event::Resync { switches: 0 });
 
     assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(
@@ -57,7 +85,10 @@ async fn a_switch_the_backend_refuses_is_a_422_with_its_code_and_switches_nothin
         json!({ "error": "/etc is refused", "code": "fake_refused" })
     );
     assert!(runs.lock().unwrap().is_empty());
-    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "resync", "switches": 0})
+    );
 }
 
 #[tokio::test]
@@ -96,7 +127,10 @@ async fn a_switch_that_panics_is_a_500_still_told_and_the_next_is_taken() {
     )
     .await;
     assert_eq!(reply.status, StatusCode::INTERNAL_SERVER_ERROR);
-    assert_eq!(stream.next().await, json!({"type": "switched"}));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "switched", "switches": 1})
+    );
 
     let reply = post(&server, "/api/switch", token, json!({ "to": "after" })).await;
     assert_eq!(reply.status, StatusCode::OK);
@@ -179,7 +213,10 @@ async fn once_switched_what_the_backend_names_now_is_watched_and_not_what_it_nam
     )
     .await;
     assert_eq!(reply.status, StatusCode::OK);
-    assert_eq!(stream.next().await, json!({"type": "switched"}));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "switched", "switches": 1})
+    );
 
     fs::write(before.path().join("old.md"), "# Old\n").unwrap();
     assert_eq!(stream.within(debounced()).await, None);
@@ -207,7 +244,11 @@ async fn a_switch_naming_paths_where_nothing_was_watched_starts_watching_them() 
     )
     .await;
     let told = stream.until("switched").await;
-    assert_eq!(told.last(), Some(&json!({"type": "switched"})), "{told:?}");
+    assert_eq!(
+        told.last(),
+        Some(&json!({"type": "switched", "switches": 1})),
+        "{told:?}"
+    );
 
     fs::write(after.path().join("new.md"), "# New\n").unwrap();
     assert_eq!(
