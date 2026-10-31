@@ -59,7 +59,7 @@ test('a library skill changed shows outdated, and updating every project brings 
 
   await page.getByTestId('update-all').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText(['$ flayer update --all --yes'])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} update --all --yes`])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
 
@@ -92,7 +92,7 @@ test('removing a library skill shows what removing it everywhere does first, the
 
   await page.getByTestId('remove-dry').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer remove --everywhere skill:${UPDATED}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} remove --everywhere skill:${UPDATED}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
   const dry = page.getByTestId('remove-said')
@@ -101,7 +101,7 @@ test('removing a library skill shows what removing it everywhere does first, the
   expect(existsSync(join(own.at.workspace, alpha, '.claude/skills', UPDATED)), 'a dry run removes nothing').toBe(true)
 
   await page.getByTestId('remove-yes').click()
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer remove --everywhere --yes skill:${UPDATED}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} remove --everywhere --yes skill:${UPDATED}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(2)
   await expect(dialog.getByTestId('cancel')).toBeFocused()
   await dialog.getByTestId('run').click()
@@ -122,7 +122,7 @@ test('removing a library skill shows what removing it everywhere does first, the
   await expect(left.getByTestId('project')).toHaveText(beta)
   await expect(left.getByTestId('left')).toContainText('only a forced uninstall takes it out')
   await left.getByTestId('change').click()
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer uninstall -p ${join(own.at.workspace, beta)} --force skill:${UPDATED}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} uninstall -p ${join(own.at.workspace, beta)} --force skill:${UPDATED}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(2)
   await expect(dialog.getByTestId('cancel')).toBeFocused()
   await dialog.getByTestId('run').click()

@@ -183,7 +183,8 @@ fn the_panel_runs_what_it_is_sent_and_the_next_snapshot_shows_it() {
     assert_eq!(
         ran["lines"],
         json!([format!(
-            "flayer install -p {} skill:commit-style",
+            "flayer -W {} install -p {} skill:commit-style",
+            dir.path().display(),
             dir.path().join("alpha").display()
         )])
     );
@@ -434,7 +435,8 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
     let mut rest = String::new();
     panel.stdout.read_to_string(&mut rest).unwrap();
     assert_eq!(rest, transcript);
-    assert!(rest.starts_with("$ flayer install -p "), "{rest}");
+    let named = format!("$ flayer -W {} install -p ", dir.path().display());
+    assert!(rest.starts_with(&named), "{rest}");
     let mut said = String::new();
     let mut stderr = panel.started.child.stderr.take().unwrap();
     stderr.read_to_string(&mut said).unwrap();

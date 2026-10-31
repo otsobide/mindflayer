@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 
 use common::*;
 use mindflayer_cli::backend::{Outcome, PanelBackend, Query};
-use mindflayer_cli::task::Caution;
+use mindflayer_cli::task::{naming, shell, Caution};
 use mindflayer_core::watch;
 use mindflayer_server::{Backend, Refusal};
 use serde_json::{json, Value};
@@ -309,7 +309,10 @@ fn a_task_cannot_carry_a_directory_a_home_a_workspace_or_an_agent_home() {
         sent[field] = json!("/etc");
         assert_eq!(
             backend.preview(&task(sent)).map(|preview| preview.lines),
-            Ok(vec![String::from("flayer gather list")])
+            Ok(vec![format!(
+                "flayer -W {} gather list",
+                dir.path().display()
+            )])
         );
     }
 }
@@ -323,7 +326,11 @@ fn a_task_held_by_a_linked_project_runs_in_that_project_with_the_directory_resol
     let beta = dir.path().join("beta");
     let backend = backend(dir.path());
     let sent = add_to(json!({"type": "project", "entry": "alpha"}));
-    let line = format!("mind -C {} add skill deploy 'Ship it'", alpha.display());
+    let line = format!(
+        "mind -W {} -C {} add skill deploy 'Ship it'",
+        dir.path().display(),
+        alpha.display()
+    );
     let beta_before = files(&beta);
 
     assert_eq!(
@@ -730,7 +737,7 @@ fn the_default_workspace_is_made_by_the_first_change_and_said_first() {
         backend.preview(&task(link.clone())).unwrap().lines,
         [
             String::from("flayer init"),
-            format!("flayer link {}", fresh.display())
+            format!("flayer -W {} link {}", home.display(), fresh.display())
         ]
     );
     assert!(!home.join(FLAYER_DIR).exists(), "a preview made it");
@@ -908,7 +915,10 @@ fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
 
     assert_eq!(
         preview.lines,
-        ["flayer init", "flayer remove --yes skill:deploy"]
+        [
+            String::from("flayer init"),
+            format!("flayer -W {} remove --yes skill:deploy", home.display())
+        ]
     );
     assert_eq!(preview.confirm.len(), 1, "{preview:?}");
     assert_eq!(preview.confirm[0]["line"], 1);
@@ -1077,7 +1087,8 @@ fn a_scan_names_the_entry_a_moved_project_left_for_its_relink() {
     assert_eq!(
         backend.preview(&relink).unwrap().lines,
         [format!(
-            "flayer relink collapse {}",
+            "flayer -W {} relink collapse {}",
+            projects.display(),
             moved.to_str().unwrap()
         )]
     );
@@ -1088,7 +1099,8 @@ fn a_scan_names_the_entry_a_moved_project_left_for_its_relink() {
 
 /// The panel's link batch is the minds screen's: for the same directories
 /// marked, the lines the backend previews for what the panel sends are the
-/// lines the screen's task is, each directory by its path, from a scan of a
+/// lines the screen's task is, each naming the workspace as every line of
+/// the panel's does, each directory by its path, from a scan of a
 /// folder outside the workspace, where both spell it so. Inside it they
 /// spell a folder apart, and the batch is the same folder for folder
 /// ([`inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_folder`]).
@@ -1131,21 +1143,22 @@ fn the_panels_link_batch_is_the_minds_screens_for_the_same_selection() {
     let tui::state::Mode::Minds(screen) = &app.mode else {
         panic!("{:?}", app.mode)
     };
+    let named = dir.path().to_str().unwrap();
     let screened: Vec<String> = screen
         .task()
         .unwrap()
         .commands()
         .iter()
-        .map(|line| mindflayer_cli::task::shell(line))
+        .map(|line| shell(&naming(line, named)))
         .collect();
 
     assert_eq!(previewed, screened);
     assert_eq!(
         previewed,
         [
-            format!("mind -C {} init", under(work.path(), &["plain"])),
+            format!("mind -W {named} -C {} init", under(work.path(), &["plain"])),
             format!(
-                "flayer link {} {}",
+                "flayer -W {named} link {} {}",
                 under(work.path(), &["acme", "delta"]),
                 under(work.path(), &["plain"])
             ),
@@ -1209,7 +1222,7 @@ fn inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_fo
     let by_path: Vec<String> = by_path
         .commands()
         .iter()
-        .map(|line| mindflayer_cli::task::shell(line))
+        .map(|line| shell(&naming(line, panel.path().to_str().unwrap())))
         .collect();
     assert_eq!(previewed, by_path);
 
@@ -1291,7 +1304,8 @@ fn loaded_from_the_screen(app: &mut App, typed: Option<&str>) -> Task {
 /// path the snapshot lists it by, is the task the TUI's load form runs for
 /// that path typed, and unloading it, by the entry the snapshot then lists
 /// it by, the task the form runs for it picked: the same `Task` each time,
-/// so the same lines, and run from the panel each leaves the workspace's
+/// so the same lines, the panel's naming the workspace, and run from the
+/// panel each leaves the workspace's
 /// marker as the screen's left it.
 #[test]
 fn loading_and_unloading_from_the_panel_are_the_tuis_tasks_for_the_same_workspace() {
@@ -1300,10 +1314,11 @@ fn loading_and_unloading_from_the_panel_are_the_tuis_tasks_for_the_same_workspac
     let backend = PanelBackend::launch(&root, &lookup).unwrap();
     let mut app =
         App::new(root.clone(), tui::load(&root, &lookup).unwrap()).with_lookup(lookup.clone());
+    let named = root.to_str().unwrap().to_owned();
     let lines = |task: &Task| -> Vec<String> {
         task.commands()
             .iter()
-            .map(|line| mindflayer_cli::task::shell(line))
+            .map(|line| shell(&naming(line, &named)))
             .collect()
     };
     let unloaded = registry(&root);
@@ -1323,7 +1338,7 @@ fn loading_and_unloading_from_the_panel_are_the_tuis_tasks_for_the_same_workspac
 
     assert_eq!(screened, load);
     assert_eq!(previewed.lines, lines(&screened));
-    assert_eq!(previewed.lines, [format!("flayer load {path}")]);
+    assert_eq!(previewed.lines, [format!("flayer -W {named} load {path}")]);
     assert!(previewed.confirm.is_empty(), "{:?}", previewed.confirm);
     let loaded = registry(&root);
     assert!(loaded.contains("loaded = [\"../team\"]"), "{loaded}");
@@ -1486,11 +1501,13 @@ fn a_plan_is_answered_with_the_tasks_that_carry_it_out_and_changes_nothing() {
         backend.preview(&batch).unwrap().lines,
         [
             format!(
-                "flayer install -p {} --from load:../team skill:deploy",
+                "flayer -W {} install -p {} --from load:../team skill:deploy",
+                home.display(),
                 under(&home, &["beta"])
             ),
             format!(
-                "flayer uninstall -p {} skill:deploy",
+                "flayer -W {} uninstall -p {} skill:deploy",
+                home.display(),
                 under(&home, &["alpha"])
             ),
         ]
@@ -1972,41 +1989,42 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
     let alpha = under(&home, &["alpha"]);
     let beta = under(&home, &["beta"]);
     let project = |entry: &str| json!({"type": "project", "entry": entry});
+    let named = home.display();
 
     for (sent, line, confirm) in [
         (
             json!({"type": "update", "holder": {"type": "workspace"}, "reference": null, "force": false}),
-            String::from("flayer update --all --yes"),
+            format!("flayer -W {named} update --all --yes"),
             Vec::new(),
         ),
         (
             json!({"type": "update", "holder": project("alpha"), "reference": null, "force": false}),
-            format!("mind -C {alpha} update --yes"),
+            format!("mind -W {named} -C {alpha} update --yes"),
             Vec::new(),
         ),
         (
             json!({"type": "update", "holder": project("alpha"), "reference": "skill:lint", "force": false}),
-            format!("mind -C {alpha} update --yes skill:lint"),
+            format!("mind -W {named} -C {alpha} update --yes skill:lint"),
             Vec::new(),
         ),
         (
             json!({"type": "update", "holder": project("beta"), "reference": "skill:lint", "force": true}),
-            format!("mind -C {beta} update --yes --force skill:lint"),
+            format!("mind -W {named} -C {beta} update --yes --force skill:lint"),
             vec!["forces"],
         ),
         (
             json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old", "force": false}),
-            format!("flayer uninstall -p {beta} skill:old"),
+            format!("flayer -W {named} uninstall -p {beta} skill:old"),
             vec!["uninstalls"],
         ),
         (
             json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old", "force": true}),
-            format!("flayer uninstall -p {beta} --force skill:old"),
+            format!("flayer -W {named} uninstall -p {beta} --force skill:old"),
             vec!["uninstalls", "forces"],
         ),
         (
             json!({"type": "uninstall_orphaned", "holder": {"type": "workspace"}}),
-            String::from("flayer uninstall --all-projects --orphaned"),
+            format!("flayer -W {named} uninstall --all-projects --orphaned"),
             vec!["uninstalls"],
         ),
         (
@@ -2014,7 +2032,7 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
                 "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
                 "name": "lint", "everywhere": true, "yes": false,
             }),
-            String::from("flayer remove --everywhere skill:lint"),
+            format!("flayer -W {named} remove --everywhere skill:lint"),
             Vec::new(),
         ),
         (
@@ -2022,7 +2040,7 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
                 "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
                 "name": "lint", "everywhere": true, "yes": true,
             }),
-            String::from("flayer remove --everywhere --yes skill:lint"),
+            format!("flayer -W {named} remove --everywhere --yes skill:lint"),
             vec!["removes", "uninstalls"],
         ),
     ] {
@@ -2298,7 +2316,8 @@ fn a_save_writes_the_text_through_edit_contents_and_takes_its_file_away_after() 
     assert_eq!(
         ran.runs[0].command,
         format!(
-            "flayer edit --contents {route} --if-unchanged {} skill:deploy",
+            "flayer -W {} edit --contents {route} --if-unchanged {} skill:deploy",
+            root.display(),
             mindflayer_core::hash::bytes(read.as_bytes())
         )
     );

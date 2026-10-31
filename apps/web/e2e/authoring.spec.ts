@@ -55,7 +55,7 @@ test('a library skill edited in the browser is written on disk as flayer edit --
   await page.getByTestId('save').click()
   const dialog = page.getByRole('dialog')
   const route = `.mindflayer/tmp/edit-${sha256(text).slice(0, 16)}.md`
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer edit --contents ${route} --if-unchanged ${sha256(before)} skill:${AUTHORED}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} edit --contents ${route} --if-unchanged ${sha256(before)} skill:${AUTHORED}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
   await expect(page.getByTestId('unsaved')).toHaveCount(0)
@@ -101,13 +101,13 @@ test('a skill added from a template and one renamed are what flayer add and flay
   await expect(page.getByTestId('verdict')).toContainText('flayer add would write it.')
   await page.getByTestId('add').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText(['$ flayer add --template full skill deploy-docs \'Publish the docs\''])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} add --template full skill deploy-docs 'Publish the docs'`])
   await dialog.getByTestId('run').click()
   await expect(page).toHaveURL(/\/artifact\?kind=skill&name=deploy-docs$/)
 
   await page.getByTestId('rename-to').fill('publish-docs')
   await page.getByTestId('rename-run').click()
-  await expect(dialog.getByTestId('command')).toHaveText(['$ flayer rename skill:deploy-docs publish-docs'])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} rename skill:deploy-docs publish-docs`])
   await dialog.getByTestId('run').click()
   await expect(page).toHaveURL(/\/artifact\?kind=skill&name=publish-docs$/)
 

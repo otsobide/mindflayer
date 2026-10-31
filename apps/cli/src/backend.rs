@@ -461,29 +461,44 @@ impl PanelBackend {
             ));
         }
         let workspace = self.workspace()?;
+        let lookup = self.pinned(&workspace);
+        // With what the lines run with, so a project is asked which
+        // workspace it consults as its line will ask it: this one, named.
         let admitted = Admission {
             workspace: &workspace,
-            lookup: &self.lookup,
+            lookup: &lookup,
         }
         .task(task)
         .map_err(|error| refused(error.code(), error))?;
-        let mut lines = admitted.commands();
+        let named = |lines: Vec<Vec<String>>| -> Result<Vec<Vec<String>>, Refusal> {
+            let root =
+                policy::spelled(workspace.root()).map_err(|error| refused(error.code(), error))?;
+            Ok(lines.iter().map(|line| task::naming(line, &root)).collect())
+        };
+        let lines = admitted.commands();
         // As the TUI does: a change to the default before it is made makes
         // it first, by a line of its own, rather than leave the change to
         // find a workspace above home while it walks up from the root. Not
         // in front of a task that makes it already: the TUI offers that one
         // only with nothing made, but a browser may send it at any time.
+        //
+        // Every line names the workspace with `-W`, so what the panel shows,
+        // and the transcript keeps, says which workspace each reached, and
+        // reaches it pasted anywhere. All but those before it is made: `-W`
+        // refuses a folder with no marker, so the default is named by the
+        // lines after the `flayer init` that makes it, and a read of it
+        // before then by none, as the TUI's lines find it.
         let init = Task::InitWorkspace.commands();
-        if !workspace.is_made()
-            && admitted.writes()
-            && !lines.is_empty()
-            && !lines.starts_with(&init)
-        {
-            lines.splice(0..0, init);
-        }
+        let lines = if workspace.is_made() {
+            named(lines)?
+        } else if admitted.writes() && !lines.is_empty() && !lines.starts_with(&init) {
+            init.into_iter().chain(named(lines)?).collect()
+        } else {
+            lines
+        };
         Ok(Plan {
             lines,
-            lookup: self.pinned(&workspace),
+            lookup,
             chained: admitted.chained(),
             writes: admitted.writes(),
         })

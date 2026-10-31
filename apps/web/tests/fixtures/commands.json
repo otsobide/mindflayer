@@ -3,18 +3,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer link /home/you/Projects/blog"
+        "flayer -W /home/you/Projects link /home/you/Projects/blog"
       ]
     },
     "ran": {
       "lines": [
-        "flayer link /home/you/Projects/blog"
+        "flayer -W /home/you/Projects link /home/you/Projects/blog"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer link /home/you/Projects/blog",
+            "command": "flayer -W /home/you/Projects link /home/you/Projects/blog",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -38,18 +38,18 @@
         }
       ],
       "lines": [
-        "flayer unlink gone"
+        "flayer -W /home/you/Projects unlink gone"
       ]
     },
     "ran": {
       "lines": [
-        "flayer unlink gone"
+        "flayer -W /home/you/Projects unlink gone"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer unlink gone",
+            "command": "flayer -W /home/you/Projects unlink gone",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -67,18 +67,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "mind -C /home/you/Projects/docs validate"
+        "mind -W /home/you/Projects -C /home/you/Projects/docs validate"
       ]
     },
     "ran": {
       "lines": [
-        "mind -C /home/you/Projects/docs validate"
+        "mind -W /home/you/Projects -C /home/you/Projects/docs validate"
       ],
       "outcome": {
         "ok": false,
         "runs": [
           {
-            "command": "mind -C /home/you/Projects/docs validate",
+            "command": "mind -W /home/you/Projects -C /home/you/Projects/docs validate",
             "error": null,
             "ok": false,
             "stderr": [
@@ -115,18 +115,18 @@
         }
       ],
       "lines": [
-        "flayer remove --everywhere --yes skill:lint"
+        "flayer -W /home/you/Projects remove --everywhere --yes skill:lint"
       ]
     },
     "ran": {
       "lines": [
-        "flayer remove --everywhere --yes skill:lint"
+        "flayer -W /home/you/Projects remove --everywhere --yes skill:lint"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer remove --everywhere --yes skill:lint",
+            "command": "flayer -W /home/you/Projects remove --everywhere --yes skill:lint",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -150,27 +150,27 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "mind -C /home/you/Projects/notes init",
-        "flayer link /home/you/Projects/drafts /home/you/Projects/notes"
+        "mind -W /home/you/Projects -C /home/you/Projects/notes init",
+        "flayer -W /home/you/Projects link /home/you/Projects/drafts /home/you/Projects/notes"
       ]
     },
     "ran": {
       "lines": [
-        "mind -C /home/you/Projects/notes init",
-        "flayer link /home/you/Projects/drafts /home/you/Projects/notes"
+        "mind -W /home/you/Projects -C /home/you/Projects/notes init",
+        "flayer -W /home/you/Projects link /home/you/Projects/drafts /home/you/Projects/notes"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "mind -C /home/you/Projects/notes init",
+            "command": "mind -W /home/you/Projects -C /home/you/Projects/notes init",
             "error": null,
             "ok": true,
             "stderr": [],
             "stdout": "initialized mind project `notes` in /home/you/Projects/notes/.mind\n"
           },
           {
-            "command": "flayer link /home/you/Projects/drafts /home/you/Projects/notes",
+            "command": "flayer -W /home/you/Projects link /home/you/Projects/drafts /home/you/Projects/notes",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -197,18 +197,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer relink old /home/you/Projects/archive/old"
+        "flayer -W /home/you/Projects relink old /home/you/Projects/archive/old"
       ]
     },
     "ran": {
       "lines": [
-        "flayer relink old /home/you/Projects/archive/old"
+        "flayer -W /home/you/Projects relink old /home/you/Projects/archive/old"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer relink old /home/you/Projects/archive/old",
+            "command": "flayer -W /home/you/Projects relink old /home/you/Projects/archive/old",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -227,18 +227,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "mind -C /home/you/Projects/web agents --yes claude opencode codex"
+        "mind -W /home/you/Projects -C /home/you/Projects/web agents --yes claude opencode codex"
       ]
     },
     "ran": {
       "lines": [
-        "mind -C /home/you/Projects/web agents --yes claude opencode codex"
+        "mind -W /home/you/Projects -C /home/you/Projects/web agents --yes claude opencode codex"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "mind -C /home/you/Projects/web agents --yes claude opencode codex",
+            "command": "mind -W /home/you/Projects -C /home/you/Projects/web agents --yes claude opencode codex",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -276,18 +276,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer migrate -p /home/you/Projects/legacy"
+        "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy"
       ]
     },
     "ran": {
       "lines": [
-        "flayer migrate -p /home/you/Projects/legacy"
+        "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer migrate -p /home/you/Projects/legacy",
+            "command": "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -306,18 +306,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer migrate -p /home/you/Projects/legacy --yes"
+        "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy --yes"
       ]
     },
     "ran": {
       "lines": [
-        "flayer migrate -p /home/you/Projects/legacy --yes"
+        "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy --yes"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer migrate -p /home/you/Projects/legacy --yes",
+            "command": "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy --yes",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -336,18 +336,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer remove --everywhere skill:review"
+        "flayer -W /home/you/Projects remove --everywhere skill:review"
       ]
     },
     "ran": {
       "lines": [
-        "flayer remove --everywhere skill:review"
+        "flayer -W /home/you/Projects remove --everywhere skill:review"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer remove --everywhere skill:review",
+            "command": "flayer -W /home/you/Projects remove --everywhere skill:review",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -382,18 +382,18 @@
         }
       ],
       "lines": [
-        "flayer remove --everywhere --yes skill:review"
+        "flayer -W /home/you/Projects remove --everywhere --yes skill:review"
       ]
     },
     "ran": {
       "lines": [
-        "flayer remove --everywhere --yes skill:review"
+        "flayer -W /home/you/Projects remove --everywhere --yes skill:review"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer remove --everywhere --yes skill:review",
+            "command": "flayer -W /home/you/Projects remove --everywhere --yes skill:review",
             "error": null,
             "ok": true,
             "stderr": [
