@@ -5002,9 +5002,12 @@ older marker marks, and shows a transcript of every run (#76, #77, [its
 changes](#its-changes)). It edits, adds and renames the library's own, and
 adopts somebody's skill from a project's page, judged by core as they are
 typed ([authoring in the library](#authoring-in-the-library), #82),
-loads and unloads other workspaces from a page of its own (#83), and
+loads and unloads other workspaces from a page of its own (#83),
 switches to another workspace this machine knows from the header of every
-page ([switching workspace](#switching-workspace), #84).
+page ([switching workspace](#switching-workspace), #84), and goes to any
+of it, or installs, updates all and links, from a command palette over
+every page, its keys listed on `?` ([the command
+palette](#the-command-palette), #85).
 
 ### One way out: the transport
 
@@ -5365,7 +5368,10 @@ is waiting until then, and says why when the server refused.
   beside its colour and icon, an agent that does not read an artifact keeps
   its slot, crossed out, and says so in words, and a failure says its code.
   The sidebar is a landmark of its own and each page the main one, so
-  nothing is outside a landmark. `tests/a11y.test.ts` runs axe on every
+  nothing is outside a landmark. The command palette reaches every page,
+  and installs, updates all and links, from the keyboard alone, and `?`
+  lists its keys and every other's ([the command
+  palette](#the-command-palette)). `tests/a11y.test.ts` runs axe on every
   page, of both fixtures, with every WCAG A and AA rule and the best
   practices but contrast, which happy-dom lays nothing out to measure.
 - **The commands are the empty states.** Whatever is empty names the
@@ -5543,6 +5549,10 @@ What the pages offer:
   workspace above a project (`Task::LoadHere`), is no page's: the panel is
   launched on a workspace, and loads into that one
   ([open questions](#open-questions)).
+- **An install, an update of every project and a link, from the command
+  palette**, each the task of the page offering the same change: one box's
+  plan applied as the matrix applies its marks, **Update all**'s, and the
+  link form's ([the command palette](#the-command-palette)).
 - **A migration, for a project an older marker marks**, the dry run first,
   `flayer migrate -p <project>`, whose report the page shows once it ran,
   then the migration, the same line with `--yes`, offered only then. The
@@ -5553,9 +5563,10 @@ What the pages offer:
 
 The preview and the run are Vue Query mutations, and the transcript, the
 scan, the plan and the matrix's preview of its lines queries, so what the
-server answered lives where every answer does; which drawer is open is
-Pinia's, beside the sidebar's state, and so are the boxes marked on the
-matrix.
+server answered lives where every answer does, the palette's plan of one
+box among them, under the plan's key; which drawer is open is Pinia's,
+beside the sidebar's state, and so are the boxes marked on the matrix and
+whether the palette or the sheet of shortcuts is open.
 
 ### Authoring in the library
 
@@ -5695,6 +5706,93 @@ the panel previews, the transcript it keeps and the lines `flayer ui`
 prints once it stops each name the workspace they ran against, so the
 transcript stays true across a switch and needs no entry for one.
 
+### The command palette
+
+Ctrl+K, or Cmd+K where the browser says it is a Mac, opens Nuxt UI's
+`UCommandPalette` in a modal over any page (`CommandPalette.vue`), and so
+does **Search** at the top of the sidebar. It is another way to the pages
+and their changes, and holds no rule of its own:
+
+- **What it lists is the snapshot's**, read while it is open and only
+  then (`useSnapshot`, told so), asked again only as a page would ask it,
+  when the server is not watching: the pages, the sidebar's own list
+  (`VIEWS`, spelled once in `AppSidebar.vue`, where Nuxt UI bundles the
+  icons it names, which it does for no `.ts` file), each project with its
+  health, the library's own and the shelf with their kind, and the
+  sources. A choice goes where the link on a page goes, once the palette
+  has closed and Reka has given the focus back, so whatever a choice opens
+  next takes the focus from there and gives it back there. Opened again
+  while that close is still drawn, the modal is kept and Reka never says
+  the close ended, so the choice is let go of rather than done at the next
+  close, and every opening draws the palette anew (its key), nothing typed
+  and its field focused.
+- **Its search is Fuse's**, the one Nuxt UI's palette runs, over each
+  entry's label, the word beside it and its description: a token search,
+  every word typed to be found somewhere (`tokenMatch: 'all'`), each
+  within a threshold of 0.2, which forgives a letter out of place
+  (`revew`) and not a word only half like another (0.3 found `came` for
+  `acme`). Searched, it lists the twelve nearest entries in all, Nuxt
+  UI's default (`resultLimit`), each under its group, the groups in the
+  order of their best match; with nothing typed, each group lists its
+  first twelve, an offer's projects to install into among them. So a long
+  list is found by typing rather than scrolled through, and nothing says
+  more are there ([open questions](#open-questions)). It filters and
+  orders what the snapshot lists, as a page's filter does, and no count or
+  verdict depends on it. Nuxt UI would draw what matched as HTML, each
+  match marked; every entry gives that HTML as empty, so its words,
+  somebody's summary among them, are drawn as text, as a skill's markdown
+  is ([nothing the CSP refuses](#nothing-the-csp-refuses)).
+- **Its changes are the pages' tasks**, through the one runner, so each is
+  previewed by the server, shown, and confirmed where the CLI says it takes
+  something away, as any page's is. **Update all** is the page of updates'
+  task (`UPDATE_ALL`, spelled once in `src/api/updates.ts`). **Link** is
+  the link form's, the path as typed, offered last for whatever is typed,
+  since telling a path from a word is the path policy's. **Install** lists
+  each offer, then the projects whose box of it the snapshot draws
+  neither ticked nor closed, looked up as the matrix looks them up
+  (`src/boxes.ts`), and plans the one box chosen (`Query::Plan`, through
+  `usePlanOnce`, under the matrix's key), whose tasks go to the runner as
+  one `apply_install` (`batchOf`, the matrix's own): the offer to install
+  from, what it replaces and what holds it back are core's, a box held back
+  is said with its code, and one whose plan runs nothing, which a change
+  made since the snapshot was read leaves, says that. A task of the
+  palette's own, an `install` spelled here, was the alternative, and would
+  have been the install screen's batch rules written again.
+- **Its keys are passed over while somebody types.** Nuxt UI's
+  `defineShortcuts`, told nothing otherwise, passes over a shortcut while
+  an input, a textarea or anything editable has the focus, CodeMirror's
+  content among it, which vueuse finds through the editor's shadow root;
+  and the panel gives it none while a task is shown or runs, whose
+  question is answered first. Ctrl+K alone is told otherwise
+  (`usingInput`), and only while the palette is open: its modal holds the
+  focus, so the field Ctrl+K is pressed in is the palette's own search,
+  where Nuxt UI would pass it to the browser, which in Chromium puts the
+  focus in its own search bar and leaves the palette open. vueuse, which
+  Nuxt UI asks what has the focus, hears of the focus moving, and not of
+  the element holding it being taken away, which a browser tells nobody;
+  the palette's search field goes with the palette, so the palette lets go
+  of the focus as it closes, before Reka gives it back, or every shortcut
+  would be passed over as typed into a field that is gone.
+- **`?` opens the sheet of shortcuts** (`ShortcutSheet.vue`): every key the
+  panel answers, the palette's, the dialog's, the matrix's and the
+  editor's, under where each applies, its keys spelled out beside them for
+  a screen reader. Which key does what is each component's; the sheet lists
+  them and changes none, so a key a component gains is added to it by hand,
+  as it is to the README's table and the reference's. The palette and the
+  sheet each close the other.
+
+Both are modals, which trap the focus and give it back where it was when
+they close, named by the title Reka keeps for assistive technology; the
+palette's field and its list carry names of their own. `tests/palette.test.ts`
+holds the palette to its keys, its groups and its search, and each change
+to the task the page offering it sends, with every way a page could reach
+the network stubbed to fail; `tests/views.test.ts` opens both, the
+palette through an offer's projects to what holds an install back, and
+holds every icon they draw, which no page draws, to the bundle, with no
+`<style>` added ([nothing the CSP refuses](#nothing-the-csp-refuses));
+`e2e/palette.spec.ts` installs a skill from it with the keyboard alone
+([end to end](#end-to-end-in-a-browser)).
+
 ### Its fixtures come from Rust
 
 The views' tests render the snapshots in `apps/web/tests/fixtures`, which a
@@ -5784,6 +5882,9 @@ though four of its libraries assume otherwise:
 - Vite inlines nothing as a `data:` URL (`assetsInlineLimit: 0`).
 - A skill's markdown is drawn from its tokens, so nothing in it reaches the
   page as HTML, a style or a `data:` URL ([its views](#its-views)).
+- Nuxt UI's command palette draws what a search matched as HTML, each match
+  marked: every entry gives that HTML as empty, so it draws the words as
+  text ([the command palette](#the-command-palette)).
 
 A nonce per launch would have let the style elements in, at the price of the
 server rewriting the page each time and the panel handing the nonce to each
@@ -5913,6 +6014,17 @@ one from their fixture. That the ledger a batch leaves is the one its
 lines leave run in the CLI, every hash and action logged, is the backend
 suite's to hold (`backend_test.rs`), which reads it.
 
+`e2e/palette.spec.ts` takes `assignable` too, and drives the palette with
+the keyboard alone once the sidebar's **Search** has the focus: opened by
+its keys, it has to hold the focus through Tab and Shift+Tab,
+name its search field and its list, and give the focus back on Escape,
+and on its keys pressed again in its search; then the team's skill, typed and chosen, and one project, typed and
+chosen, have to show the line core's plan of that box runs, Run focused
+since it takes nothing away, which Enter runs. The copies have to be where
+each agent reads them in that project alone, and the copy given the same
+line on the command line has to hold the same files, and be listed by
+`flayer list --json` as the workspace is, its folder aside.
+
 `e2e/loads.spec.ts` takes `loadable`, the one builder whose workspace is
 served with a home of its own beside it rather than the run's: only a
 default workspace remembers the workspaces this machine knows, and the
@@ -6002,8 +6114,9 @@ is in, as a person's does, and the overview says `above` rather than that
 
 The tour is Playwright's library driving Chromium, not a spec: Playwright's
 runner would run the pages side by side, while the tour visits them once,
-in order: the matrix with a box ticked and another unticked, the plan's
-lines below them, never applied; the page of updates, its edited copy left
+in order: the command palette over the overview, a word typed and
+nothing chosen; the matrix with a box ticked and another unticked, the
+plan's lines below them, never applied; the page of updates, its edited copy left
 with why; the preview of linking what Discover marked, then, once that has
 run, an unlink asked about and cancelled, and the transcript; and last the
 dry run of removing one of the library's own everywhere, which changes
@@ -8680,6 +8793,40 @@ just listed.
   `-W` is given, so the shell's activated workspace is listed among what it
   may switch to only when this machine knows it. Listing it would mean
   reading the variable the launch was told to pass over.
+- **The palette offers Update all whatever an update would do.** Whether
+  one writes anything is core's survey (`Query::Updates`), which reads
+  every origin again, and which the page of updates asks for and greys its
+  button by; the palette would ask for it each time it opened. Asked only
+  while the palette is open, it could say what the button says, at the
+  price of that read on every opening; until then, choosing it shows the
+  line, and its run says what it did.
+- **The palette lists twelve, and says nothing of the rest.** Nuxt UI's
+  palette cuts a search to its twelve nearest entries in all, and each
+  group, with nothing typed, to its first twelve: a workspace with more
+  projects than that lists only twelve under **Projects**, or under an
+  offer to install, until enough is typed to narrow it. A larger
+  `resultLimit` would draw every entry the snapshot lists each time the
+  palette opens, the whole shelf among them, which a long list would want
+  virtualized; saying how many are left out would be a count the snapshot
+  does not carry. Until a workspace that large asks for one or the other,
+  typing is the way to the rest, as the reference says.
+- **The palette offers to link whatever is typed.** Telling a path from a
+  word is the path policy's, on the server, so `Link deploy` is listed
+  under what a search for `deploy` finds, and refused with why if chosen.
+  Asking the policy as the text changes would take a query of its own, and
+  guessing from the text, a separator say, would be a second policy.
+- **Ctrl+K is the browser's too.** Some browsers put the focus in their
+  search on Ctrl+K; the panel takes it while its page has the focus outside
+  a field, or the palette is open, as many web applications do. A key of
+  one's own would leave the browser its own, but keys a person chooses are
+  for later.
+- **A field taken away with the focus in it leaves the keys off.** vueuse,
+  which Nuxt UI asks what has the focus, is not told when a browser takes
+  away the element holding it, so the shortcuts stay passed over as typed
+  into a field until something else is focused. The palette lets go of the
+  focus as it closes, its field going with it; any other overlay, or a page
+  that takes away a field while it has the focus, would have to do the
+  same, and nothing yet holds one to it.
 - **`mind load` is no page's.** The panel is launched on a workspace and
   loads into that one; a project's own load into the workspace above it
   (`Task::LoadHere`), which the TUI offers when it is opened on a project,

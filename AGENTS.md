@@ -236,9 +236,12 @@ under `apps/` with its own `Makefile`:
   something away, and run), `src/api/transcript.ts` the query of the
   server's transcript, `src/api/scan.ts` the query of a scan, asked for
   by hand, `src/api/plan.ts` the queries of a plan of the boxes marked
-  on the matrix and of the lines it runs (`usePlan`, `usePreview`), and
+  on the matrix and of the lines it runs (`usePlan`, `usePreview`), of one
+  box once, for the command palette (`usePlanOnce`), and the batch a plan
+  applies (`batchOf`), and
   `src/api/updates.ts` the query of what an update of every project would
-  do (`useUpdates`), `src/api/draft.ts` the query of what core says of
+  do (`useUpdates`) and the task of updating them all (`UPDATE_ALL`),
+  `src/api/draft.ts` the query of what core says of
   a draft as it is typed (`useJudged`), and `src/api/workspaces.ts` the
   query of what the header may switch to (`useWorkspaces`).
   `src/pages/` holds one
@@ -254,10 +257,15 @@ under `apps/` with its own `Makefile`:
   the query), the workspaces it loads and those this machine knows
   (`loads`), the shelf (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
   the query a page keeps its state in, `src/library.ts` finds the projects
-  holding one of the library's own, `src/markdown.ts` draws a skill's
+  holding one of the library's own, `src/boxes.ts` a box of the matrix in
+  the snapshot, for the matrix and the command palette alike,
+  `src/markdown.ts` draws a skill's
   markdown from its tokens, and `src/time.ts` says the ledger's times.
   `src/components/` holds the frame
-  (`AppSidebar`, `AppHeader`, `AppLogo`) and the views' pieces: the badges
+  (`AppSidebar`, which lists the views for the palette too, `AppHeader`,
+  `AppLogo`), what opens over every page on its keys, the command palette
+  (`CommandPalette`, Ctrl+K) and the sheet of keyboard shortcuts
+  (`ShortcutSheet`, `?`), and the views' pieces: the badges
   of a state, a health and the agents, a count, the warnings panel, the
   commands an empty state names, what is wrong with an artifact
   (`IssueList`), a rendered body (`MarkdownBody`), an artifact's files
@@ -360,7 +368,10 @@ These are easy to break from a single file without noticing.
   since every line names its workspace. A new feature is written as a command
   first; the TUI and the panel gain it by producing that command's words.
   Never add a TUI-only or panel-only code path, nor one where the backend
-  does the work itself rather than run a line. A gather's lines run on a
+  does the work itself rather than run a line. The panel's command palette
+  is another way to a page's change, never a change of its own: it sends
+  the task the page offering it sends (`UPDATE_ALL`, the link form's, one
+  box's plan applied with `batchOf`), through the same runner. A gather's lines run on a
   thread of their own (`Task::runs_apart`), still through the same parsers:
   the thread changes where they run, not what they are. The install screen applies the same way, in the TUI or
   opened by `flayer install` (`install::apply`): its marks are the

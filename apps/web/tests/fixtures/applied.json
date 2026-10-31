@@ -38,5 +38,44 @@
       ],
       "type": "apply_install"
     }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer -W /home/you/Assign install -p /home/you/Assign/api --from workspace skill:deploy"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer -W /home/you/Assign install -p /home/you/Assign/api --from workspace skill:deploy"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer -W /home/you/Assign install -p /home/you/Assign/api --from workspace skill:deploy",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "updated deploy in api, from workspace\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "changes": [
+        {
+          "from": "workspace",
+          "kind": "skill",
+          "name": "deploy",
+          "projects": [
+            "api"
+          ],
+          "type": "install"
+        }
+      ],
+      "type": "apply_install"
+    }
   }
 ]

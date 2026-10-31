@@ -885,6 +885,13 @@ fn format_into_two() -> Value {
     ])
 }
 
+/// The library's `deploy` into `api`, in place of the team's: one box,
+/// what the panel's command palette plans for one install, and what
+/// [`write_what_applying_a_plan_is_answered_with`] runs second.
+fn deploy_into_api() -> Value {
+    json!([cell("api", "skill:deploy", "workspace", true)])
+}
+
 /// What the panel is answered with when it plans boxes of the workspace
 /// [`assigning`] builds: each query as the matrix sends it, the boxes in
 /// the order they were marked, and the answer.
@@ -906,7 +913,7 @@ fn write_what_planning_boxes_of_a_workspace_to_assign_in_is_answered_with() {
 
     let answers: Vec<Value> = [
         format_into_two(),
-        json!([cell("api", "skill:deploy", "workspace", true)]),
+        deploy_into_api(),
         json!([
             cell("api", "skill:format", SHELF, true),
             cell("docs", "skill:deploy", "workspace", true),
@@ -954,35 +961,39 @@ fn write_what_planning_boxes_of_a_workspace_to_assign_in_is_answered_with() {
     write("plans", &json);
 }
 
-/// What the panel is answered with when it applies the plan of `format`
-/// into two projects of the workspace [`assigning`] builds: the plan's
-/// tasks sent back as one `apply_install`, its preview, and what its run is
-/// answered with, as [`write_what_previewing_and_running_a_few_tasks_is_answered_with`]
-/// writes each.
+/// What the panel is answered with when it applies a plan of boxes of the
+/// workspace [`assigning`] builds, each on that workspace as it was built:
+/// the plan's tasks sent back as one `apply_install`, its preview, and what
+/// its run is answered with, as [`write_what_previewing_and_running_a_few_tasks_is_answered_with`]
+/// writes each. `format` into two projects, which the matrix applies, and
+/// the library's `deploy` into `api`, one box, which the command palette
+/// applies.
 #[test]
 fn write_what_applying_a_plan_is_answered_with() {
-    let dir = TempDir::new().unwrap();
-    let home = dir.path().join("you");
-    let root = assigning(&home);
-    let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
-    let planned = asked(
-        &backend,
-        json!({"type": "plan", "selection": format_into_two()}),
-    );
+    let mut answers = Vec::new();
+    for selection in [format_into_two(), deploy_into_api()] {
+        let dir = TempDir::new().unwrap();
+        let home = dir.path().join("you");
+        let root = assigning(&home);
+        let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
+        let planned = asked(&backend, json!({"type": "plan", "selection": selection}));
 
-    let sent = json!({"type": "apply_install", "changes": planned["answer"]["tasks"]});
-    let task: Task = serde_json::from_value(sent.clone()).unwrap();
-    let preview = backend
-        .preview(&task)
-        .unwrap_or_else(|refusal| panic!("{sent}: {}: {}", refusal.code, refusal.message));
-    let outcome = backend.run(task).unwrap();
-    assert!(outcome.ok, "{outcome:?}");
-    let ran = json!({"lines": preview.lines, "outcome": outcome});
-    let answers = vec![json!({"task": sent, "preview": preview, "ran": ran})];
+        let sent = json!({"type": "apply_install", "changes": planned["answer"]["tasks"]});
+        let task: Task = serde_json::from_value(sent.clone()).unwrap();
+        let preview = backend
+            .preview(&task)
+            .unwrap_or_else(|refusal| panic!("{sent}: {}: {}", refusal.code, refusal.message));
+        let outcome = backend.run(task).unwrap();
+        assert!(outcome.ok, "{outcome:?}");
+        let ran = json!({"lines": preview.lines, "outcome": outcome});
+        let answer = json!({"task": sent, "preview": preview, "ran": ran});
+        let json = serde_json::to_string(&answer).unwrap();
+        let json = pinned(&json, dir.path(), Some(&root));
+        assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+        answers.push(serde_json::from_str::<Value>(&json).unwrap());
+    }
 
     let json = serde_json::to_string_pretty(&answers).unwrap() + "\n";
-    let json = pinned(&json, dir.path(), Some(&root));
-    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
     write("applied", &json);
 }
 

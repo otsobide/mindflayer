@@ -1859,7 +1859,8 @@ takes out what nothing offers from **Updates**, removes one of the
 library's own everywhere, its dry run first, edits, adds and renames the
 library's own, adopts a skill somebody keeps in a project's agents'
 folders, loads and unloads other workspaces from **Loads**, and switches
-to another workspace from the header; everything else is still a command
+to another workspace from the header, and installs, updates all and links
+from the command palette (below) too; everything else is still a command
 away.
 
 **The transcript**, in every page's header, lists every task the session
@@ -2119,6 +2120,56 @@ with it. Each line is shown first, as everywhere in the panel, and the
 page is drawn again from what it changed: an edited copy an update left is
 still listed, with why.
 
+**The command palette** opens over any page on Ctrl+K, or Cmd+K on a Mac,
+and from **Search** at the top of the sidebar. Type to find any page, a
+project, one of the library's own, anything on the shelf and the sources it
+came from: a word finds what holds it, a letter out of place forgiven, and
+each word more narrows what the others found, the group holding the nearest
+first. A search lists its twelve nearest, and with nothing typed each group
+lists its first twelve, the projects to install into among them: type
+enough to narrow it to the rest. Beside each is what it is, a project's
+health, a skill's or a rule's kind, and its words are shown as written,
+never as markup. Choosing one goes where its link on a page goes. It
+changes things too, each as the page offering the same change does:
+
+- **Install** one skill or rule, from wherever it is offered, then one of
+  the projects whose box of it on **Assign** is neither ticked nor closed.
+  That one box is planned, as ticking it would plan it, and what the plan
+  says runs, `flayer install -p <project> --from <origin> <kind:name>`,
+  replacing another of its name the project holds; what holds it back, a
+  copy somebody wrote (`foreign`) say, is said with its code, and nothing
+  runs.
+- **Update all**, `flayer update --all --yes`, the button of **Updates**,
+  offered whatever an update would do, which its line then says.
+- **Link**, offered last for whatever is typed, `flayer link <path>`, the
+  line of the form above the projects table, which refuses, saying why,
+  anything but the absolute path of a folder.
+
+Each shows its lines before it runs, as every change does. Escape, or Ctrl+K
+again, closes the palette, and the focus goes back where it was; Backspace,
+with nothing typed, goes back from the projects to install into.
+
+**`?` lists the keyboard shortcuts**, every key the panel answers:
+
+| Keys | Where | What they do |
+|---|---|---|
+| Ctrl+K, or Cmd+K on a Mac | anywhere | open or close the command palette |
+| `?` | anywhere | show or hide the keyboard shortcuts |
+| ↑ and ↓, Enter, Backspace, Esc or Ctrl+K | the command palette | move, choose, go back from the projects to install into, close |
+| Tab, Enter, Esc | a change asked about | move between Cancel and Run, press the one focused, cancel with nothing run |
+| the arrows; Page Up and Page Down | **Assign**'s matrix | move one box; ten rows |
+| Home and End; Ctrl+Home and Ctrl+End | **Assign**'s matrix | the first or the last box of the row; of the matrix |
+| Space or Enter | **Assign**'s matrix | mark the box the other way round, or take its mark away |
+| Ctrl+S, or Cmd+S on a Mac | the editor | save, its line shown first |
+| Tab | the editor | leave the editor |
+
+Neither Ctrl+K nor `?` is taken while a field or the editor has the focus,
+whose keys they stay (`?` is a character typed there), but for the
+palette's own search, which Ctrl+K closes, nor while a change is shown or
+runs, whose question is answered first. Where the browser gives Ctrl+K a
+use of its own, such as its search bar, the panel takes it while its page
+has the focus outside a field, or the palette is open.
+
 **It follows the disk.** A change made from a terminal, the TUI or an
 editor shows in the panel within a moment, without a reload: a skill edited,
 a project linked, an install. The server watches what the workspace's
@@ -2130,8 +2181,8 @@ workspace again. When the system will not let it watch everything, which on
 Linux is the limit `fs.inotify.max_user_watches` sets, each page says so
 above what it shows, with a button that reads everything again.
 
-Every page works from the keyboard and says every state in words, never by
-colour alone. The API under it is there for a script holding the token as a
+Every page works from the keyboard, its keys listed on `?`, and says every
+state in words, never by colour alone. The API under it is there for a script holding the token as a
 Bearer token: `POST /api/query` for a read (`{"type": "snapshot"}` answers
 what the panel draws, `{"type": "files", ...}` what one artifact holds,
 `{"type": "contents", ...}` one file of it, as text, `{"type": "scan",

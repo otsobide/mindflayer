@@ -1,3 +1,4 @@
+import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { useFreshness } from './live'
 import { useTransport } from './transport'
@@ -16,12 +17,17 @@ export const SNAPSHOT_KEY = ['snapshot'] as const
  * Everything a view shows is in it, its counts and its order included: a
  * view lays it out and filters it, and works out nothing a query could
  * answer.
+ *
+ * `enabled` false reads what is kept and asks for nothing, for what is
+ * drawn over every page only now and then, the command palette, which
+ * would otherwise ask for the snapshot on a page that asks for none.
  */
-export function useSnapshot() {
+export function useSnapshot(enabled: MaybeRefOrGetter<boolean> = true) {
   const transport = useTransport()
   return useQuery({
     queryKey: SNAPSHOT_KEY,
     queryFn: () => transport.query({ type: 'snapshot' }),
+    enabled: computed(() => toValue(enabled)),
     staleTime: useFreshness()
   })
 }

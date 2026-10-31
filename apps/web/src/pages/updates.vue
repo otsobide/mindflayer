@@ -10,7 +10,7 @@ import type { Updates } from '@/api/generated/Updates'
 import { useRunner } from '@/api/commands'
 import { useSnapshot } from '@/api/snapshot'
 import { TransportError, type Task } from '@/api/transport'
-import { useUpdates } from '@/api/updates'
+import { UPDATE_ALL, useUpdates } from '@/api/updates'
 import AppHeader from '@/components/AppHeader.vue'
 import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
@@ -121,9 +121,6 @@ const DOES: Partial<Record<Does, string>> = {
   unsure: 'left as it is: where it came from cannot be told'
 }
 
-/** Every project, `flayer update --all --yes`. */
-const ALL: Task = { type: 'update', holder: { type: 'workspace' }, reference: null, force: false }
-
 /** Every installation nothing offers any more, out of every project. */
 const ORPHANS: Task = { type: 'uninstall_orphaned', holder: { type: 'workspace' } }
 
@@ -154,7 +151,7 @@ function why(error: unknown): string {
           size="sm"
           :disabled="busy || !updates?.writes"
           data-testid="update-all"
-          @click="ask(ALL)"
+          @click="ask(UPDATE_ALL)"
         />
       </AppHeader>
     </template>

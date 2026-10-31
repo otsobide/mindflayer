@@ -180,10 +180,12 @@ export function commanded(): Commanded[] {
 }
 
 /**
- * What the assigning fixture's server answers when the plan of `format`
- * into `api` and `docs` is applied, its tasks sent back as one batch
- * (tests/fixtures/applied.json): its preview, and its run. Copied, so a
- * test may change its copy.
+ * What the assigning fixture's server answers when a plan is applied, its
+ * tasks sent back as one batch, each on the workspace as it was built
+ * (tests/fixtures/applied.json): its preview, and its run. The plan of
+ * `format` into `api` and `docs`, which the matrix applies, then of the
+ * library's `deploy` into `api`, one box, which the command palette
+ * applies. Copied, so a test may change its copy.
  */
 export function applying(): Commanded[] {
   return structuredClone(applied) as unknown as Commanded[]

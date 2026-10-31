@@ -244,6 +244,35 @@ describe('the workspace switcher', () => {
   })
 })
 
+// It holds the focus while open, and Reka hides the rest of the page from
+// assistive technology meanwhile, as under every modal.
+describe('the command palette', () => {
+  it('passes axe open, listing what there is and what a search finds', async () => {
+    await render('/', fixture('workspace'))
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="palette"] [role="option"]')).not.toBeNull())
+    expect(await violations(OVER)).toEqual([])
+
+    const input = document.querySelector<HTMLInputElement>('[data-testid="palette"] input')!
+    input.value = 'review'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="palette"] [role="option"]')?.textContent).toContain('review'))
+    expect(await violations(OVER)).toEqual([])
+  })
+})
+
+describe('the sheet of shortcuts', () => {
+  it('passes axe open', async () => {
+    await render('/', fixture('workspace'))
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', shiftKey: true, bubbles: true }))
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="shortcuts"]')).not.toBeNull())
+
+    expect(await violations(OVER)).toEqual([])
+  })
+})
+
 let runner: Runner
 
 /**
