@@ -5786,8 +5786,12 @@ they close, named by the title Reka keeps for assistive technology; the
 palette's field and its list carry names of their own. `tests/palette.test.ts`
 holds the palette to its keys, its groups and its search, and each change
 to the task the page offering it sends, with every way a page could reach
-the network stubbed to fail; `e2e/palette.spec.ts` installs a skill from it
-with the keyboard alone ([end to end](#end-to-end-in-a-browser)).
+the network stubbed to fail; `tests/views.test.ts` opens both, the
+palette through an offer's projects to what holds an install back, and
+holds every icon they draw, which no page draws, to the bundle, with no
+`<style>` added ([nothing the CSP refuses](#nothing-the-csp-refuses));
+`e2e/palette.spec.ts` installs a skill from it with the keyboard alone
+([end to end](#end-to-end-in-a-browser)).
 
 ### Its fixtures come from Rust
 
