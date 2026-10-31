@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import type { Planned } from '@/api/generated/Planned'
 import type { Snapshot } from '@/api/generated/Snapshot'
+import { TransportError, type Query, type Transport } from '@/api/transport'
+import { UPDATE_ALL } from '@/api/updates'
 import { VIEWS } from '@/components/AppSidebar.vue'
 import { useShell } from '@/stores/shell'
-import { answering, answers, commanding, drafts, fixture, render, unmount } from './panel'
+import { answering, answers, applying, commanded, commanding, drafts, fixture, plans, render, unmount, updates, updatings, type Answered } from './panel'
 
 afterEach(() => {
   unmount()
@@ -45,6 +48,11 @@ function listed(): { group: string, entries: string[] }[] {
       .map(part => part.textContent!.trim())
       .join(' '))
   }))
+}
+
+/** The entries listed under `heading`, none when it is not listed. */
+function group(heading: string): string[] {
+  return listed().find(each => each.group === heading)?.entries ?? []
 }
 
 /** Every entry's label, in the order listed. */
@@ -136,13 +144,17 @@ describe('the command palette', () => {
     expect(palette()).toBeNull()
   })
 
-  it('lists every page, then each project, the library\'s own, the shelf and the sources, each under its heading', async () => {
+  it('lists every page and its actions, then each offer to install, project, the library\'s own, the shelf and the sources, each under its heading', async () => {
     const snapshot = fixture('workspace')
     await render('/', snapshot)
     await opened()
 
     expect(listed()).toEqual([
       { group: 'Pages', entries: VIEWS.map(view => view.label) },
+      { group: 'Actions', entries: ['Update all'] },
+      // Every offer some project's box of is neither ticked nor closed:
+      // `review`, which every project holds, is not.
+      { group: 'Install', entries: ['Install lint skill', 'Install format skill', 'Install triage skill', 'Install git/commits rule', 'Install style/comments rule'] },
       { group: 'Projects', entries: snapshot.projects.map(project => `${project.name ?? project.entry} ${project.health}`) },
       { group: 'Library', entries: snapshot.library.artifacts.map(held => `${held.name} ${held.kind}`) },
       { group: 'Shelf', entries: snapshot.shelf.map(shelved => `${shelved.name} ${shelved.kind}`) },
@@ -163,17 +175,21 @@ describe('the command palette', () => {
     await search('projets')
     expect(entries()).toContain('Projects')
 
-    // Near enough to find `comments` too, but `commits` first; and every
-    // skill, which the first word finds nothing of, left out.
+    // Not so near as to find `comments`; and every skill, which the first
+    // word finds nothing of, left out, but what is typed offered as a
+    // folder to link, last, whatever it is.
     await search('rule commits')
-    expect(entries()).toEqual(['git/commits rule', 'style/comments rule'])
+    expect(group('Library')).toEqual(['git/commits rule'])
+    expect(entries().filter(entry => !entry.endsWith(' rule'))).toEqual(['Link rule commits'])
 
-    // The source, whose origin it is all of, before what it put on the shelf.
+    // The source, whose origin it is all of, before what it put on the
+    // shelf and offers to install, whose descriptions name it.
     await search('acme')
-    expect(listed().map(group => group.group)).toEqual(['Sources', 'Shelf'])
+    expect(listed()[0]).toEqual({ group: 'Sources', entries: ['https://github.com/acme/skills git'] })
+    expect([...group('Shelf')].sort()).toEqual(['format skill', 'triage skill'])
 
     await search('nothing here at all')
-    expect(entries()).toEqual([])
+    expect(entries()).toEqual(['Link nothing here at all'])
   })
 
   it('goes where a link on a page would, once it has closed', async () => {
@@ -219,5 +235,181 @@ describe('the command palette', () => {
     await search('api')
 
     expect(queries.slice(asked)).toEqual([])
+  })
+})
+
+/** Choose, by Enter, the entry highlighted: the first, or the nearest to what was typed. */
+async function enter() {
+  press('Enter')
+  await settled()
+}
+
+/** The lines the dialog shows, as `$ line`, once it shows a task. */
+async function shown(): Promise<string[]> {
+  return vi.waitFor(() => {
+    const lines = [...document.querySelectorAll('[data-testid="preview"] [data-testid="command"]')].map(line => line.textContent!.trim())
+    expect(lines).not.toEqual([])
+    return lines
+  })
+}
+
+/** Press Run in the dialog, and wait until it has gone. */
+async function run() {
+  document.querySelector<HTMLElement>('[role="dialog"] [data-testid="run"]')!.click()
+  await vi.waitFor(() => expect(document.querySelector('[data-testid="preview"]')).toBeNull())
+}
+
+/** Each toast's title and description, as shown. */
+function toasts(): string[] {
+  return [...document.querySelectorAll('li[data-state="open"] [data-slot="wrapper"]')]
+    .map(toast => [...toast.children].map(part => part.textContent!.trim()).join(' '))
+}
+
+describe('acting from the command palette', () => {
+  it('installs one offer into one project as ticking its box on the matrix does: core plans the box, and its tasks are previewed, then run', async () => {
+    const [, applied] = applying()
+    const [, oneBox] = plans()
+    const { queries, sent, transport } = commanding(fixture('assigning'), applying(), plans())
+    await render('/', transport)
+    await opened()
+
+    await search('install deploy workspace')
+    expect(group('Install')).toEqual(['Install deploy skill'])
+    await enter()
+    // `api` holds the team's `deploy`, whose box the library's replaces;
+    // `bare` and `gone` take no skill.
+    expect(listed()).toEqual([{ group: 'Install deploy', entries: ['api claude, codex', 'web claude, opencode', 'docs codex'] }])
+    await search('api')
+    await enter()
+
+    expect(await shown()).toEqual(applied!.preview.lines.map(line => `$ ${line}`))
+    expect(queries.filter(query => query.type === 'plan')).toEqual([oneBox!.query])
+    expect(sent).toEqual([{ task: applied!.task, mode: 'preview' }])
+    expect(applied!.task).toEqual({ type: 'apply_install', changes: (oneBox!.answer as Planned).tasks })
+
+    await run()
+    expect(sent.map(each => each.mode)).toEqual(['preview', 'run'])
+    expect(sent[1]!.task).toEqual(applied!.task)
+  })
+
+  it('offers an offer only into the projects whose box of it is neither ticked nor closed', async () => {
+    await render('/', fixture('assigning'))
+    await opened()
+
+    // `docs` holds the team's `notes`; `bare` and `gone` take no skill.
+    await search('install notes')
+    await enter()
+
+    expect(listed()).toEqual([{ group: 'Install notes', entries: ['api claude, codex', 'web claude, opencode'] }])
+  })
+
+  it('says what holds an install back, with its code, and runs nothing', async () => {
+    const cell = { project: 'web', reference: 'skill:format', origin: 'https://github.com/acme/skills', wanted: true }
+    const why = { code: 'foreign', message: '`format` in web is somebody\'s own, at .claude/skills/format' }
+    const held: Answered = { query: { type: 'plan', selection: [cell] }, answer: { tasks: [], conflicts: [], locked: [{ cell, why }] } }
+    const { sent, transport } = commanding(fixture('assigning'), applying(), [held])
+    await render('/', transport)
+    await opened()
+
+    await search('install format')
+    await enter()
+    await search('web')
+    await enter()
+
+    await vi.waitFor(() => expect(toasts()).toEqual([`Nothing ran ${why.message} (${why.code})`]))
+    expect(sent).toEqual([])
+  })
+
+  it('says why a plan was refused, with its code, and runs nothing', async () => {
+    const { sent, transport } = commanding(fixture('assigning'), applying(), [])
+    const refusing: Transport = {
+      ...transport,
+      query: query => (query.type === 'plan'
+        ? Promise.reject(new TransportError(422, '`api` is no entry of the workspace', 'not_linked'))
+        : transport.query(query))
+    } as Transport
+    await render('/', refusing)
+    await opened()
+
+    await search('install format')
+    await enter()
+    await search('api')
+    await enter()
+
+    await vi.waitFor(() => expect(toasts()).toEqual(['Nothing ran `api` is no entry of the workspace (not_linked)']))
+    expect(sent).toEqual([])
+  })
+
+  it('updates every project with the task Update all sends on the page of updates', async () => {
+    const [all] = updatings()
+    const { sent, transport } = commanding(fixture('updating'), updatings(), updates())
+    await render('/', transport)
+    await opened()
+
+    await search('update all')
+    await enter()
+
+    expect(await shown()).toEqual(all!.preview.lines.map(line => `$ ${line}`))
+    expect(sent).toEqual([{ task: UPDATE_ALL, mode: 'preview' }])
+    expect(all!.task).toEqual(UPDATE_ALL)
+  })
+
+  it('links the folder typed, with the task the link form sends', async () => {
+    const [link] = commanded()
+    const path = (link!.task as { path: string }).path
+    const { sent, transport } = commanding(fixture('workspace'), commanded())
+    await render('/', transport)
+    await opened()
+
+    await search(path)
+    expect(listed().at(-1)).toEqual({ group: 'Link', entries: [`Link ${path}`] })
+    await enter()
+
+    expect(await shown()).toEqual(link!.preview.lines.map(line => `$ ${line}`))
+    expect(sent).toEqual([{ task: { type: 'link', path }, mode: 'preview' }])
+  })
+
+  it('fetches nothing itself: each action reaches the server through the transport the pages use', async () => {
+    const reached = vi.fn()
+    for (const name of ['fetch', 'XMLHttpRequest', 'EventSource', 'WebSocket']) {
+      vi.stubGlobal(name, vi.fn((...args: unknown[]) => {
+        reached(name, ...args)
+        throw new Error(`${name} reached past the transport`)
+      }))
+    }
+    try {
+      const { queries, sent, transport } = commanding(fixture('assigning'), [...applying(), ...updatings(), ...commanded()], plans())
+      const { router } = await render('/', transport)
+      const asked = queries.length
+
+      // Each change shown, then let go, so the next can be asked.
+      const letGo = async () => {
+        await shown()
+        document.querySelector<HTMLElement>('[role="dialog"] [data-testid="cancel"]')!.click()
+        await vi.waitFor(() => expect(document.querySelector('[data-testid="preview"]')).toBeNull())
+      }
+      for (const [steps, then] of [
+        [['install deploy workspace', 'api'], letGo],
+        [['update all'], letGo],
+        [['/home/you/Projects/blog'], letGo],
+        [['assign'], async () => undefined]
+      ] as [string[], () => Promise<void>][]) {
+        await opened()
+        for (const step of steps) {
+          await search(step)
+          await enter()
+        }
+        await vi.waitFor(() => expect(useShell().paletteOpen).toBe(false))
+        await then()
+        await settled()
+      }
+
+      await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/assign'))
+      expect(reached).not.toHaveBeenCalled()
+      expect(queries.slice(asked).filter((query: Query) => query.type !== 'snapshot').map(query => query.type)).toEqual(['plan'])
+      expect(sent.map(each => [each.task.type, each.mode])).toEqual([['apply_install', 'preview'], ['update', 'preview'], ['link', 'preview']])
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

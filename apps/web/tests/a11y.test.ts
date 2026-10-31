@@ -257,7 +257,7 @@ describe('the command palette', () => {
     const input = document.querySelector<HTMLInputElement>('[data-testid="palette"] input')!
     input.value = 'review'
     input.dispatchEvent(new Event('input', { bubbles: true }))
-    await vi.waitFor(() => expect(document.querySelectorAll('[data-testid="palette"] [role="option"]')).toHaveLength(2))
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="palette"] [role="option"]')?.textContent).toContain('review'))
     expect(await violations(OVER)).toEqual([])
   })
 })

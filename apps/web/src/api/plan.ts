@@ -1,5 +1,5 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
-import { keepPreviousData, useQuery } from '@tanstack/vue-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/vue-query'
 import type { Cell } from './generated/Cell'
 import type { Planned } from './generated/Planned'
 import { useFreshness } from './live'
@@ -37,6 +37,23 @@ export function usePlan(selection: MaybeRefOrGetter<Cell[]>) {
     enabled: computed(() => toValue(selection).length > 0),
     placeholderData: keepPreviousData,
     staleTime: useFreshness()
+  })
+}
+
+/**
+ * Ask for the plan of `selection` once, when somebody chooses it, rather
+ * than whenever marks change: for what plans one box at a time, the
+ * command palette's install. The matrix's query, under its key, so what it
+ * is answered with lives where the matrix's does; asked again whatever is
+ * kept, since a plan is of the disk as it stands.
+ */
+export function usePlanOnce() {
+  const transport = useTransport()
+  const client = useQueryClient()
+  return (selection: Cell[]) => client.fetchQuery({
+    queryKey: ['plan', selection],
+    queryFn: () => transport.query({ type: 'plan', selection }),
+    staleTime: 0
   })
 }
 
