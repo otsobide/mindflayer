@@ -2125,10 +2125,12 @@ and from **Search** at the top of the sidebar. Type to find any page, a
 project, one of the library's own, anything on the shelf and the sources it
 came from: a word finds what holds it, a letter out of place forgiven, and
 each word more narrows what the others found, the group holding the nearest
-first. Beside each is what it is, a project's health, a skill's or a rule's
-kind, and its words are shown as written, never as markup. Choosing one goes
-where its link on a page goes. It changes things too, each as the page
-offering the same change does:
+first. A search lists its twelve nearest, and with nothing typed each group
+lists its first twelve, the projects to install into among them: type
+enough to narrow it to the rest. Beside each is what it is, a project's
+health, a skill's or a rule's kind, and its words are shown as written,
+never as markup. Choosing one goes where its link on a page goes. It
+changes things too, each as the page offering the same change does:
 
 - **Install** one skill or rule, from wherever it is offered, then one of
   the projects whose box of it on **Assign** is neither ticked nor closed.

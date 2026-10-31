@@ -5731,14 +5731,17 @@ and their changes, and holds no rule of its own:
   every word typed to be found somewhere (`tokenMatch: 'all'`), each
   within a threshold of 0.2, which forgives a letter out of place
   (`revew`) and not a word only half like another (0.3 found `came` for
-  `acme`). Searched, the groups come in the order of their best match,
-  each listing its twelve nearest, Nuxt UI's default, so a long list is
-  found by typing rather than scrolled through. It
-  filters and orders what the snapshot lists, as a page's filter does, and
-  no count or verdict depends on it. Nuxt UI would draw what matched as
-  HTML, each match marked; every entry gives that HTML as empty, so its
-  words, somebody's summary among them, are drawn as text, as a skill's
-  markdown is ([nothing the CSP refuses](#nothing-the-csp-refuses)).
+  `acme`). Searched, it lists the twelve nearest entries in all, Nuxt
+  UI's default (`resultLimit`), each under its group, the groups in the
+  order of their best match; with nothing typed, each group lists its
+  first twelve, an offer's projects to install into among them. So a long
+  list is found by typing rather than scrolled through, and nothing says
+  more are there ([open questions](#open-questions)). It filters and
+  orders what the snapshot lists, as a page's filter does, and no count or
+  verdict depends on it. Nuxt UI would draw what matched as HTML, each
+  match marked; every entry gives that HTML as empty, so its words,
+  somebody's summary among them, are drawn as text, as a skill's markdown
+  is ([nothing the CSP refuses](#nothing-the-csp-refuses)).
 - **Its changes are the pages' tasks**, through the one runner, so each is
   previewed by the server, shown, and confirmed where the CLI says it takes
   something away, as any page's is. **Update all** is the page of updates'
@@ -8793,6 +8796,16 @@ just listed.
   while the palette is open, it could say what the button says, at the
   price of that read on every opening; until then, choosing it shows the
   line, and its run says what it did.
+- **The palette lists twelve, and says nothing of the rest.** Nuxt UI's
+  palette cuts a search to its twelve nearest entries in all, and each
+  group, with nothing typed, to its first twelve: a workspace with more
+  projects than that lists only twelve under **Projects**, or under an
+  offer to install, until enough is typed to narrow it. A larger
+  `resultLimit` would draw every entry the snapshot lists each time the
+  palette opens, the whole shelf among them, which a long list would want
+  virtualized; saying how many are left out would be a count the snapshot
+  does not carry. Until a workspace that large asks for one or the other,
+  typing is the way to the rest, as the reference says.
 - **The palette offers to link whatever is typed.** Telling a path from a
   word is the path policy's, on the server, so `Link deploy` is listed
   under what a search for `deploy` finds, and refused with why if chosen.
