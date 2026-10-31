@@ -99,6 +99,16 @@ const SAID: Record<string, string> = {
   '?': 'Question mark'
 }
 
+/**
+ * What the sheet says of itself: which keys a field keeps, named as this
+ * platform presses them. Only the two that open something, since the rest
+ * are the palette's and the editor's own, pressed in a field.
+ */
+const description = computed(() => {
+  const palette = macOS.value ? 'Cmd+K' : 'Ctrl+K'
+  return `What the keys do in the panel. Neither ${palette} nor ? is taken while you type in a field or in the editor, whose keys they stay, but in the palette's own search, where ${palette} closes it.`
+})
+
 /** The ways to press `shortcut`, in words. */
 function said(shortcut: Shortcut): string {
   const word = (key: string) => (key === 'meta' ? (macOS.value ? 'Command' : 'Control') : SAID[key] ?? key)
@@ -110,7 +120,7 @@ function said(shortcut: Shortcut): string {
   <UModal
     v-model:open="open"
     title="Keyboard shortcuts"
-    description="What the keys do in the panel. None of them is taken while you type in a field or in the editor, whose keys they stay."
+    :description="description"
     :ui="{ content: 'sm:max-w-2xl' }"
   >
     <template #body>

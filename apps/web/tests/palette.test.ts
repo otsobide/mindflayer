@@ -545,6 +545,9 @@ describe('the sheet of shortcuts', () => {
     expect(keys.slice(0, 2)).toEqual(['Control K', 'Question mark'])
     expect(keys).toContain('Control S')
     expect(sheet()!.getAttribute('aria-labelledby')).toBeTruthy()
+    // What a field keeps is the two that open something, not every key
+    // listed: the palette's and the editor's are pressed in a field.
+    expect(document.getElementById(sheet()!.getAttribute('aria-describedby')!)!.textContent).toBe('What the keys do in the panel. Neither Ctrl+K nor ? is taken while you type in a field or in the editor, whose keys they stay, but in the palette\'s own search, where Ctrl+K closes it.')
 
     press('Escape')
     await vi.waitFor(() => expect(sheet()).toBeNull())
