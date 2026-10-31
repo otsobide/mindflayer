@@ -31,6 +31,7 @@ const links = computed<NavigationMenuItem[]>(() => [
     to: '/library',
     active: ['/artifact', '/edit', '/new'].includes(route.path) || undefined
   },
+  { label: 'Loads', icon: 'i-lucide-layers', to: '/loads' },
   { label: 'Shelf', icon: 'i-lucide-package', to: '/shelf' },
   { label: 'Sources', icon: 'i-lucide-git-branch', to: '/sources' }
 ])

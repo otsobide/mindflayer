@@ -145,43 +145,10 @@ describe('the library', () => {
 
     expect(page.get('[data-testid="sidebar"] nav a[aria-current="page"]').text()).toBe('Library')
   })
-})
 
-describe('the loaded workspaces', () => {
-  it('lists each with where it is, what it offers, what --from takes, and why it does not open', async () => {
-    const snapshot = fixture('workspace')
-    const [team] = snapshot.loaded
+  it('leads to the workspaces it loads, which have a page of their own', async () => {
+    const { page } = await render('/library', fixture('workspace'))
 
-    const { page } = await render('/library', snapshot)
-
-    const row = page.get('[data-testid="load"]')
-    expect(row.get('th').text()).toBe(team!.entry)
-    expect(row.text()).toContain(team!.path)
-    expect(row.get('[data-testid="offers"]').text()).toBe(String(team!.offers))
-    expect(row.get('[data-testid="origin"]').text()).toBe(team!.origin)
-    expect(row.get('[data-testid="error"]').text()).toBe(`${team!.error!.code}: ${team!.error!.message}`)
-  })
-
-  it('names a loaded workspace that opens by its name, beside its entry', async () => {
-    const snapshot = fixture('workspace')
-    snapshot.loaded[0] = { ...snapshot.loaded[0]!, name: 'team', offers: 3, error: null }
-
-    const { page } = await render('/library', snapshot)
-
-    const row = page.get('[data-testid="load"]')
-    expect(texts(row, 'th div')).toEqual(['team', '../team'])
-    expect(row.get('[data-testid="offers"]').text()).toBe('3')
-    expect(row.get('[data-testid="error"]').text()).toBe('yes')
-  })
-
-  it('names the command that would load one when it loads none', async () => {
-    const snapshot = fixture('workspace')
-    snapshot.loaded = []
-
-    const { page } = await render('/library', snapshot)
-
-    expect(texts(page.get('[data-testid="no-loaded"]'), 'code')).toEqual([
-      `$ flayer -W ${snapshot.workspace.path} load <PATH>`
-    ])
+    expect(page.get('[data-testid="to-loads"] a').attributes('href')).toBe('/loads')
   })
 })
