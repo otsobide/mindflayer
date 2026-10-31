@@ -1515,6 +1515,12 @@ type derives `Serialize` from the start:
   `code::Said`; and the hash a file read for the panel carries
   (`contents::Contents`'s `hash`, by `hash::bytes`), what `edit
   --if-unchanged` takes, a field added to a type the panel read already.
+- **Told for the panel by #83**: how the workspace a snapshot is of stands
+  with each workspace this machine knows (`view::KnownHere`), the row
+  `flayer workspaces` prints (`KnownWorkspace`) flattened beside the entry
+  it loads it by (`loaded_as`) and whether it could load it (`loadable`),
+  as a shelf row's origin is flattened beside the ledger's row: what one
+  workspace loads is nothing that list of the machine says.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -1703,9 +1709,14 @@ read, built and ordered in core from the read types the commands print:
   ([D-23](#d-23-what-a-project-received-is-an-installed-view));
 - the workspaces it loads, each with how many of its own it offers; its
   shelf and the sources it is filled from; the workspaces this machine
-  knows; the latest actions, newest first (`view::HISTORY`); and the
-  warnings that belong to none of those. Each load, each thing on the shelf
-  (`view::Shelved`) and each source (`view::ShelfSource`) says its
+  knows, each with whether it loads it and by which entry, and whether it
+  could (`view::KnownHere`: one that opens, is not this one, is loaded by no
+  spelling yet and has a path a command line can hold), which only a
+  comparison of where each path leads tells, so a front end offering a load
+  offers what `flayer load` takes; the latest actions, newest first
+  (`view::HISTORY`); and the warnings that belong to none of those. Each
+  load, each thing on the shelf (`view::Shelved`) and each source
+  (`view::ShelfSource`) says its
   `origin`, what `--from` takes for what it offers and what an install of
   that records, each spelled by the one function that spells it for an
   install (`ledger::Source::origin`, `install::loaded_origin`): a second
@@ -3269,6 +3280,12 @@ not apply says why, and the lines after it run all the same.
 Two spellings of one loaded directory are one source; `load_all`,
 `unload_all` and `unlink_all` rewrite the marker once, for all of the paths or
 none.
+
+The panel loads and unloads from a page of its own by the tasks the TUI's
+load form sends, a workspace this machine knows by its path or any other
+typed, and one loaded by its entry ([its changes](#its-changes)); which of
+those it knows the workspace could load is the snapshot's
+([the read model](#the-read-model)).
 
 ### What keeps an install out of git
 
@@ -4898,7 +4915,8 @@ projects, changing a project's agents and share mode and migrating one an
 older marker marks, and shows a transcript of every run (#76, #77, [its
 changes](#its-changes)). It edits, adds and renames the library's own, and
 adopts somebody's skill from a project's page, judged by core as they are
-typed ([authoring in the library](#authoring-in-the-library), #82).
+typed ([authoring in the library](#authoring-in-the-library), #82), and
+loads and unloads other workspaces from a page of its own (#83).
 
 ### One way out: the transport
 
@@ -5048,8 +5066,8 @@ where serde's are, and the feature only reads them.
 
 ### Its views
 
-Eight pages draw the snapshot ([the read model](#the-read-model)), a ninth
-a scan beside it and a tenth what an update would do, each a file under
+Nine pages draw the snapshot ([the read model](#the-read-model)), a tenth
+a scan beside it and an eleventh what an update would do, each a file under
 `src/pages`:
 
 - **The overview** (`/`) names the workspace, where it is and why that one,
@@ -5101,14 +5119,22 @@ a scan beside it and a tenth what an update would do, each a file under
 - **The library** (`/library?kind=...`) has a page for each kind in `kinds`,
   the first when none is named, listing the workspace's own of it, filtered
   by name or summary, each with the projects holding a copy and how each
-  copy stands, and what `validate` says; and below, every workspace it
-  loads, with what it offers, its `origin` and why it does not open.
+  copy stands, and what `validate` says.
 - **One of the library's own** (`/artifact?kind=...&name=...`) shows its
   front matter as a table, its body rendered, its files, each opening as
   text (`&file=...`), what `validate` says of it, and the projects holding a
   copy, each with its state, agents and targets, and below, its removal
   everywhere, dry run first ([its changes](#its-changes)). Named in the
   query, as a project is, since a rule's name is a route.
+- **Loads** (`/loads`), beside the library and the shelf in the sidebar,
+  the third place an offer comes from, lists every workspace it loads, with
+  its entry, where it is, its `origin`, why it does not open, and what it
+  offers, each with a link to the matrix showing that origin alone; and
+  below, every workspace this machine knows (`known`), each saying in words
+  whether it is the default, this one, loaded and by which entry
+  (`loaded_as`), or one that does not open, with the projects it links as
+  core counts them. It had been a table at the foot of every page of the
+  library, which is a page a kind, where a list of workspaces is of none.
 - **The shelf** (`/shelf`) lists what was gathered, filtered by kind, by
   name, summary or origin, each with its `origin`, the commit it was taken
   at and when.
@@ -5123,10 +5149,14 @@ shelf, is never taken for it, and an install recorded before origins were
 kept, whose copy names no origin, is not left out, which comparing a
 copy's `origin` with `library.origin` in the panel would do. What a source
 supplied is the shelf's rows that name its folder, which no two sources
-share. Both are filters of what the snapshot lists, as a health filter
-is. An origin is shown as core says it, never put together
-from an address and a branch, which would be the rule for `--from` in
-TypeScript ([the read model](#the-read-model)).
+share, and what a load offers the offers of its `origin`, which a second
+spelling of one workspace shares with the first, as it shares its count.
+Each is a filter of what the snapshot lists, as a health filter is; which
+known workspace can be loaded is core's (`loadable`), not the panel's
+reading of `in_use`, `stale` and the loads' paths, which would take two
+spellings of one folder for two. An origin is shown as core says it,
+never put together from an address and a branch, which would be the rule
+for `--from` in TypeScript ([the read model](#the-read-model)).
 
 An artifact's page reads more than the snapshot: its files
 (`Query::Files`), whose answer names the file it is read from, then that
@@ -5402,6 +5432,23 @@ What the pages offer:
 - **A save, an addition and a rename of one of the library's own, and an
   adoption from a project's page**, each a task the server previews like
   any other ([authoring in the library](#authoring-in-the-library)).
+- **A load and an unload, from the page of loads**: a workspace this
+  machine knows by the path the snapshot lists it by, offered only where
+  core says the workspace can load it (`loadable`), or any other by the
+  path typed, sent as typed for the path policy to hold; and an unload of
+  one it loads by the entry the marker spells it by (`policy::loaded`),
+  one that does not open among them, asked about by `Caution::Unloads`.
+  Each is the task the TUI's load form sends for the same workspace, typed
+  or picked (`Task::Load`, `Task::Unload`), which a test of the backend
+  holds the panel to, line for line and marker for marker. Neither
+  remembers anything: what this machine knows is `flayer init`'s to add,
+  so a workspace loaded by its path joins the list only once `flayer init`
+  runs on it, and a load from the panel never writes in the default
+  workspace's marker ([the workspaces this machine
+  knows](#the-workspaces-this-machine-knows)). `mind load`, into the
+  workspace above a project (`Task::LoadHere`), is no page's: the panel is
+  launched on a workspace, and loads into that one
+  ([open questions](#open-questions)).
 - **A migration, for a project an older marker marks**, the dry run first,
   `flayer migrate -p <project>`, whose report the page shows once it ran,
   then the migration, the same line with `--yes`, offered only then. The
@@ -5718,6 +5765,21 @@ one from their fixture. That the ledger a batch leaves is the one its
 lines leave run in the CLI, every hash and action logged, is the backend
 suite's to hold (`backend_test.rs`), which reads it.
 
+`e2e/loads.spec.ts` takes `loadable`, the one builder whose workspace is
+served with a home of its own beside it rather than the run's: only a
+default workspace remembers the workspaces this machine knows, and the
+run's home is held to stay empty. The builder makes that default first, so
+each `flayer init` after it remembers the workspace it makes, `team` with a
+skill of its own, then the workspace, holding one and linking a project.
+`team`, loaded from the page's list of what this machine knows by the line
+it shows, has to list its skill, which the matrix then offers; unloaded,
+confirmed first, it has to be offered no more; and the twin, given the
+same two lines, has to hold the same marker after each. A home of a test's
+own is held to stay as it was made once its server has stopped, by the look
+the driver holds the run's with (`look`, in `e2e/environment.ts`), so a
+load that wrote into the default workspace would fail the test that ran
+it.
+
 No page may log a violation of the CSP. Each engine fires
 `securitypolicyviolation` and words its own console messages, and a
 message the browser rather than a script logs may not reach Playwright, so
@@ -5745,9 +5807,10 @@ the machine it was taken on holds, a home's path and an account's name
 among it. `make docs/screenshots` builds the panel and the debug binaries
 as `make web/e2e` does and runs `e2e/screenshots.ts`, which reuses the
 suite's harness (`environment.ts`): every process without the variables
-that lead to a real workspace or agent home, an empty temporary home that
-has to be empty still once the server has stopped, every command naming
-its home, and every agent home empty.
+that lead to a real workspace or agent home, a temporary home holding only
+the default workspace the demo makes there, which has to be as the demo
+made it once the server has stopped, every command naming its home, and
+every agent home empty.
 
 The workspace it shows is `e2e/demo.ts`'s rather than the suite's fixture,
 which is made to be compared and looks it: six projects with plausible
@@ -5760,7 +5823,10 @@ outdated, two by a second gather and one by an edit of the library's own,
 and one edited, `infra`'s copy of that same skill, which `infra` keeps
 where Claude reads its skills and changed with `mind edit` before;
 a rule stating `paths`, so a project's page warns that two of its agents
-never read it; and two repositories nobody linked, for Discover. Every
+never read it; two repositories nobody linked, for Discover; and a home
+made the default workspace before anything else, so it knows the demo's
+workspace and `platform` beside it, a workspace of skills of its own that
+nothing loads, for the tour to load. Every
 change is a command; the files written by hand are the repositories'
 contents, as a person's work is, and each body of the library's own is
 written by `flayer edit --editor 'cp <draft>'`, as an editor saves it.
@@ -5785,7 +5851,9 @@ with why; the preview of linking what Discover marked, then, once that has
 run, an unlink asked about and cancelled, and the transcript; and last the
 dry run of removing one of the library's own everywhere, which changes
 nothing, taken after the transcript it would otherwise join, once the toast
-saying it ran has gone from over what it said. Chromium
+saying it ran has gone from over what it said; and `platform` loaded from
+the page of loads, after every other page is taken without it, so no other
+picture changes with it. Chromium
 alone, since the images are the same in WebKit, which does not run
 everywhere. The viewport is 1440 by 900, wide enough for a project's table
 with every column beside the sidebar (1280 cut its targets short), at a
@@ -6098,7 +6166,10 @@ workspaces forget PATH` takes one out, and `w` in the TUI runs `flayer
 workspaces` and shows what it prints, as `s` shows `flayer gather list`. What
 is known, in which order, and which one is in use are core's (`known::known`,
 fed by `resolve`), so the panel's switcher will read the answer the CLI
-prints.
+prints. Its page of loads reads it already (#83), to offer loading one,
+and whether the workspace on screen loads each and could load it is the
+snapshot's, beside the row the list prints (`view::KnownHere`), since it
+is of that workspace rather than of the machine.
 
 In the default workspace's marker rather than in a file of its own or in the
 ledger. Home is the one place every flayer on a machine can find; its marker
@@ -8422,6 +8493,17 @@ just listed.
 
 ## Open questions
 
+- **A known workspace that has gone is offered nothing on the page of
+  loads.** It is listed, with why it does not open, and offers neither a
+  load, which would be refused, nor `flayer workspaces forget`, which
+  would take it off the list: forgetting changes what the machine knows
+  rather than what the workspace on screen offers, and #84's switcher,
+  which reads the same list, may be the place for it.
+- **`mind load` is no page's.** The panel is launched on a workspace and
+  loads into that one; a project's own load into the workspace above it
+  (`Task::LoadHere`), which the TUI offers when it is opened on a project,
+  is admitted by the backend and offered by no page, since no page shows a
+  project no workspace links.
 - **A save's line names a file gone once it ran.** The transcript keeps
   `flayer edit --contents .mindflayer/tmp/edit-<hash>.md ...` as it ran, and
   the backend takes the file away after, so the line pasted into a shell
