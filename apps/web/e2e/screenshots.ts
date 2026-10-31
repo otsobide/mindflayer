@@ -168,6 +168,12 @@ const ASSIGNED = [
 ]
 
 /**
+ * What is typed into the command palette's image: a word the shelf's
+ * `release-notes` starts with, which some projects hold and others could.
+ */
+const PALETTE = 'release'
+
+/**
  * The tour, in the order it is taken: of the last five, three run a command
  * and ask about another, the fourth runs a dry run, which changes nothing,
  * after the transcript is taken, and the last loads a workspace, after
@@ -189,6 +195,21 @@ const TOUR: Shot[] = [
       await page.getByTestId('cards').waitFor()
       await page.getByTestId('workspace-switcher').click()
       await page.getByRole('menuitemcheckbox', { checked: true }).waitFor()
+    }
+  },
+  {
+    // The command palette over the overview, opened with its keys and a
+    // word typed: what it finds of every kind, grouped, an install among
+    // it. Nothing is chosen.
+    name: 'palette',
+    path: '/',
+    ready: async (page) => {
+      await page.getByTestId('cards').waitFor()
+      await page.keyboard.press('ControlOrMeta+K')
+      const palette = page.getByRole('dialog', { name: 'Command palette' })
+      await palette.getByRole('textbox').waitFor()
+      await page.keyboard.type(PALETTE)
+      await palette.getByRole('option', { name: new RegExp(`^Install ${literally(PALETTE)}`) }).waitFor()
     }
   },
   {
