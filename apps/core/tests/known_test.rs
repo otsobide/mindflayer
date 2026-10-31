@@ -4,7 +4,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::known;
+use mindflayer_core::known::{self, Launch};
+use mindflayer_core::resolve::Reason;
 use mindflayer_core::{
     FlayerWorkspace, MindProject, Registration, WorkspaceError, FLAYER_CONFIG, FLAYER_DIR,
 };
@@ -508,4 +509,157 @@ fn why_a_workspace_would_not_open_is_written_with_no_credential() {
     let json = serde_json::to_string(&known).unwrap();
     assert!(!json.contains("ghp_t0ken"), "{json}");
     assert!(json.contains("https://github.com/acme/skills"), "{json}");
+}
+
+/// Each row of a list of what a front end may switch to: its name, whether
+/// it is the one in use, the one launched on, how it is chosen once switched
+/// to, and whether a switch to it is offered.
+fn offered(rows: &[known::Switchable]) -> Vec<(Option<&str>, bool, bool, Reason, bool)> {
+    rows.iter()
+        .map(|row| {
+            (
+                row.workspace.name.as_deref(),
+                row.workspace.in_use,
+                row.launched,
+                row.reason,
+                row.switchable,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_switch_is_offered_to_every_known_workspace_but_the_one_in_use() {
+    let (_dir, home, writing) = home_and_writing();
+    let (notes, _) = FlayerWorkspace::init(home.join("notes")).unwrap();
+    known::remember(Some(&home), &writing).unwrap();
+    known::remember(Some(&home), &notes).unwrap();
+    let launch = Launch {
+        root: writing.root(),
+        reason: Reason::Explicit,
+    };
+
+    let rows = known::switchable(Some(&home), &launch, &writing);
+
+    assert_eq!(
+        offered(&rows),
+        [
+            (Some("home"), false, false, Reason::Explicit, true),
+            (Some("writing"), true, true, Reason::Explicit, false),
+            (Some("notes"), false, false, Reason::Explicit, true),
+        ]
+    );
+}
+
+#[test]
+fn the_launch_is_listed_last_when_nothing_remembers_it_and_keeps_its_reason() {
+    let (dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+    let (elsewhere, _) = FlayerWorkspace::init(dir.path().join("elsewhere")).unwrap();
+    let launch = Launch {
+        root: elsewhere.root(),
+        reason: Reason::Above,
+    };
+
+    // Switched to `writing` since: the launch is still offered, by the rule
+    // that chose it, and the default by `-W`, as any other is.
+    let rows = known::switchable(Some(&home), &launch, &writing);
+
+    assert_eq!(
+        offered(&rows),
+        [
+            (Some("home"), false, false, Reason::Explicit, true),
+            (Some("writing"), true, false, Reason::Explicit, false),
+            (Some("elsewhere"), false, true, Reason::Above, true),
+        ]
+    );
+    assert_eq!(rows[2].workspace.path, elsewhere.root());
+}
+
+#[test]
+fn the_default_launched_on_keeps_its_reason_and_a_gone_workspace_is_offered_nothing() {
+    let (_dir, home, writing) = home_and_writing();
+    known::remember(Some(&home), &writing).unwrap();
+    let default = FlayerWorkspace::open(&home).unwrap();
+    let launch = Launch {
+        root: &home,
+        reason: Reason::Home,
+    };
+    fs::remove_dir_all(writing.root()).unwrap();
+
+    let rows = known::switchable(Some(&home), &launch, &default);
+
+    assert_eq!(
+        offered(&rows),
+        [
+            (Some("home"), true, true, Reason::Home, false),
+            (None, false, false, Reason::Explicit, false),
+        ]
+    );
+    assert!(rows[1].workspace.stale.is_some());
+    assert!(!writing.root().exists(), "nothing was made");
+}
+
+#[test]
+fn the_default_nothing_has_made_is_listed_while_it_is_the_one_in_use_and_never_made() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    fs::create_dir(&home).unwrap();
+    let unmade = FlayerWorkspace::unmade(&home).unwrap();
+    let launch = Launch {
+        root: &home,
+        reason: Reason::Home,
+    };
+
+    let rows = known::switchable(Some(&home), &launch, &unmade);
+
+    assert_eq!(
+        offered(&rows),
+        [(Some("home"), true, true, Reason::Home, false)]
+    );
+    assert!(rows[0].workspace.default);
+    assert!(!home.join(FLAYER_DIR).exists(), "the default was made");
+}
+
+#[test]
+fn what_may_be_switched_to_serializes_each_field_by_its_name() {
+    let (_dir, home, writing) = home_and_writing();
+    let launch = Launch {
+        root: writing.root(),
+        reason: Reason::Activated,
+    };
+
+    let rows = known::switchable(Some(&home), &launch, &writing);
+
+    assert_eq!(
+        serde_json::to_value(&rows).unwrap(),
+        serde_json::json!([
+            {
+                "name": "home",
+                "path": home.to_string_lossy(),
+                "default": true,
+                "remembered": false,
+                "in_use": false,
+                "projects": 0,
+                "stale_projects": 0,
+                "stale": null,
+                "launched": false,
+                "reason": "explicit",
+                "switchable": true,
+            },
+            {
+                "name": "writing",
+                "path": writing.root().to_string_lossy(),
+                "default": false,
+                "remembered": false,
+                "in_use": true,
+                "projects": 0,
+                "stale_projects": 0,
+                "stale": null,
+                "launched": true,
+                "reason": "activated",
+                "switchable": false,
+            },
+        ])
+    );
 }

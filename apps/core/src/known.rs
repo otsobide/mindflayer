@@ -29,6 +29,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use crate::paths;
+use crate::resolve::Reason;
 use crate::workspace::{
     absolute, same_directory, FlayerWorkspace, Registration, WorkspaceError, FLAYER_CONFIG,
     FLAYER_DIR,
@@ -193,6 +194,100 @@ pub fn known(
         }
     }
     (Known { workspaces }, failures)
+}
+
+/// Where a front end that stays on one workspace was launched: the
+/// workspace it resolved there, and the rule that chose it.
+///
+/// No activated workspace beside it: an activation wins over walking up and
+/// over the default, so whenever the front end read one it is this one,
+/// and a `-W` given at launch switches the activation off, as it does for
+/// every command.
+#[derive(Debug, Clone, Copy)]
+pub struct Launch<'a> {
+    pub root: &'a Path,
+    pub reason: Reason,
+}
+
+/// A workspace a front end that stays on one may switch to, as
+/// [`switchable`] lists it: the row `flayer workspaces` prints, with how it
+/// stands with the front end.
+///
+/// Beside the row rather than in it, as [`crate::view::KnownHere`] stands
+/// beside it: the row is the machine's list, the same whoever asks, and
+/// which one a front end was launched on is the front end's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+pub struct Switchable {
+    #[serde(flatten)]
+    #[cfg_attr(feature = "ts", ts(flatten))]
+    pub workspace: KnownWorkspace,
+    /// Whether it is the one the front end was launched on.
+    pub launched: bool,
+    /// The rule it is chosen by once switched to, as a snapshot of it says:
+    /// the launch's, for the one the front end was launched on, and named,
+    /// as `-W` names it, for every other, since a switch names it to every
+    /// line the front end runs from then on, and nothing else chose it.
+    pub reason: Reason,
+    /// Whether a switch to it is offered: it opens, it is not the one in
+    /// use, and its path is text a command line can hold, since every line
+    /// names the workspace by it.
+    pub switchable: bool,
+}
+
+/// Every workspace a front end launched as `launch` says, and on
+/// `in_use` now, may switch to: the ones this machine knows, as [`known`]
+/// lists them, `in_use` among them, then the one it was launched on when it
+/// is none of those, and the default before anything has made it, while it
+/// is the one in use.
+///
+/// The one place a front end that stays on one workspace learns where it
+/// may go instead, so it offers no other, and is held to the same list when
+/// asked to go ([`crate::policy::switched`]): a path it was sent is matched
+/// against these, never opened as given. A read, as `known` is: nothing is
+/// made, and a workspace that does not open is a row saying why, offered
+/// nothing.
+pub fn switchable(
+    home: Option<&Path>,
+    launch: &Launch<'_>,
+    in_use: &FlayerWorkspace,
+) -> Vec<Switchable> {
+    let (known, _) = known(home, Some(in_use));
+    let mut rows = known.workspaces;
+    let listed = |rows: &[KnownWorkspace], root: &Path| {
+        rows.iter().any(|row| same_directory(&row.path, root))
+    };
+    // `known` marks nothing unmade, but a front end on the default before
+    // anything made it is on it all the same, and says which it is on.
+    if !in_use.is_made() && !listed(&rows, in_use.root()) {
+        rows.push(KnownWorkspace {
+            default: home.is_some_and(|home| same_directory(home, in_use.root())),
+            in_use: true,
+            ..KnownWorkspace::of(in_use)
+        });
+    }
+    if !listed(&rows, launch.root) {
+        rows.push(match FlayerWorkspace::open(launch.root) {
+            Ok(workspace) => KnownWorkspace::of(&workspace),
+            Err(error) => KnownWorkspace::gone(launch.root.to_path_buf(), &error),
+        });
+    }
+    rows.into_iter()
+        .map(|row| {
+            let launched = same_directory(&row.path, launch.root);
+            let switchable = row.stale.is_none() && !row.in_use && row.path.to_str().is_some();
+            Switchable {
+                launched,
+                reason: if launched {
+                    launch.reason
+                } else {
+                    Reason::Explicit
+                },
+                switchable,
+                workspace: row,
+            }
+        })
+        .collect()
 }
 
 /// The default workspace at `home`, when there is one and it is made.
