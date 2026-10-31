@@ -6,7 +6,7 @@ import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
 import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
-import { answering, answers, commanded, commanding, drafts, fixture, plans, render, unmount, updates, validated, type Fixture } from './panel'
+import { answering, answers, commanded, commanding, drafts, fixture, plans, render, switching, unmount, updates, validated, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -229,6 +229,49 @@ describe('a page over a workspace the server cannot watch all of', () => {
  * ones, a pattern of the library's own, not of a page.
  */
 const OVER: axe.ElementContext = { include: [document.body], exclude: [['[data-aria-hidden="true"]']] }
+
+// Its menu holds the focus while open, and Reka hides the rest of the
+// page from assistive technology meanwhile, as it does under a modal.
+describe('the workspace switcher', () => {
+  it('passes axe open, listing a workspace in use, ones to switch to and one that does not open', async () => {
+    const { page } = await render('/', switching().transport)
+
+    await page.get('[data-testid="workspace-switcher"]').trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(document.querySelectorAll('[role="menuitemcheckbox"]')).toHaveLength(5)
+    expect(await violations(OVER)).toEqual([])
+  })
+})
+
+// It holds the focus while open, and Reka hides the rest of the page from
+// assistive technology meanwhile, as under every modal.
+describe('the command palette', () => {
+  it('passes axe open, listing what there is and what a search finds', async () => {
+    await render('/', fixture('workspace'))
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="palette"] [role="option"]')).not.toBeNull())
+    expect(await violations(OVER)).toEqual([])
+
+    const input = document.querySelector<HTMLInputElement>('[data-testid="palette"] input')!
+    input.value = 'review'
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="palette"] [role="option"]')?.textContent).toContain('review'))
+    expect(await violations(OVER)).toEqual([])
+  })
+})
+
+describe('the sheet of shortcuts', () => {
+  it('passes axe open', async () => {
+    await render('/', fixture('workspace'))
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '?', shiftKey: true, bubbles: true }))
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="shortcuts"]')).not.toBeNull())
+
+    expect(await violations(OVER)).toEqual([])
+  })
+})
 
 let runner: Runner
 

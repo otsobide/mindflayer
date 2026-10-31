@@ -1,0 +1,438 @@
+{
+  "refused": {
+    "code": "not_a_workspace",
+    "error": "/home/you/old: not a flayer workspace (no .mindflayer/flayer.toml)",
+    "to": {
+      "path": "/home/you/old"
+    }
+  },
+  "switched": {
+    "answer": {
+      "default": false,
+      "in_use": true,
+      "launched": false,
+      "name": "kit",
+      "path": "/home/you/kit",
+      "projects": 0,
+      "reason": "explicit",
+      "remembered": true,
+      "stale": null,
+      "stale_projects": 0,
+      "switchable": false
+    },
+    "snapshot": {
+      "agents": [
+        "claude",
+        "codex",
+        "opencode"
+      ],
+      "box_states": [
+        "current",
+        "outdated",
+        "edited",
+        "missing",
+        "orphaned",
+        "foreign"
+      ],
+      "boxes": [],
+      "format": 1,
+      "healths": [
+        "ok",
+        "attention",
+        "broken",
+        "stale"
+      ],
+      "history": [],
+      "kinds": [
+        "skill",
+        "rule"
+      ],
+      "known": [
+        {
+          "default": true,
+          "in_use": false,
+          "loadable": true,
+          "loaded_as": null,
+          "name": "you",
+          "path": "/home/you",
+          "projects": 0,
+          "remembered": false,
+          "stale": null,
+          "stale_projects": 0
+        },
+        {
+          "default": false,
+          "in_use": false,
+          "loadable": true,
+          "loaded_as": null,
+          "name": "Assign",
+          "path": "/home/you/Assign",
+          "projects": 5,
+          "remembered": true,
+          "stale": null,
+          "stale_projects": 1
+        },
+        {
+          "default": false,
+          "in_use": false,
+          "loadable": true,
+          "loaded_as": null,
+          "name": "team",
+          "path": "/home/you/team",
+          "projects": 0,
+          "remembered": true,
+          "stale": null,
+          "stale_projects": 0
+        },
+        {
+          "default": false,
+          "in_use": true,
+          "loadable": false,
+          "loaded_as": null,
+          "name": "kit",
+          "path": "/home/you/kit",
+          "projects": 0,
+          "remembered": true,
+          "stale": null,
+          "stale_projects": 0
+        },
+        {
+          "default": false,
+          "in_use": false,
+          "loadable": false,
+          "loaded_as": null,
+          "name": null,
+          "path": "/home/you/old",
+          "projects": 0,
+          "remembered": true,
+          "stale": "/home/you/old: not a flayer workspace (no .mindflayer/flayer.toml)",
+          "stale_projects": 0
+        }
+      ],
+      "library": {
+        "artifacts": [],
+        "directories": [
+          {
+            "kind": "skill",
+            "path": ".mindflayer/library/skills"
+          },
+          {
+            "kind": "rule",
+            "path": ".mindflayer/library/rules"
+          }
+        ],
+        "failures": [],
+        "holders": [],
+        "origin": "workspace",
+        "templates": [
+          {
+            "kind": "skill",
+            "name": "full",
+            "origin": null
+          }
+        ]
+      },
+      "loaded": [],
+      "offers": [],
+      "projects": [],
+      "shelf": [],
+      "sources": [],
+      "states": [
+        "current",
+        "outdated",
+        "edited",
+        "missing",
+        "orphaned",
+        "foreign",
+        "authored"
+      ],
+      "summary": {
+        "held": {
+          "kinds": [
+            {
+              "count": 0,
+              "kind": "skill"
+            },
+            {
+              "count": 0,
+              "kind": "rule"
+            }
+          ],
+          "states": [
+            {
+              "count": 0,
+              "state": "current"
+            },
+            {
+              "count": 0,
+              "state": "outdated"
+            },
+            {
+              "count": 0,
+              "state": "edited"
+            },
+            {
+              "count": 0,
+              "state": "missing"
+            },
+            {
+              "count": 0,
+              "state": "orphaned"
+            },
+            {
+              "count": 0,
+              "state": "foreign"
+            },
+            {
+              "count": 0,
+              "state": "authored"
+            }
+          ],
+          "total": 0
+        },
+        "library": {
+          "kinds": [
+            {
+              "count": 0,
+              "kind": "skill"
+            },
+            {
+              "count": 0,
+              "kind": "rule"
+            }
+          ],
+          "states": [
+            {
+              "count": 0,
+              "state": "current"
+            },
+            {
+              "count": 0,
+              "state": "outdated"
+            },
+            {
+              "count": 0,
+              "state": "edited"
+            },
+            {
+              "count": 0,
+              "state": "missing"
+            },
+            {
+              "count": 0,
+              "state": "orphaned"
+            },
+            {
+              "count": 0,
+              "state": "foreign"
+            },
+            {
+              "count": 0,
+              "state": "authored"
+            }
+          ],
+          "total": 0
+        },
+        "projects": 0,
+        "shelf": {
+          "kinds": [
+            {
+              "count": 0,
+              "kind": "skill"
+            },
+            {
+              "count": 0,
+              "kind": "rule"
+            }
+          ],
+          "states": [
+            {
+              "count": 0,
+              "state": "current"
+            },
+            {
+              "count": 0,
+              "state": "outdated"
+            },
+            {
+              "count": 0,
+              "state": "edited"
+            },
+            {
+              "count": 0,
+              "state": "missing"
+            },
+            {
+              "count": 0,
+              "state": "orphaned"
+            },
+            {
+              "count": 0,
+              "state": "foreign"
+            },
+            {
+              "count": 0,
+              "state": "authored"
+            }
+          ],
+          "total": 0
+        },
+        "stale": 0
+      },
+      "warnings": [],
+      "workspace": {
+        "made": true,
+        "name": "kit",
+        "path": "/home/you/kit",
+        "reason": "explicit"
+      }
+    },
+    "to": {
+      "path": "/home/you/kit"
+    },
+    "workspaces": {
+      "answer": [
+        {
+          "default": true,
+          "in_use": false,
+          "launched": false,
+          "name": "you",
+          "path": "/home/you",
+          "projects": 0,
+          "reason": "explicit",
+          "remembered": false,
+          "stale": null,
+          "stale_projects": 0,
+          "switchable": true
+        },
+        {
+          "default": false,
+          "in_use": false,
+          "launched": true,
+          "name": "Assign",
+          "path": "/home/you/Assign",
+          "projects": 5,
+          "reason": "above",
+          "remembered": true,
+          "stale": null,
+          "stale_projects": 1,
+          "switchable": true
+        },
+        {
+          "default": false,
+          "in_use": false,
+          "launched": false,
+          "name": "team",
+          "path": "/home/you/team",
+          "projects": 0,
+          "reason": "explicit",
+          "remembered": true,
+          "stale": null,
+          "stale_projects": 0,
+          "switchable": true
+        },
+        {
+          "default": false,
+          "in_use": true,
+          "launched": false,
+          "name": "kit",
+          "path": "/home/you/kit",
+          "projects": 0,
+          "reason": "explicit",
+          "remembered": true,
+          "stale": null,
+          "stale_projects": 0,
+          "switchable": false
+        },
+        {
+          "default": false,
+          "in_use": false,
+          "launched": false,
+          "name": null,
+          "path": "/home/you/old",
+          "projects": 0,
+          "reason": "explicit",
+          "remembered": true,
+          "stale": "/home/you/old: not a flayer workspace (no .mindflayer/flayer.toml)",
+          "stale_projects": 0,
+          "switchable": false
+        }
+      ],
+      "query": {
+        "type": "workspaces"
+      }
+    }
+  },
+  "workspaces": {
+    "answer": [
+      {
+        "default": true,
+        "in_use": false,
+        "launched": false,
+        "name": "you",
+        "path": "/home/you",
+        "projects": 0,
+        "reason": "explicit",
+        "remembered": false,
+        "stale": null,
+        "stale_projects": 0,
+        "switchable": true
+      },
+      {
+        "default": false,
+        "in_use": true,
+        "launched": true,
+        "name": "Assign",
+        "path": "/home/you/Assign",
+        "projects": 5,
+        "reason": "above",
+        "remembered": true,
+        "stale": null,
+        "stale_projects": 1,
+        "switchable": false
+      },
+      {
+        "default": false,
+        "in_use": false,
+        "launched": false,
+        "name": "team",
+        "path": "/home/you/team",
+        "projects": 0,
+        "reason": "explicit",
+        "remembered": true,
+        "stale": null,
+        "stale_projects": 0,
+        "switchable": true
+      },
+      {
+        "default": false,
+        "in_use": false,
+        "launched": false,
+        "name": "kit",
+        "path": "/home/you/kit",
+        "projects": 0,
+        "reason": "explicit",
+        "remembered": true,
+        "stale": null,
+        "stale_projects": 0,
+        "switchable": true
+      },
+      {
+        "default": false,
+        "in_use": false,
+        "launched": false,
+        "name": null,
+        "path": "/home/you/old",
+        "projects": 0,
+        "reason": "explicit",
+        "remembered": true,
+        "stale": "/home/you/old: not a flayer workspace (no .mindflayer/flayer.toml)",
+        "stale_projects": 0,
+        "switchable": false
+      }
+    ],
+    "query": {
+      "type": "workspaces"
+    }
+  }
+}

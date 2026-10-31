@@ -232,6 +232,7 @@ export type CoreCode =
   | "path_relative"
   | "path_unnormalized"
   | "path_in_mindflayer"
+  | "switch_unlisted"
   | "reapply_no_agent"
   | "reapply_no_folder"
   | "reapply_copy_failed"

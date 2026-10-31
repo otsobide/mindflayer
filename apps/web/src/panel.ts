@@ -1,14 +1,15 @@
-import type { App } from 'vue'
+import { watch, type App } from 'vue'
 import { createRouter, createWebHistory, type Router, type RouterHistory } from 'vue-router'
 import { routes } from 'vue-router/auto-routes'
 import { createPinia } from 'pinia'
 import { VueQueryPlugin } from '@tanstack/vue-query'
 import ui from '@nuxt/ui/vue-plugin'
-import { listen, liveKey, settleKey } from './api/live'
+import { listen, liveKey, settleKey, settleSwitchKey } from './api/live'
 import { transportKey, type Transport } from './api/transport'
 import { installColorMode } from './color-mode'
 import { installPreferences } from './preferences'
 import { createQueryClient } from './query'
+import { useMarks } from './stores/marks'
 
 export interface PanelOptions {
   /** How the panel reaches the server; a test hands it a fake. */
@@ -38,14 +39,22 @@ export function createPanel({ transport, history = createWebHistory() }: PanelOp
       installColorMode()
       app.provide(transportKey, transport)
       app.use(router)
-      app.use(createPinia())
+      const pinia = createPinia()
+      app.use(pinia)
       const queryClient = createQueryClient()
       app.use(VueQueryPlugin, { queryClient })
       // One subscription for the app, which is the tab, let go with it.
-      const { live, settle, stop } = listen(transport, queryClient)
+      const { live, settle, settleSwitch, stop } = listen(transport, queryClient)
       app.provide(liveKey, live)
       app.provide(settleKey, settle)
-      app.onUnmount(stop)
+      app.provide(settleSwitchKey, settleSwitch)
+      // Boxes marked on the matrix are of the workspace before a switch,
+      // whose projects and offers the next one need not have.
+      const stopWatching = watch(() => live.switches, () => useMarks(pinia).clear())
+      app.onUnmount(() => {
+        stopWatching()
+        stop()
+      })
       app.use(ui)
     }
   }

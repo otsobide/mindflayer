@@ -1082,6 +1082,72 @@ fn no_value_starting_with_a_dash_is_read_as_an_option_or_a_command() {
 }
 
 #[test]
+fn a_line_named_for_a_workspace_names_it_once_and_is_otherwise_read_as_it_was() {
+    let root = "/home/you/work";
+    for task in every(GIVEN) {
+        for line in task.commands() {
+            let named = naming(&line, root);
+            assert_eq!(&named[1..3], ["-W", root], "{named:?}");
+            // The same command, from the same directory: only the workspace
+            // it names differs, which a project's `-W .` named before.
+            let workspace = match named[0].as_str() {
+                "mind" => {
+                    let (cli, plain) = (
+                        Cli::try_parse_from(&named).unwrap(),
+                        Cli::try_parse_from(&line).unwrap(),
+                    );
+                    assert_eq!(cli.directory, plain.directory, "{named:?}");
+                    assert_eq!(
+                        format!("{:?}", cli.command),
+                        format!("{:?}", plain.command),
+                        "{named:?}"
+                    );
+                    cli.workspace
+                }
+                "flayer" => {
+                    let (cli, plain) = (
+                        FlayerCli::try_parse_from(&named).unwrap(),
+                        FlayerCli::try_parse_from(&line).unwrap(),
+                    );
+                    assert_eq!(cli.directory, plain.directory, "{named:?}");
+                    assert_eq!(
+                        format!("{:?}", cli.command),
+                        format!("{:?}", plain.command),
+                        "{named:?}"
+                    );
+                    cli.workspace
+                }
+                other => panic!("{task:?} runs `{other}`"),
+            };
+            assert_eq!(workspace.as_deref(), Some(root), "{named:?}");
+        }
+    }
+}
+
+#[test]
+fn a_project_s_line_naming_the_workspace_on_screen_is_named_for_the_one_given_instead() {
+    let edit = Task::Validate {
+        holder: Holder::Elsewhere(String::from("alpha")),
+    };
+    let lines = edit.commands();
+    assert_eq!(lines, [line("mind -W . -C alpha validate")]);
+
+    assert_eq!(
+        naming(&lines[0], "/home/you/work"),
+        line("mind -W /home/you/work -C alpha validate")
+    );
+}
+
+#[test]
+fn a_root_starting_with_a_dash_is_named_as_the_value_of_w() {
+    let named = naming(&line("flayer link beta"), "-W");
+
+    assert_eq!(named, line("flayer -W=-W link beta"));
+    let cli = FlayerCli::try_parse_from(&named).unwrap();
+    assert_eq!(cli.workspace.as_deref(), Some("-W"));
+}
+
+#[test]
 fn a_line_shown_runs_as_one_command_of_the_words_it_is() {
     for value in hostile().iter().map(String::as_str).chain(VALUES) {
         for task in every(value) {

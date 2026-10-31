@@ -11,8 +11,8 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::*;
-use mindflayer_cli::backend::{Outcome, PanelBackend, Query};
-use mindflayer_cli::task::Caution;
+use mindflayer_cli::backend::{Outcome, PanelBackend, Query, Switch};
+use mindflayer_cli::task::{naming, shell, Caution};
 use mindflayer_core::watch;
 use mindflayer_server::{Backend, Refusal};
 use serde_json::{json, Value};
@@ -309,7 +309,10 @@ fn a_task_cannot_carry_a_directory_a_home_a_workspace_or_an_agent_home() {
         sent[field] = json!("/etc");
         assert_eq!(
             backend.preview(&task(sent)).map(|preview| preview.lines),
-            Ok(vec![String::from("flayer gather list")])
+            Ok(vec![format!(
+                "flayer -W {} gather list",
+                dir.path().display()
+            )])
         );
     }
 }
@@ -323,7 +326,11 @@ fn a_task_held_by_a_linked_project_runs_in_that_project_with_the_directory_resol
     let beta = dir.path().join("beta");
     let backend = backend(dir.path());
     let sent = add_to(json!({"type": "project", "entry": "alpha"}));
-    let line = format!("mind -C {} add skill deploy 'Ship it'", alpha.display());
+    let line = format!(
+        "mind -W {} -C {} add skill deploy 'Ship it'",
+        dir.path().display(),
+        alpha.display()
+    );
     let beta_before = files(&beta);
 
     assert_eq!(
@@ -730,7 +737,7 @@ fn the_default_workspace_is_made_by_the_first_change_and_said_first() {
         backend.preview(&task(link.clone())).unwrap().lines,
         [
             String::from("flayer init"),
-            format!("flayer link {}", fresh.display())
+            format!("flayer -W {} link {}", home.display(), fresh.display())
         ]
     );
     assert!(!home.join(FLAYER_DIR).exists(), "a preview made it");
@@ -908,7 +915,10 @@ fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
 
     assert_eq!(
         preview.lines,
-        ["flayer init", "flayer remove --yes skill:deploy"]
+        [
+            String::from("flayer init"),
+            format!("flayer -W {} remove --yes skill:deploy", home.display())
+        ]
     );
     assert_eq!(preview.confirm.len(), 1, "{preview:?}");
     assert_eq!(preview.confirm[0]["line"], 1);
@@ -1077,7 +1087,8 @@ fn a_scan_names_the_entry_a_moved_project_left_for_its_relink() {
     assert_eq!(
         backend.preview(&relink).unwrap().lines,
         [format!(
-            "flayer relink collapse {}",
+            "flayer -W {} relink collapse {}",
+            projects.display(),
             moved.to_str().unwrap()
         )]
     );
@@ -1088,7 +1099,8 @@ fn a_scan_names_the_entry_a_moved_project_left_for_its_relink() {
 
 /// The panel's link batch is the minds screen's: for the same directories
 /// marked, the lines the backend previews for what the panel sends are the
-/// lines the screen's task is, each directory by its path, from a scan of a
+/// lines the screen's task is, each naming the workspace as every line of
+/// the panel's does, each directory by its path, from a scan of a
 /// folder outside the workspace, where both spell it so. Inside it they
 /// spell a folder apart, and the batch is the same folder for folder
 /// ([`inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_folder`]).
@@ -1131,21 +1143,22 @@ fn the_panels_link_batch_is_the_minds_screens_for_the_same_selection() {
     let tui::state::Mode::Minds(screen) = &app.mode else {
         panic!("{:?}", app.mode)
     };
+    let named = dir.path().to_str().unwrap();
     let screened: Vec<String> = screen
         .task()
         .unwrap()
         .commands()
         .iter()
-        .map(|line| mindflayer_cli::task::shell(line))
+        .map(|line| shell(&naming(line, named)))
         .collect();
 
     assert_eq!(previewed, screened);
     assert_eq!(
         previewed,
         [
-            format!("mind -C {} init", under(work.path(), &["plain"])),
+            format!("mind -W {named} -C {} init", under(work.path(), &["plain"])),
             format!(
-                "flayer link {} {}",
+                "flayer -W {named} link {} {}",
                 under(work.path(), &["acme", "delta"]),
                 under(work.path(), &["plain"])
             ),
@@ -1209,7 +1222,7 @@ fn inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_fo
     let by_path: Vec<String> = by_path
         .commands()
         .iter()
-        .map(|line| mindflayer_cli::task::shell(line))
+        .map(|line| shell(&naming(line, panel.path().to_str().unwrap())))
         .collect();
     assert_eq!(previewed, by_path);
 
@@ -1291,7 +1304,8 @@ fn loaded_from_the_screen(app: &mut App, typed: Option<&str>) -> Task {
 /// path the snapshot lists it by, is the task the TUI's load form runs for
 /// that path typed, and unloading it, by the entry the snapshot then lists
 /// it by, the task the form runs for it picked: the same `Task` each time,
-/// so the same lines, and run from the panel each leaves the workspace's
+/// so the same lines, the panel's naming the workspace, and run from the
+/// panel each leaves the workspace's
 /// marker as the screen's left it.
 #[test]
 fn loading_and_unloading_from_the_panel_are_the_tuis_tasks_for_the_same_workspace() {
@@ -1300,10 +1314,11 @@ fn loading_and_unloading_from_the_panel_are_the_tuis_tasks_for_the_same_workspac
     let backend = PanelBackend::launch(&root, &lookup).unwrap();
     let mut app =
         App::new(root.clone(), tui::load(&root, &lookup).unwrap()).with_lookup(lookup.clone());
+    let named = root.to_str().unwrap().to_owned();
     let lines = |task: &Task| -> Vec<String> {
         task.commands()
             .iter()
-            .map(|line| mindflayer_cli::task::shell(line))
+            .map(|line| shell(&naming(line, &named)))
             .collect()
     };
     let unloaded = registry(&root);
@@ -1323,7 +1338,7 @@ fn loading_and_unloading_from_the_panel_are_the_tuis_tasks_for_the_same_workspac
 
     assert_eq!(screened, load);
     assert_eq!(previewed.lines, lines(&screened));
-    assert_eq!(previewed.lines, [format!("flayer load {path}")]);
+    assert_eq!(previewed.lines, [format!("flayer -W {named} load {path}")]);
     assert!(previewed.confirm.is_empty(), "{:?}", previewed.confirm);
     let loaded = registry(&root);
     assert!(loaded.contains("loaded = [\"../team\"]"), "{loaded}");
@@ -1486,11 +1501,13 @@ fn a_plan_is_answered_with_the_tasks_that_carry_it_out_and_changes_nothing() {
         backend.preview(&batch).unwrap().lines,
         [
             format!(
-                "flayer install -p {} --from load:../team skill:deploy",
+                "flayer -W {} install -p {} --from load:../team skill:deploy",
+                home.display(),
                 under(&home, &["beta"])
             ),
             format!(
-                "flayer uninstall -p {} skill:deploy",
+                "flayer -W {} uninstall -p {} skill:deploy",
+                home.display(),
                 under(&home, &["alpha"])
             ),
         ]
@@ -1972,41 +1989,42 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
     let alpha = under(&home, &["alpha"]);
     let beta = under(&home, &["beta"]);
     let project = |entry: &str| json!({"type": "project", "entry": entry});
+    let named = home.display();
 
     for (sent, line, confirm) in [
         (
             json!({"type": "update", "holder": {"type": "workspace"}, "reference": null, "force": false}),
-            String::from("flayer update --all --yes"),
+            format!("flayer -W {named} update --all --yes"),
             Vec::new(),
         ),
         (
             json!({"type": "update", "holder": project("alpha"), "reference": null, "force": false}),
-            format!("mind -C {alpha} update --yes"),
+            format!("mind -W {named} -C {alpha} update --yes"),
             Vec::new(),
         ),
         (
             json!({"type": "update", "holder": project("alpha"), "reference": "skill:lint", "force": false}),
-            format!("mind -C {alpha} update --yes skill:lint"),
+            format!("mind -W {named} -C {alpha} update --yes skill:lint"),
             Vec::new(),
         ),
         (
             json!({"type": "update", "holder": project("beta"), "reference": "skill:lint", "force": true}),
-            format!("mind -C {beta} update --yes --force skill:lint"),
+            format!("mind -W {named} -C {beta} update --yes --force skill:lint"),
             vec!["forces"],
         ),
         (
             json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old", "force": false}),
-            format!("flayer uninstall -p {beta} skill:old"),
+            format!("flayer -W {named} uninstall -p {beta} skill:old"),
             vec!["uninstalls"],
         ),
         (
             json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old", "force": true}),
-            format!("flayer uninstall -p {beta} --force skill:old"),
+            format!("flayer -W {named} uninstall -p {beta} --force skill:old"),
             vec!["uninstalls", "forces"],
         ),
         (
             json!({"type": "uninstall_orphaned", "holder": {"type": "workspace"}}),
-            String::from("flayer uninstall --all-projects --orphaned"),
+            format!("flayer -W {named} uninstall --all-projects --orphaned"),
             vec!["uninstalls"],
         ),
         (
@@ -2014,7 +2032,7 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
                 "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
                 "name": "lint", "everywhere": true, "yes": false,
             }),
-            String::from("flayer remove --everywhere skill:lint"),
+            format!("flayer -W {named} remove --everywhere skill:lint"),
             Vec::new(),
         ),
         (
@@ -2022,7 +2040,7 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
                 "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
                 "name": "lint", "everywhere": true, "yes": true,
             }),
-            String::from("flayer remove --everywhere --yes skill:lint"),
+            format!("flayer -W {named} remove --everywhere --yes skill:lint"),
             vec!["removes", "uninstalls"],
         ),
     ] {
@@ -2298,7 +2316,8 @@ fn a_save_writes_the_text_through_edit_contents_and_takes_its_file_away_after() 
     assert_eq!(
         ran.runs[0].command,
         format!(
-            "flayer edit --contents {route} --if-unchanged {} skill:deploy",
+            "flayer -W {} edit --contents {route} --if-unchanged {} skill:deploy",
+            root.display(),
             mindflayer_core::hash::bytes(read.as_bytes())
         )
     );
@@ -2389,4 +2408,300 @@ fn a_save_whose_scratch_folder_is_a_link_is_refused_and_writes_nothing_where_it_
     assert!(refused.message.contains("is a link"), "{}", refused.message);
     assert_eq!(fs::read_dir(&commands).unwrap().count(), 0);
     assert_eq!(fs::read_to_string(&manifest).unwrap(), read);
+}
+
+// ---------------------------------------------------------------------------
+// Switching to another workspace
+// ---------------------------------------------------------------------------
+
+/// What a browser sends to switch, read as the server reads it.
+fn switch(sent: Value) -> Switch {
+    serde_json::from_value(sent.clone()).unwrap_or_else(|error| panic!("{sent}: {error}"))
+}
+
+/// The backend over `root`, launched there, at `home`, with `root` found
+/// above where it starts, as `flayer ui` run in it finds it.
+fn launched_knowing(home: &Path, root: &Path) -> PanelBackend {
+    PanelBackend::launch(root, &Lookup::at_home(Some(home))).unwrap()
+}
+
+/// The path, name, and whether in use, launched on and offered, of each
+/// workspace the backend may switch to.
+fn offered(backend: &PanelBackend) -> Vec<(String, bool, bool, bool)> {
+    let answer = backend.query(query(json!({"type": "workspaces"}))).unwrap();
+    answer
+        .as_array()
+        .unwrap_or_else(|| panic!("{answer}"))
+        .iter()
+        .map(|row| {
+            (
+                row["name"].as_str().unwrap_or("").to_owned(),
+                row["in_use"] == true,
+                row["launched"] == true,
+                row["switchable"] == true,
+            )
+        })
+        .collect()
+}
+
+/// The workspace a snapshot is of, and the rule it says chose it.
+fn snapshot_of(backend: &PanelBackend) -> (Value, Value) {
+    let snapshot = backend.query(query(json!({"type": "snapshot"}))).unwrap();
+    (
+        snapshot["workspace"]["path"].clone(),
+        snapshot["workspace"]["reason"].clone(),
+    )
+}
+
+#[test]
+fn what_may_be_switched_to_is_every_known_workspace_and_the_launch() {
+    let (_dir, home, root) = knowing();
+    let backend = launched_knowing(&home, &root);
+
+    assert_eq!(
+        offered(&backend),
+        [
+            (String::from("home"), false, false, true),
+            (String::from("Projects"), true, true, false),
+            (String::from("team"), false, false, true),
+        ]
+    );
+}
+
+#[test]
+fn a_query_of_what_may_be_switched_to_takes_no_field() {
+    let refused = serde_json::from_value::<Query>(json!({"type": "workspaces", "path": "/"}));
+
+    assert!(refused.is_err(), "{refused:?}");
+}
+
+/// Switched to a workspace this machine knows, every read is of it, every
+/// line names it, every run lands in it, what is watched is its own, and
+/// the snapshot says it was named, as `-W` names it; switched back to the
+/// launch, the rule that chose it at launch.
+#[test]
+fn a_switch_to_a_known_workspace_is_what_every_query_preview_and_run_acts_on() {
+    let (dir, home, root) = knowing();
+    let team = dir.path().join("team");
+    let backend = launched_knowing(&home, &root);
+    let kept = backend.clone();
+    let path = |root: &Path| json!(root.to_str().unwrap());
+
+    let answer = backend
+        .switch(switch(json!({"path": team.to_str().unwrap()})))
+        .unwrap();
+
+    assert_eq!(answer["path"], path(&team));
+    assert_eq!(answer["in_use"], true);
+    assert_eq!(answer["reason"], "explicit");
+    assert_eq!(snapshot_of(&backend), (path(&team), json!("explicit")));
+    assert_eq!(kept.root(), team, "a clone acts on another");
+    let validate = json!({"type": "validate", "holder": {"type": "workspace"}});
+    assert_eq!(
+        backend.preview(&task(validate.clone())).unwrap().lines,
+        [format!("flayer -W {} validate", team.display())]
+    );
+    let add = json!({
+        "type": "add", "holder": {"type": "workspace"}, "kind": "skill",
+        "name": "minutes", "description": "Take the minutes", "template": null,
+    });
+    let ran = backend.run(task(add)).unwrap();
+    assert!(ran.ok, "{ran:?}");
+    assert!(
+        team.join(".mindflayer/library/skills/minutes").is_dir(),
+        "{ran:?}"
+    );
+    assert!(!root.join(".mindflayer/library/skills/minutes").exists());
+    let watched = backend.watched_paths();
+    assert!(watched.iter().any(|each| each.path.starts_with(&team)));
+    assert!(
+        !watched.iter().any(|each| each.path.starts_with(&root)),
+        "{watched:?}"
+    );
+
+    backend
+        .switch(switch(json!({"path": root.to_str().unwrap()})))
+        .unwrap();
+    assert_eq!(snapshot_of(&backend), (path(&root), json!("above")));
+    assert_eq!(
+        backend.preview(&task(validate)).unwrap().lines,
+        [format!("flayer -W {} validate", root.display())]
+    );
+}
+
+/// The server's test the issue names: a path no list holds, however it is
+/// spelled, a value starting with a dash among them, is refused with a
+/// code, and nothing is switched; the next read and the next line are of
+/// the workspace before, and the disk is as it was.
+#[test]
+fn a_switch_to_a_path_outside_the_list_is_refused_and_nothing_is_switched() {
+    let (dir, home, root) = knowing();
+    let stranger = dir.path().join("stranger");
+    fs::create_dir_all(&stranger).unwrap();
+    flayer(&stranger, &["init"]).unwrap();
+    let team = dir.path().join("team");
+    let backend = launched_knowing(&home, &root);
+    let before = files(dir.path());
+    let team = team.to_str().unwrap();
+
+    for sent in [
+        // A workspace, but one nothing remembers.
+        stranger.to_str().unwrap().to_owned(),
+        // A listed one, spelled otherwise.
+        format!("{team}/"),
+        format!("{team}/.mindflayer"),
+        under(dir.path(), &["home", "..", "team"]),
+        String::from("team"),
+        String::from("../team"),
+        // Values that start with a dash.
+        String::from("--yes"),
+        String::from("-W"),
+        String::from("--workspace=/"),
+        String::from("-C/"),
+        // Nothing at all, and somewhere else entirely.
+        String::new(),
+        String::from("/"),
+        String::from("file:///etc"),
+    ] {
+        let refused = backend.switch(switch(json!({"path": sent})));
+
+        assert_eq!(
+            refused.as_ref().map_err(|refusal| refusal.code),
+            Err("switch_unlisted"),
+            "{sent:?}: {refused:?}"
+        );
+    }
+    assert_eq!(
+        snapshot_of(&backend),
+        (json!(root.to_str().unwrap()), json!("above"))
+    );
+    assert_eq!(
+        backend
+            .preview(&task(json!({"type": "shelf"})))
+            .unwrap()
+            .lines,
+        [format!("flayer -W {} gather list", root.display())]
+    );
+    assert_eq!(files(dir.path()), before);
+}
+
+#[test]
+fn a_switch_carrying_anything_but_a_path_is_refused() {
+    for sent in [
+        json!({"path": "/", "workspace": "/"}),
+        json!({"path": "/", "home": "/"}),
+        json!({"type": "load", "path": "/"}),
+        json!({}),
+        json!({"path": ["/"]}),
+    ] {
+        assert!(
+            serde_json::from_value::<Switch>(sent.clone()).is_err(),
+            "{sent}"
+        );
+    }
+}
+
+/// A workspace the list names that will not open, gone since, is refused
+/// with why it will not, never made, and nothing is switched.
+#[test]
+fn a_known_workspace_that_does_not_open_is_refused_and_never_made() {
+    let (dir, home, root) = knowing();
+    let team = dir.path().join("team");
+    let backend = launched_knowing(&home, &root);
+    fs::remove_dir_all(team.join(FLAYER_DIR)).unwrap();
+
+    assert_eq!(
+        offered(&backend)[2],
+        (String::new(), false, false, false),
+        "listed, and offered nothing"
+    );
+    let refused = backend.switch(switch(json!({"path": team.to_str().unwrap()})));
+
+    assert_eq!(
+        refused.as_ref().map_err(|refusal| refusal.code),
+        Err("not_a_workspace"),
+        "{refused:?}"
+    );
+    assert!(!team.join(FLAYER_DIR).exists(), "it was made");
+    assert_eq!(
+        snapshot_of(&backend),
+        (json!(root.to_str().unwrap()), json!("above"))
+    );
+}
+
+/// A workspace whose root no word of a command line can hold, not UTF-8,
+/// is acted on as it was before every line named it: its lines name no
+/// workspace, run against it all the same, and nothing switches to it.
+#[cfg(unix)]
+#[test]
+fn a_workspace_whose_root_is_not_text_runs_its_lines_naming_none() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().join(OsStr::from_bytes(b"caf\xe9"));
+    fs::create_dir(&root).unwrap();
+    FlayerWorkspace::init(&root).unwrap();
+    let backend = backend(&root);
+    let add = add_to(json!({"type": "workspace"}));
+
+    assert_eq!(
+        backend
+            .preview(&task(add.clone()))
+            .map(|preview| preview.lines),
+        Ok(vec![String::from("flayer add skill deploy 'Ship it'")])
+    );
+    let outcome = backend.run(task(add)).unwrap();
+
+    assert!(outcome.ok, "{outcome:?}");
+    assert_eq!(outcome.runs[0].command, "flayer add skill deploy 'Ship it'");
+    assert!(root
+        .join(".mindflayer/library/skills/deploy/SKILL.md")
+        .is_file());
+    let offered: Vec<_> = offered(&backend)
+        .into_iter()
+        .map(|(_, in_use, launched, switchable)| (in_use, launched, switchable))
+        .collect();
+    assert_eq!(offered, [(true, true, false)]);
+}
+
+/// Switched to a workspace that has gone since, the panel can still read
+/// where it may go, the one in use among it with why it does not open, and
+/// go back.
+#[test]
+fn a_workspace_gone_since_it_was_switched_to_can_still_be_left() {
+    let (dir, home, root) = knowing();
+    let team = dir.path().join("team");
+    let backend = launched_knowing(&home, &root);
+    backend
+        .switch(switch(json!({"path": team.to_str().unwrap()})))
+        .unwrap();
+    fs::remove_dir_all(team.join(FLAYER_DIR)).unwrap();
+
+    let snapshot = backend.query(query(json!({"type": "snapshot"})));
+    assert_eq!(
+        snapshot.as_ref().map_err(|refusal| refusal.code),
+        Err("not_a_workspace")
+    );
+    let listed = backend.query(query(json!({"type": "workspaces"}))).unwrap();
+    let in_use: Vec<&Value> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| row["in_use"] == true)
+        .collect();
+    assert_eq!(in_use.len(), 1, "{listed}");
+    assert_eq!(in_use[0]["path"], json!(team.to_str().unwrap()));
+    assert!(in_use[0]["stale"].is_string(), "{listed}");
+    assert!(offered(&backend)
+        .iter()
+        .any(|row| row.0 == "Projects" && row.3));
+    backend
+        .switch(switch(json!({"path": root.to_str().unwrap()})))
+        .unwrap();
+
+    assert_eq!(
+        snapshot_of(&backend),
+        (json!(root.to_str().unwrap()), json!("above"))
+    );
 }

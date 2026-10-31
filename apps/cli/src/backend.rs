@@ -12,10 +12,15 @@
 //!
 //! What it adds is distrust, since every request comes from a browser:
 //!
-//! - **It acts on one workspace**, the one the panel was launched on,
-//!   resolved once ([`PanelBackend::launch`]) and named to every line it
-//!   runs, so a change made meanwhile elsewhere on the disk cannot send a
-//!   line to another.
+//! - **It acts on one workspace at a time**, the one the panel was launched
+//!   on, resolved once ([`PanelBackend::launch`]), until it is switched to
+//!   another ([`Backend::switch`]), and only to one core lists
+//!   ([`Query::Workspaces`]): a workspace this machine knows, or the
+//!   launch's. Each line it runs names it with `-W`, so a change made
+//!   meanwhile elsewhere on the disk cannot send a line to another, and a
+//!   line copied from the panel reaches the same one; but for a root that
+//!   is not UTF-8, which no word can hold, and which every line reaches all
+//!   the same through what it runs with.
 //! - **The browser supplies no `-C`, `--home`, `-W` or agent home.** A task
 //!   has no field for them, no value it holds is read as an option, and
 //!   every line runs with the launch's home and agent homes, from the
@@ -55,13 +60,14 @@ use std::fmt::Display;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
 use mindflayer_core::code::Said;
 use mindflayer_core::contents::{Contents, Files};
 use mindflayer_core::draft;
 use mindflayer_core::gather::Watch;
 use mindflayer_core::install::{self, Cell, Conflict, Locked};
+use mindflayer_core::known::{self, Launch};
 use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindflayer_core::scan::{self, Order, DEFAULT_DEPTH};
 use mindflayer_core::update::Updates;
@@ -91,8 +97,8 @@ use crate::{CliError, Lookup, Warning};
 /// "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`,
 /// `{"type": "updates"}`, `{"type": "validate", "holder": {"type":
 /// "workspace"}, "draft": {"type": "edit", "reference": "skill:deploy",
-/// "text": "..."}}`. A field a query does not have is refused, as a task's
-/// is.
+/// "text": "..."}}`, `{"type": "workspaces"}`. A field a query does not
+/// have is refused, as a task's is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -162,6 +168,17 @@ pub enum Query {
     /// held to the same rules by the line that writes it. The holder is held
     /// to the path policy as a read of an artifact's is.
     Validate { holder: Holder, draft: Draft },
+    /// Every workspace the panel may switch to ([`known::switchable`]):
+    /// those this machine knows and the one it was launched on, each with
+    /// whether it is the one in use, the launch's, the rule it is chosen by
+    /// once switched to, and whether a switch to it is offered; what
+    /// [`Backend::switch`] is held to.
+    ///
+    /// A query of its own rather than a part of the snapshot: which one the
+    /// panel was launched on is the launch's, and a snapshot says only what
+    /// a workspace holds, the same whichever front end reads it. Nothing in
+    /// it is sent by the browser.
+    Workspaces {},
 }
 
 /// An artifact a command is about to write, as the panel asks core to judge
@@ -364,18 +381,69 @@ pub struct Confirm {
     pub message: String,
 }
 
-/// The backend over the workspace a panel was launched on.
-#[derive(Debug, Clone)]
-pub struct PanelBackend {
-    /// The workspace's root: where every line runs from, and what each is
-    /// pinned to.
+/// What the panel asks to switch to: a workspace by its path, as the
+/// answer to [`Query::Workspaces`] lists it, `{"path": "/home/you/work"}`.
+///
+/// A path matched against that list, read again when the switch arrives,
+/// and never opened as sent ([`policy::switched`]): a browser goes to no
+/// workspace that list does not offer. A field it does not have is
+/// refused, as a task's is.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[serde(deny_unknown_fields)]
+pub struct Switch {
+    pub path: String,
+}
+
+/// The workspace a backend acts on, and the rule it is chosen by.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Pin {
+    /// Its root: where every line runs from, and what each names.
     root: PathBuf,
     /// Why it is the one, which the snapshot says.
     reason: Reason,
+}
+
+impl Pin {
+    /// The workspace, as the disk has it now: the default one as it will
+    /// be, while nothing has made it yet.
+    ///
+    /// Only the default one: any other was there when it was pinned, and
+    /// one gone since is refused rather than taken for one to make, which
+    /// the first change would do to it.
+    fn workspace(&self) -> Result<FlayerWorkspace, Refusal> {
+        let made = self.root.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file();
+        if made || self.reason != Reason::Home {
+            FlayerWorkspace::open(&self.root)
+        } else {
+            FlayerWorkspace::unmade(&self.root)
+        }
+        .map_err(|error| refused(error.code(), error))
+    }
+
+    /// The workspace, or, when it will not open now, gone or broken since
+    /// it was pinned, as it would be once made again: what is watched, and
+    /// what the panel may switch away from, either way.
+    fn opened_or_not(&self) -> Result<FlayerWorkspace, Refusal> {
+        self.workspace()
+            .or_else(|refusal| FlayerWorkspace::unmade(&self.root).map_err(|_| refusal))
+    }
+}
+
+/// The backend over the workspace a panel was launched on, or switched to
+/// since.
+#[derive(Debug, Clone)]
+pub struct PanelBackend {
+    /// The workspace the launch resolved, and how: what the panel may
+    /// always switch back to, by the rule that chose it.
+    launch: Pin,
+    /// The workspace it acts on now: the launch's, until a switch
+    /// ([`Backend::switch`]). Shared by its clones, and read once by
+    /// each query, preview and run, so none of them meets two.
+    pin: Arc<RwLock<Pin>>,
     /// Where to look for workspaces, as the launch decided it: its home and
-    /// agent homes, which every line runs with, and what chose the
-    /// workspace, which decides whether a line needs `-W .` to be read again
-    /// from the root.
+    /// agent homes, which every line runs with, and the home whose default
+    /// workspace knows what may be switched to.
     lookup: Lookup,
     /// Every line it ran for a task that changes something, in the order
     /// they ran ([`transcript`](Self::transcript)). Shared by its clones.
@@ -390,9 +458,13 @@ impl PanelBackend {
     pub fn launch(directory: &Path, lookup: &Lookup) -> Result<PanelBackend, CliError> {
         let resolved = resolve(&lookup.inputs(directory, Intent::Read))?
             .ok_or_else(|| CliError::NotInWorkspace(directory.to_path_buf()))?;
-        Ok(PanelBackend {
+        let launch = Pin {
             root: resolved.workspace.root().to_path_buf(),
             reason: resolved.reason,
+        };
+        Ok(PanelBackend {
+            pin: Arc::new(RwLock::new(launch.clone())),
+            launch,
             lookup: lookup.clone(),
             changed: Arc::default(),
         })
@@ -412,25 +484,26 @@ impl PanelBackend {
         transcript(&changed.iter().map(Done::from).collect::<Vec<_>>())
     }
 
-    /// The root of the workspace it acts on.
-    pub fn root(&self) -> &Path {
-        &self.root
+    /// The root of the workspace it acts on now.
+    pub fn root(&self) -> PathBuf {
+        self.pin().root
     }
 
-    /// The workspace, as the disk has it now: the default one as it will
-    /// be, while nothing has made it yet.
-    ///
-    /// Only the default one: any other was there at launch, and one gone
-    /// since is refused rather than taken for one to make, which the first
-    /// change would do to it.
-    fn workspace(&self) -> Result<FlayerWorkspace, Refusal> {
-        let made = self.root.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file();
-        if made || self.reason != Reason::Home {
-            FlayerWorkspace::open(&self.root)
-        } else {
-            FlayerWorkspace::unmade(&self.root)
+    /// The workspace it acts on now, and why.
+    fn pin(&self) -> Pin {
+        self.pin
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Where it was launched, as core's list of what it may switch to
+    /// takes it.
+    fn launched(&self) -> Launch<'_> {
+        Launch {
+            root: &self.launch.root,
+            reason: self.launch.reason,
         }
-        .map_err(|error| refused(error.code(), error))
     }
 
     /// What every line runs with: the launch's home and agent homes, and the
@@ -441,7 +514,7 @@ impl PanelBackend {
     fn pinned(&self, workspace: &FlayerWorkspace) -> Lookup {
         Lookup {
             flag: Some(if workspace.is_made() {
-                self.root.clone()
+                workspace.root().to_path_buf()
             } else {
                 PathBuf::new()
             }),
@@ -450,50 +523,72 @@ impl PanelBackend {
         }
     }
 
-    /// The lines `task` is, as they would run against the disk as it is
-    /// now, with what they run with and whether each leans on the one
-    /// before; or why none of them runs.
-    fn plan(&self, task: &Task) -> Result<Plan, Refusal> {
+    /// The lines `task` is in the workspace `pin` names, as they would run
+    /// against the disk as it is now, with what they run with and whether
+    /// each leans on the one before; or why none of them runs.
+    fn plan(&self, task: &Task, pin: &Pin) -> Result<Plan, Refusal> {
         if let Some((line, refusal)) = task.refused_line() {
             return Err(refused(
                 refusal.code(),
                 format!("`{}` {refusal}", shell(&line)),
             ));
         }
-        let workspace = self.workspace()?;
+        let workspace = pin.workspace()?;
+        let lookup = self.pinned(&workspace);
+        // With what the lines run with, so a project is asked which
+        // workspace it consults as its line will ask it: this one, named.
         let admitted = Admission {
             workspace: &workspace,
-            lookup: &self.lookup,
+            lookup: &lookup,
         }
         .task(task)
         .map_err(|error| refused(error.code(), error))?;
-        let mut lines = admitted.commands();
+        let named = |lines: Vec<Vec<String>>| match workspace.root().to_str() {
+            Some(root) => lines.iter().map(|line| task::naming(line, root)).collect(),
+            None => lines,
+        };
+        let lines = admitted.commands();
         // As the TUI does: a change to the default before it is made makes
         // it first, by a line of its own, rather than leave the change to
         // find a workspace above home while it walks up from the root. Not
         // in front of a task that makes it already: the TUI offers that one
         // only with nothing made, but a browser may send it at any time.
+        //
+        // Every line names the workspace with `-W`, so what the panel shows,
+        // and the transcript keeps, says which workspace each reached, and
+        // reaches it pasted anywhere. All but those before it is made: `-W`
+        // refuses a folder with no marker, so the default is named by the
+        // lines after the `flayer init` that makes it, and a read of it
+        // before then by none, as the TUI's lines find it. And all of a
+        // workspace whose root no word of a line can hold, not UTF-8: its
+        // lines run against it all the same, through the lookup, which
+        // holds the path as it is, as they did before any line named it,
+        // rather than every task on it refused for a word only shown. It is
+        // only ever the launch's, since nothing whose path is not text is
+        // offered as a switch.
         let init = Task::InitWorkspace.commands();
-        if !workspace.is_made()
-            && admitted.writes()
-            && !lines.is_empty()
-            && !lines.starts_with(&init)
-        {
-            lines.splice(0..0, init);
-        }
+        let lines = if workspace.is_made() {
+            named(lines)
+        } else if admitted.writes() && !lines.is_empty() && !lines.starts_with(&init) {
+            init.into_iter().chain(named(lines)).collect()
+        } else {
+            lines
+        };
         Ok(Plan {
             lines,
-            lookup: self.pinned(&workspace),
+            root: pin.root.clone(),
+            lookup,
             chained: admitted.chained(),
             writes: admitted.writes(),
         })
     }
 }
 
-/// What a task runs: its lines, what they run with, whether one failing
-/// stops the rest, and whether they change something.
+/// What a task runs: its lines, where they run from and with what, whether
+/// one failing stops the rest, and whether they change something.
 struct Plan {
     lines: Vec<Vec<String>>,
+    root: PathBuf,
     lookup: Lookup,
     chained: bool,
     writes: bool,
@@ -503,9 +598,17 @@ impl Backend for PanelBackend {
     type Query = Query;
     type Task = Task;
     type Outcome = Outcome;
+    type Switch = Switch;
 
     fn query(&self, query: Query) -> Result<serde_json::Value, Refusal> {
-        let workspace = self.workspace()?;
+        let pin = self.pin();
+        // What may be switched to is answered even when the workspace in
+        // use will not open, gone since it was switched to, so the panel
+        // can still leave it.
+        let workspace = match query {
+            Query::Workspaces {} => pin.opened_or_not(),
+            _ => pin.workspace(),
+        }?;
         // Each is strings, numbers and lists of them, and maps keyed by
         // field names, with every path written as text whatever its bytes:
         // nothing in either can fail to serialize.
@@ -513,7 +616,7 @@ impl Backend for PanelBackend {
             Query::Snapshot {} => {
                 let resolved = Resolved {
                     workspace,
-                    reason: self.reason,
+                    reason: pin.reason,
                 };
                 let snapshot = Snapshot::of(&resolved, self.lookup.home.as_deref());
                 Ok(serde_json::to_value(snapshot).expect("a snapshot serializes"))
@@ -597,6 +700,11 @@ impl Backend for PanelBackend {
                 };
                 Ok(serde_json::to_value(judged).expect("a judgement serializes"))
             }
+            Query::Workspaces {} => {
+                let listed =
+                    known::switchable(self.lookup.home.as_deref(), &self.launched(), &workspace);
+                Ok(serde_json::to_value(listed).expect("a list serializes"))
+            }
         }
     }
 
@@ -604,7 +712,7 @@ impl Backend for PanelBackend {
     /// confirm first, both of the one plan: so what the panel asks about is
     /// the lines it shows, a `flayer init` in front of them counted.
     fn preview(&self, task: &Task) -> Result<Preview, Refusal> {
-        let plan = self.plan(task)?;
+        let plan = self.plan(task, &self.pin())?;
         let confirm = cautioned(&plan.lines)
             .into_iter()
             .map(|(line, caution)| Confirm {
@@ -629,10 +737,11 @@ impl Backend for PanelBackend {
     /// and taken away once the lines have run, whatever came of them
     /// ([`Scratch`]): the browser sends the text, never a path.
     fn run(&self, task: Task) -> Result<Outcome, Refusal> {
-        let plan = self.plan(&task)?;
+        let pin = self.pin();
+        let plan = self.plan(&task, &pin)?;
         let _scratch = match &task {
             Task::Save { text, .. } => Some(
-                Scratch::put(&self.workspace()?, text)
+                Scratch::put(&pin.workspace()?, text)
                     .map_err(|error| refused(error.code(), error))?,
             ),
             _ => None,
@@ -645,7 +754,7 @@ impl Backend for PanelBackend {
             // all the same is not run here either.
             let run = ran(
                 words,
-                run_line(words, &self.root, &plan.lookup, &watch, |_| true),
+                run_line(words, &plan.root, &plan.lookup, &watch, |_| true),
             );
             let failed = run.error.is_some();
             runs.push(run);
@@ -665,18 +774,43 @@ impl Backend for PanelBackend {
         })
     }
 
+    /// Switch to the workspace `to` names, from now on: one the answer to
+    /// [`Query::Workspaces`] lists, as it is listed when the switch arrives,
+    /// opened and never made ([`policy::switched`]); and answer with its
+    /// row as that list then has it. Nothing is switched when it is
+    /// refused.
+    ///
+    /// What every query, preview and run after it acts on, and what each
+    /// line they run names with `-W`: the launch's home, agent homes and
+    /// all else stay as the launch decided them. The rule it is chosen by
+    /// is the list's, the launch's for the launch's and `-W` for every
+    /// other, which the snapshot then says.
+    fn switch(&self, to: Switch) -> Result<serde_json::Value, Refusal> {
+        let in_use = self.pin().opened_or_not()?;
+        let listed = known::switchable(self.lookup.home.as_deref(), &self.launched(), &in_use);
+        let (workspace, reason) =
+            policy::switched(&listed, &to.path).map_err(|error| refused(error.code(), error))?;
+        *self.pin.write().unwrap_or_else(PoisonError::into_inner) = Pin {
+            root: workspace.root().to_path_buf(),
+            reason,
+        };
+        let row = known::switchable(self.lookup.home.as_deref(), &self.launched(), &workspace)
+            .into_iter()
+            .find(|row| row.workspace.in_use);
+        Ok(serde_json::to_value(row).expect("a row serializes"))
+    }
+
     /// Every path core names for a snapshot of the workspace
     /// ([`watch::watched`]), with the home the snapshot is read with, each
     /// scope as the holder a query names: `{"type": "workspace"}`, or
     /// `{"type": "project", "entry": ...}` by the entry the snapshot lists.
     ///
-    /// One that will not open now, gone or broken since launch, is watched
-    /// where its marker and ledger would be, so its coming back is seen.
+    /// Of the workspace it acts on now, so a switch drops the paths of the
+    /// one before. One that will not open now, gone or broken since it was
+    /// pinned, is watched where its marker and ledger would be, so its
+    /// coming back is seen.
     fn watched_paths(&self) -> Vec<Watched> {
-        let Ok(workspace) = self
-            .workspace()
-            .or_else(|_| FlayerWorkspace::unmade(&self.root))
-        else {
+        let Ok(workspace) = self.pin().opened_or_not() else {
             return Vec::new();
         };
         watch::watched(&workspace, self.lookup.home.as_deref())

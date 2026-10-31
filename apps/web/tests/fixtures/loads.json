@@ -3,18 +3,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer load /home/you/kit"
+        "flayer -W /home/you/Assign load /home/you/kit"
       ]
     },
     "ran": {
       "lines": [
-        "flayer load /home/you/kit"
+        "flayer -W /home/you/Assign load /home/you/kit"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer load /home/you/kit",
+            "command": "flayer -W /home/you/Assign load /home/you/kit",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -38,18 +38,18 @@
         }
       ],
       "lines": [
-        "flayer unload ../team"
+        "flayer -W /home/you/Assign unload ../team"
       ]
     },
     "ran": {
       "lines": [
-        "flayer unload ../team"
+        "flayer -W /home/you/Assign unload ../team"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer unload ../team",
+            "command": "flayer -W /home/you/Assign unload ../team",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -67,18 +67,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer load /home/you/Assign"
+        "flayer -W /home/you/Assign load /home/you/Assign"
       ]
     },
     "ran": {
       "lines": [
-        "flayer load /home/you/Assign"
+        "flayer -W /home/you/Assign load /home/you/Assign"
       ],
       "outcome": {
         "ok": false,
         "runs": [
           {
-            "command": "flayer load /home/you/Assign",
+            "command": "flayer -W /home/you/Assign load /home/you/Assign",
             "error": {
               "code": "loads_itself",
               "message": "/home/you/Assign: a workspace cannot load itself"

@@ -7,6 +7,7 @@ use std::path::MAIN_SEPARATOR_STR as SEPARATOR;
 use tempfile::TempDir;
 
 use super::*;
+use crate::known;
 use crate::workspace::MindProject;
 
 /// A workspace linking `alpha` under it and `beside` next to it, and loading
@@ -225,4 +226,93 @@ fn nothing_named_here_touches_the_disk_but_to_read() {
         fs::read_to_string(workspace.flayer_dir().join(crate::FLAYER_CONFIG)).unwrap(),
         before
     );
+}
+
+/// What a front end launched on `launched` may switch to, the default in
+/// `home` knowing `remembered`, while it is on `in_use`.
+fn listed(home: &Path, launched: &FlayerWorkspace, in_use: &FlayerWorkspace) -> Vec<Switchable> {
+    let launch = known::Launch {
+        root: launched.root(),
+        reason: Reason::Above,
+    };
+    known::switchable(Some(home), &launch, in_use)
+}
+
+/// A default workspace in `home` remembering `writing` beside it, and
+/// `elsewhere`, a workspace nothing remembers, the one launched on.
+fn machine() -> (TempDir, PathBuf, FlayerWorkspace, FlayerWorkspace) {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("home");
+    FlayerWorkspace::init(&home).unwrap();
+    let (writing, _) = FlayerWorkspace::init(dir.path().join("writing")).unwrap();
+    known::remember(Some(&home), &writing).unwrap();
+    let (elsewhere, _) = FlayerWorkspace::init(dir.path().join("elsewhere")).unwrap();
+    (dir, home, writing, elsewhere)
+}
+
+#[test]
+fn a_listed_workspace_is_switched_to_by_its_path_as_listed_with_its_reason() {
+    let (_dir, home, writing, elsewhere) = machine();
+    let rows = listed(&home, &elsewhere, &elsewhere);
+
+    let (to, reason) = switched(&rows, writing.root().to_str().unwrap()).unwrap();
+    assert_eq!(to.root(), writing.root());
+    assert_eq!(reason, Reason::Explicit);
+
+    // Back to the launch, by the rule that chose it then.
+    let rows = listed(&home, &elsewhere, &writing);
+    let (to, reason) = switched(&rows, elsewhere.root().to_str().unwrap()).unwrap();
+    assert_eq!(to.root(), elsewhere.root());
+    assert_eq!(reason, Reason::Above);
+}
+
+#[test]
+fn a_path_no_list_holds_is_refused_whatever_it_leads_to() {
+    let (dir, home, writing, elsewhere) = machine();
+    let (unknown, _) = FlayerWorkspace::init(dir.path().join("unknown")).unwrap();
+    let rows = listed(&home, &elsewhere, &elsewhere);
+    let writing = writing.root().to_str().unwrap();
+    let other = [
+        // A workspace, but none this machine knows.
+        unknown.root().to_str().unwrap().to_owned(),
+        // Listed ones, spelled otherwise: through `.mindflayer`, with a
+        // trailing separator, or with a `.` part.
+        format!("{writing}{SEPARATOR}.mindflayer"),
+        format!("{writing}{SEPARATOR}"),
+        spelled_under(dir.path(), &[".", "writing"]),
+        String::from("writing"),
+        String::from("-W"),
+        String::from("--workspace=/"),
+        String::new(),
+    ];
+    for given in other {
+        assert_eq!(
+            code(switched(&rows, &given)),
+            "switch_unlisted",
+            "{given:?}"
+        );
+    }
+}
+
+#[test]
+fn a_listed_workspace_that_does_not_open_is_refused_and_never_made() {
+    let (_dir, home, writing, elsewhere) = machine();
+    let rows = listed(&home, &elsewhere, &elsewhere);
+    fs::remove_dir_all(writing.root().join(FLAYER_DIR)).unwrap();
+
+    let refused = switched(&rows, writing.root().to_str().unwrap());
+
+    assert_eq!(code(refused), "not_a_workspace");
+    assert!(!writing.root().join(FLAYER_DIR).exists(), "it was made");
+}
+
+#[test]
+fn the_one_in_use_is_taken_as_a_switch_that_changes_nothing() {
+    let (_dir, home, _writing, elsewhere) = machine();
+    let rows = listed(&home, &elsewhere, &elsewhere);
+
+    let (to, reason) = switched(&rows, elsewhere.root().to_str().unwrap()).unwrap();
+
+    assert_eq!(to.root(), elsewhere.root());
+    assert_eq!(reason, Reason::Above);
 }

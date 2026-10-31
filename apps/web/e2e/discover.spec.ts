@@ -29,7 +29,7 @@ test('a suggestion the scan finds is linked from the panel and appears in the pr
   await page.getByRole('checkbox', { name: 'notes' }).click()
   await page.getByTestId('link-marked').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer link ${notes}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} link ${notes}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
   await expect(dialog).toBeHidden()

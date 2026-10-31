@@ -56,6 +56,21 @@ pub struct FakeTask {
     pub confirm: Vec<String>,
 }
 
+/// The fake's switch: what to act on from now on, by a name of the fake's
+/// own, whether to refuse it, whether it panics, and, when it is taken,
+/// what to watch from then on in place of what the fake watches now
+/// (`watch`, each path watched under the name as its scope).
+#[derive(Deserialize)]
+pub struct FakeSwitch {
+    pub to: String,
+    #[serde(default)]
+    pub refuse: bool,
+    #[serde(default)]
+    pub panic: bool,
+    #[serde(default)]
+    pub watch: Option<Vec<std::path::PathBuf>>,
+}
+
 /// What the fake refuses with: a code of its own, which a real backend's
 /// would be one of its front end's.
 pub fn refusal(what: &str) -> Refusal {
@@ -96,12 +111,16 @@ pub struct Fake {
     pub hold: Arc<Hold>,
     /// What it asks the server to watch, which a test changes as it goes.
     pub watched: Arc<Mutex<Vec<Watched>>>,
+    /// What it acts on, by the name the last switch it took gave it: none
+    /// before any.
+    pub on: Arc<Mutex<Option<String>>>,
 }
 
 impl Backend for Fake {
     type Query = FakeQuery;
     type Task = FakeTask;
     type Outcome = FakeOutcome;
+    type Switch = FakeSwitch;
 
     fn query(&self, query: FakeQuery) -> Result<Value, Refusal> {
         if query.refuse {
@@ -144,6 +163,29 @@ impl Backend for Fake {
             thread: std::thread::current().name().map(str::to_owned),
             unwritable: task.unwritable.then_some(Unwritable),
         })
+    }
+
+    /// Recorded among the runs, `switch <to>`, so a test sees it take its
+    /// turn among them.
+    fn switch(&self, to: FakeSwitch) -> Result<Value, Refusal> {
+        if to.refuse {
+            return Err(refusal(&to.to));
+        }
+        if to.panic {
+            panic!("the switch to {} panics, as asked", to.to);
+        }
+        self.runs.lock().unwrap().push(format!("switch {}", to.to));
+        if let Some(watch) = to.watch {
+            *self.watched.lock().unwrap() = watch
+                .into_iter()
+                .map(|path| Watched {
+                    path,
+                    scope: json!(to.to),
+                })
+                .collect();
+        }
+        *self.on.lock().unwrap() = Some(to.to.clone());
+        Ok(json!({ "on": to.to }))
     }
 
     fn watched_paths(&self) -> Vec<Watched> {
@@ -417,7 +459,10 @@ pub async fn subscribe(server: &Listening, auth: Auth<'_>) -> Stream {
 /// everything, and that everything named is watched.
 pub async fn opened(server: &Listening, auth: Auth<'_>) -> Stream {
     let mut stream = subscribe(server, auth).await;
-    assert_eq!(stream.next().await, json!({"type": "resync"}));
+    assert_eq!(
+        stream.next().await,
+        json!({"type": "resync", "switches": 0})
+    );
     assert_eq!(stream.next().await, json!({"type": "watching"}));
     stream
 }

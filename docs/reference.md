@@ -1807,8 +1807,9 @@ a script to read; what it prints once it stops (below) follows it there.
 be opened, as on a machine with no display, is a warning, not a failure.
 `mind ui` is the same command from inside a project. Either serves the
 workspace a command run there would use, decided once as it starts, from
-`-C`, `--home`, `-W` and the agent homes: nothing the browser sends changes
-which one.
+`-C`, `--home`, `-W` and the agent homes, until you switch to another this
+machine knows from the header (below): nothing else the browser sends
+changes which one.
 
 It listens on 127.0.0.1 only, on a port the system picks, or the one `--port`
 names. The link carries a token made for this launch, which the browser
@@ -1829,14 +1830,16 @@ prints every command that changed something, with what each said, as the
 TUI does when it closes:
 
 ```
-$ flayer install -p /home/you/Projects/collapse skill:commit-style
+$ flayer -W /home/you/Projects install -p /home/you/Projects/collapse skill:commit-style
 installed commit-style into collapse, from workspace
 ```
 
 **Every change is previewed first.** Whatever you ask the panel to change,
 it asks the server what that is before anything runs, and shows you the
 lines, exactly as the server will run them and as you could type them in
-the workspace's folder: nothing runs until you press Run. A line that takes
+the workspace's folder: nothing runs until you press Run. Each names the
+workspace with `-W` and its path, so it says which workspace it acts on,
+and acts on that one whatever your shell has activated. A line that takes
 something away makes that a question to confirm, saying what each line
 takes in the CLI's own words: `remove --yes`, which deletes an artifact,
 `uninstall` and `remove --everywhere`, which take installed copies out of
@@ -1855,15 +1858,22 @@ skills and rules from **Assign**, brings what is installed up to date and
 takes out what nothing offers from **Updates**, removes one of the
 library's own everywhere, its dry run first, edits, adds and renames the
 library's own, adopts a skill somebody keeps in a project's agents'
-folders, and loads and unloads other workspaces from **Loads**; everything
-else is still a command away.
+folders, loads and unloads other workspaces from **Loads**, and switches
+to another workspace from the header, and installs, updates all and links
+from the command palette (below) too; everything else is still a command
+away.
 
 **The transcript**, in every page's header, lists every task the session
 ran, from this tab or any other, each line with what it printed, and
 **Copy as script** copies those lines, one to a line, exactly as they ran:
-pasted into a shell in the workspace's folder, they do it all again. What
-`flayer ui` prints when it stops is the same, but for the tasks that only
-read, such as a `validate`.
+pasted into a shell in the workspace's folder, they do it all again. Each
+names the workspace it ran against with `-W`, before a switch or after it,
+and reads the rest of its words from the folder it is typed in, as any
+line does: the entry an `unlink`, `unload` or `relink` names, or the file
+a save reads. Across a switch, paste the lines run before it in that
+workspace's folder and those after it in the other's. What `flayer ui`
+prints when it stops is the same, but for the tasks that only read, such as
+a `validate`.
 
 **The overview** says which skills and rules your projects have at a
 glance. It names the workspace, where it is and how it was chosen, and counts
@@ -1977,7 +1987,7 @@ write is held to), and what `validate` would say of it once written, word
 for word as `flayer validate` then prints it. **Save** runs, shown first:
 
 ```
-$ flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review
+$ flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review
 edited skill review: ok
 ```
 
@@ -2020,6 +2030,31 @@ one that does not open, offers **Load**, `flayer load <path>`; any other is
 loaded by its absolute path, typed below, which the line refuses, saying
 why, when no workspace is there or it is this one. Each is shown first, and
 is the line the TUI's load form runs for the same workspace.
+
+**The header switches workspace.** The header of every page names the
+workspace the panel acts on and how it was chosen: `named with -W`,
+`activated`, `found above` or `default workspace`, as the TUI's header says
+it. Press it for every workspace you may switch to: those this machine
+knows ([the flayers this machine knows](#the-flayers-this-machine-knows)),
+the default first, and the one the panel was launched on, each with where
+it is, whether it is the default or the one in use, which is checked, how
+many projects it links, or why it does not open. Choose one and the panel
+acts on it from then on, without a restart: every page shows it, starting
+from its overview, and every line previewed names it with `-W`, so its
+header then says `named with -W`, but for the one it was launched on,
+which keeps how it was chosen then. Nothing is written: a switch is no
+command, so the transcript has no line for it, and each line in it still
+names the workspace it ran against. Only a workspace on that list can be
+switched to, matched by its path as listed: the server refuses any other
+path a script sends (`switch_unlisted`), and one that does not open, gone
+since the list was read, with why (`not_a_workspace`), never making it. A
+task shown in any tab is let go once the panel switched, since its lines
+name the workspace before, in a tab hidden then as soon as it is shown
+again, and so are the boxes marked on **Assign**; the
+switch waits for whatever is running to finish first. Launched with `-W`,
+the panel does not read `$MINDFLAYER_WORKSPACE`, as no command does once
+`-W` is given, so an activated workspace is listed then only if this
+machine knows it.
 
 **The shelf** lists everything gathered, filtered by kind or by name,
 summary or origin, each with the commit it was taken at, when, and its
@@ -2085,6 +2120,56 @@ with it. Each line is shown first, as everywhere in the panel, and the
 page is drawn again from what it changed: an edited copy an update left is
 still listed, with why.
 
+**The command palette** opens over any page on Ctrl+K, or Cmd+K on a Mac,
+and from **Search** at the top of the sidebar. Type to find any page, a
+project, one of the library's own, anything on the shelf and the sources it
+came from: a word finds what holds it, a letter out of place forgiven, and
+each word more narrows what the others found, the group holding the nearest
+first. A search lists its twelve nearest, and with nothing typed each group
+lists its first twelve, the projects to install into among them: type
+enough to narrow it to the rest. Beside each is what it is, a project's
+health, a skill's or a rule's kind, and its words are shown as written,
+never as markup. Choosing one goes where its link on a page goes. It
+changes things too, each as the page offering the same change does:
+
+- **Install** one skill or rule, from wherever it is offered, then one of
+  the projects whose box of it on **Assign** is neither ticked nor closed.
+  That one box is planned, as ticking it would plan it, and what the plan
+  says runs, `flayer install -p <project> --from <origin> <kind:name>`,
+  replacing another of its name the project holds; what holds it back, a
+  copy somebody wrote (`foreign`) say, is said with its code, and nothing
+  runs.
+- **Update all**, `flayer update --all --yes`, the button of **Updates**,
+  offered whatever an update would do, which its line then says.
+- **Link**, offered last for whatever is typed, `flayer link <path>`, the
+  line of the form above the projects table, which refuses, saying why,
+  anything but the absolute path of a folder.
+
+Each shows its lines before it runs, as every change does. Escape, or Ctrl+K
+again, closes the palette, and the focus goes back where it was; Backspace,
+with nothing typed, goes back from the projects to install into.
+
+**`?` lists the keyboard shortcuts**, every key the panel answers:
+
+| Keys | Where | What they do |
+|---|---|---|
+| Ctrl+K, or Cmd+K on a Mac | anywhere | open or close the command palette |
+| `?` | anywhere | show or hide the keyboard shortcuts |
+| ↑ and ↓, Enter, Backspace, Esc or Ctrl+K | the command palette | move, choose, go back from the projects to install into, close |
+| Tab, Enter, Esc | a change asked about | move between Cancel and Run, press the one focused, cancel with nothing run |
+| the arrows; Page Up and Page Down | **Assign**'s matrix | move one box; ten rows |
+| Home and End; Ctrl+Home and Ctrl+End | **Assign**'s matrix | the first or the last box of the row; of the matrix |
+| Space or Enter | **Assign**'s matrix | mark the box the other way round, or take its mark away |
+| Ctrl+S, or Cmd+S on a Mac | the editor | save, its line shown first |
+| Tab | the editor | leave the editor |
+
+Neither Ctrl+K nor `?` is taken while a field or the editor has the focus,
+whose keys they stay (`?` is a character typed there), but for the
+palette's own search, which Ctrl+K closes, nor while a change is shown or
+runs, whose question is answered first. Where the browser gives Ctrl+K a
+use of its own, such as its search bar, the panel takes it while its page
+has the focus outside a field, or the palette is open.
+
 **It follows the disk.** A change made from a terminal, the TUI or an
 editor shows in the panel within a moment, without a reload: a skill edited,
 a project linked, an install. The server watches what the workspace's
@@ -2096,8 +2181,8 @@ workspace again. When the system will not let it watch everything, which on
 Linux is the limit `fs.inotify.max_user_watches` sets, each page says so
 above what it shows, with a button that reads everything again.
 
-Every page works from the keyboard and says every state in words, never by
-colour alone. The API under it is there for a script holding the token as a
+Every page works from the keyboard, its keys listed on `?`, and says every
+state in words, never by colour alone. The API under it is there for a script holding the token as a
 Bearer token: `POST /api/query` for a read (`{"type": "snapshot"}` answers
 what the panel draws, `{"type": "files", ...}` what one artifact holds,
 `{"type": "contents", ...}` one file of it, as text, `{"type": "scan",
@@ -2105,17 +2190,21 @@ what the panel draws, `{"type": "files", ...}` what one artifact holds,
 `{"type": "plan", "selection": [{"project": "alpha", "reference":
 "skill:deploy", "origin": "workspace", "wanted": true}]}` what boxes of a
 project and an offer, ticked or not, amount to: the tasks that carry them
-out, beside what clashes and what is locked, with nothing run), `POST
+out, beside what clashes and what is locked, with nothing run, and
+`{"type": "workspaces"}` what the header may switch to), `POST
 /api/commands/preview` for the lines a task is and what of them the panel
 asks you to confirm (`{"lines": [...], "confirm": [...]}`), `POST
-/api/commands` to run them, which asks nobody, `GET
+/api/commands` to run them, which asks nobody, `POST /api/switch` with
+`{"path": "/home/you/Notes"}` to switch to a workspace that list holds,
+answered with its row, `GET
 /api/transcript` for everything the session ran, and `GET /api/events` for
 what happens as it happens, as server-sent events: `resync`, to read
 everything again, first and whenever a reader fell behind; right after it
 `watching`, or `unwatched` with a `reason` when the server cannot watch
 everything, and either again whenever that changes; `changed` when something
-watched changed; and `command_started` and `command_finished` around each
-run.
+watched changed; `command_started` and `command_finished` around each
+run; and `switched` once the panel acts on another workspace, to read
+everything again.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,

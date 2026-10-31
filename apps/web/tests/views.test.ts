@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { Health } from '@/api/generated/Health'
-import { answering, answers, commanded, commanding, drafts, fixture, plans, render, unmount, updates } from './panel'
+import { answering, answers, applying, commanded, commanding, drafts, fixture, plans, render, unmount, updates, type Answered } from './panel'
 
 /** Every `<style>` element anything adds while a test runs, which the CSP would refuse. */
 let styles: Element[]
@@ -134,6 +134,59 @@ describe('authoring in the library', () => {
     const { page } = await render(path, transport)
 
     drawsEveryIcon(page)
+    expect(styles).toEqual([])
+  })
+})
+
+/** Press `key` where the focus is, as a keyboard would. */
+function press(key: string, modifiers: KeyboardEventInit = {}) {
+  const at: EventTarget = document.activeElement ?? window
+  at.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true, ...modifiers }))
+}
+
+/** Type `term` into the command palette's search, and wait for what it finds. */
+async function search(term: string) {
+  const input = document.querySelector<HTMLInputElement>('[data-testid="palette"] input')!
+  input.value = term
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+  // Fuse answers a frame later, its results throttled to one a frame.
+  await new Promise(resolve => setTimeout(resolve, 40))
+  await flushPromises()
+}
+
+// Neither is drawn until it opens, so the pages above draw neither: their
+// icons are Nuxt UI's (its search, close, back and an entry's chevron) and
+// the entries' own, which no page draws.
+describe('the command palette and the sheet of shortcuts', () => {
+  it('draw every icon from the bundle, an offer\'s projects, a link and what holds an install back among them, and add no style element', async () => {
+    const cell = { project: 'web', reference: 'skill:format', origin: 'https://github.com/acme/skills', wanted: true }
+    const why = { code: 'foreign', message: '`format` in web is somebody\'s own, at .claude/skills/format' }
+    const held: Answered = { query: { type: 'plan', selection: [cell] }, answer: { tasks: [], conflicts: [], locked: [{ cell, why }] } }
+    const { transport } = commanding(fixture('assigning'), applying(), [held])
+    const { page } = await render('/', transport)
+
+    press('k', { ctrlKey: true })
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="palette"] [role="option"]')).not.toBeNull())
+    expect(document.querySelector('[data-testid="palette"] [data-slot="itemTrailingIcon"]'), 'an offer, which lists projects').not.toBeNull()
+    drawsEveryIcon(page)
+
+    await search('install format')
+    expect(document.querySelector('[data-testid="palette"]')!.textContent).toContain('Link install format')
+    drawsEveryIcon(page)
+
+    press('Enter')
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="palette"] [data-slot="back"]')).not.toBeNull())
+    drawsEveryIcon(page)
+
+    await search('web')
+    press('Enter')
+    await vi.waitFor(() => expect(document.querySelector('li[data-state="open"]')?.textContent).toContain(why.code))
+    drawsEveryIcon(page)
+
+    press('?', { shiftKey: true })
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="shortcuts"]')).not.toBeNull())
+    drawsEveryIcon(page)
+
     expect(styles).toEqual([])
   })
 })

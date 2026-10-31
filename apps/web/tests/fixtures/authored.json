@@ -3,18 +3,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+        "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
       ]
     },
     "ran": {
       "lines": [
-        "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+        "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review",
+            "command": "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -38,18 +38,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+        "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
       ]
     },
     "ran": {
       "lines": [
-        "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+        "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
       ],
       "outcome": {
         "ok": false,
         "runs": [
           {
-            "command": "flayer edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review",
+            "command": "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review",
             "error": {
               "code": "edit_stale",
               "message": "/home/you/Projects/.mindflayer/library/skills/review/SKILL.md: changed since it was read, its SHA-256 now cb41a83d67ebbaa277cd7fe70f07d309ac257de256c210e6d8f35d9115edf740 and not 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d, so it is not written over; read it again"
@@ -76,18 +76,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer add --template full skill deploy-docs 'Publish the docs'"
+        "flayer -W /home/you/Projects add --template full skill deploy-docs 'Publish the docs'"
       ]
     },
     "ran": {
       "lines": [
-        "flayer add --template full skill deploy-docs 'Publish the docs'"
+        "flayer -W /home/you/Projects add --template full skill deploy-docs 'Publish the docs'"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer add --template full skill deploy-docs 'Publish the docs'",
+            "command": "flayer -W /home/you/Projects add --template full skill deploy-docs 'Publish the docs'",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -111,18 +111,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer rename skill:lint tidy"
+        "flayer -W /home/you/Projects rename skill:lint tidy"
       ]
     },
     "ran": {
       "lines": [
-        "flayer rename skill:lint tidy"
+        "flayer -W /home/you/Projects rename skill:lint tidy"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer rename skill:lint tidy",
+            "command": "flayer -W /home/you/Projects rename skill:lint tidy",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -145,18 +145,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer adopt -p /home/you/Projects/web --yes skill:legacy"
+        "flayer -W /home/you/Projects adopt -p /home/you/Projects/web --yes skill:legacy"
       ]
     },
     "ran": {
       "lines": [
-        "flayer adopt -p /home/you/Projects/web --yes skill:legacy"
+        "flayer -W /home/you/Projects adopt -p /home/you/Projects/web --yes skill:legacy"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer adopt -p /home/you/Projects/web --yes skill:legacy",
+            "command": "flayer -W /home/you/Projects adopt -p /home/you/Projects/web --yes skill:legacy",
             "error": null,
             "ok": true,
             "stderr": [],

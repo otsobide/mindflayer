@@ -145,7 +145,8 @@ under `apps/` with its own `Makefile`:
   (`status`), finding a project that moved again by its id and giving a
   copy made with its `.mind` one of its own (`relink`), the workspaces this
   machine knows, a list the default
-  workspace keeps (`known`), creating and changing artifacts, and moving a
+  workspace keeps, and those a front end on one may switch to
+  (`known`, `known::switchable`), creating and changing artifacts, and moving a
   workspace's own into its library and a project from its `mind.toml` or
   `settings.json` to a `settings.toml` (`migrate`), bringing what was
   installed up to date with where it came from, and what doing so in every
@@ -168,7 +169,8 @@ under `apps/` with its own `Makefile`:
   the panel, cut at its front matter when it is the one the artifact is
   read from, and every file it holds listed (`contents`), which paths and
   entries a request from outside
-  may name (`policy`), what `show` and `validate` say of each
+  may name, a workspace to switch to among them (`policy`), what `show`
+  and `validate` say of each
   artifact (`reading`), and what core says of one a command is about to
   write, by the command's own checks and in `validate`'s words, for a
   front end judging what is typed (`draft`). Its only I/O is files, and it never reads the
@@ -213,7 +215,8 @@ under `apps/` with its own `Makefile`:
   trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
   cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
   Metadata checks and the CSP, `src/api.rs` the JSON endpoints,
-  `src/writer.rs` the thread every run goes through, `src/transcript.rs` what
+  `src/writer.rs` the thread every run and every switch goes through,
+  `src/transcript.rs` what
   the session ran, `src/events.rs` the bus `/api/events` streams,
   `src/watcher.rs` what watches the paths the backend names and tells the
   bus what changed, `src/log.rs` the redacting request log and
@@ -226,16 +229,21 @@ under `apps/` with its own `Makefile`:
   one query of the snapshot every view reads, `src/api/artifact.ts` the
   queries of an artifact's files and of one file, `src/api/live.ts` the
   tab's one subscription to the server's events, which it turns into what
-  Vue Query asks for again, how the server watches, and how a run waits for
-  its views (`settle`), `src/api/commands.ts` the runner every change goes
+  Vue Query asks for again, how the server watches, and how a run and a
+  switch wait for their views (`settle`, `settleSwitch`),
+  `src/api/commands.ts` the runner every change goes
   through (`useRunner`: a task previewed, shown, confirmed when it takes
   something away, and run), `src/api/transcript.ts` the query of the
   server's transcript, `src/api/scan.ts` the query of a scan, asked for
   by hand, `src/api/plan.ts` the queries of a plan of the boxes marked
-  on the matrix and of the lines it runs (`usePlan`, `usePreview`), and
+  on the matrix and of the lines it runs (`usePlan`, `usePreview`), of one
+  box once, for the command palette (`usePlanOnce`), and the batch a plan
+  applies (`batchOf`), and
   `src/api/updates.ts` the query of what an update of every project would
-  do (`useUpdates`), and `src/api/draft.ts` the query of what core says of
-  a draft as it is typed (`useJudged`).
+  do (`useUpdates`) and the task of updating them all (`UPDATE_ALL`),
+  `src/api/draft.ts` the query of what core says of
+  a draft as it is typed (`useJudged`), and `src/api/workspaces.ts` the
+  query of what the header may switch to (`useWorkspaces`).
   `src/pages/` holds one
   page per route (file routes): the overview (`index`), the projects
   (`projects`), a project's page (`project`, which `src/routes.ts` names by
@@ -249,15 +257,22 @@ under `apps/` with its own `Makefile`:
   the query), the workspaces it loads and those this machine knows
   (`loads`), the shelf (`shelf`) and the sources (`sources`). `src/address.ts` reads and changes
   the query a page keeps its state in, `src/library.ts` finds the projects
-  holding one of the library's own, `src/markdown.ts` draws a skill's
+  holding one of the library's own, `src/boxes.ts` a box of the matrix in
+  the snapshot, for the matrix and the command palette alike,
+  `src/markdown.ts` draws a skill's
   markdown from its tokens, and `src/time.ts` says the ledger's times.
   `src/components/` holds the frame
-  (`AppSidebar`, `AppHeader`, `AppLogo`) and the views' pieces: the badges
+  (`AppSidebar`, which lists the views for the palette too, `AppHeader`,
+  `AppLogo`), what opens over every page on its keys, the command palette
+  (`CommandPalette`, Ctrl+K) and the sheet of keyboard shortcuts
+  (`ShortcutSheet`, `?`), and the views' pieces: the badges
   of a state, a health and the agents, a count, the warnings panel, the
   commands an empty state names, what is wrong with an artifact
   (`IssueList`), a rendered body (`MarkdownBody`), an artifact's files
   (`FileTree`), the ledger's latest actions (`ActivityFeed`),
   `SnapshotGate`, which draws a page once the snapshot is answered, the
+  header's workspace in use and its menu of what it may switch to
+  (`WorkspaceSwitcher`), the
   folder to link (`LinkForm`), the path of a workspace to load
   (`LoadForm`), a project's agents and share toggles
   (`SettingsForm`) and its migration, dry run first (`MigrateOffer`), the
@@ -344,10 +359,19 @@ These are easy to break from a single file without noticing.
   JSON, the backend holds it to the path policy (`admit::Admission`), shows
   its lines before they run (`Backend::preview`) and runs them through
   `run_line` on the server's one writer thread, with the `Lookup` `ui` was
-  launched with, the workspace pinned. A new feature is written as a command
+  launched with, the workspace pinned and named with `-W` in each line's
+  own words (`task::naming`), so a line previewed, run and kept in the
+  transcript says which workspace it reached. A switch from the panel's
+  header re-pins it (`Backend::switch`), on the same thread, only to a
+  workspace core lists (`known::switchable`, held by `policy::switched`),
+  and is no line: nothing of it is in the transcript, which stays true
+  since every line names its workspace. A new feature is written as a command
   first; the TUI and the panel gain it by producing that command's words.
   Never add a TUI-only or panel-only code path, nor one where the backend
-  does the work itself rather than run a line. A gather's lines run on a
+  does the work itself rather than run a line. The panel's command palette
+  is another way to a page's change, never a change of its own: it sends
+  the task the page offering it sends (`UPDATE_ALL`, the link form's, one
+  box's plan applied with `batchOf`), through the same runner. A gather's lines run on a
   thread of their own (`Task::runs_apart`), still through the same parsers:
   the thread changes where they run, not what they are. The install screen applies the same way, in the TUI or
   opened by `flayer install` (`install::apply`): its marks are the
@@ -448,8 +472,10 @@ These are easy to break from a single file without noticing.
   `apply_install`, never a task of its own), what an update of every
   project would do (`Query::Updates`, answered with core's
   `update::Updates`), what core says of a draft about to be written
-  (`Query::Validate`, answered with core's `draft::Judged`), and which
-  workspace
+  (`Query::Validate`, answered with core's `draft::Judged`), what the
+  panel may switch to, which depends on where it was launched
+  (`Query::Workspaces`, answered with core's `known::switchable`), and
+  which workspace
   a project's own lines consult (`docs/architecture.md`, "The read
   model").
 - **Every error has a stable code.** Each public error type in core,
@@ -721,8 +747,15 @@ These are easy to break from a single file without noticing.
     a scan is to look under, by an absolute, normalized path outside every
     `.mindflayer`, verbatim. The
     browser supplies no `-C`, `--home`, `-W` or agent home: the backend runs
-    every line with the launch's, against the workspace it was launched on,
-    named. A refused task runs nothing, and every refusal has a code.
+    every line with the launch's, against the workspace it acts on, the one
+    it was launched on or one switched to since, named with `-W` in the
+    line. A switch names a workspace only by its path as core's list of
+    what may be switched to spells it (`known::switchable`), matched
+    character for character against that list read again as it arrives
+    (`policy::switched`): another spelling, a path never listed or one
+    starting with a dash is refused (`switch_unlisted`), a listed one that
+    does not open is refused with why, never made, and a refusal switches
+    nothing. A refused task runs nothing, and every refusal has a code.
   - A file reaches the browser only as text inside JSON, no larger than
     `contents::CAP`, binary or larger reported by its size alone, and never
     served as itself (`contents::Contents`); its links are judged by
@@ -919,8 +952,8 @@ These are easy to break from a single file without noticing.
   the TUI runs carries none of the four options, so it would decide them
   again from the environment.
 - **The server holds no rules.** `apps/server` carries JSON between the
-  browser and a `Backend`, whose `Query`, `Task` and `Outcome` are associated
-  types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it
+  browser and a `Backend`, whose `Query`, `Task`, `Outcome` and `Switch`
+  are associated types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it
   with `cargo metadata`); a front end depends on it, as the CLI does
   (`backend.rs`), never the other way. A check, path rule or naming rule
   written there is one the panel could disagree with the CLI about: it
@@ -932,7 +965,12 @@ These are easy to break from a single file without noticing.
   enforces none of it, so a run sent without the question is run, as a
   shell runs what is typed into it. Queries and
   previews run on tokio's blocking pool, and every run on the one writer
-  thread, in the order it arrived. Which paths it watches is core's
+  thread, in the order it arrived, and so does a switch of what the backend
+  acts on (`POST /api/switch`, `Backend::switch`), which only the backend
+  can say it may make: once it is taken, the watcher asks for the paths
+  again and drops those no longer named (`Watcher::again`) before every
+  subscriber is told `switched`, and nothing of it is kept in the
+  transcript. Which paths it watches is core's
   (`watch::watched`), handed over by the backend (`watched_paths`), each
   with a scope it carries to the panel unread: the watcher knows files and
   folders, each watched on its own and never a tree, and nothing of which
@@ -956,7 +994,8 @@ These are easy to break from a single file without noticing.
   the `HttpOnly` cookie, the `X-Mindflayer: 1` header. What the server
   answers belongs in Vue Query; Pinia holds UI state only. The server's
   events reach the views only as Vue Query marking what they reached stale
-  (`src/api/live.ts`), never as a read of their own and never a scan, over
+  (`src/api/live.ts`), or, on `switched`, resetting every answer, never as
+  a read of their own and never a scan, over
   one subscription a tab, let go while it is hidden: a scan's query is
   keyed outside what they mark (`scan`), never stale on its own, and asked
   for again only by its page, as after a run of its own. Every change goes
@@ -994,7 +1033,10 @@ These are easy to break from a single file without noticing.
   an artifact's front matter, which core cuts from the file
   (`contents::Manifest`). So is which workspace this machine knows the one
   on screen could load (`known`'s `loadable`, `view::KnownHere`), never
-  told from `in_use`, `stale` and the loads' paths. So is which projects
+  told from `in_use`, `stale` and the loads' paths, and which one the
+  header may switch to and by which rule it is then chosen
+  (`Query::Workspaces`: `switchable` and `reason`, `known::switchable`),
+  the path a switch names being the one that list spells. So is which projects
   hold a copy of one of the library's own (`library.holders`, by `install::from_the_library`, the
   rule `flayer remove --everywhere` follows), never told by comparing a
   copy's origin, which an install from before origins were kept lacks. Every

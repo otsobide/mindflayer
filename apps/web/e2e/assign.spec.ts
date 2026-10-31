@@ -38,7 +38,7 @@ test('a skill ticked into two projects is copied where each agent reads it, and 
 
   await box(page, alpha).click()
   await box(page, beta).click()
-  const install = `$ flayer install -p ${folder(alpha)} -p ${folder(beta)} --from ${OFFERED.origin} skill:${OFFERED.name}`
+  const install = `$ flayer -W ${own.at.workspace} install -p ${folder(alpha)} -p ${folder(beta)} --from ${OFFERED.origin} skill:${OFFERED.name}`
   await expect(page.getByTestId('line')).toHaveText([install])
   await page.getByTestId('apply').click()
   const dialog = page.getByRole('dialog')
@@ -54,7 +54,7 @@ test('a skill ticked into two projects is copied where each agent reads it, and 
   }
 
   await box(page, beta).click()
-  const uninstall = `$ flayer uninstall -p ${folder(beta)} skill:${OFFERED.name}`
+  const uninstall = `$ flayer -W ${own.at.workspace} uninstall -p ${folder(beta)} skill:${OFFERED.name}`
   await expect(page.getByTestId('line')).toHaveText([uninstall])
   await page.getByTestId('apply').click()
   await expect(dialog.getByTestId('command')).toHaveText([uninstall])

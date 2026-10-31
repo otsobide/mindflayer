@@ -141,6 +141,16 @@ where it is.
 
 ![Loaded workspaces: the platform team's workspace loaded, with its two skills, and the workspaces this machine knows, one of which can still be loaded](docs/images/loads.png)
 
+### Switching workspace
+
+The header of every page names the workspace the panel works on and how it
+was found. Press it to see every workspace this machine knows, and the one
+you started the panel on, and switch to another without restarting: every
+page then shows that one, and every command the panel runs names it with
+`-W`, so the transcript says which workspace each line ran against.
+
+![The header's workspace menu open: the demo's workspace in use, found above, and the default and the platform team's workspaces to switch to](docs/images/switcher.png)
+
 ### The shelf and its sources
 
 The shelf holds what was gathered from git repositories, each skill with
@@ -186,11 +196,37 @@ in, then the rest. Tick them and link them in one go.
 
 ![Discover: two repositories found and marked to link, and the projects linked already](docs/images/discover.png)
 
+### The command palette and the keys
+
+Press Ctrl+K, or Cmd+K on a Mac, on any page, or **Search** at the top of
+the sidebar, and type: every page and project, the library's skills and
+rules, what is on the shelf and where it came from, found by a few letters,
+a typo forgiven, each word narrowing the rest. It acts too: **Install** a
+skill or rule, then choose a project that could take it, as ticking its box
+in Assign would; **Update all**; or **Link** the folder whose path you
+typed. Each shows its lines before it runs, like every change below.
+
+![The command palette over the overview, release typed: the shelf's release-notes, the skills to install, the library's deploy-checklist, and the word offered as a folder to link](docs/images/palette.png)
+
+`?` lists every key the panel answers. Neither Ctrl+K nor `?` is taken
+while you type in a field or the editor, whose keys they stay, but for the
+palette's own search, which Ctrl+K closes:
+
+| Keys | Where | What they do |
+|---|---|---|
+| Ctrl+K, or Cmd+K on a Mac | anywhere | open or close the command palette |
+| `?` | anywhere | show or hide the keyboard shortcuts |
+| ↑ ↓, Enter, Backspace, Esc or Ctrl+K | the palette | move, choose, go back from the projects to install into, close |
+| Tab, Enter, Esc | a change asked about | move between Cancel and Run, press the one focused, cancel |
+| arrows, Page Up and Down, Home and End, Ctrl with Home and End, Space | Assign's matrix | move a box or ten rows, to the end of a row or of the matrix, mark a box |
+| Ctrl+S, or Cmd+S on a Mac, and Tab | the editor | save, shown first, and leave the editor |
+
 ### Every change is a command
 
 The panel changes nothing behind your back. Whatever you ask for, it first
 shows the command lines it will run, exactly as you could type them in the
-workspace's folder, and runs nothing until you press Run.
+workspace's folder, each naming the workspace with `-W`, and runs nothing
+until you press Run.
 
 ![The preview of linking the two repositories: a mind init, then a flayer link](docs/images/preview.png)
 

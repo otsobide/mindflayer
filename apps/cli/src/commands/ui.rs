@@ -44,7 +44,7 @@ pub(crate) fn ui_command(
     lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
     let backend = PanelBackend::launch(directory, lookup)?;
-    let root = backend.root().to_path_buf();
+    let root = backend.root();
     // A clone keeps what the server's ran, for the transcript.
     let kept = backend.clone();
     let port = port(options);

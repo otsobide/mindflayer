@@ -183,7 +183,8 @@ fn the_panel_runs_what_it_is_sent_and_the_next_snapshot_shows_it() {
     assert_eq!(
         ran["lines"],
         json!([format!(
-            "flayer install -p {} skill:commit-style",
+            "flayer -W {} install -p {} skill:commit-style",
+            dir.path().display(),
             dir.path().join("alpha").display()
         )])
     );
@@ -193,6 +194,44 @@ fn the_panel_runs_what_it_is_sent_and_the_next_snapshot_shows_it() {
     assert_eq!(standing(&after, "beta", "commit-style"), None);
     let (_, transcript) = panel.send("GET", "/api/transcript", Auth::Bearer, None);
     assert_eq!(transcript, json!([ran]));
+}
+
+/// Over loopback, as the panel's header sends it: a switch to a path no
+/// list holds is refused with its code and leaves the panel where it was;
+/// one to a workspace the home's default knows is taken, and the next
+/// snapshot, and the next line, are of it.
+#[test]
+fn the_panel_switches_only_to_a_workspace_this_machine_knows() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let team = home.path().join("team");
+    fs::create_dir_all(&team).unwrap();
+    flayer_at_home(home.path(), home.path(), &["init"]).unwrap();
+    flayer_at_home(&team, home.path(), &["init"]).unwrap();
+    let panel = serve("flayer", dir.path(), home.path());
+
+    for path in ["/etc", "--yes", "../team"] {
+        let (status, refused) = panel.post("/api/switch", json!({ "path": path }));
+        assert_eq!(status, 422, "{path}: {refused}");
+        assert_eq!(refused["code"], "switch_unlisted", "{path}: {refused}");
+    }
+    assert_eq!(
+        panel.snapshot()["workspace"]["path"],
+        json!(dir.path().to_str().unwrap())
+    );
+
+    let (status, switched) = panel.post("/api/switch", json!({ "path": team.to_str().unwrap() }));
+    assert_eq!(status, 200, "{switched}");
+    assert_eq!(switched["in_use"], true, "{switched}");
+    let snapshot = panel.snapshot();
+    assert_eq!(snapshot["workspace"]["path"], json!(team.to_str().unwrap()));
+    assert_eq!(snapshot["workspace"]["reason"], "explicit");
+    let (status, preview) = panel.post("/api/commands/preview", json!({"type": "shelf"}));
+    assert_eq!(status, 200, "{preview}");
+    assert_eq!(
+        preview["lines"],
+        json!([format!("flayer -W {} gather list", team.display())])
+    );
 }
 
 /// A save as the panel's editor sends it, over loopback: the text it read
@@ -434,7 +473,8 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
     let mut rest = String::new();
     panel.stdout.read_to_string(&mut rest).unwrap();
     assert_eq!(rest, transcript);
-    assert!(rest.starts_with("$ flayer install -p "), "{rest}");
+    let named = format!("$ flayer -W {} install -p ", dir.path().display());
+    assert!(rest.starts_with(&named), "{rest}");
     let mut said = String::new();
     let mut stderr = panel.started.child.stderr.take().unwrap();
     stderr.read_to_string(&mut said).unwrap();

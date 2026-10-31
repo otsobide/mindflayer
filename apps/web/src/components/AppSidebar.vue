@@ -1,40 +1,62 @@
+<script lang="ts">
+/** A view of the panel: a page under src/pages and a line of the sidebar. */
+export interface View {
+  label: string
+  icon: string
+  to: string
+  /** The pages reached from this one, which light its line too. */
+  lights?: string[]
+}
+
+/**
+ * Every view, in the sidebar's order, which the command palette lists them
+ * in too: spelled once, so neither offers a page the other leaves out.
+ * Here rather than in a module of its own, since Nuxt UI bundles the icons
+ * a `.vue` file names, and only those.
+ *
+ * A project's page is reached from the projects, so it lights their line,
+ * and one of the library's own, its editor and the page adding one light
+ * the library's: `/project` is no child of `/projects` to the router, nor
+ * `/artifact` of `/library` (src/routes.ts says why).
+ */
+export const VIEWS: readonly View[] = [
+  { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: '/' },
+  { label: 'Projects', icon: 'i-lucide-folder-git-2', to: '/projects', lights: ['/project'] },
+  { label: 'Discover', icon: 'i-lucide-radar', to: '/discover' },
+  { label: 'Assign', icon: 'i-lucide-grid-3x3', to: '/assign' },
+  { label: 'Updates', icon: 'i-lucide-circle-arrow-up', to: '/updates' },
+  { label: 'Library', icon: 'i-lucide-library-big', to: '/library', lights: ['/artifact', '/edit', '/new'] },
+  { label: 'Loads', icon: 'i-lucide-layers', to: '/loads' },
+  { label: 'Shelf', icon: 'i-lucide-package', to: '/shelf' },
+  { label: 'Sources', icon: 'i-lucide-git-branch', to: '/sources' }
+]
+</script>
+
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import type { NavigationMenuItem } from '@nuxt/ui'
+import { useKbd } from '@nuxt/ui/composables'
 import { storeToRefs } from 'pinia'
 import { useShell } from '@/stores/shell'
 import AppLogo from './AppLogo.vue'
 
-const { sidebarOpen, sidebarCollapsed } = storeToRefs(useShell())
+const shell = useShell()
+const { sidebarOpen, sidebarCollapsed } = storeToRefs(shell)
 const route = useRoute()
 
-// A view is a page under src/pages and a line here. A project's page is
-// reached from the projects, so it lights their line, and one of the
-// library's own, its editor and the page adding one light the library's:
-// `/project` is no child of `/projects` to the router, nor `/artifact` of
-// `/library` (src/routes.ts says why).
-const links = computed<NavigationMenuItem[]>(() => [
-  { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: '/' },
-  {
-    label: 'Projects',
-    icon: 'i-lucide-folder-git-2',
-    to: '/projects',
-    active: route.path === '/project' || undefined
-  },
-  { label: 'Discover', icon: 'i-lucide-radar', to: '/discover' },
-  { label: 'Assign', icon: 'i-lucide-grid-3x3', to: '/assign' },
-  { label: 'Updates', icon: 'i-lucide-circle-arrow-up', to: '/updates' },
-  {
-    label: 'Library',
-    icon: 'i-lucide-library-big',
-    to: '/library',
-    active: ['/artifact', '/edit', '/new'].includes(route.path) || undefined
-  },
-  { label: 'Loads', icon: 'i-lucide-layers', to: '/loads' },
-  { label: 'Shelf', icon: 'i-lucide-package', to: '/shelf' },
-  { label: 'Sources', icon: 'i-lucide-git-branch', to: '/sources' }
-])
+const links = computed<NavigationMenuItem[]>(() => VIEWS.map(({ label, icon, to, lights }) => ({
+  label,
+  icon,
+  to,
+  active: lights?.includes(route.path) || undefined
+})))
+
+// The keys that open the command palette, as assistive technology is told
+// them: Nuxt UI reads its `meta` as Ctrl off a Mac, so Meta+K (Super) opens
+// nothing there, and only a Mac takes both.
+const { macOS } = useKbd()
+const paletteKeys = computed(() => (macOS.value ? 'Meta+K Control+K' : 'Control+K'))
 
 // Which server this panel came from. Each `flayer ui` takes a port of its
 // own, so two open panels can belong to two different launches.
@@ -72,6 +94,42 @@ const address = window.location.host
     </template>
 
     <template #default="{ collapsed }">
+      <!--
+        What opens the command palette, for a pointer or a touch: Ctrl+K,
+        or Cmd+K on a Mac, from the keyboard, which the keys beside it say.
+      -->
+      <UButton
+        :label="collapsed ? undefined : 'Search'"
+        icon="i-lucide-search"
+        color="neutral"
+        variant="outline"
+        :square="collapsed"
+        :block="!collapsed"
+        aria-label="Search: the command palette"
+        :aria-keyshortcuts="paletteKeys"
+        class="justify-start"
+        data-testid="open-palette"
+        @click="shell.paletteOpen = true"
+      >
+        <template
+          v-if="!collapsed"
+          #trailing
+        >
+          <span
+            class="ms-auto flex items-center gap-0.5"
+            aria-hidden="true"
+          >
+            <UKbd
+              value="meta"
+              variant="subtle"
+            />
+            <UKbd
+              value="k"
+              variant="subtle"
+            />
+          </span>
+        </template>
+      </UButton>
       <UNavigationMenu
         :items="links"
         :collapsed="collapsed"

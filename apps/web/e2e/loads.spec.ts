@@ -41,7 +41,7 @@ test('a workspace this machine knows, loaded from the panel, offers its skill on
   await expect(page.getByTestId('no-loaded')).toBeVisible()
   const known = page.getByTestId('known-workspace').filter({ has: page.getByTestId('path').getByText(team, { exact: true }) })
   await known.getByRole('button', { name: 'Load team' }).click()
-  const load = `$ flayer load ${team}`
+  const load = `$ flayer -W ${own.at.workspace} load ${team}`
   await expect(dialog.getByTestId('command')).toHaveText([load])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
@@ -62,7 +62,7 @@ test('a workspace this machine knows, loaded from the panel, offers its skill on
 
   await page.getByRole('link', { name: 'Loads' }).click()
   await page.getByRole('button', { name: 'Unload team' }).click()
-  const unload = `$ flayer unload ${LOADED.entry}`
+  const unload = `$ flayer -W ${own.at.workspace} unload ${LOADED.entry}`
   await expect(dialog.getByTestId('command')).toHaveText([unload])
   await expect(dialog.getByTestId('caution')).not.toHaveCount(0)
   await dialog.getByTestId('run').click()

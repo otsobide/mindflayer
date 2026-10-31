@@ -12,6 +12,12 @@ export interface Live {
   state: 'waiting' | 'watching' | 'unwatched'
   /** Why not, when not. */
   reason?: string
+  /**
+   * How many times the server switched workspace since the tab opened, as
+   * far as the tab knows: what whatever keeps something of the workspace
+   * on screen, a task shown or boxes marked, watches, to let it go.
+   */
+  switches: number
 }
 
 export const liveKey: InjectionKey<Readonly<Live>> = Symbol('live')
@@ -39,10 +45,11 @@ export function useFreshness(): ComputedRef<number> {
 /**
  * The queries the server's events mark stale, by the first word of their
  * key (`src/api/snapshot.ts`, `src/api/artifact.ts`, `src/api/plan.ts`,
- * `src/api/updates.ts`, `src/api/draft.ts`): the snapshot, what was read of
- * an artifact, the plan of the boxes marked with the lines it previews,
- * what an update would do, and what core says of a draft, which are of the
- * disk as it stands.
+ * `src/api/updates.ts`, `src/api/draft.ts`, `src/api/workspaces.ts`): the
+ * snapshot, what was read of an artifact, the plan of the boxes marked with
+ * the lines it previews, what an update would do, what core says of a
+ * draft, and what the header may switch to, which are of the disk as it
+ * stands.
  * Named rather than every query, for one asked for by hand: a scan (#77)
  * reads the disk far past what is watched, and an event asking for it
  * again would run one on every change, every command and every tab shown
@@ -50,7 +57,7 @@ export function useFreshness(): ComputedRef<number> {
  * Spelled here rather than imported, since every one of those modules
  * imports this one.
  */
-const FOLLOWED: readonly unknown[] = ['snapshot', 'files', 'contents', 'plan', 'preview', 'updates', 'validate']
+const FOLLOWED: readonly unknown[] = ['snapshot', 'files', 'contents', 'plan', 'preview', 'updates', 'validate', 'workspaces']
 
 /**
  * The query only a run changes, by the first word of its key
@@ -81,6 +88,27 @@ export const settleKey: InjectionKey<Settle> = Symbol('settle')
 /** How a run waits for its views, for whatever sends one. */
 export function useSettle(): Settle {
   const settle = inject(settleKey)
+  if (!settle) {
+    throw new Error('the panel was started without its live updates')
+  }
+  return settle
+}
+
+/**
+ * Send a switch (`send`), and answer what the server answered once the
+ * views have the new workspace's answers: once the stream has told it
+ * `switched` and the tab has let go of the workspace before, or, when the
+ * stream tells nothing within `PATIENCE`, once it has let go regardless,
+ * as a run is settled (`Settle`). Not settled on a refusal, which switched
+ * nothing.
+ */
+export type SettleSwitch = <Answer>(send: () => Promise<Answer>) => Promise<Answer>
+
+export const settleSwitchKey: InjectionKey<SettleSwitch> = Symbol('settle-switch')
+
+/** How a switch waits for its views, for whatever sends one. */
+export function useSettleSwitch(): SettleSwitch {
+  const settle = inject(settleSwitchKey)
   if (!settle) {
     throw new Error('the panel was started without its live updates')
   }
@@ -127,10 +155,17 @@ function markRan(client: QueryClient): Promise<void> {
  * front none to ask with.
  */
 export function listen(transport: Transport, client: QueryClient, page: Document = document, patience: number = PATIENCE) {
-  const live = reactive<Live>({ state: 'waiting' })
+  const live = reactive<Live>({ state: 'waiting', switches: 0 })
   let unsubscribe: Unsubscribe | undefined
   /** Each run waiting on its finish, told every finish and what it set off. */
   const waiting = new Set<(lines: string[], asked: Promise<void>) => void>()
+  /** Each switch waiting on the word it was taken, told what letting go set off. */
+  const switching = new Set<(asked: Promise<void>) => void>()
+  /**
+   * How many switches the server had taken as the stream last said, by the
+   * count each `switched` and `resync` carries: none before it first says.
+   */
+  let heard: number | undefined
 
   function told(event: LiveEvent) {
     switch (event.type) {
@@ -147,8 +182,28 @@ export function listen(transport: Transport, client: QueryClient, page: Document
         }
         break
       }
-      case 'resync':
-        void markRan(client)
+      // A count other than the last one heard is a switch this tab missed:
+      // its stream was let go while it was hidden, or fell behind. Let go
+      // of the workspace before as on hearing `switched`, or a task it
+      // shows would be run in the new one under lines naming the old one,
+      // for as long as it stayed hidden.
+      case 'resync': {
+        const missed = heard !== undefined && event.switches !== heard
+        heard = event.switches
+        if (missed) {
+          tellSwitched()
+        } else {
+          void markRan(client)
+        }
+        break
+      }
+      // One a resync counted already is not let go of twice: one the
+      // stream still held behind the resync of a tab that fell behind.
+      case 'switched':
+        if (heard === undefined || event.switches > heard) {
+          heard = event.switches
+          tellSwitched()
+        }
         break
       case 'command_started':
         break
@@ -161,6 +216,26 @@ export function listen(transport: Transport, client: QueryClient, page: Document
         live.reason = event.reason
         break
     }
+  }
+
+  // Let go of the workspace before, as `switched` says, and tell every
+  // switch this tab waits on that it was taken.
+  function tellSwitched() {
+    const asked = switched()
+    for (const taken of switching) {
+      taken(asked)
+    }
+  }
+
+  // Let go of the workspace before a switch, from this tab or another:
+  // every answer reset rather than marked stale, since an answer of the
+  // workspace before is no answer of this one, and a view drawing it while
+  // the new one comes would show one workspace's projects under the
+  // other's name; and `switches` counted, for what keeps a task shown or
+  // boxes marked to let them go.
+  function switched(): Promise<void> {
+    live.switches += 1
+    return client.resetQueries()
   }
 
   function start() {
@@ -211,11 +286,38 @@ export function listen(transport: Transport, client: QueryClient, page: Document
     }
   }
 
+  // Waiting from before the switch is sent, as a run waits: the server
+  // tells it taken just before it answers. Any word of one will do, there
+  // being nothing in it to tell two apart: either way the tab lets go once.
+  async function settleSwitch<Answer>(send: () => Promise<Answer>): Promise<Answer> {
+    let heard: Promise<void> | undefined
+    let expecting: ((asked: Promise<void>) => void) | undefined
+    const taken = (asked: Promise<void>) => {
+      heard ??= asked
+      expecting?.(asked)
+    }
+    switching.add(taken)
+    try {
+      const answer = await send()
+      await (heard ?? new Promise<void>((resolve) => {
+        const timer = setTimeout(() => resolve(switched()), patience)
+        expecting = (asked) => {
+          clearTimeout(timer)
+          resolve(asked)
+        }
+      }))
+      return answer
+    } finally {
+      switching.delete(taken)
+    }
+  }
+
   page.addEventListener('visibilitychange', shown)
   shown()
   return {
     live: readonly(live),
     settle: settle as Settle,
+    settleSwitch: settleSwitch as SettleSwitch,
     stop() {
       page.removeEventListener('visibilitychange', shown)
       pause()

@@ -27,7 +27,7 @@ test('a project linked from the panel leaves flayer.toml as flayer link leaves i
   await page.getByTestId('link-path').fill(notes)
   await page.getByTestId('link').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer link ${notes}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} link ${notes}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
   await expect(dialog).toBeHidden()
@@ -37,7 +37,7 @@ test('a project linked from the panel leaves flayer.toml as flayer link leaves i
   same(marker(own.at.workspace), marker(own.twin.workspace))
 
   await page.getByTestId('projects').getByTestId('open-transcript').click()
-  await expect(page.getByTestId('transcript').getByTestId('line')).toHaveText([`$ flayer link ${notes}`])
+  await expect(page.getByTestId('transcript').getByTestId('line')).toHaveText([`$ flayer -W ${own.at.workspace} link ${notes}`])
 })
 
 test('a project is unlinked from the panel only once confirmed, leaving flayer.toml as flayer unlink leaves it', async ({ page, own }) => {
@@ -46,7 +46,7 @@ test('a project is unlinked from the panel only once confirmed, leaving flayer.t
 
   await page.getByTestId('unlink').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText(['$ flayer unlink drafts'])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} unlink drafts`])
   await expect(dialog.getByTestId('caution')).toHaveText([/^unlinks/])
   await expect(dialog.getByTestId('run')).toHaveText('Confirm and run')
   await expect(dialog.getByTestId('cancel')).toBeFocused()

@@ -3,18 +3,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer install -p /home/you/Assign/api -p /home/you/Assign/docs --from https://github.com/acme/skills skill:format"
+        "flayer -W /home/you/Assign install -p /home/you/Assign/api -p /home/you/Assign/docs --from https://github.com/acme/skills skill:format"
       ]
     },
     "ran": {
       "lines": [
-        "flayer install -p /home/you/Assign/api -p /home/you/Assign/docs --from https://github.com/acme/skills skill:format"
+        "flayer -W /home/you/Assign install -p /home/you/Assign/api -p /home/you/Assign/docs --from https://github.com/acme/skills skill:format"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer install -p /home/you/Assign/api -p /home/you/Assign/docs --from https://github.com/acme/skills skill:format",
+            "command": "flayer -W /home/you/Assign install -p /home/you/Assign/api -p /home/you/Assign/docs --from https://github.com/acme/skills skill:format",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -32,6 +32,45 @@
           "projects": [
             "api",
             "docs"
+          ],
+          "type": "install"
+        }
+      ],
+      "type": "apply_install"
+    }
+  },
+  {
+    "preview": {
+      "confirm": [],
+      "lines": [
+        "flayer -W /home/you/Assign install -p /home/you/Assign/api --from workspace skill:deploy"
+      ]
+    },
+    "ran": {
+      "lines": [
+        "flayer -W /home/you/Assign install -p /home/you/Assign/api --from workspace skill:deploy"
+      ],
+      "outcome": {
+        "ok": true,
+        "runs": [
+          {
+            "command": "flayer -W /home/you/Assign install -p /home/you/Assign/api --from workspace skill:deploy",
+            "error": null,
+            "ok": true,
+            "stderr": [],
+            "stdout": "updated deploy in api, from workspace\n"
+          }
+        ]
+      }
+    },
+    "task": {
+      "changes": [
+        {
+          "from": "workspace",
+          "kind": "skill",
+          "name": "deploy",
+          "projects": [
+            "api"
           ],
           "type": "install"
         }

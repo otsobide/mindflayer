@@ -1257,6 +1257,31 @@ fn at(holder: &Holder, command: &[&str], positionals: &[&str]) -> Vec<String> {
     words(&head, positionals)
 }
 
+/// `line`, naming the workspace at `root` with `-W`, right after the
+/// binary, in place of the `-W .` a project's line consulting another
+/// workspace names ([`Holder::Elsewhere`]): how a front end that runs every
+/// line against one workspace shows it and runs it, so the line says which
+/// workspace it reaches, and reaches it wherever it is pasted.
+///
+/// Put in front of the line rather than built into each, as `-W .` is for
+/// a row of the TUI's: every line of such a front end names it, whatever
+/// the task, and the line the TUI runs stays the one somebody types where
+/// they stand. The value goes after the option as any value does
+/// ([`option`]), so a root spelled with a leading dash is still its value.
+pub fn naming(line: &[String], root: &str) -> Vec<String> {
+    let Some((binary, rest)) = line.split_first() else {
+        return Vec::new();
+    };
+    let rest = match rest {
+        [flag, _, rest @ ..] if flag == "-W" => rest,
+        rest => rest,
+    };
+    std::iter::once(binary.clone())
+        .chain(option("-W", root))
+        .chain(rest.iter().cloned())
+        .collect()
+}
+
 /// Where a save's `text` is put for its line to read, as a route from the
 /// workspace's root, `/` separated: the file [`scratch_name`] names, in the
 /// workspace's scratch folder as core spells its route

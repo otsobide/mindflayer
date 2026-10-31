@@ -29,6 +29,10 @@ pub trait Backend: Send + Sync + 'static {
     type Task: DeserializeOwned + Send + 'static;
     /// What carrying out a task produced, sent back as it is.
     type Outcome: Serialize + Send + 'static;
+    /// What the panel asks the backend to act on from now on, in place of
+    /// what it acts on now: which values may be named there, and what each
+    /// means, are the front end's, as a task's are.
+    type Switch: DeserializeOwned + Send + 'static;
 
     /// Answer a read.
     ///
@@ -56,13 +60,28 @@ pub trait Backend: Send + Sync + 'static {
     /// meets, and nothing promises a caller of this trait asked first.
     fn run(&self, task: Self::Task) -> Result<Self::Outcome, Refusal>;
 
+    /// Act on what `to` names from now on, and answer with what it acts on
+    /// then, as JSON of the backend's own; or refuse, with nothing changed.
+    ///
+    /// For a front end that stays on one thing at a time, and lets the
+    /// panel move it to another, which only it can say it may: the server
+    /// calls it on the thread every run goes through, so a switch never
+    /// lands while a task runs, and a task sent after it runs after it.
+    /// Once it is taken, the server asks for [`watched_paths`] again,
+    /// before anything else, and tells the panel to read everything again,
+    /// since everything it shows was of what the backend acted on before.
+    ///
+    /// [`watched_paths`]: Backend::watched_paths
+    fn switch(&self, to: Self::Switch) -> Result<serde_json::Value, Refusal>;
+
     /// The files and folders whose changes mean what the panel shows is out
     /// of date, each with what it is of ([`Watched`]).
     ///
     /// Which paths those are is the front end's to say, since they are its
     /// rules: what a project holds, and where its agents read. Asked when
-    /// the server starts and again after every change it reports, since a
-    /// change can name new ones: a project linked, a folder made.
+    /// the server starts, again after every change it reports, since a
+    /// change can name new ones, a project linked, a folder made, and again
+    /// after a switch, which can name none of the ones before.
     fn watched_paths(&self) -> Vec<Watched>;
 }
 

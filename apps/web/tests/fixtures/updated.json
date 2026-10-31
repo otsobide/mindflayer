@@ -3,18 +3,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer update --all --yes"
+        "flayer -W /home/you/Updating update --all --yes"
       ]
     },
     "ran": {
       "lines": [
-        "flayer update --all --yes"
+        "flayer -W /home/you/Updating update --all --yes"
       ],
       "outcome": {
         "ok": false,
         "runs": [
           {
-            "command": "flayer update --all --yes",
+            "command": "flayer -W /home/you/Updating update --all --yes",
             "error": null,
             "ok": false,
             "stderr": [
@@ -53,18 +53,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "mind -C /home/you/Updating/api update --yes"
+        "mind -W /home/you/Updating -C /home/you/Updating/api update --yes"
       ]
     },
     "ran": {
       "lines": [
-        "mind -C /home/you/Updating/api update --yes"
+        "mind -W /home/you/Updating -C /home/you/Updating/api update --yes"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "mind -C /home/you/Updating/api update --yes",
+            "command": "mind -W /home/you/Updating -C /home/you/Updating/api update --yes",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -87,18 +87,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "mind -C /home/you/Updating/api update --yes skill:lint"
+        "mind -W /home/you/Updating -C /home/you/Updating/api update --yes skill:lint"
       ]
     },
     "ran": {
       "lines": [
-        "mind -C /home/you/Updating/api update --yes skill:lint"
+        "mind -W /home/you/Updating -C /home/you/Updating/api update --yes skill:lint"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "mind -C /home/you/Updating/api update --yes skill:lint",
+            "command": "mind -W /home/you/Updating -C /home/you/Updating/api update --yes skill:lint",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -127,18 +127,18 @@
         }
       ],
       "lines": [
-        "mind -C /home/you/Updating/web update --yes --force skill:lint"
+        "mind -W /home/you/Updating -C /home/you/Updating/web update --yes --force skill:lint"
       ]
     },
     "ran": {
       "lines": [
-        "mind -C /home/you/Updating/web update --yes --force skill:lint"
+        "mind -W /home/you/Updating -C /home/you/Updating/web update --yes --force skill:lint"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "mind -C /home/you/Updating/web update --yes --force skill:lint",
+            "command": "mind -W /home/you/Updating -C /home/you/Updating/web update --yes --force skill:lint",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -167,18 +167,18 @@
         }
       ],
       "lines": [
-        "flayer uninstall -p /home/you/Updating/web skill:format"
+        "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web skill:format"
       ]
     },
     "ran": {
       "lines": [
-        "flayer uninstall -p /home/you/Updating/web skill:format"
+        "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web skill:format"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer uninstall -p /home/you/Updating/web skill:format",
+            "command": "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web skill:format",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -212,18 +212,18 @@
         }
       ],
       "lines": [
-        "flayer uninstall -p /home/you/Updating/web --force skill:release"
+        "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web --force skill:release"
       ]
     },
     "ran": {
       "lines": [
-        "flayer uninstall -p /home/you/Updating/web --force skill:release"
+        "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web --force skill:release"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer uninstall -p /home/you/Updating/web --force skill:release",
+            "command": "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web --force skill:release",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -252,18 +252,18 @@
         }
       ],
       "lines": [
-        "flayer uninstall --all-projects --orphaned"
+        "flayer -W /home/you/Updating uninstall --all-projects --orphaned"
       ]
     },
     "ran": {
       "lines": [
-        "flayer uninstall --all-projects --orphaned"
+        "flayer -W /home/you/Updating uninstall --all-projects --orphaned"
       ],
       "outcome": {
         "ok": false,
         "runs": [
           {
-            "command": "flayer uninstall --all-projects --orphaned",
+            "command": "flayer -W /home/you/Updating uninstall --all-projects --orphaned",
             "error": null,
             "ok": false,
             "stderr": [
