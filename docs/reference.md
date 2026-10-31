@@ -232,7 +232,8 @@ and edit by hand, and which an older Mindflayer reads past and keeps. Listing
 never makes the workspace in your home; until something does, it knows no
 flayer, and with `--home ""` there is none to know them. `--json` prints the
 list in the envelope every reading command's `--json` shares, and `w` shows it
-in [the TUI](#the-tui).
+in [the TUI](#the-tui). The [control panel](#control-panel)'s **Loads** page
+lists them too, and loads any of them into the workspace it shows.
 
 ## The two kinds
 
@@ -1163,7 +1164,8 @@ which is also what `--from` takes, as do the path you gave `load`, from
 wherever you type it, and the workspace's name. Only a loaded workspace's own
 are offered, never what it loads in turn. `flayer unload <path>` forgets it;
 what was already installed from it stays where it is. `mind load <path>` does
-the same from inside a project, into the workspace above it.
+the same from inside a project, into the workspace above it, and the
+[control panel](#control-panel) does both from its **Loads** page.
 
 A loaded workspace is usually somebody else's, so what it offers is read with
 suspicion: a skill whose declared name is not one plain folder name (`..`,
@@ -1852,8 +1854,9 @@ migrates a project an older Mindflayer made, installs and uninstalls
 skills and rules from **Assign**, brings what is installed up to date and
 takes out what nothing offers from **Updates**, removes one of the
 library's own everywhere, its dry run first, edits, adds and renames the
-library's own, and adopts a skill somebody keeps in a project's agents'
-folders; everything else is still a command away.
+library's own, adopts a skill somebody keeps in a project's agents'
+folders, and loads and unloads other workspaces from **Loads**; everything
+else is still a command away.
 
 **The transcript**, in every page's header, lists every task the session
 ran, from this tab or any other, each line with what it printed, and
@@ -1944,9 +1947,7 @@ and the depth stay in the address, so a reload scans the same again.
 **The library** has a page for each kind, `skill` and `rule`, listing the
 workspace's own with what each is for, which projects hold a copy of it and
 how each copy stands, and what `validate` says of it; type to filter by name
-or summary. Below them are the workspaces it loads, each with where it is,
-how many of its own it offers, what `--from` takes for them (`load:../team`)
-and why one does not open. A kind it holds none of names `flayer add`.
+or summary. A kind it holds none of names `flayer add`.
 **New skill** and **New rule**, at the top, open a page that adds one: its
 name, its description and what it starts from, nothing or one of the
 kind's templates ([from a template](#from-a-template)), judged as you type by what
@@ -2002,6 +2003,23 @@ everywhere** run the same line with `--yes`, a confirmation since it deletes
 the artifact and uninstalls its copies, and go back to the library. The
 panel never removes the library's copy alone, which would leave each copy
 installed from it orphaned.
+
+**Loads** lists the workspaces this one loads ([loading another
+workspace](#loading-another-workspace)), each with its entry, where it is,
+what `--from` takes for what it offers (`load:../team`), why one does not
+open, and what it offers, each skill and rule by its name and what it is
+for, with a link to **Assign** showing those alone. **Unload** runs `flayer
+unload <entry>`, a confirmation, since the workspace then stops offering
+them; what was installed from it stays where it is. Below are the
+workspaces this machine knows ([the flayers this machine
+knows](#the-flayers-this-machine-knows)), the default first, each saying
+whether it is the default, this workspace, loaded already and by which
+entry, or one that does not open, with how many projects it links. One the
+workspace could load, which is none of this one, one it loads already and
+one that does not open, offers **Load**, `flayer load <path>`; any other is
+loaded by its absolute path, typed below, which the line refuses, saying
+why, when no workspace is there or it is this one. Each is shown first, and
+is the line the TUI's load form runs for the same workspace.
 
 **The shelf** lists everything gathered, filtered by kind or by name,
 summary or origin, each with the commit it was taken at, when, and its
