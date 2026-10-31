@@ -197,6 +197,28 @@ describe('each change the page of loads sends', () => {
     expect((page.get('input[data-testid="load-path"]').element as HTMLInputElement).value).toBe(path)
   })
 
+  it('loads a path typed with white space around it without it, the task the TUI\'s form sends, and nothing for white space alone', async () => {
+    const { sent, transport } = commanding(fixture('assigning'), loadings())
+    const { page } = await render('/loads', transport)
+    const path = KIT.task.type === 'load' ? KIT.task.path : ''
+
+    await page.get('input[data-testid="load-path"]').setValue(' \t\u00a0')
+    await page.get('[data-testid="load-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(page.get('[data-testid="load-typed"]').attributes('disabled')).toBeDefined()
+    expect(sent).toEqual([])
+
+    // U+0085 is white space to Rust's `str::trim`, which the TUI's form
+    // trims with, and not to JavaScript's `trim`.
+    await page.get('input[data-testid="load-path"]').setValue(`  ${path}\u0085 `)
+    await page.get('[data-testid="load-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(sent).toEqual([{ task: KIT.task, mode: 'preview' }])
+    expect(shown().lines).toEqual(KIT.preview.lines.map(line => `$ ${line}`))
+  })
+
   it('empties the field once a typed path was loaded', async () => {
     const { transport } = commanding(fixture('assigning'), loadings())
     const { page } = await render('/loads', transport)

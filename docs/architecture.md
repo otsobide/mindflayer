@@ -5435,7 +5435,8 @@ What the pages offer:
 - **A load and an unload, from the page of loads**: a workspace this
   machine knows by the path the snapshot lists it by, offered only where
   core says the workspace can load it (`loadable`), or any other by the
-  path typed, sent as typed for the path policy to hold; and an unload of
+  path typed, sent without the white space around it, which the TUI's form
+  takes off too, for the path policy to hold; and an unload of
   one it loads by the entry the marker spells it by (`policy::loaded`),
   one that does not open among them, asked about by `Caution::Unloads`.
   Each is the task the TUI's load form sends for the same workspace, typed

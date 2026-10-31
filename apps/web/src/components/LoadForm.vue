@@ -1,22 +1,35 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRunner } from '@/api/commands'
 
 const runner = useRunner()
 const { busy } = runner
 
 /**
- * The workspace to load, as typed: sent to the server as it is, which holds
- * it to the path policy (absolute, normalized, outside every `.mindflayer`)
- * and says why when it is not, before anything runs. Whether a workspace is
- * there, and whether it is this one, which a load refuses, is the line's to
- * say once it runs: checked nowhere here, so the panel cannot let through a
- * path the CLI would refuse, or refuse one it takes.
+ * The workspace to load, as typed. Whether a workspace is there, and
+ * whether it is this one, which a load refuses, is the line's to say once
+ * it runs: checked nowhere here, so the panel cannot let through a path the
+ * CLI would refuse, or refuse one it takes.
  */
 const path = ref('')
 
+/**
+ * What is sent: the path without the white space around it, which the TUI's
+ * load form takes off too (`load_task`), so the same text typed is the same
+ * task on either front end, and nothing when that leaves nothing, as there.
+ * The server holds it to the path policy (absolute, normalized, outside
+ * every `.mindflayer`) and says why when it is not, before anything runs.
+ * Unicode's White_Space, which Rust's `str::trim` takes off, rather than
+ * JavaScript's `trim`, which takes U+FEFF off as well and leaves U+0085: a
+ * path ending in either would be two tasks.
+ */
+const typed = computed(() => path.value.replace(/^\p{White_Space}+|\p{White_Space}+$/gu, ''))
+
 async function load() {
-  const ran = await runner.ask({ type: 'load', path: path.value })
+  if (typed.value === '') {
+    return
+  }
+  const ran = await runner.ask({ type: 'load', path: typed.value })
   if (ran?.outcome.ok) {
     path.value = ''
   }
@@ -53,7 +66,7 @@ async function load() {
       label="Load"
       icon="i-lucide-layers"
       size="sm"
-      :disabled="busy || path === ''"
+      :disabled="busy || typed === ''"
       data-testid="load-typed"
     />
   </form>
