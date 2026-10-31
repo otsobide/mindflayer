@@ -1,8 +1,19 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
 import type { Cell } from './generated/Cell'
+import type { Planned } from './generated/Planned'
 import { useFreshness } from './live'
 import { useTransport, type Task } from './transport'
+
+/**
+ * The batch a plan's tasks are, sent back as they came, as the install
+ * screen applies its marks; none when every box is held back and nothing
+ * runs. What applying a plan sends, from the matrix or anywhere else that
+ * plans a box, so the one batch is spelled once.
+ */
+export function batchOf(plan: Planned): Task | undefined {
+  return plan.tasks.length > 0 ? { type: 'apply_install', changes: plan.tasks } : undefined
+}
 
 /**
  * What the boxes somebody ticked and unticked amount to (the backend's

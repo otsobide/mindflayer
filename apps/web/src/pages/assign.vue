@@ -2,16 +2,16 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import type { Cell } from '@/api/generated/Cell'
-import type { HeldBox } from '@/api/generated/HeldBox'
 import type { Offered } from '@/api/generated/Offered'
 import type { Project } from '@/api/generated/Project'
 import type { Said } from '@/api/generated/Said'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { useRunner } from '@/api/commands'
-import { usePlan, usePreview } from '@/api/plan'
+import { batchOf, usePlan, usePreview } from '@/api/plan'
 import { useSnapshot } from '@/api/snapshot'
 import { TransportError, type Task } from '@/api/transport'
 import { first, useQueryChange } from '@/address'
+import { boxKey, boxOf, found, named, type Box } from '@/boxes'
 import AppHeader from '@/components/AppHeader.vue'
 import AssignGrid, { type Line, type Row, type Shown } from '@/components/AssignGrid.vue'
 import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
@@ -38,51 +38,17 @@ const byProject = computed(() => first(route.query.by) === 'project')
 const { data } = useSnapshot()
 const marks = useMarks()
 
-/** What names a project to a command and a box: its entry. */
-function named(project: Project): string {
-  return project.entry ?? project.path
-}
-
 /** What a project is called: its name, or its entry when it opens no project. */
 function title(project: Project): string {
   return project.name ?? named(project)
 }
 
-/**
- * What tells one box from another: its project, its artifact and the
- * offer's origin, apart by a character none of them holds.
- */
-function boxKey(project: string, reference: string, origin: string): string {
-  return `${project}\u0000${reference}\u0000${origin}`
-}
-
-/** An offer as a command line names it, `kind:name`, which a box sends. */
-function reference(offered: Offered): string {
-  return `${offered.kind}:${offered.name}`
-}
-
-/**
- * The snapshot's boxes, found by the box they are of: each one that is not
- * empty, and each kind of each project none can be asked of. Looked up, never
- * worked out: which offer a project holds is core's (`install::holding`).
- */
-const found = computed(() => {
-  const held = new Map<string, HeldBox>()
-  const closed = new Map<string, Said>()
-  for (const boxes of data.value?.boxes ?? []) {
-    for (const box of boxes.held) {
-      held.set(boxKey(boxes.entry, `${box.kind}:${box.name}`, box.origin), box)
-    }
-    for (const each of boxes.closed) {
-      closed.set(`${boxes.entry}\u0000${each.kind}`, each.why)
-    }
-  }
-  return { held, closed }
-})
+/** The snapshot's boxes, found by the box they are of (src/boxes.ts). */
+const boxes = computed(() => found(data.value))
 
 /** Whether the snapshot ticks the box a mark is of. */
-function ticked(cell: Omit<Cell, 'wanted'>): boolean {
-  return found.value.held.get(boxKey(cell.project, cell.reference, cell.origin))?.ticked ?? false
+function ticked(box: Box): boolean {
+  return boxes.value.held(box)?.ticked ?? false
 }
 
 /**
@@ -99,9 +65,7 @@ const { data: planned, error: refused, isFetching: planning, isPlaceholderData }
 const plan = computed(() => (selection.value.length > 0 && !isPlaceholderData.value ? planned.value : undefined))
 
 /** The batch the plan's tasks are, sent back as they came: the install screen's apply. */
-const batch = computed<Task | undefined>(() => (plan.value && plan.value.tasks.length > 0
-  ? { type: 'apply_install', changes: plan.value.tasks }
-  : undefined))
+const batch = computed<Task | undefined>(() => (plan.value ? batchOf(plan.value) : undefined))
 const { data: preview, error: unpreviewed } = usePreview(batch)
 
 /** Each box the plan holds back, and why: locked by a code, or clashing with another. */
@@ -109,11 +73,11 @@ const heldBack = computed(() => {
   const held = new Map<string, { how: 'locked' | 'conflict', why: Said }>()
   for (const conflict of planned.value?.conflicts ?? []) {
     for (const cell of conflict.cells) {
-      held.set(boxKey(cell.project, cell.reference, cell.origin), { how: 'conflict', why: conflict.why })
+      held.set(boxKey(cell), { how: 'conflict', why: conflict.why })
     }
   }
   for (const locked of planned.value?.locked ?? []) {
-    held.set(boxKey(locked.cell.project, locked.cell.reference, locked.cell.origin), { how: 'locked', why: locked.why })
+    held.set(boxKey(locked.cell), { how: 'locked', why: locked.why })
   }
   return held
 })
@@ -185,16 +149,14 @@ function boxAt(line: number, column: number): { offered: Offered, project: Proje
 
 /** How the box of `offered` in `project` is drawn: as the snapshot has it, as it was marked, as the plan holds it. */
 function shown(offered: Offered, project: Project): Shown {
-  const entry = named(project)
-  const asked = { project: entry, reference: reference(offered), origin: offered.origin }
-  const key = boxKey(entry, asked.reference, asked.origin)
-  const closed = found.value.closed.get(`${entry}\u0000${offered.kind}`)
-  const held = found.value.held.get(key)
+  const asked = boxOf(project, offered)
+  const closed = boxes.value.closed(asked.project, offered.kind)
+  const held = boxes.value.held(asked)
   const mark = marks.find(asked)
   const isTicked = held?.ticked ?? false
   const checked = mark?.wanted ?? isTicked
   const changed = mark !== undefined && mark.wanted !== isTicked
-  const back = changed ? heldBack.value.get(key) : undefined
+  const back = changed ? heldBack.value.get(boxKey(asked)) : undefined
   const said = [`${offered.kind} ${offered.name} from ${offered.origin} in ${title(project)}`]
   if (closed) {
     said.push(`none can go there, ${closed.code}: ${closed.message}`)
@@ -226,7 +188,7 @@ function cell(line: number, column: number): Shown {
 /** Mark the box at a line and a column the other way round from what it shows. */
 function toggle(line: number, column: number) {
   const { offered, project } = boxAt(line, column)
-  const asked = { project: named(project), reference: reference(offered), origin: offered.origin }
+  const asked = boxOf(project, offered)
   const now = marks.find(asked)?.wanted ?? ticked(asked)
   marks.mark({ ...asked, wanted: !now }, ticked(asked))
 }
