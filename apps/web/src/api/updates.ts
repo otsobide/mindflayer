@@ -1,6 +1,13 @@
 import { useQuery } from '@tanstack/vue-query'
 import { useFreshness } from './live'
-import { useTransport } from './transport'
+import { useTransport, type Task } from './transport'
+
+/**
+ * Every project brought up to date, `flayer update --all --yes`: the task
+ * the page of updates sends for **Update all**, and the command palette
+ * for its own, spelled once so the two cannot drift apart.
+ */
+export const UPDATE_ALL: Task = { type: 'update', holder: { type: 'workspace' }, reference: null, force: false }
 
 /**
  * What updating every project the workspace links would do (core's
