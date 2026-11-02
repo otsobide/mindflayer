@@ -10,6 +10,7 @@ import { TransportError } from '@/api/transport'
 import { every, first, useQueryChange } from '@/address'
 import AppHeader from '@/components/AppHeader.vue'
 import CommandHint, { flayer } from '@/components/CommandHint.vue'
+import FolderPicker from '@/components/FolderPicker.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 
 const route = useRoute()
@@ -62,13 +63,32 @@ watch([asked, () => snapshot.value?.workspace.path], ([now, path]) => {
   }
 }, { immediate: true })
 
+/** The folders the form names, each line that is not empty, as a scan sends them. */
+function named(): string[] {
+  return roots.value.split('\n').filter(line => line !== '')
+}
+
+/** Whether the explorer is open, to add a folder rather than type it. */
+const browsing = ref(false)
+
+/** Where the explorer opens: the last folder the form names, or the workspace's root when it names none. */
+const start = computed(() => named().at(-1) ?? '')
+
+/** Add the folder the explorer chose to those to look under, once. */
+function add(folder: string) {
+  const lines = named()
+  if (!lines.includes(folder)) {
+    roots.value = [...lines, folder].join('\n')
+  }
+}
+
 /**
  * Scan what the form says, or the same again when it says what was asked:
  * walked again either way, never an answer kept from an earlier visit or
  * an earlier set of folders, which whatever was linked since has changed.
  */
 function scan() {
-  const wanted: Asked = { roots: roots.value.split('\n').filter(line => line !== ''), depth: levels(depth.value) }
+  const wanted: Asked = { roots: named(), depth: levels(depth.value) }
   if (JSON.stringify(wanted) === JSON.stringify(asked.value)) {
     void refetch()
   } else {
@@ -172,7 +192,7 @@ const refusal = computed(() => {
           <div class="flex flex-wrap items-end gap-3">
             <UFormField
               label="Folders to look under"
-              description="Absolute paths, one a line."
+              description="Absolute paths, one a line, typed or browsed to."
               name="roots"
               class="w-full sm:w-auto"
             >
@@ -188,6 +208,17 @@ const refusal = computed(() => {
                 data-testid="scan-roots"
               />
             </UFormField>
+            <UButton
+              type="button"
+              label="Browse"
+              icon="i-lucide-folder-search"
+              size="sm"
+              color="neutral"
+              variant="outline"
+              :disabled="busy"
+              data-testid="scan-browse"
+              @click="browsing = true"
+            />
             <UFormField
               label="Depth"
               description="Levels below each; empty for the default."
@@ -212,6 +243,13 @@ const refusal = computed(() => {
               data-testid="scan"
             />
           </div>
+          <FolderPicker
+            v-model:open="browsing"
+            :start="start"
+            title="Choose a folder to look under"
+            verb="Add"
+            @chosen="add"
+          />
         </form>
 
         <p

@@ -5,11 +5,11 @@ import { TransportError, type Query, type Transport } from '@/api/transport'
 import { commanded, commanding, fixture, render, unmount, walks, type Answered } from './panel'
 
 /*
- * The explorer, opened from the Link form on the projects page, over what
- * the CLI's suite was answered with as it walked the folders of the
- * candidates fixture (tests/fixtures/folders.json): the workspace at
- * /home/you/Projects, in the home /home/you. What the Link form then sends
- * is held to the link the CLI's suite previewed and ran
+ * The explorer, opened from the Link form on the projects page and from
+ * Discover, over what the CLI's suite was answered with as it walked the
+ * folders of the candidates fixture (tests/fixtures/folders.json): the
+ * workspace at /home/you/Projects, in the home /home/you. What the Link
+ * form then sends is held to the link the CLI's suite previewed and ran
  * (tests/fixtures/commands.json).
  */
 
@@ -302,5 +302,45 @@ describe('the explorer, from the Link form', () => {
     expect(find('[data-testid="folder-symlink"]')).toBe(row('api').querySelector('[data-testid="folder-symlink"]'))
     expect(all('[data-testid="folder-failure"]')).toEqual([`browse_name_unfit: ${root.failures[0]!.message}`])
     expect(find('[data-testid="folder-truncated"]')).not.toBeNull()
+  })
+})
+
+describe('the explorer, from Discover', () => {
+  it('opens at the last folder named, and adds the one chosen to those to look under once', async () => {
+    const { queries, transport } = exploring()
+    const { page } = await render('/discover', transport)
+    const roots = () => (page.get('textarea[data-testid="scan-roots"]').element as HTMLTextAreaElement).value
+    expect(roots()).toBe(ROOT)
+
+    await press('[data-testid="scan-browse"]')
+    await listed()
+    row('archive').querySelector<HTMLElement>('[data-testid="folder-choose"]')!.click()
+    await flushPromises()
+    await vi.waitFor(() => expect(find('[data-testid="folder-picker"]')).toBeNull())
+    expect(roots()).toBe(`${ROOT}\n${ROOT}/archive`)
+
+    // Opened again at the folder just added, which is chosen again: once.
+    await press('[data-testid="scan-browse"]')
+    await listed()
+    await press('[data-testid="folder-choose-here"]')
+    await vi.waitFor(() => expect(find('[data-testid="folder-picker"]')).toBeNull())
+
+    expect(roots()).toBe(`${ROOT}\n${ROOT}/archive`)
+    expect(listings(queries)).toEqual([listing(ROOT), listing(`${ROOT}/archive`)])
+    expect(queries.filter(query => query.type === 'scan')).toEqual([])
+  })
+
+  it('opens at the workspace\'s root while the form names no folder', async () => {
+    const { queries, transport } = exploring()
+    const { page } = await render('/discover', transport)
+    await page.get('textarea[data-testid="scan-roots"]').setValue('\n')
+
+    await press('[data-testid="scan-browse"]')
+    await listed()
+    row('blog').querySelector<HTMLElement>('[data-testid="folder-choose"]')!.click()
+    await flushPromises()
+
+    expect(listings(queries)).toEqual([listing(null)])
+    expect((page.get('textarea[data-testid="scan-roots"]').element as HTMLTextAreaElement).value).toBe(`${ROOT}/blog`)
   })
 })

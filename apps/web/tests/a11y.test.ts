@@ -379,4 +379,13 @@ describe('the explorer', () => {
     await vi.waitFor(() => expect(document.querySelector('[data-testid="folder-refused"]')).not.toBeNull())
     expect(await violations(OVER)).toEqual([])
   })
+
+  it('passes axe open from Discover', async () => {
+    const { transport } = commanding(fixture('candidates'), commanded(), walks().walked)
+    await render('/discover', transport)
+
+    await pressed('[data-testid="scan-browse"]')
+
+    expect(await violations(OVER)).toEqual([])
+  })
 })
