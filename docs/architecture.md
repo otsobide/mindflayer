@@ -5850,7 +5850,8 @@ name](#what-a-browser-may-name)):
   typed. A subfolder whose type will not read, a link that loops say, or
   whose path is not UTF-8, which no request could send back, is said with
   its code beside the rest (`browse_entry_unread`, `browse_name_unfit`),
-  and a folder that cannot be listed at all is refused with one
+  a hidden one only once the switch is on, so a switch left off says
+  nothing of what it hides; and a folder that cannot be listed at all is refused with one
   (`browse_missing`, `browse_not_a_folder`, `browse_unlisted`). A link is
   listed and opened like any folder, since a repository is often reached
   through one, and cannot make a listing of one folder loop.

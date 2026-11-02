@@ -368,6 +368,31 @@ fn a_link_whose_type_will_not_read_is_said_with_its_code_beside_the_rest() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn a_hidden_link_whose_type_will_not_read_is_said_only_once_hidden_folders_are_asked_for() {
+    use std::os::unix::fs::symlink;
+
+    let (dir, workspace) = fixture();
+    let root = dir.path().join("work");
+    symlink(root.join(".loop"), root.join(".loop")).unwrap();
+
+    let without = listed(&workspace, &root, false);
+    let with = listed(&workspace, &root, true);
+
+    assert!(without.failures.is_empty(), "{:?}", without.failures);
+    let codes: Vec<&str> = with.failures.iter().map(|said| said.code).collect();
+    assert_eq!(codes, ["browse_entry_unread"]);
+    assert!(
+        with.failures[0].message.contains(".loop"),
+        "{:?}",
+        with.failures
+    );
+    // Not known to be a folder, so counted as no hidden one either way.
+    assert_eq!((without.hidden, with.hidden), (0, 0));
+    assert_eq!(names(&without), ["alpha"]);
+}
+
 #[test]
 fn the_home_is_named_only_as_a_folder_a_request_may_name() {
     let (dir, workspace) = fixture();

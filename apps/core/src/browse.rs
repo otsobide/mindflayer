@@ -75,7 +75,8 @@ pub struct Folders {
     pub truncated: bool,
     /// What it could not read or name, each with its code
     /// ([`BrowseFailure`]): a subfolder whose type will not read, or whose
-    /// path no request could send back.
+    /// path no request could send back, a hidden one only when hidden
+    /// ones are asked for.
     pub failures: Vec<Said>,
     /// The home the front end was given, as a folder a request may name,
     /// for a way back to it: none when there is none, or when it is no
@@ -277,7 +278,7 @@ impl Folders {
             });
         }
         let mut failures: Vec<BrowseFailure> = Vec::new();
-        let mut entries = entries(folder, &mut failures)?;
+        let mut entries = entries(folder, hidden, &mut failures)?;
         entries.sort_by(|a, b| a.name.cmp(&b.name));
 
         // Held to the policy on the way to being listed, never as a filter
@@ -340,12 +341,20 @@ impl Folders {
 }
 
 /// Every entry of `folder` that is a folder, or a link to one, with its
-/// name as UTF-8 writes it; what will not read said in `failures`.
+/// name as UTF-8 writes it; what will not read said in `failures`, of a
+/// hidden entry only when `hidden` asks for hidden ones.
 ///
 /// A name that is not UTF-8 is kept, as near as UTF-8 writes it, for the
 /// listing to say it rather than list it, and only when it would be
 /// listed: a hidden one not asked for is passed over as hidden ones are.
-fn entries(folder: &Path, failures: &mut Vec<BrowseFailure>) -> Result<Vec<Entry>, BrowseError> {
+/// So is a hidden entry whose type will not read, told hidden by its name
+/// before its type is read: a switch left off says nothing of what it
+/// hides, whatever that is.
+fn entries(
+    folder: &Path,
+    hidden: bool,
+    failures: &mut Vec<BrowseFailure>,
+) -> Result<Vec<Entry>, BrowseError> {
     let mut found = Vec::new();
     for entry in fs::read_dir(folder).map_err(|source| BrowseError::of(folder, source))? {
         let entry = match entry {
@@ -359,10 +368,17 @@ fn entries(folder: &Path, failures: &mut Vec<BrowseFailure>) -> Result<Vec<Entry
             }
         };
         let path = entry.path();
+        let name = entry.file_name();
+        let is_hidden = name.as_encoded_bytes().first() == Some(&b'.');
+        let mut unread = |path: PathBuf, source: io::Error| {
+            if hidden || !is_hidden {
+                failures.push(BrowseFailure::Unread { path, source });
+            }
+        };
         let kind = match entry.file_type() {
             Ok(kind) => kind,
             Err(source) => {
-                failures.push(BrowseFailure::Unread { path, source });
+                unread(path, source);
                 continue;
             }
         };
@@ -376,7 +392,7 @@ fn entries(folder: &Path, failures: &mut Vec<BrowseFailure>) -> Result<Vec<Entry
                 Ok(metadata) => metadata.is_dir(),
                 Err(source) if source.kind() == io::ErrorKind::NotFound => false,
                 Err(source) => {
-                    failures.push(BrowseFailure::Unread { path, source });
+                    unread(path, source);
                     continue;
                 }
             }
@@ -386,9 +402,8 @@ fn entries(folder: &Path, failures: &mut Vec<BrowseFailure>) -> Result<Vec<Entry
         if !is_folder {
             continue;
         }
-        let name = entry.file_name();
         found.push(Entry {
-            hidden: name.as_encoded_bytes().first() == Some(&b'.'),
+            hidden: is_hidden,
             name: name.to_string_lossy().into_owned(),
             path,
             symlink,
