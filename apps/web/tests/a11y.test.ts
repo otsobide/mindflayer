@@ -6,7 +6,7 @@ import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
 import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
-import { answering, answers, commanded, commanding, drafts, fixture, plans, render, switching, unmount, updates, validated, type Fixture } from './panel'
+import { answering, answers, commanded, commanding, drafts, fixture, plans, render, switching, unmount, updates, validated, walks, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -343,6 +343,40 @@ describe('what the runner draws over a page', () => {
     await flushPromises()
     expect(useShell().warningsOpen).toBe(true)
     expect(document.querySelectorAll('[data-testid="said"] [data-testid="run"]')).toHaveLength(validate.ran.outcome.runs.length)
+    expect(await violations(OVER)).toEqual([])
+  })
+})
+
+// A modal: Reka hides the rest of the page from assistive technology
+// while it holds the focus.
+describe('the explorer', () => {
+  /** Press what `selector` finds, and wait for the explorer to show a listing. */
+  async function pressed(selector: string) {
+    document.querySelector<HTMLElement>(selector)!.click()
+    await flushPromises()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="folder-here"]')).not.toBeNull())
+  }
+
+  it('passes axe open from the Link form, its hidden folders shown, and with a path refused', async () => {
+    const { transport } = commanding(fixture('candidates'), commanded(), walks().walked)
+    await render('/projects', transport)
+
+    await pressed('[data-testid="link-browse"]')
+    expect(await violations(OVER)).toEqual([])
+
+    const notes = [...document.querySelectorAll<HTMLElement>('[data-testid="folder-open"]')].find(each => each.textContent?.trim() === 'notes')!
+    notes.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="folder-empty"]')).not.toBeNull())
+    document.querySelector<HTMLElement>('[data-testid="folder-hidden"] [role="switch"], [role="switch"][data-testid="folder-hidden"]')!.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="folder"]')).not.toBeNull())
+    expect(await violations(OVER)).toEqual([])
+
+    const field = document.querySelector<HTMLInputElement>('input[data-testid="folder-path"], [data-testid="folder-path"] input')!
+    field.value = 'Projects'
+    field.dispatchEvent(new Event('input'))
+    await flushPromises()
+    document.querySelector<HTMLElement>('[data-testid="folder-go"]')!.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="folder-refused"]')).not.toBeNull())
     expect(await violations(OVER)).toEqual([])
   })
 })
