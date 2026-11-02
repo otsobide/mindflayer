@@ -45,12 +45,13 @@ truncated: boolean,
 /**
  * What it could not read or name, each with its code
  * ([`BrowseFailure`]): a subfolder whose type will not read, or whose
- * path no request could send back.
+ * path no request could send back, a hidden one only when hidden
+ * ones are asked for.
  */
 failures: Array<Said>, 
 /**
- * The home the front end was given, as a folder a request may name,
- * for a way back to it: none when there is none, or when it is no
- * such path ([`policy::path`]).
+ * The home the front end was given, normalized, as a folder a request
+ * may name, for a way back to it: none when there is none, or when it
+ * is no such path ([`policy::path`]).
  */
 home: string | null, };
