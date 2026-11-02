@@ -5871,13 +5871,14 @@ name](#what-a-browser-may-name)):
   workspace's root when it holds none. Its own path field holds what was
   sent until a listing answers, so a start the server refuses is there to
   be corrected, never the folder an earlier opening listed.
-- **Read again each time it opens.** Its key (`src/api/folders.ts`) is
-  one `src/api/live.ts` does not follow, since the server watches none of
-  the folders it lists, and carries which opening it is, so opening the
-  explorer again reads every folder it shows again, and what an opening
-  read is dropped once it closes, as what the header may switch to is read
-  each time its menu opens. A folder walked back to within one opening
-  shows what was read of it, and is read again behind it.
+- **Read again each time it is opened.** Its key (`src/api/folders.ts`)
+  is one `src/api/live.ts` does not follow, since the server watches none
+  of the folders it lists, and carries which opening it is, and a listing
+  is dropped as soon as nothing shows it, the explorer moving on to
+  another folder included, as what the header may switch to is read each
+  time its menu opens. So every folder is read again whenever it is
+  opened, one walked back to within an opening too, the last folder
+  listed staying on screen until it answers.
 
 No command line gains anything: a shell has `ls` and completion, and the
 listing is what a front end with no terminal lacks ([the read

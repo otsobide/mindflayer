@@ -23,11 +23,12 @@ export interface Opened {
  * Its key starts with `folders`, which `src/api/live.ts` does not follow:
  * a listing reads folders the server does not watch, anywhere on the disk,
  * and no event says anything of them. So each opening of the explorer is
- * a key of its own, by its `visit`, and reads every folder it shows again,
- * and what an opening read is dropped once nothing shows it
- * (`gcTime: 0`), as what the header may switch to is read again each time
- * its menu opens. Walking back to a folder within one opening shows what
- * was read of it and reads it again behind it (`staleTime: 0`).
+ * a key of its own, by its `visit`, and a listing is dropped as soon as
+ * nothing shows it (`gcTime: 0`), the explorer moving on to another
+ * folder included, as what the header may switch to is read again each
+ * time its menu opens. Every folder opened is read again, one walked back
+ * to within an opening too, the last one listed staying on screen until
+ * it answers (`shown` in `FolderPicker.vue`).
  */
 export function useFolders(opened: MaybeRefOrGetter<Opened>, enabled: MaybeRefOrGetter<boolean>) {
   const transport = useTransport()
