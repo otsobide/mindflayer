@@ -32,6 +32,7 @@ use std::path::{Path, PathBuf};
 
 use ts_rs::{Config, ExportError, TypeVisitor, TS};
 
+use crate::browse::Folders;
 use crate::code;
 use crate::contents::{self, Contents};
 use crate::draft::Judged;
@@ -42,8 +43,8 @@ use crate::view::{Listing, Snapshot};
 
 /// Every type core hands a front end whole, each with every type it names:
 /// the snapshot, an artifact's files and a file's contents, what an update
-/// of every project would do, and the workspaces it may switch to, which
-/// the panel queries; what `list`,
+/// of every project would do, the workspaces it may switch to, and the
+/// folders inside one, which the panel queries; what `list`,
 /// `show` and `validate` print, which a script reads; and every code core
 /// gives, which a front end compares a code with.
 pub fn roots(visitor: &mut impl TypeVisitor) {
@@ -56,6 +57,7 @@ pub fn roots(visitor: &mut impl TypeVisitor) {
     visitor.visit::<Contents>();
     visitor.visit::<Judged>();
     visitor.visit::<Switchable>();
+    visitor.visit::<Folders>();
     visitor.visit::<CoreCode>();
 }
 
