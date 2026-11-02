@@ -5868,7 +5868,9 @@ name](#what-a-browser-may-name)):
   keep in step with the form's.
 - **It opens where the field says**: at the folder the Link form's field
   holds, or the last one Discover's names, sent as typed, and at the
-  workspace's root when it holds none.
+  workspace's root when it holds none. Its own path field holds what was
+  sent until a listing answers, so a start the server refuses is there to
+  be corrected, never the folder an earlier opening listed.
 - **Read again each time it opens.** Its key (`src/api/folders.ts`) is
   one `src/api/live.ts` does not follow, since the server watches none of
   the folders it lists, and carries which opening it is, so opening the

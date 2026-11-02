@@ -246,6 +246,30 @@ describe('the explorer, from the Link form', () => {
     await vi.waitFor(() => expect(find('[data-testid="folder-refused"]')).toBeNull())
   })
 
+  it('opens at a folder the field holds that is refused, holding it in its own field to be corrected', async () => {
+    const { queries, transport } = exploring()
+    const { page } = await render('/projects', transport)
+    const field = () => (find('input[data-testid="folder-path"], [data-testid="folder-path"] input') as HTMLInputElement).value
+    // Opened once first, so its field held a folder a listing spelled.
+    await press('[data-testid="link-browse"]')
+    await listed()
+    await press('[data-testid="folder-cancel"]')
+    await vi.waitFor(() => expect(find('[data-testid="folder-picker"]')).toBeNull())
+    expect(WALK.refused.query).toEqual(listing('Projects'))
+    await page.get('input[data-testid="link-path"]').setValue('Projects')
+
+    await press('[data-testid="link-browse"]')
+    await vi.waitFor(() => expect(find('[data-testid="folder-refused"]')).not.toBeNull())
+
+    expect(listings(queries)).toEqual([listing(null), WALK.refused.query])
+    expect(field()).toBe('Projects')
+    await type('input[data-testid="folder-path"], [data-testid="folder-path"] input', `${ROOT}/archive`)
+    await press('[data-testid="folder-go"]')
+    await listed()
+    expect(listings(queries).at(-1)).toEqual(listing(`${ROOT}/archive`))
+    expect(field()).toBe(`${ROOT}/archive`)
+  })
+
   it('reads the folder again each time it opens, and never for what the server streams', async () => {
     const { queries, tell, transport } = exploring()
     await render('/projects', transport)

@@ -43,20 +43,24 @@ const opened = ref<Opened>({ path: null, hidden: false, visit: 0 })
  */
 const shown = ref<Folders>()
 
+/** The path field, as typed: the folder listed once it is, to change and go to. */
+const typed = ref('')
+
 // Each opening starts where the field says and reads every folder afresh,
-// keeping whether hidden folders show from the last.
+// keeping whether hidden folders show from the last. Its path field holds
+// what was sent until a listing answers, so a start the server refuses is
+// there to be corrected, rather than the folder an earlier opening listed.
 watch(open, (now) => {
   if (now) {
     const start = props.start ?? ''
-    opened.value = { path: start.trim() === '' ? null : start, hidden: opened.value.hidden, visit: opened.value.visit + 1 }
+    const blank = start.trim() === ''
+    opened.value = { path: blank ? null : start, hidden: opened.value.hidden, visit: opened.value.visit + 1 }
+    typed.value = blank ? '' : start
     shown.value = undefined
   }
 }, { immediate: true })
 
 const { data, error } = useFolders(opened, open)
-
-/** The path field, as typed: the folder listed once it is, to change and go to. */
-const typed = ref('')
 
 watch(data, (now) => {
   if (now) {
