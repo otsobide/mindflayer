@@ -78,9 +78,9 @@ pub struct Folders {
     /// path no request could send back, a hidden one only when hidden
     /// ones are asked for.
     pub failures: Vec<Said>,
-    /// The home the front end was given, as a folder a request may name,
-    /// for a way back to it: none when there is none, or when it is no
-    /// such path ([`policy::path`]).
+    /// The home the front end was given, normalized, as a folder a request
+    /// may name, for a way back to it: none when there is none, or when it
+    /// is no such path ([`policy::path`]).
     pub home: Option<String>,
 }
 
@@ -332,7 +332,12 @@ impl Folders {
                 .iter()
                 .map(|failure| Said::of(failure.code(), failure))
                 .collect(),
+            // Spelled as normalizing it spells it, as core takes the home
+            // everywhere else, so a launch's `HOME=/home/you/` still gives a
+            // way back; one relative or in a `.mindflayer` stays refused.
             home: home
+                .map(paths::normalize)
+                .as_deref()
                 .and_then(Path::to_str)
                 .filter(|home| policy::path(home).is_ok())
                 .map(str::to_owned),

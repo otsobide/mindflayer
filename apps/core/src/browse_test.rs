@@ -400,10 +400,14 @@ fn the_home_is_named_only_as_a_folder_a_request_may_name() {
     let home = dir.path().join("home");
 
     let named = Folders::read(&workspace, &root, false, Some(&home)).unwrap();
+    // As `HOME=/home/you/` hands it over, which normalizing spells as named.
+    let trailing = format!("{}/", home.display());
+    let unnormalized = Folders::read(&workspace, &root, false, Some(Path::new(&trailing))).unwrap();
     let relative = Folders::read(&workspace, &root, false, Some(Path::new("home"))).unwrap();
     let inside = Folders::read(&workspace, &root, false, Some(&root.join(FLAYER_DIR))).unwrap();
 
     assert_eq!(named.home.as_deref(), home.to_str());
+    assert_eq!(unnormalized.home.as_deref(), home.to_str());
     assert_eq!(relative.home, None);
     assert_eq!(inside.home, None);
 }

@@ -5837,11 +5837,11 @@ name](#what-a-browser-may-name)):
   whether the workspace links it and whether it is a link, and the same of
   the folder open, so it can be chosen too. The panel puts no path
   together: up is a crumb's path, down a subfolder's, home the path the
-  answer names (the launch's, when the path policy takes it), and the
-  workspace's root no path at all. Which folder is a project and which the
-  workspace links are rules (`MindProject::is_marked`,
-  `FlayerWorkspace::is_linked`), and a listing put together in TypeScript
-  would be a second copy of them.
+  answer names (the launch's, normalized as core takes it everywhere,
+  when the path policy takes it), and the workspace's root no path at
+  all. Which folder is a project and which the workspace links are rules
+  (`MindProject::is_marked`, `FlayerWorkspace::is_linked`), and a listing
+  put together in TypeScript would be a second copy of them.
 - **What it leaves out is core's too.** A hidden folder is listed only
   once its switch is on, which says how many there are, counted by core
   whether listed or not; a `.mindflayer`, and a link leading into one,
