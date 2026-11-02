@@ -169,7 +169,10 @@ under `apps/` with its own `Makefile`:
   the panel, cut at its front matter when it is the one the artifact is
   read from, and every file it holds listed (`contents`), which paths and
   entries a request from outside
-  may name, a workspace to switch to among them (`policy`), what `show`
+  may name, a workspace to switch to among them (`policy`), the folders
+  directly inside one, each said to be a mind project, a workspace, a git
+  repository or a plain folder, for a front end with no terminal to pick
+  one from (`browse`), what `show`
   and `validate` say of each
   artifact (`reading`), and what core says of one a command is about to
   write, by the command's own checks and in `validate`'s words, for a
@@ -241,6 +244,8 @@ under `apps/` with its own `Makefile`:
   applies (`batchOf`), and
   `src/api/updates.ts` the query of what an update of every project would
   do (`useUpdates`) and the task of updating them all (`UPDATE_ALL`),
+  `src/api/folders.ts` the query of the folders inside one, read again
+  each time the explorer opens (`useFolders`),
   `src/api/draft.ts` the query of what core says of
   a draft as it is typed (`useJudged`), and `src/api/workspaces.ts` the
   query of what the header may switch to (`useWorkspaces`).
@@ -273,7 +278,9 @@ under `apps/` with its own `Makefile`:
   `SnapshotGate`, which draws a page once the snapshot is answered, the
   header's workspace in use and its menu of what it may switch to
   (`WorkspaceSwitcher`), the
-  folder to link (`LinkForm`), the path of a workspace to load
+  folder to link (`LinkForm`), the explorer it and Discover choose a
+  folder from, a folder at a time as core lists it (`FolderPicker`), the
+  path of a workspace to load
   (`LoadForm`), a project's agents and share toggles
   (`SettingsForm`) and its migration, dry run first (`MigrateOffer`), the
   removal of one of the library's own everywhere, dry run first
@@ -466,7 +473,10 @@ These are easy to break from a single file without noticing.
   `ENVELOPE_VERSION`, and every URL in it, an error's message included,
   goes out through `url::redacted`. What a front end reads beside it is
   only what it cannot hold: a scan (the panel's `Query::Scan`, asked for
-  by hand and answered with the backend's `Scanned`), a plan of boxes
+  by hand and answered with the backend's `Scanned`), the folders
+  directly inside one, for the panel's explorer to choose from
+  (`Query::Folders`, answered with core's `browse::Folders`, which no
+  command line has, since a shell has `ls`), a plan of boxes
   (`Query::Plan`, answered with the backend's `Planned`, core's plan with
   each change the task that runs it, which the panel sends back as one
   `apply_install`, never a task of its own), what an update of every
@@ -744,8 +754,10 @@ These are easy to break from a single file without noticing.
     to for the line's one `-C` or `-p` (and each project a plan's boxes
     name, held to it by `Admission::selection` before core plans), and a
     folder not linked yet, or one
-    a scan is to look under, by an absolute, normalized path outside every
-    `.mindflayer`, verbatim. The
+    a scan is to look under or the explorer is to list, by an absolute,
+    normalized path outside every `.mindflayer`, verbatim, each folder a
+    listing holds held to the policy again and left out when refused
+    (`browse`). The
     browser supplies no `-C`, `--home`, `-W` or agent home: the backend runs
     every line with the launch's, against the workspace it acts on, the one
     it was launched on or one switched to since, named with `-W` in the
