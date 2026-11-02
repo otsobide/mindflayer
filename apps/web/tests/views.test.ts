@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
+import type { Folders } from '@/api/generated/Folders'
 import type { Health } from '@/api/generated/Health'
-import { answering, answers, applying, commanded, commanding, drafts, fixture, plans, render, unmount, updates, type Answered } from './panel'
+import { answering, answers, applying, commanded, commanding, drafts, fixture, plans, render, unmount, updates, walks, type Answered } from './panel'
 
 /** Every `<style>` element anything adds while a test runs, which the CSP would refuse. */
 let styles: Element[]
@@ -185,6 +186,35 @@ describe('the command palette and the sheet of shortcuts', () => {
 
     press('?', { shiftKey: true })
     await vi.waitFor(() => expect(document.querySelector('[data-testid="shortcuts"]')).not.toBeNull())
+    drawsEveryIcon(page)
+
+    expect(styles).toEqual([])
+  })
+})
+
+describe('the explorer', () => {
+  it('draws every icon from the bundle, each word core says of a folder, a link and what it could not read among them, and adds no style element', async () => {
+    const walked = walks().walked
+    const root = walked[0]!.answer as Folders
+    root.folders[0]!.symlink = true
+    root.failures = [{ code: 'browse_entry_unread', message: '/home/you/Projects/loop: what it is cannot be read' }]
+    const { transport } = commanding(fixture('candidates'), commanded(), walked)
+    const { page } = await render('/projects', transport)
+
+    document.querySelector<HTMLElement>('[data-testid="link-browse"]')!.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="folder-failure"]')).not.toBeNull())
+    expect(new Set([...document.querySelectorAll('[data-testid="folder"] [data-testid="folder-is"]')].map(each => each.textContent))).toEqual(new Set(['mind project', 'folder', 'git repository']))
+    drawsEveryIcon(page)
+
+    // The home, a workspace, and a refusal.
+    document.querySelector<HTMLElement>('[data-testid="folder-home"]')!.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="folder"] [data-testid="folder-is"]')?.textContent).toBe('flayer workspace'))
+    const field = document.querySelector<HTMLInputElement>('input[data-testid="folder-path"], [data-testid="folder-path"] input')!
+    field.value = 'nowhere'
+    field.dispatchEvent(new Event('input'))
+    await flushPromises()
+    document.querySelector<HTMLElement>('[data-testid="folder-go"]')!.click()
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="folder-refused"]')).not.toBeNull())
     drawsEveryIcon(page)
 
     expect(styles).toEqual([])

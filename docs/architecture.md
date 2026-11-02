@@ -1521,6 +1521,12 @@ type derives `Serialize` from the start:
   it loads it by (`loaded_as`) and whether it could load it (`loadable`),
   as a shelf row's origin is flattened beside the ledger's row: what one
   workspace loads is nothing that list of the machine says.
+- **Listed for the panel by #212**: the folders directly inside one
+  (`browse::Folders`, each `Folder` and each `Crumb` of its trail), a path
+  through `paths::lossy`, what a folder is a word (`browse::Is`, by its
+  slug, said in TypeScript as `FolderIs`, since `Is` alone says nothing in
+  a folder of the panel's types), and what it could not read or name a
+  `code::Said` of `browse::BrowseFailure`.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -1846,7 +1852,11 @@ listed for its rules. Reading every kind for the health alone was the
 other way, which would weigh a failure the reply says nowhere.
 
 What a front end reads beside the snapshot is what no snapshot holds: a scan,
-a plan of the boxes somebody ticked and unticked, asked for each time they
+the folders directly inside one, for the panel's explorer to choose one from
+(`Query::Folders`, core's `browse::Folders`, [choosing a
+folder](#choosing-a-folder)), which no command line has, since a shell has
+`ls` and completion and a front end with no terminal lacks both, a plan of
+the boxes somebody ticked and unticked, asked for each time they
 change and never kept beside the snapshot (`Query::Plan`, [a batch is
 planned in core](#a-batch-is-planned-in-core)), what an update of every
 project would do (`Query::Updates`, [bringing what was installed up to
@@ -4585,6 +4595,20 @@ of it a browser may name.
   few names in each, opens markers and the ledger to read, and writes
   nothing, so nothing outside the workspace is reached that a command would
   not read.
+- **A folder listed only where one may be named** (`Query::Folders`): the
+  folder the explorer opens is held to the same rule as a folder to link,
+  and refused with its code before anything is read; none named is the
+  workspace's root, as for a scan. Core lists it (`browse::Folders`) and
+  holds each folder inside it to the rule again, leaving out one it
+  refuses, a `.mindflayer` and a link leading into one, rather than list
+  what no request could name next. A listing is a read of names: each
+  entry's type, and whether a marker, a `.mindflayer/flayer.toml` or a
+  `.git` is there, looked for and never opened. So a page holding the token
+  learns the names of folders wherever the account may list them, as a
+  scan of a root it names could already, and nothing of what a file holds
+  ([open questions](#open-questions)). It runs nothing: the folder chosen
+  goes back to a field, and from there to a line as a typed one does
+  ([choosing a folder](#choosing-a-folder)).
 - **A plan only of linked projects** (`Query::Plan`): each box's project
   an entry of the registry, held by `Admission::selection` as a task's
   projects are, before core plans, which holds it to the same entries
@@ -5007,7 +5031,9 @@ switches to another workspace this machine knows from the header of every
 page ([switching workspace](#switching-workspace), #84), and goes to any
 of it, or installs, updates all and links, from a command palette over
 every page, its keys listed on `?` ([the command
-palette](#the-command-palette), #85).
+palette](#the-command-palette), #85). It finds the folder to link, or to
+scan under, in an explorer of the disk core lists a folder at a time
+([choosing a folder](#choosing-a-folder), #212).
 
 ### One way out: the transport
 
@@ -5176,7 +5202,8 @@ a scan beside it and an eleventh what an update would do, each a file under
   and share toggles (`SettingsForm.vue`), or, for one an older marker
   marks, its migration (`MigrateOffer.vue`).
 - **What could be linked** (`/discover?root=...&depth=...`) scans the
-  folders typed, one a line, and lists what `flayer scan --suggest` finds
+  folders typed, one a line, or added from the explorer ([choosing a
+  folder](#choosing-a-folder)), and lists what `flayer scan --suggest` finds
   there in its order: what a relink would follow, then what is not linked,
   each with its reason, the command's words for why and a box to mark it,
   then what is linked already, and the entries no scan can follow, with the
@@ -5462,7 +5489,7 @@ was let go.
 What the pages offer:
 
 - **A link, from the projects page**, of the folder typed above its table,
-  sent as typed for the path policy to hold.
+  or chosen in the explorer, sent as typed for the path policy to hold.
 - **An unlink, from a project's page**, which is a confirmation, in the
   CLI's words that nothing on disk is deleted, then goes back to the
   projects.
@@ -5793,6 +5820,83 @@ holds every icon they draw, which no page draws, to the bundle, with no
 `e2e/palette.spec.ts` installs a skill from it with the keyboard alone
 ([end to end](#end-to-end-in-a-browser)).
 
+### Choosing a folder
+
+The Link form and Discover name a folder by its absolute path, as typed
+(#77, #76), and a browser cannot walk the disk to help somebody find it.
+So each has a **Browse** button opening the explorer (`FolderPicker.vue`,
+#212), a modal showing one folder at a time as core lists it
+(`Query::Folders`, core's `browse::Folders`, [what a browser may
+name](#what-a-browser-may-name)):
+
+- **What it shows is core's.** The folder, its trail from the root as
+  buttons, and the folders directly inside it, in the order of their
+  names, each with an icon and a word for what core says it is
+  (`browse::Is`: a mind project by any marker, a flayer workspace, a git
+  repository or any other folder, the strongest when it is more than one),
+  whether the workspace links it and whether it is a link, and the same of
+  the folder open, so it can be chosen too. The panel puts no path
+  together: up is a crumb's path, down a subfolder's, home the path the
+  answer names (the launch's, normalized as core takes it everywhere,
+  when the path policy takes it), and the workspace's root no path at
+  all. Which folder is a project and which the workspace links are rules
+  (`MindProject::is_marked`, `FlayerWorkspace::is_linked`), and a listing
+  put together in TypeScript would be a second copy of them.
+- **What it leaves out is core's too.** A hidden folder is listed only
+  once its switch is on, which says how many there are, counted by core
+  whether listed or not; a `.mindflayer`, and a link leading into one,
+  never, since the path policy refuses to name them; and no more than a
+  thousand (`browse::FOLDERS_CAP`), saying so, past which a path is
+  typed. A subfolder whose type will not read, a link that loops say, or
+  whose path is not UTF-8, which no request could send back, is said with
+  its code beside the rest (`browse_entry_unread`, `browse_name_unfit`),
+  a hidden one only once the switch is on, so a switch left off says
+  nothing of what it hides; and a folder that cannot be listed at all is refused with one
+  (`browse_missing`, `browse_not_a_folder`, `browse_unlisted`). A link is
+  listed and opened like any folder, since a repository is often reached
+  through one, and cannot make a listing of one folder loop.
+- **A path typed goes as typed**, as the Link form's does, for the server
+  to hold to the path policy. A refusal is said with its code above the
+  last folder listed, which stays, so a typo leaves the explorer where it
+  was.
+- **Choosing runs nothing.** A folder, or the one open, is chosen with a
+  button, which puts its path in the field the explorer was opened from:
+  the Link form's, which the link previews and runs as a typed one, or
+  Discover's folders to look under, added once, which a scan reads only
+  once Scan is pressed. A task that chose and linked in one step was the
+  other way, a second way to link a folder, with a preview of its own to
+  keep in step with the form's.
+- **It opens where the field says**: at the folder the Link form's field
+  holds, or the last one Discover's names, sent as typed, and at the
+  workspace's root when it holds none. Its own path field holds what was
+  sent until a listing answers, so a start the server refuses is there to
+  be corrected, never the folder an earlier opening listed.
+- **Read again each time it is opened.** Its key (`src/api/folders.ts`)
+  is one `src/api/live.ts` does not follow, since the server watches none
+  of the folders it lists, and carries which opening it is, and a listing
+  is dropped as soon as nothing shows it, the explorer moving on to
+  another folder included, as what the header may switch to is read each
+  time its menu opens. So every folder is read again whenever it is
+  opened, one walked back to within an opening too, the last folder
+  listed staying on screen until it answers.
+
+No command line gains anything: a shell has `ls` and completion, and the
+listing is what a front end with no terminal lacks ([the read
+model](#the-read-model)). Nor does the TUI's link form, which keeps its
+text field ([open questions](#open-questions)).
+
+`tests/folders.test.ts` walks the explorer over what a test of the CLI was
+answered with as it walked the candidates fixture's folders
+(`tests/fixtures/folders.json`): down by a name, up by the trail, home and
+back, hidden folders asked for, a path refused with its code; and holds
+what each choice puts in a field, and the link that previews, to the
+commands' fixtures. `tests/a11y.test.ts` and `tests/views.test.ts` open it
+from the Link form and from Discover, a modal like the palette;
+`e2e/explorer.spec.ts` walks the suite's fixture in a browser, chooses a
+project the Link form previews, cancelled, and adds a folder typed, on
+Enter, to Discover's, which a scan then reads ([end to
+end](#end-to-end-in-a-browser)).
+
 ### Its fixtures come from Rust
 
 The views' tests render the snapshots in `apps/web/tests/fixtures`, which a
@@ -5815,7 +5919,10 @@ dry run and run, which the runner's, the transcript's and the pages' tests
 answer their tasks from (`commanding`), and `scan.json` what scanning the
 folder of the workspace `candidates.json` is a snapshot of is answered
 with, which the page of what could be linked is drawn from, beside that
-snapshot, so the two describe one workspace. `assigning.json` is a
+snapshot, so the two describe one workspace. `folders.json` holds what
+the explorer is answered with as it walks that workspace's folders,
+beside a relative path refused with its code ([choosing a
+folder](#choosing-a-folder)). `assigning.json` is a
 workspace built for the matrix, one name offered from the library and a
 loaded workspace, the shelf, a copy current, outdated, edited and
 somebody's, a project nothing can go into and an entry that opens none;
@@ -5961,7 +6068,11 @@ project, kind by kind, in its order; each of the library's own to its row
 and to the rows of the projects holding a copy. A security smoke test sends
 the panel's own query, with the cookie and every header the panel sends,
 from the panel's origin and from another, and only the second is refused,
-as is one carrying the token as Bearer, and the page itself.
+as is one carrying the token as Bearer, and the page itself. The explorer
+walks the fixture's folders, up by its trail and down by a name, and the
+project it chooses is the folder the Link form's preview links, cancelled;
+a folder typed in it, on Enter, is added to Discover's and scanned
+(`e2e/explorer.spec.ts`), neither changing anything.
 
 What the panel changes is held to the CLI byte for byte. A test that
 changes something takes a workspace of its own (`own`, in `e2e/panel.ts`):
@@ -6115,7 +6226,8 @@ is in, as a person's does, and the overview says `above` rather than that
 The tour is Playwright's library driving Chromium, not a spec: Playwright's
 runner would run the pages side by side, while the tour visits them once,
 in order: the command palette over the overview, a word typed and
-nothing chosen; the matrix with a box ticked and another unticked, the
+nothing chosen; the explorer over the projects page, at the workspace's
+root, nothing chosen; the matrix with a box ticked and another unticked, the
 plan's lines below them, never applied; the page of updates, its edited copy left
 with why; the preview of linking what Discover marked, then, once that has
 run, an unlink asked about and cancelled, and the transcript; and last the
@@ -8827,6 +8939,26 @@ just listed.
   focus as it closes, its field going with it; any other overlay, or a page
   that takes away a field while it has the focus, would have to do the
   same, and nothing yet holds one to it.
+- **The explorer lists any folder the account may list.** The path policy
+  holds what a request may name, not where on the disk it is, so a page
+  holding the token learns the names of folders anywhere the account may
+  read, as a scan of a root it names could already, though nothing a file
+  holds. Holding the explorer to the home, or to the workspace's folder,
+  would refuse the repository kept elsewhere that somebody browses to
+  find; the token and the guards are what keep other pages out.
+- **The explorer orders names by their bytes.** Core sorts a folder's
+  names as `ls` does with no locale, so `Zeta` comes before `alpha`. The
+  reader's order is the browser's to know, and sorting there would be a
+  second order of what core listed; a listing told the locale would be
+  core reading something of the front end's it has never needed.
+- **On Windows the trail ends at a drive.** The trail goes up to the root
+  of the folder listed, `C:\` say, and nothing lists the other drives,
+  which only a path typed reaches. Development is Linux's for now (#154).
+- **The TUI's link form has no explorer.** It keeps its text field, where
+  the shell's completion is not to hand either; the minds screen's scan is
+  how it finds a folder, and a list of folders on a screen of its own
+  would be the TUI's version of the panel's explorer, over the same core
+  listing.
 - **`mind load` is no page's.** The panel is launched on a workspace and
   loads into that one; a project's own load into the workspace above it
   (`Task::LoadHere`), which the TUI offers when it is opened on a project,

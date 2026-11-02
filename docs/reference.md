@@ -1850,11 +1850,11 @@ not the panel's, and Cancel has the focus, so an Enter pressed by habit
 runs nothing. Once a run is over and the pages show what it changed, a toast
 says how it went; when it failed, or said a warning, the drawer of what it
 said opens, every warning, note and error under the line that said it, with
-its code. The panel links projects, from the folder you type above the
-projects table or from what **Discover** finds, relinks one that moved,
-unlinks one from its page, changes a project's agents and share mode,
-migrates a project an older Mindflayer made, installs and uninstalls
-skills and rules from **Assign**, brings what is installed up to date and
+its code. The panel links projects, from the folder you type or browse to
+above the projects table or from what **Discover** finds, relinks one
+that moved, unlinks one from its page, changes a project's agents and
+share mode, migrates a project an older Mindflayer made, installs and
+uninstalls skills and rules from **Assign**, brings what is installed up to date and
 takes out what nothing offers from **Updates**, removes one of the
 library's own everywhere, its dry run first, edits, adds and renames the
 library's own, adopts a skill somebody keeps in a project's agents'
@@ -1897,6 +1897,28 @@ or does not pass `validate`; and `stale`. Click a column to sort by it, type
 to filter by name or path, or show one health alone. The address keeps all
 of it, so a link or a reload opens the table as you left it.
 
+**The explorer** finds a folder for you to link, or for Discover to look
+under, so you need not type its path. **Browse**, beside the field above
+the projects table, opens it at the folder the field holds, or at the
+workspace's own when it holds none. It lists the folders directly inside
+one, in the order of their names, each saying what it is (a mind project,
+by any of its markers, a flayer workspace, a git repository or a plain
+folder), whether the workspace links it, and whether it is a link to a
+folder elsewhere, which opens like any other; and says the same of the
+folder open. Open a folder by its name, go back up by the trail above
+the list, to your home or to the workspace's folder by their buttons, or
+type a path and press Enter. Hidden folders are listed only once you
+switch them on, which says how many there are; a `.mindflayer`, and a
+link into one, are never listed, since nothing in one may be linked or
+scanned. A path the panel may not name is refused with its code, as a
+typed folder to link is, and the explorer stays where it was. **Choose**
+(**Add**, from Discover), on a folder or for the folder open, puts its
+path in the field and runs nothing: the link is shown first, as every
+change is, and a scan waits for **Scan**. Each time it opens
+it reads the folders again; it lists a thousand at most, and says so when
+there are more. Only names are looked at: nothing is opened, written or
+made, and no command has it, since a shell has `ls` and completion.
+
 **A project's page** groups what it holds by kind. Each artifact says how it
 stands, which of the project's agents read it (one that does not is crossed
 out), where it came from, where its copies are, and what `validate` says of
@@ -1931,9 +1953,11 @@ it was committed, and one a `settings.json` marks keeps the agents and the
 share mode that file names; the toggles change either once it has moved.
 
 **Discover** finds the projects worth linking. Type the folders your
-repositories are kept in, one a line, each an absolute path, and how many
-levels down to look, empty for three, and press **Scan**: the panel asks for
-what `flayer scan --suggest` would find there, the workspace's own folder
+repositories are kept in, one a line, each an absolute path, or add one
+with **Browse**, which opens the explorer at the last folder named and
+adds the one you choose, once; then how many levels down to look, empty
+for three, and press **Scan**: the panel asks for what
+`flayer scan --suggest` would find there, the workspace's own folder
 offered to start from. It scans nothing until you ask, and nothing again by
 itself while you look, since a scan reads far more of the disk than the
 panel watches; a folder is only read. What is not linked comes first, most
@@ -2186,7 +2210,9 @@ state in words, never by colour alone. The API under it is there for a script ho
 Bearer token: `POST /api/query` for a read (`{"type": "snapshot"}` answers
 what the panel draws, `{"type": "files", ...}` what one artifact holds,
 `{"type": "contents", ...}` one file of it, as text, `{"type": "scan",
-"roots": ["/home/you/Projects"], "depth": null}` what Discover lists, and
+"roots": ["/home/you/Projects"], "depth": null}` what Discover lists,
+`{"type": "folders", "path": "/home/you/Projects", "hidden": false}` what
+the explorer lists of a folder, `null` for the workspace's, and
 `{"type": "plan", "selection": [{"project": "alpha", "reference":
 "skill:deploy", "origin": "workspace", "wanted": true}]}` what boxes of a
 project and an offer, ticked or not, amount to: the tasks that carry them
