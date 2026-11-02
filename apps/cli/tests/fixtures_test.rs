@@ -709,6 +709,92 @@ fn write_what_scanning_the_workspace_is_answered_with() {
     write("scan", &json);
 }
 
+/// `trail`, a folder listing's, as the folder it leads to reads in a
+/// fixture: from `/` through [`HOME`], the folders above the temporary one
+/// and it put in their place, as [`pinned`] spells every path under it.
+fn trail_from_home(trail: &mut Value, dir: &Path) {
+    let crumbs = trail.as_array_mut().unwrap();
+    crumbs.retain(|crumb| !dir.starts_with(crumb["path"].as_str().unwrap()));
+    crumbs.splice(
+        0..0,
+        [
+            json!({"name": "/", "path": "/"}),
+            json!({"name": "home", "path": HOME}),
+        ],
+    );
+}
+
+/// What the panel's explorer is answered with as it walks the workspace
+/// [`workspace`] builds, with [`candidates`] beside its projects and `old`
+/// [`moved`], launched in its home: the workspace's root as the Link form
+/// opens it, naming no folder, and as Discover opens it, naming the folder
+/// its field holds; the home above it; `archive`, where `old` moved to;
+/// and `notes`, a repository, with its hidden folder left out, then asked
+/// for (`walked`). Beside them, a folder typed as no request may name one,
+/// refused with its code (`refused`).
+#[test]
+fn write_what_walking_the_folders_of_the_workspace_is_answered_with() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let root = workspace(&home);
+    candidates(&root);
+    moved(&root);
+    let backend = PanelBackend::launch(&root, &at_home(&home)).unwrap();
+    let folders = |folder: &Path, hidden: bool| json!({"type": "folders", "path": folder.to_str().unwrap(), "hidden": hidden});
+
+    let mut walked = vec![asked(
+        &backend,
+        json!({"type": "folders", "path": null, "hidden": false}),
+    )];
+    for (folder, hidden) in [
+        (root.clone(), false),
+        (home.clone(), false),
+        (root.join("archive"), false),
+        (root.join("notes"), false),
+        (root.join("notes"), true),
+    ] {
+        walked.push(asked(&backend, folders(&folder, hidden)));
+    }
+    for each in &mut walked {
+        trail_from_home(&mut each["answer"]["trail"], dir.path());
+    }
+    let typed = json!({"type": "folders", "path": "Projects", "hidden": false});
+    let refused = backend
+        .query(serde_json::from_value(typed.clone()).unwrap())
+        .expect_err("a relative path is listed");
+
+    let said: Vec<(&Value, &Value, &Value)> = walked[0]["answer"]["folders"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|folder| (&folder["name"], &folder["is"], &folder["linked"]))
+        .collect();
+    assert!(
+        said.contains(&(&json!("api"), &json!("project"), &json!(true))),
+        "{said:?}"
+    );
+    assert!(
+        said.contains(&(&json!("scratch"), &json!("repository"), &json!(false))),
+        "{said:?}"
+    );
+    assert!(
+        said.contains(&(&json!("archive"), &json!("folder"), &json!(false))),
+        "{said:?}"
+    );
+    assert_eq!(walked[0]["answer"], walked[1]["answer"]);
+    assert_eq!(walked[4]["answer"]["hidden"], 1);
+    assert_eq!(refused.code, "path_relative");
+    let answer = json!({
+        "walked": walked,
+        "refused": {"query": typed, "error": refused.message, "code": refused.code},
+    });
+    let json = serde_json::to_string_pretty(&answer).unwrap() + "\n";
+    let json = pinned(&json, dir.path(), Some(&root));
+    assert!(!json.contains(&*dir.path().to_string_lossy()), "{json}");
+    assert!(json.contains("\"home\": \"/home/you\""), "{json}");
+    write("folders", &json);
+}
+
 /// What the panel is answered with when it previews and runs each of a few
 /// tasks in turn on the workspace [`workspace`] builds, with `blog` made a
 /// project beside the others and not linked: each task as the panel sends
