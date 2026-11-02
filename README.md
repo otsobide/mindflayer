@@ -78,6 +78,15 @@ path.
 
 ![The projects table, with each project's agents, share mode, counts, what is outdated and health](docs/images/projects.png)
 
+No need to remember the path: **Browse** opens an explorer of your folders,
+starting at the workspace's own, and says what each one is (a mind
+project, a workspace, a git repository or a plain folder) and which the
+workspace links already. Walk down by a folder's name and back up by the trail, or
+type a path to go there. Choosing one only fills the field: the link is
+shown before it runs, like every change.
+
+![The explorer over the projects page: the workspace's folders, each a mind project or a git repository, most of them linked already](docs/images/explorer.png)
+
 ### A project
 
 A project's page, at the top of this one, groups what it holds by kind. Each
@@ -190,9 +199,10 @@ uninstall, which asks first too.
 
 ### Discover
 
-Name the folders your repositories are kept in, and the panel finds what is
-worth linking: mind projects first, then repositories an agent already works
-in, then the rest. Tick them and link them in one go.
+Name the folders your repositories are kept in, typed or added with
+**Browse** from the same explorer, and the panel finds what is worth
+linking: mind projects first, then repositories an agent already works in,
+then the rest. Tick them and link them in one go.
 
 ![Discover: two repositories found and marked to link, and the projects linked already](docs/images/discover.png)
 

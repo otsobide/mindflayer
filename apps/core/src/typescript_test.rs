@@ -11,6 +11,7 @@ use serde_json::Value;
 use super::*;
 use crate::agent::Agent;
 use crate::artifact::ValidationIssue;
+use crate::browse;
 use crate::contents::Withheld;
 use crate::install::Place;
 use crate::kind::Kind;
@@ -116,6 +117,7 @@ fn every_word_type_says_in_typescript_the_words_serde_writes() {
         scan::Reason::Git,
     ]);
     says_what_serde_writes(&[Withheld::Binary, Withheld::TooLarge]);
+    says_what_serde_writes(&browse::Is::ALL);
     says_what_serde_writes(&[Place::Workspace, Place::Loaded, Place::Shelf]);
     says_what_serde_writes(&[
         Does::Keep,
@@ -141,7 +143,8 @@ fn a_word_type_is_declared_as_the_union_of_its_words() {
 }
 
 /// A scan's reason under a name of its own, in a file of its own, apart
-/// from the rule that chose a workspace, which is `Reason` in both.
+/// from the rule that chose a workspace, which is `Reason` in both; and
+/// what a folder is, whose own name says nothing alone.
 #[test]
 fn a_word_type_named_apart_is_declared_and_written_under_that_name() {
     assert_eq!(
@@ -153,6 +156,14 @@ fn a_word_type_named_apart_is_declared_and_written_under_that_name() {
         Some(PathBuf::from("ScanReason.ts"))
     );
     assert_eq!(Reason::output_path(), Some(PathBuf::from("Reason.ts")));
+    assert_eq!(
+        browse::Is::decl(&Config::new()),
+        r#"type FolderIs = "project" | "workspace" | "repository" | "folder";"#
+    );
+    assert_eq!(
+        browse::Is::output_path(),
+        Some(PathBuf::from("FolderIs.ts"))
+    );
 }
 
 /// What the TypeScript is read off holds one issue of each code, so no

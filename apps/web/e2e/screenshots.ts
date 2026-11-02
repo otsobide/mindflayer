@@ -218,6 +218,18 @@ const TOUR: Shot[] = [
     ready: async page => page.getByTestId('row').first().waitFor()
   },
   {
+    // The explorer over the projects page, opened from the Link form at
+    // the workspace's root: what each folder is, and which the workspace
+    // links. Nothing is chosen.
+    name: 'explorer',
+    path: '/projects',
+    ready: async (page) => {
+      await page.getByTestId('row').first().waitFor()
+      await page.getByTestId('link-browse').click()
+      await page.getByRole('dialog', { name: 'Choose a folder to link' }).getByTestId('folder').first().waitFor()
+    }
+  },
+  {
     name: 'project',
     path: project,
     ready: async page => page.getByTestId('artifact').first().waitFor()

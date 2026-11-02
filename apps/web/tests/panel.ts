@@ -16,6 +16,7 @@ import authoredJson from './fixtures/authored.json'
 import candidates from './fixtures/candidates.json'
 import commands from './fixtures/commands.json'
 import draftsJson from './fixtures/drafts.json'
+import foldersJson from './fixtures/folders.json'
 import library from './fixtures/library.json'
 import loadsJson from './fixtures/loads.json'
 import planned from './fixtures/plans.json'
@@ -81,6 +82,24 @@ export function answers(): Answered[] {
  */
 export function scans(): Answered[] {
   return structuredClone(scan) as unknown as Answered[]
+}
+
+/**
+ * What the candidates fixture's server, launched in its home, answers as
+ * the explorer walks its folders (tests/fixtures/folders.json): the
+ * workspace's root asked for by no path, as the Link form opens it, and by
+ * its own, as Discover does; the home above it; `archive`, holding `old`;
+ * and `notes`, a repository, its hidden folder left out, then asked for
+ * (`walked`). Beside them, `Projects` typed, which a request may not name,
+ * refused with its code (`refused`). Copied, so a test may change its copy.
+ */
+export interface Walk {
+  walked: Answered[]
+  refused: { query: Query, error: string, code: string }
+}
+
+export function walks(): Walk {
+  return structuredClone(foldersJson) as unknown as Walk
 }
 
 /**

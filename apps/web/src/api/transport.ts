@@ -2,6 +2,7 @@ import { inject, type InjectionKey } from 'vue'
 import type { Confirm } from './generated/Confirm'
 import type { Contents } from './generated/Contents'
 import type { Files } from './generated/Files'
+import type { Folders } from './generated/Folders'
 import type { Holder } from './generated/Holder'
 import type { Judged } from './generated/Judged'
 import type { Outcome } from './generated/Outcome'
@@ -33,6 +34,7 @@ export interface Answers {
   files: Files
   contents: Contents
   scan: Scanned
+  folders: Folders
   plan: Planned
   updates: Updates
   validate: Judged

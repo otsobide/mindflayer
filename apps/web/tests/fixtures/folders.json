@@ -1,0 +1,383 @@
+{
+  "refused": {
+    "code": "path_relative",
+    "error": "`Projects` is not an absolute path: name a folder by its absolute path, which reads the same from anywhere",
+    "query": {
+      "hidden": false,
+      "path": "Projects",
+      "type": "folders"
+    }
+  },
+  "walked": [
+    {
+      "answer": {
+        "failures": [],
+        "folders": [
+          {
+            "is": "project",
+            "linked": true,
+            "name": "api",
+            "path": "/home/you/Projects/api",
+            "symlink": false
+          },
+          {
+            "is": "folder",
+            "linked": false,
+            "name": "archive",
+            "path": "/home/you/Projects/archive",
+            "symlink": false
+          },
+          {
+            "is": "project",
+            "linked": false,
+            "name": "blog",
+            "path": "/home/you/Projects/blog",
+            "symlink": false
+          },
+          {
+            "is": "project",
+            "linked": true,
+            "name": "docs",
+            "path": "/home/you/Projects/docs",
+            "symlink": false
+          },
+          {
+            "is": "project",
+            "linked": false,
+            "name": "drafts",
+            "path": "/home/you/Projects/drafts",
+            "symlink": false
+          },
+          {
+            "is": "project",
+            "linked": true,
+            "name": "legacy",
+            "path": "/home/you/Projects/legacy",
+            "symlink": false
+          },
+          {
+            "is": "repository",
+            "linked": false,
+            "name": "notes",
+            "path": "/home/you/Projects/notes",
+            "symlink": false
+          },
+          {
+            "is": "repository",
+            "linked": false,
+            "name": "scratch",
+            "path": "/home/you/Projects/scratch",
+            "symlink": false
+          },
+          {
+            "is": "project",
+            "linked": true,
+            "name": "web",
+            "path": "/home/you/Projects/web",
+            "symlink": false
+          }
+        ],
+        "hidden": 0,
+        "home": "/home/you",
+        "is": "workspace",
+        "linked": false,
+        "path": "/home/you/Projects",
+        "trail": [
+          {
+            "name": "/",
+            "path": "/"
+          },
+          {
+            "name": "home",
+            "path": "/home"
+          },
+          {
+            "name": "you",
+            "path": "/home/you"
+          },
+          {
+            "name": "Projects",
+            "path": "/home/you/Projects"
+          }
+        ],
+        "truncated": false
+      },
+      "query": {
+        "hidden": false,
+        "path": null,
+        "type": "folders"
+      }
+    },
+    {
+      "answer": {
+        "failures": [],
+        "folders": [
+          {
+            "is": "project",
+            "linked": true,
+            "name": "api",
+            "path": "/home/you/Projects/api",
+            "symlink": false
+          },
+          {
+            "is": "folder",
+            "linked": false,
+            "name": "archive",
+            "path": "/home/you/Projects/archive",
+            "symlink": false
+          },
+          {
+            "is": "project",
+            "linked": false,
+            "name": "blog",
+            "path": "/home/you/Projects/blog",
+            "symlink": false
+          },
+          {
+            "is": "project",
+            "linked": true,
+            "name": "docs",
+            "path": "/home/you/Projects/docs",
+            "symlink": false
+          },
+          {
+            "is": "project",
+            "linked": false,
+            "name": "drafts",
+            "path": "/home/you/Projects/drafts",
+            "symlink": false
+          },
+          {
+            "is": "project",
+            "linked": true,
+            "name": "legacy",
+            "path": "/home/you/Projects/legacy",
+            "symlink": false
+          },
+          {
+            "is": "repository",
+            "linked": false,
+            "name": "notes",
+            "path": "/home/you/Projects/notes",
+            "symlink": false
+          },
+          {
+            "is": "repository",
+            "linked": false,
+            "name": "scratch",
+            "path": "/home/you/Projects/scratch",
+            "symlink": false
+          },
+          {
+            "is": "project",
+            "linked": true,
+            "name": "web",
+            "path": "/home/you/Projects/web",
+            "symlink": false
+          }
+        ],
+        "hidden": 0,
+        "home": "/home/you",
+        "is": "workspace",
+        "linked": false,
+        "path": "/home/you/Projects",
+        "trail": [
+          {
+            "name": "/",
+            "path": "/"
+          },
+          {
+            "name": "home",
+            "path": "/home"
+          },
+          {
+            "name": "you",
+            "path": "/home/you"
+          },
+          {
+            "name": "Projects",
+            "path": "/home/you/Projects"
+          }
+        ],
+        "truncated": false
+      },
+      "query": {
+        "hidden": false,
+        "path": "/home/you/Projects",
+        "type": "folders"
+      }
+    },
+    {
+      "answer": {
+        "failures": [],
+        "folders": [
+          {
+            "is": "workspace",
+            "linked": false,
+            "name": "Projects",
+            "path": "/home/you/Projects",
+            "symlink": false
+          }
+        ],
+        "hidden": 0,
+        "home": "/home/you",
+        "is": "folder",
+        "linked": false,
+        "path": "/home/you",
+        "trail": [
+          {
+            "name": "/",
+            "path": "/"
+          },
+          {
+            "name": "home",
+            "path": "/home"
+          },
+          {
+            "name": "you",
+            "path": "/home/you"
+          }
+        ],
+        "truncated": false
+      },
+      "query": {
+        "hidden": false,
+        "path": "/home/you",
+        "type": "folders"
+      }
+    },
+    {
+      "answer": {
+        "failures": [],
+        "folders": [
+          {
+            "is": "project",
+            "linked": false,
+            "name": "old",
+            "path": "/home/you/Projects/archive/old",
+            "symlink": false
+          }
+        ],
+        "hidden": 0,
+        "home": "/home/you",
+        "is": "folder",
+        "linked": false,
+        "path": "/home/you/Projects/archive",
+        "trail": [
+          {
+            "name": "/",
+            "path": "/"
+          },
+          {
+            "name": "home",
+            "path": "/home"
+          },
+          {
+            "name": "you",
+            "path": "/home/you"
+          },
+          {
+            "name": "Projects",
+            "path": "/home/you/Projects"
+          },
+          {
+            "name": "archive",
+            "path": "/home/you/Projects/archive"
+          }
+        ],
+        "truncated": false
+      },
+      "query": {
+        "hidden": false,
+        "path": "/home/you/Projects/archive",
+        "type": "folders"
+      }
+    },
+    {
+      "answer": {
+        "failures": [],
+        "folders": [],
+        "hidden": 1,
+        "home": "/home/you",
+        "is": "repository",
+        "linked": false,
+        "path": "/home/you/Projects/notes",
+        "trail": [
+          {
+            "name": "/",
+            "path": "/"
+          },
+          {
+            "name": "home",
+            "path": "/home"
+          },
+          {
+            "name": "you",
+            "path": "/home/you"
+          },
+          {
+            "name": "Projects",
+            "path": "/home/you/Projects"
+          },
+          {
+            "name": "notes",
+            "path": "/home/you/Projects/notes"
+          }
+        ],
+        "truncated": false
+      },
+      "query": {
+        "hidden": false,
+        "path": "/home/you/Projects/notes",
+        "type": "folders"
+      }
+    },
+    {
+      "answer": {
+        "failures": [],
+        "folders": [
+          {
+            "is": "folder",
+            "linked": false,
+            "name": ".git",
+            "path": "/home/you/Projects/notes/.git",
+            "symlink": false
+          }
+        ],
+        "hidden": 1,
+        "home": "/home/you",
+        "is": "repository",
+        "linked": false,
+        "path": "/home/you/Projects/notes",
+        "trail": [
+          {
+            "name": "/",
+            "path": "/"
+          },
+          {
+            "name": "home",
+            "path": "/home"
+          },
+          {
+            "name": "you",
+            "path": "/home/you"
+          },
+          {
+            "name": "Projects",
+            "path": "/home/you/Projects"
+          },
+          {
+            "name": "notes",
+            "path": "/home/you/Projects/notes"
+          }
+        ],
+        "truncated": false
+      },
+      "query": {
+        "hidden": true,
+        "path": "/home/you/Projects/notes",
+        "type": "folders"
+      }
+    }
+  ]
+}

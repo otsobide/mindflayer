@@ -1052,6 +1052,177 @@ fn a_scan_says_what_it_could_not_read_as_flayer_scan_warns_of_it() {
     assert_eq!(answer["warnings"][0]["code"], "scan_folder_unlisted");
 }
 
+/// What the panel's explorer is answered with: the folders directly inside
+/// the one it names, as core lists them, each with what it is and whether
+/// the workspace links it; none named is the workspace's root.
+#[test]
+fn a_folder_is_answered_with_what_is_directly_inside_it_as_core_lists_it() {
+    let dir = workspace_with_candidates();
+    fs::create_dir(dir.path().join(".cache")).unwrap();
+    let backend = backend(dir.path());
+
+    let root = backend
+        .query(query(
+            json!({"type": "folders", "path": null, "hidden": false}),
+        ))
+        .unwrap();
+    let named = backend
+        .query(query(
+            json!({"type": "folders", "path": dir.path().to_str().unwrap(), "hidden": false}),
+        ))
+        .unwrap();
+
+    assert_eq!(root, named);
+    assert_eq!(root["path"], json!(dir.path().to_str().unwrap()));
+    assert_eq!(root["is"], "workspace");
+    let said: Vec<(&str, &str, bool)> = root["folders"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|folder| {
+            (
+                folder["name"].as_str().unwrap(),
+                folder["is"].as_str().unwrap(),
+                folder["linked"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            ("alpha", "project", true),
+            ("beta", "project", true),
+            ("gamma", "project", false),
+            ("repo", "repository", false),
+        ]
+    );
+    assert_eq!(root["hidden"], 1);
+    assert_eq!(root["failures"], json!([]));
+    // Launched with no home, so no way back to one is named.
+    assert_eq!(root["home"], Value::Null);
+
+    let hidden = backend
+        .query(query(
+            json!({"type": "folders", "path": null, "hidden": true}),
+        ))
+        .unwrap();
+    assert_eq!(hidden["folders"][0]["name"], ".cache");
+    let inside = backend
+        .query(query(
+            json!({"type": "folders", "path": under(dir.path(), &["repo"]), "hidden": true}),
+        ))
+        .unwrap();
+    assert_eq!(inside["is"], "repository");
+    assert_eq!(inside["folders"][0]["name"], ".git");
+    assert_eq!(
+        inside["trail"].as_array().unwrap().last().unwrap(),
+        &json!({"name": "repo", "path": under(dir.path(), &["repo"])})
+    );
+}
+
+/// The home the panel was launched with is named beside every listing, so
+/// the explorer can go back to it, and is listed as any folder is.
+#[test]
+fn a_folder_listing_names_the_launchs_home() {
+    let dir = workspace_with_candidates();
+    let home = dir.path().join("home");
+    fs::create_dir_all(home.join("Projects")).unwrap();
+    let lookup = Lookup {
+        home: Some(home.clone()),
+        ..Lookup::default()
+    };
+    let backend = PanelBackend::launch(dir.path(), &lookup).unwrap();
+
+    let root = backend
+        .query(query(
+            json!({"type": "folders", "path": null, "hidden": false}),
+        ))
+        .unwrap();
+    let at_home = backend
+        .query(query(
+            json!({"type": "folders", "path": root["home"], "hidden": false}),
+        ))
+        .unwrap();
+
+    assert_eq!(root["home"], json!(home.to_str().unwrap()));
+    assert_eq!(at_home["folders"][0]["name"], "Projects");
+    assert!(
+        !home.join(FLAYER_DIR).exists(),
+        "a listing made the default"
+    );
+}
+
+/// Only a folder the browser may name, as a folder to link is: one the
+/// policy refuses is refused with its code before anything of it is read,
+/// as given and through a link into a `.mindflayer`, one not there is
+/// refused with core's, and a listing leaves the disk as it found it.
+#[test]
+fn a_folder_is_listed_only_where_the_policy_allows_and_nothing_is_written() {
+    let dir = workspace_with_candidates();
+    let backend = backend(dir.path());
+    let before = files(dir.path());
+    let climbing = under(dir.path(), &["repo", ".."]);
+    let flayer_dir = under(dir.path(), &[FLAYER_DIR]);
+    // Inside a `.mindflayer` and not there: refused for where it is, which
+    // nothing had to be read to tell.
+    let unmade = under(dir.path(), &[FLAYER_DIR, "nowhere"]);
+    let missing = under(dir.path(), &["wrok"]);
+    // A link into the workspace's own `.mindflayer`, which only a system
+    // with links can make.
+    #[cfg(unix)]
+    let through = {
+        let link = dir.path().join("hub");
+        std::os::unix::fs::symlink(dir.path().join(FLAYER_DIR), &link).unwrap();
+        Some(link.to_str().unwrap().to_owned())
+    };
+    #[cfg(not(unix))]
+    let through: Option<String> = None;
+    let mut cases = vec![
+        ("repo", "path_relative"),
+        ("file:///etc", "path_url"),
+        ("--home=/etc", "path_relative"),
+        (climbing.as_str(), "path_unnormalized"),
+        (flayer_dir.as_str(), "path_in_mindflayer"),
+        (unmade.as_str(), "path_in_mindflayer"),
+        (missing.as_str(), "browse_missing"),
+    ];
+    if let Some(through) = &through {
+        cases.push((through.as_str(), "path_in_mindflayer"));
+    }
+
+    for (path, code) in cases {
+        let refusal = backend
+            .query(query(
+                json!({"type": "folders", "path": path, "hidden": true}),
+            ))
+            .unwrap_err();
+        assert_eq!(refusal.code, code, "{path}");
+    }
+
+    let listed = backend
+        .query(query(
+            json!({"type": "folders", "path": null, "hidden": true}),
+        ))
+        .unwrap();
+    let names: Vec<&str> = listed["folders"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|folder| folder["name"].as_str().unwrap())
+        .collect();
+    assert!(!names.contains(&FLAYER_DIR), "{names:?}");
+    if through.is_some() {
+        assert!(!names.contains(&"hub"), "{names:?}");
+        fs::remove_file(dir.path().join("hub")).unwrap();
+    }
+    assert_eq!(files(dir.path()), before);
+    // A field a listing does not have is refused, as a task's is.
+    assert!(serde_json::from_value::<Query>(
+        json!({"type": "folders", "path": null, "hidden": false, "depth": 1})
+    )
+    .is_err());
+}
+
 /// A project found moved offers no link beside the entry it left stale,
 /// but names that entry as the marker spells it, which a relink takes.
 #[test]

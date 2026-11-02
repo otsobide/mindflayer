@@ -36,6 +36,10 @@
 //!   path policy as a folder to link is, and is only read: it is asked for
 //!   by hand ([`Query::Scan`]), never with the snapshot, which a live update
 //!   reads again on every change.
+//! - **A folder is listed only where the browser may name one**, held to
+//!   the path policy as a folder to link is, and is only read: what is
+//!   directly inside it, for the panel's explorer to pick one from
+//!   ([`Query::Folders`]), which runs nothing.
 //! - **A plan names only linked projects**, each box's by its entry, held
 //!   to the path policy as a task's projects are, and is only read: what
 //!   the boxes ticked amount to is core's to say ([`Query::Plan`]), and
@@ -62,6 +66,7 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
+use mindflayer_core::browse::Folders;
 use mindflayer_core::code::Said;
 use mindflayer_core::contents::{Contents, Files};
 use mindflayer_core::draft;
@@ -93,7 +98,8 @@ use crate::{CliError, Lookup, Warning};
 /// "workspace"}, "reference": "skill:deploy"}`, `{"type": "contents",
 /// "holder": {"type": "workspace"}, "reference": "skill:deploy", "file":
 /// "SKILL.md"}`, `{"type": "scan", "roots": ["/home/you/Work"], "depth":
-/// null}`, `{"type": "plan", "selection": [{"project": "alpha",
+/// null}`, `{"type": "folders", "path": "/home/you/Work", "hidden":
+/// false}`, `{"type": "plan", "selection": [{"project": "alpha",
 /// "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`,
 /// `{"type": "updates"}`, `{"type": "validate", "holder": {"type":
 /// "workspace"}, "draft": {"type": "edit", "reference": "skill:deploy",
@@ -134,6 +140,18 @@ pub enum Query {
         roots: Vec<String>,
         depth: Option<usize>,
     },
+    /// The folders directly inside `path`, for the panel's explorer to pick
+    /// one from ([`Folders`]): an absolute, normalized path outside every
+    /// `.mindflayer` ([`policy::path`]), as a folder to link or a root to
+    /// scan is, held to it before anything is read; none is the workspace's
+    /// root. Hidden folders only when `hidden` asks for them. Answered with
+    /// the launch's home beside them, for a way back to it.
+    ///
+    /// A read of one folder, asked for each time the explorer opens one,
+    /// and no task: choosing a folder only fills a field, and the line it
+    /// goes to is previewed and run as a typed one is. No command line has
+    /// one, since a terminal has `ls` and completion.
+    Folders { path: Option<String>, hidden: bool },
     /// What `selection`, boxes of projects and offers ticked or not,
     /// amounts to ([`Planned`]): core's plan of it ([`install::plan`]), the
     /// one place the rules of a batch live, each change as the task that
@@ -655,6 +673,18 @@ impl Backend for PanelBackend {
                 };
                 let scanned = Scanned::of(&workspace, &scan::scan(&workspace, &request));
                 Ok(serde_json::to_value(scanned).expect("a scan serializes"))
+            }
+            Query::Folders { path, hidden } => {
+                let folder = match path {
+                    Some(path) => {
+                        policy::path(&path).map_err(|error| refused(error.code(), error))?
+                    }
+                    None => workspace.root().to_path_buf(),
+                };
+                let folders =
+                    Folders::read(&workspace, &folder, hidden, self.lookup.home.as_deref())
+                        .map_err(|error| refused(error.code(), error))?;
+                Ok(serde_json::to_value(folders).expect("a listing serializes"))
             }
             Query::Plan { selection } => {
                 Admission {
