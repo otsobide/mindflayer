@@ -1185,7 +1185,9 @@ These are easy to break from a single file without noticing.
   of the library's own is answered with (`library.json`, every files and
   contents query an artifact's page asks), what scanning the folder of the
   workspace `candidates.json` is a snapshot of is answered with
-  (`scan.json`), what previewing and running
+  (`scan.json`), what the explorer is answered with as it walks that
+  workspace's folders, beside a relative path refused with its code
+  (`folders.json`), what previewing and running
   a few tasks in turn is (`commands.json`), and, of a workspace built for
   the matrix (`assigning.json`), what planning a few selections of its
   boxes is answered with (`plans.json`) and what applying the first is

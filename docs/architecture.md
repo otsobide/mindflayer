@@ -5919,7 +5919,10 @@ dry run and run, which the runner's, the transcript's and the pages' tests
 answer their tasks from (`commanding`), and `scan.json` what scanning the
 folder of the workspace `candidates.json` is a snapshot of is answered
 with, which the page of what could be linked is drawn from, beside that
-snapshot, so the two describe one workspace. `assigning.json` is a
+snapshot, so the two describe one workspace. `folders.json` holds what
+the explorer is answered with as it walks that workspace's folders,
+beside a relative path refused with its code ([choosing a
+folder](#choosing-a-folder)). `assigning.json` is a
 workspace built for the matrix, one name offered from the library and a
 loaded workspace, the shelf, a copy current, outdated, edited and
 somebody's, a project nothing can go into and an entry that opens none;
