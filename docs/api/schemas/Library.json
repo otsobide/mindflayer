@@ -1,0 +1,624 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Library",
+  "description": "The workspace's own artifacts, held as a project holds its own.",
+  "type": "object",
+  "properties": {
+    "artifacts": {
+      "description": "Each of its own, by kind and then name: no project's, so none\nstands in a state, and nothing is installed into them.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Held"
+      }
+    },
+    "directories": {
+      "description": "Where it keeps each kind, as a route from the workspace's root.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Directory"
+      }
+    },
+    "failures": {
+      "description": "What could not be read in it and is no artifact's: a folder that\ncannot be listed, its templates.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Said"
+      }
+    },
+    "holders": {
+      "description": "Each project its registry links that holds a copy of one of its own,\nin the order of `artifacts`, then of the registry.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LibraryHolder"
+      }
+    },
+    "origin": {
+      "description": "What `--from` takes for each of its own, and what an install of one\nrecords as its origin: so a front end names it in a command line by\ncore's word rather than by one of its own that core could spell\ndifferently.",
+      "type": "string"
+    },
+    "templates": {
+      "description": "What `flayer add --template` can start from.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Template"
+      }
+    }
+  },
+  "required": [
+    "origin",
+    "directories",
+    "artifacts",
+    "holders",
+    "templates",
+    "failures"
+  ],
+  "$defs": {
+    "Agent": {
+      "description": "A coding agent, by the name `--agents` and a project's settings take.",
+      "type": "string",
+      "enum": [
+        "claude",
+        "codex",
+        "opencode"
+      ]
+    },
+    "Directory": {
+      "description": "Where a holder keeps one kind.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "path": {
+          "description": "A route from the holder, `/` separated, or the path itself when no\nroute leads there.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ]
+    },
+    "Held": {
+      "description": "One artifact a holder holds, and how it stands there.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "The agents among its project's that read a copy of it, in report\norder.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "issues": {
+          "description": "Everything `validate` says of it, warnings included, each saying\nwhether it is one.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValidationIssue"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where what was installed came from, as `--from` takes it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "How its name stands in its project, as `status` says; none for the\nlibrary's own, which are no project's. Only a copy that reads has a\nstanding, so beside an [`unread`](Self::unread) one it is that of a\ncopy of the name elsewhere, in an agent's folder, and none when\nthere is no such copy.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/State"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "description": "The one line a listing shows; none for one whose file does not read,\nand for an install nothing of which is found.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targets": {
+          "description": "Where it is held, as routes from its holder, `/` separated, in path\norder: each copy discovery found, the one whose file does not read\namong them, and each place the ledger records putting one, found or\nnot.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unread": {
+          "description": "The copy whose file does not read, when one does not, and why.\nListed all the same, by the name its place gives it, because a file\nthat does not read is the one most in need of opening.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unread"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "summary",
+        "state",
+        "agents",
+        "origin",
+        "targets",
+        "issues",
+        "unread"
+      ]
+    },
+    "Kind": {
+      "description": "A kind of artifact, by the word a command line takes for it.",
+      "type": "string",
+      "enum": [
+        "skill",
+        "rule"
+      ]
+    },
+    "LibraryHolder": {
+      "description": "A project holding a copy of one of the workspace's own: one whose install\nthe ledger tells came from it ([`install::from_the_library`]), the rule\n`flayer remove --everywhere` takes the copies it removes by.\n\nTold here rather than by a front end comparing a copy's\n[`origin`](Held::origin) with [`Library::origin`], which would be a\nrule of its own, and a different one: a record from before origins were\nkept names none, and is a copy of one of the workspace's own all the\nsame while no workspace it loads offers that name.",
+      "type": "object",
+      "properties": {
+        "entry": {
+          "description": "The project, as its registry entry spells it ([`Project::entry`]):\nits artifact of that kind and name is the copy. Each entry that\nspells one directory is a holder of its own, as each is a project\nof the snapshot's.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "The one of the workspace's own it holds a copy of.",
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "entry"
+      ]
+    },
+    "Said": {
+      "description": "An error as a serialized type holds one: its code, for a front end to act\non, and its message, for whoever reads it.\n\nBuilt where the type is serialized, or kept in what a front end reads\n(the workspace's snapshot), in place of the error, since an error\nholds what JSON has no shape for (an `io::Error`, a parser's own), and\nonly these two are meant to leave core. Its fields are public for a\nfront end that reads the snapshot as Rust rather than as JSON, the TUI.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "Written through [`redacted`](crate::url::redacted), as every URL\nis: an error can quote one, a source's among them, and what built\nthe error is no promise that it carries no credential.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "State": {
+      "description": "How an artifact stands in a project, as `status` says it.",
+      "type": "string",
+      "enum": [
+        "current",
+        "outdated",
+        "edited",
+        "missing",
+        "orphaned",
+        "foreign",
+        "authored"
+      ]
+    },
+    "Template": {
+      "description": "A template `mind add` can start from.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "The folder or file it is, or none for one built in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "origin"
+      ]
+    },
+    "Unread": {
+      "description": "A copy of an artifact whose file does not read, and why.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "The reason alone, without the path, which [`path`](Self::path)\nsays: written through [`redacted`](crate::url::redacted), as a\n[`Said`]'s message is.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Where the copy is, as a route from its holder, `/` separated: its\nplace in the folder the holder keeps its kind in, the one place a\nfile that does not read is named by ([`lifecycle::identify`]). Said\non its own, as well as among [`Held::targets`], since a copy that\nreads can sit beside it under the same name, elsewhere.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "code",
+        "message"
+      ]
+    },
+    "ValidationIssue": {
+      "description": "Something that stops an artifact from being usable, or will: its code,\nwhat it is about, whether it is only worth a warning, and its message.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_not_kebab_case"
+            },
+            "message": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "segment",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_segment_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "segment",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_directory_mismatch"
+            },
+            "directory": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "directory",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_not_a_string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_not_a_map"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_not_a_string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "key",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_repeated"
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "key",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "content_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "front_matter_unparsed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "reason",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "paths_not_strings"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_not_a_string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        }
+      ]
+    }
+  }
+}

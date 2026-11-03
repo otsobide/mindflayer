@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Folders",
+  "description": "One folder and the folders directly inside it, as a front end may offer\nthem to be chosen.",
+  "type": "object",
+  "properties": {
+    "failures": {
+      "description": "What it could not read or name, each with its code\n([`BrowseFailure`]): a subfolder whose type will not read, or whose\npath no request could send back, a hidden one only when hidden\nones are asked for.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Said"
+      }
+    },
+    "folders": {
+      "description": "Its subfolders, in the order of their names, hidden ones only when\nasked for, and no more than [`FOLDERS_CAP`].",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Folder"
+      }
+    },
+    "hidden": {
+      "description": "How many of its subfolders are hidden, their names starting with a\n`.`, listed or not: what asking for them would list, the bound\naside.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "home": {
+      "description": "The home the front end was given, normalized, as a folder a request\nmay name, for a way back to it: none when there is none, or when it\nis no such path ([`policy::path`]).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "is": {
+      "description": "What it is itself, so it can be chosen as one of its subfolders can.",
+      "$ref": "#/$defs/FolderIs"
+    },
+    "linked": {
+      "description": "Whether the workspace links it.",
+      "type": "boolean"
+    },
+    "path": {
+      "description": "The folder listed, absolute, as it was asked for.",
+      "type": "string"
+    },
+    "trail": {
+      "description": "Each folder from the root down to it, it last: what a front end\noffers to go up by, each by the path it is asked for by.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Crumb"
+      }
+    },
+    "truncated": {
+      "description": "Whether it holds more subfolders than [`FOLDERS_CAP`], which\n`folders` stops at.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "path",
+    "is",
+    "linked",
+    "trail",
+    "folders",
+    "hidden",
+    "truncated",
+    "failures",
+    "home"
+  ],
+  "$defs": {
+    "Crumb": {
+      "description": "One folder on the way down to the one listed.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Its name, or the root's path for the root, which has none.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path"
+      ]
+    },
+    "Folder": {
+      "description": "One folder directly inside the one listed.",
+      "type": "object",
+      "properties": {
+        "is": {
+          "description": "What it is.",
+          "$ref": "#/$defs/FolderIs"
+        },
+        "linked": {
+          "description": "Whether the workspace links it, by the path an entry leads to, as\n`flayer link` would tell.",
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Where it is, absolute, as a request names it to list it in turn.",
+          "type": "string"
+        },
+        "symlink": {
+          "description": "Whether it is a link to a folder rather than a folder: listed and\nopened as one all the same.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "is",
+        "linked",
+        "symlink"
+      ]
+    },
+    "FolderIs": {
+      "description": "What a folder is, the strongest of what it holds: a mind project, a\nflayer workspace, a git repository, or any other folder.",
+      "type": "string",
+      "enum": [
+        "project",
+        "workspace",
+        "repository",
+        "folder"
+      ]
+    },
+    "Said": {
+      "description": "An error as a serialized type holds one: its code, for a front end to act\non, and its message, for whoever reads it.\n\nBuilt where the type is serialized, or kept in what a front end reads\n(the workspace's snapshot), in place of the error, since an error\nholds what JSON has no shape for (an `io::Error`, a parser's own), and\nonly these two are meant to leave core. Its fields are public for a\nfront end that reads the snapshot as Rust rather than as JSON, the TUI.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "Written through [`redacted`](crate::url::redacted), as every URL\nis: an error can quote one, a source's among them, and what built\nthe error is no promise that it carries no credential.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}

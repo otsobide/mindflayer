@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Shown",
+  "description": "One artifact in full, as `show` shows it: what it is, where it is, what\nits front matter declares that `show` prints, and the body after it.",
+  "type": "object",
+  "properties": {
+    "allowed_tools": {
+      "description": "A skill's `allowed-tools`, when it narrows them.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "body": {
+      "description": "What follows the front matter, as the file has it now.",
+      "type": "string"
+    },
+    "compatibility": {
+      "description": "A skill's `compatibility`, when written as the string it should be.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "description": {
+      "description": "What it says it is for: always for a skill, and for a rule only when\nits front matter says.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "file": {
+      "description": "The file it is read from: a skill's `SKILL.md`, or the rule itself.",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/Kind"
+    },
+    "license": {
+      "description": "A skill's `license`, when it names one.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "metadata": {
+      "description": "Each `metadata` entry of a skill that maps a string to a string, in\nthe order written: the rest are `validate`'s to report. None for a\nrule, which has no `metadata`.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "path": {
+      "description": "The directory a skill is, or the file a rule is: its first copy's,\nthe one `show` reads.",
+      "type": "string"
+    },
+    "paths": {
+      "description": "The files a rule is about, as glob patterns, when it says.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "project": {
+      "description": "The root of what holds it: its project, or the workspace for the\nworkspace's own.",
+      "type": "string"
+    },
+    "summary": {
+      "description": "The one line a listing shows; none when there is nothing to show.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "kind",
+    "name",
+    "path",
+    "project",
+    "file",
+    "summary",
+    "description",
+    "allowed_tools",
+    "license",
+    "compatibility",
+    "metadata",
+    "paths",
+    "body"
+  ],
+  "$defs": {
+    "Kind": {
+      "description": "A kind of artifact, by the word a command line takes for it.",
+      "type": "string",
+      "enum": [
+        "skill",
+        "rule"
+      ]
+    }
+  }
+}

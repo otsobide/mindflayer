@@ -64,7 +64,7 @@ pub trait Visitor {
 }
 
 /// Every type core hands a front end whole, each with every type it names:
-/// what the panel's TypeScript exports ([`crate::typescript::roots`]), the
+/// what the panel's TypeScript exports (`typescript::roots`), the
 /// snapshot, an artifact's files and a file's contents, what an update of
 /// every project would do, the workspaces it may switch to, the folders
 /// inside one, what `list`, `show` and `validate` print, and every code
@@ -156,6 +156,65 @@ impl Visitor for Schemas {
     }
 }
 
+/// Every root a visit names, as one description of the whole API holds
+/// them: a generator for each way, whose definitions every root it visits
+/// shares, as an OpenAPI document's components are shared by its routes.
+///
+/// What finds two types going by one name, which schemars tells apart
+/// without a word, by a number it adds to the second's name: a file of one
+/// root shows that only when both types are in it, and a description of
+/// the whole API holds every type of every crate at once.
+#[derive(Debug)]
+pub struct Together {
+    given: SchemaGenerator,
+    taken: SchemaGenerator,
+}
+
+impl Default for Together {
+    fn default() -> Self {
+        Together {
+            given: SchemaSettings::draft2020_12()
+                .for_serialize()
+                .into_generator(),
+            taken: SchemaSettings::draft2020_12()
+                .for_deserialize()
+                .into_generator(),
+        }
+    }
+}
+
+impl Together {
+    /// Each name schemars made up for a type whose own was taken: one that
+    /// is another type's name with a number after it.
+    pub fn renamed(&self) -> Vec<String> {
+        [&self.given, &self.taken]
+            .into_iter()
+            .flat_map(|generator| {
+                let defined = generator.definitions();
+                defined
+                    .keys()
+                    .filter(|name| {
+                        let stem = name.trim_end_matches(|c: char| c.is_ascii_digit());
+                        stem.len() < name.len() && defined.contains_key(stem)
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+}
+
+/// Each root a definition of its own, beside every type it names.
+impl Visitor for Together {
+    fn given<T: JsonSchema + ?Sized>(&mut self) {
+        self.given.subschema_for::<T>();
+    }
+
+    fn taken<T: JsonSchema + ?Sized>(&mut self) {
+        self.taken.subschema_for::<T>();
+    }
+}
+
 /// What a type's documentation says, as schemars writes a derived type's
 /// `description`: each line without the space after its `///`, the lines
 /// joined as written. For a type whose schema is written by hand, so its
@@ -211,3 +270,7 @@ impl JsonSchema for CoreCode {
         }))
     }
 }
+
+#[cfg(test)]
+#[path = "schema_test.rs"]
+mod tests;
