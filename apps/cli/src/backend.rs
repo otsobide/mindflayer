@@ -114,6 +114,7 @@ use crate::{CliError, Lookup, Warning};
 /// have is refused, as a task's is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Query {
     /// Everything the workspace holds ([`Snapshot`]).
@@ -225,6 +226,7 @@ pub enum Query {
 /// it ([`Query::Validate`]): tagged as a query is, `{"type": "add", ...}`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Draft {
     /// What `add` would write, by the fields an `add` task carries: a
@@ -252,6 +254,7 @@ pub enum Draft {
 /// the same, rather than by the panel from the scan's fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Scanned {
     /// Where it looked, each once, in the order given: the workspace's root
     /// when it was given none.
@@ -277,6 +280,7 @@ pub struct Scanned {
 /// One directory a scan found, and what the panel offers for it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Suggestion {
     /// What `flayer scan --json` prints of it.
     pub found: Found,
@@ -353,6 +357,7 @@ impl Scanned {
 /// marks, each line runs whatever came of the ones before.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Planned {
     /// Each `install` and `uninstall` that carries the selection out, in
     /// the order to run them.
@@ -378,6 +383,7 @@ impl From<install::Plan> for Planned {
 /// What running a task's lines produced.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Outcome {
     /// Whether every line ran and found everything in order.
     pub ok: bool,
@@ -390,6 +396,7 @@ pub struct Outcome {
 /// code of everything that went wrong beside its words.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Run {
     /// The line, as it would be typed into a shell ([`shell`]).
     pub command: String,
@@ -412,6 +419,7 @@ pub struct Run {
 /// CLI's words rather than its own, and draws by the word alone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Confirm {
     /// Which of the preview's lines, by its place among them, from 0.
     pub line: usize,
@@ -430,6 +438,7 @@ pub struct Confirm {
 /// refused, as a task's is.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct Switch {
     pub path: String,

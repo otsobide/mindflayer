@@ -1,0 +1,389 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Query",
+  "description": "A read the panel asks for.\n\nTagged as a task is, by its name in snake_case beside its fields:\n`{\"type\": \"snapshot\"}`, `{\"type\": \"projects\"}`, `{\"type\": \"library\"}`,\n`{\"type\": \"project\", \"entry\": \"alpha\"}`, `{\"type\": \"files\", \"holder\": {\"type\":\n\"workspace\"}, \"reference\": \"skill:deploy\"}`, `{\"type\": \"contents\",\n\"holder\": {\"type\": \"workspace\"}, \"reference\": \"skill:deploy\", \"file\":\n\"SKILL.md\"}`, `{\"type\": \"scan\", \"roots\": [\"/home/you/Work\"], \"depth\":\nnull}`, `{\"type\": \"folders\", \"path\": \"/home/you/Work\", \"hidden\":\nfalse}`, `{\"type\": \"plan\", \"selection\": [{\"project\": \"alpha\",\n\"reference\": \"skill:deploy\", \"origin\": \"workspace\", \"wanted\": true}]}`,\n`{\"type\": \"updates\"}`, `{\"type\": \"validate\", \"holder\": {\"type\":\n\"workspace\"}, \"draft\": {\"type\": \"edit\", \"reference\": \"skill:deploy\",\n\"text\": \"...\"}}`, `{\"type\": \"workspaces\"}`. A field a query does not\nhave is refused, as a task's is.",
+  "oneOf": [
+    {
+      "description": "Everything the workspace holds ([`Snapshot`]).\n\nA variant with no fields rather than a unit one, which serde would\nread from an object holding any field at all: with braces there is\nsomething for `deny_unknown_fields` to hold the object to.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "snapshot"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Every entry of the workspace's registry and the project it opens,\nthe snapshot's own list of them ([`Snapshot::projects`]).\n\nCut from the snapshot rather than read another way, for a script\nthat wants only them: each is what the snapshot says of it, its\nhealth and its tally included, and nothing a second reading could\nsay otherwise.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "projects"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "The workspace's own artifacts, the snapshot's own part of them\n([`Snapshot::library`]), cut from it as the projects are.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "library"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "One entry of the registry and the project it opens, by the entry as\nthe snapshot lists it ([`Snapshot::project`]): the snapshot's own row\nof it, and an entry no registry holds refused as an unlink of it is.",
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "project"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "entry"
+      ]
+    },
+    {
+      "description": "Every file and folder of one artifact ([`Files`]), named as for\n[`Contents`](Self::Contents), whose `file` each route it lists is.",
+      "type": "object",
+      "properties": {
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "files"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "reference"
+      ]
+    },
+    {
+      "description": "One file of one artifact, as text ([`Contents`]): `reference` names\nthe artifact in `holder`, the workspace's own or a project by its\nentry, and `file` is its route from the artifact's folder, or a\nrule's file name.",
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "contents"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "reference",
+        "file"
+      ]
+    },
+    {
+      "description": "What could be linked under `roots`, `depth` levels down, as `flayer\nscan --suggest` finds it ([`Scanned`]): each root an absolute,\nnormalized path outside every `.mindflayer` ([`policy::path`]), as a\nfolder to link is, which is only read; none is the workspace's root,\nand no depth core's own (`scan::DEFAULT_DEPTH`), as for the command.\n\nA query of its own, asked for only when somebody asks, rather than a\npart of the snapshot: a scan walks the disk far past what a snapshot\nreads, and a live update reads the snapshot again on every change.",
+      "type": "object",
+      "properties": {
+        "depth": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "scan"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "roots"
+      ]
+    },
+    {
+      "description": "The folders directly inside `path`, for the panel's explorer to pick\none from ([`Folders`]): an absolute, normalized path outside every\n`.mindflayer` ([`policy::path`]), as a folder to link or a root to\nscan is, held to it before anything is read; none is the workspace's\nroot. Hidden folders only when `hidden` asks for them. Answered with\nthe launch's home beside them, for a way back to it.\n\nA read of one folder, asked for each time the explorer opens one,\nand no task: choosing a folder only fills a field, and the line it\ngoes to is previewed and run as a typed one is. No command line has\none, since a terminal has `ls` and completion.",
+      "type": "object",
+      "properties": {
+        "hidden": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "folders"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "hidden"
+      ]
+    },
+    {
+      "description": "What `selection`, boxes of projects and offers ticked or not,\namounts to ([`Planned`]): core's plan of it ([`install::plan`]), the\none place the rules of a batch live, each change as the task that\nruns it, beside what clashes and what is locked.\n\nA read, as marking a box on the install screen is: nothing runs\nuntil the panel sends the tasks back, to be previewed and run as any\ntask is.\nEach project a box names is an entry the workspace links, held to\nthe path policy as a task's projects are\n([`Admission::selection`]).",
+      "type": "object",
+      "properties": {
+        "selection": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Cell"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "plan"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "selection"
+      ]
+    },
+    {
+      "description": "What updating every project the workspace links would do ([`Updates`]):\neach installation an update says something of, how it stands, what\nan update does with it, and why it leaves one it leaves, every copy\nedited since left alone, as `flayer update --all` says without\n`--yes`.\n\nA query of its own, asked for by the page of updates, rather than a\npart of the snapshot: telling what an update does reads where each\ninstallation came from again, past what the snapshot reads, and a\nlive update reads the snapshot again on every change. Nothing in it\nis sent by the browser, so nothing is held to the path policy.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "updates"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "What core says of `draft`, an artifact a command is about to write\nin `holder` ([`draft::Judged`]): why the command would write nothing, in its\nwords, and what `validate` would say of it once written, in its own.\n\nHow the panel's forms and editor judge what is typed as it is typed,\nby core's rules and never a copy of them in TypeScript: only a read,\nas a plan is, which writes nothing, and a draft judged fit is still\nheld to the same rules by the line that writes it. The holder is held\nto the path policy as a read of an artifact's is.",
+      "type": "object",
+      "properties": {
+        "draft": {
+          "$ref": "#/$defs/Draft"
+        },
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "type": {
+          "type": "string",
+          "const": "validate"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "draft"
+      ]
+    },
+    {
+      "description": "Every workspace the panel may switch to ([`known::switchable`]):\nthose this machine knows and the one it was launched on, each with\nwhether it is the one in use, the launch's, the rule it is chosen by\nonce switched to, and whether a switch to it is offered; what\n[`Backend::switch`] is held to.\n\nA query of its own rather than a part of the snapshot: which one the\npanel was launched on is the launch's, and a snapshot says only what\na workspace holds, the same whichever front end reads it. Nothing in\nit is sent by the browser.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "workspaces"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    }
+  ],
+  "$defs": {
+    "Cell": {
+      "description": "One box of a selection: whether `project` should hold what `reference`\nnames, as `origin` offers it.\n\n`{\"project\": \"alpha\", \"reference\": \"skill:deploy\", \"origin\": \"workspace\",\n\"wanted\": true}` in JSON, which the panel sends: the project by its entry\nas the workspace's marker spells it, as a snapshot lists it, the artifact\nas a command line names it, and the origin as `--from` takes it, which\nevery listing prints. A field it does not name is refused, as a task's\nis.",
+      "type": "object",
+      "properties": {
+        "origin": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "wanted": {
+          "description": "Whether the project should hold it from there: ticked, or not.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "reference",
+        "origin",
+        "wanted"
+      ]
+    },
+    "Draft": {
+      "description": "An artifact a command is about to write, as the panel asks core to judge\nit ([`Query::Validate`]): tagged as a query is, `{\"type\": \"add\", ...}`.",
+      "oneOf": [
+        {
+          "description": "What `add` would write, by the fields an `add` task carries: a\ntemplate by its name, as `--template` takes it.",
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/Kind"
+            },
+            "name": {
+              "type": "string"
+            },
+            "template": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "add"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "kind",
+            "name",
+            "description"
+          ]
+        },
+        {
+          "description": "What `edit --contents` would write into the artifact `reference`\nnames, `kind:name`, given `text` whole: its `SKILL.md`, or a rule's\nfile.",
+          "type": "object",
+          "properties": {
+            "reference": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "edit"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "reference",
+            "text"
+          ]
+        }
+      ]
+    },
+    "Holder": {
+      "description": "Which level a task runs at: what holds the artifacts it is about.\n\n`{\"type\": \"project\", \"entry\": \"alpha\"}` in JSON, or `{\"type\":\n\"workspace\"}`: the shape a task's own variants have, which a variant\nholding one string cannot take inside the object the tag is in.",
+      "oneOf": [
+        {
+          "description": "The workspace, for its own artifacts: `flayer <cmd>`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "workspace"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "A project, by its entry: `mind -C <entry> <cmd>`, or `mind <cmd>` for\nthe one at the root the commands run from.",
+          "type": "object",
+          "properties": {
+            "entry": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "project"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "entry"
+          ]
+        },
+        {
+          "description": "A project whose own workspace is not the one on screen, by its entry:\n`mind -W . -C <entry> <cmd>`, which names the one on screen, so a\nchange drops that workspace's record and an add takes its templates.\n\nStill the project's command rather than `flayer <cmd> -p <entry>`,\nwhich would consult the same workspace: a project's row teaches the\nproject's command, at every row alike, and `-W` only where leaving\nit out would consult another.",
+          "type": "object",
+          "properties": {
+            "entry": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "elsewhere"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "entry"
+          ]
+        }
+      ]
+    },
+    "Kind": {
+      "description": "A kind of artifact, by the word a command line takes for it.",
+      "type": "string",
+      "enum": [
+        "skill",
+        "rule"
+      ]
+    }
+  }
+}

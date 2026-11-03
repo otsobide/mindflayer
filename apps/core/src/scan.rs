@@ -93,6 +93,7 @@ pub enum Order {
 /// with, so it says its TypeScript too.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Found {
     /// Where it is.
     #[serde(serialize_with = "paths::lossy")]
@@ -175,8 +176,8 @@ impl Serialize for Reason {
 // Under a name of its own: `Reason` in TypeScript is already the rule that
 // chose a workspace (`resolve::Reason`), and the two are written into one
 // folder, a file to a name.
-#[cfg(feature = "ts")]
-crate::typescript::words! {
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
     /// Why a directory a scan found is worth linking, the strongest of what
     /// it holds, best first: a mind project its settings name by an id, one
     /// with none, a git repository an agent reads something in, and any

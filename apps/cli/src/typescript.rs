@@ -10,11 +10,13 @@
 
 use std::path::PathBuf;
 
-use mindflayer_core::typescript::{docs, lines, CoreCode};
+use mindflayer_core::code::CoreCode;
+use mindflayer_core::typescript::{docs, lines};
 use mindflayer_server::Condition;
 use ts_rs::{Config, TypeVisitor, TS};
 
 use crate::backend::{Confirm, Outcome, Planned, Query, Scanned, Switch};
+use crate::error::Code;
 use crate::render::Envelope;
 use crate::task::Task;
 use crate::CODES;
@@ -46,8 +48,6 @@ pub fn roots(visitor: &mut impl TypeVisitor) {
 /// Not the type of a warning's `code`, which stays a `string`, as a
 /// `Said`'s does: a union is a promise a test of the codes themselves
 /// keeps, and no test holds every line a command says to a code listed.
-pub struct Code;
-
 impl TS for Code {
     type WithoutGenerics = Self;
     type OptionInnerType = Self;

@@ -5,10 +5,19 @@ use std::sync::{Arc, Mutex, PoisonError};
 use serde::Serialize;
 
 /// What one write did: the lines it was, and what running them produced.
-#[derive(Clone, Serialize)]
-pub(crate) struct Entry {
-    pub(crate) lines: Vec<String>,
-    pub(crate) outcome: serde_json::Value,
+///
+/// What a run is answered with, and each entry of the transcript: named as
+/// its route's answer is ([`Answer::Ran`](crate::Answer::Ran)), rather than
+/// as an entry, which a description of the API would put beside the
+/// ledger's.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Ran {
+    /// The command lines, each as somebody would type it.
+    pub lines: Vec<String>,
+    /// What running them produced: the backend's
+    /// [`Outcome`](crate::Backend::Outcome), as its JSON, carried unread.
+    pub outcome: serde_json::Value,
 }
 
 /// Every task the session ran, in the order it ran them: what the TUI prints
@@ -19,20 +28,20 @@ pub(crate) struct Entry {
 /// replay. And only in memory, for as long as the server runs, as the TUI's
 /// lasts as long as its screen.
 #[derive(Clone, Default)]
-pub(crate) struct Transcript(Arc<Mutex<Vec<Entry>>>);
+pub(crate) struct Transcript(Arc<Mutex<Vec<Ran>>>);
 
 impl Transcript {
     /// Add what a run did. Called on the writer thread, after the run and
     /// before anyone is told it finished, so the order here is the order the
     /// runs happened in and a reply never gets ahead of the transcript.
-    pub(crate) fn record(&self, entry: Entry) {
+    pub(crate) fn record(&self, ran: Ran) {
         self.0
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .push(entry);
+            .push(ran);
     }
 
-    pub(crate) fn entries(&self) -> Vec<Entry> {
+    pub(crate) fn entries(&self) -> Vec<Ran> {
         self.0
             .lock()
             .unwrap_or_else(PoisonError::into_inner)

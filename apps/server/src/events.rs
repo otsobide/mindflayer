@@ -26,6 +26,7 @@ pub const CAPACITY: usize = 64;
 /// Tagged by its name in snake_case beside its fields, as a task and a
 /// query are: `{"type": "changed", "scopes": [...]}`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
     /// Something a backend watches changed on disk, so what the panel shows

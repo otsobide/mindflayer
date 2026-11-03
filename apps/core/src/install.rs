@@ -154,8 +154,8 @@ impl Serialize for Place {
     }
 }
 
-#[cfg(feature = "ts")]
-crate::typescript::words! {
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
     /// Which of the three places offers something to install.
     Place by slug { Workspace, Loaded, Shelf }
 }

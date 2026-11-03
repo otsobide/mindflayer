@@ -1,0 +1,1626 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Snapshot",
+  "description": "Everything a workspace holds, as every front end shows it.",
+  "type": "object",
+  "properties": {
+    "agents": {
+      "description": "Every agent this build knows, in report order, for the same reason.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Agent"
+      }
+    },
+    "box_states": {
+      "description": "Every state a box of an offer ([`Snapshot::boxes`]) can stand in, in\nreport order ([`State::of_boxes`]): `states` but `authored`, which no\noffer is. What a legend of the boxes lists, so a front end leaves\nout no state by its name.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/State"
+      }
+    },
+    "boxes": {
+      "description": "How each entry in the registry stands with every offer, in the\norder `projects` lists them: what each of its boxes shows.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Boxes"
+      }
+    },
+    "format": {
+      "description": "[`FORMAT`].",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "healths": {
+      "description": "Every health a project can be in, in report order: what a front end\nsorts and filters its projects by, so it orders none of its own.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Health"
+      }
+    },
+    "history": {
+      "description": "The latest actions, newest first, at most [`HISTORY`].",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Entry"
+      }
+    },
+    "kinds": {
+      "description": "Every kind this build knows, in report order: what a front end lays\nits columns out by, so a kind added to core reaches it without a\nchange of its own.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Kind"
+      }
+    },
+    "known": {
+      "description": "Every workspace this machine knows ([`crate::known`]), this one\namong them, each with whether this one loads it, and could.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/KnownHere"
+      }
+    },
+    "library": {
+      "description": "The workspace's own artifacts.",
+      "$ref": "#/$defs/Library"
+    },
+    "loaded": {
+      "description": "Every workspace it loads, in the order its marker lists them.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LoadedWorkspace"
+      }
+    },
+    "offers": {
+      "description": "Everything there is to install, from wherever it is offered: what\na front end that assigns lays its offers out by.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Offered"
+      }
+    },
+    "projects": {
+      "description": "Every entry in its registry, in the order its marker lists them, a\nsecond spelling of one directory included: each is what `unlink` is\ngiven.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Project"
+      }
+    },
+    "shelf": {
+      "description": "Everything gathered onto its shelf, by kind, then name, then source.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Shelved"
+      }
+    },
+    "sources": {
+      "description": "Every source the shelf is filled from, by URL.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ShelfSource"
+      }
+    },
+    "states": {
+      "description": "Every state an artifact can stand in, in report order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/State"
+      }
+    },
+    "summary": {
+      "description": "What it holds, counted: what an overview shows of it.",
+      "$ref": "#/$defs/Summary"
+    },
+    "warnings": {
+      "description": "What could not be read and belongs to no project or library: two\nprojects holding one id, what a loaded workspace cannot offer, a\nledger whose shelf or history would not read.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Said"
+      }
+    },
+    "workspace": {
+      "description": "The workspace it is of, and why that one.",
+      "$ref": "#/$defs/Workspace"
+    }
+  },
+  "required": [
+    "format",
+    "workspace",
+    "kinds",
+    "agents",
+    "states",
+    "box_states",
+    "healths",
+    "summary",
+    "library",
+    "projects",
+    "loaded",
+    "shelf",
+    "sources",
+    "offers",
+    "boxes",
+    "known",
+    "history",
+    "warnings"
+  ],
+  "$defs": {
+    "Agent": {
+      "description": "A coding agent, by the name `--agents` and a project's settings take.",
+      "type": "string",
+      "enum": [
+        "claude",
+        "codex",
+        "opencode"
+      ]
+    },
+    "Boxes": {
+      "description": "How one entry in the registry stands with every offer ([`Offered`]):\nwhat each of its boxes shows, told as the install screen tells it, by\n[`install::survey`] and [`install::holding`], so the panel ticks the box\nthe screen ticks.\n\nA box neither listed in `held` nor of a kind in `closed` is empty: the\nproject holds nothing of its name, and records no installation of it.\nOnly the boxes that are not are listed, a project holding a few of the\nhundreds offered.",
+      "type": "object",
+      "properties": {
+        "closed": {
+          "description": "Each kind none of its boxes can be asked about, and why, by the code\na plan locks one by: every kind of an entry that opens no project,\nand each a project has nowhere to put ([`install::receives`]), or\ncould not be surveyed for.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Closed"
+          }
+        },
+        "entry": {
+          "description": "The entry, as [`Project::entry`] spells it.",
+          "type": "string"
+        },
+        "held": {
+          "description": "Each box of a name it holds something of or records, kind by kind,\nin the order of [`Snapshot::offers`].",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeldBox"
+          }
+        }
+      },
+      "required": [
+        "entry",
+        "closed",
+        "held"
+      ]
+    },
+    "Closed": {
+      "description": "A kind none of a project's boxes of can be asked about, and why.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "why": {
+          "$ref": "#/$defs/Said"
+        }
+      },
+      "required": [
+        "kind",
+        "why"
+      ]
+    },
+    "Directory": {
+      "description": "Where a holder keeps one kind.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "path": {
+          "description": "A route from the holder, `/` separated, or the path itself when no\nroute leads there.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ]
+    },
+    "Entry": {
+      "description": "One line of the action log.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name, and the two that can quote a URL only through [`redacted`],\nwhere they are written rather than trusted to [`Ledger::history`], which\nhands back none with a credential in it: a row an older build wrote\nbefore the scrub still holds one until a command that writes opens the\nledger.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string"
+        },
+        "at": {
+          "description": "When it happened, in seconds since the Unix epoch.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "detail": {
+          "description": "What it said, successful or not, with every URL in it [`redacted`].",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outcome": {
+          "type": "string"
+        },
+        "target": {
+          "description": "What the action was about: a URL, a name. A URL is [`redacted`].",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "at",
+        "action",
+        "target",
+        "outcome",
+        "detail"
+      ]
+    },
+    "Health": {
+      "description": "How a project stands as a whole.",
+      "type": "string",
+      "enum": [
+        "ok",
+        "attention",
+        "broken",
+        "stale"
+      ]
+    },
+    "Held": {
+      "description": "One artifact a holder holds, and how it stands there.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "The agents among its project's that read a copy of it, in report\norder.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "issues": {
+          "description": "Everything `validate` says of it, warnings included, each saying\nwhether it is one.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValidationIssue"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where what was installed came from, as `--from` takes it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "How its name stands in its project, as `status` says; none for the\nlibrary's own, which are no project's. Only a copy that reads has a\nstanding, so beside an [`unread`](Self::unread) one it is that of a\ncopy of the name elsewhere, in an agent's folder, and none when\nthere is no such copy.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/State"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "description": "The one line a listing shows; none for one whose file does not read,\nand for an install nothing of which is found.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targets": {
+          "description": "Where it is held, as routes from its holder, `/` separated, in path\norder: each copy discovery found, the one whose file does not read\namong them, and each place the ledger records putting one, found or\nnot.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unread": {
+          "description": "The copy whose file does not read, when one does not, and why.\nListed all the same, by the name its place gives it, because a file\nthat does not read is the one most in need of opening.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unread"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "summary",
+        "state",
+        "agents",
+        "origin",
+        "targets",
+        "issues",
+        "unread"
+      ]
+    },
+    "HeldBox": {
+      "description": "A box of an offer whose name a project holds something of, or records\nan installation of: how the name stands, and whether the box is ticked.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "The offer's, as [`Offered::origin`] says it.",
+          "type": "string"
+        },
+        "state": {
+          "description": "How the name stands in the project, as every offer of it stands\n([`State::of_standing`]): never `authored`, which no offer is.",
+          "$ref": "#/$defs/State"
+        },
+        "ticked": {
+          "description": "Whether the box is ticked ([`install::holding`]): the offer the\ninstallation came from, every offer of a name somebody's copy holds,\nand none of one whose every copy has gone, for ticking it to put\nthem back.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "origin",
+        "state",
+        "ticked"
+      ]
+    },
+    "Kind": {
+      "description": "A kind of artifact, by the word a command line takes for it.",
+      "type": "string",
+      "enum": [
+        "skill",
+        "rule"
+      ]
+    },
+    "KindCount": {
+      "description": "How many of one kind.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        }
+      },
+      "required": [
+        "kind",
+        "count"
+      ]
+    },
+    "KindTargets": {
+      "description": "The folders a project's settings install one kind in.",
+      "type": "object",
+      "properties": {
+        "folders": {
+          "description": "Each folder as the settings spell it, `/` separated.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        }
+      },
+      "required": [
+        "kind",
+        "folders"
+      ]
+    },
+    "KnownHere": {
+      "description": "A workspace this machine knows, as `flayer workspaces` lists it, with\nhow the workspace a snapshot is of stands with it: whether it loads it,\nand whether it could.\n\nBeside the row rather than in it, as a shelf row's origin is\n([`Shelved`]): the row is the machine's list, the same whichever\nworkspace asks, and what one of them loads is nothing that list says.\nTold here rather than by a front end from `in_use`, `stale` and\n[`Snapshot::loaded`], whose paths it would compare itself: two spellings\nof one folder are one workspace, which only a comparison of where each\nleads tells.",
+      "type": "object",
+      "properties": {
+        "default": {
+          "description": "The default workspace, in home: listed for being the default,\nwhatever its own `known` says.",
+          "type": "boolean"
+        },
+        "in_use": {
+          "description": "The one in use where the list was asked for, as `resolve` chose it.",
+          "type": "boolean"
+        },
+        "loadable": {
+          "description": "Whether this workspace can load it: it opens, it is not this one,\nthis one loads it by no spelling yet, and its path is text a command\nline can hold. What a front end offers to load, by its `path`, which\n`flayer load` is given as it is.",
+          "type": "boolean"
+        },
+        "loaded_as": {
+          "description": "The entry this workspace loads it by, when it loads it, as\n[`LoadedWorkspace::entry`] spells it: what `flayer unload` is given.\nThe first, when it loads it by more than one spelling.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "What its marker calls it; none for one that would not open, which has\nno marker to read.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Where it is.",
+          "type": "string"
+        },
+        "projects": {
+          "description": "How many projects it links, each directory once, stale ones among\nthem: its own count, which says which of several flayers is which.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "remembered": {
+          "description": "Whether the default workspace's `known` names it, which is what\n`flayer workspaces forget` takes out. False for the default itself,\nand for the one in use when nothing remembers it.",
+          "type": "boolean"
+        },
+        "stale": {
+          "description": "Why it would not open, when it would not: listed rather than left\nout, since a workspace that has gone is the one somebody has to find\nto forget it.\n\nWritten through [`redacted`](crate::url::redacted), as an error's\nmessage is in a [`Said`](crate::code::Said): a marker that does not\nparse is quoted in its own words, a source's URL among them perhaps,\nand whoever wrote that file is no promise that it holds no\ncredential.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stale_projects": {
+          "description": "How many of those would not open.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "default",
+        "remembered",
+        "in_use",
+        "projects",
+        "stale_projects",
+        "stale",
+        "loaded_as",
+        "loadable"
+      ]
+    },
+    "Library": {
+      "description": "The workspace's own artifacts, held as a project holds its own.",
+      "type": "object",
+      "properties": {
+        "artifacts": {
+          "description": "Each of its own, by kind and then name: no project's, so none\nstands in a state, and nothing is installed into them.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Held"
+          }
+        },
+        "directories": {
+          "description": "Where it keeps each kind, as a route from the workspace's root.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Directory"
+          }
+        },
+        "failures": {
+          "description": "What could not be read in it and is no artifact's: a folder that\ncannot be listed, its templates.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Said"
+          }
+        },
+        "holders": {
+          "description": "Each project its registry links that holds a copy of one of its own,\nin the order of `artifacts`, then of the registry.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LibraryHolder"
+          }
+        },
+        "origin": {
+          "description": "What `--from` takes for each of its own, and what an install of one\nrecords as its origin: so a front end names it in a command line by\ncore's word rather than by one of its own that core could spell\ndifferently.",
+          "type": "string"
+        },
+        "templates": {
+          "description": "What `flayer add --template` can start from.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Template"
+          }
+        }
+      },
+      "required": [
+        "origin",
+        "directories",
+        "artifacts",
+        "holders",
+        "templates",
+        "failures"
+      ]
+    },
+    "LibraryHolder": {
+      "description": "A project holding a copy of one of the workspace's own: one whose install\nthe ledger tells came from it ([`install::from_the_library`]), the rule\n`flayer remove --everywhere` takes the copies it removes by.\n\nTold here rather than by a front end comparing a copy's\n[`origin`](Held::origin) with [`Library::origin`], which would be a\nrule of its own, and a different one: a record from before origins were\nkept names none, and is a copy of one of the workspace's own all the\nsame while no workspace it loads offers that name.",
+      "type": "object",
+      "properties": {
+        "entry": {
+          "description": "The project, as its registry entry spells it ([`Project::entry`]):\nits artifact of that kind and name is the copy. Each entry that\nspells one directory is a holder of its own, as each is a project\nof the snapshot's.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "The one of the workspace's own it holds a copy of.",
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "entry"
+      ]
+    },
+    "LoadedWorkspace": {
+      "description": "A workspace another one loads, and how much of its own it offers.",
+      "type": "object",
+      "properties": {
+        "entry": {
+          "description": "The entry as the marker spells it: what `flayer unload` is given.",
+          "type": "string"
+        },
+        "error": {
+          "description": "Why it would not open, when it would not.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Said"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "description": "Its name; none for one that would not open.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "offers": {
+          "description": "How many of its own it offers to install, counted from what the\ninstall machinery offers, so the number is what an install shows. A\nsecond spelling of one workspace offers what the first does.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "origin": {
+          "description": "What `--from` takes for what it offers, and what an install of one\nof them records as its origin: the first spelling's, for a second\nspelling of one workspace, as its offers are.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Where it points: what `mind unload` is given, from a project.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entry",
+        "path",
+        "name",
+        "offers",
+        "origin",
+        "error"
+      ]
+    },
+    "MarkerFile": {
+      "description": "The file inside `.mind` a project's marker is read from.",
+      "type": "string",
+      "enum": [
+        "mind.toml",
+        "settings.json",
+        "settings.toml"
+      ]
+    },
+    "Missed": {
+      "description": "One artifact a project received that some of its agents read nowhere,\nand those agents.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "The agents among the project's that read it nowhere, in report\norder. Never empty.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "agents"
+      ]
+    },
+    "Offered": {
+      "description": "One thing there is to install, from one place: a row of the install\nscreen turned round by artifact, and of the panel's matrix (#79).\n\nTold by core's own list of what an install offers ([`install::survey`]),\nrather than put together by a front end from the library, the shelf and\nthe loads: only that list leaves out a name no copy can be filed under,\nand reads what each loaded workspace offers, which nothing else in a\nsnapshot lists.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where it is offered from, as `--from` takes it and an install of it\nrecords it: what a box of it names its offer by.",
+          "type": "string"
+        },
+        "place": {
+          "description": "Which place offers it.",
+          "$ref": "#/$defs/Place"
+        },
+        "summary": {
+          "description": "The one line a listing shows.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "summary",
+        "place",
+        "origin"
+      ]
+    },
+    "Place": {
+      "description": "Which of the three places offers something to install.",
+      "type": "string",
+      "enum": [
+        "workspace",
+        "loaded",
+        "shelf"
+      ]
+    },
+    "Project": {
+      "description": "One entry in a workspace's registry, and the project it opens.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "The agents its settings name, in report order: a slot each for every\nartifact's own, so they line up.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "artifacts": {
+          "description": "Everything it holds, authored, received or somebody's, by kind and\nthen name, the rules its `AGENTS.md` block holds among them (D-23).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Held"
+          }
+        },
+        "directories": {
+          "description": "Where it authors each kind, as a route from it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Directory"
+          }
+        },
+        "entry": {
+          "description": "The entry as the marker spells it, which `-p` and `unlink` take; none\nfor a project no workspace links.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "failures": {
+          "description": "What could not be read in it and is no artifact's: a folder that\ncannot be listed, the ledger, its templates.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Said"
+          }
+        },
+        "health": {
+          "description": "How it stands as a whole, from everything below. A [`Listing`] read\nfor some kinds tells it from what it read of them, as it counts the\ntally, and from `misplaced`, which no listing narrows: a skill that\ndoes not read leaves `ok` a project listed for its rules. Reading\nevery kind for the health alone was the other way, which would weigh\na failure the listing says nowhere.",
+          "$ref": "#/$defs/Health"
+        },
+        "id": {
+          "description": "The id its settings name it by (D-09), which a move is followed by.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "marker": {
+          "description": "The file its marker is read from, which says an older one `mind\nmigrate` moves.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MarkerFile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "migrates": {
+          "description": "Whether `mind migrate` has it to move: an older marker marks it, a\n`mind.toml` or a `settings.json`, whose settings nothing but that\nmove changes ([`MindProject::changeable`]); false for an entry that\nopens no project. Told here rather than by a front end comparing\n`marker` with the file it knows to be the newest, which would be the\nrule written again, and wrong once a newer one is.",
+          "type": "boolean"
+        },
+        "misplaced": {
+          "description": "Each folder its settings name in `targets` that no install uses.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Said"
+          }
+        },
+        "missed": {
+          "description": "Each rule it received that some of its agents read nowhere.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Missed"
+          }
+        },
+        "name": {
+          "description": "What its marker calls it; none for an entry that opens no project.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Where it points.",
+          "type": "string"
+        },
+        "settings": {
+          "description": "What its settings say, which a change of them starts from; none for\na project a `mind.toml` marks, which has none to change.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stale": {
+          "description": "Why its entry opens no project, when it does not: listed rather than\nleft out, since it is the one somebody has to find to unlink it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Said"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tally": {
+          "description": "How many of them are of each kind, and stand in each state.",
+          "$ref": "#/$defs/Tally"
+        },
+        "templates": {
+          "description": "What `mind add --template` can start from in it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Template"
+          }
+        },
+        "unreached": {
+          "description": "Each kind it installs only where some of its agents do not read, as\n`status` says it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Unreached"
+          }
+        }
+      },
+      "required": [
+        "entry",
+        "path",
+        "name",
+        "marker",
+        "migrates",
+        "id",
+        "agents",
+        "settings",
+        "stale",
+        "health",
+        "directories",
+        "artifacts",
+        "tally",
+        "templates",
+        "unreached",
+        "missed",
+        "misplaced",
+        "failures"
+      ]
+    },
+    "ProjectId": {
+      "description": "A project's id: 128 random bits, written as 32 lowercase hexadecimal digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "ProjectSettings": {
+      "description": "What a project's settings say, as a change of them takes it.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "Its agents, in the order its settings name them, which a change\nkeeps for the ones it keeps: not report order, which\n[`Project::agents`] is in.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "edit_tracked": {
+          "type": "boolean"
+        },
+        "share": {
+          "$ref": "#/$defs/Share"
+        },
+        "targets": {
+          "description": "Each kind it names `targets` for, in report order: none when every\nkind goes where its agents read.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KindTargets"
+          }
+        }
+      },
+      "required": [
+        "agents",
+        "share",
+        "edit_tracked",
+        "targets"
+      ]
+    },
+    "Reason": {
+      "description": "The rule that chose a workspace: named on the command line,\nactivated for the shell, found walking up, or the default in home.",
+      "type": "string",
+      "enum": [
+        "explicit",
+        "activated",
+        "above",
+        "home"
+      ]
+    },
+    "Said": {
+      "description": "An error as a serialized type holds one: its code, for a front end to act\non, and its message, for whoever reads it.\n\nBuilt where the type is serialized, or kept in what a front end reads\n(the workspace's snapshot), in place of the error, since an error\nholds what JSON has no shape for (an `io::Error`, a parser's own), and\nonly these two are meant to leave core. Its fields are public for a\nfront end that reads the snapshot as Rust rather than as JSON, the TUI.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "Written through [`redacted`](crate::url::redacted), as every URL\nis: an error can quote one, a source's among them, and what built\nthe error is no promise that it carries no credential.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "Share": {
+      "description": "Whether what is installed into a project reaches the team, as the\nsettings file and `mind share` spell it.",
+      "type": "string",
+      "enum": [
+        "local",
+        "shared"
+      ]
+    },
+    "ShelfSource": {
+      "description": "A source the shelf is filled from, with what `--from` takes for what it\nsupplied.",
+      "type": "object",
+      "properties": {
+        "directory": {
+          "description": "The folder this source owns under `.mindflayer/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SourceKind"
+        },
+        "origin": {
+          "description": "[`Source::origin`], which every artifact it supplied is installed\nfrom.",
+          "type": "string"
+        },
+        "reference": {
+          "description": "The branch or tag asked for, or `None` for whatever the remote's HEAD\npoints at.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "description": "The commit last gathered from, once one has been resolved.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subdirectory": {
+          "description": "The folder inside the source that was harvested, `skills` by default.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The URL as the user typed it, without the credentials [`redacted`]\ntakes out.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "url",
+        "reference",
+        "subdirectory",
+        "revision",
+        "directory",
+        "origin"
+      ]
+    },
+    "Shelved": {
+      "description": "One artifact gathered onto the shelf, with what `--from` takes for it.\n\nThe ledger's row with its origin beside it, as `gather list --json`\nprints an offer from the shelf: the same names, so a script reading\neither reads one shape. Beside the row rather than in it, since an offer\nflattens the row beside an origin of its own.",
+      "type": "object",
+      "properties": {
+        "gathered_at": {
+          "description": "When it was gathered, in seconds since the Unix epoch.",
+          "type": "integer",
+          "format": "int64"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where it came from, as `--from` takes it and an install of it\nrecords it ([`Source::origin`]).",
+          "type": "string"
+        },
+        "path": {
+          "description": "Where it sits, relative to the workspace root, `/` separated.",
+          "type": "string"
+        },
+        "revision": {
+          "description": "The revision it was taken at.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "summary": {
+          "description": "The one line a listing shows, as it read when it was gathered.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "path",
+        "summary",
+        "revision",
+        "gathered_at",
+        "source",
+        "origin"
+      ]
+    },
+    "Source": {
+      "description": "A place artifacts have been gathered from.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name, but the row id, and the URL only through [`redacted`].",
+      "type": "object",
+      "properties": {
+        "directory": {
+          "description": "The folder this source owns under `.mindflayer/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/SourceKind"
+        },
+        "reference": {
+          "description": "The branch or tag asked for, or `None` for whatever the remote's HEAD\npoints at.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "description": "The commit last gathered from, once one has been resolved.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subdirectory": {
+          "description": "The folder inside the source that was harvested, `skills` by default.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The URL as the user typed it, without the credentials [`redacted`]\ntakes out.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "url",
+        "reference",
+        "subdirectory",
+        "revision",
+        "directory"
+      ]
+    },
+    "SourceKind": {
+      "description": "What kind of place a source is.",
+      "type": "string",
+      "enum": [
+        "git"
+      ]
+    },
+    "State": {
+      "description": "How an artifact stands in a project, as `status` says it.",
+      "type": "string",
+      "enum": [
+        "current",
+        "outdated",
+        "edited",
+        "missing",
+        "orphaned",
+        "foreign",
+        "authored"
+      ]
+    },
+    "StateCount": {
+      "description": "How many stand in one state.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "state": {
+          "$ref": "#/$defs/State"
+        }
+      },
+      "required": [
+        "state",
+        "count"
+      ]
+    },
+    "Summary": {
+      "description": "What a workspace holds, counted: the projects it links, those that open\nnone, and the artifacts its projects, its library and its shelf hold.\n\nCounted here rather than by a front end from the lists beside it, for\nthe reason a [`Tally`] is, and because a count of projects is no list's\nlength: two entries can spell one directory.",
+      "type": "object",
+      "properties": {
+        "held": {
+          "description": "What those projects hold together, each project once.",
+          "$ref": "#/$defs/Tally"
+        },
+        "library": {
+          "description": "What its library holds: its own, which stand in no state.",
+          "$ref": "#/$defs/Tally"
+        },
+        "projects": {
+          "description": "How many directories its registry names that open a project: each\nonce, however many entries spell it, as [`KnownWorkspace::projects`]\ncounts them.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "shelf": {
+          "description": "What its shelf holds, which stands in no state either.",
+          "$ref": "#/$defs/Tally"
+        },
+        "stale": {
+          "description": "How many it names that open none, each once.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "projects",
+        "stale",
+        "held",
+        "library",
+        "shelf"
+      ]
+    },
+    "Tally": {
+      "description": "How many artifacts a holder holds of each kind, and how many of them\nstand in each state.\n\nCounted here, from the rows it counts, rather than by each front end from\nthe rows it draws: a count is an answer, as which row is which artifact's\nis, and the panel counting its own would be a second set of them.",
+      "type": "object",
+      "properties": {
+        "kinds": {
+          "description": "How many of each kind it was read for, in report order, one it holds\nnone of among them: what a front end lays a column a kind out by.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KindCount"
+          }
+        },
+        "states": {
+          "description": "How many stand in each state, every state in report order, one none\nstands in among them. A row that stands in none, the library's own\nor one whose only copy does not read, is in no count here.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StateCount"
+          }
+        },
+        "total": {
+          "description": "How many, every kind together.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "total",
+        "kinds",
+        "states"
+      ]
+    },
+    "Template": {
+      "description": "A template `mind add` can start from.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "The folder or file it is, or none for one built in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "origin"
+      ]
+    },
+    "Unreached": {
+      "description": "A kind a project installs only in folders some of its agents do not read,\nand those agents.\n\nTold by where each agent reads ([`Agent::reads`]), matched by spelling and\nthen on disk, so a `.claude/skills` linked to the project's `.skills` is\nClaude reading it: pointing an agent at a folder is up to whoever keeps\nthe project, and a link is one way the report can see. An agent told\nsome other way, by a setting of its own, is beyond what docs/agents.md\nsays it reads, and is still said here.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "The agents among the project's that read none of them, in report\norder. Never empty.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "targets": {
+          "description": "Every folder the kind is installed in, as a route from the project,\nwith `/` whatever the platform, in the order an install writes them.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "targets",
+        "agents"
+      ]
+    },
+    "Unread": {
+      "description": "A copy of an artifact whose file does not read, and why.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "The reason alone, without the path, which [`path`](Self::path)\nsays: written through [`redacted`](crate::url::redacted), as a\n[`Said`]'s message is.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Where the copy is, as a route from its holder, `/` separated: its\nplace in the folder the holder keeps its kind in, the one place a\nfile that does not read is named by ([`lifecycle::identify`]). Said\non its own, as well as among [`Held::targets`], since a copy that\nreads can sit beside it under the same name, elsewhere.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "code",
+        "message"
+      ]
+    },
+    "ValidationIssue": {
+      "description": "Something that stops an artifact from being usable, or will: its code,\nwhat it is about, whether it is only worth a warning, and its message.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_not_kebab_case"
+            },
+            "message": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "segment",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_segment_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "segment",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_directory_mismatch"
+            },
+            "directory": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "directory",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_not_a_string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_not_a_map"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_not_a_string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "key",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_repeated"
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "key",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "content_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "front_matter_unparsed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "reason",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "paths_not_strings"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_not_a_string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        }
+      ]
+    },
+    "Workspace": {
+      "description": "The workspace a snapshot is of.",
+      "type": "object",
+      "properties": {
+        "made": {
+          "description": "Whether it is on disk: only the default one is ever read otherwise,\nas it will be once the first command that writes makes it.",
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "description": "The rule that chose it ([`resolve`](crate::resolve)).",
+          "$ref": "#/$defs/Reason"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "reason",
+        "made"
+      ]
+    }
+  }
+}

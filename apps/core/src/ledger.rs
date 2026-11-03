@@ -76,8 +76,8 @@ impl Serialize for SourceKind {
     }
 }
 
-#[cfg(feature = "ts")]
-crate::typescript::words! {
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
     /// What kind of place a source is.
     SourceKind by slug { Git }
 }
@@ -88,6 +88,7 @@ crate::typescript::words! {
 /// by its name, but the row id, and the URL only through [`redacted`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Source {
     /// Its row id, which is what gathered artifacts point at.
     ///
@@ -136,6 +137,7 @@ impl Source {
 /// by its name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Gathered {
     pub kind: Kind,
     pub name: String,
@@ -280,6 +282,7 @@ pub enum Carried {
 /// ledger.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Entry {
     /// When it happened, in seconds since the Unix epoch.
     pub at: i64,

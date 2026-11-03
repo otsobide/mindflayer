@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Outcome",
+  "description": "What running a task's lines produced.",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "description": "Whether every line ran and found everything in order.",
+      "type": "boolean"
+    },
+    "runs": {
+      "description": "Each line that ran, in order: up to the first that failed, for a task\nwhose lines lean on each other ([`Task::chained`]).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Run"
+      }
+    }
+  },
+  "required": [
+    "ok",
+    "runs"
+  ],
+  "$defs": {
+    "Run": {
+      "description": "What one command line produced, as a terminal would show it, with the\ncode of everything that went wrong beside its words.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "The line, as it would be typed into a shell ([`shell`]).",
+          "type": "string"
+        },
+        "error": {
+          "description": "Why it could not run, when it could not.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Said"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ok": {
+          "description": "Whether it ran and found everything in order: what its exit status\nwould have said.",
+          "type": "boolean"
+        },
+        "stderr": {
+          "description": "Each line it said on stderr, with its code; none for a hint or a\nnote, which no code is given to.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Warning"
+          }
+        },
+        "stdout": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "stdout",
+        "stderr",
+        "error",
+        "ok"
+      ]
+    },
+    "Said": {
+      "description": "An error as a serialized type holds one: its code, for a front end to act\non, and its message, for whoever reads it.\n\nBuilt where the type is serialized, or kept in what a front end reads\n(the workspace's snapshot), in place of the error, since an error\nholds what JSON has no shape for (an `io::Error`, a parser's own), and\nonly these two are meant to leave core. Its fields are public for a\nfront end that reads the snapshot as Rust rather than as JSON, the TUI.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "Written through [`redacted`](crate::url::redacted), as every URL\nis: an error can quote one, a source's among them, and what built\nthe error is no promise that it carries no credential.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "Warning": {
+      "description": "One line a command says beside what it reports, on stderr: a warning, a\nnote, a hint, or an error about one part of what it did; and the code of\nwhat it says, when what it says has one.\n\nThe text is what a terminal shows, word for word, `warning: ` and all.\nThe code rides beside it for the panel, which acts on a condition by its\ncode rather than by matching English that is reworded whenever it is\nmade clearer: the code core gives what went wrong ([`mindflayer_core::code`]),\nor the CLI's own ([`CliError::code`]). A line with none says something no\ncode is given to: a hint, a note, or what the CLI makes of what it found\nrather than something that went wrong. Kept beside the text rather than\nin a list of its own beside the lines, which every line pushed would have\nto keep in step with.\n\nSerialized as it is, `{\"text\": ..., \"code\": ...}`, in what a run of the\npanel's backend says (`backend::Run`): the line a terminal shows, and\nthe code beside it.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "code"
+      ]
+    }
+  }
+}

@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Judged",
+  "description": "What core says of a draft: what `validate` would say of it once written,\nand why the command writing it would write nothing, when it would.\n\nEach field by its name, a contract once a front end reads it, as a\nreport's are.",
+  "type": "object",
+  "properties": {
+    "issues": {
+      "description": "Everything `validate` would say of the artifact as it would be\nwritten, warnings included, in its words: none when what would be\nwritten cannot be told.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ValidationIssue"
+      }
+    },
+    "refused": {
+      "description": "Why the command would write nothing, by the code and in the words it\nwould refuse with; none when it would write.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Said"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "issues",
+    "refused"
+  ],
+  "$defs": {
+    "Said": {
+      "description": "An error as a serialized type holds one: its code, for a front end to act\non, and its message, for whoever reads it.\n\nBuilt where the type is serialized, or kept in what a front end reads\n(the workspace's snapshot), in place of the error, since an error\nholds what JSON has no shape for (an `io::Error`, a parser's own), and\nonly these two are meant to leave core. Its fields are public for a\nfront end that reads the snapshot as Rust rather than as JSON, the TUI.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "Written through [`redacted`](crate::url::redacted), as every URL\nis: an error can quote one, a source's among them, and what built\nthe error is no promise that it carries no credential.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "ValidationIssue": {
+      "description": "Something that stops an artifact from being usable, or will: its code,\nwhat it is about, whether it is only worth a warning, and its message.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_not_kebab_case"
+            },
+            "message": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "segment",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_segment_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "segment",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_directory_mismatch"
+            },
+            "directory": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "directory",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_not_a_string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_not_a_map"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_not_a_string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "key",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_repeated"
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "key",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "content_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "front_matter_unparsed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "reason",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "paths_not_strings"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_not_a_string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        }
+      ]
+    }
+  }
+}

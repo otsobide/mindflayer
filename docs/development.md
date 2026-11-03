@@ -116,6 +116,8 @@ make web/lint          # ESLint, its style included; make web/fmt fixes that
 make web/build         # check the types, then build apps/web/dist
 make web/types         # write the types from Rust, then check the panel's (vue-tsc)
 make web/types/check   # fail when the types from Rust are not the ones committed
+make api/schemas       # write the API's JSON Schemas from Rust into docs/api/schemas
+make api/schemas/check # fail when the schemas from Rust are not the ones committed
 make web/typecheck     # check the panel's types alone (vue-tsc)
 make web/clean         # remove dist/, what the browser suite wrote, and the tools' caches
 
@@ -141,7 +143,13 @@ serializes it, into `apps/web/src/api/generated`, which is committed and
 never edited by hand. After changing a type core or the CLI hands the panel,
 `make web/types` writes them again and checks the panel against them; `make
 web/types/check` needs only cargo and git, and fails when what is committed
-is not what Rust writes, as CI's `types drift (web)` check does.
+is not what Rust writes, as CI's `types drift (web)` check does. What the
+API takes and gives, those types and the server's own answers among it, is
+described as JSON Schema in `docs/api/schemas`, written from the same Rust
+the same way: after changing such a type, `make api/schemas` writes them
+again, and `make api/schemas/check`, which CI runs in the same check,
+fails when they are not what Rust writes, or when a fixture the panel's
+views render does not hold to the schema of what it answers.
 
 `make web/build` writes `apps/web/dist`, which the server embeds as it
 compiles, and marks the server to compile again, so the next build of the

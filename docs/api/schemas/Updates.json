@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Updates",
+  "description": "What updating every project a workspace links would do, as the panel's\npage of updates draws it: each installation an update says something\nof, outdated, edited, missing or orphaned, how it stands, what an update\ndoes with it, and why it leaves one it leaves.\n\nA read, as a dry run is ([`plan`]): the ledger opened without being\nmade, nothing written. A query of its own rather than a part of the\nsnapshot, which a live update reads again on every change: telling what\nan update does reads where each installation came from again, past what\ntelling how it stands reads.",
+  "type": "object",
+  "properties": {
+    "projects": {
+      "description": "Each project the workspace links holding an installation an update\nsays something of, in the order the registry lists them, each\ndirectory once, by the first entry spelling it.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProjectUpdates"
+      }
+    },
+    "states": {
+      "description": "How many of their installations stand in each state an update says\nsomething of, every such state in report order, one none stands in\namong them ([`State::asks_for_a_command`]): what a front end lists\nthem by, each list counted.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/StateCount"
+      }
+    },
+    "unread": {
+      "description": "Each entry that opens no project, by why: whether it holds anything\nto update cannot be told, so it is said, beside the rest.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Said"
+      }
+    },
+    "writes": {
+      "description": "Whether updating every project writes something: what `flayer update\n--all --yes` would, rather than leave and say.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "projects",
+    "states",
+    "writes",
+    "unread"
+  ],
+  "$defs": {
+    "Does": {
+      "description": "What an update does with one installation.",
+      "type": "string",
+      "enum": [
+        "keep",
+        "refresh",
+        "put_back",
+        "write_over",
+        "leave",
+        "orphaned",
+        "unsure"
+      ]
+    },
+    "Kind": {
+      "description": "A kind of artifact, by the word a command line takes for it.",
+      "type": "string",
+      "enum": [
+        "skill",
+        "rule"
+      ]
+    },
+    "Pending": {
+      "description": "One installation an update says something of.",
+      "type": "object",
+      "properties": {
+        "copies": {
+          "description": "The copies that names, each a route from the project, `/`\nseparated: put back, written over or left.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "does": {
+          "description": "What an update does with it.",
+          "$ref": "#/$defs/Does"
+        },
+        "forced": {
+          "description": "Whether a change reaches it only forced: a copy changed since it was\ninstalled, which an update not forced leaves alone and, once nothing\noffers it any more, an uninstall not forced leaves too. Said here so\na front end sends `--force` by core's word, rather than telling from\nthe state, the step, or both, which of core's refusals its change\nwould meet.",
+          "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "left": {
+          "description": "Why an update leaves it as the project holds it, when it does\n([`Left`]).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Said"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where it came from, as `--from` takes it: none for a record from\nbefore origins were kept.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "How it stands, as `status` says it.",
+          "$ref": "#/$defs/State"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "origin",
+        "state",
+        "does",
+        "copies",
+        "left",
+        "forced"
+      ]
+    },
+    "ProjectUpdates": {
+      "description": "One project's installations an update says something of.",
+      "type": "object",
+      "properties": {
+        "entry": {
+          "description": "The entry, as the registry spells it, which a task names it by.",
+          "type": "string"
+        },
+        "installations": {
+          "description": "Each of them, by kind and then name.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Pending"
+          }
+        },
+        "name": {
+          "description": "What its marker calls it.",
+          "type": "string"
+        },
+        "writes": {
+          "description": "Whether updating the project writes something.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "entry",
+        "name",
+        "installations",
+        "writes"
+      ]
+    },
+    "Said": {
+      "description": "An error as a serialized type holds one: its code, for a front end to act\non, and its message, for whoever reads it.\n\nBuilt where the type is serialized, or kept in what a front end reads\n(the workspace's snapshot), in place of the error, since an error\nholds what JSON has no shape for (an `io::Error`, a parser's own), and\nonly these two are meant to leave core. Its fields are public for a\nfront end that reads the snapshot as Rust rather than as JSON, the TUI.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "Written through [`redacted`](crate::url::redacted), as every URL\nis: an error can quote one, a source's among them, and what built\nthe error is no promise that it carries no credential.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "State": {
+      "description": "How an artifact stands in a project, as `status` says it.",
+      "type": "string",
+      "enum": [
+        "current",
+        "outdated",
+        "edited",
+        "missing",
+        "orphaned",
+        "foreign",
+        "authored"
+      ]
+    },
+    "StateCount": {
+      "description": "How many stand in one state.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "state": {
+          "$ref": "#/$defs/State"
+        }
+      },
+      "required": [
+        "state",
+        "count"
+      ]
+    }
+  }
+}

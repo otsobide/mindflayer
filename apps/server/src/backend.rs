@@ -109,6 +109,7 @@ pub trait Backend: Send + Sync + 'static {
 /// [`Backend::preview`] answers, and `POST /api/v1/tasks/preview` sends as
 /// it is, `{"lines": [...], "confirm": [...]}`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Preview {
     /// The command lines, each as somebody would type it.
     pub lines: Vec<String>,

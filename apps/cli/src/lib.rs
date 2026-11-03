@@ -26,6 +26,8 @@ pub(crate) mod progress;
 pub(crate) mod render;
 #[cfg(feature = "ui")]
 pub mod routes;
+#[cfg(feature = "schema")]
+pub mod schema;
 pub mod task;
 pub mod tui;
 #[cfg(feature = "ts")]

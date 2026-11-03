@@ -26,6 +26,8 @@ pub mod config_entry;
 pub mod contents;
 pub mod copy;
 pub mod create;
+#[cfg(any(feature = "ts", feature = "schema"))]
+pub mod described;
 pub mod draft;
 pub mod everywhere;
 pub mod exclude;
@@ -48,6 +50,8 @@ pub mod relink;
 pub mod resolve;
 pub mod rule;
 pub mod scan;
+#[cfg(feature = "schema")]
+pub mod schema;
 pub mod settings;
 pub mod skill;
 pub mod status;

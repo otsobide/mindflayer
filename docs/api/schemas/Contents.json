@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Contents",
+  "description": "One file of an artifact, as a front end may show it.",
+  "type": "object",
+  "properties": {
+    "file": {
+      "description": "The file, as it was asked for: a route from the artifact's folder,\n`/` separated, or a rule's own file name.",
+      "type": "string"
+    },
+    "hash": {
+      "description": "The SHA-256 of what it holds ([`hash::bytes`]), when it was read\nwhole: none for one larger than [`CAP`], which never is.\n\nWhat `edit --if-unchanged` takes, so a front end that changes the\nfile holds the change to what it read, and is refused when somebody\nchanged it since (`edit_stale`). Hashed here, of the bytes the text\nwas read from, rather than by the front end from the text: one\nrecipe for every hash of a file, and a text a browser hashed could\nbe told apart from the file by nothing but a line ending.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "kind": {
+      "description": "The artifact it belongs to.",
+      "$ref": "#/$defs/Kind"
+    },
+    "manifest": {
+      "description": "What it declares and says, cut as core reads it, when it is the file\nthe artifact is read from (a skill's `SKILL.md`, a rule's own file)\nand its text was read; none for any other file, whose front matter\nno agent reads as such.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Manifest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "name": {
+      "type": "string"
+    },
+    "size": {
+      "description": "How many bytes it holds.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "text": {
+      "description": "What it says, when it is UTF-8 text no larger than [`CAP`]; none\notherwise, and [`withheld`](Self::withheld) says why.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "withheld": {
+      "description": "Why there is no text, when there is none.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Withheld"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "kind",
+    "name",
+    "file",
+    "size",
+    "hash",
+    "text",
+    "withheld",
+    "manifest"
+  ],
+  "$defs": {
+    "Declaration": {
+      "description": "One key of an artifact's front matter, and what it is given.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "description": "A string as it is; anything else, a list or a mapping, a number or\nnothing, as YAML writes it, so a value is shown whatever its shape\nrather than only those the format defines.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ]
+    },
+    "Kind": {
+      "description": "A kind of artifact, by the word a command line takes for it.",
+      "type": "string",
+      "enum": [
+        "skill",
+        "rule"
+      ]
+    },
+    "Manifest": {
+      "description": "The file an artifact is read from, cut at its front matter as core cuts\nit: what a front end shows as a table of what it declares above the\nmarkdown it renders.\n\nCut here rather than by a front end from [`Contents::text`], since where\nfront matter ends, and whether a rule's fences hold any, are rules\n([`frontmatter::split`], [`RuleManifest::read`]): a panel cutting it\nitself could show as declared what every agent reads as content.",
+      "type": "object",
+      "properties": {
+        "body": {
+          "description": "What follows the front matter, as an agent reads it: the whole file\nwhen no front matter is read.",
+          "type": "string"
+        },
+        "front_matter": {
+          "description": "Each key at the top of its front matter, in the order written, every\none the format does not define among them; none when it has none\ncore reads: no fences, fences that never close, or a block that is\nno YAML mapping.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Declaration"
+          }
+        }
+      },
+      "required": [
+        "front_matter",
+        "body"
+      ]
+    },
+    "Withheld": {
+      "description": "Why a file's text is not handed over, though the file was found.",
+      "type": "string",
+      "enum": [
+        "binary",
+        "too_large"
+      ]
+    }
+  }
+}

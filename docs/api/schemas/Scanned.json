@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Scanned",
+  "description": "What a scan the panel asked for found ([`Query::Scan`]): what `flayer\nscan --suggest --json` prints, each directory with what the panel needs\nto offer it, and what the command warns of beside it.\n\nA shape of the backend's rather than the envelope the command prints,\nsince what it adds to each directory is a front end's: the words the\ncommand says why in, what marking it asks for, and the entry a relink\nnames. Each worked out here, in Rust, where the minds screen works out\nthe same, rather than by the panel from the scan's fields.",
+  "type": "object",
+  "properties": {
+    "depth": {
+      "description": "How many levels below each root it looked.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "found": {
+      "description": "Every directory it found, in the order `flayer scan --suggest` ranks\nthem: what is not linked first, most worth linking first, then what\nis.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Suggestion"
+      }
+    },
+    "roots": {
+      "description": "Where it looked, each once, in the order given: the workspace's root\nwhen it was given none.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "truncated": {
+      "description": "Whether it stopped at core's bound before looking everywhere, which\n`warnings` says too.",
+      "type": "boolean"
+    },
+    "untraced": {
+      "description": "Each entry where no project is any more whose id the ledger never\nlearned, as the scan spells it: what `flayer relink <entry> <path>`\nfollows, which only somebody who knows where it went can type.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "description": "What it could not read, and that it stopped early, as `flayer scan`\nwarns of them, each with its code.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Warning"
+      }
+    }
+  },
+  "required": [
+    "roots",
+    "depth",
+    "found",
+    "untraced",
+    "truncated",
+    "warnings"
+  ],
+  "$defs": {
+    "Found": {
+      "description": "A directory a workspace could manage.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name. The panel reads it in what a scan it asks for is answered\nwith, so it says its TypeScript too.",
+      "type": "object",
+      "properties": {
+        "agent_files": {
+          "description": "Each name at its root an agent reads something from\n([`Agent::reads_at_root`], of every agent), in name order: what makes\na repository's reason [`Reason::Agents`], and listed for a mind\nproject too, which can hold them as well. Looked at, never followed\nor read: a link there counts as what it is called.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "description": "The id its settings name it by (D-09), whatever it is called and\nwherever it is: none for a git repository that is not a project yet,\nfor a project a `mind.toml` still marks, which has none, and for one\nwhose marker would not open, which is a failure beside it.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "linked": {
+          "description": "Whether the workspace links it already.",
+          "type": "boolean"
+        },
+        "mind": {
+          "description": "A mind project already, rather than a git repository that is not one\nyet and would need `mind init` before it can be linked.",
+          "type": "boolean"
+        },
+        "moved": {
+          "description": "The entry it moved from, when it is not linked and holds the id the\nworkspace's ledger last saw at an entry where no project is any more\n([`MindProject::is_vacant`]): spelled as `route` is, so `flayer\nrelink <moved> <route>` run there follows it. None otherwise, and for\nan id another directory holds too, which is a copy rather than a\nmove.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Where it is.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why it is worth linking: the strongest of what it holds.",
+          "$ref": "#/$defs/ScanReason"
+        },
+        "route": {
+          "description": "What `flayer link` would be given for it, run where the request\nspells routes from: the route from there, `/` separated, when it is\ninside, and its path otherwise.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "route",
+        "id",
+        "mind",
+        "linked",
+        "moved",
+        "reason",
+        "agent_files"
+      ]
+    },
+    "MindsChange": {
+      "description": "What one directory's mark on the minds screen asks of the workspace, when\nit differs from how the directory started: what [`Task::minds`] is built\nfrom. By its name in snake_case in JSON: `\"init_and_link\"`.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "link",
+            "unlink"
+          ]
+        },
+        {
+          "description": "`mind init` in it, then link it: a repository that is not a mind\nproject yet.",
+          "type": "string",
+          "const": "init_and_link"
+        }
+      ]
+    },
+    "ProjectId": {
+      "description": "A project's id: 128 random bits, written as 32 lowercase hexadecimal digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "ScanReason": {
+      "description": "Why a directory a scan found is worth linking, the strongest of what\nit holds, best first: a mind project its settings name by an id, one\nwith none, a git repository an agent reads something in, and any\nother git repository.",
+      "type": "string",
+      "enum": [
+        "id",
+        "mind",
+        "agents",
+        "git"
+      ]
+    },
+    "Suggestion": {
+      "description": "One directory a scan found, and what the panel offers for it.",
+      "type": "object",
+      "properties": {
+        "found": {
+          "description": "What `flayer scan --json` prints of it.",
+          "$ref": "#/$defs/Found"
+        },
+        "moved_from": {
+          "description": "The entry it moved from, as the marker spells it, which a relink\nnames: matched by core's `scan::moved_from`, as the minds screen\nmatches it, since the scan spells `moved` as `flayer link` would\ntake it. None when it did not move.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "offers": {
+          "description": "What marking it asks for ([`MindsChange::of_found`]): linking it, or\nmaking it a project first. None for one linked, and for one found\nmoved, which wants a relink rather than a second entry beside the one\nit left stale.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MindsChange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "why": {
+          "description": "Why it is worth linking, in the words `flayer scan --suggest` and the\nminds screen say it in ([`worth_linking`]); none for one linked.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "found",
+        "why",
+        "offers",
+        "moved_from"
+      ]
+    },
+    "Warning": {
+      "description": "One line a command says beside what it reports, on stderr: a warning, a\nnote, a hint, or an error about one part of what it did; and the code of\nwhat it says, when what it says has one.\n\nThe text is what a terminal shows, word for word, `warning: ` and all.\nThe code rides beside it for the panel, which acts on a condition by its\ncode rather than by matching English that is reworded whenever it is\nmade clearer: the code core gives what went wrong ([`mindflayer_core::code`]),\nor the CLI's own ([`CliError::code`]). A line with none says something no\ncode is given to: a hint, a note, or what the CLI makes of what it found\nrather than something that went wrong. Kept beside the text rather than\nin a list of its own beside the lines, which every line pushed would have\nto keep in step with.\n\nSerialized as it is, `{\"text\": ..., \"code\": ...}`, in what a run of the\npanel's backend says (`backend::Run`): the line a terminal shows, and\nthe code beside it.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "code"
+      ]
+    }
+  }
+}

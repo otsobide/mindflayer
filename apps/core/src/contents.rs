@@ -68,6 +68,7 @@ pub const CAP: u64 = 1 << 20;
 /// One file of an artifact, as a front end may show it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Contents {
     /// The artifact it belongs to.
     pub kind: Kind,
@@ -109,6 +110,7 @@ pub struct Contents {
 /// itself could show as declared what every agent reads as content.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Manifest {
     /// Each key at the top of its front matter, in the order written, every
     /// one the format does not define among them; none when it has none
@@ -123,6 +125,7 @@ pub struct Manifest {
 /// One key of an artifact's front matter, and what it is given.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Declaration {
     pub key: String,
     /// A string as it is; anything else, a list or a mapping, a number or
@@ -143,6 +146,7 @@ pub const FILES_CAP: usize = 1000;
 /// Every file and folder of an artifact, as a front end may list them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Files {
     /// The artifact they belong to.
     pub kind: Kind,
@@ -162,6 +166,7 @@ pub struct Files {
 /// One file or folder of an artifact.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Listed {
     /// Its route from the artifact's folder, `/` separated, as [`Contents`]
     /// takes it; a rule's own file name. One whose name no route spells is
@@ -209,8 +214,8 @@ impl Serialize for Withheld {
     }
 }
 
-#[cfg(feature = "ts")]
-crate::typescript::words! {
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
     /// Why a file's text is not handed over, though the file was found.
     Withheld by slug { Binary, TooLarge }
 }

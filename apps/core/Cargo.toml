@@ -53,14 +53,40 @@ sha2 = "0.11"
 # does not hold, where the warning would only scroll past in a build. A type
 # written some other way says so with `ts(as)`, held to it by a test.
 ts-rs = { version = "12", optional = true, features = ["no-serde-warnings"] }
+# What core hands a front end and takes from one as JSON Schema 2020-12, for
+# the local server's API (D-24, #217), derived beside each type's serde
+# derive as ts-rs is, and read off the same attributes, which schemars reads
+# as serde does. 1.x, the current major, whose default is 2020-12 and which
+# says a type either as serde writes it or as serde reads it: an `Option`
+# field is always written, and may be left out of what is read. Only under
+# `schema`, as ts-rs is under `ts`. MIT, as are its derive and the two small
+# crates it brings; serde_json beside it to write what a type says by hand.
+schemars = { version = "1.2", optional = true }
+serde_json = { version = "1", optional = true }
 
 [features]
 # The TypeScript types of what core hands a front end: `make web/types`
 # builds with it to write them into the panel, and nothing else does.
 ts = ["dep:ts-rs"]
+# The JSON Schema of what core hands a front end and takes from one: `make
+# api/schemas` builds with it to write them into docs/api/schemas, and
+# nothing else does.
+schema = ["dep:schemars", "dep:serde_json"]
 
 [dev-dependencies]
 # To pin what a report's types serialize to, name by name: what a front end
 # prints as JSON is a contract. The version the server already builds.
 serde_json = "1"
 tempfile = "3"
+# What holds each schema written by hand to what serde writes: a JSON
+# Schema 2020-12 validator that passes the suite of tests JSON Schema
+# publishes, and builds no HTTP client, nor anything else that reaches the
+# network: its one loader of a `$ref` reads a file, and the tests take even
+# that away. Its default features off all the same, so a later release that
+# adds a loader by default does not bring it in. MIT or Apache-2.0; what it
+# brings is MIT (appendlist, fluent-uri), MIT or Apache-2.0 (ahash),
+# BSD-2-Clause, Apache-2.0 or MIT (zerocopy) and MIT-0 (borrow-or-share),
+# each a licence GPL-3.0-only takes in. jsonschema was the other, whose
+# defaults build reqwest for a remote `$ref`, and which brings some thirty
+# crates to this one's six.
+boon = { version = "0.6", default-features = false }

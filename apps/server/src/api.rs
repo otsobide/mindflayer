@@ -11,7 +11,8 @@ use axum::response::sse::{self, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, on, post, MethodFilter, MethodRouter};
 use axum::Json;
-use serde_json::{json, Value};
+use serde::Serialize;
+use serde_json::Value;
 
 use crate::code::Condition;
 use crate::events::Events;
@@ -160,7 +161,7 @@ pub(crate) async fn run<B: Backend>(
         Err(rejection) => return refused(rejection),
     };
     match api.writer.run(task).await {
-        Ok(Ok(entry)) => Json(entry).into_response(),
+        Ok(Ok(ran)) => Json(ran).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
         Err(failed) => error(failed.condition, failed.message),
     }
@@ -296,27 +297,44 @@ fn unread(rejection: &JsonRejection) -> Condition {
     }
 }
 
-/// What the backend refused, as `{"error": "...", "code": "..."}`, its
-/// code the backend's own: a 404 when what the request named is not there,
-/// and a 422 when it is not one to act on, as a body the server cannot read
-/// is. Which of the two, the backend says ([`Grounds`](crate::Grounds)); the
-/// server never reads the code to tell.
-pub(crate) fn refused_by(refusal: Refusal) -> Response {
-    (
-        refusal.grounds.status(),
-        Json(json!({ "error": refusal.message, "code": refusal.code })),
-    )
-        .into_response()
+/// What every answer under `/api` that is no success holds, whoever turned
+/// the request away, the server or the backend: `{"code": "...", "error":
+/// "..."}`, an object of these two fields and no other.
+///
+/// One type for both ([`error`], [`refused_by`]) rather than an object
+/// spelled where each is answered, so the shape a script reads every
+/// refusal by is said once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Refused {
+    /// The one word a script acts on, which never changes when the words
+    /// are made clearer: a [`Condition`]'s, or the backend's own.
+    pub code: &'static str,
+    /// What happened, for a person: the route, the parameter or the header,
+    /// what was expected and what came.
+    pub error: String,
 }
 
-/// A condition of the server's own, as `{"error": "...", "code": "..."}`
-/// with the status it is answered with: the words of what was found, the
-/// route, the parameter or the header, beside the one word a script acts
-/// on.
+/// What the backend refused, as [`Refused`], its code the backend's own: a
+/// 404 when what the request named is not there, and a 422 when it is not
+/// one to act on, as a body the server cannot read is. Which of the two,
+/// the backend says ([`Grounds`](crate::Grounds)); the server never reads
+/// the code to tell.
+pub(crate) fn refused_by(refusal: Refusal) -> Response {
+    let refused = Refused {
+        code: refusal.code,
+        error: refusal.message,
+    };
+    (refusal.grounds.status(), Json(refused)).into_response()
+}
+
+/// A condition of the server's own, as [`Refused`], with the status it is
+/// answered with: the words of what was found, the route, the parameter or
+/// the header, beside the one word a script acts on.
 pub(crate) fn error(condition: Condition, message: &str) -> Response {
-    (
-        condition.status(),
-        Json(json!({ "error": message, "code": condition.code() })),
-    )
-        .into_response()
+    let refused = Refused {
+        code: condition.code(),
+        error: message.to_owned(),
+    };
+    (condition.status(), Json(refused)).into_response()
 }

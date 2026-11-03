@@ -42,14 +42,51 @@ fmt: ## Format all Rust code
 fmt/check: ## Fail if any Rust code is not formatted
 	cargo fmt --all --check
 
-# Twice: as everything builds, and with the `ts` feature, whose code (the
-# panel's types and the tests holding them to serde) nothing else lints.
-# Its own run rather than the one with the feature on, which would leave the
-# build without it, the one every binary ships as, unlinted.
+# The features that describe what the crates hand a front end: the panel's
+# TypeScript (`ts`, core's and the CLI's) and the API's JSON Schema
+# (`schema`, the server's too).
+TS_FEATURES := mindflayer-core/ts,mindflayer-cli/ts
+SCHEMA_FEATURES := mindflayer-core/schema,mindflayer-server/schema,mindflayer-cli/schema
+
+# Twice: as everything builds, and with the `ts` and `schema` features,
+# whose code (the panel's types, the API's schemas and the tests holding
+# both to serde) nothing else lints. Its own run rather than the one with
+# the features on, which would leave the build without them, the one every
+# binary ships as, unlinted; the two together, as `make api/schemas` builds
+# them, rather than a run for each.
 .PHONY: lint
-lint: lint/em-dash ## Run clippy across the workspace, then with the ts feature, once no em dash is found
+lint: lint/em-dash ## Run clippy across the workspace, then with the ts and schema features, once no em dash is found
 	cargo clippy --workspace --all-targets
-	cargo clippy --workspace --all-targets --features mindflayer-core/ts,mindflayer-cli/ts
+	cargo clippy --workspace --all-targets --features $(TS_FEATURES),$(SCHEMA_FEATURES)
+
+# The API's JSON Schemas (#217, D-24): every type core, the CLI and the
+# server hand the API whole or take from it, written from Rust by the
+# export tests the `schema` feature compiles, a file a root, into
+# docs/api/schemas, committed for the API's description (#218) and any
+# client to read, and never edited by hand. "api" is no app, so these do
+# not collide with the <app>/<target> rules above. Emptied first, since an
+# export writes and never deletes: a root Rust no longer has would leave
+# its file behind. The export tests and those holding each schema to what
+# serde writes are all named for it, and run alone; with `ts` too, so the
+# test holding every root of the panel's types to a schema runs beside
+# them. Cargo alone, as the panel's types are, so CI's `types drift (web)`
+# runs it.
+SCHEMAS := docs/api/schemas
+
+.PHONY: api/schemas
+api/schemas: ## Write the API's JSON Schemas from Rust into docs/api/schemas (cargo only)
+	rm -rf $(SCHEMAS)
+	cargo test -p mindflayer-core -p mindflayer-server -p mindflayer-cli --features $(SCHEMA_FEATURES),$(TS_FEATURES) --lib schema
+
+# As web/types/check: `git diff --exit-code` for a file that changed or
+# went, and an untracked one for a root that is new.
+.PHONY: api/schemas/check
+api/schemas/check: api/schemas ## Fail if the schemas written from Rust are not the ones committed (cargo and git only)
+	@git diff --exit-code --stat -- $(SCHEMAS) \
+		&& test -z "$$(git ls-files --others --exclude-standard -- $(SCHEMAS))" \
+		|| { git ls-files --others --exclude-standard -- $(SCHEMAS); \
+			echo "error: the schemas Rust writes are not the ones committed: run make api/schemas and commit $(SCHEMAS)" >&2; \
+			exit 1; }
 
 # The em dash reads as machine-written, so `lint` keeps it out of every
 # tracked file: docs, comments, messages and test expectations alike, the

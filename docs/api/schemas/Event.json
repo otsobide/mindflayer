@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Event",
+  "description": "One thing the panel is told.\n\nTagged by its name in snake_case beside its fields, as a task and a\nquery are: `{\"type\": \"changed\", \"scopes\": [...]}`.",
+  "oneOf": [
+    {
+      "description": "Something a backend watches changed on disk, so what the panel shows\nof each scope may be out of date: one event for every change the\nwatcher took in together, each scope once, in the backend's words.",
+      "type": "object",
+      "properties": {
+        "scopes": {
+          "type": "array",
+          "items": true
+        },
+        "type": {
+          "type": "string",
+          "const": "changed"
+        }
+      },
+      "required": [
+        "type",
+        "scopes"
+      ]
+    },
+    {
+      "description": "A task's lines started to run on the writer thread.",
+      "type": "object",
+      "properties": {
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "command_started"
+        }
+      },
+      "required": [
+        "type",
+        "lines"
+      ]
+    },
+    {
+      "description": "They stopped, however that went: the reply to the run says how.",
+      "type": "object",
+      "properties": {
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "command_finished"
+        }
+      },
+      "required": [
+        "type",
+        "lines"
+      ]
+    },
+    {
+      "description": "The backend acts on something else since ([`Backend::switch`]),\nand what it names is watched: everything is to be asked for again,\nand nothing shown before kept, since it was of what it acted on\nbefore. Told on the writer thread, once the switch is taken, to\nevery subscriber, the tab that asked for it among them\n([`Events::switched`]), with how many switches were taken since the\nbus was made, this one counted.\n\n[`Backend::switch`]: crate::Backend::switch",
+      "type": "object",
+      "properties": {
+        "switches": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "switched"
+        }
+      },
+      "required": [
+        "type",
+        "switches"
+      ]
+    },
+    {
+      "description": "The subscriber may have missed something: it has just connected, or\nit fell behind. Everything is to be asked for again.\n\nWith how many switches were taken since the bus was made, as the\nlatest [`Switched`](Event::Switched) said: a subscriber that missed\none, a tab whose stream was let go while it was hidden or one that\nfell behind, learns it from a count other than the one it heard last,\nand lets go of what it shows of what the backend acted on before as\nit would on hearing `Switched`. A count rather than a word that a\nswitch happened, which only a bus that knew what each subscriber had\nheard could say.",
+      "type": "object",
+      "properties": {
+        "switches": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "type": {
+          "type": "string",
+          "const": "resync"
+        }
+      },
+      "required": [
+        "type",
+        "switches"
+      ]
+    },
+    {
+      "description": "Every path the backend named is watched, so a change to one arrives\nas [`Changed`](Event::Changed).",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "watching"
+        }
+      },
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Not every one is, so a change there arrives as nothing, and what the\npanel shows is refreshed by hand: the system's limit on watches was\nreached, or a watch could not be set up at all.",
+      "type": "object",
+      "properties": {
+        "reason": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "unwatched"
+        }
+      },
+      "required": [
+        "type",
+        "reason"
+      ]
+    }
+  ]
+}

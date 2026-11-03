@@ -41,6 +41,7 @@ use crate::workspace::{FlayerWorkspace, MindProject};
 /// report's are.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Judged {
     /// Everything `validate` would say of the artifact as it would be
     /// written, warnings included, in its words: none when what would be

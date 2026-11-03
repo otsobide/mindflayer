@@ -1,0 +1,1009 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Task",
+  "description": "Work a front end asked for, as the command it is.\n\nIn JSON, what the panel sends to be run, each variant is an object\ntagged by its name in snake_case, its fields beside the tag: `{\"type\":\n\"link\", \"path\": \"beta\"}`. Tagged inside the object rather than around\nit, so a task reads as one flat record, the shape TypeScript tells a\nunion apart by. A field a task with fields does not have is refused\nrather than passed over, as one its holder or its agents line does not\nhave is: a task is a write, and one sent with a field misspelled would\nrun without it. Each name is a contract once a front end sends it, as a\nreport's is, so a test pins every one.",
+  "oneOf": [
+    {
+      "description": "`flayer init`, where the TUI was opened.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "init_workspace"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "`mind init`, where the TUI was opened.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "init_project"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "`flayer link <path>`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "link"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
+      "description": "`mind link`: the project the TUI is on, into the workspace above it.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "link_here"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "`mind -C <path> init`, then `flayer link <path>`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "init_and_link"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
+      "description": "`flayer unlink <entry>`.",
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "unlink"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "entry"
+      ]
+    },
+    {
+      "description": "`flayer relink <old> <new>`: a stale entry pointed at where the scan\nfound its project, moved.",
+      "type": "object",
+      "properties": {
+        "new": {
+          "type": "string"
+        },
+        "old": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "relink"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "old",
+        "new"
+      ]
+    },
+    {
+      "description": "`flayer load <path>`.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "load"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
+      "description": "`mind load <path>`: into the workspace above the project the TUI is on.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "load_here"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
+      "description": "`flayer unload <entry>`.",
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "unload"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "entry"
+      ]
+    },
+    {
+      "description": "`mind unload <path>`: out of the workspace above the project the TUI\nis on, by its absolute path, which reads the same from anywhere.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "unload_here"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "path"
+      ]
+    },
+    {
+      "description": "`… add [--template <template>] <kind> <name> <description>`.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "template": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "add"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "kind",
+        "name",
+        "description"
+      ]
+    },
+    {
+      "description": "`… show <kind:name>`.",
+      "type": "object",
+      "properties": {
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "show"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "reference"
+      ]
+    },
+    {
+      "description": "`… edit <kind:name>`, which hands the terminal to an editor until it is\nclosed.",
+      "type": "object",
+      "properties": {
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "edit"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "kind",
+        "name"
+      ]
+    },
+    {
+      "description": "`flayer edit [-p <project>] --contents <file> --if-unchanged <hash>\n<kind:name>`: what the artifact is read from, a skill's `SKILL.md`\nor a rule's file, replaced with `text` whole, only while it holds\nwhat `hash`, the SHA-256 the panel was given with what it read\n(`contents::Contents::hash`), is the hash of.\n\nThe text, never a path: the file the line reads is the workspace's\nscratch file for it ([`scratch_route`]), named by the line, which\nthe front end running it writes the text into before the line runs\nand takes away after. A front end that has not written it runs a\nline that reads nothing, which `edit` says. The workspace's command\nat either level, `-p` naming a project, rather than `mind -C`, so\nthe route is read from the workspace's root, where the lines run and\nthe scratch folder is.",
+      "type": "object",
+      "properties": {
+        "hash": {
+          "type": "string"
+        },
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "save"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "kind",
+        "name",
+        "text",
+        "hash"
+      ]
+    },
+    {
+      "description": "`… rename <kind:name> <to>`.",
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "string"
+        },
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "to": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "rename"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "kind",
+        "from",
+        "to"
+      ]
+    },
+    {
+      "description": "`… remove --yes <kind:name>`: asked about before it gets here, which is\nwhat the `--yes` says. `flayer remove --everywhere --yes <kind:name>`\nwhen `everywhere`, one of the workspace's own taken out of every\nproject it links first. Without `yes`, the dry run, which deletes\nnothing and says what would go, each project's copy with how it\nstands when `everywhere`: what the panel shows before it asks.",
+      "type": "object",
+      "properties": {
+        "everywhere": {
+          "type": "boolean"
+        },
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "remove"
+        },
+        "yes": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "kind",
+        "name",
+        "everywhere",
+        "yes"
+      ]
+    },
+    {
+      "description": "`flayer validate`, everything; `mind validate`, one project.",
+      "type": "object",
+      "properties": {
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "type": {
+          "type": "string",
+          "const": "validate"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder"
+      ]
+    },
+    {
+      "description": "`mind -C <path> init` for each repository that is not a project yet,\nthen one `flayer link` and one `flayer unlink`: what the minds screen's\nmarks amount to, built from them by [`Task::minds`].",
+      "type": "object",
+      "properties": {
+        "init": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "link": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "minds"
+        },
+        "unlink": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "init",
+        "link",
+        "unlink"
+      ]
+    },
+    {
+      "description": "What a front end's marks on directories ask for, each by the path a\ncommand is given: the batch [`Task::minds`] builds from them, whose\nlines these are, as the minds screen's are.\n\nHow the panel links what a scan found: it sends its marks, never the\nbatch, so that a directory made a project is then linked, with the\nrest, by the one function that says so, and the same marks make the\nsame lines on either front end: the same words where both spell a\nfolder alike, and the same batch folder for folder inside the\nworkspace, where the panel names one by its path, all the path\npolicy takes, and the minds screen by its route from the root.\n[`Minds`](Task::Minds) taken from a\nbrowser was the other way, which would hold the panel to spelling\nthat rule again in TypeScript, and could leave a folder made a\nproject and never linked.",
+      "type": "object",
+      "properties": {
+        "marks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Mark"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "marks"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "marks"
+      ]
+    },
+    {
+      "description": "`flayer gather list`.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "shelf"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "`flayer workspaces`: the workspaces this machine knows, the one in\nuse marked, to read.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "workspaces"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "`flayer gather git [--path <folder>] [--ref <ref>] <url>`.",
+      "type": "object",
+      "properties": {
+        "folder": {
+          "type": "string"
+        },
+        "reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "gather"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "url",
+        "folder"
+      ]
+    },
+    {
+      "description": "`… targets set --yes <kind> <dir>...`, or `… targets reset --yes\n<kind>` when no folder is named: what the targets form amounts to.",
+      "type": "object",
+      "properties": {
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "type": {
+          "type": "string",
+          "const": "targets"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "kind"
+      ]
+    },
+    {
+      "description": "`… agents --yes <agent>...`, then `… share --yes <mode>\n[--edit-tracked]`, each only when what it sets changes: what the\nagents and share toggles amount to.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "The agents to name, when they change.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentsLine"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "edit_tracked": {
+          "type": "boolean"
+        },
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "share": {
+          "description": "The share mode, when it or `edit_tracked` changes.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Share"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "settings"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "edit_tracked"
+      ]
+    },
+    {
+      "description": "What a project's toggles amount to, turned from `was`, what its\nsettings say, to `now`, what the toggles say: the\n[`Settings`](Task::Settings) task [`Task::settings`] builds, whose\nlines these are, as the TUI's toggles' are.\n\nHow the panel changes a project's agents and share mode: it sends\nthe toggles as they stand, never the lines' agents, so the order a\nproject names them in, and what unticking every one asks, is said by\nthe one function, never again in TypeScript. `was` is what the\npanel read in the snapshot, as the TUI's is what it read when the\nform opened: each line names the agents and the mode outright, so a\n`was` the disk has moved on from changes which lines run, never what\na line sets.",
+      "type": "object",
+      "properties": {
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "now": {
+          "$ref": "#/$defs/Toggles"
+        },
+        "type": {
+          "type": "string",
+          "const": "toggled"
+        },
+        "was": {
+          "$ref": "#/$defs/Toggles"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "was",
+        "now"
+      ]
+    },
+    {
+      "description": "`… update --yes [<kind:name>]`: what is installed in a project, or\nthe one artifact named, brought up to date and put back where a copy\nhas gone; `flayer update --all --yes [<kind:name>]` for the\nworkspace's own row, in every project it links. With `force`, `--yes\n--force`, writing over a copy changed since it was installed too,\nwhich the line is then asked about for ([`Caution::Forces`]).",
+      "type": "object",
+      "properties": {
+        "force": {
+          "type": "boolean"
+        },
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "reference": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "update"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder",
+        "force"
+      ]
+    },
+    {
+      "description": "`flayer install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`FlayerWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\n[`FlayerWorkspace::naming`]: mindflayer_core::FlayerWorkspace::naming",
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "install"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "projects",
+        "kind",
+        "name"
+      ]
+    },
+    {
+      "description": "`flayer uninstall -p <project>... <kind:name>`: one artifact taken\nback out of each project named, whichever place its copy came from,\neach named as an install's are, by what `naming` gives. With\n`force`, `--force`, taking out a copy changed since it was installed\ntoo, which the line is then asked about for ([`Caution::Forces`]):\nnever from the install screen, whose marks leave an edit to a command\nline, and from the panel only for the copy core says needs it.",
+      "type": "object",
+      "properties": {
+        "force": {
+          "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "uninstall"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "projects",
+        "kind",
+        "name",
+        "force"
+      ]
+    },
+    {
+      "description": "`… uninstall --orphaned`: every installation in a project that\nnothing offers any more where it came from, taken back out of it;\n`flayer uninstall --all-projects --orphaned` for the workspace's own\nrow, out of every project it links, as an update reaches them. Never\nforced: one changed since it was installed is left, every copy of it,\nfor a command line that says `--force` once somebody has looked.",
+      "type": "object",
+      "properties": {
+        "holder": {
+          "$ref": "#/$defs/Holder"
+        },
+        "type": {
+          "type": "string",
+          "const": "uninstall_orphaned"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "holder"
+      ]
+    },
+    {
+      "description": "`flayer adopt -p <project> --yes <kind:name>`: somebody's skill in\nthe project's agents' folders brought into the workspace's library,\nits copies recorded as installed from there: asked about before it\ngets here, which is what the `--yes` says. The project is named as an\ninstall's are, by what `naming` gives.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "adopt"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "project",
+        "kind",
+        "name"
+      ]
+    },
+    {
+      "description": "`flayer migrate -p <project> [--yes]`: one project the workspace\nlinks moved from an older marker, a `mind.toml` or a\n`settings.json`, to a `settings.toml`, what the workspace records of\nit carried along; without `yes`, the dry run, which writes nothing\nand says what would move. The project is named as an install's are,\nby what `naming` gives.\n\nThe workspace's command, as an install's is, so what it carries is\nwhat the workspace on screen records: `mind migrate` in the project\nfinds a workspace by walking up, which misses one linking the\nproject from beside it. The agents and the share mode are left to\nthe command, every agent and shared for a `mind.toml`, as a project\ncommitted by design was, and what a `settings.json` names for one,\nfor `mind agents` and `mind share` to change once it is moved.",
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "migrate"
+        },
+        "yes": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "project",
+        "yes"
+      ]
+    },
+    {
+      "description": "Open the install screen, which is what `flayer install` opens.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "open_install"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "What the install screen marked, as the `Install` and `Uninstall`\ntasks it amounts to ([`Screen::task`]), each run whatever came\nof the ones before.\n\n[`Screen::task`]: crate::install::state::Screen::task",
+      "type": "object",
+      "properties": {
+        "changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#"
+          }
+        },
+        "type": {
+          "type": "string",
+          "const": "apply_install"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "changes"
+      ]
+    },
+    {
+      "description": "Read the disk again.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "refresh"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ]
+    }
+  ],
+  "$defs": {
+    "Agent": {
+      "description": "A coding agent, by the name `--agents` and a project's settings take.",
+      "type": "string",
+      "enum": [
+        "claude",
+        "codex",
+        "opencode"
+      ]
+    },
+    "AgentsLine": {
+      "description": "What an `agents` line says, as the toggles have it.\n\n`{\"type\": \"named\", \"agents\": [\"claude\"]}` in JSON: tagged as a task is,\nwith the agents beside the tag, since a variant holding a list has no\nfield of its own for them to be named by.",
+      "oneOf": [
+        {
+          "description": "`agents --yes <agent>...`: exactly these.",
+          "type": "object",
+          "properties": {
+            "agents": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Agent"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "named"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "agents"
+          ]
+        },
+        {
+          "description": "`agents remove --yes <agent>...`: none of these, every one the\nproject names, which is how a line asks for no agent at all, since\nnaming none is not one. The command refuses it, with its own reason.",
+          "type": "object",
+          "properties": {
+            "agents": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Agent"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "removed"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "agents"
+          ]
+        }
+      ]
+    },
+    "Holder": {
+      "description": "Which level a task runs at: what holds the artifacts it is about.\n\n`{\"type\": \"project\", \"entry\": \"alpha\"}` in JSON, or `{\"type\":\n\"workspace\"}`: the shape a task's own variants have, which a variant\nholding one string cannot take inside the object the tag is in.",
+      "oneOf": [
+        {
+          "description": "The workspace, for its own artifacts: `flayer <cmd>`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "workspace"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "A project, by its entry: `mind -C <entry> <cmd>`, or `mind <cmd>` for\nthe one at the root the commands run from.",
+          "type": "object",
+          "properties": {
+            "entry": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "project"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "entry"
+          ]
+        },
+        {
+          "description": "A project whose own workspace is not the one on screen, by its entry:\n`mind -W . -C <entry> <cmd>`, which names the one on screen, so a\nchange drops that workspace's record and an add takes its templates.\n\nStill the project's command rather than `flayer <cmd> -p <entry>`,\nwhich would consult the same workspace: a project's row teaches the\nproject's command, at every row alike, and `-W` only where leaving\nit out would consult another.",
+          "type": "object",
+          "properties": {
+            "entry": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "elsewhere"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "entry"
+          ]
+        }
+      ]
+    },
+    "Kind": {
+      "description": "A kind of artifact, by the word a command line takes for it.",
+      "type": "string",
+      "enum": [
+        "skill",
+        "rule"
+      ]
+    },
+    "Mark": {
+      "description": "One directory a front end marked, by the path a command is given, with\nwhat to do to it: what [`Task::Marks`] holds, and [`Task::minds`] builds\na batch from. `{\"path\": \"/home/you/blog\", \"change\": \"link\"}` in JSON.",
+      "type": "object",
+      "properties": {
+        "change": {
+          "$ref": "#/$defs/MindsChange"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "change"
+      ]
+    },
+    "MindsChange": {
+      "description": "What one directory's mark on the minds screen asks of the workspace, when\nit differs from how the directory started: what [`Task::minds`] is built\nfrom. By its name in snake_case in JSON: `\"init_and_link\"`.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "link",
+            "unlink"
+          ]
+        },
+        {
+          "description": "`mind init` in it, then link it: a repository that is not a mind\nproject yet.",
+          "type": "string",
+          "const": "init_and_link"
+        }
+      ]
+    },
+    "Share": {
+      "description": "Whether what is installed into a project reaches the team, as the\nsettings file and `mind share` spell it.",
+      "type": "string",
+      "enum": [
+        "local",
+        "shared"
+      ]
+    },
+    "Toggles": {
+      "description": "What a project's agents and share toggles say: the agents ticked, its\nshare mode, and whether a file git tracks may be edited to reach an\nagent. What [`Task::settings`] reads twice, as the project's settings\nsay them and as the toggles do.\n\n`{\"agents\": [\"claude\"], \"share\": \"local\", \"edit_tracked\": false}` in\nJSON: the names the snapshot gives the same three in a project's\nsettings.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "As its settings name them, in their order; ticked, in any.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "edit_tracked": {
+          "type": "boolean"
+        },
+        "share": {
+          "$ref": "#/$defs/Share"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "agents",
+        "share",
+        "edit_tracked"
+      ]
+    }
+  }
+}

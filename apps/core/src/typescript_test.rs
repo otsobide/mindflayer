@@ -13,6 +13,7 @@ use crate::agent::Agent;
 use crate::artifact::ValidationIssue;
 use crate::browse;
 use crate::contents::Withheld;
+use crate::described::field_serializers;
 use crate::install::Place;
 use crate::kind::Kind;
 use crate::ledger::SourceKind;
@@ -357,7 +358,11 @@ fn every_field_serializer_in_core_is_one_held_to_its_typescript() {
 }
 
 /// What finds them, which a test that found none would pass unseen: a
-/// `deserialize_with` names no serializer, and `with` names a module.
+/// `deserialize_with` names no serializer, `with` names a module, and a
+/// `with` of schemars' names the type a schema is read off. One after an
+/// argument holding parentheses of its own, or a string holding some, is
+/// still serde's, and one in an attribute neither serde's nor schemars'
+/// counts, so a misreading names one more rather than hide one.
 #[test]
 fn field_serializers_are_read_off_every_attribute_that_names_one() {
     let folder = tempfile::tempdir().unwrap();
@@ -366,7 +371,12 @@ fn field_serializers_are_read_off_every_attribute_that_names_one() {
         folder.path().join("nested/one.rs"),
         "#[serde(default, deserialize_with = \"read\")]\n\
          #[serde(serialize_with = \"crate::paths::lossy\")]\n\
-         #[serde(\n    with = \"humantime\"\n)]\n",
+         #[serde(\n    with = \"humantime\"\n)]\n\
+         #[cfg_attr(feature = \"schema\", schemars(with = \"Option<String>\"))]\n\
+         #[serde(rename(serialize = \"x\"), serialize_with = \"renamed\")]\n\
+         #[serde(bound(serialize = \"T: Fn(u8) -> (\\\")\\\")\"), with = \"bounded\")]\n\
+         #[cfg_attr(feature = \"schema\", schemars(rename = \"x\", with = \"Vec<(u8, u8)>\"))]\n\
+         #[other(with = \"unknown\")]\n",
     )
     .unwrap();
     std::fs::write(
@@ -377,7 +387,13 @@ fn field_serializers_are_read_off_every_attribute_that_names_one() {
 
     assert_eq!(
         field_serializers(folder.path()).unwrap(),
-        BTreeSet::from(["humantime".to_owned(), "paths::lossy".to_owned()])
+        BTreeSet::from([
+            "bounded".to_owned(),
+            "humantime".to_owned(),
+            "paths::lossy".to_owned(),
+            "renamed".to_owned(),
+            "unknown".to_owned(),
+        ])
     );
 }
 
