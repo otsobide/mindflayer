@@ -55,6 +55,7 @@ use crate::kind::{Kind, Layout};
 use crate::lifecycle::{self, LifecycleError};
 use crate::paths;
 use crate::rule::RuleManifest;
+use crate::value::ContentHash;
 use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// The most a file may hold, in bytes, to have its text read: a mebibyte.
@@ -87,7 +88,7 @@ pub struct Contents {
     /// was read from, rather than by the front end from the text: one
     /// recipe for every hash of a file, and a text a browser hashed could
     /// be told apart from the file by nothing but a line ending.
-    pub hash: Option<String>,
+    pub hash: Option<ContentHash>,
     /// What it says, when it is UTF-8 text no larger than [`CAP`]; none
     /// otherwise, and [`withheld`](Self::withheld) says why.
     pub text: Option<String>,

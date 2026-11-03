@@ -44,6 +44,7 @@ use crate::install::{self, InstallError, WORKSPACE_ORIGIN};
 use crate::kind::Kind;
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::skill::SkillManifest;
+use crate::value::ContentHash;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// What the `metadata` keys start with that `gh skill` writes into a skill
@@ -69,7 +70,7 @@ pub struct Plan {
     pub source: PathBuf,
     /// What every copy that is there holds ([`hash::tree`]): what the
     /// library copy will hold, and the hash the record keeps.
-    pub hash: String,
+    pub hash: ContentHash,
     /// Each `metadata` entry its `SKILL.md` declares under a key starting
     /// with [`PROVENANCE_PREFIX`], in the order written: where `gh skill`
     /// says it got it, for a front end to show. Nothing reads it further,
@@ -576,7 +577,7 @@ fn in_library(workspace: &FlayerWorkspace, name: &str, copy: &Path) -> Result<Pa
 /// What the copy at `path` holds ([`hash::tree`]), which refuses a link
 /// inside it, or anything else neither a file nor a folder: no install
 /// writes one, and following it could read anything.
-fn hash_of(path: &Path) -> Result<String, AdoptError> {
+fn hash_of(path: &Path) -> Result<ContentHash, AdoptError> {
     hash::tree(path).map_err(|error| AdoptError::Unreproducible {
         path: path.to_path_buf(),
         reason: error.to_string(),

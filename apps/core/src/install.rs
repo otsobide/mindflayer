@@ -44,6 +44,7 @@ use crate::ledger::{
 use crate::paths;
 use crate::settings::Share;
 use crate::url::redacted;
+use crate::value::ContentHash;
 use crate::workspace::{same_directory, FlayerWorkspace, Loaded, MindProject, WorkspaceError};
 
 mod plan;
@@ -1809,8 +1810,8 @@ pub(crate) fn untracked(project: &MindProject, copies: &[PathBuf]) -> Vec<PathBu
 /// The one hash every copy holds ([`hash::tree`]), or why there is none:
 /// a copy that cannot be hashed, or, should one change while the others are
 /// read, copies that do not hold the same.
-pub(crate) fn one_hash(copies: &[PathBuf]) -> Result<String, String> {
-    let mut found: Option<(String, &Path)> = None;
+pub(crate) fn one_hash(copies: &[PathBuf]) -> Result<ContentHash, String> {
+    let mut found: Option<(ContentHash, &Path)> = None;
     for copy in copies {
         let hash = hash::tree(copy).map_err(|error| error.to_string())?;
         match &found {

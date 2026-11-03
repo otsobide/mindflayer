@@ -44,6 +44,7 @@ use crate::ledger::Carried;
 use crate::paths;
 use crate::skill::SkillManifest;
 use crate::template::Template;
+use crate::value::ContentHash;
 use crate::workspace::{
     replace_bytes_unresolved, replace_file, FlayerWorkspace, MindProject, WorkspaceError,
 };
@@ -1123,7 +1124,7 @@ pub enum LifecycleError {
     Stale {
         path: PathBuf,
         expected: String,
-        found: String,
+        found: ContentHash,
     },
     /// The file leads, through a link, out of `directory`, one of the
     /// folders contents given whole are written inside: the project's

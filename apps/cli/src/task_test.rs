@@ -1563,7 +1563,7 @@ fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_
         kind: Kind::Skill,
         name: String::from("deploy"),
         text: String::from(text),
-        hash: hash.clone(),
+        hash: hash.to_string(),
     };
 
     let own = save(Holder::Workspace);

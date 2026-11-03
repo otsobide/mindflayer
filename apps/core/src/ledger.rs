@@ -31,6 +31,7 @@ use crate::code::codes;
 use crate::kind::Kind;
 use crate::settings::ProjectId;
 use crate::url::{carries_credentials, redacted};
+use crate::value::ContentHash;
 
 /// The schema version this build writes.
 ///
@@ -213,7 +214,7 @@ pub struct InstallRecord {
     /// [`crate::hash::tree`] of what was written, which every target holds.
     /// `None` in a record from before schema 3, which D-04 reads as current
     /// only while the copy matches its offer byte for byte.
-    pub content_hash: Option<String>,
+    pub content_hash: Option<ContentHash>,
     /// Every copy it wrote, by path.
     pub targets: Vec<Target>,
 }
@@ -232,7 +233,7 @@ pub struct Target {
     /// for Claude hold different bytes, each with a hash of its own. `None`
     /// for a skill's copies, every one of which holds the tree the
     /// installation's hash names.
-    pub content_hash: Option<String>,
+    pub content_hash: Option<ContentHash>,
 }
 
 /// Where one installation's copies are once its project has moved from a
@@ -246,7 +247,7 @@ pub struct Moved {
     /// What every one of them holds ([`crate::hash::tree`]), for a record
     /// from before hashes were kept, which the migration found current by
     /// its offer: kept only where the record has none.
-    pub content_hash: Option<String>,
+    pub content_hash: Option<ContentHash>,
 }
 
 /// What [`Ledger::uninstalled_copy`] forgot.
@@ -1443,10 +1444,10 @@ impl Ledger {
                     row.get::<_, String>(1)?,
                     row.get::<_, Option<i64>>(2)?,
                     row.get::<_, Option<String>>(3)?,
-                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<ContentHash>>(4)?,
                     row.get::<_, Option<String>>(5)?,
                     row.get::<_, Option<String>>(6)?,
-                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, Option<ContentHash>>(7)?,
                 ))
             })
             .map_err(failed)?;
@@ -2301,6 +2302,23 @@ fn slug(url: &str) -> String {
         String::from("source")
     } else {
         trimmed.to_owned()
+    }
+}
+
+/// A hash as the ledger stores it: the text it is written as, in a `TEXT`
+/// column. Here, in the ledger, rather than beside the value: the value
+/// knows nothing of SQLite, and a store of another kind would say how it
+/// keeps one in its own module, as this one does.
+impl rusqlite::ToSql for ContentHash {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::from(self.as_str()))
+    }
+}
+
+/// A hash as the ledger holds it, taken as written ([`ContentHash::recorded`]).
+impl rusqlite::types::FromSql for ContentHash {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        String::column_result(value).map(ContentHash::recorded)
     }
 }
 

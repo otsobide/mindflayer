@@ -56,6 +56,7 @@ use crate::code::codes;
 use crate::exclude::{self, ExcludeError, Excluded};
 use crate::hash;
 use crate::install;
+use crate::value::ContentHash;
 use crate::workspace::{replace_bytes_unresolved, FlayerWorkspace, MindProject};
 
 /// The folders, from a project's root, the files go in.
@@ -108,7 +109,7 @@ pub enum Mode {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Recorded {
     pub route: String,
-    pub hash: String,
+    pub hash: ContentHash,
 }
 
 /// What [`render`] did.
@@ -157,7 +158,7 @@ pub struct RuleFile {
     /// The hash of what the file holds while it is Mindflayer's, for the
     /// caller to record; none once the render leaves nothing of Mindflayer's
     /// there.
-    pub hash: Option<String>,
+    pub hash: Option<ContentHash>,
 }
 
 /// What [`render`] did to one rule's file.
@@ -310,7 +311,7 @@ pub fn render<'a>(
         asked.insert(route, bytes);
     }
     // By route, the hash given last for one given twice.
-    let mut owned: BTreeMap<String, &str> = BTreeMap::new();
+    let mut owned: BTreeMap<String, &ContentHash> = BTreeMap::new();
     for record in recorded {
         owned.insert(named(&record.route)?, &record.hash);
     }
@@ -374,7 +375,7 @@ pub fn render<'a>(
                 missed: missed.clone(),
             });
         }
-        let recorded = owned.get(&route).map(|hash| (*hash).to_owned());
+        let recorded = owned.get(&route).map(|hash| (*hash).clone());
         let (written, hash) = match plan {
             Plan::Create(bytes) => match create(&path, &bytes) {
                 Ok(()) => (Written::Created, Some(hash::bytes(&bytes))),
@@ -428,7 +429,7 @@ pub fn render<'a>(
         if let Err(error) = fs::remove_file(&file.path) {
             warnings.push(failed(&file.route, &file.path, &error));
             file.written = Written::Failed;
-            file.hash = owned.get(&file.route).map(|hash| (*hash).to_owned());
+            file.hash = owned.get(&file.route).map(|hash| (*hash).clone());
         }
     }
     // Pruned after a file gone by itself as after one taken away, so the
@@ -616,8 +617,8 @@ fn entries(routes: &[impl AsRef<str>]) -> Vec<exclude::Entry> {
 
 /// What to do at a rule's place, given the rule as it is now when it is
 /// asked for, the hash recorded there when one is, and what is `found`.
-fn plan(asked: Option<&[u8]>, recorded: Option<&str>, found: Found) -> Plan {
-    let ours = |bytes: &[u8]| recorded.is_some_and(|hash| hash::bytes(bytes) == hash);
+fn plan(asked: Option<&[u8]>, recorded: Option<&ContentHash>, found: Found) -> Plan {
+    let ours = |bytes: &[u8]| recorded.is_some_and(|hash| hash::bytes(bytes) == *hash);
     match (asked, found) {
         (_, Found::Unreadable(error)) => Plan::Unlooked(error),
         (Some(rule), Found::Absent) => Plan::Create(rule.to_vec()),

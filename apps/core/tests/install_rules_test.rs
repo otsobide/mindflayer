@@ -21,6 +21,7 @@ use mindflayer_core::install::{
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::lifecycle;
 use mindflayer_core::migrate;
+use mindflayer_core::value::ContentHash;
 use mindflayer_core::{
     hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, LifecycleError,
     MindProject, Missed, Reference, Share, State, Status,
@@ -599,12 +600,12 @@ impl Fixture {
 }
 
 /// The hash a section of `body` for `route` is recorded with.
-fn section_hash(route: &str, body: &str) -> String {
+fn section_hash(route: &str, body: &str) -> ContentHash {
     Section::new(route, body).unwrap().hash()
 }
 
 /// A target of the section of a rule, by its hash.
-fn in_block(hash: String) -> Target {
+fn in_block(hash: ContentHash) -> Target {
     Target {
         agent: None,
         path: String::from("AGENTS.md"),

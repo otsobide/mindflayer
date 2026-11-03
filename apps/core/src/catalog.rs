@@ -16,6 +16,7 @@ use crate::install;
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError};
 use crate::paths;
+use crate::value::ContentHash;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject};
 
 /// The artifacts discovered across some mind projects, and what went wrong.
@@ -215,7 +216,7 @@ impl Catalog {
         &mut self,
         name: &str,
         first: &Path,
-        hashed: &mut Option<Option<String>>,
+        hashed: &mut Option<Option<ContentHash>>,
         other: &Path,
     ) -> bool {
         if same_directory(first, other) {

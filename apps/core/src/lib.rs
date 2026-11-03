@@ -60,6 +60,7 @@ pub mod template;
 pub mod typescript;
 pub mod update;
 pub mod url;
+pub mod value;
 pub mod view;
 pub mod watch;
 pub mod workspace;

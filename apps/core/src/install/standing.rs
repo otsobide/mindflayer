@@ -27,6 +27,7 @@ use crate::copy;
 use crate::hash;
 use crate::kind::Kind;
 use crate::ledger::{InstallRecord, Target};
+use crate::value::ContentHash;
 use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// How one offer stands with respect to one project.
@@ -440,7 +441,7 @@ fn holds(workspace: &FlayerWorkspace, offer: &Offer, copy: &Path) -> bool {
 
 /// The hash of the section `offer`, a rule, renders as: none for one about
 /// some files only, which has no section, or one that cannot be read.
-fn section_of(workspace: &FlayerWorkspace, offer: &Offer) -> Option<String> {
+fn section_of(workspace: &FlayerWorkspace, offer: &Offer) -> Option<ContentHash> {
     let rule = Artifact::rule(
         offer.source(workspace),
         offer.name().to_owned(),

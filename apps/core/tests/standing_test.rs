@@ -12,6 +12,7 @@ use common::{repository, skill, url};
 use mindflayer_core::copy;
 use mindflayer_core::gather::{self, Request};
 use mindflayer_core::install::{self, Edits, Installed, Removed, Standing};
+use mindflayer_core::value::ContentHash;
 use mindflayer_core::{
     claude_rules, create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger,
     MindProject, Share,
@@ -151,7 +152,7 @@ impl Given {
             .unwrap();
     }
 
-    fn recorded_hash(&self, kind: Kind, name: &str) -> Option<String> {
+    fn recorded_hash(&self, kind: Kind, name: &str) -> Option<ContentHash> {
         self.ledger
             .installation("app", kind, name)
             .unwrap()

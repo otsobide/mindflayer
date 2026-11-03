@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// A hash as the ledger holds what it is given, which these tests need not
+/// be a real one: what is stored is read back as it was written.
+fn recorded(text: &str) -> ContentHash {
+    ContentHash::recorded(text.to_owned())
+}
+
 #[test]
 fn a_url_becomes_a_readable_directory_name() {
     assert_eq!(
@@ -765,7 +771,7 @@ fn installation_of(name: &str, targets: &[(Option<&str>, &str)]) -> InstallRecor
         name: name.to_owned(),
         source_id: None,
         origin: Some(String::from("workspace")),
-        content_hash: Some(String::from("e3b0c442")),
+        content_hash: Some(recorded("e3b0c442")),
         targets: targets
             .iter()
             .map(|(agent, path)| Target {
@@ -791,8 +797,8 @@ fn each_copy_reads_back_with_the_hash_of_its_own_it_was_given() {
         ],
     );
     written.kind = Kind::Rule;
-    written.targets[0].content_hash = Some(String::from("section"));
-    written.targets[1].content_hash = Some(String::from("file"));
+    written.targets[0].content_hash = Some(recorded("section"));
+    written.targets[1].content_hash = Some(recorded("file"));
 
     ledger.installed("collapse", &written).unwrap();
 
@@ -830,13 +836,13 @@ fn rule_of(name: &str, targets: &[(Option<&str>, &str, &str)]) -> InstallRecord 
         name: name.to_owned(),
         source_id: None,
         origin: Some(String::from("workspace")),
-        content_hash: Some(format!("{name}-rule")),
+        content_hash: Some(recorded(&format!("{name}-rule"))),
         targets: targets
             .iter()
             .map(|(agent, path, hash)| Target {
                 agent: agent.map(str::to_owned),
                 path: (*path).to_owned(),
-                content_hash: Some((*hash).to_owned()),
+                content_hash: Some(recorded(hash)),
             })
             .collect(),
     }
@@ -987,7 +993,7 @@ fn installing_again_replaces_the_copies_recorded_rather_than_adding_to_them() {
         )
         .unwrap();
     let mut again = installation_of("deploy", &[(None, "skills/deploy")]);
-    again.content_hash = Some(String::from("another"));
+    again.content_hash = Some(recorded("another"));
 
     ledger.installed("collapse", &again).unwrap();
 
@@ -1146,7 +1152,7 @@ fn a_renamed_copy_is_an_installation_of_its_own_beside_the_copies_it_left() {
         &[(None, "AGENTS.md"), (None, "rules/git/no-force-push.md")],
     );
     written.kind = Kind::Rule;
-    written.targets[1].content_hash = Some(String::from("4f9c2a7e"));
+    written.targets[1].content_hash = Some(recorded("4f9c2a7e"));
     ledger.installed("collapse", &written).unwrap();
 
     let carried = ledger
@@ -1180,7 +1186,7 @@ fn a_renamed_copy_is_an_installation_of_its_own_beside_the_copies_it_left() {
             targets: vec![Target {
                 agent: None,
                 path: String::from("rules/git/never-force-push.md"),
-                content_hash: Some(String::from("4f9c2a7e")),
+                content_hash: Some(recorded("4f9c2a7e")),
             }],
             ..written
         })
@@ -1357,7 +1363,7 @@ fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_
         name: name.to_owned(),
         targets: installation_of(name, &[(Some("claude"), &format!(".claude/skills/{name}"))])
             .targets,
-        content_hash: hash.map(str::to_owned),
+        content_hash: hash.map(recorded),
     };
 
     ledger

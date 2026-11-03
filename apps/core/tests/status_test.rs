@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use mindflayer_core::ledger::{InstallRecord, Target};
+use mindflayer_core::value::ContentHash;
 use mindflayer_core::{
     hash, Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MarkerFile,
     MindProject, ProjectStatus, Share, State, Status, StatusFailure, Unreached, MIND_DIR,
@@ -70,7 +71,7 @@ fn offer(workspace: &FlayerWorkspace, name: &str) -> PathBuf {
 
 /// The hash of `name` as [`put`] writes it, which is what an install of it
 /// records: a copy that holds it reads as untouched.
-fn written(name: &str) -> String {
+fn written(name: &str) -> ContentHash {
     let dir = TempDir::new().unwrap();
     write_skill(&dir.path().join(name), name);
     hash::tree(&dir.path().join(name)).unwrap()

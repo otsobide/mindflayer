@@ -604,7 +604,7 @@ fn a_skills_file_comes_back_as_text_inside_json() {
     // What `edit --if-unchanged` takes of it, core's hash of its bytes.
     assert_eq!(
         answer["hash"],
-        mindflayer_core::hash::bytes(skill_file("alpha", "A skill").as_bytes())
+        mindflayer_core::hash::bytes(skill_file("alpha", "A skill").as_bytes()).as_str()
     );
     // Cut where core cuts it, so the panel draws what it declares apart.
     assert_eq!(answer["manifest"]["front_matter"][0]["key"], "name");

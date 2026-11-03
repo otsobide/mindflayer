@@ -50,6 +50,7 @@ use crate::hash;
 use crate::install;
 use crate::lines::{self, Line};
 use crate::paths;
+use crate::value::ContentHash;
 use crate::workspace::{replace_bytes, same_directory, FlayerWorkspace, MindProject};
 
 /// The line that opens Mindflayer's block.
@@ -211,7 +212,7 @@ impl Section {
     /// reads alike whatever ending the file uses: an editor or git turning
     /// the file's newlines into another kind changes no rule, and is no edit
     /// of one. Without its marker, which says only whose it is.
-    pub fn hash(&self) -> String {
+    pub fn hash(&self) -> ContentHash {
         let mut said = String::new();
         for line in &self.lines {
             said.push_str(line);
