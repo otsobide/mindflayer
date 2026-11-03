@@ -32,7 +32,7 @@ async fn the_stream_takes_the_cookie_and_starts_by_asking_for_everything() {
 
     assert_eq!(stream.status, StatusCode::OK);
     assert_eq!(stream.header("content-type"), Some("text/event-stream"));
-    assert_eq!(stream.header("cache-control"), Some("no-cache"));
+    assert_eq!(stream.header("cache-control"), Some("no-store"));
     assert!(stream.header("content-security-policy").is_some());
     assert_eq!(
         stream.next().await,

@@ -4592,6 +4592,15 @@ page on another port that loads `/api/v1/transcript` with a `<script>` tag has
 it refused rather than run. And there is no CORS layer at all: no answer
 grants another origin anything, and a preflight is never passed.
 
+Every answer under `/api`, a refusal as much as a read, carries
+`Cache-Control: no-store` besides. A read is a GET, and a browser is free
+to keep a GET's answer in the profile's cache on disk for as long as it
+likes, the whole text of an artifact's file (`/api/v1/contents`) among
+them, where a POST's was never kept. The panel loses nothing by it: what it
+read stays in Vue Query's cache while the page is open, and is asked for
+again whenever the disk changes. The panel's own files keep theirs
+([the panel's files](#the-panels-files)).
+
 What none of this stops is the server behind such a page. The browser sends
 `mf_<port>` to every port of 127.0.0.1, since cookies are not isolated by port
 and those requests are same-site, so any server there that the browser sends

@@ -11,7 +11,8 @@ use std::sync::Arc;
 
 use axum::extract::{Request, State};
 use axum::http::header::{
-    AsHeaderName, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HOST, ORIGIN, X_CONTENT_TYPE_OPTIONS,
+    AsHeaderName, CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HOST, ORIGIN,
+    X_CONTENT_TYPE_OPTIONS,
 };
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
@@ -240,13 +241,24 @@ const POLICY: &str = "default-src 'self'; frame-ancestors 'none'";
 /// another port that loads `/api/v1/transcript` as a script has it refused,
 /// not run, and JSON is never mistaken for a page.
 ///
+/// And `no-store` with every answer under `/api`, refusals included, so the
+/// browser keeps none of them in the profile's cache on disk: a read is a
+/// GET, whose answer it is otherwise free to store there, the whole text of
+/// an artifact's file among them. Nothing is lost by it, since the panel
+/// keeps what it read in a cache of its own while the page is open, and
+/// asks again whenever the disk changes.
+///
 /// No CORS layer goes with them, on purpose: without one, no answer grants
 /// another origin the right to read it, and a preflight is never passed.
 pub(crate) async fn restrict(request: Request, next: Next) -> Response {
+    let of_the_api = api::is_api(request.uri().path());
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
     headers.insert(CONTENT_SECURITY_POLICY, HeaderValue::from_static(POLICY));
     headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    if of_the_api {
+        headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
     response
 }
 

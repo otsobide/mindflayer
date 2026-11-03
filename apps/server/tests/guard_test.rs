@@ -317,6 +317,80 @@ async fn every_answer_carries_the_content_security_policy_and_nosniff() {
     }
 }
 
+/// A read is a GET, whose answer a browser may otherwise keep in the
+/// profile's cache on disk, a file's whole text among them: every answer
+/// under `/api` says not to, whoever turned it away, while the panel's page
+/// keeps its own.
+#[tokio::test]
+async fn no_answer_under_the_api_is_stored_and_the_panel_keeps_its_own() {
+    let (server, _) = launch();
+    let token = Auth::Bearer(server.token());
+    let mut rebound = request(&server, Method::GET, "/api/v1/echo?echo=hi", token, None);
+    rebound.headers_mut().insert(
+        "host",
+        format!("attacker.example:{}", server.address().port())
+            .parse()
+            .unwrap(),
+    );
+
+    let replies = [
+        (
+            "a read",
+            get(&server, "/api/v1/echo?echo=hi", token).await,
+            StatusCode::OK,
+        ),
+        (
+            "a read with a body",
+            post(&server, "/api/v1/judge", token, json!({ "echo": "hi" })).await,
+            StatusCode::OK,
+        ),
+        (
+            "the transcript",
+            get(&server, "/api/v1/transcript", token).await,
+            StatusCode::OK,
+        ),
+        (
+            "a refusal of a parameter",
+            get(&server, "/api/v1/echo?echo=hi&what=1", token).await,
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            "the backend's refusal",
+            get(&server, "/api/v1/echo?echo=x&refuse=true", token).await,
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            "a path no route names",
+            get(&server, "/api/commands", token).await,
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            "a method a route does not take",
+            send(&server, Method::DELETE, "/api/v1/transcript", token, None).await,
+            StatusCode::METHOD_NOT_ALLOWED,
+        ),
+        (
+            "the gate's refusal",
+            get(&server, "/api/v1/echo?echo=hi", Auth::Nothing).await,
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            "the guard's refusal",
+            deliver(&server, rebound).await,
+            StatusCode::FORBIDDEN,
+        ),
+    ];
+    for (case, reply, status) in replies {
+        assert_eq!(reply.status, status, "{case}: {}", reply.text());
+        assert_eq!(reply.header("cache-control"), Some("no-store"), "{case}");
+    }
+
+    // Built into this binary or not, the panel's page is asked for again on
+    // every load, and its files are the same for everybody.
+    let page = get(&server, "/", Auth::Nothing).await;
+    assert_eq!(page.header("cache-control"), Some("no-cache"));
+}
+
 #[tokio::test]
 async fn no_answer_grants_another_origin_anything() {
     let (server, _) = launch();
@@ -451,8 +525,9 @@ fn versioned() -> [(Method, &'static str, Option<Value>); 8] {
 /// server's, is a 401; one naming another host or sent from another page a
 /// 403, whichever way it holds the token; and a change by cookie that the
 /// panel's page would not send is refused as one to `/tasks` is. Every
-/// refusal, and every answer, carries the policy and `nosniff`; and either
-/// credential, sent as a script or the page sends it, is answered.
+/// refusal, and every answer, carries the policy, `nosniff` and `no-store`;
+/// and either credential, sent as a script or the page sends it, is
+/// answered.
 #[tokio::test]
 async fn every_versioned_route_holds_every_guard_by_bearer_and_cookie_alike() {
     let (server, _) = launch();
@@ -480,6 +555,13 @@ async fn every_versioned_route_holds_every_guard_by_bearer_and_cookie_alike() {
                 .get("x-content-type-options")
                 .map(|value| value.to_str().unwrap()),
             Some("nosniff"),
+            "{case}"
+        );
+        assert_eq!(
+            reply_headers
+                .get("cache-control")
+                .map(|value| value.to_str().unwrap()),
+            Some("no-store"),
             "{case}"
         );
     };

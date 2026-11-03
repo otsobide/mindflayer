@@ -1014,8 +1014,9 @@ These are easy to break from a single file without noticing.
   `Sec-Fetch-Site: same-origin`, `X-Mindflayer: 1` and `application/json`.
   The one widening is the panel's dev server's origin, exactly, when a front
   end names it (`Server::dev_server`, `flayer ui --dev`).
-  Every answer carries the CSP and `nosniff`; there is no CORS layer, and the
-  token is never logged.
+  Every answer carries the CSP and `nosniff`, and every one under `/api`
+  `Cache-Control: no-store`, since a read is a GET a browser would keep;
+  there is no CORS layer, and the token is never logged.
 - **The panel holds no rules either, and talks only through its
   transport.** It asks and draws: nothing a query answers is worked out in
   TypeScript. Every request goes through the `Transport` from
