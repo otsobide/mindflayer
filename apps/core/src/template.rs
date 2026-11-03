@@ -53,11 +53,13 @@ impl Serialize for Origin {
 /// by its name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Template {
     pub name: String,
     pub kind: Kind,
     /// The folder or file it is, or none for one built in.
     #[cfg_attr(feature = "ts", ts(as = "Option<String>"))]
+    #[cfg_attr(feature = "schema", schemars(with = "Option<String>"))]
     pub origin: Origin,
 }
 

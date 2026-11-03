@@ -246,12 +246,13 @@ pub const ALL: &[(&str, &[&str])] = &[
 ];
 
 /// Every code core gives ([`ALL`]), as one type a description of what a
-/// front end is handed names: the union of them in the panel's TypeScript.
+/// front end is handed names: the union of them in the panel's TypeScript,
+/// and the strings they are in the API's schema.
 ///
 /// A type with nothing in it, since what it stands for is the list, and
-/// here rather than beside the description, so that any description of
-/// core's types names the same one.
-#[cfg(feature = "ts")]
+/// here rather than beside either description, so that both name the same
+/// one.
+#[cfg(any(feature = "ts", feature = "schema"))]
 pub struct CoreCode;
 
 /// An error as a serialized type holds one: its code, for a front end to act
@@ -264,6 +265,7 @@ pub struct CoreCode;
 /// front end that reads the snapshot as Rust rather than as JSON, the TUI.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Said {
     pub code: &'static str,
     /// Written through [`redacted`](crate::url::redacted), as every URL

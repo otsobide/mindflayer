@@ -69,6 +69,7 @@ pub const HISTORY: usize = 20;
 /// Everything a workspace holds, as every front end shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Snapshot {
     /// [`FORMAT`].
     pub format: u32,
@@ -129,6 +130,7 @@ pub struct Snapshot {
 /// length: two entries can spell one directory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Summary {
     /// How many directories its registry names that open a project: each
     /// once, however many entries spell it, as [`KnownWorkspace::projects`]
@@ -181,6 +183,7 @@ impl Summary {
 /// The workspace a snapshot is of.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Workspace {
     pub name: String,
     #[serde(serialize_with = "paths::lossy")]
@@ -195,6 +198,7 @@ pub struct Workspace {
 /// The workspace's own artifacts, held as a project holds its own.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Library {
     /// What `--from` takes for each of its own, and what an install of one
     /// records as its origin: so a front end names it in a command line by
@@ -227,6 +231,7 @@ pub struct Library {
 /// same while no workspace it loads offers that name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LibraryHolder {
     /// The one of the workspace's own it holds a copy of.
     pub kind: Kind,
@@ -241,6 +246,7 @@ pub struct LibraryHolder {
 /// One entry in a workspace's registry, and the project it opens.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Project {
     /// The entry as the marker spells it, which `-p` and `unlink` take; none
     /// for a project no workspace links.
@@ -302,6 +308,7 @@ pub struct Project {
 /// What a project's settings say, as a change of them takes it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProjectSettings {
     /// Its agents, in the order its settings name them, which a change
     /// keeps for the ones it keeps: not report order, which
@@ -317,6 +324,7 @@ pub struct ProjectSettings {
 /// The folders a project's settings install one kind in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct KindTargets {
     pub kind: Kind,
     /// Each folder as the settings spell it, `/` separated.
@@ -326,6 +334,7 @@ pub struct KindTargets {
 /// Where a holder keeps one kind.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Directory {
     pub kind: Kind,
     /// A route from the holder, `/` separated, or the path itself when no
@@ -336,6 +345,7 @@ pub struct Directory {
 /// One artifact a holder holds, and how it stands there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Held {
     pub kind: Kind,
     pub name: String,
@@ -376,6 +386,7 @@ pub struct Held {
 /// is, and the panel counting its own would be a second set of them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Tally {
     /// How many, every kind together.
     pub total: usize,
@@ -391,6 +402,7 @@ pub struct Tally {
 /// How many of one kind.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct KindCount {
     pub kind: Kind,
     pub count: usize,
@@ -399,6 +411,7 @@ pub struct KindCount {
 /// How many stand in one state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct StateCount {
     pub state: State,
     pub count: usize,
@@ -522,7 +535,7 @@ impl Serialize for Health {
     }
 }
 
-#[cfg(feature = "ts")]
+#[cfg(any(feature = "ts", feature = "schema"))]
 crate::described::words! {
     /// How a project stands as a whole.
     Health by slug { Ok, Attention, Broken, Stale }
@@ -531,6 +544,7 @@ crate::described::words! {
 /// A copy of an artifact whose file does not read, and why.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Unread {
     /// Where the copy is, as a route from its holder, `/` separated: its
     /// place in the folder the holder keeps its kind in, the one place a
@@ -549,6 +563,7 @@ pub struct Unread {
 /// A workspace another one loads, and how much of its own it offers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LoadedWorkspace {
     /// The entry as the marker spells it: what `flayer unload` is given.
     pub entry: String,
@@ -582,6 +597,7 @@ pub struct LoadedWorkspace {
 /// leads tells.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct KnownHere {
     #[serde(flatten)]
     #[cfg_attr(feature = "ts", ts(flatten))]
@@ -629,6 +645,7 @@ impl KnownHere {
 /// flattens the row beside an origin of its own.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Shelved {
     #[serde(flatten)]
     #[cfg_attr(feature = "ts", ts(flatten))]
@@ -652,6 +669,7 @@ impl Shelved {
 /// supplied.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ShelfSource {
     #[serde(flatten)]
     #[cfg_attr(feature = "ts", ts(flatten))]
@@ -681,6 +699,7 @@ impl ShelfSource {
 /// snapshot lists.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Offered {
     pub kind: Kind,
     pub name: String,
@@ -717,6 +736,7 @@ impl Offered {
 /// hundreds offered.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Boxes {
     /// The entry, as [`Project::entry`] spells it.
     pub entry: String,
@@ -733,6 +753,7 @@ pub struct Boxes {
 /// A kind none of a project's boxes of can be asked about, and why.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Closed {
     pub kind: Kind,
     pub why: Said,
@@ -742,6 +763,7 @@ pub struct Closed {
 /// an installation of: how the name stands, and whether the box is ticked.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct HeldBox {
     pub kind: Kind,
     pub name: String,
@@ -872,6 +894,7 @@ impl Boxes {
 /// failure of the reply's either.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Listing {
     /// The workspace's own, when the listing reads them: none for one
     /// project's listing.

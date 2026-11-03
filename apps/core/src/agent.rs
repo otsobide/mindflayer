@@ -209,7 +209,7 @@ impl Serialize for Agent {
     }
 }
 
-#[cfg(feature = "ts")]
+#[cfg(any(feature = "ts", feature = "schema"))]
 crate::described::words! {
     /// A coding agent, by the name `--agents` and a project's settings take.
     Agent by name { Claude, Codex, OpenCode }

@@ -97,6 +97,7 @@ pub struct ProjectStatus {
 /// and those agents.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Missed {
     pub kind: Kind,
     pub name: String,
@@ -116,6 +117,7 @@ pub struct Missed {
 /// says it reads, and is still said here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Unreached {
     pub kind: Kind,
     /// Every folder the kind is installed in, as a route from the project,
@@ -294,7 +296,7 @@ impl Serialize for State {
     }
 }
 
-#[cfg(feature = "ts")]
+#[cfg(any(feature = "ts", feature = "schema"))]
 crate::described::words! {
     /// How an artifact stands in a project, as `status` says it.
     State by slug { Current, Outdated, Edited, Missing, Orphaned, Foreign, Authored }

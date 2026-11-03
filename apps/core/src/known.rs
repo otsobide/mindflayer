@@ -51,6 +51,7 @@ pub struct Known {
 /// One workspace this machine knows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct KnownWorkspace {
     /// What its marker calls it; none for one that would not open, which has
     /// no marker to read.
@@ -218,6 +219,7 @@ pub struct Launch<'a> {
 /// which one a front end was launched on is the front end's.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Switchable {
     #[serde(flatten)]
     #[cfg_attr(feature = "ts", ts(flatten))]

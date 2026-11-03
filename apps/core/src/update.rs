@@ -265,7 +265,7 @@ impl Serialize for Does {
     }
 }
 
-#[cfg(feature = "ts")]
+#[cfg(any(feature = "ts", feature = "schema"))]
 crate::described::words! {
     /// What an update does with one installation.
     Does by slug { Keep, Refresh, PutBack, WriteOver, Leave, Orphaned, Unsure }
@@ -636,6 +636,7 @@ fn step(
 /// telling how it stands reads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Updates {
     /// Each project the workspace links holding an installation an update
     /// says something of, in the order the registry lists them, each
@@ -657,6 +658,7 @@ pub struct Updates {
 /// One project's installations an update says something of.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct ProjectUpdates {
     /// The entry, as the registry spells it, which a task names it by.
     pub entry: String,
@@ -671,6 +673,7 @@ pub struct ProjectUpdates {
 /// One installation an update says something of.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Pending {
     pub kind: Kind,
     pub name: String,

@@ -83,7 +83,7 @@ impl Serialize for Kind {
     }
 }
 
-#[cfg(feature = "ts")]
+#[cfg(any(feature = "ts", feature = "schema"))]
 crate::described::words! {
     /// A kind of artifact, by the word a command line takes for it.
     Kind by slug { Skill, Rule }

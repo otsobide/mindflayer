@@ -358,7 +358,8 @@ fn every_field_serializer_in_core_is_one_held_to_its_typescript() {
 }
 
 /// What finds them, which a test that found none would pass unseen: a
-/// `deserialize_with` names no serializer, and `with` names a module.
+/// `deserialize_with` names no serializer, `with` names a module, and a
+/// `with` of schemars' names the type a schema is read off.
 #[test]
 fn field_serializers_are_read_off_every_attribute_that_names_one() {
     let folder = tempfile::tempdir().unwrap();
@@ -367,7 +368,8 @@ fn field_serializers_are_read_off_every_attribute_that_names_one() {
         folder.path().join("nested/one.rs"),
         "#[serde(default, deserialize_with = \"read\")]\n\
          #[serde(serialize_with = \"crate::paths::lossy\")]\n\
-         #[serde(\n    with = \"humantime\"\n)]\n",
+         #[serde(\n    with = \"humantime\"\n)]\n\
+         #[cfg_attr(feature = \"schema\", schemars(with = \"Option<String>\"))]\n",
     )
     .unwrap();
     std::fs::write(

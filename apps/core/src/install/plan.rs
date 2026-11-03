@@ -408,6 +408,7 @@ pub fn holding(
 /// is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct Cell {
     pub project: String,
@@ -454,6 +455,7 @@ pub struct Asked {
 /// it cannot be carried out, and why.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Plan {
     /// Each `install` and `uninstall` to run, in the order to run them.
     pub changes: Vec<Change>,
@@ -472,6 +474,7 @@ pub struct Plan {
 /// ["alpha"], "kind": "skill", "name": "deploy", "from": "workspace"}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Change {
     /// `flayer install -p <project>... --from <from> <kind:name>`: always
@@ -499,6 +502,7 @@ pub enum Change {
 /// to guess.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Conflict {
     pub project: String,
     pub kind: Kind,
@@ -514,6 +518,7 @@ pub struct Conflict {
 /// them ([`Refused`]), or the error asking the project for it gave.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Locked {
     pub cell: Cell,
     pub why: Said,
