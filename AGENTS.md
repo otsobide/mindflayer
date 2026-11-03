@@ -217,7 +217,9 @@ under `apps/` with its own `Makefile`:
   and `Code`. `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
-  trait, `src/route.rs` the table of reads a backend hands over (`Route`,
+  trait and the `Refusal` it answers with (with its `Grounds`),
+  `src/code.rs` the conditions the server turns a request away for itself,
+  each with its code and its status (`Condition`), `src/route.rs` the table of reads a backend hands over (`Route`,
   `Parameter`, `Shape`, `API`), a query string read by it, and the table
   of the server's own routes it serves beside them (`Own`, `Sent`,
   `Answer`), which a description of the API walks with the backend's,
@@ -512,7 +514,14 @@ These are easy to break from a single file without noticing.
   `update::Left` says an edit left alone by `install::Refused`'s
   `edited`. A new error type joins
   `code::ALL`; `code_test.rs` holds no two codes alike and finds a type
-  that derives `Error` and never joined.
+  that derives `Error` and never joined. The server, which can use no
+  mindflayer crate, gives its own conditions codes the same way with a
+  `codes!` of its own (`apps/server/src/code.rs`, `Condition`, its status
+  beside each code), and the CLI's `error_test.rs` holds them unique
+  beside core's and the CLI's, which only the CLI can see together; every
+  answer under `/api` that is no success is `{"error", "code"}`, a
+  backend's refusal with its front end's code and anything else with the
+  server's, and the TypeScript `Code` holds all three lists.
 - **Failures are collected, not raised.** One unreadable artifact or stale
   registry entry is a `warning:` on stderr (in the envelope too, under
   `--json`) and a non-zero exit, never a reason to hide the rest. An absence (no
@@ -976,8 +985,13 @@ These are easy to break from a single file without noticing.
   (`backend.rs`), never the other way. A check, path rule or naming rule
   written there is one the panel could disagree with the CLI about: it
   belongs in core, reached through the backend, which says it as a
-  `Refusal`, a code and a message, sent as a 422; a task refused when its
-  lines are asked for is never run, nor kept in the transcript. Everything
+  `Refusal`, a code, a message and its grounds, sent as a 404 when it is
+  `Grounds::Absent` (in the CLI's backend, a read whose parameters name
+  what is not there, decided where the refusal is built, `Absence`) and a
+  422 when it is `Grounds::Unfit` (everything else, whatever a body names
+  among it): the server never reads a code to pick a status. A task
+  refused when its lines are asked for is never run, nor kept in the
+  transcript. Everything
   it serves is under `/api/v1` (D-24), and a route, a parameter or a field
   once served is a contract, as the envelope's names are: dropping or
   renaming one, or changing what it holds, moves the API to `/api/v2`,
