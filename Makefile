@@ -88,6 +88,27 @@ api/schemas/check: api/schemas ## Fail if the schemas written from Rust are not 
 			echo "error: the schemas Rust writes are not the ones committed: run make api/schemas and commit $(SCHEMAS)" >&2; \
 			exit 1; }
 
+# The API's OpenAPI 3.1 document (#218, D-24): every route of the server's
+# own table and of the CLI's backend's, with the schemas above as its
+# definitions, written from both tables by the CLI's export test, which the
+# `schema` feature compiles, into docs/api/openapi.json, committed and never
+# edited by hand. One file, written over, so nothing is emptied first. With
+# the features `api/schemas` builds with, so the two share one build, and
+# cargo alone, so CI's `types drift (web)` runs it beside them.
+OPENAPI := docs/api/openapi.json
+
+.PHONY: api/openapi
+api/openapi: ## Write the API's OpenAPI document from Rust into docs/api/openapi.json (cargo only)
+	cargo test -p mindflayer-cli --features $(SCHEMA_FEATURES),$(TS_FEATURES) --lib openapi
+
+# As api/schemas/check, for the one file.
+.PHONY: api/openapi/check
+api/openapi/check: api/openapi ## Fail if the OpenAPI document written from Rust is not the one committed (cargo and git only)
+	@git diff --exit-code --stat -- $(OPENAPI) \
+		&& test -z "$$(git ls-files --others --exclude-standard -- $(OPENAPI))" \
+		|| { echo "error: the OpenAPI document Rust writes is not the one committed: run make api/openapi and commit $(OPENAPI)" >&2; \
+			exit 1; }
+
 # The em dash reads as machine-written, so `lint` keeps it out of every
 # tracked file: docs, comments, messages and test expectations alike, the
 # panel's included, which is why this is not a clippy lint. Tracked files
