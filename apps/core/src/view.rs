@@ -1021,6 +1021,28 @@ impl Snapshot {
             warnings,
         }
     }
+
+    /// The entry of its registry spelled `entry`, as
+    /// [`projects`](Self::projects) lists it, with the project it opens or
+    /// why it opens none: what a front end shows of one project, cut from
+    /// the snapshot rather than read another way, so it says of it exactly
+    /// what the snapshot says.
+    ///
+    /// By the entry's spelling and nothing else, as
+    /// [`policy::linked`](crate::policy::linked) takes one, and refused as
+    /// that refuses one no registry holds (`not_registered`): a project's
+    /// name, which two projects can declare, would be a second way to name
+    /// one.
+    pub fn project(self, entry: &str) -> Result<Project, WorkspaceError> {
+        let workspace = self.workspace.path;
+        self.projects
+            .into_iter()
+            .find(|project| project.entry.as_deref() == Some(entry))
+            .ok_or_else(|| WorkspaceError::NotRegistered {
+                path: PathBuf::from(entry),
+                workspace,
+            })
+    }
 }
 
 impl Library {
