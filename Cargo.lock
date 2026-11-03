@@ -2818,12 +2818,14 @@ name = "mindflayer-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "boon",
  "form_urlencoded",
  "futures-util",
  "notify",
  "notify-debouncer-full",
  "rand 0.10.2",
  "rust-embed",
+ "schemars",
  "serde",
  "serde_json",
  "tempfile",

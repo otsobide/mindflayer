@@ -305,13 +305,14 @@ fn unread(rejection: &JsonRejection) -> Condition {
 /// spelled where each is answered, so the shape a script reads every
 /// refusal by is said once.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct Refused {
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Refused {
     /// The one word a script acts on, which never changes when the words
     /// are made clearer: a [`Condition`]'s, or the backend's own.
-    pub(crate) code: &'static str,
+    pub code: &'static str,
     /// What happened, for a person: the route, the parameter or the header,
     /// what was expected and what came.
-    pub(crate) error: String,
+    pub error: String,
 }
 
 /// What the backend refused, as [`Refused`], its code the backend's own: a

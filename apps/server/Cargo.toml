@@ -35,6 +35,16 @@ form_urlencoded = "1"
 # built beside the 0.10 that gix's sha1 uses; pinning 8.11 would share one,
 # at the price of staying behind.
 rust-embed = { version = "8", features = ["interpolate-folder-path", "mime-guess"] }
+# What the server answers with of its own as JSON Schema, for a description
+# of the API (D-24, #217): derived beside serde's derive, as a front end's
+# types are, under `schema`, so a plain build compiles none of it. The
+# version core takes, so the workspace builds one.
+schemars = { version = "1.2", optional = true }
+
+[features]
+# The JSON Schema of the server's own answers: `make api/schemas` builds
+# with it, and nothing else does.
+schema = ["dep:schemars"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
@@ -42,3 +52,6 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 tower = { version = "0.5", features = ["util"] }
 # A folder outside the panel, holding a symlink the panel must never read.
 tempfile = "3"
+# What holds each of the server's schemas to what serde writes: the 2020-12
+# validator core's tests use, for the reasons its manifest gives.
+boon = { version = "0.6", default-features = false }

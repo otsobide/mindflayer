@@ -10,10 +10,14 @@ use serde::Serialize;
 /// its route's answer is ([`Answer::Ran`](crate::Answer::Ran)), rather than
 /// as an entry, which a description of the API would put beside the
 /// ledger's.
-#[derive(Clone, Serialize)]
-pub(crate) struct Ran {
-    pub(crate) lines: Vec<String>,
-    pub(crate) outcome: serde_json::Value,
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Ran {
+    /// The command lines, each as somebody would type it.
+    pub lines: Vec<String>,
+    /// What running them produced: the backend's
+    /// [`Outcome`](crate::Backend::Outcome), as its JSON, carried unread.
+    pub outcome: serde_json::Value,
 }
 
 /// Every task the session ran, in the order it ran them: what the TUI prints
