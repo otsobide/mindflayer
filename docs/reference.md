@@ -2269,18 +2269,52 @@ curl -H "Authorization: Bearer <token>" -H 'Content-Type: application/json' \
   'http://127.0.0.1:<port>/api/v1/tasks/preview'
 ```
 
-What goes wrong is `{"error": "..."}`, with a `code` beside it when what was
-asked broke one of Mindflayer's rules, a 422. Otherwise its status says
-what: a 400 for a parameter a route does not take, takes once or needs, or
-a body that is no JSON at all; a 401 without the token; a 403 for a
-request naming the server otherwise than as `127.0.0.1`, `localhost` or
-`[::1]` on its port, or sent from a page of another origin; a 404 for a
-path no route names, `/api` without its version among them; a 405 for a
-method a route does not take; a 415 for a body not sent as
-`application/json`; and a 422 with no code for a body the route cannot
-read. A route, a parameter or a field once there stays as it is under
+What goes wrong is an object of two fields, `error`, what happened in
+words, naming the route, the parameter or the header, and `code`, one word
+for it that never changes when the words do, which is what a script acts
+on:
+
+```sh
+$ curl -H "Authorization: Bearer <token>" 'http://127.0.0.1:<port>/api/v1/project?entry=web'
+{"code":"not_registered","error":"web: not registered in the workspace at /home/you/Projects"}
+```
+
+Its status says which kind of thing went wrong, and the code which one:
+
+| Status | Code | What went wrong |
+| --- | --- | --- |
+| 400 | `malformed_json` | the body is not JSON |
+| 400 | `body_unreadable` | the body could not be read whole |
+| 400 | `body_refused` | the body was refused some other way |
+| 400 | `unknown_parameter` | a parameter the route does not take |
+| 400 | `repeated_parameter` | a parameter that takes one value, given twice |
+| 400 | `malformed_parameter` | a value its parameter cannot read: `depth=deep`, `hidden=yes` |
+| 400 | `missing_parameter` | a parameter the route needs, left out |
+| 400 | `invalid_parameters` | parameters the route cannot read together |
+| 401 | `token_required` | no launch token, or another server's (with `WWW-Authenticate: Bearer`) |
+| 403 | `unknown_host` | the server named otherwise than as `127.0.0.1`, `localhost` or `[::1]` on its port |
+| 403 | `foreign_origin` | sent from a page of another origin |
+| 403 | `same_origin_required` | a change sent with the panel's cookie from anywhere but its page |
+| 403 | `x_mindflayer_required` | a change sent with the panel's cookie without `X-Mindflayer: 1` |
+| 404 | `unknown_route` | a path no route names, `/api` without its version among them |
+| 404 | Mindflayer's | a read naming what is not there: `not_registered` for an entry, `not_found` for an artifact, `contents_missing` for a file, `browse_missing` for a folder |
+| 405 | `method_not_allowed` | a method the route does not take (with `Allow`) |
+| 413 | `body_too_large` | a body larger than the server reads |
+| 415 | `json_required` | a body not sent as `application/json` |
+| 422 | `invalid_body` | JSON that is not what the route reads |
+| 422 | Mindflayer's | what Mindflayer will not do, by the code of its rule: `path_relative` for a path that is not absolute, `opens_editor` for a task that needs a terminal |
+| 500 | `backend_failed` | Mindflayer failed while it answered |
+| 500 | `writer_stopped` | the thread that runs tasks has stopped |
+
+A task, a switch, a plan or a draft that names what is not there, an entry
+no registry holds say, is a 422 rather than a 404: the route it was sent
+to is there, and the code says the rest. Outside `/api`, what the server
+answers is for a person in a browser and stays text: the panel's pages, and
+the launch link's refusal of a token that is not this server's.
+
+A route, a parameter or a field once there stays as it is under
 `/api/v1`: one dropped, renamed or holding something else moves the API to
-`/api/v2`.
+`/api/v2`. A code is never renamed, nor given to something else.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
