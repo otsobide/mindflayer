@@ -74,9 +74,10 @@ needs. It had grown into a reference of close to 2,800 lines, every
 command's literal output among them, which buried all of that. The
 reference moved, whole and unchanged in substance, into
 [docs/reference.md](reference.md), how to build and test into
-[docs/development.md](development.md), and literal output is the
-reference's alone: `examples_test.rs` reads its walk-through of the
-examples from there.
+[docs/development.md](development.md). No literal output is left in the
+README: the commands' is the reference's, where `examples_test.rs` reads
+its walk-through of the examples, and the HTTP API's is [its
+guide's](#the-apis-guide-runs-its-examples), written since.
 
 Every relative link in the README and under `docs/` is held to lead
 somewhere by `apps/cli/tests/docs_test.rs`: the file it names is there, an
