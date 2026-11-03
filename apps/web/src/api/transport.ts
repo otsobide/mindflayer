@@ -71,7 +71,7 @@ export interface Ran {
 }
 
 /**
- * What the server's event stream tells (`GET /api/events`), each told
+ * What the server's event stream tells (`GET /api/v1/events`), each told
  * apart by its `type`:
  *
  * - `changed`: something the server watches changed on disk, so what is

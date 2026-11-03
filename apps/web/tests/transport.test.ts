@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { httpTransport } from '@/api/http'
-import { TransportError, type Task } from '@/api/transport'
+import { TransportError, type Query, type Task } from '@/api/transport'
 
 /** A request as `fetch` was handed it. */
 interface Sent {
@@ -33,7 +33,7 @@ afterEach(() => {
 })
 
 describe('the HTTP transport', () => {
-  it('posts a query as JSON to a relative URL, with the cookie and the header', async () => {
+  it('asks for a read at its route under the version, relative, with the cookie and the header', async () => {
     const sent = serve(() => json(200, { projects: [] }))
 
     const answer = await httpTransport().query({ type: 'snapshot' })
@@ -41,14 +41,51 @@ describe('the HTTP transport', () => {
     expect(answer).toEqual({ projects: [] })
     expect(sent).toHaveLength(1)
     const [{ url, init }] = sent as [Sent]
-    expect(url).toBe('/api/query')
-    expect(init.method).toBe('POST')
+    expect(url).toBe('/api/v1/snapshot')
+    expect(init.method).toBe('GET')
     expect(init.credentials).toBe('same-origin')
     expect(init.headers).toMatchObject({
       'Content-Type': 'application/json',
       'X-Mindflayer': '1'
     })
-    expect(JSON.parse(init.body as string)).toEqual({ type: 'snapshot' })
+    expect(init.body).toBeUndefined()
+  })
+
+  it('names each read by its route, what it reads in its parameters, or in a body for a POST', async () => {
+    const workspace = { type: 'workspace' } as const
+    const api = { type: 'project', entry: 'apps/api' } as const
+    const cell = { project: 'api', reference: 'skill:deploy', origin: 'workspace', wanted: true }
+    const draft = { type: 'edit', reference: 'skill:deploy', text: '---\n' } as const
+    const asked: [Query, string, string, unknown][] = [
+      [{ type: 'snapshot' }, 'GET', '/api/v1/snapshot', undefined],
+      [{ type: 'projects' }, 'GET', '/api/v1/projects', undefined],
+      [{ type: 'library' }, 'GET', '/api/v1/library', undefined],
+      [{ type: 'project', entry: 'apps/api' }, 'GET', '/api/v1/project?entry=apps%2Fapi', undefined],
+      [{ type: 'files', holder: workspace, reference: 'skill:deploy' }, 'GET', '/api/v1/files?reference=skill%3Adeploy', undefined],
+      [{ type: 'files', holder: api, reference: 'deploy' }, 'GET', '/api/v1/files?reference=deploy&project=apps%2Fapi', undefined],
+      [
+        { type: 'contents', holder: { type: 'elsewhere', entry: '../web' }, reference: 'rule:git/commits', file: 'commits.md' },
+        'GET',
+        '/api/v1/contents?reference=rule%3Agit%2Fcommits&file=commits.md&project=..%2Fweb',
+        undefined
+      ],
+      [{ type: 'scan', roots: [], depth: null }, 'GET', '/api/v1/scan', undefined],
+      [{ type: 'scan', roots: ['/home/you/My Work', '/srv'], depth: 2 }, 'GET', '/api/v1/scan?root=%2Fhome%2Fyou%2FMy+Work&root=%2Fsrv&depth=2', undefined],
+      [{ type: 'folders', path: null, hidden: false }, 'GET', '/api/v1/folders?hidden=false', undefined],
+      [{ type: 'folders', path: '/home/you', hidden: true }, 'GET', '/api/v1/folders?path=%2Fhome%2Fyou&hidden=true', undefined],
+      [{ type: 'updates' }, 'GET', '/api/v1/updates', undefined],
+      [{ type: 'workspaces' }, 'GET', '/api/v1/workspaces', undefined],
+      [{ type: 'plan', selection: [cell] }, 'POST', '/api/v1/plan', { selection: [cell] }],
+      [{ type: 'validate', holder: workspace, draft }, 'POST', '/api/v1/validate', { holder: workspace, draft }]
+    ]
+    const sent = serve(() => json(200, {}))
+
+    for (const [query] of asked) {
+      await httpTransport().query(query)
+    }
+
+    expect(sent.map(({ url, init }) => [url, init.method, init.body === undefined ? undefined : JSON.parse(init.body as string)]))
+      .toEqual(asked.map(([, method, url, body]) => [url, method, body]))
   })
 
   it('previews a task without running it', async () => {
@@ -56,7 +93,7 @@ describe('the HTTP transport', () => {
 
     const preview = await httpTransport().send(INSTALL, 'preview')
 
-    expect(sent.map(request => request.url)).toEqual(['/api/commands/preview'])
+    expect(sent.map(request => request.url)).toEqual(['/api/v1/tasks/preview'])
     expect(preview).toEqual({ lines: ['flayer install demo -p app'], confirm: [] })
   })
 
@@ -68,7 +105,7 @@ describe('the HTTP transport', () => {
 
     expect(transcript).toEqual(ran)
     const [{ url, init }] = sent as [Sent]
-    expect(url).toBe('/api/transcript')
+    expect(url).toBe('/api/v1/transcript')
     expect(init.method).toBe('GET')
     expect(init.credentials).toBe('same-origin')
     expect(init.body).toBeUndefined()
@@ -89,17 +126,17 @@ describe('the HTTP transport', () => {
 
     const run = await httpTransport().send(INSTALL, 'run')
 
-    expect(sent.map(request => request.url)).toEqual(['/api/commands'])
+    expect(sent.map(request => request.url)).toEqual(['/api/v1/tasks'])
     expect(run).toEqual({ lines: ['flayer install demo -p app'], outcome })
   })
 
   it('says what the server refused, from its error body', async () => {
-    serve(() => json(404, { error: 'no such endpoint: POST /api/nothing' }))
+    serve(() => json(404, { error: 'no such endpoint: GET /api/v1/nothing' }))
 
     const refused = await httpTransport().query({ type: 'snapshot' }).catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(TransportError)
-    expect(refused).toMatchObject({ status: 404, message: 'no such endpoint: POST /api/nothing', code: undefined })
+    expect(refused).toMatchObject({ status: 404, message: 'no such endpoint: GET /api/v1/nothing', code: undefined })
   })
 
   it('says how to get the token when the server asks for it', async () => {
@@ -179,7 +216,7 @@ describe('the HTTP transport', () => {
     source.onmessage?.(new MessageEvent('message', { data: '"resync"' }))
     stop()
 
-    expect(source.url).toBe('/api/events')
+    expect(source.url).toBe('/api/v1/events')
     expect(events).toEqual([changed])
     expect(source.closed).toBe(true)
   })

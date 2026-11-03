@@ -59,7 +59,7 @@ export function usePlanOnce() {
 
 /**
  * The lines `task` is, as the server previews them (`POST
- * /api/commands/preview`), for the matrix to show what applying its plan
+ * /api/v1/tasks/preview`), for the matrix to show what applying its plan
  * runs before anybody asks for it: the same preview the runner asks for
  * once Apply is pressed, so what was shown is what the dialog shows. A read
  * too, which runs nothing; asked once there is a task.
