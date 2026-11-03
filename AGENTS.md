@@ -148,7 +148,7 @@ under `apps/` with its own `Makefile`:
   (`settings`, the marker from v3 on), workspaces, which workspace a command
   uses (`resolve`), the shell code that activates one (`activate`), kinds, the
   agents and where each kind goes for them (`agent`), the catalog, gathering
-  (`gix`), the SQLite ledger, installing, keeping installs out of git
+  (through `port::Remote`), the SQLite ledger, installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
   (`agents_md`) and into Claude's rules folder (`claude_rules`), whether
   Claude reads that block and the `@AGENTS.md` import in a project's
@@ -190,7 +190,14 @@ under `apps/` with its own `Makefile`:
   and `validate` say of each
   artifact (`reading`), and what core says of one a command is about to
   write, by the command's own checks and in `validate`'s words, for a
-  front end judging what is typed (`draft`). Its only I/O is files, and it never reads the
+  front end judging what is typed (`draft`). Every record, report and view
+  it builds is an aggregate of the value objects in `value` (a copy's
+  `ContentHash`, a `Redacted` URL or message, an `Origin`, an
+  `ArtifactName`, a `Revision`, a `ProjectId`). Its only I/O beyond files
+  goes through a port (`port`: a `Remote` a gather fetches through, a
+  `Clock` the ledger stamps by), each implemented by an adapter in
+  `adapter` (`adapter::gix::Gix`, its credentials callback in
+  `adapter/gix/credentials.rs`, and `SystemClock`), and it never reads the
   environment. Under its `ts` feature, `typescript` gives what it hands a
   front end TypeScript (the roots its export writes), under its `schema`
   feature `schema` gives it JSON Schema (the roots its export writes, each
@@ -393,6 +400,27 @@ These are easy to break from a single file without noticing.
   the order `flayer scan --suggest` ranks what it finds in (`scan::Order`),
   in which the minds screen, the link form and the panel's page of what
   could be linked show what is not linked, without sorting it.
+- **Values are value objects, and the world is reached through ports.**
+  A field that holds a hash, a URL or words quoting one, an origin, an
+  artifact's name or a revision holds the value in `value`, never a
+  `String`: one held to a rule (`ContentHash`, `ProjectId`, `Redacted`) is
+  made only the way its rule allows, so no `From<String>`, and one named
+  apart (`ArtifactName`, `Origin`, `Revision`) holds any text, since core
+  reads leniently. A new value joins `value` through its `text_value!`
+  macro, so it reads as its text and goes out as one, said in TypeScript
+  and JSON Schema as a `String` is, and no contract moves
+  (`make web/types/check`, `make api/schemas/check`); its store's adapter
+  says how it is kept (the ledger's `ToSql` and `FromSql`), never `value`.
+  Whatever core needs of the world beyond its files is a trait in `port`,
+  in core's own words, its library's errors and types turned into those at
+  the adapter: a gather fetches only through `Request::remote` (`Gix`
+  unless `through` hands another), the ledger reads the time only through
+  its `Clock` (`with_clock`), and no module but `adapter` names `gix` for
+  a fetch. A new library outside core is an adapter of a port, injected
+  with the default built in, as D-14 has it for HTTP; a new front end is
+  one more driver of the command lines (`commands::run_line`), never a
+  path of its own into core (docs/architecture.md, "Values, ports and
+  adapters", D-25).
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
@@ -880,16 +908,19 @@ These are easy to break from a single file without noticing.
     reads the block as (`Reach::Same`).
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
-    URL it writes and reads, `GitError` to what it says, `git::scrub` to a
-    clone's config and reflogs. A gather refuses a URL that carries one. A
+    URL it writes and reads, `GitError` to what it says, the gix adapter's
+    scrub (`Remote::scrub`) to a clone's config and reflogs. A gather refuses a URL that carries one. A
     command that writes to the ledger opens it with
     `FlayerWorkspace::ledger_to_write`, which scrubs what an older build
     stored first and hands back what it took out to be said; one that only
     reads opens it with `ledger_for_reading`, which scrubs nothing. The
     install screen is a read until it applies, and the lines it then runs
-    scrub as any `install` does. Anything new that keeps or prints a URL goes
-    through `url::redacted` too, a serialized one included
-    (`url::serialize_redacted`), whatever built the value.
+    scrub as any `install` does. Anything new that keeps or prints a URL
+    holds it as a value made without its credentials: a `value::Redacted`
+    (made only through `Redacted::new`, which redacts) for a URL or words
+    that may quote one, a `value::Origin` for where an install came from,
+    which writes itself out redacted whatever built it. Never a `String`
+    redacted where it is written.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`,
@@ -923,7 +954,7 @@ These are easy to break from a single file without noticing.
   holder's pid, except a record drop's or carry's (`install::disown`,
   `install::carry`), which follows a change already made.
 - **A gather never prompts for a credential itself.** Every connection `gix`
-  lets a clone configure gets the callback in `gather/credentials.rs`, which
+  lets a clone configure gets the callback in `adapter/gix/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass
   turned off. A credential none of them has is `GitError::Credentials`, never
   a question on a terminal the TUI owns or a server lacks. Anything new that
