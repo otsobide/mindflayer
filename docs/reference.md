@@ -2260,13 +2260,27 @@ server cannot watch everything, and either again whenever that changes;
 `command_finished` around each run; and `switched` once the panel acts on
 another workspace, to read everything again.
 
+A POST sends its body as JSON, and says so in `Content-Type`, which curl's
+`-d` alone does not (it says a form):
+
+```sh
+curl -H "Authorization: Bearer <token>" -H 'Content-Type: application/json' \
+  -d '{"type": "link", "path": "/home/you/Projects/beta"}' \
+  'http://127.0.0.1:<port>/api/v1/tasks/preview'
+```
+
 What goes wrong is `{"error": "..."}`, with a `code` beside it when what was
-asked broke one of Mindflayer's rules, a 422: otherwise a 400 for a
-parameter a route does not take, takes once or needs, a 401 without the
-token, a 404 for a path no route names, `/api` without its version among
-them, and a 405 for a method a route does not take. A route, a parameter or
-a field once there stays as it is under `/api/v1`: one dropped, renamed or
-holding something else moves the API to `/api/v2`.
+asked broke one of Mindflayer's rules, a 422. Otherwise its status says
+what: a 400 for a parameter a route does not take, takes once or needs, or
+a body that is no JSON at all; a 401 without the token; a 403 for a
+request naming the server otherwise than as `127.0.0.1`, `localhost` or
+`[::1]` on its port, or sent from a page of another origin; a 404 for a
+path no route names, `/api` without its version among them; a 405 for a
+method a route does not take; a 415 for a body not sent as
+`application/json`; and a 422 with no code for a body the route cannot
+read. A route, a parameter or a field once there stays as it is under
+`/api/v1`: one dropped, renamed or holding something else moves the API to
+`/api/v2`.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
