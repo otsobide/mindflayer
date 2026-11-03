@@ -1453,7 +1453,7 @@ fn the_workspace_offers_its_own_skills_first_and_installs_them_like_any_other() 
 
     let offered: Vec<(&str, String)> = candidates
         .iter()
-        .map(|candidate| (candidate.name(), candidate.origin()))
+        .map(|candidate| (candidate.name(), candidate.origin().into_string()))
         .collect();
     assert_eq!(offered[0], ("commit-style", String::from("workspace")));
     assert_eq!(offered.len(), 2);
@@ -2020,7 +2020,9 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
             source: mindflayer_core::ledger::Source {
                 id: 1,
                 kind: mindflayer_core::SourceKind::Git,
-                url: String::from("https://me:s3cret@github.com/acme/skills.git"),
+                url: mindflayer_core::value::Redacted::new(
+                    "https://me:s3cret@github.com/acme/skills.git",
+                ),
                 reference: Some(String::from("main")),
                 subdirectory: String::from("skills"),
                 revision: Some(String::from("4f9c2a7")),

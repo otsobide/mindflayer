@@ -1836,7 +1836,12 @@ fn held(
     for project in ["alpha", "beta"] {
         for kind in Kind::ALL {
             for record in ledger.records(project, kind).unwrap() {
-                records.push((project.to_owned(), kind, record.name, record.origin));
+                records.push((
+                    project.to_owned(),
+                    kind,
+                    record.name,
+                    record.origin.map(String::from),
+                ));
             }
         }
     }

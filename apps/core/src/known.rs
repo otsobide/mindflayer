@@ -30,6 +30,7 @@ use serde::Serialize;
 
 use crate::paths;
 use crate::resolve::Reason;
+use crate::value::Redacted;
 use crate::workspace::{
     absolute, same_directory, FlayerWorkspace, Registration, WorkspaceError, FLAYER_CONFIG,
     FLAYER_DIR,
@@ -82,8 +83,7 @@ pub struct KnownWorkspace {
     /// parse is quoted in its own words, a source's URL among them perhaps,
     /// and whoever wrote that file is no promise that it holds no
     /// credential.
-    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
-    pub stale: Option<String>,
+    pub stale: Option<Redacted>,
 }
 
 impl KnownWorkspace {
@@ -122,7 +122,7 @@ impl KnownWorkspace {
             in_use: false,
             projects: 0,
             stale_projects: 0,
-            stale: Some(error.to_string()),
+            stale: Some(Redacted::new(&error.to_string())),
         }
     }
 }

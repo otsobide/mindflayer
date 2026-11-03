@@ -913,7 +913,7 @@ fn record(ledger: &Ledger, name: &str, paths: &[&str]) {
                 kind: Kind::Skill,
                 name: name.to_owned(),
                 source_id: None,
-                origin: Some(String::from("workspace")),
+                origin: Some("workspace".into()),
                 content_hash: None,
                 targets: paths
                     .iter()

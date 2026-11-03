@@ -27,7 +27,7 @@ use crate::copy;
 use crate::hash;
 use crate::kind::Kind;
 use crate::ledger::{InstallRecord, Target};
-use crate::value::ContentHash;
+use crate::value::{ContentHash, Origin};
 use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// How one offer stands with respect to one project.
@@ -193,7 +193,7 @@ impl Surveyed {
     pub(crate) fn source(
         &self,
         workspace: &FlayerWorkspace,
-    ) -> Result<Option<&Offer>, Vec<String>> {
+    ) -> Result<Option<&Offer>, Vec<Origin>> {
         match &self.offered[..] {
             [] => Ok(None),
             [one] => Ok(Some(one)),

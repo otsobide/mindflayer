@@ -33,6 +33,7 @@ use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
 use crate::lock::LockError;
 use crate::paths;
 use crate::url::{carries_credentials, redacted};
+use crate::value::Redacted;
 use crate::workspace::FlayerWorkspace;
 
 pub use watch::{Progress, Watch};
@@ -409,7 +410,7 @@ codes!(Leftover => "source_leftover");
 #[error("{url}: its clone still holds the credentials it was gathered with: {source}")]
 pub struct ScrubFailure {
     /// The source's URL, without them.
-    pub url: String,
+    pub url: Redacted,
     #[source]
     pub source: git::GitError,
 }

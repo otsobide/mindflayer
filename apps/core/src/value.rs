@@ -150,6 +150,12 @@ macro_rules! text_value {
             }
         }
 
+        impl PartialEq<Cow<'_, str>> for $name {
+            fn eq(&self, other: &Cow<'_, str>) -> bool {
+                self.0 == **other
+            }
+        }
+
         impl PartialEq<$name> for str {
             fn eq(&self, other: &$name) -> bool {
                 self == other.0
@@ -222,6 +228,14 @@ macro_rules! from_text {
         impl From<Cow<'_, str>> for $name {
             fn from(text: Cow<'_, str>) -> Self {
                 $name(text.into_owned())
+            }
+        }
+
+        /// Read as any string, since any text makes one: what a front end
+        /// sends, a box's origin among it, is taken as it was sent.
+        impl<'de> serde::Deserialize<'de> for $name {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                String::deserialize(deserializer).map($name)
             }
         }
     };

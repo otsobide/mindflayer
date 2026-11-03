@@ -504,8 +504,12 @@ fn why_a_workspace_would_not_open_is_written_with_no_credential() {
 
     let (known, _) = known::known(Some(&home), None);
 
+    // Held without it, not only written so: the value is `Redacted`, which
+    // nothing makes from a text that keeps one. The URL is still quoted, so
+    // the redaction had something to take out.
     let stale = known.workspaces[1].stale.as_deref().expect("said why");
-    assert!(stale.contains("ghp_t0ken"), "{stale}");
+    assert!(!stale.contains("ghp_t0ken"), "{stale}");
+    assert!(stale.contains("https://github.com/acme/skills"), "{stale}");
     let json = serde_json::to_string(&known).unwrap();
     assert!(!json.contains("ghp_t0ken"), "{json}");
     assert!(json.contains("https://github.com/acme/skills"), "{json}");

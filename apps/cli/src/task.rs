@@ -389,7 +389,7 @@ impl From<Change> for Task {
                 projects,
                 kind,
                 name,
-                from: Some(from),
+                from: Some(from.into_string()),
             },
             Change::Uninstall {
                 projects,

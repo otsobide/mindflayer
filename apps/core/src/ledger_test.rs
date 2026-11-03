@@ -449,7 +449,7 @@ fn merging_keeps_the_fresher_rows_artifacts_and_lets_the_others_go_with_its_row(
 fn an_origin_is_recorded_and_read_back_without_credentials() {
     let ledger = Ledger::in_memory().unwrap();
     let mut written = installation_of("deploy", &[(None, "skills/deploy")]);
-    written.origin = Some(String::from("https://me:hunter2@h/a#main"));
+    written.origin = Some(Origin::from("https://me:hunter2@h/a#main"));
 
     ledger.installed("collapse", &written).unwrap();
 
@@ -770,7 +770,7 @@ fn installation_of(name: &str, targets: &[(Option<&str>, &str)]) -> InstallRecor
         kind: Kind::Skill,
         name: name.to_owned(),
         source_id: None,
-        origin: Some(String::from("workspace")),
+        origin: Some(Origin::from("workspace")),
         content_hash: Some(recorded("e3b0c442")),
         targets: targets
             .iter()
@@ -835,7 +835,7 @@ fn rule_of(name: &str, targets: &[(Option<&str>, &str, &str)]) -> InstallRecord 
         kind: Kind::Rule,
         name: name.to_owned(),
         source_id: None,
-        origin: Some(String::from("workspace")),
+        origin: Some(Origin::from("workspace")),
         content_hash: Some(recorded(&format!("{name}-rule"))),
         targets: targets
             .iter()
@@ -1509,7 +1509,7 @@ fn every_installation_into_a_project_reads_back_with_its_copies_in_name_order() 
         ],
     );
     let audit = InstallRecord {
-        origin: Some(String::from("https://github.com/acme/skills")),
+        origin: Some(Origin::from("https://github.com/acme/skills")),
         source_id: None,
         ..installation_of("audit", &[(None, ".agents/skills/audit")])
     };
@@ -1862,7 +1862,7 @@ fn gathered_from(url: &str) -> Gathered {
         source: Source {
             id: 3,
             kind: SourceKind::Git,
-            url: url.to_owned(),
+            url: Redacted::new(url),
             reference: Some(String::from("main")),
             subdirectory: String::from("skills"),
             revision: Some(String::from("4f9c2a7")),
@@ -1922,7 +1922,7 @@ fn an_action_log_entry_serializes_every_field() {
     let entry = Entry {
         at: 1_790_000_000,
         action: String::from("install"),
-        target: Some(String::from("collapse")),
+        target: Some(Redacted::new("collapse")),
         outcome: String::from("ok"),
         detail: None,
     };
@@ -1942,9 +1942,9 @@ fn an_action_log_entry_is_serialized_without_the_credentials_its_urls_carry() {
     let entry = Entry {
         at: 0,
         action: String::from("gather"),
-        target: Some(url.to_owned()),
+        target: Some(Redacted::new(url)),
         outcome: String::from("failed"),
-        detail: Some(format!("{url}: cannot be fetched")),
+        detail: Some(Redacted::new(&format!("{url}: cannot be fetched"))),
     };
 
     let serialized = serde_json::to_string(&entry).unwrap();
@@ -1989,7 +1989,7 @@ fn every_source_is_listed_in_url_order_without_credentials() {
         .sources()
         .unwrap()
         .into_iter()
-        .map(|source| (source.url, source.reference))
+        .map(|source| (source.url.into_string(), source.reference))
         .collect();
 
     assert_eq!(

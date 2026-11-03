@@ -88,7 +88,7 @@ fn record(ledger: &Ledger, project: &str, name: &str, origin: &str, paths: &[&st
                 kind: Kind::Skill,
                 name: name.to_owned(),
                 source_id: None,
-                origin: Some(origin.to_owned()),
+                origin: Some(origin.into()),
                 content_hash: Some(written(name)),
                 targets: paths
                     .iter()

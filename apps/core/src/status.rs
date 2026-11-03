@@ -33,6 +33,7 @@ use crate::ledger::{InstallRecord, Target};
 use crate::paths;
 use crate::relink::{self, Duplicate};
 use crate::settings::ProjectId;
+use crate::value::Origin;
 use crate::workspace::{
     same_directory, FlayerWorkspace, MarkerFile, MindProject, MisplacedTarget, WorkspaceError,
 };
@@ -145,7 +146,7 @@ pub struct ArtifactStatus {
     /// `load:<entry>`, or a shelf source's address. None when the ledger
     /// records no copy of it, and for a record from before origins were kept
     /// of something that came from no source.
-    pub origin: Option<String>,
+    pub origin: Option<Origin>,
 }
 
 /// How an artifact stands in a project, as far as its copies, the ledger and

@@ -41,7 +41,7 @@ fn install(projects: &[&str], kind: Kind, name: &str, from: &str) -> Change {
         projects: projects.iter().map(|&project| project.to_owned()).collect(),
         kind,
         name: name.to_owned(),
-        from: from.to_owned(),
+        from: Origin::from(from),
     }
 }
 
@@ -418,7 +418,7 @@ fn one_name_asked_for_from_two_places_in_one_project_clashes_and_nothing_of_it_i
             cells: vec![asked[0].cell.clone(), asked[1].cell.clone()],
             why: Said {
                 code: "wanted_twice",
-                message: String::from(
+                message: Redacted::new(
                     "`deploy` is asked of alpha from more than one place (workspace, \
                      load:../team), and a project holds one skill of a name: ask for one"
                 ),
@@ -471,7 +471,7 @@ fn one_box_asked_both_ways_clashes_and_nothing_of_its_name_is_planned_there() {
             cells: vec![asked[0].cell.clone(), asked[1].cell.clone()],
             why: Said {
                 code: "asked_both_ways",
-                message: String::from(
+                message: Redacted::new(
                     "`deploy` from workspace is asked both to be in alpha and not to be"
                 ),
             },
@@ -526,7 +526,7 @@ fn a_change_to_somebodys_copy_is_locked_as_foreign_and_one_asking_for_it_is_no_c
             cell: asked[1].cell.clone(),
             why: Said {
                 code: "foreign",
-                message: String::from(
+                message: Redacted::new(
                     "`deploy` is in beta, and Mindflayer did not put it there, so it is left alone"
                 ),
             },

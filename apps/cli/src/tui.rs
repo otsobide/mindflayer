@@ -567,7 +567,7 @@ fn loaded_source(loaded: &LoadedWorkspace) -> LoadedSource {
         root: loaded.path.clone(),
         name: loaded.name.clone().unwrap_or_else(|| loaded.entry.clone()),
         offers: match &loaded.error {
-            Some(error) => Err(error.message.clone()),
+            Some(error) => Err(error.message.to_string()),
             None => Ok(loaded.offers),
         },
     }
@@ -617,7 +617,7 @@ fn member(project: &view::Project, screen: &FlayerWorkspace, lookup: &Lookup) ->
             root: project.path.clone(),
             own: false,
             elsewhere: false,
-            holdings: Err(stale.message.clone()),
+            holdings: Err(stale.message.to_string()),
         };
     }
     let consults = MindProject::open(&project.path)
@@ -642,7 +642,7 @@ fn held(entry: String, project: &view::Project) -> Member {
     let mut unreached: Vec<String> = project
         .misplaced
         .iter()
-        .map(|misplaced| misplaced.message.clone())
+        .map(|misplaced| misplaced.message.to_string())
         .collect();
     unreached.extend(
         project
@@ -700,7 +700,10 @@ fn items(artifacts: &[Held]) -> Vec<Item> {
                 .filter(|issue| !issue.is_warning())
                 .map(ToString::to_string)
                 .collect(),
-            broken: held.unread.as_ref().map(|unread| unread.message.clone()),
+            broken: held
+                .unread
+                .as_ref()
+                .map(|unread| unread.message.to_string()),
             state: held.state,
             agents: held.agents.clone(),
         })
@@ -709,7 +712,7 @@ fn items(artifacts: &[Held]) -> Vec<Item> {
 
 /// What each of `said` says, one line each.
 fn messages(said: &[Said]) -> Vec<String> {
-    said.iter().map(|said| said.message.clone()).collect()
+    said.iter().map(|said| said.message.to_string()).collect()
 }
 
 /// Where a holder keeps each kind, relative to it, so an empty one can say

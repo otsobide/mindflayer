@@ -44,7 +44,7 @@ use crate::ledger::{
 use crate::paths;
 use crate::settings::Share;
 use crate::url::redacted;
-use crate::value::ContentHash;
+use crate::value::{ContentHash, Origin};
 use crate::workspace::{same_directory, FlayerWorkspace, Loaded, MindProject, WorkspaceError};
 
 mod plan;
@@ -207,7 +207,7 @@ impl Serialize for Offer {
             place: Place,
             #[serde(flatten)]
             held: T,
-            origin: String,
+            origin: Origin,
         }
         #[derive(Serialize)]
         struct Own<'a> {
@@ -228,7 +228,7 @@ impl Serialize for Offer {
             workspace: &'a str,
         }
 
-        let origin = redacted(&self.origin()).into_owned();
+        let origin = Origin::from(redacted(&self.origin()));
         match self {
             Offer::Shelf(gathered) => Placed {
                 place: Place::Shelf,
@@ -318,10 +318,10 @@ impl Offer {
     /// One string for every front end: what a listing prints is what
     /// `--from` accepts. A source's address carries no credential, because
     /// the ledger hands none back.
-    pub fn origin(&self) -> String {
+    pub fn origin(&self) -> Origin {
         match self {
             Offer::Shelf(gathered) => gathered.source.origin(),
-            Offer::Workspace { .. } => String::from(WORKSPACE_ORIGIN),
+            Offer::Workspace { .. } => Origin::from(WORKSPACE_ORIGIN),
             Offer::Loaded { entry, .. } => loaded_origin(entry),
         }
     }
@@ -363,8 +363,8 @@ pub const LOADED_PREFIX: &str = "load:";
 /// its marker spells it: written once, for an offer and for a listing of
 /// the loads alike ([`crate::view::LoadedWorkspace`]), so what a listing
 /// says `--from` takes is what an install from that load records.
-pub fn loaded_origin(entry: &str) -> String {
-    format!("{LOADED_PREFIX}{entry}")
+pub fn loaded_origin(entry: &str) -> Origin {
+    Origin::from(format!("{LOADED_PREFIX}{entry}"))
 }
 
 /// `from` as `--from` should match it: when it is a path, typed relative to
@@ -385,7 +385,10 @@ pub fn resolve_from(workspace: &FlayerWorkspace, base: &Path, from: &str) -> Str
         .into_iter()
         .find(|loaded| paths::normalize(&loaded.root) == path || same_place(&loaded.root, &path))
         .and_then(|loaded| paths::to_config_string(&loaded.entry))
-        .map_or_else(|| from.to_owned(), |entry| loaded_origin(&entry))
+        .map_or_else(
+            || from.to_owned(),
+            |entry| loaded_origin(&entry).into_string(),
+        )
 }
 
 /// Whether a declared name is one plain folder name, and so safe to join onto
@@ -592,7 +595,7 @@ impl Candidate {
     }
 
     /// See [`Offer::origin`].
-    pub fn origin(&self) -> String {
+    pub fn origin(&self) -> Origin {
         self.offer.origin()
     }
 
@@ -913,7 +916,7 @@ pub(crate) fn orphaned(
     kind: Kind,
 ) -> Result<Vec<String>, LedgerError> {
     let loads = workspace.loads();
-    let away: Vec<String> = loads
+    let away: Vec<Origin> = loads
         .iter()
         .filter(|loaded| loaded.workspace.is_err())
         .map(load_origin)
@@ -1005,7 +1008,7 @@ fn places(workspace: &FlayerWorkspace, loads: &[Loaded], record: &InstallRecord)
 
 /// The origin a record names for what it installed from `loaded`, as
 /// [`Offer::origin`] spells it.
-fn load_origin(loaded: &Loaded) -> String {
+fn load_origin(loaded: &Loaded) -> Origin {
     let entry = paths::to_config_string(&loaded.entry)
         .unwrap_or_else(|| loaded.entry.display().to_string());
     loaded_origin(&entry)
@@ -2715,7 +2718,7 @@ pub enum InstallError {
     #[error("rule `{name}` was installed from {}, which no longer offers it, so the project's rules are not rendered: put it back there, or uninstall it", .origin.as_deref().unwrap_or("a place not recorded"))]
     NoLongerOffered {
         name: String,
-        origin: Option<String>,
+        origin: Option<Origin>,
     },
     #[error("{file}: its block holds rule `{route}`, which this workspace did not install there, so the project's rules are not rendered: uninstall it from the workspace that did, or take its section out by hand")]
     NotRecorded { file: PathBuf, route: String },
@@ -2756,7 +2759,7 @@ pub enum InstallError {
     #[error("nothing called `{name}` can be installed{}: gather it, load a workspace that has it with `flayer load`, or add it to the workspace with `flayer add`", from.as_deref().map(|from| format!(" from {from}")).unwrap_or_default())]
     NotOffered { name: String, from: Option<String> },
     #[error("`{name}` is offered by more than one place ({}), so say which with --from", .origins.join(", "))]
-    OfferedTwice { name: String, origins: Vec<String> },
+    OfferedTwice { name: String, origins: Vec<Origin> },
     #[error("`{name}` is offered as {}, so say which: {}", as_kinds(.kinds), qualified(.name, .kinds))]
     OfferedAsKinds { name: String, kinds: Vec<Kind> },
     #[error("`{name}` is installed as {}, so say which: {}", as_kinds(.kinds), qualified(.name, .kinds))]

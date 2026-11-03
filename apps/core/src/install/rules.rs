@@ -51,7 +51,7 @@ use crate::kind::Kind;
 use crate::ledger::{Action, InstallRecord, Ledger, Outcome, Target};
 use crate::paths;
 use crate::settings::Share;
-use crate::value::ContentHash;
+use crate::value::{ContentHash, Origin};
 use crate::workspace::{replace_bytes_unresolved, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// How the ledger names a project's `AGENTS.md`: its route from the project,
@@ -680,7 +680,7 @@ struct Wanted {
     artifact: Artifact,
     /// The rule's file as written, which its file for Claude holds whole.
     bytes: Vec<u8>,
-    origin: String,
+    origin: Origin,
     before: Option<InstallRecord>,
 }
 

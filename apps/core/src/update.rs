@@ -54,6 +54,7 @@ use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
 use crate::paths;
 use crate::status::State;
+use crate::value::Origin;
 use crate::view::StateCount;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
@@ -105,7 +106,7 @@ pub struct Update {
     pub name: String,
     /// Where it came from, as `--from` takes it: none for a record from
     /// before origins were kept.
-    pub origin: Option<String>,
+    pub origin: Option<Origin>,
     pub standing: Standing,
     pub step: Step,
     /// What writing it came to, once applied: none until then, for one an
@@ -141,7 +142,7 @@ pub enum Step {
     /// Offered from each of these places, and recorded before origins were
     /// kept, with no copy left that tells which: left, for an install whose
     /// `--from` says which.
-    Unsure(Vec<String>),
+    Unsure(Vec<Origin>),
 }
 
 impl Step {
@@ -308,7 +309,7 @@ pub enum Left {
         kind: Kind,
         name: String,
         project: String,
-        origin: Option<String>,
+        origin: Option<Origin>,
         edited: bool,
     },
     /// Offered from each of these places, and recorded before origins were
@@ -322,14 +323,14 @@ pub enum Left {
         kind: Kind,
         name: String,
         project: String,
-        origins: Vec<String>,
+        origins: Vec<Origin>,
     },
 }
 
 /// Where an orphaned installation is no longer offered, as its record names
 /// it: by its origin, or where it came from, for a record from before
 /// origins were kept.
-fn offered_by(origin: &Option<String>) -> String {
+fn offered_by(origin: &Option<Origin>) -> String {
     origin.as_deref().map_or_else(
         || String::from("where it came from"),
         |origin| format!("by {origin}"),
@@ -679,8 +680,7 @@ pub struct Pending {
     pub name: String,
     /// Where it came from, as `--from` takes it: none for a record from
     /// before origins were kept.
-    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
-    pub origin: Option<String>,
+    pub origin: Option<Origin>,
     /// How it stands, as `status` says it.
     pub state: State,
     /// What an update does with it.

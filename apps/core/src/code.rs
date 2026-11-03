@@ -75,6 +75,7 @@ use crate::scan::ScanFailure;
 use crate::status::StatusFailure;
 use crate::template::TemplateError;
 use crate::update::{Left, UpdateError};
+use crate::value::Redacted;
 use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
 
 /// Give an error type its `code()` and its `CODES`.
@@ -271,8 +272,7 @@ pub struct Said {
     /// Written through [`redacted`](crate::url::redacted), as every URL
     /// is: an error can quote one, a source's among them, and what built
     /// the error is no promise that it carries no credential.
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    pub message: String,
+    pub message: Redacted,
 }
 
 impl Said {
@@ -280,7 +280,7 @@ impl Said {
     pub(crate) fn of(code: &'static str, error: &impl Display) -> Self {
         Said {
             code,
-            message: error.to_string(),
+            message: Redacted::new(&error.to_string()),
         }
     }
 }

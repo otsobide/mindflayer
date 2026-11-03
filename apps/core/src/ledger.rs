@@ -31,7 +31,7 @@ use crate::code::codes;
 use crate::kind::Kind;
 use crate::settings::ProjectId;
 use crate::url::{carries_credentials, redacted};
-use crate::value::ContentHash;
+use crate::value::{ContentHash, Origin, Redacted};
 
 /// The schema version this build writes.
 ///
@@ -101,8 +101,7 @@ pub struct Source {
     pub kind: SourceKind,
     /// The URL as the user typed it, without the credentials [`redacted`]
     /// takes out.
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    pub url: String,
+    pub url: Redacted,
     /// The branch or tag asked for, or `None` for whatever the remote's HEAD
     /// points at.
     pub reference: Option<String>,
@@ -124,10 +123,10 @@ impl Source {
     /// for it, and what an install from it records as its origin
     /// ([`crate::install::Offer::origin`]), written here once so a listing
     /// of the sources spells what an install of one of theirs does.
-    pub fn origin(&self) -> String {
+    pub fn origin(&self) -> Origin {
         match &self.reference {
-            Some(reference) => format!("{}#{reference}", self.url),
-            None => self.url.clone(),
+            Some(reference) => Origin::from(format!("{}#{reference}", self.url)),
+            None => Origin::from(self.url.as_str()),
         }
     }
 }
@@ -210,7 +209,7 @@ pub struct InstallRecord {
     /// ([`crate::install::Offer::origin`]), without the credentials
     /// [`redacted`] takes out. `None` only in a record from before schema 3
     /// of something that came from no source.
-    pub origin: Option<String>,
+    pub origin: Option<Origin>,
     /// [`crate::hash::tree`] of what was written, which every target holds.
     /// `None` in a record from before schema 3, which D-04 reads as current
     /// only while the copy matches its offer byte for byte.
@@ -289,12 +288,10 @@ pub struct Entry {
     pub at: i64,
     pub action: String,
     /// What the action was about: a URL, a name. A URL is [`redacted`].
-    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
-    pub target: Option<String>,
+    pub target: Option<Redacted>,
     pub outcome: String,
     /// What it said, successful or not, with every URL in it [`redacted`].
-    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
-    pub detail: Option<String>,
+    pub detail: Option<Redacted>,
 }
 
 /// The workspace's database.
@@ -715,7 +712,7 @@ impl Ledger {
         Ok(Source {
             id: self.connection.last_insert_rowid(),
             kind,
-            url: url.into_owned(),
+            url: Redacted::new(&url),
             reference: reference.map(str::to_owned),
             subdirectory: subdirectory.to_owned(),
             revision: None,
@@ -861,7 +858,7 @@ impl Ledger {
                 source: Source {
                     id: row.source_id,
                     kind: source_kind,
-                    url: redacted(&row.url).into_owned(),
+                    url: Redacted::new(&row.url),
                     reference: row.reference,
                     subdirectory: row.subdirectory,
                     revision: row.source_revision,
@@ -902,7 +899,7 @@ impl Ledger {
                         Ok(Source {
                             id: row.get(0)?,
                             kind,
-                            url: redacted(&url).into_owned(),
+                            url: Redacted::new(&url),
                             reference: row.get(3)?,
                             subdirectory: row.get(4)?,
                             revision: row.get(5)?,
@@ -1086,7 +1083,7 @@ impl Ledger {
         };
         // And comes out as every URL does, for one schema 3 filled in from a
         // source's URL as an older build stored it, until the scrub rewrites it.
-        let origin = origin.map(|text| redacted(&text).into_owned());
+        let origin = origin.map(|text| Origin::from(redacted(&text)));
 
         let mut statement = self
             .connection
@@ -1465,7 +1462,7 @@ impl Ledger {
                         name,
                         source_id,
                         // Out as every URL comes out, as `installation` has it.
-                        origin: origin.map(|text| redacted(&text).into_owned()),
+                        origin: origin.map(|text| Origin::from(redacted(&text))),
                         content_hash,
                         targets: Vec::new(),
                     },
@@ -1955,9 +1952,9 @@ impl Ledger {
                 Ok(Entry {
                     at: row.get(0)?,
                     action: row.get(1)?,
-                    target: target.map(|text| redacted(&text).into_owned()),
+                    target: target.map(|text| Redacted::new(&text)),
                     outcome: row.get(3)?,
-                    detail: detail.map(|text| redacted(&text).into_owned()),
+                    detail: detail.map(|text| Redacted::new(&text)),
                 })
             })
             .map_err(|source| self.failed("reading the action log", source))?;
@@ -2268,7 +2265,7 @@ fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
     Ok(Source {
         id: row.get(0)?,
         kind,
-        url: redacted(&url).into_owned(),
+        url: Redacted::new(&url),
         reference: row.get(3)?,
         subdirectory: row.get(4)?,
         revision: row.get(5)?,

@@ -80,6 +80,7 @@ use mindflayer_core::policy::PolicyError;
 use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindflayer_core::scan::{self, Order, DEFAULT_DEPTH};
 use mindflayer_core::update::Updates;
+use mindflayer_core::value::Redacted;
 use mindflayer_core::view::Snapshot;
 use mindflayer_core::{paths, policy, watch};
 use mindflayer_core::{
@@ -1033,7 +1034,7 @@ fn ran(words: &[String], ran: Ran) -> Run {
             stderr: Vec::new(),
             error: Some(Said {
                 code: refusal.code(),
-                message: refusal.to_string(),
+                message: Redacted::new(&refusal.to_string()),
             }),
             ok: false,
         },
@@ -1050,7 +1051,7 @@ fn ran(words: &[String], ran: Ran) -> Run {
             stderr: failure.warnings,
             error: Some(Said {
                 code: failure.error.code(),
-                message: failure.error.to_string(),
+                message: Redacted::new(&failure.error.to_string()),
             }),
             ok: false,
         },
@@ -1066,7 +1067,7 @@ impl From<&Run> for Done {
             command: run.command.clone(),
             stdout: run.stdout.clone(),
             stderr: run.stderr.iter().map(|line| line.text.clone()).collect(),
-            error: run.error.as_ref().map(|error| error.message.clone()),
+            error: run.error.as_ref().map(|error| error.message.to_string()),
             ok: run.ok,
         }
     }

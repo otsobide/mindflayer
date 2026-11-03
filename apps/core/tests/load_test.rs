@@ -246,7 +246,7 @@ fn a_loaded_workspaces_own_skills_are_offered_after_the_workspaces_own() {
 
     let offered: Vec<(&str, String)> = candidates
         .iter()
-        .map(|candidate| (candidate.name(), candidate.origin()))
+        .map(|candidate| (candidate.name(), candidate.origin().into_string()))
         .collect();
     assert_eq!(
         offered,
@@ -734,7 +734,7 @@ fn something_gathered_and_loaded_from_one_directory_has_two_origins() {
     let candidates = install::survey(&target, &ledger, &project, Kind::Skill).unwrap();
     let origins: Vec<String> = candidates
         .iter()
-        .map(|candidate| candidate.origin())
+        .map(|candidate| candidate.origin().into_string())
         .collect();
     assert_eq!(origins.len(), 2);
     assert_ne!(origins[0], origins[1], "{origins:?}");

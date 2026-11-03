@@ -106,7 +106,11 @@ impl Fixture {
             &candidates,
         )
         .unwrap();
-        candidates.iter().map(Candidate::origin).zip(held).collect()
+        candidates
+            .iter()
+            .map(|candidate| candidate.origin().into_string())
+            .zip(held)
+            .collect()
     }
 }
 
@@ -222,7 +226,7 @@ fn cell(project: &str, reference: &str, origin: &str, wanted: bool) -> Cell {
     Cell {
         project: project.to_owned(),
         reference: reference.to_owned(),
-        origin: origin.to_owned(),
+        origin: origin.into(),
         wanted,
     }
 }
@@ -302,7 +306,7 @@ fn boxes_read_off_the_disk_plan_an_install_and_an_uninstall_naming_each_project_
                 projects: owned(&["beta"]),
                 kind: Kind::Skill,
                 name: String::from("deploy"),
-                from: String::from("load:../team"),
+                from: "load:../team".into(),
             },
         ]
     );
@@ -325,7 +329,7 @@ fn an_offer_asked_for_in_place_of_the_one_a_project_holds_replaces_it() {
             projects: owned(&["alpha"]),
             kind: Kind::Skill,
             name: String::from("deploy"),
-            from: String::from("load:../team"),
+            from: "load:../team".into(),
         }]
     );
 }
@@ -380,7 +384,7 @@ fn a_credential_typed_into_a_box_is_its_origin_as_printed_and_never_said_back() 
             projects: owned(&["alpha"]),
             kind: Kind::Skill,
             name: String::from("lint"),
-            from: address.clone(),
+            from: address.clone().into(),
         }]
     );
     assert_eq!(codes(&plan), (vec![], vec!["not_offered"]));
@@ -413,13 +417,13 @@ fn a_bare_name_is_the_one_kind_its_origin_offers_it_as() {
                 projects: owned(&["alpha"]),
                 kind: Kind::Skill,
                 name: String::from("deploy"),
-                from: String::from("load:../team"),
+                from: "load:../team".into(),
             },
             Change::Install {
                 projects: owned(&["alpha"]),
                 kind: Kind::Rule,
                 name: String::from("deploy"),
-                from: String::from("workspace"),
+                from: "workspace".into(),
             },
         ]
     );
@@ -677,7 +681,7 @@ impl Fixture {
                         && held.origin == offered.origin
                 });
                 (
-                    offered.origin.clone(),
+                    offered.origin.to_string(),
                     held.map(|held| held.state),
                     held.is_some_and(|held| held.ticked),
                 )

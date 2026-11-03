@@ -1297,6 +1297,7 @@ fn shelf_origin(workspace: &FlayerWorkspace, ledger: &Ledger) -> String {
     screen_for(workspace, ledger).targets[0].rows[0]
         .candidate
         .origin()
+        .into_string()
 }
 
 #[test]

@@ -36,6 +36,7 @@ use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
 use crate::policy::{self, PolicyError};
 use crate::url::redacted;
+use crate::value::{Origin, Redacted};
 use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// What `selection` amounts to in `workspace` as the disk stands now: each
@@ -245,7 +246,7 @@ impl Read {
             // one origin, and no change installs from what was typed.
             Some((standing, held)) => Ok(Some(Asked {
                 cell: Cell {
-                    origin,
+                    origin: Origin::from(origin),
                     ..cell.clone()
                 },
                 kind,
@@ -413,10 +414,9 @@ pub fn holding(
 pub struct Cell {
     pub project: String,
     pub reference: String,
-    // Written as every URL is, whoever built the cell: one a browser sent
-    // comes back inside a lock or a conflict as it was sent.
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    pub origin: String,
+    // Written as every URL is, whoever built the cell (`Origin`): one a
+    // browser sent comes back inside a lock or a conflict as it was sent.
+    pub origin: Origin,
     /// Whether the project should hold it from there: ticked, or not.
     pub wanted: bool,
 }
@@ -428,7 +428,7 @@ impl Cell {
         Cell {
             project: project.to_owned(),
             reference: format!("{}{QUALIFIER}{name}", kind.slug()),
-            origin: origin.to_owned(),
+            origin: Origin::from(origin),
             wanted,
         }
     }
@@ -485,8 +485,7 @@ pub enum Change {
         projects: Vec<String>,
         kind: Kind,
         name: String,
-        #[serde(serialize_with = "crate::url::serialize_redacted")]
-        from: String,
+        from: Origin,
     },
     /// `flayer uninstall -p <project>... <kind:name>`: the name, whichever
     /// offer its copy came from, as the command takes it.
@@ -532,13 +531,13 @@ pub enum Clash {
         project: String,
         kind: Kind,
         name: String,
-        origins: Vec<String>,
+        origins: Vec<Origin>,
     },
     #[error("`{name}` from {origin} is asked both to be in {project} and not to be")]
     BothWays {
         project: String,
         name: String,
-        origin: String,
+        origin: Origin,
     },
 }
 
@@ -649,7 +648,7 @@ enum Decided {
 
 /// One origin's boxes of a name in a project: every box asked of it, the
 /// same box asked twice alike counted once.
-struct Origin {
+struct Boxed {
     /// The place of each, in what was asked, the first first.
     at: Vec<usize>,
     wanted: bool,
@@ -681,12 +680,12 @@ fn groups(asked: &[Asked]) -> Vec<Vec<usize>> {
 fn decide(asked: &[Asked], group: &[usize]) -> Decision {
     let first = &asked[group[0]];
     let (project, kind, name) = (&first.cell.project, first.kind, &first.name);
-    let mut origins: Vec<(&str, Origin)> = Vec::new();
+    let mut origins: Vec<(&Origin, Boxed)> = Vec::new();
     for &at in group {
         let one = &asked[at];
         match origins
             .iter_mut()
-            .find(|(origin, _)| *origin == one.cell.origin)
+            .find(|(origin, _)| **origin == one.cell.origin)
         {
             Some((_, seen)) => {
                 seen.both |= seen.wanted != one.cell.wanted;
@@ -694,7 +693,7 @@ fn decide(asked: &[Asked], group: &[usize]) -> Decision {
             }
             None => origins.push((
                 &one.cell.origin,
-                Origin {
+                Boxed {
                     at: vec![at],
                     wanted: one.cell.wanted,
                     held: one.held,
@@ -716,14 +715,14 @@ fn decide(asked: &[Asked], group: &[usize]) -> Decision {
             why: said(&Clash::BothWays {
                 project: project.clone(),
                 name: name.clone(),
-                origin: (*origin).to_owned(),
+                origin: (*origin).clone(),
             }),
         })
         .collect();
     if !both.is_empty() {
         return Decision::Clashes(both);
     }
-    let wanted: Vec<&(&str, Origin)> = origins.iter().filter(|(_, seen)| seen.wanted).collect();
+    let wanted: Vec<&(&Origin, Boxed)> = origins.iter().filter(|(_, seen)| seen.wanted).collect();
     if wanted.len() > 1 {
         let firsts: Vec<usize> = wanted.iter().map(|(_, seen)| seen.at[0]).collect();
         return Decision::Clashes(vec![Conflict {
@@ -786,7 +785,7 @@ fn decide(asked: &[Asked], group: &[usize]) -> Decision {
 fn said(clash: &Clash) -> Said {
     Said {
         code: clash.code(),
-        message: clash.to_string(),
+        message: Redacted::new(&clash.to_string()),
     }
 }
 
@@ -805,7 +804,7 @@ fn held_back(refused: Refused, name: &str, project: &str) -> Said {
     };
     Said {
         code: refused.code(),
-        message,
+        message: Redacted::new(&message),
     }
 }
 

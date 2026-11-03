@@ -48,6 +48,7 @@ use crate::resolve::{self, Inputs, Intent, Reason, ResolveError, Resolved};
 use crate::settings::{ProjectId, Settings, Share};
 use crate::status::{ArtifactStatus, Missed, ProjectStatus, State, Unreached};
 use crate::template::{self, Template};
+use crate::value::{Origin, Redacted};
 use crate::workspace::{
     same_directory, FlayerWorkspace, MarkerFile, Member, MindProject, WorkspaceError,
 };
@@ -362,8 +363,7 @@ pub struct Held {
     /// order.
     pub agents: Vec<Agent>,
     /// Where what was installed came from, as `--from` takes it.
-    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
-    pub origin: Option<String>,
+    pub origin: Option<Origin>,
     /// Where it is held, as routes from its holder, `/` separated, in path
     /// order: each copy discovery found, the one whose file does not read
     /// among them, and each place the ledger records putting one, found or
@@ -556,8 +556,7 @@ pub struct Unread {
     /// The reason alone, without the path, which [`path`](Self::path)
     /// says: written through [`redacted`](crate::url::redacted), as a
     /// [`Said`]'s message is.
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    pub message: String,
+    pub message: Redacted,
 }
 
 /// A workspace another one loads, and how much of its own it offers.
@@ -579,7 +578,7 @@ pub struct LoadedWorkspace {
     /// What `--from` takes for what it offers, and what an install of one
     /// of them records as its origin: the first spelling's, for a second
     /// spelling of one workspace, as its offers are.
-    pub origin: String,
+    pub origin: Origin,
     /// Why it would not open, when it would not.
     pub error: Option<Said>,
 }
@@ -652,8 +651,7 @@ pub struct Shelved {
     pub gathered: Gathered,
     /// Where it came from, as `--from` takes it and an install of it
     /// records it ([`Source::origin`]).
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    pub origin: String,
+    pub origin: Origin,
 }
 
 impl Shelved {
@@ -676,8 +674,7 @@ pub struct ShelfSource {
     pub source: Source,
     /// [`Source::origin`], which every artifact it supplied is installed
     /// from.
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    pub origin: String,
+    pub origin: Origin,
 }
 
 impl ShelfSource {
@@ -709,8 +706,7 @@ pub struct Offered {
     pub place: Place,
     /// Where it is offered from, as `--from` takes it and an install of it
     /// records it: what a box of it names its offer by.
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    pub origin: String,
+    pub origin: Origin,
 }
 
 impl Offered {
@@ -768,8 +764,7 @@ pub struct HeldBox {
     pub kind: Kind,
     pub name: String,
     /// The offer's, as [`Offered::origin`] says it.
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    pub origin: String,
+    pub origin: Origin,
     /// How the name stands in the project, as every offer of it stands
     /// ([`State::of_standing`]): never `authored`, which no offer is.
     pub state: State,
@@ -1307,9 +1302,11 @@ fn holdings(
             unread: Some(Unread {
                 path,
                 code: failure.code(),
-                message: failure
-                    .source()
-                    .map_or_else(|| failure.to_string(), ToString::to_string),
+                message: Redacted::new(
+                    &failure
+                        .source()
+                        .map_or_else(|| failure.to_string(), ToString::to_string),
+                ),
             }),
             kind,
             name,

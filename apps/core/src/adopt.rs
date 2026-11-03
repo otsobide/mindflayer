@@ -44,7 +44,7 @@ use crate::install::{self, InstallError, WORKSPACE_ORIGIN};
 use crate::kind::Kind;
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::skill::SkillManifest;
-use crate::value::ContentHash;
+use crate::value::{ContentHash, Origin};
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// What the `metadata` keys start with that `gh skill` writes into a skill
@@ -143,7 +143,7 @@ pub enum AdoptError {
     Installed {
         project: String,
         name: String,
-        origin: String,
+        origin: Origin,
     },
     #[error("{path} is {project}'s own, in the folder it authors skills in, so it is not adopted: only somebody's skill in an agent's folder is")]
     Authored { project: String, path: PathBuf },
@@ -313,7 +313,7 @@ pub fn apply(
             kind: Kind::Skill,
             name: plan.name.clone(),
             source_id: None,
-            origin: Some(String::from(WORKSPACE_ORIGIN)),
+            origin: Some(Origin::from(WORKSPACE_ORIGIN)),
             content_hash: Some(plan.hash.clone()),
             targets: plan
                 .copies
@@ -427,7 +427,7 @@ fn plan_with(
             name,
             origin: record
                 .origin
-                .unwrap_or_else(|| String::from("a place not recorded")),
+                .unwrap_or_else(|| Origin::from("a place not recorded")),
         });
     }
     let there: Vec<&PathBuf> = paths

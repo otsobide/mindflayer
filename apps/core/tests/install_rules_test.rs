@@ -129,7 +129,7 @@ fn a_project_a_mind_toml_marks_gets_a_copy_of_the_rule_filed_by_its_route() {
             kind: Kind::Rule,
             name: String::from("git/no-force-push"),
             source_id: None,
-            origin: Some(String::from(WORKSPACE_ORIGIN)),
+            origin: Some(WORKSPACE_ORIGIN.into()),
             content_hash: Some(held.clone()),
             targets: vec![Target {
                 agent: None,
@@ -627,7 +627,7 @@ fn record(route: &str, source: &str, targets: Vec<Target>) -> InstallRecord {
         kind: Kind::Rule,
         name: route.to_owned(),
         source_id: None,
-        origin: Some(String::from(WORKSPACE_ORIGIN)),
+        origin: Some(WORKSPACE_ORIGIN.into()),
         content_hash: Some(hash::bytes(source.as_bytes())),
         targets,
     }
@@ -1359,9 +1359,13 @@ fn rendering_a_project_a_mind_toml_marks_renders_nothing() {
 fn status_of(fixture: &Fixture, route: &str) -> Option<(State, Vec<Agent>, Option<String>)> {
     let (status, failures) = Status::of_project(&fixture.project, Some(&fixture.workspace));
     assert!(failures.is_empty(), "{failures:?}");
-    status.projects[0]
-        .find(Kind::Rule, route)
-        .map(|rule| (rule.state, rule.agents.clone(), rule.origin.clone()))
+    status.projects[0].find(Kind::Rule, route).map(|rule| {
+        (
+            rule.state,
+            rule.agents.clone(),
+            rule.origin.clone().map(String::from),
+        )
+    })
 }
 
 #[test]
@@ -1833,7 +1837,9 @@ fn a_project_whose_settings_name_no_agent_receives_neither_kind() {
 
 /// What each of `said` says, without its code.
 fn messages(said: Vec<Said>) -> Vec<String> {
-    said.into_iter().map(|said| said.message).collect()
+    said.into_iter()
+        .map(|said| said.message.into_string())
+        .collect()
 }
 
 /// What status says each rule the fixture's project received misses.
