@@ -6,7 +6,7 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener};
 use std::sync::Arc;
 
 use axum::middleware;
-use axum::routing::{any, get, post, MethodRouter};
+use axum::routing::{any, MethodRouter};
 use axum::Router;
 
 use crate::api::{self, Api};
@@ -15,6 +15,7 @@ use crate::events::Events;
 use crate::guard::{self, Hosts};
 use crate::log::{self, Log, Sink};
 use crate::panel::{self, Panel};
+use crate::route::{self, Own, API};
 use crate::token::Token;
 use crate::transcript::Transcript;
 use crate::watcher::Watcher;
@@ -95,6 +96,10 @@ impl<B: Backend> Server<B> {
     ///
     /// Synchronous, and std's listener rather than tokio's, so that a front
     /// end can learn the port and print the link before it has a runtime.
+    ///
+    /// Fails, with nothing served, on a table of routes the backend hands
+    /// over that cannot be served ([`Backend::routes`]): a path taken twice,
+    /// or no path the router could take as it is spelled.
     pub fn bind(self) -> io::Result<Listening> {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, self.port))?;
         let address = listener.local_addr()?;
@@ -121,7 +126,7 @@ pub struct Listening {
     router: Router,
     /// Where the panel is served from instead, when that is a dev server.
     dev_server: Option<String>,
-    /// What `/api/events` streams.
+    /// What `/api/v1/events` streams.
     events: Events,
 }
 
@@ -154,7 +159,7 @@ impl Listening {
         auth::cookie_name(self.address.port())
     }
 
-    /// The bus `/api/events` streams, for a front end that tells the panel
+    /// The bus `/api/v1/events` streams, for a front end that tells the panel
     /// something of its own or listens without HTTP, as a desktop shell
     /// would.
     pub fn events(&self) -> Events {
@@ -197,6 +202,8 @@ fn route<B: Backend>(
     port: u16,
     events: Events,
 ) -> io::Result<Router> {
+    let routes = B::routes();
+    route::check(&routes)?;
     let gate = Arc::new(Gate::new(token.clone(), port));
     let log = server
         .log
@@ -220,15 +227,25 @@ fn route<B: Backend>(
         transcript,
         events,
     });
-    let router = Router::new()
-        .route("/api/query", endpoint(post(api::query::<B>)))
-        .route("/api/commands/preview", endpoint(post(api::preview::<B>)))
-        .route("/api/commands", endpoint(post(api::commands::<B>)))
-        .route("/api/switch", endpoint(post(api::switch::<B>)))
-        .route("/api/transcript", endpoint(get(api::transcript::<B>)))
-        .route("/api/events", endpoint(get(api::events::<B>)))
+    // Each of the backend's reads at its path under the version, as its
+    // table says: the server matches it, and knows nothing of what it is.
+    // Then each of its own, as its own table says, so what a description
+    // of the API walks is what is served.
+    let mut router = Router::new();
+    for read in routes {
+        let path = format!("{API}{}", read.path);
+        router = router.route(&path, endpoint(api::read::<B>(read)));
+    }
+    for own in Own::ALL {
+        let path = format!("{API}{}", own.path());
+        router = router.route(&path, endpoint(api::own::<B>(own)));
+    }
+    let router = router
         // The bare prefix and everything under it that names no endpoint,
-        // so a typo in a script gets a JSON 404 rather than the panel. `/api/`
+        // so a typo in a script gets a JSON 404 rather than the panel, and
+        // so does a path of another version, or of none: the panel's own
+        // unversioned endpoints went when it moved under the version, since
+        // it ships in the same binary and was their only client. `/api/`
         // needs a route of its own: the catch-all wants at least one
         // character after the slash, and without one the prefix would reach
         // the panel past the gate.

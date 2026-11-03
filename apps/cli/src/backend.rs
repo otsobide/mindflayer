@@ -58,7 +58,10 @@
 //!   each file by the route a file is then asked for by.
 //!
 //! Every refusal has a code, as every error does, and nothing of a refused
-//! task runs.
+//! task runs. A read whose parameters name what is not there, an entry, an
+//! artifact, a file or a folder, is refused as absent, a 404; every other
+//! refusal, a task's, a switch's and whatever a body sends among them, as
+//! unfit, a 422 ([`Absence`]).
 
 use std::fmt::Display;
 use std::fs::{self, OpenOptions};
@@ -66,27 +69,30 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
-use mindflayer_core::browse::Folders;
+use mindflayer_core::browse::{BrowseError, Folders};
 use mindflayer_core::code::Said;
-use mindflayer_core::contents::{Contents, Files};
+use mindflayer_core::contents::{Contents, ContentsError, Files};
 use mindflayer_core::draft;
 use mindflayer_core::gather::Watch;
 use mindflayer_core::install::{self, Cell, Conflict, Locked};
 use mindflayer_core::known::{self, Launch};
+use mindflayer_core::policy::PolicyError;
 use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindflayer_core::scan::{self, Order, DEFAULT_DEPTH};
 use mindflayer_core::update::Updates;
 use mindflayer_core::view::Snapshot;
 use mindflayer_core::{paths, policy, watch};
 use mindflayer_core::{
-    FlayerWorkspace, Found, Kind, MindProject, Reference, Scan, FLAYER_CONFIG, FLAYER_DIR,
+    FlayerWorkspace, Found, Kind, LifecycleError, MindProject, Reference, Scan, WorkspaceError,
+    FLAYER_CONFIG, FLAYER_DIR,
 };
-use mindflayer_server::{Backend, Preview, Refusal, Watched};
+use mindflayer_server::{Backend, Grounds, Preview, Refusal, Route, Watched};
 use serde::{Deserialize, Serialize};
 
 use crate::admit::Admission;
 use crate::commands::project::{scan_warned, worth_linking};
 use crate::commands::{run_line, Ran};
+use crate::routes;
 use crate::task::{self, cautioned, shell, Caution, Holder, MindsChange, Task};
 use crate::tui::state::{transcript, Done};
 use crate::{CliError, Lookup, Warning};
@@ -94,7 +100,8 @@ use crate::{CliError, Lookup, Warning};
 /// A read the panel asks for.
 ///
 /// Tagged as a task is, by its name in snake_case beside its fields:
-/// `{"type": "snapshot"}`, `{"type": "files", "holder": {"type":
+/// `{"type": "snapshot"}`, `{"type": "projects"}`, `{"type": "library"}`,
+/// `{"type": "project", "entry": "alpha"}`, `{"type": "files", "holder": {"type":
 /// "workspace"}, "reference": "skill:deploy"}`, `{"type": "contents",
 /// "holder": {"type": "workspace"}, "reference": "skill:deploy", "file":
 /// "SKILL.md"}`, `{"type": "scan", "roots": ["/home/you/Work"], "depth":
@@ -115,6 +122,21 @@ pub enum Query {
     /// read from an object holding any field at all: with braces there is
     /// something for `deny_unknown_fields` to hold the object to.
     Snapshot {},
+    /// Every entry of the workspace's registry and the project it opens,
+    /// the snapshot's own list of them ([`Snapshot::projects`]).
+    ///
+    /// Cut from the snapshot rather than read another way, for a script
+    /// that wants only them: each is what the snapshot says of it, its
+    /// health and its tally included, and nothing a second reading could
+    /// say otherwise.
+    Projects {},
+    /// The workspace's own artifacts, the snapshot's own part of them
+    /// ([`Snapshot::library`]), cut from it as the projects are.
+    Library {},
+    /// One entry of the registry and the project it opens, by the entry as
+    /// the snapshot lists it ([`Snapshot::project`]): the snapshot's own row
+    /// of it, and an entry no registry holds refused as an unlink of it is.
+    Project { entry: String },
     /// Every file and folder of one artifact ([`Files`]), named as for
     /// [`Contents`](Self::Contents), whose `file` each route it lists is.
     Files { holder: Holder, reference: String },
@@ -630,21 +652,39 @@ impl Backend for PanelBackend {
         // Each is strings, numbers and lists of them, and maps keyed by
         // field names, with every path written as text whatever its bytes:
         // nothing in either can fail to serialize.
+        let snapshot = |workspace| {
+            let resolved = Resolved {
+                workspace,
+                reason: pin.reason,
+            };
+            Snapshot::of(&resolved, self.lookup.home.as_deref())
+        };
         match query {
             Query::Snapshot {} => {
-                let resolved = Resolved {
-                    workspace,
-                    reason: pin.reason,
-                };
-                let snapshot = Snapshot::of(&resolved, self.lookup.home.as_deref());
-                Ok(serde_json::to_value(snapshot).expect("a snapshot serializes"))
+                Ok(serde_json::to_value(snapshot(workspace)).expect("a snapshot serializes"))
+            }
+            // Each the snapshot's own part, read whole and cut, so it says
+            // what the snapshot says to the letter.
+            Query::Projects {} => {
+                Ok(serde_json::to_value(snapshot(workspace).projects)
+                    .expect("a snapshot serializes"))
+            }
+            Query::Library {} => {
+                Ok(serde_json::to_value(snapshot(workspace).library)
+                    .expect("a snapshot serializes"))
+            }
+            Query::Project { entry } => {
+                let project = snapshot(workspace)
+                    .project(&entry)
+                    .map_err(|error| named(error.code(), error))?;
+                Ok(serde_json::to_value(project).expect("a snapshot serializes"))
             }
             Query::Files { holder, reference } => {
                 let files = match linked(&workspace, holder)? {
                     None => Files::of_library(&workspace, &reference),
                     Some(project) => Files::of_project(&project, &reference),
                 }
-                .map_err(|error| refused(error.code(), error))?;
+                .map_err(|error| named(error.code(), error))?;
                 Ok(serde_json::to_value(files).expect("a listing serializes"))
             }
             Query::Contents {
@@ -656,7 +696,7 @@ impl Backend for PanelBackend {
                     None => Contents::of_library(&workspace, &reference, &file),
                     Some(project) => Contents::of_project(&project, &reference, &file),
                 }
-                .map_err(|error| refused(error.code(), error))?;
+                .map_err(|error| named(error.code(), error))?;
                 Ok(serde_json::to_value(contents).expect("contents serialize"))
             }
             Query::Scan { roots, depth } => {
@@ -683,7 +723,7 @@ impl Backend for PanelBackend {
                 };
                 let folders =
                     Folders::read(&workspace, &folder, hidden, self.lookup.home.as_deref())
-                        .map_err(|error| refused(error.code(), error))?;
+                        .map_err(|error| named(error.code(), error))?;
                 Ok(serde_json::to_value(folders).expect("a listing serializes"))
             }
             Query::Plan { selection } => {
@@ -706,7 +746,14 @@ impl Backend for PanelBackend {
             // which a line of the panel's names as it runs, so the templates
             // offered and the records consulted are that one's.
             Query::Validate { holder, draft } => {
-                let holder = linked(&workspace, holder)?.unwrap_or_else(|| workspace.own());
+                // Named in a body, which is no part of the route's address,
+                // so a holder that is not there is a 422, as a task's is.
+                let holder = linked(&workspace, holder)
+                    .map_err(|refusal| Refusal {
+                        grounds: Grounds::Unfit,
+                        ..refusal
+                    })?
+                    .unwrap_or_else(|| workspace.own());
                 let judged = match draft {
                     Draft::Add {
                         kind,
@@ -736,6 +783,12 @@ impl Backend for PanelBackend {
                 Ok(serde_json::to_value(listed).expect("a list serializes"))
             }
         }
+    }
+
+    /// The panel's reads, and the snapshot's parts, each the query the panel
+    /// sends for it ([`routes::table`]).
+    fn routes() -> Vec<Route<Query>> {
+        routes::table()
     }
 
     /// Each line as a shell would read it, and what the panel has somebody
@@ -935,17 +988,19 @@ fn scope(scope: watch::Scope) -> serde_json::Value {
 
 /// The project a query's `holder` names by its entry in `workspace`, or none
 /// for the workspace's own: a read of an artifact is held to one or the
-/// other, as a task's holder is ([`policy::linked`]).
+/// other, as a task's holder is ([`policy::linked`]). An entry no registry
+/// holds, or one whose folder holds no project any more, is refused as
+/// absent, as a read's parameter names it.
 fn linked(workspace: &FlayerWorkspace, holder: Holder) -> Result<Option<MindProject>, Refusal> {
     match holder {
         Holder::Workspace => Ok(None),
         Holder::Project(entry) | Holder::Elsewhere(entry) => {
             let member =
-                policy::linked(workspace, &entry).map_err(|error| refused(error.code(), error))?;
+                policy::linked(workspace, &entry).map_err(|error| named(error.code(), error))?;
             member
                 .project
                 .map(Some)
-                .map_err(|error| refused(error.code(), error))
+                .map_err(|error| named(error.code(), error))
         }
     }
 }
@@ -999,10 +1054,144 @@ impl From<&Run> for Done {
     }
 }
 
-/// A refusal of `code`, saying `message`.
+/// A refusal of `code`, saying `message`, of a request that is not one to
+/// act on: a 422.
 fn refused(code: &'static str, message: impl Display) -> Refusal {
-    Refusal {
-        code,
-        message: message.to_string(),
+    Refusal::unfit(code, message.to_string())
+}
+
+/// A refusal of `code`, saying what `error` says, of a read whose
+/// parameters name what `error` is about: absent, a 404, when `error` says
+/// that is not there, and unfit, a 422, for anything else.
+fn named<E: Absence + Display>(code: &'static str, error: E) -> Refusal {
+    if error.absent() {
+        Refusal::absent(code, error.to_string())
+    } else {
+        Refusal::unfit(code, error.to_string())
+    }
+}
+
+/// Whether an error core gave of what a read's parameters named says it is
+/// not there: what tells a 404 from a 422 ([`Grounds`]).
+///
+/// Asked only of a read's parameters, a GET's query string, which is part
+/// of the address of what it reads, so a value naming nothing makes the
+/// address name nothing, as a path no route serves does. What a body names
+/// is no part of the address, whose route is there: a task, a switch, a
+/// plan or a draft naming an entry no registry holds is a request not to act
+/// on, a 422 with the same code; and so is a refusal of a request that
+/// names nothing at all, a workspace in use that will not open among them.
+///
+/// Decided here, where each refusal is built, rather than by the server
+/// from the code, which would put a rule of the front end's in a crate that
+/// knows none; and as a match with no wildcard for each error, so a
+/// variant core adds is decided before it compiles. Not core's either: a
+/// status is HTTP's, and a front end without a server has no use for one.
+trait Absence {
+    fn absent(&self) -> bool;
+}
+
+/// Something named that is not what it was named as: a folder with no
+/// project or no workspace in it, an entry the registry or the loads do
+/// not hold, a workspace this machine does not know.
+impl Absence for WorkspaceError {
+    fn absent(&self) -> bool {
+        match self {
+            WorkspaceError::NotAProject { .. }
+            | WorkspaceError::NotAWorkspace { .. }
+            | WorkspaceError::NotRegistered { .. }
+            | WorkspaceError::NotLoaded { .. }
+            | WorkspaceError::NotKnown { .. } => true,
+            WorkspaceError::Create { .. }
+            | WorkspaceError::Read { .. }
+            | WorkspaceError::Parse { .. }
+            | WorkspaceError::Malformed { .. }
+            | WorkspaceError::Version { .. }
+            | WorkspaceError::Edit { .. }
+            | WorkspaceError::LoadsItself { .. }
+            | WorkspaceError::NonUtf8Path { .. }
+            | WorkspaceError::OutsideProject { .. }
+            | WorkspaceError::InsideMind { .. }
+            | WorkspaceError::NoDirectory { .. }
+            | WorkspaceError::Target { .. }
+            | WorkspaceError::NoSettings { .. }
+            | WorkspaceError::OutsideWorkspace { .. }
+            | WorkspaceError::OverlapsGathered { .. }
+            | WorkspaceError::Lock(_) => false,
+        }
+    }
+}
+
+/// A path is refused for how it is spelled or where it leads, which is no
+/// absence; an entry, for not being in the registry, which is.
+impl Absence for PolicyError {
+    fn absent(&self) -> bool {
+        match self {
+            PolicyError::Workspace(error) => error.absent(),
+            PolicyError::Url { .. }
+            | PolicyError::Relative { .. }
+            | PolicyError::Unnormalized { .. }
+            | PolicyError::InMindflayer { .. }
+            | PolicyError::Unlisted { .. } => false,
+        }
+    }
+}
+
+/// Nothing by the name asked for: absent. One name for several, or one not
+/// to be changed from here, is there and still refused.
+impl Absence for LifecycleError {
+    fn absent(&self) -> bool {
+        match self {
+            LifecycleError::NotFound { .. } => true,
+            LifecycleError::Workspace(error) => error.absent(),
+            LifecycleError::Received { .. }
+            | LifecycleError::NotAuthored { .. }
+            | LifecycleError::Ambiguous { .. }
+            | LifecycleError::Name { .. }
+            | LifecycleError::Nested { .. }
+            | LifecycleError::Unfit { .. }
+            | LifecycleError::Unchanged { .. }
+            | LifecycleError::Exists { .. }
+            | LifecycleError::Unreadable { .. }
+            | LifecycleError::Rewrite { .. }
+            | LifecycleError::Outside { .. }
+            | LifecycleError::NotText { .. }
+            | LifecycleError::Unparsed { .. }
+            | LifecycleError::NameChanged { .. }
+            | LifecycleError::ContentsUnfit { .. }
+            | LifecycleError::HashMalformed { .. }
+            | LifecycleError::Stale { .. }
+            | LifecycleError::LeadsOut { .. }
+            | LifecycleError::Io { .. }
+            | LifecycleError::Artifact(_) => false,
+        }
+    }
+}
+
+/// No file at the route asked for, or something there that is no file:
+/// absent, as a file named is. A link leading out, or a file that is there
+/// and cannot be read, is refused for what it is.
+impl Absence for ContentsError {
+    fn absent(&self) -> bool {
+        match self {
+            ContentsError::Missing { .. } | ContentsError::NotAFile { .. } => true,
+            ContentsError::Find(error) => error.absent(),
+            ContentsError::Route { .. }
+            | ContentsError::Outside { .. }
+            | ContentsError::NameUnfit { .. }
+            | ContentsError::Cycle { .. }
+            | ContentsError::Unreadable { .. } => false,
+        }
+    }
+}
+
+/// No folder at the path asked for, or something there that is no folder:
+/// absent. One that is there and cannot be listed is not.
+impl Absence for BrowseError {
+    fn absent(&self) -> bool {
+        match self {
+            BrowseError::Missing { .. } | BrowseError::NotAFolder { .. } => true,
+            BrowseError::Unlisted { .. } => false,
+        }
     }
 }

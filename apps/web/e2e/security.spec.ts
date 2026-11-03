@@ -13,12 +13,11 @@ const FOREIGN = 'http://evil.example'
 /** What the panel's page sends beside the cookie with every change. */
 const PANEL = { 'Sec-Fetch-Site': 'same-origin', 'X-Mindflayer': '1' }
 
-test('a query sent with the cookie from another origin is refused', async ({ page, panel, served }) => {
+test('a read sent with the cookie from another origin is refused', async ({ page, panel, served }) => {
   await panel.open('/')
   const ask = (origin: string) =>
-    page.request.post(`${served.origin}/api/query`, {
-      data: { type: 'snapshot' },
-      headers: { ...PANEL, Origin: origin },
+    page.request.get(`${served.origin}/api/v1/snapshot`, {
+      headers: { Origin: origin },
       failOnStatusCode: false
     })
 
@@ -27,16 +26,50 @@ test('a query sent with the cookie from another origin is refused', async ({ pag
 
   const foreign = await ask(FOREIGN)
   expect(foreign.status()).toBe(403)
-  expect(await foreign.json()).toEqual({ error: `this server takes requests only from its own pages, at ${served.origin}` })
+  expect(await foreign.json()).toEqual({
+    error: `this server takes requests only from its own pages, at ${served.origin}`,
+    code: 'foreign_origin'
+  })
 })
 
-test('a query sent with the token as Bearer from another origin is refused', async ({ request, served }) => {
-  const foreign = await request.post(`${served.origin}/api/query`, {
-    data: { type: 'snapshot' },
+test('a preview sent with the cookie from another origin is refused', async ({ page, panel, served }) => {
+  await panel.open('/')
+  const preview = (origin: string) =>
+    page.request.post(`${served.origin}/api/v1/tasks/preview`, {
+      data: { type: 'shelf' },
+      headers: { ...PANEL, Origin: origin },
+      failOnStatusCode: false
+    })
+
+  const own = await preview(served.origin)
+  expect(own.status(), await own.text()).toBe(200)
+
+  const foreign = await preview(FOREIGN)
+  expect(foreign.status()).toBe(403)
+  expect(await foreign.json()).toMatchObject({ code: 'foreign_origin' })
+})
+
+test('a read sent with the token as Bearer from another origin is refused', async ({ request, served }) => {
+  const foreign = await request.get(`${served.origin}/api/v1/snapshot`, {
     headers: { Authorization: `Bearer ${served.token}`, Origin: FOREIGN },
     failOnStatusCode: false
   })
   expect(foreign.status()).toBe(403)
+  expect(await foreign.json()).toMatchObject({ code: 'foreign_origin' })
+})
+
+test('no unversioned route answers, the panel\'s old ones among them', async ({ request, served }) => {
+  const bearer = { Authorization: `Bearer ${served.token}` }
+  for (const path of ['/api/query', '/api/commands/preview', '/api/commands', '/api/switch']) {
+    const asked = await request.post(`${served.origin}${path}`, { data: { type: 'snapshot' }, headers: bearer, failOnStatusCode: false })
+    expect(asked.status(), path).toBe(404)
+    expect(await asked.json()).toEqual({ error: `no such endpoint: POST ${path}`, code: 'unknown_route' })
+  }
+  for (const path of ['/api/transcript', '/api/events', '/api/snapshot']) {
+    const asked = await request.get(`${served.origin}${path}`, { headers: bearer, failOnStatusCode: false })
+    expect(asked.status(), path).toBe(404)
+    expect(await asked.json(), path).toMatchObject({ code: 'unknown_route' })
+  }
 })
 
 test('the panel itself is refused to another origin', async ({ request, served }) => {

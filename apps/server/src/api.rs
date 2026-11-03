@@ -1,17 +1,21 @@
-//! The JSON endpoints under `/api`.
+//! The JSON endpoints under `/api/v1`, and what answers every other path
+//! under `/api`.
 
 use std::convert::Infallible;
 use std::sync::Arc;
 
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{BytesRejection, FailedToBufferBody, JsonRejection};
 use axum::extract::State;
-use axum::http::{Method, StatusCode, Uri};
+use axum::http::{Method, Uri};
 use axum::response::sse::{self, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
+use axum::routing::{get, on, post, MethodFilter, MethodRouter};
 use axum::Json;
-use serde_json::json;
+use serde_json::{json, Value};
 
+use crate::code::Condition;
 use crate::events::Events;
+use crate::route::{self, Arguments, Own, Route};
 use crate::transcript::Transcript;
 use crate::watcher::Watcher;
 use crate::writer::Writer;
@@ -28,38 +32,103 @@ pub(crate) struct Api<B: Backend> {
     pub(crate) _watcher: Arc<Watcher>,
 }
 
-/// `POST /api/query`: a read, answered by the backend.
-///
-/// On the blocking pool, because a query reads the disk and the runtime's
-/// own threads are for moving bytes: one slow read there would stall every
-/// other request waiting on that thread.
-pub(crate) async fn query<B: Backend>(
-    State(api): State<Arc<Api<B>>>,
-    body: Result<Json<B::Query>, JsonRejection>,
-) -> Response {
-    let query = match body {
-        Ok(Json(query)) => query,
-        Err(rejection) => return refused(rejection),
+/// A read one of the backend's routes serves ([`Route`]), as the method
+/// it is asked by: a GET by its parameters, a POST by its body.
+pub(crate) fn read<B: Backend>(route: Route<B::Query>) -> MethodRouter<Arc<Api<B>>> {
+    let route = Arc::new(route);
+    match route.method {
+        route::Method::Get => get(move |State(api): State<Arc<Api<B>>>, uri: Uri| {
+            let route = Arc::clone(&route);
+            async move { answer(&api, &route, &uri, None).await }
+        }),
+        route::Method::Post => post(
+            move |State(api): State<Arc<Api<B>>>,
+                  uri: Uri,
+                  body: Result<Json<Value>, JsonRejection>| {
+                let route = Arc::clone(&route);
+                async move { answer(&api, &route, &uri, Some(body)).await }
+            },
+        ),
+    }
+}
+
+/// One of the server's own routes ([`Own`]), its handler asked by the
+/// method the table says rather than one spelled again here, so a
+/// description written from the table says how it is served.
+pub(crate) fn own<B: Backend>(own: Own) -> MethodRouter<Arc<Api<B>>> {
+    let method = match own.method() {
+        route::Method::Get => MethodFilter::GET,
+        route::Method::Post => MethodFilter::POST,
     };
+    match own {
+        Own::Preview => on(method, preview::<B>),
+        Own::Run => on(method, run::<B>),
+        Own::Switch => on(method, switch::<B>),
+        Own::Transcript => on(method, transcript::<B>),
+        Own::Events => on(method, events::<B>),
+    }
+}
+
+/// What `route` answers to a request for `uri`, with `body` for a POST:
+/// its parameters read as the table says, every one it does not take
+/// refused, the backend's query made of them by the route, and that query
+/// answered.
+///
+/// What a GET sends that the route cannot read is a 400, as a query string
+/// is refused anywhere (`invalid_parameters`); what a POST's body holds that
+/// it cannot read is a 422, as a body a task cannot be read from is, since
+/// the request arrived whole (`invalid_body`). The route's own words come
+/// after its path, so a script learns which of its requests they are
+/// about.
+async fn answer<B: Backend>(
+    api: &Api<B>,
+    route: &Route<B::Query>,
+    uri: &Uri,
+    body: Option<Result<Json<Value>, JsonRejection>>,
+) -> Response {
+    let path = uri.path();
+    let parameters = match route::arguments(&route.parameters, uri.query()) {
+        Ok(parameters) => Value::Object(parameters),
+        Err(unfit) => return error(unfit.condition(), &unfit.say(path, &route.parameters)),
+    };
+    let (sent, unfit) = match body {
+        None => (parameters, Condition::InvalidParameters),
+        Some(Ok(Json(body))) => (body, Condition::InvalidBody),
+        Some(Err(rejection)) => return refused(rejection),
+    };
+    match (route.query)(Arguments::new(sent)) {
+        Ok(query) => ask(api, query).await,
+        Err(message) => error(unfit, &format!("{path}: {message}")),
+    }
+}
+
+/// The backend's answer to `query`, on the blocking pool, because a query
+/// reads the disk and the runtime's own threads are for moving bytes: one
+/// slow read there would stall every other request waiting on that thread.
+async fn ask<B: Backend>(api: &Api<B>, query: B::Query) -> Response {
     let backend = Arc::clone(&api.backend);
     match tokio::task::spawn_blocking(move || backend.query(query)).await {
         Ok(Ok(answer)) => Json(answer).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
         Err(_) => error(
-            StatusCode::INTERNAL_SERVER_ERROR,
+            Condition::BackendFailed,
             "the backend failed while answering the query",
         ),
     }
 }
 
-/// `POST /api/commands/preview`: the command lines a task is, and what of
+/// `POST /api/v1/tasks/preview`: the command lines a task is, and what of
 /// them the panel has somebody confirm, with nothing run. On the blocking
 /// pool for the same reason as a query: working out a line can mean reading
 /// the disk.
 pub(crate) async fn preview<B: Backend>(
     State(api): State<Arc<Api<B>>>,
+    uri: Uri,
     body: Result<Json<B::Task>, JsonRejection>,
 ) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
     let task = match body {
         Ok(Json(task)) => task,
         Err(rejection) => return refused(rejection),
@@ -69,19 +138,23 @@ pub(crate) async fn preview<B: Backend>(
         Ok(Ok(preview)) => Json(preview).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
         Err(_) => error(
-            StatusCode::INTERNAL_SERVER_ERROR,
+            Condition::BackendFailed,
             "the backend failed while previewing the task",
         ),
     }
 }
 
-/// `POST /api/commands`: run a task, once every task that arrived before it
+/// `POST /api/v1/tasks`: run a task, once every task that arrived before it
 /// has run, and say what its lines were and what came of them; or, when the
 /// backend refused it, why nothing of it ran.
-pub(crate) async fn commands<B: Backend>(
+pub(crate) async fn run<B: Backend>(
     State(api): State<Arc<Api<B>>>,
+    uri: Uri,
     body: Result<Json<B::Task>, JsonRejection>,
 ) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
     let task = match body {
         Ok(Json(task)) => task,
         Err(rejection) => return refused(rejection),
@@ -89,11 +162,11 @@ pub(crate) async fn commands<B: Backend>(
     match api.writer.run(task).await {
         Ok(Ok(entry)) => Json(entry).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
-        Err(message) => error(StatusCode::INTERNAL_SERVER_ERROR, &message),
+        Err(failed) => error(failed.condition, failed.message),
     }
 }
 
-/// `POST /api/switch`: act on what the body names from now on, once every
+/// `POST /api/v1/switch`: act on what the body names from now on, once every
 /// task that arrived before it has run, and say what that is; or, when the
 /// backend refused it, why nothing changed.
 ///
@@ -102,8 +175,12 @@ pub(crate) async fn commands<B: Backend>(
 /// is no command, and every line the backend runs names what it acts on.
 pub(crate) async fn switch<B: Backend>(
     State(api): State<Arc<Api<B>>>,
+    uri: Uri,
     body: Result<Json<B::Switch>, JsonRejection>,
 ) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
     let to = match body {
         Ok(Json(to)) => to,
         Err(rejection) => return refused(rejection),
@@ -111,16 +188,19 @@ pub(crate) async fn switch<B: Backend>(
     match api.writer.switch(to).await {
         Ok(Ok(answer)) => Json(answer).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
-        Err(message) => error(StatusCode::INTERNAL_SERVER_ERROR, &message),
+        Err(failed) => error(failed.condition, failed.message),
     }
 }
 
-/// `GET /api/transcript`: every task the session ran, oldest first.
-pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>) -> Response {
+/// `GET /api/v1/transcript`: every task the session ran, oldest first.
+pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>, uri: Uri) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
     Json(api.transcript.entries()).into_response()
 }
 
-/// `GET /api/events`: every event from now on ([`crate::Event`]), as
+/// `GET /api/v1/events`: every event from now on ([`crate::Event`]), as
 /// server-sent events, one `data:` line of JSON each, `resync` first.
 ///
 /// Server-sent events rather than a WebSocket: the stream goes one way, a
@@ -134,7 +214,10 @@ pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>) -> Re
 /// connection for one that has died. The stream ends when the bus is
 /// closed, which a server stopping does first: until then it is a request
 /// under way, which a graceful stop would wait for without end.
-pub(crate) async fn events<B: Backend>(State(api): State<Arc<Api<B>>>) -> Response {
+pub(crate) async fn events<B: Backend>(State(api): State<Arc<Api<B>>>, uri: Uri) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
     let stream =
         futures_util::stream::unfold(api.events.subscribe(), |mut subscription| async move {
             let event = subscription.next().await?;
@@ -149,6 +232,16 @@ pub(crate) async fn events<B: Backend>(State(api): State<Arc<Api<B>>>) -> Respon
         .into_response()
 }
 
+/// The refusal of a parameter sent to a route of the server's own, which
+/// takes none, as a backend's route refuses one it does not take: so a
+/// script's misspelling is said rather than passed over, under every route
+/// alike. None when none was sent.
+fn unasked(uri: &Uri) -> Option<Response> {
+    route::arguments(&[], uri.query())
+        .err()
+        .map(|unfit| error(unfit.condition(), &unfit.say(uri.path(), &[])))
+}
+
 /// Whether a path is the API's: `/api` and everything under it, where every
 /// answer is JSON, refusals included.
 pub(crate) fn is_api(path: &str) -> bool {
@@ -159,37 +252,71 @@ pub(crate) fn is_api(path: &str) -> bool {
 /// panel's page, which is what a path outside `/api` that names no file gets.
 pub(crate) async fn missing(method: Method, uri: Uri) -> Response {
     error(
-        StatusCode::NOT_FOUND,
+        Condition::UnknownRoute,
         &format!("no such endpoint: {method} {}", uri.path()),
     )
 }
 
-/// A known path asked for with a method it does not take.
+/// A known path asked for with a method it does not take, the methods it
+/// does take in `Allow`, which the router adds.
 pub(crate) async fn not_allowed(method: Method, uri: Uri) -> Response {
     error(
-        StatusCode::METHOD_NOT_ALLOWED,
+        Condition::MethodNotAllowed,
         &format!("{} does not take {method}", uri.path()),
     )
 }
 
 /// A body that is not the JSON a handler expects, in the same shape as every
-/// other error here rather than axum's plain text.
+/// other error here rather than axum's plain text, with axum's words for
+/// what it found and the code of the condition it is.
 pub(crate) fn refused(rejection: JsonRejection) -> Response {
-    error(rejection.status(), &rejection.body_text())
+    error(unread(&rejection), &rejection.body_text())
 }
 
-/// What the backend refused, as `{"error": "...", "code": "..."}`: a 422,
-/// as a body it could not read is, since in both the request arrived whole
-/// and is not one to act on.
+/// The condition each of axum's ways to refuse a JSON body is, answered
+/// with the status axum gives it, so a description of the API lists each
+/// beforehand.
+///
+/// The rejection is `#[non_exhaustive]`, and so is what it carries when the
+/// body could not be read, so this match is the one place among the
+/// server's codes with a fallback. Whatever keeps a body from being read
+/// whole is `body_unreadable`, however axum comes to say it; a rejection
+/// axum adds later is `body_refused`, a 400 with a code of its own, rather
+/// than an answer with no code, or with one that says something else.
+fn unread(rejection: &JsonRejection) -> Condition {
+    match rejection {
+        JsonRejection::JsonDataError(_) => Condition::InvalidBody,
+        JsonRejection::JsonSyntaxError(_) => Condition::MalformedJson,
+        JsonRejection::MissingJsonContentType(_) => Condition::JsonRequired,
+        JsonRejection::BytesRejection(BytesRejection::FailedToBufferBody(
+            FailedToBufferBody::LengthLimitError(_),
+        )) => Condition::BodyTooLarge,
+        JsonRejection::BytesRejection(_) => Condition::BodyUnreadable,
+        _ => Condition::BodyRefused,
+    }
+}
+
+/// What the backend refused, as `{"error": "...", "code": "..."}`, its
+/// code the backend's own: a 404 when what the request named is not there,
+/// and a 422 when it is not one to act on, as a body the server cannot read
+/// is. Which of the two, the backend says ([`Grounds`](crate::Grounds)); the
+/// server never reads the code to tell.
 pub(crate) fn refused_by(refusal: Refusal) -> Response {
     (
-        StatusCode::UNPROCESSABLE_ENTITY,
+        refusal.grounds.status(),
         Json(json!({ "error": refusal.message, "code": refusal.code })),
     )
         .into_response()
 }
 
-/// An error, as `{"error": "..."}`.
-pub(crate) fn error(status: StatusCode, message: &str) -> Response {
-    (status, Json(json!({ "error": message }))).into_response()
+/// A condition of the server's own, as `{"error": "...", "code": "..."}`
+/// with the status it is answered with: the words of what was found, the
+/// route, the parameter or the header, beside the one word a script acts
+/// on.
+pub(crate) fn error(condition: Condition, message: &str) -> Response {
+    (
+        condition.status(),
+        Json(json!({ "error": message, "code": condition.code() })),
+    )
+        .into_response()
 }

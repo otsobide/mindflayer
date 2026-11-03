@@ -14,6 +14,8 @@ use std::process::ChildStdout;
 use std::time::Duration;
 
 use common::*;
+use mindflayer_cli::backend::PanelBackend;
+use mindflayer_server::Backend;
 use serde_json::{json, Value};
 
 /// A panel being served, with what its link said.
@@ -137,11 +139,29 @@ impl Panel {
         self.send("POST", path, Auth::Bearer, Some(body))
     }
 
+    fn get(&self, path: &str) -> (u16, Value) {
+        self.send("GET", path, Auth::Bearer, None)
+    }
+
     fn snapshot(&self) -> Value {
-        let (status, snapshot) = self.post("/api/query", json!({"type": "snapshot"}));
+        let (status, snapshot) = self.get("/api/v1/snapshot");
         assert_eq!(status, 200, "{snapshot}");
         snapshot
     }
+}
+
+/// `value` as a query string carries it: every byte but a letter, a digit
+/// and `-._~` written as `%XX`, as a browser's form encodes it.
+fn encoded(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                char::from(byte).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
 }
 
 /// How `name` stands in the project the snapshot lists as `entry`, if it
@@ -177,23 +197,121 @@ fn the_panel_runs_what_it_is_sent_and_the_next_snapshot_shows_it() {
         "name": "commit-style",
         "from": null,
     });
-    let (status, ran) = panel.post("/api/commands", install);
+    let line = format!(
+        "flayer -W {} install -p {} skill:commit-style",
+        dir.path().display(),
+        dir.path().join("alpha").display()
+    );
+    let (status, preview) = panel.post("/api/v1/tasks/preview", install.clone());
+    assert_eq!(status, 200, "{preview}");
+    assert_eq!(preview, json!({"lines": [line], "confirm": []}));
+    assert_eq!(standing(&panel.snapshot(), "alpha", "commit-style"), None);
+
+    let (status, ran) = panel.post("/api/v1/tasks", install);
     assert_eq!(status, 200, "{ran}");
     assert_eq!(ran["outcome"]["ok"], true, "{ran}");
-    assert_eq!(
-        ran["lines"],
-        json!([format!(
-            "flayer -W {} install -p {} skill:commit-style",
-            dir.path().display(),
-            dir.path().join("alpha").display()
-        )])
-    );
+    assert_eq!(ran["lines"], json!([line]));
 
     let after = panel.snapshot();
     assert_eq!(standing(&after, "alpha", "commit-style"), Some("current"));
     assert_eq!(standing(&after, "beta", "commit-style"), None);
-    let (_, transcript) = panel.send("GET", "/api/transcript", Auth::Bearer, None);
+    let (_, transcript) = panel.get("/api/v1/transcript");
     assert_eq!(transcript, json!([ran]));
+}
+
+/// Every read the API serves, over loopback with the token as Bearer, on
+/// a workspace of two projects and a skill of its own: each answered, the
+/// snapshot's parts as the snapshot holds them, and nothing changed by any
+/// of them, the POSTs among them.
+#[test]
+fn every_read_route_answers_over_loopback_with_a_bearer_token() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let panel = serve("flayer", dir.path(), home.path());
+    let root = dir.path().to_str().unwrap();
+    let snapshot = panel.snapshot();
+    assert_eq!(snapshot["workspace"]["path"], root);
+
+    let cell = json!({
+        "project": "alpha", "reference": "skill:commit-style", "origin": "workspace",
+        "wanted": true,
+    });
+    let draft = json!({
+        "type": "add", "kind": "skill", "name": "review", "description": "Read it",
+        "template": null,
+    });
+    let asked: Vec<(&str, String, Option<Value>)> = vec![
+        ("/snapshot", String::new(), None),
+        ("/projects", String::new(), None),
+        ("/project", String::from("?entry=beta"), None),
+        ("/library", String::new(), None),
+        (
+            "/files",
+            String::from("?reference=skill%3Acommit-style"),
+            None,
+        ),
+        (
+            "/contents",
+            String::from("?reference=skill%3Acommit-style&file=SKILL.md"),
+            None,
+        ),
+        ("/scan", format!("?root={}&depth=1", encoded(root)), None),
+        ("/folders", format!("?path={}", encoded(root)), None),
+        ("/updates", String::new(), None),
+        ("/workspaces", String::new(), None),
+        ("/plan", String::new(), Some(json!({"selection": [cell]}))),
+        (
+            "/validate",
+            String::new(),
+            Some(json!({"holder": {"type": "workspace"}, "draft": draft})),
+        ),
+    ];
+    let served: Vec<&str> = PanelBackend::routes()
+        .iter()
+        .map(|route| route.path)
+        .collect();
+    let named: Vec<&str> = asked.iter().map(|(path, _, _)| *path).collect();
+    assert_eq!(
+        named, served,
+        "every route the backend serves is asked here"
+    );
+
+    let mut answers = std::collections::BTreeMap::new();
+    for (path, query, body) in asked {
+        let method = if body.is_some() { "POST" } else { "GET" };
+        let (status, answer) =
+            panel.send(method, &format!("/api/v1{path}{query}"), Auth::Bearer, body);
+        assert_eq!(status, 200, "{method} {path}{query}: {answer}");
+        answers.insert(path, answer);
+    }
+
+    assert_eq!(answers["/snapshot"], snapshot);
+    assert_eq!(answers["/projects"], snapshot["projects"]);
+    assert_eq!(answers["/library"], snapshot["library"]);
+    assert_eq!(answers["/project"], snapshot["projects"][1]);
+    assert_eq!(answers["/files"]["manifest"], "SKILL.md");
+    assert!(
+        answers["/contents"]["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("name: commit-style")),
+        "{}",
+        answers["/contents"]
+    );
+    assert_eq!(answers["/scan"]["roots"], json!([root]));
+    let folders: Vec<&Value> = answers["/folders"]["folders"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|folder| &folder["name"])
+        .collect();
+    assert_eq!(folders, [&json!("alpha"), &json!("beta")]);
+    assert!(answers["/updates"].is_object(), "{}", answers["/updates"]);
+    assert_eq!(answers["/workspaces"][0]["in_use"], true);
+    assert_eq!(answers["/plan"]["tasks"][0]["type"], "install");
+    assert!(answers["/validate"].is_object(), "{}", answers["/validate"]);
+    assert_eq!(panel.snapshot(), snapshot, "no read changed anything");
+    let (_, transcript) = panel.get("/api/v1/transcript");
+    assert_eq!(transcript, json!([]));
 }
 
 /// Over loopback, as the panel's header sends it: a switch to a path no
@@ -211,7 +329,7 @@ fn the_panel_switches_only_to_a_workspace_this_machine_knows() {
     let panel = serve("flayer", dir.path(), home.path());
 
     for path in ["/etc", "--yes", "../team"] {
-        let (status, refused) = panel.post("/api/switch", json!({ "path": path }));
+        let (status, refused) = panel.post("/api/v1/switch", json!({ "path": path }));
         assert_eq!(status, 422, "{path}: {refused}");
         assert_eq!(refused["code"], "switch_unlisted", "{path}: {refused}");
     }
@@ -220,13 +338,14 @@ fn the_panel_switches_only_to_a_workspace_this_machine_knows() {
         json!(dir.path().to_str().unwrap())
     );
 
-    let (status, switched) = panel.post("/api/switch", json!({ "path": team.to_str().unwrap() }));
+    let (status, switched) =
+        panel.post("/api/v1/switch", json!({ "path": team.to_str().unwrap() }));
     assert_eq!(status, 200, "{switched}");
     assert_eq!(switched["in_use"], true, "{switched}");
     let snapshot = panel.snapshot();
     assert_eq!(snapshot["workspace"]["path"], json!(team.to_str().unwrap()));
     assert_eq!(snapshot["workspace"]["reason"], "explicit");
-    let (status, preview) = panel.post("/api/commands/preview", json!({"type": "shelf"}));
+    let (status, preview) = panel.post("/api/v1/tasks/preview", json!({"type": "shelf"}));
     assert_eq!(status, 200, "{preview}");
     assert_eq!(
         preview["lines"],
@@ -244,13 +363,7 @@ fn a_save_writes_the_text_and_leaves_nothing_in_the_scratch_folder() {
     let home = TempDir::new().unwrap();
     let panel = serve("flayer", dir.path(), home.path());
     let workspace = json!({"type": "workspace"});
-    let (status, read) = panel.post(
-        "/api/query",
-        json!({
-            "type": "contents", "holder": workspace, "reference": "skill:commit-style",
-            "file": "SKILL.md",
-        }),
-    );
+    let (status, read) = panel.get("/api/v1/contents?reference=skill%3Acommit-style&file=SKILL.md");
     assert_eq!(status, 200, "{read}");
     let text = read["text"]
         .as_str()
@@ -258,7 +371,7 @@ fn a_save_writes_the_text_and_leaves_nothing_in_the_scratch_folder() {
         .replace("writes commits", "writes its commits");
 
     let (status, ran) = panel.post(
-        "/api/commands",
+        "/api/v1/tasks",
         json!({
             "type": "save", "holder": workspace, "kind": "skill", "name": "commit-style",
             "text": text, "hash": read["hash"],
@@ -279,19 +392,57 @@ fn a_request_without_the_token_is_refused_with_a_401() {
     let home = TempDir::new().unwrap();
     let panel = serve("flayer", dir.path(), home.path());
 
-    for (path, body) in [
-        ("/api/query", Some(json!({"type": "snapshot"}))),
-        ("/api/commands", Some(json!({"type": "shelf"}))),
+    for (method, path, body) in [
+        ("GET", "/api/v1/snapshot", None),
+        ("POST", "/api/v1/plan", Some(json!({"selection": []}))),
+        ("POST", "/api/v1/tasks", Some(json!({"type": "shelf"}))),
     ] {
-        let (status, refusal) = panel.send("POST", path, Auth::Nothing, body);
+        let (status, refusal) = panel.send(method, path, Auth::Nothing, body);
         assert_eq!(status, 401, "{path}");
         assert_eq!(
             refusal,
-            json!({"error": "this needs the launch token, as the cookie its link sets or as a Bearer token"})
+            json!({
+                "error": "this needs the launch token, as the cookie its link sets or as a Bearer token",
+                "code": "token_required",
+            })
         );
     }
-    let (status, _) = panel.send("GET", "/api/transcript", Auth::Nothing, None);
+    let (status, _) = panel.send("GET", "/api/v1/transcript", Auth::Nothing, None);
     assert_eq!(status, 401);
+}
+
+/// A read naming what is not there is a 404 with core's code for it, an
+/// entry no registry holds or a folder that does not exist; one naming a
+/// path the policy refuses, which is there or not, is a 422 with its own.
+#[test]
+fn a_read_naming_what_is_not_there_is_a_404_and_a_refused_path_a_422() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let panel = serve("flayer", dir.path(), home.path());
+    let gone = dir.path().join("gone");
+
+    for (asked, status, code) in [
+        (
+            "/api/v1/project?entry=ghost".to_owned(),
+            404,
+            "not_registered",
+        ),
+        (
+            format!("/api/v1/folders?path={}", encoded(gone.to_str().unwrap())),
+            404,
+            "browse_missing",
+        ),
+        (
+            "/api/v1/folders?path=Projects".to_owned(),
+            422,
+            "path_relative",
+        ),
+    ] {
+        let (answered, refusal) = panel.get(&asked);
+        assert_eq!(answered, status, "{asked}: {refusal}");
+        assert_eq!(refusal["code"], code, "{asked}: {refusal}");
+        assert!(refusal["error"].is_string(), "{asked}: {refusal}");
+    }
 }
 
 /// What a front end without a terminal does not run is a 422 that names the
@@ -308,7 +459,7 @@ fn a_refused_command_is_a_422_naming_the_command() {
         "kind": "skill",
         "name": "commit-style",
     });
-    for path in ["/api/commands/preview", "/api/commands"] {
+    for path in ["/api/v1/tasks/preview", "/api/v1/tasks"] {
         let (status, refusal) = panel.post(path, edit.clone());
         assert_eq!(status, 422, "{path}");
         assert_eq!(
@@ -320,7 +471,7 @@ fn a_refused_command_is_a_422_naming_the_command() {
             "{path}"
         );
     }
-    let (_, transcript) = panel.send("GET", "/api/transcript", Auth::Bearer, None);
+    let (_, transcript) = panel.get("/api/v1/transcript");
     assert_eq!(transcript, json!([]));
 }
 
@@ -374,7 +525,7 @@ fn through_the_dev_server_the_link_is_its_own_and_its_changes_are_taken() {
 
     let (status, ran) = panel.send(
         "POST",
-        "/api/commands",
+        "/api/v1/tasks",
         Auth::Cookie("http://127.0.0.1:5173"),
         Some(shelf.clone()),
     );
@@ -382,11 +533,12 @@ fn through_the_dev_server_the_link_is_its_own_and_its_changes_are_taken() {
 
     let (status, refusal) = panel.send(
         "POST",
-        "/api/commands",
+        "/api/v1/tasks",
         Auth::Cookie("http://127.0.0.1:5174"),
         Some(shelf),
     );
     assert_eq!(status, 403, "{refusal}");
+    assert_eq!(refusal["code"], "foreign_origin", "{refusal}");
     assert!(
         refusal["error"]
             .as_str()
@@ -440,7 +592,7 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
     let mut panel = serve("flayer", dir.path(), home.path());
-    let (status, _) = panel.post("/api/commands", json!({"type": "shelf"}));
+    let (status, _) = panel.post("/api/v1/tasks", json!({"type": "shelf"}));
     assert_eq!(status, 200);
     let install = json!({
         "type": "install",
@@ -449,7 +601,7 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
         "name": "commit-style",
         "from": null,
     });
-    let (status, ran) = panel.post("/api/commands", install);
+    let (status, ran) = panel.post("/api/v1/tasks", install);
     assert_eq!(status, 200, "{ran}");
 
     let pid = panel.started.child.id().to_string();

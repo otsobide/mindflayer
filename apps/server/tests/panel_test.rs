@@ -125,7 +125,10 @@ async fn an_unknown_api_path_gets_json_and_not_the_page() {
     assert_eq!(reply.status, StatusCode::NOT_FOUND);
     assert_eq!(
         reply.json(),
-        json!({ "error": "no such endpoint: GET /api/projects" })
+        json!({
+            "error": "no such endpoint: GET /api/projects",
+            "code": "unknown_route",
+        })
     );
 }
 
@@ -156,7 +159,7 @@ async fn a_build_without_the_panel_says_how_to_build_it() {
     }
 
     // The API does not need the panel.
-    let reply = get(&server, "/api/transcript", Auth::Bearer(server.token())).await;
+    let reply = get(&server, "/api/v1/transcript", Auth::Bearer(server.token())).await;
     assert_eq!(reply.status, StatusCode::OK);
 }
 

@@ -5,8 +5,10 @@ import type { Files } from './generated/Files'
 import type { Folders } from './generated/Folders'
 import type { Holder } from './generated/Holder'
 import type { Judged } from './generated/Judged'
+import type { Library } from './generated/Library'
 import type { Outcome } from './generated/Outcome'
 import type { Planned } from './generated/Planned'
+import type { Project } from './generated/Project'
 import type { Query } from './generated/Query'
 import type { Scanned } from './generated/Scanned'
 import type { Snapshot } from './generated/Snapshot'
@@ -31,6 +33,9 @@ export type { Outcome, Query, Switch, Switchable, Task }
  */
 export interface Answers {
   snapshot: Snapshot
+  projects: Project[]
+  library: Library
+  project: Project
   files: Files
   contents: Contents
   scan: Scanned
@@ -66,7 +71,7 @@ export interface Ran {
 }
 
 /**
- * What the server's event stream tells (`GET /api/events`), each told
+ * What the server's event stream tells (`GET /api/v1/events`), each told
  * apart by its `type`:
  *
  * - `changed`: something the server watches changed on disk, so what is
@@ -153,10 +158,12 @@ export interface Transport {
  * with something that is not JSON, or could not be reached or stopped
  * before its answer was whole (status 0).
  *
- * With the code of the condition when the backend refused it, as every
- * refusal it reads a request through says one (`{"error", "code"}`): the
- * panel acts on a refusal by its code, as on a run's warnings, and never on
- * its words.
+ * With the code of the condition whenever the server answered, as every
+ * answer under `/api` that is no success says one (`{"error", "code"}`),
+ * the backend's for what it refused and the server's own for the rest, each
+ * one of the generated `Code`: the panel acts on a refusal by its code, as
+ * on a run's warnings, and never on its words. None for an answer that came
+ * from something else on the way, or for no answer at all.
  */
 export class TransportError extends Error {
   readonly status: number

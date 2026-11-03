@@ -1,4 +1,4 @@
-//! The event stream at `/api/events`: who may open it, what it says first,
+//! The event stream at `/api/v1/events`: who may open it, what it says first,
 //! what one that falls behind is told, and that it ends when the server
 //! stops.
 
@@ -14,10 +14,11 @@ use mindflayer_server::{Event, CAPACITY};
 async fn the_stream_needs_the_launch_token() {
     let (server, _) = launch();
 
-    let reply = get(&server, "/api/events", Auth::Nothing).await;
+    let reply = get(&server, "/api/v1/events", Auth::Nothing).await;
 
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
     assert!(reply.json()["error"].is_string());
+    assert_eq!(reply.json()["code"], "token_required");
 }
 
 /// The panel's own request: a GET by cookie, which needs no more than the
@@ -32,7 +33,7 @@ async fn the_stream_takes_the_cookie_and_starts_by_asking_for_everything() {
 
     assert_eq!(stream.status, StatusCode::OK);
     assert_eq!(stream.header("content-type"), Some("text/event-stream"));
-    assert_eq!(stream.header("cache-control"), Some("no-cache"));
+    assert_eq!(stream.header("cache-control"), Some("no-store"));
     assert!(stream.header("content-security-policy").is_some());
     assert_eq!(
         stream.next().await,
@@ -90,7 +91,7 @@ async fn stopping_the_server_ends_its_streams() {
         socket.set_read_timeout(Some(PATIENCE)).unwrap();
         write!(
             socket,
-            "GET /api/events HTTP/1.1\r\nHost: {address}\r\nAuthorization: Bearer {token}\r\n\r\n"
+            "GET /api/v1/events HTTP/1.1\r\nHost: {address}\r\nAuthorization: Bearer {token}\r\n\r\n"
         )
         .unwrap();
         let mut seen = Vec::new();
@@ -136,7 +137,7 @@ async fn a_run_is_told_as_it_starts_and_once_it_is_in_the_transcript() {
 
     post(
         &server,
-        "/api/commands",
+        "/api/v1/tasks",
         token,
         json!({ "name": "link beta" }),
     )
@@ -151,7 +152,7 @@ async fn a_run_is_told_as_it_starts_and_once_it_is_in_the_transcript() {
         stream.next().await,
         json!({"type": "command_finished", "lines": lines})
     );
-    let transcript = get(&server, "/api/transcript", token).await.json();
+    let transcript = get(&server, "/api/v1/transcript", token).await.json();
     assert_eq!(transcript[0]["lines"], lines);
 }
 
@@ -164,7 +165,7 @@ async fn a_task_whose_lines_are_refused_is_told_to_nobody() {
 
     let reply = post(
         &server,
-        "/api/commands",
+        "/api/v1/tasks",
         token,
         json!({ "name": "unlink -rf", "refuse": true }),
     )
@@ -172,6 +173,7 @@ async fn a_task_whose_lines_are_refused_is_told_to_nobody() {
     server.events().publish(Event::Resync { switches: 0 });
 
     assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(reply.json()["code"], "fake_refused");
     assert_eq!(
         stream.next().await,
         json!({"type": "resync", "switches": 0})
@@ -193,7 +195,7 @@ async fn a_run_refused_or_panicking_is_still_told_finished() {
         json!({ "name": "after" }),
     ] {
         let name = task["name"].as_str().unwrap().to_owned();
-        post(&server, "/api/commands", token, task).await;
+        post(&server, "/api/v1/tasks", token, task).await;
         let lines = json!([format!("fake run {name}")]);
         assert_eq!(
             stream.next().await,

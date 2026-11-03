@@ -8,6 +8,7 @@ use std::thread;
 use serde_json::json;
 use tokio::sync::oneshot;
 
+use crate::code::Condition;
 use crate::events::{Event, Events};
 use crate::transcript::{Entry, Transcript};
 use crate::watcher::Watcher;
@@ -15,12 +16,21 @@ use crate::{Backend, Refusal};
 
 /// What came of a task: what it ran, or why the backend ran none of it;
 /// and, around that, why the thread could not say, when it could not.
-type Done = Result<Result<Entry, Refusal>, String>;
+type Done = Result<Result<Entry, Refusal>, Failed>;
 
 /// What came of a switch: what the backend acts on now, as it says it, or
 /// why it switched to nothing; and, around that, why the thread could not
 /// say, when it could not.
-type Switched = Result<Result<serde_json::Value, Refusal>, String>;
+type Switched = Result<Result<serde_json::Value, Refusal>, Failed>;
+
+/// Why the thread could not say how a job went: the condition, a 500 of the
+/// server's own, and the words for it, which are fixed, since what failed
+/// left nothing to say of itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Failed {
+    pub(crate) condition: Condition,
+    pub(crate) message: &'static str,
+}
 
 /// What waits its turn on the thread, and where to say how it went: a
 /// task to run, or a switch of what the backend acts on, which takes its
@@ -103,9 +113,21 @@ impl<B: Backend> Writer<B> {
     }
 }
 
-/// Why the thread could not say how a job went.
-fn stopped() -> String {
-    String::from("the thread that runs tasks has stopped")
+/// The thread has stopped, so nothing queued on it is answered.
+fn stopped() -> Failed {
+    Failed {
+        condition: Condition::WriterStopped,
+        message: "the thread that runs tasks has stopped",
+    }
+}
+
+/// The backend panicked, as `message` says where, so there is no answer
+/// to give.
+fn panicked(message: &'static str) -> Failed {
+    Failed {
+        condition: Condition::BackendFailed,
+        message,
+    }
 }
 
 /// Run one task: its lines first, worked out on this thread, so they are the
@@ -131,12 +153,12 @@ fn perform<B: Backend>(
     transcript: &Transcript,
     events: &Events,
 ) -> Done {
-    let panicked = || String::from("the backend panicked while running the task");
+    let failed = || panicked("the backend panicked while running the task");
     let lines = match panic::catch_unwind(AssertUnwindSafe(|| backend.preview(&task))) {
         Ok(Ok(preview)) => preview.lines,
         // A refused task ran nothing, so it is no run to replay.
         Ok(Err(refusal)) => return Ok(Err(refusal)),
-        Err(_) => return Err(panicked()),
+        Err(_) => return Err(failed()),
     };
     events.publish(Event::CommandStarted {
         lines: lines.clone(),
@@ -154,7 +176,7 @@ fn perform<B: Backend>(
             Ok(Ok(entry))
         }
         Ok(Err(refusal)) => Ok(Err(refusal)),
-        Err(_) => Err(panicked()),
+        Err(_) => Err(failed()),
     };
     events.publish(Event::CommandFinished { lines });
     done
@@ -174,5 +196,5 @@ fn switch<B: Backend>(backend: &B, to: B::Switch, watcher: &Watcher, events: &Ev
         watcher.again();
         events.switched();
     }
-    switched.map_err(|_| String::from("the backend panicked while switching"))
+    switched.map_err(|_| panicked("the backend panicked while switching"))
 }

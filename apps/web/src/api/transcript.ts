@@ -10,7 +10,7 @@ export const TRANSCRIPT_KEY = ['transcript'] as const
 
 /**
  * Every task the session ran, oldest first, with what each produced: the
- * server's transcript (`GET /api/transcript`), runs from every tab and
+ * server's transcript (`GET /api/v1/transcript`), runs from every tab and
  * script holding the token, not this panel's alone.
  *
  * Asked for only while `enabled`, the drawer open, so a page that never

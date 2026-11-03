@@ -112,7 +112,7 @@ fn a_holder_and_an_agents_line_say_where_they_keep_what_they_hold() {
 }
 
 #[test]
-fn every_code_the_cli_gives_is_in_its_union_once_beside_core_s() {
+fn every_code_the_cli_and_the_server_give_is_in_its_union_once_beside_core_s() {
     let union = Code::inline(&Config::new());
     let members: Vec<&str> = union
         .split('\n')
@@ -121,6 +121,7 @@ fn every_code_the_cli_gives_is_in_its_union_once_beside_core_s() {
     let given: Vec<String> = CODES
         .iter()
         .flat_map(|(_, codes)| codes.iter())
+        .chain(mindflayer_server::Condition::CODES)
         .map(|code| format!("{code:?}"))
         .collect();
 

@@ -14,7 +14,7 @@ use common::*;
 use mindflayer_cli::backend::{Outcome, PanelBackend, Query, Switch};
 use mindflayer_cli::task::{naming, shell, Caution};
 use mindflayer_core::watch;
-use mindflayer_server::{Backend, Refusal};
+use mindflayer_server::{Backend, Grounds, Refusal};
 use serde_json::{json, Value};
 
 /// The backend over the workspace at `root`, launched there with nothing
@@ -278,6 +278,7 @@ fn a_refused_command_is_named_in_what_the_refusal_says() {
             message: String::from(
                 "`flayer edit skill:x` opens an editor, which needs a terminal to draw on"
             ),
+            grounds: Grounds::Unfit,
         }
     );
 }
@@ -446,6 +447,33 @@ fn a_snapshot_is_of_the_workspace_the_panel_was_launched_on() {
     assert_eq!(entries, [&json!("alpha"), &json!("beta")]);
 }
 
+/// The projects, the library and one project are the snapshot's own parts,
+/// each exactly as the snapshot holds it; one project by its entry as the
+/// snapshot lists it, and nothing else that names it.
+#[test]
+fn the_projects_the_library_and_one_project_are_the_snapshots_own_parts() {
+    let dir = workspace_with_own();
+    let backend = backend(dir.path());
+    let snapshot = backend.query(query(json!({"type": "snapshot"}))).unwrap();
+
+    let projects = backend.query(query(json!({"type": "projects"}))).unwrap();
+    let library = backend.query(query(json!({"type": "library"}))).unwrap();
+    let beta = backend
+        .query(query(json!({"type": "project", "entry": "beta"})))
+        .unwrap();
+
+    assert_eq!(projects, snapshot["projects"]);
+    assert_eq!(library, snapshot["library"]);
+    assert_eq!(beta, snapshot["projects"][1]);
+    let alpha = dir.path().join("alpha");
+    for entry in ["./beta", "gamma", alpha.to_str().unwrap(), ""] {
+        let refused = backend
+            .query(query(json!({"type": "project", "entry": entry})))
+            .unwrap_err();
+        assert_eq!(refused.code, "not_registered", "{entry}");
+    }
+}
+
 #[test]
 fn a_query_sent_with_a_field_it_does_not_have_is_refused() {
     for sent in [
@@ -505,7 +533,7 @@ fn a_skills_file_comes_back_as_text_inside_json() {
 #[test]
 fn an_html_asset_or_an_svg_holding_a_script_is_not_served_as_content() {
     let (_dir, backend, skill) = contents_fixture();
-    let page = "<!doctype html><script>fetch('/api/commands',{method:'POST'})</script>\n";
+    let page = "<!doctype html><script>fetch('/api/v1/tasks',{method:'POST'})</script>\n";
     let image =
         "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(document.cookie)</script></svg>\n";
     fs::write(skill.join("page.html"), page).unwrap();
@@ -1221,6 +1249,108 @@ fn a_folder_is_listed_only_where_the_policy_allows_and_nothing_is_written() {
         json!({"type": "folders", "path": null, "hidden": false, "depth": 1})
     )
     .is_err());
+}
+
+/// A read whose parameters name what is not there is refused as absent,
+/// a 404, with core's code: an entry no registry holds, an artifact
+/// nothing holds, a file or a folder that does not exist, or that is no
+/// file or folder. What is there and still refused is unfit, a 422, as is
+/// anything a body names, a draft's holder or a task's project, whose
+/// route is there whatever the body holds.
+#[test]
+fn a_read_naming_what_is_not_there_is_absent_and_a_body_naming_it_unfit() {
+    let (dir, backend, skill) = contents_fixture();
+    let root = dir.path();
+    fs::create_dir(skill.join("references")).unwrap();
+    let alpha = json!({"type": "project", "entry": "alpha"});
+    let ghost = json!({"type": "project", "entry": "ghost"});
+    let gone = under(root, &["gone"]);
+    let skill_file = skill.join("SKILL.md");
+    let not_a_folder = skill_file.to_str().unwrap();
+
+    for (what, sent, code, grounds) in [
+        (
+            "an entry no registry holds",
+            json!({"type": "project", "entry": "ghost"}),
+            "not_registered",
+            Grounds::Absent,
+        ),
+        (
+            "an artifact's files, of an entry no registry holds",
+            json!({"type": "files", "holder": ghost, "reference": "skill:alpha"}),
+            "not_registered",
+            Grounds::Absent,
+        ),
+        (
+            "an artifact nothing holds",
+            json!({"type": "files", "holder": alpha, "reference": "skill:ghost"}),
+            "not_found",
+            Grounds::Absent,
+        ),
+        (
+            "a file that is not there",
+            json!({"type": "contents", "holder": alpha, "reference": "skill:alpha", "file": "GHOST.md"}),
+            "contents_missing",
+            Grounds::Absent,
+        ),
+        (
+            "a folder asked for as a file",
+            json!({"type": "contents", "holder": alpha, "reference": "skill:alpha", "file": "references"}),
+            "contents_not_a_file",
+            Grounds::Absent,
+        ),
+        (
+            "a file's route that climbs out",
+            json!({"type": "contents", "holder": alpha, "reference": "skill:alpha", "file": "../x"}),
+            "contents_route_unfit",
+            Grounds::Unfit,
+        ),
+        (
+            "a folder that does not exist",
+            json!({"type": "folders", "path": gone, "hidden": false}),
+            "browse_missing",
+            Grounds::Absent,
+        ),
+        (
+            "a file asked for as a folder",
+            json!({"type": "folders", "path": not_a_folder, "hidden": false}),
+            "browse_not_a_folder",
+            Grounds::Absent,
+        ),
+        (
+            "a folder the policy refuses",
+            json!({"type": "folders", "path": "Projects", "hidden": false}),
+            "path_relative",
+            Grounds::Unfit,
+        ),
+        (
+            "a draft's holder no registry holds, in a body",
+            json!({"type": "validate", "holder": ghost, "draft": {
+                "type": "edit", "reference": "skill:alpha", "text": "x",
+            }}),
+            "not_registered",
+            Grounds::Unfit,
+        ),
+    ] {
+        let refusal = backend.query(query(sent.clone())).unwrap_err();
+        assert_eq!(
+            (refusal.code, refusal.grounds),
+            (code, grounds),
+            "{what}: {sent}"
+        );
+    }
+
+    let sent = add_to(json!({"type": "project", "entry": "ghost"}));
+    for refusal in [
+        backend.preview(&task(sent.clone())).unwrap_err(),
+        backend.run(task(sent.clone())).unwrap_err(),
+    ] {
+        assert_eq!(
+            (refusal.code, refusal.grounds),
+            ("not_registered", Grounds::Unfit),
+            "a task's project, in a body"
+        );
+    }
 }
 
 /// A project found moved offers no link beside the entry it left stale,
