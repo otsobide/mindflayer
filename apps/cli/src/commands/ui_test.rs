@@ -114,6 +114,15 @@ fn the_port_is_the_one_named_or_the_dev_servers_proxys_or_any() {
 // The token file
 // ---------------------------------------------------------------------------
 
+/// `TokenFile::write` of [`API`] and [`TOKEN`] at `path`, which must be
+/// refused, and why.
+fn refused(path: &Path) -> CliError {
+    match TokenFile::write(path, API, TOKEN) {
+        Ok(_) => panic!("{}: written", path.display()),
+        Err(error) => error,
+    }
+}
+
 /// Every name a script reads pinned, as the envelope's are: the version,
 /// where the API is and the token, a field to a line.
 #[test]
@@ -121,7 +130,7 @@ fn the_token_file_holds_its_version_where_the_api_is_and_the_token() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("api.json");
 
-    write_token_file(&path, API, TOKEN).unwrap();
+    let _written = TokenFile::write(&path, API, TOKEN).unwrap();
 
     assert_eq!(
         fs::read_to_string(&path).unwrap(),
@@ -137,7 +146,7 @@ fn no_account_but_its_owners_may_read_the_token_file() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("api.json");
 
-    write_token_file(&path, API, TOKEN).unwrap();
+    let _written = TokenFile::write(&path, API, TOKEN).unwrap();
 
     let mode = fs::metadata(&path).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o600, "{mode:o}");
@@ -154,7 +163,7 @@ fn what_is_at_the_path_already_is_refused_with_its_code_and_left_as_it_was() {
     fs::create_dir(&folder).unwrap();
 
     for path in [&file, &folder] {
-        let error = write_token_file(path, API, TOKEN).unwrap_err();
+        let error = refused(path);
 
         assert_eq!(error.code(), "token_file_exists", "{error}");
         assert_eq!(
@@ -185,7 +194,7 @@ fn a_link_at_the_path_is_refused_and_nothing_is_written_where_it_leads() {
     std::os::unix::fs::symlink(&nowhere, &to_nowhere).unwrap();
 
     for path in [&to_kept, &to_nowhere] {
-        let error = write_token_file(path, API, TOKEN).unwrap_err();
+        let error = refused(path);
 
         assert_eq!(error.code(), "token_file_exists", "{error}");
     }
@@ -201,7 +210,7 @@ fn a_folder_not_there_is_refused_with_its_code_and_none_is_made() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("run").join("api.json");
 
-    let error = write_token_file(&path, API, TOKEN).unwrap_err();
+    let error = refused(&path);
 
     assert_eq!(error.code(), "token_file_folder_missing", "{error}");
     assert_eq!(
@@ -225,7 +234,7 @@ fn a_path_through_a_file_is_refused_as_unwritable() {
     fs::write(&file, "somebody's\n").unwrap();
     let path = file.join("api.json");
 
-    let error = write_token_file(&path, API, TOKEN).unwrap_err();
+    let error = refused(&path);
 
     assert_eq!(error.code(), "token_file_unwritable", "{error}");
     assert!(
@@ -237,4 +246,128 @@ fn a_path_through_a_file_is_refused_as_unwritable() {
         "{error}"
     );
     assert_eq!(fs::read_to_string(&file).unwrap(), "somebody's\n");
+}
+
+/// A [`TokenFile`] written at `api.json` in a folder of its own, and the
+/// file's path.
+fn written() -> (TempDir, PathBuf, TokenFile) {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("api.json");
+    let file = TokenFile::write(&path, API, TOKEN).unwrap();
+    (dir, path, file)
+}
+
+/// What taking `file` away said, and whether the command still went well.
+fn taken_away(file: TokenFile) -> (Vec<Warning>, bool) {
+    let mut outcome = Outcome::plain(String::new());
+    file.take_away(&mut outcome);
+    (outcome.stderr, outcome.ok)
+}
+
+#[test]
+fn the_token_file_is_taken_away_with_nothing_said() {
+    let (_dir, path, file) = written();
+
+    assert_eq!(taken_away(file), (Vec::new(), true));
+    assert!(fs::symlink_metadata(&path).is_err(), "still there");
+}
+
+/// Changed, longer or shorter or the same length, it is somebody's: left
+/// as they wrote it, and said, with nothing gone wrong.
+#[test]
+fn a_token_file_changed_since_is_left_as_it_is_and_said() {
+    let same_length = String::from_utf8(handed(API, TOKEN))
+        .unwrap()
+        .replace(TOKEN, "xyz");
+    for changed in ["{}\n", same_length.as_str()] {
+        let (_dir, path, file) = written();
+        fs::write(&path, changed).unwrap();
+
+        let (said, ok) = taken_away(file);
+
+        assert_eq!(
+            said,
+            [Warning::from(format!(
+                "note: {}: changed since the API's address and token were written there, so it \
+                 is left as it is",
+                path.display()
+            ))]
+        );
+        assert!(ok);
+        assert_eq!(fs::read_to_string(&path).unwrap(), changed);
+    }
+}
+
+/// A link put in its place is somebody's, even to what was written: left,
+/// and what it leads to as well.
+#[cfg(unix)]
+#[test]
+fn a_link_put_in_its_place_is_left_whatever_it_leads_to() {
+    let (dir, path, file) = written();
+    let copy = dir.path().join("copy.json");
+    fs::rename(&path, &copy).unwrap();
+    std::os::unix::fs::symlink(&copy, &path).unwrap();
+
+    let (said, ok) = taken_away(file);
+
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].text.starts_with("note: "), "{said:?}");
+    assert!(ok);
+    assert!(fs::symlink_metadata(&path).unwrap().is_symlink());
+    assert_eq!(fs::read(&copy).unwrap(), handed(API, TOKEN));
+}
+
+#[test]
+fn a_token_file_taken_away_already_is_nothing_to_say() {
+    let (_dir, path, file) = written();
+    fs::remove_file(&path).unwrap();
+
+    assert_eq!(taken_away(file), (Vec::new(), true));
+}
+
+/// As when the panel fails once the file is written: it goes all the same,
+/// and only while it holds what was written.
+#[test]
+fn dropped_before_it_was_taken_away_the_token_file_goes_all_the_same() {
+    let (_dir, path, file) = written();
+
+    drop(file);
+
+    assert!(fs::symlink_metadata(&path).is_err(), "still there");
+    let (_dir, path, file) = written();
+    fs::write(&path, "{}\n").unwrap();
+    drop(file);
+    assert_eq!(fs::read_to_string(&path).unwrap(), "{}\n");
+}
+
+/// A folder it may no longer change keeps the file: a warning with its
+/// code, which fails the command, since a token is left behind. Not where
+/// the folder's mode keeps nobody out, as for root, which is said.
+#[cfg(unix)]
+#[test]
+fn a_token_file_that_cannot_be_taken_away_is_a_warning_with_its_code() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let (dir, path, file) = written();
+    let mode = |mode| fs::set_permissions(dir.path(), fs::Permissions::from_mode(mode)).unwrap();
+    mode(0o500);
+    if fs::write(dir.path().join("probe"), "").is_ok() {
+        mode(0o700);
+        eprintln!("skipped: a folder's mode keeps this account out of nothing");
+        return;
+    }
+
+    let (said, ok) = taken_away(file);
+
+    mode(0o700);
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert_eq!(said[0].code, Some("token_file_unremoved"));
+    assert!(
+        said[0].text.starts_with(&format!(
+            "warning: {}: could not be taken away once the panel stopped: ",
+            path.display()
+        )),
+        "{said:?}"
+    );
+    assert!(!ok);
+    assert!(path.is_file());
 }

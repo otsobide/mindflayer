@@ -12,7 +12,7 @@
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use mindflayer_server::{Listening, Server};
 use serde::Serialize;
@@ -21,7 +21,7 @@ use tokio::sync::oneshot;
 use super::typed;
 use crate::backend::PanelBackend;
 use crate::parse::UiOptions;
-use crate::{CliError, Failure, Lookup, Outcome};
+use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// Where the panel's dev server serves it while it is worked on (`make
 /// web/dev`), as a browser writes the origin: `server.host` and
@@ -43,9 +43,10 @@ const TOKEN_FILE_VERSION: u32 = 1;
 /// `-C`, `--home`, `-W` and agent homes this command line was given
 /// ([`PanelBackend::launch`]), and nothing the browser sends changes it. So
 /// a workspace that cannot be used, a port that cannot be taken, or a token
-/// file that cannot be written ([`write_token_file`]), is said as any
+/// file that cannot be written ([`TokenFile::write`]), is said as any
 /// command's failure is, and no link is printed. The file is written once
-/// the port is taken, which it names, and before anything is served.
+/// the port is taken, which it names, and before anything is served; it is
+/// taken away once nothing is ([`TokenFile::take_away`]).
 pub(crate) fn ui_command(
     directory: &Path,
     options: &UiOptions,
@@ -84,9 +85,10 @@ pub(crate) fn ui_command(
         // Once Ctrl-C is listened for, so one sent as soon as the file is
         // there stops the panel as every other does; and before the link,
         // so a script that waits for the link finds the file whole.
-        if let Some(path) = &token_file {
-            write_token_file(path, &listening.api(), listening.token())?;
-        }
+        let handed = token_file
+            .as_deref()
+            .map(|path| TokenFile::write(path, &listening.api(), listening.token()))
+            .transpose()?;
         announce(
             &url,
             address,
@@ -103,13 +105,18 @@ pub(crate) fn ui_command(
         tokio::task::spawn_blocking(move || {
             open(&url, no_open, &mut io::stderr(), webbrowser::open);
         });
-        serve(listening, interrupts).await.map_err(unserved)
+        serve(listening, interrupts).await.map_err(unserved)?;
+        Ok::<_, CliError>(handed)
     });
     // Without waiting for a browser still open in the foreground, which the
     // runtime would otherwise do before it let go.
     runtime.shutdown_background();
-    served?;
-    Ok(Outcome::plain(kept.transcript()))
+    let handed = served?;
+    let mut outcome = Outcome::plain(kept.transcript());
+    if let Some(handed) = handed {
+        handed.take_away(&mut outcome);
+    }
+    Ok(outcome)
 }
 
 /// The port to listen on: the one named, or else the dev server's proxy's
@@ -179,45 +186,151 @@ fn handed(api: &str, token: &str) -> Vec<u8> {
     text
 }
 
-/// Write where the API is and its token to `path`, a file made for the run.
+/// The file `--token-file` named, written for this run, and taken away
+/// once the panel stops, only while it still holds what was written there:
+/// by [`TokenFile::take_away`], which says what kept it, or when it is
+/// dropped before that, on a failure once it was written, saying nothing.
 ///
-/// With `create_new`, so whatever is there already, a file, a folder or a
-/// link, is refused and left as it is: never written over, and never
-/// written through, wherever a link would lead, as a temporary renamed
-/// onto the path would replace it. A link among the folders on the way is
-/// followed: the path is the person's own, typed on their command line,
-/// unlike one a repository or a browser names. In one write, which is done
-/// before the link is printed.
+/// Compared with what was written rather than taken away whatever it
+/// holds: the path is somebody's to write as much as the panel's, and once
+/// it holds something else that something is theirs, kept as everything
+/// somebody wrote is. A copy of what was written, put there by somebody,
+/// goes all the same: it holds a token that opens nothing any more.
 ///
-/// Mode 0600 on Unix, so no account but this one reads the token. Windows
-/// has no mode bits: the file takes the permissions its folder passes on,
-/// which in the account's own folders let in the account, the system and
-/// the administrators, and in a folder others share them too. An ACL of the
-/// file's own is #154's, with the rest of Windows.
-fn write_token_file(path: &Path, api: &str, token: &str) -> Result<(), CliError> {
-    let mut made = OpenOptions::new();
-    made.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut made, 0o600);
-    let mut file = made.open(path).map_err(|source| match source.kind() {
-        io::ErrorKind::AlreadyExists => CliError::TokenFileExists(path.to_owned()),
-        io::ErrorKind::NotFound => CliError::TokenFileFolderMissing(path.to_owned()),
-        _ => CliError::TokenFileUnwritable {
-            path: path.to_owned(),
-            source,
-        },
-    })?;
-    let written = file.write_all(&handed(api, token));
-    // Closed first, which Windows needs of a file before it is removed.
-    drop(file);
-    written.map_err(|source| {
-        // Made a moment ago, and of no use half written.
-        let _ = fs::remove_file(path);
-        CliError::TokenFileUnwritable {
-            path: path.to_owned(),
-            source,
+/// No `Debug`, which would print the token it holds.
+struct TokenFile {
+    path: PathBuf,
+    written: Vec<u8>,
+    /// Whether [`TokenFile::take_away`] has seen to it, which dropping it
+    /// then leaves alone.
+    settled: bool,
+}
+
+/// What became of a [`TokenFile`] once the panel stopped.
+enum Settled {
+    /// It held what was written, and is gone.
+    Taken,
+    /// Somebody took it away first.
+    Gone,
+    /// It holds something else, or something else is at its path, a link
+    /// among them, which is left as it is.
+    Kept,
+}
+
+impl TokenFile {
+    /// Write where the API is and its token to `path`.
+    ///
+    /// With `create_new`, so whatever is there already, a file, a folder
+    /// or a link, is refused and left as it is: never written over, and
+    /// never written through, wherever a link would lead, as a temporary
+    /// renamed onto the path would replace it. A link among the folders on
+    /// the way is followed: the path is the person's own, typed on their
+    /// command line, unlike one a repository or a browser names. In one
+    /// write, which is done before the link is printed.
+    ///
+    /// Mode 0600 on Unix, so no account but this one reads the token.
+    /// Windows has no mode bits: the file takes the permissions its folder
+    /// passes on, which in the account's own folders let in the account,
+    /// the system and the administrators, and in a folder others share
+    /// them too. An ACL of the file's own is #154's, with the rest of
+    /// Windows.
+    fn write(path: &Path, api: &str, token: &str) -> Result<Self, CliError> {
+        let mut made = OpenOptions::new();
+        made.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut made, 0o600);
+        let mut file = made.open(path).map_err(|source| match source.kind() {
+            io::ErrorKind::AlreadyExists => CliError::TokenFileExists(path.to_owned()),
+            io::ErrorKind::NotFound => CliError::TokenFileFolderMissing(path.to_owned()),
+            _ => CliError::TokenFileUnwritable {
+                path: path.to_owned(),
+                source,
+            },
+        })?;
+        let written = handed(api, token);
+        let wrote = file.write_all(&written);
+        // Closed first, which Windows needs of a file before it is removed.
+        drop(file);
+        match wrote {
+            Ok(()) => Ok(Self {
+                path: path.to_owned(),
+                written,
+                settled: false,
+            }),
+            Err(source) => {
+                // Made a moment ago, and of no use half written.
+                let _ = fs::remove_file(path);
+                Err(CliError::TokenFileUnwritable {
+                    path: path.to_owned(),
+                    source,
+                })
+            }
         }
-    })
+    }
+
+    /// Take the file away now the panel has stopped, and say in `outcome`
+    /// what kept it: a note when it holds something else, which is
+    /// somebody's to keep and no fault of the command's, or a warning,
+    /// which fails it, when it could not be looked at or taken away, and
+    /// a token is perhaps still there.
+    fn take_away(mut self, outcome: &mut Outcome) {
+        self.settled = true;
+        match self.settle() {
+            Ok(Settled::Taken | Settled::Gone) => {}
+            Ok(Settled::Kept) => outcome.stderr.push(Warning::from(format!(
+                "note: {}: changed since the API's address and token were written there, so \
+                 it is left as it is",
+                self.path.display()
+            ))),
+            Err(source) => {
+                let error = CliError::TokenFileUnremoved {
+                    path: self.path.clone(),
+                    source,
+                };
+                outcome
+                    .stderr
+                    .push(Warning::coded(error.code(), format!("warning: {error}")));
+                outcome.ok = false;
+            }
+        }
+    }
+
+    /// Take the file away if it holds what was written.
+    ///
+    /// Looked at as a link, never through one: a link put at the path is
+    /// somebody's, whatever it leads to. By its length first, so a large
+    /// file put in its place is never read.
+    fn settle(&self) -> io::Result<Settled> {
+        let found = match fs::symlink_metadata(&self.path) {
+            Ok(found) => found,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Settled::Gone),
+            Err(error) => return Err(error),
+        };
+        if !found.is_file() || found.len() != self.written.len() as u64 {
+            return Ok(Settled::Kept);
+        }
+        match fs::read(&self.path) {
+            Ok(held) if held == self.written => {}
+            Ok(_) => return Ok(Settled::Kept),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Settled::Gone),
+            Err(error) => return Err(error),
+        }
+        match fs::remove_file(&self.path) {
+            Ok(()) => Ok(Settled::Taken),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Settled::Gone),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+/// On a failure once the file was written: taken away all the same, with
+/// nothing said beside the failure, which is what there is to say.
+impl Drop for TokenFile {
+    fn drop(&mut self) {
+        if !self.settled {
+            let _ = self.settle();
+        }
+    }
 }
 
 /// Open the link with `opener`, unless told not to.

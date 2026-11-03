@@ -995,8 +995,8 @@ pub struct UiOptions {
 
     /// Write where the API is and the token to PATH, as JSON, for a script
     /// to read: a new file only your account can read, never one already
-    /// there. With --no-open, the way to serve the API to scripts with no
-    /// browser.
+    /// there, taken away when the panel stops unless it was changed. With
+    /// --no-open, the way to serve the API to scripts with no browser.
     //
     // A path somebody names rather than one of Mindflayer's own, in its
     // home say: several panels may be served at once, each with a token of

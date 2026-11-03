@@ -616,13 +616,7 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
     let (status, ran) = panel.post("/api/v1/tasks", install);
     assert_eq!(status, 200, "{ran}");
 
-    let pid = panel.started.child.id().to_string();
-    let sent = std::process::Command::new("kill")
-        .args(["-INT", &pid])
-        .status()
-        .expect("run kill");
-    assert!(sent.success());
-    let exited = exit(&mut panel.started, Duration::from_secs(60));
+    let (exited, rest, said) = interrupt(&mut panel);
 
     assert!(exited.success(), "{exited:?}");
     let run = &ran["outcome"]["runs"][0];
@@ -634,14 +628,9 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
     for line in run["stderr"].as_array().unwrap() {
         transcript.push_str(&format!("{}\n", line["text"].as_str().unwrap()));
     }
-    let mut rest = String::new();
-    panel.stdout.read_to_string(&mut rest).unwrap();
     assert_eq!(rest, transcript);
     let named = format!("$ flayer -W {} install -p ", dir.path().display());
     assert!(rest.starts_with(&named), "{rest}");
-    let mut said = String::new();
-    let mut stderr = panel.started.child.stderr.take().unwrap();
-    stderr.read_to_string(&mut said).unwrap();
     assert_eq!(
         said,
         format!(
@@ -675,9 +664,11 @@ fn handed(path: &Path) -> Handed {
 /// What a script that did not start the panel does: read where the API is,
 /// and the token, from the file `--token-file` named, and call the API with
 /// it as Bearer. The file is whole by the time the link is out, it is the
-/// launch's own token, and no account but this one may read it.
+/// launch's own token, and no account but this one may read it. Once the
+/// panel stops it is gone, and nothing it said holds the token but the
+/// link it always printed.
 #[test]
-fn a_script_reaches_the_api_through_the_token_file() {
+fn a_script_reaches_the_api_through_the_token_file_which_goes_when_ui_stops() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
     let run = TempDir::new().unwrap();
@@ -712,6 +703,61 @@ fn a_script_reaches_the_api_through_the_token_file() {
     assert_eq!(
         snapshot["workspace"]["path"],
         json!(dir.path().to_str().unwrap())
+    );
+
+    #[cfg(unix)]
+    {
+        let mut panel = panel;
+        let (exited, rest, said) = interrupt(&mut panel);
+
+        assert!(exited.success(), "{exited:?}");
+        assert!(
+            fs::symlink_metadata(&path).is_err(),
+            "the file is still there"
+        );
+        assert_eq!(rest, "");
+        assert_eq!(
+            said,
+            format!(
+                "note: serving the workspace at {} on {} until Ctrl-C\n",
+                dir.path().display(),
+                panel.address
+            )
+        );
+    }
+}
+
+/// Somebody's once it holds something else: left where it is when the
+/// panel stops, as it was written, and said, with nothing gone wrong.
+#[cfg(unix)]
+#[test]
+fn a_token_file_changed_while_the_panel_ran_is_left_where_it_is() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let run = TempDir::new().unwrap();
+    let path = run.path().join("api.json");
+    let mut panel = serve_with(
+        "flayer",
+        dir.path(),
+        home.path(),
+        &["--token-file", path.to_str().unwrap()],
+    );
+    fs::write(&path, "{\"mine\": true}\n").unwrap();
+
+    let (exited, _, said) = interrupt(&mut panel);
+
+    assert!(exited.success(), "{exited:?}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), "{\"mine\": true}\n");
+    assert_eq!(
+        said,
+        format!(
+            "note: serving the workspace at {} on {} until Ctrl-C\n\
+             note: {}: changed since the API's address and token were written there, so it \
+             is left as it is\n",
+            dir.path().display(),
+            panel.address,
+            path.display()
+        )
     );
 }
 
@@ -853,6 +899,25 @@ fn a_token_file_is_refused_without_a_path() {
             line.join(" ")
         );
     }
+}
+
+/// Ctrl-C, as a terminal sends it: SIGINT, by `kill`. And how the panel
+/// exited, what it printed after the link, and all it said on stderr.
+#[cfg(unix)]
+fn interrupt(panel: &mut Panel) -> (std::process::ExitStatus, String, String) {
+    let pid = panel.started.child.id().to_string();
+    let sent = std::process::Command::new("kill")
+        .args(["-INT", &pid])
+        .status()
+        .expect("run kill");
+    assert!(sent.success());
+    let exited = exit(&mut panel.started, Duration::from_secs(60));
+    let mut rest = String::new();
+    panel.stdout.read_to_string(&mut rest).unwrap();
+    let mut said = String::new();
+    let mut stderr = panel.started.child.stderr.take().unwrap();
+    stderr.read_to_string(&mut said).unwrap();
+    (exited, rest, said)
 }
 
 /// How a started binary exited, waited for until `limit` has passed.

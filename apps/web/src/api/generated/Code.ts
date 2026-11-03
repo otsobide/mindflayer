@@ -37,6 +37,7 @@ export type Code =
   | "token_file_exists"
   | "token_file_folder_missing"
   | "token_file_unwritable"
+  | "token_file_unremoved"
   | "opens_screen"
   | "opens_editor"
   | "reads_stdin"

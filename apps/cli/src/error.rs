@@ -225,6 +225,15 @@ pub enum CliError {
         #[source]
         source: io::Error,
     },
+    /// What `ui --token-file` wrote could not be taken away once the panel
+    /// stopped, nor looked at to tell whether it still held that: said as a
+    /// warning, since the panel was served all the same.
+    #[error("{path}: could not be taken away once the panel stopped: {source}")]
+    TokenFileUnremoved {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
 }
 
 // A variant that carries core's error takes its code, as one of core's does;
@@ -261,6 +270,7 @@ codes!(CliError {
     Self::TokenFileExists(_) => "token_file_exists",
     Self::TokenFileFolderMissing(_) => "token_file_folder_missing",
     Self::TokenFileUnwritable { .. } => "token_file_unwritable",
+    Self::TokenFileUnremoved { .. } => "token_file_unremoved",
 } carried {
     Self::Workspace(error) => error,
     Self::Chosen { source, .. } => source,
