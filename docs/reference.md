@@ -2375,6 +2375,23 @@ task as it is sent, `Ran.json` for what a run is answered with,
 field it does not name, since one added keeps the version, so a script
 that checks what it is answered with does not refuse an answer for one.
 
+The API whole, every route with its parameters, its body, its answer and
+each status it may be refused with, the codes of each listed, is described
+as an OpenAPI 3.1 document, which the panel serves behind the token, as
+every route, and the repository holds as
+[`docs/api/openapi.json`](api/openapi.json):
+
+```sh
+curl -H "Authorization: Bearer <token>" 'http://127.0.0.1:<port>/api/v1/openapi.json'
+```
+
+Its definitions are those schemas, by the same names, but for a type the
+API is both sent and answered with that is described otherwise each way, a
+task above all: as it is sent, it is named with `Sent` after it
+(`TaskSent`). What each event of `/api/v1/events` holds is under
+`x-itemSchema` on that route, as OpenAPI 3.1 has no place for what each
+item of a stream holds.
+
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
 and with it the server and what only the panel needs (axum, the embedded

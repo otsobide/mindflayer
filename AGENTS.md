@@ -59,6 +59,8 @@ make web/fixtures         # write the snapshots and answers the views' tests ren
 make web/fixtures/check   # cargo and git only (CI): fail when they are not the ones committed
 make api/schemas          # write the API's JSON Schemas from Rust into docs/api/schemas (cargo only)
 make api/schemas/check    # cargo and git only (CI): fail when they are not the ones committed
+make api/openapi          # write the API's OpenAPI document from Rust into docs/api/openapi.json (cargo only)
+make api/openapi/check    # cargo and git only (CI): fail when it is not the one committed
 make web/typecheck        # vue-tsc alone
 make web/test PNPM='npx --yes pnpm@12.15.0'
 pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
@@ -83,7 +85,11 @@ checks with `make web/fixtures/check`. A change to a type the API takes or
 gives, core's, the CLI's or the server's, runs `make api/schemas` and
 commits the schemas it writes into `docs/api/schemas`, which the same job
 checks with `make api/schemas/check`, once the fixtures are written again,
-since it holds each to its schema. The other way
+since it holds each to its schema. Such a change, or one to a route of
+the CLI's table or the server's own, runs `make api/openapi` too, which
+writes the API's OpenAPI document, `docs/api/openapi.json`, from the routes
+and those schemas, and which the same job checks with `make
+api/openapi/check`. The other way
 round, `make install` and `make cli/release` build the panel before the
 binaries that embed it where Node and pnpm run, and warn otherwise (`make
 web/build/if-node`), and `make web/build` touches
@@ -225,7 +231,10 @@ under `apps/` with its own `Makefile`:
   panel's types the CLI gives (a query, a task, an outcome, the envelope)
   and `Code`, and under its `schema` feature `src/schema.rs` the roots of
   the API's schemas it gives, those and the bodies of the reads that take
-  one, the token file and the server's own answers. `src/tui/` and
+  one, the token file and the server's own answers, and `src/openapi.rs`
+  the API's OpenAPI document, written from both tables and those schemas,
+  each type a route names found among the roots (`openapi::document`,
+  `Described`, the server's `schema::Describe`). `src/tui/` and
   `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
@@ -235,7 +244,8 @@ under `apps/` with its own `Makefile`:
   table of reads a backend hands over (`Route`, `Parameter`, `Shape`,
   `API`), a query string read by it, and the table of the server's own
   routes it serves beside them (`Own`, `Sent`, `Answer`), which a
-  description of the API walks with the backend's,
+  description of the API walks with the backend's, each route with what a
+  request to it may be refused for (`conditions`),
   `src/server.rs` binds and routes, `src/auth.rs` holds the token's
   cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
   Metadata checks and the CSP, `src/api.rs` the JSON endpoints,
@@ -246,7 +256,10 @@ under `apps/` with its own `Makefile`:
   bus what changed, `src/log.rs` the redacting request log,
   `src/panel.rs` the embedded panel (`apps/web/dist`), and under its
   `schema` feature `src/schema.rs` the roots of the API's schemas it gives
-  of its own (`Preview`, `Ran`, `Event`, `Refused`).
+  of its own (`Preview`, `Ran`, `Event`, `Refused`) and its part of the
+  API's OpenAPI document, what is HTTP of each route of both tables
+  (`paths`), each type a route names asked of the front end (`Describe`,
+  `Carried`, `Way`).
 - `apps/web` (`mindflayer-web`): the web panel, in Vue and Nuxt UI on Vite,
   with pnpm. `src/main.ts` mounts what `src/panel.ts` installs (router,
   Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
@@ -343,7 +356,9 @@ what `make cli/release/check` runs: it starts a release's `flayer ui` with a
 home of its own and every agent home empty, and asks it for the panel.
 `docs/api/schemas` holds the API's JSON Schemas, a file a root, which the
 crates' `schema` tests write (`make api/schemas`) and nothing edits by
-hand.
+hand, and `docs/api/openapi.json` its OpenAPI document, which the CLI's
+`openapi` test writes (`make api/openapi`) and the binaries embed and
+serve.
 
 ## Invariants that hold the design together
 
@@ -1055,7 +1070,10 @@ These are easy to break from a single file without noticing.
   `mf_<port>`, or as Bearer), and takes a change by cookie only with
   `Sec-Fetch-Site: same-origin`, `X-Mindflayer: 1` and `application/json`.
   The one widening is the panel's dev server's origin, exactly, when a front
-  end names it (`Server::dev_server`, `flayer ui --dev`).
+  end names it (`Server::dev_server`, `flayer ui --dev`). The API's
+  description is the front end's, handed over as text
+  (`Backend::document`) and served at `GET /api/v1/openapi.json` as it is,
+  behind the token like every route.
   Every answer carries the CSP and `nosniff`, and every one under `/api`
   `Cache-Control: no-store`, since a read is a GET a browser would keep;
   there is no CORS layer, and the token is never logged.
@@ -1161,6 +1179,23 @@ These are easy to break from a single file without noticing.
   version, a type sent closed only where it is sent
   (`schema::given_settings`); a diff of `docs/api/schemas` that drops or renames a property,
   or changes what one holds, moves the API to `/api/v2`.
+- **The API's description is written from both tables, and every answer
+  holds to it.** `docs/api/openapi.json`, an OpenAPI 3.1 document, is
+  written by the CLI under `schema` (`openapi::document`), never by hand:
+  the server writes what is HTTP of each route of `Backend::routes` and
+  `Own::ALL` as it serves them (`schema::paths`), each status a route may
+  be refused with from what its table says (`Route::conditions`,
+  `Own::conditions`), and asks the CLI for every type a route names
+  (`schema::Describe`), by the name its table gives it among the roots, by
+  `Sent`, or by a word for what the server carries of the backend's
+  (`Carried`), so the server still names no type of the front end's. A
+  type sent and answered that is described otherwise each way is two
+  definitions, the one sent named with `Sent` after it (`TaskSent`). The
+  CLI's backend embeds the file as it is committed (`include_str!`), so a
+  plain build serves it without schemars; `make api/openapi` writes it
+  again and `make api/openapi/check`, run in `types drift (web)`, fails
+  when it is not what Rust writes. A route, or a type it names, changed is
+  written again into it.
 - **The panel needs nothing the CSP refuses.** No URL naming another host,
   no inline `<script>` or `<style>`, no `data:` URL: fonts are Fontsource
   files, icons are bundled Lucide (`i-lucide-<name>` in a `.vue` file) drawn
@@ -1272,6 +1307,19 @@ These are easy to break from a single file without noticing.
   is a stand-in in `ui`'s unit tests. A suite or test about the panel is
   `#[cfg(feature = "ui")]`, so a build without the feature leaves it out;
   `make cli/test` runs the unit tests in that build too.
+- Every answer the CLI's HTTP suites get is held to the API's OpenAPI
+  document as it is committed (`common::contract`, with boon): `ui_test`'s
+  `Panel::send` holds what each route answered, with its status, to the
+  schema the document gives that route and status, and the events the
+  stream tells to theirs, and `backend_test` drives the backend through a
+  stand-in (`Checked`) that holds each answer as the server would send it,
+  a refusal under the status its grounds say. A route answering outside
+  its document, or with a status it does not list, fails the test that met
+  it. `apps/cli/tests/openapi_test.rs` reads the document with oas3, a
+  reader of OpenAPI 3.1 that reaches no network, holds every schema in it
+  to JSON Schema 2020-12's meta-schema, which boon carries, and walks both
+  tables against its routes; the server's `api_test` holds every refusal
+  it brings about to a condition its route lists.
 - The panel's suites are `apps/web/tests/<area>.test.ts`, in Vitest. The
   components run in happy-dom, mounted through `createPanel` with a fake
   `Transport` and a memory history, so they never reach a server. The
@@ -1386,8 +1434,8 @@ These are easy to break from a single file without noticing.
   `apps/web/dist`, runs `make cli/release/check` and uploads the release's
   binaries, which `e2e (web)` downloads and drives in Chromium and WebKit
   (`make web/e2e/run`), uploading the traces of what fails. `types drift
-  (web)` runs `make web/types/check`, `make web/fixtures/check` and `make
-  api/schemas/check`. Development targets Linux only for now: macOS
+  (web)` runs `make web/types/check`, `make web/fixtures/check`, `make
+  api/schemas/check` and `make api/openapi/check`. Development targets Linux only for now: macOS
   and Windows (`test (macos)`, `test (windows)`, which set up Node too) run
   only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
   the compatibility pass (#154) puts them back on pushes to `dev`/`main` and

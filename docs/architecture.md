@@ -29,7 +29,11 @@ agents with the operator's own login, which is why CI never runs it.
 cli/release/check` runs on a release CI built ([in `make test`, and in
 CI](#in-make-test-and-in-ci)). Nor is `docs/api/schemas`, the API's JSON
 Schemas, which the crates' tests write and `make api/schemas` writes
-again ([the API's schemas come from Rust](#the-apis-schemas-come-from-rust)).
+again ([the API's schemas come from Rust](#the-apis-schemas-come-from-rust)),
+nor `docs/api/openapi.json`, the API's OpenAPI document, which a test of
+the CLI's writes and `make api/openapi` writes again ([the API's
+description is written from both
+tables](#the-apis-description-is-written-from-both-tables)).
 
 ### The examples are a workspace
 
@@ -4241,14 +4245,14 @@ project from a path to refuse, or a skill from a rule, and it is not to learn:
 each of those answers is core's, reached through the backend, so the panel
 cannot disagree with the CLI and the TUI about any of them. What it knows is
 HTTP (routes, the token, cache headers, a log line, the code and the status
-of each request it turns away itself), and none of that would differ
-between two front ends.
+of each request it turns away itself, and its part of the API's
+description), and none of that would differ between two front ends.
 
 What it serves is the backend's reads, each at a route of its own from a
 table the backend hands over ([a table of reads](#a-table-of-reads)), and
-five routes of its own, from a table of its own (`Own`):
+six routes of its own, from a table of its own (`Own`):
 [D-18](#d-18-the-panel-writes-by-running-commands) in HTTP, with the
-switch, the transcript and the events beside it.
+switch, the transcript, the events and the API's description beside it.
 
 ### Its routes, under `/api/v1`
 
@@ -4307,6 +4311,11 @@ The server's own:
 - `GET /api/v1/events`: what happens as it happens, a change on disk or a
   run starting and finishing, as server-sent events ([live
   updates](#live-updates)).
+- `GET /api/v1/openapi.json`: the API described, every route above and
+  below with what it takes, what it answers and every way it may be
+  refused, as an OpenAPI 3.1 document the backend hands over ([the API's
+  description is written from both
+  tables](#the-apis-description-is-written-from-both-tables)).
 
 Every answer that is no success carries a code beside its words, the
 backend's or the server's own ([every refusal with a
@@ -4372,8 +4381,12 @@ own mirrors that one's rules: one arm for each condition, `Self::` and its
 name with its status and its code, from which a match with no wildcard
 writes `code()` and `status()`, and the same arms `ALL` and `CODES`. So a
 condition added does not compile without both, and none can be left off
-the list, which is data for #218 to list each route's error answers from
-rather than by hand. Named for the condition in snake_case, and never
+the list, which is data each route's answers are listed from rather than
+by hand: each route of either table says which conditions a request to it
+may be refused for (`Route::conditions`, `Own::conditions`), by its
+method, its parameters and what it hands the request on to, decided for
+each condition by a match with no wildcard, so a condition added is placed
+among the routes before it compiles. Named for the condition in snake_case, and never
 renamed nor moved to another condition once given, as core's are. A code
 reaches a client without the crate that gave it, so `invalid_body` must
 mean one thing whoever says it: the server cannot see core's list or the
@@ -4381,7 +4394,8 @@ CLI's, and the CLI, which depends on all three crates, holds the three
 apart in the test that holds its own (`error_test.rs`), as the TypeScript
 `Code` holds all three. A test of the server's sends a request for every
 way it turns one away and holds each answer to the shape, its code one of
-`CODES` or the fake backend's, and its status the one its condition names.
+`CODES` or the fake backend's, its status the one its condition names, and
+its condition one its route lists.
 
 The 415 is one condition whoever finds it, the guard on a change by cookie
 or axum's JSON extractor on a request with the token as Bearer. axum's
@@ -4436,11 +4450,12 @@ each. The one thing the server calls rather than reads is the route's
 parameter naming a holder, or a list of roots, means something only to the
 front end. So the server matches the path, reads the query string into
 JSON as each parameter's shape says, refuses what no route takes, and hands
-the rest over without knowing what any of it is; and #218 writes the
-OpenAPI document by walking the very table that is served, rather than a
-second description beside the handlers that could disagree with them,
-each body and answer the schema of the type it names, found by that name
-([the API's schemas come from Rust](#the-apis-schemas-come-from-rust)). A handler per read in the server was the alternative, which would
+the rest over without knowing what any of it is; and the OpenAPI document
+is written by walking the very table that is served, rather than a second
+description beside the handlers that could disagree with them, each body
+and answer the schema of the type it names, found by that name ([the API's
+description is written from both
+tables](#the-apis-description-is-written-from-both-tables)). A handler per read in the server was the alternative, which would
 put the CLI's reads in a crate that depends on no mindflayer crate, or a
 trait method per read, which the server would have to grow with every read
 the CLI adds.
@@ -4485,8 +4500,8 @@ against the old name unnoticed, and the change is made as one that moves
 the API to `/api/v2`; `ui_test` calls every one over loopback with the
 token as Bearer.
 
-The server's own five routes are data too, so #218 walks two tables and
-describes nothing by hand: `Own::ALL`, each with its method, its path,
+The server's own six routes are data too, so the description walks two
+tables and describes nothing by hand: `Own::ALL`, each with its method, its path,
 what its body holds and what it answers, and a sentence on each. The
 server serves each from there, its handler asked by the method the table
 says, so the table and what answers cannot disagree, and `route::check`
@@ -4499,8 +4514,9 @@ as the backend's types do, and `Answer::Events` says the stream is
 server-sent events rather than JSON. What the server answers with of its
 own, a `Preview`, a `Ran`, each `Event` and a `Refused`, has a schema of
 the server's, where what it carries of the backend's is any JSON: which of
-the backend's types fills each is what the description names from these
-words. A string naming each type, as a
+the backend's types fills each the description names from these words,
+and from a word for each place it carries the backend's JSON (`Carried`).
+A string naming each type, as a
 backend's route has, was the alternative, and it would have the server
 spell the CLI's names, or the trait grow one constant for each. A test pins
 the table by method, path, body and answer, and another holds each route to
@@ -4534,6 +4550,18 @@ shows, rather than asking again of a disk that may have changed between.
 path with its scope (`Watched`), a word of the backend's own carried to the
 panel as JSON, as a query's answer is, so the server names no type of the
 front end's here either.
+
+`document` hands the server the API described, which `GET
+/api/v1/openapi.json` answers with as it is: text the front end wrote, as
+it alone knows every type a route names, with the server's part of it
+([the API's description is written from both
+tables](#the-apis-description-is-written-from-both-tables)). Without
+`self`, as `routes` is, since a description is as fixed as the types it
+describes; and text rather than a description the server would write at
+each launch, so a front end writes it once, as it builds, and a server
+built without schemars still serves it. An option of `Server`'s was the
+other place for it, and it would make a route of the server's own one it
+serves or not as a front end remembers to hand it over.
 
 Each of `query`, `preview` and `run` may refuse what it was asked with a
 `Refusal`, a code, a message and its grounds, which is how a rule of the
@@ -5510,13 +5538,17 @@ confirm are the generated `Confirm` and a change's scopes the generated
   again; the vue-tsc half is `test (web)`'s ([in `make test`, and in
   CI](#in-make-test-and-in-ci)).
 
-OpenAPI, which #70 left out, would describe the server's routes as well as
-their bodies, at the price of a schema between the Rust and the TypeScript
-that ts-rs does without. The panel still does without it: since
-[D-24](#d-24-the-local-server-is-a-versioned-http-api) the same types are
-described as JSON Schema too, for every other client ([the API's schemas
-come from Rust](#the-apis-schemas-come-from-rust)), beside the TypeScript
-rather than in its place. A protocol crate holding the types, which both
+The panel compiles against no OpenAPI. #70 left a description of the
+routes out, a schema between the Rust and the TypeScript that ts-rs does
+without; since [D-24](#d-24-the-local-server-is-a-versioned-http-api) the
+API is described for every other client, its types as JSON Schema ([the
+API's schemas come from Rust](#the-apis-schemas-come-from-rust)) and its
+routes as an OpenAPI 3.1 document written from the tables that serve them
+([the API's description is written from both
+tables](#the-apis-description-is-written-from-both-tables)), both beside
+the TypeScript rather than in its place: the panel's types are still read
+off serde's own attributes, and its transport still spells each route ([open
+questions](#open-questions)). A protocol crate holding the types, which both
 the CLI and the server would depend on, was rejected with
 [D-17](#d-17-the-next-front-end-is-a-local-web-panel)'s B; the types stay
 where serde's are, and the feature only reads them.
@@ -5582,9 +5614,10 @@ answers, a preview, a run, each event and a refusal (`Preview`, `Ran`,
 - **Named as the routes name them.** A root's file is its type's name,
   as a route names what it is sent and answers with
   ([a table of reads](#a-table-of-reads)) and as the TypeScript names its
-  file, and `Schemas::get` finds a root's schema by it, which is how the
-  description of the routes (#218) is to find the schema of each body and
-  answer. A test holds every type a route of the CLI's names to be a root,
+  file, and `Schemas::get` finds a root's schema by it, as the API's
+  description finds the schema of each body and answer by the same name
+  among the roots ([the API's description is written from both
+  tables](#the-apis-description-is-written-from-both-tables)). A test holds every type a route of the CLI's names to be a root,
   another every root of the panel's types to have a schema of its name,
   and a third no two roots of the three crates to share a file. schemars
   names each type once in a document and gives a second type of a name
@@ -5643,6 +5676,117 @@ reads off serde's own attributes, and change the panel to describe the
 API. The two are written from the same attributes and the same
 hand-written words, and a test holds the TypeScript's roots within the
 schemas', so they describe one set of types.
+
+### The API's description is written from both tables
+
+The API is described, routes and all, as an OpenAPI 3.1 document (#218,
+[D-24](#d-24-the-local-server-is-a-versioned-http-api)):
+`docs/api/openapi.json`, written from Rust, committed and never edited by
+hand, and served at `GET /api/v1/openapi.json` behind the token, as every
+route is. It holds every route of the backend's table and of the server's
+own, with its method, its parameters (each name, whether it is needed and
+the schema its shape is read into, a list given once for each value), its
+body, what it answers and every status it may be refused with, the codes of
+each listed; the token's two ways in, as a Bearer token and as the launch
+link's cookie, as security schemes; the events as `text/event-stream`, with
+what each holds; and the API's version, in its server's URL, `/api/v1`,
+relative to where the document is served, and as `info.version`.
+
+- **Put together where every type is known, from the very tables served.**
+  The CLI writes it, under its `schema` feature (`openapi::document`), as
+  only the CLI knows every type a route names. The server writes its part,
+  what is HTTP and the same whatever the backend (`schema::paths`), walking
+  `Backend::routes` and `Own::ALL` as it serves them, and asks the CLI for
+  each type a route names through a trait of its own (`schema::Describe`):
+  a backend's type by the name its route gives it, found among the roots
+  of core, the CLI and the server as a file of `docs/api/schemas` is, the
+  way the route uses it; a body of the server's own by `Sent`; and what the
+  server carries of the backend's by a word of the server's (`Carried`). So
+  the server names no type of the front end's and depends on no mindflayer
+  crate still, and the CLI spells none of HTTP's rules: the statuses, the
+  headers beside a 401 and a 405, the media types and the security schemes
+  are the server's. A document written by hand beside the handlers was the
+  alternative, a second description that could disagree with them; and one
+  the server wrote whole at each launch, which would compile schemars into
+  every build.
+- **What the server carries is said of the CLI's types, on the route that
+  answers with it.** The server's own schemas say any JSON where it carries
+  the backend's ([the API's schemas come from
+  Rust](#the-apis-schemas-come-from-rust)): an item of a preview's
+  `confirm`, a run's `outcome`, a change's scope and a switch's answer.
+  Its definitions stay that, one whatever the backend, and each route's
+  answer is an `allOf` of the server's type and what fills each place, from
+  the CLI: a `Confirm`, an `Outcome`, or the `{"error"}` the writer thread
+  answers in its place when it would not serialize, a `Holder`, and a
+  `Switchable` or `null`. Filled in the definitions instead, the server's
+  own types would be described for one backend.
+- **A type sent and answered, described otherwise each way, is two
+  definitions.** schemars describes a type as serde writes it, every field
+  required and its objects open, or as serde reads it, a field read as none
+  left out of `required` and closed where serde refuses one it does not
+  know. A task, and the holders, boxes, marks and toggles it holds, are
+  sent, and are in what a plan answers too, so `components.schemas` holds
+  each way: answered under the type's name, and sent with `Sent`
+  after it (`TaskSent`), every reference to it named to match. A type both
+  ways describe alike, a word, is one definition under its own name, found
+  by narrowing the names taken alike until none is dropped, since a
+  definition naming one named apart differs too. Describing both as serde
+  reads them, which what serde writes holds to as well, was the other way,
+  and it would close what a plan answers to a field added to a task, which
+  moves no version.
+- **Every way a route may be refused, with its codes.** Every refusal is a
+  `Refused` ([every refusal with a code](#every-refusal-with-a-code)), each
+  status an answer of its own, its `code` one of an enum: the server's own
+  conditions of that status the route may meet, which its table says
+  (`Route::conditions`, `Own::conditions`), and, where the request reaches
+  the backend, what the CLI says its backend refuses with on the grounds
+  that status is (`Describe::refused`): core's codes and the CLI's own
+  (`CoreCode`, `CliCode`), as absent, a 404, only for a read named by its
+  parameters, and as unfit, a 422, anything it reaches. A 405 is listed
+  under each route, though it is the answer to another method there, since
+  OpenAPI has no place for a path's other methods; a path no route names, a
+  404 of `unknown_route`, is said in the document's description, as it is
+  no route's.
+- **The stream's events beside it.** OpenAPI 3.1 has no place for what each
+  item of a stream holds, so the events' schema is under `x-itemSchema`,
+  OpenAPI 3.2's `itemSchema` as a 3.1 document may carry it, beside a
+  `string` for the stream whole. A document of 3.2, which few tools read
+  yet, was the other way.
+- **Served as it is committed.** The CLI's backend hands the server the
+  committed file, embedded with `include_str!` (`Backend::document`), so a
+  plain build serves it without compiling schemars, and what it serves is
+  what the check holds to what Rust writes. Behind the token, though it
+  says nothing of a workspace: one rule for every route is simpler to hold
+  than a list of what may be read without it.
+- **Held to OpenAPI 3.1, offline.** A test reads the committed document with
+  oas3, a reader of OpenAPI 3.1 alone, into types of its own whose required
+  fields and closed words it must have, every operation's parameters, body
+  and answers resolved; holds every Schema Object in it to JSON Schema
+  2020-12's own meta-schema, which boon carries, and compiles each from the
+  document, so every reference names a definition it holds; and walks both
+  tables, every route served in the document and every route in it served.
+  oas3 is handed the text, and nothing is fetched. roas was the other
+  reader, which models every keyword of a schema and refuses the `uint64`
+  format schemars writes, which 3.1 allows; openapi-spec-validator-rs
+  carries 3.1's own meta-schema, but builds jsonschema, which boon was
+  chosen over, and turns on serde_json's `preserve_order` for every crate a
+  test builds, as oas3's default feature would, which it is taken without:
+  every map schemars and the commands write would come out in another
+  order.
+- **Held to every answer the tests get.** Every answer `ui_test` gets over
+  loopback, every event the stream tells it, and every answer the backend's
+  suite gets from the backend, as the server would send it, is held to the
+  schema the document gives that route for that status, with boon
+  (`common::contract`): a route answering outside its document, or with a
+  status it does not list, fails whichever test met it. The server's own
+  suite holds every refusal it brings about to a condition its route lists.
+- **Written again by cargo alone.** `make api/openapi` runs the CLI's export
+  test (`--lib openapi`) with the features `make api/schemas` builds with,
+  so the two share one build, and writes the one file over; `make
+  api/openapi/check` writes it the same way and fails when git sees it
+  differ from the one committed. CI runs it in `types drift (web)`, after
+  the schemas' check ([in `make test`, and in
+  CI](#in-make-test-and-in-ci)).
 
 ### Its views
 
@@ -6761,9 +6905,12 @@ CI gives the panel jobs of its own:
   Rust](#its-fixtures-come-from-rust)), and then `make api/schemas/check`,
   for the API's schemas, which holds every fixture, as Rust has just
   written it again, to its schema ([the API's schemas come from
-  Rust](#the-apis-schemas-come-from-rust)): a step of a job the rulesets
-  require already, rather than a job of its own, whose name they would have
-  to be changed by hand to require.
+  Rust](#the-apis-schemas-come-from-rust)), and `make api/openapi/check`,
+  for the API's OpenAPI document, which holds those schemas ([the API's
+  description is written from both
+  tables](#the-apis-description-is-written-from-both-tables)): steps of a
+  job the rulesets require already, rather than a job of their own, whose
+  name they would have to be changed by hand to require.
 - **`build (cli)`** waits for `test (web)`, downloads that `dist/` before
   anything compiles, and builds the release for the runner's own triple,
   which embeds it. The runner has Node and no pnpm, so `make cli/release`
@@ -9406,7 +9553,12 @@ and gives as JSON Schema written from the Rust types, the server's own
 answers and the token file among them, a file a root in `docs/api/schemas`,
 each found by the name a route gives its type, and checked for drift with
 the panel's types ([the API's schemas come from
-Rust](#the-apis-schemas-come-from-rust)).
+Rust](#the-apis-schemas-come-from-rust)). #218 describes the API as an
+OpenAPI 3.1 document written from both tables and those schemas, the
+server writing what is HTTP and the CLI each type a route names, served at
+`/api/v1/openapi.json` as it is committed, and holds every answer the
+tests get to it ([the API's description is written from both
+tables](#the-apis-description-is-written-from-both-tables)).
 
 ## Open questions
 
@@ -9678,7 +9830,9 @@ Rust](#the-apis-schemas-come-from-rust)).
   which the CLI's test of each route's query and the browser suite catch
   between them, but no type does. The table written into the panel, as its
   types are, would let the transport build each request from it; the
-  OpenAPI document #218 writes from the table is one way there.
+  OpenAPI document written from the table ([the API's description is
+  written from both tables](#the-apis-description-is-written-from-both-tables))
+  is one way there, which the panel does not read yet.
 - **A token file can be read before it is whole.** It is made empty and
   written at once, before the link is printed, so a script that waits for
   the link finds it whole, but one that waits for the file to appear may
@@ -9699,36 +9853,26 @@ Rust](#the-apis-schemas-come-from-rust)).
   permissions its folder passes on, which in the account's own folders
   keep other accounts out but in a shared one do not; an ACL of its own,
   for the account alone, is #154's, with the rest of Windows.
-- **The routes are described in prose.** Each route's parameters, body and
-  answer are listed here and pinned by a test of the CLI's or the server's,
-  and what each body and answer holds has a schema of the name the route
-  gives its type ([the API's schemas come from
-  Rust](#the-apis-schemas-come-from-rust)), but no document says which
-  route takes and answers which, with what parameters and what refusals:
-  #218 writes an OpenAPI 3.1 document from both tables and those schemas,
-  committed and checked for drift.
-- **What the server carries of the backend's is any JSON in its
-  schemas.** An item of a preview's `confirm`, a run's `outcome`, a
-  change's scope and a switch's answer are the backend's JSON, which the
-  server carries unread, so its schemas say any JSON there; the CLI's
-  types they are, `Confirm`, `Outcome`, `Holder` and a `Switchable` or
-  none, are said only in this document and the panel's `transport.ts`.
-  The description of the routes (#218), written in the CLI, which knows
-  both, is where each is to be put in its place, from the server's table's
-  words (`Sent`, `Answer`).
-- **A type both sent and answered has a schema for each way.** A task, a
-  holder, a box of a plan and the agents of a toggle are sent, and are in
-  what a plan is answered with too, and serde reads an `Option` field left
-  out where it writes it every time, so `Task.json` leaves out of
-  `required` what `Planned.json`'s `Task` names; and serde refuses a field
-  it does not know in each, so `Task.json` closes each object where
-  `Planned.json` leaves it open. A file of one root holds each type the
-  way its root goes, but a document whose routes share their definitions,
-  as OpenAPI's components are shared, holds one of a name: #218 either
-  names the two apart or describes both by the way serde reads them, which
-  what serde writes holds to as well, since no field here is left
-  unwritten, but which closes what a plan answers to a field added to a
-  task, so naming them apart is the one that keeps every answer open.
+- **A refusal lists every code core and the CLI give.** The 404 and the
+  422 a backend's refusal is answered with list every code of core's and
+  the CLI's own, not those the route's query can meet, which nothing says
+  but the code each query runs; and a 404 is listed for every read named
+  by its parameters, `/scan` among them, whose roots are refused for how
+  they are spelled and never found missing. Each route naming the codes it
+  can give would hold the document closer, at the price of a list beside
+  each query that no type holds to the errors it returns.
+- **The cookie's scheme names no cookie a tool can send.** The launch
+  link's cookie is `mf_` and the server's port, one for each port so two
+  panels open at once keep their tokens apart, and OpenAPI's security
+  scheme for a cookie names one name: the document says `mf_<port>`, which
+  a client generated from it would send as it is. A script sends the
+  token as Bearer, which the document says too, and the cookie is the
+  panel's page's.
+- **The events' schema is under an extension.** OpenAPI 3.1 has no place
+  for what each item of a stream holds, so the document says it under
+  `x-itemSchema`, 3.2's `itemSchema` as a 3.1 document may carry it, which
+  no tool of 3.1 reads. Moving the document to 3.2, once the tools that
+  read OpenAPI read it, would put it where they look.
 - **Nothing builds the schemas without the TypeScript.** `make
   api/schemas` builds the `schema` feature with `ts`, for the test holding
   every root of the panel's types to a schema, and `make lint` lints the
