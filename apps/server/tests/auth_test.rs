@@ -10,15 +10,19 @@ async fn a_request_without_the_token_is_refused() {
     let (server, runs) = launch();
 
     for (method, path, body) in [
-        (Method::POST, "/api/query", Some(json!({ "echo": "hi" }))),
+        (Method::POST, "/api/v1/judge", Some(json!({ "echo": "hi" }))),
         (
             Method::POST,
-            "/api/commands/preview",
+            "/api/v1/tasks/preview",
             Some(json!({ "name": "a" })),
         ),
-        (Method::POST, "/api/commands", Some(json!({ "name": "a" }))),
-        (Method::POST, "/api/switch", Some(json!({ "to": "beta" }))),
-        (Method::GET, "/api/transcript", None),
+        (Method::POST, "/api/v1/tasks", Some(json!({ "name": "a" }))),
+        (
+            Method::POST,
+            "/api/v1/switch",
+            Some(json!({ "to": "beta" })),
+        ),
+        (Method::GET, "/api/v1/transcript", None),
         (Method::GET, "/api/no-such-endpoint", None),
         (Method::GET, "/api", None),
         (Method::GET, "/api/", None),
@@ -42,7 +46,7 @@ async fn a_wrong_token_is_refused() {
         Auth::Bearer(""),
         Auth::Cookie(&format!("{}={}", server.cookie(), other.token())),
     ] {
-        let reply = post(&server, "/api/query", auth, json!({ "echo": "hi" })).await;
+        let reply = post(&server, "/api/v1/judge", auth, json!({ "echo": "hi" })).await;
         assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
     }
 }
@@ -53,7 +57,7 @@ async fn a_bearer_token_is_accepted() {
 
     let reply = post(
         &server,
-        "/api/query",
+        "/api/v1/judge",
         Auth::Bearer(server.token()),
         json!({ "echo": "hi" }),
     )
@@ -74,7 +78,7 @@ async fn the_cookie_named_for_the_port_is_accepted_among_others() {
 
     let reply = post(
         &server,
-        "/api/query",
+        "/api/v1/judge",
         Auth::Cookie(&cookies),
         json!({ "echo": "hi" }),
     )
@@ -91,7 +95,7 @@ async fn the_token_under_another_ports_cookie_is_refused() {
 
     let reply = post(
         &server,
-        "/api/query",
+        "/api/v1/judge",
         Auth::Cookie(&elsewhere),
         json!({ "echo": "hi" }),
     )
@@ -139,7 +143,7 @@ async fn the_launch_link_trades_its_token_for_a_cookie() {
     let cookie = set_pair(&reply);
     let reply = post(
         &server,
-        "/api/query",
+        "/api/v1/judge",
         Auth::Cookie(&cookie),
         json!({ "echo": "in" }),
     )
@@ -209,7 +213,7 @@ async fn two_servers_on_different_ports_set_differently_named_cookies() {
     for server in [&first, &second] {
         let reply = post(
             server,
-            "/api/query",
+            "/api/v1/judge",
             Auth::Cookie(&both),
             json!({ "echo": "x" }),
         )
@@ -218,7 +222,7 @@ async fn two_servers_on_different_ports_set_differently_named_cookies() {
     }
     let reply = post(
         &second,
-        "/api/query",
+        "/api/v1/judge",
         Auth::Cookie(&pairs[0]),
         json!({ "echo": "x" }),
     )

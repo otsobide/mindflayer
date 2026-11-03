@@ -200,6 +200,47 @@ async fn a_path_no_route_names_is_a_json_404() {
     }
 }
 
+/// The server's own routes take no parameter, and say so as a backend's
+/// route says it of one it does not take: nothing is run, switched or
+/// streamed for a request a script misspelled.
+#[tokio::test]
+async fn the_servers_own_routes_take_no_parameter() {
+    let (server, runs) = launch();
+    let token = Auth::Bearer(server.token());
+
+    for (method, path, sent, body) in [
+        (
+            Method::POST,
+            "/api/v1/tasks/preview",
+            "yes",
+            Some(json!({ "name": "a" })),
+        ),
+        (
+            Method::POST,
+            "/api/v1/tasks",
+            "yes",
+            Some(json!({ "name": "a" })),
+        ),
+        (
+            Method::POST,
+            "/api/v1/switch",
+            "to",
+            Some(json!({ "to": "beta" })),
+        ),
+        (Method::GET, "/api/v1/transcript", "view", None),
+        (Method::GET, "/api/v1/events", "since", None),
+    ] {
+        let asked = format!("{path}?{sent}=1");
+        let reply = send(&server, method.clone(), &asked, token, body).await;
+        assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{asked}");
+        assert_eq!(
+            reply.json(),
+            json!({ "error": format!("{path} takes no parameter, and was sent `{sent}`") })
+        );
+    }
+    assert!(runs.lock().unwrap().is_empty(), "nothing ran nor switched");
+}
+
 /// A backend whose table cannot be served: one path twice.
 struct Crooked;
 

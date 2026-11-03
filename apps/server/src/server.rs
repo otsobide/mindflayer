@@ -235,6 +235,17 @@ fn route<B: Backend>(
         router = router.route(&path, endpoint(api::read::<B>(read)));
     }
     let router = router
+        .route(
+            &format!("{API}/tasks/preview"),
+            endpoint(post(api::preview::<B>)),
+        )
+        .route(&format!("{API}/tasks"), endpoint(post(api::commands::<B>)))
+        .route(&format!("{API}/switch"), endpoint(post(api::switch::<B>)))
+        .route(
+            &format!("{API}/transcript"),
+            endpoint(get(api::transcript::<B>)),
+        )
+        .route(&format!("{API}/events"), endpoint(get(api::events::<B>)))
         .route("/api/query", endpoint(post(api::query::<B>)))
         .route("/api/commands/preview", endpoint(post(api::preview::<B>)))
         .route("/api/commands", endpoint(post(api::commands::<B>)))

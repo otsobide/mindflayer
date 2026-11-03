@@ -462,7 +462,7 @@ pub async fn post(server: &Listening, path: &str, auth: Auth<'_>, body: Value) -
 /// past the watcher's debounce, for a machine under load, and still bounded.
 pub const PATIENCE: Duration = Duration::from_secs(10);
 
-/// `GET /api/events` answered, read an event at a time as a browser's
+/// `GET /api/v1/events` answered, read an event at a time as a browser's
 /// `EventSource` reads it.
 pub struct Stream {
     pub status: StatusCode,
@@ -529,7 +529,7 @@ impl Stream {
 pub async fn subscribe(server: &Listening, auth: Auth<'_>) -> Stream {
     let response = server
         .router()
-        .oneshot(request(server, Method::GET, "/api/events", auth, None))
+        .oneshot(request(server, Method::GET, "/api/v1/events", auth, None))
         .await
         .unwrap();
     Stream {

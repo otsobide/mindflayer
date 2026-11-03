@@ -114,8 +114,12 @@ async fn ask<B: Backend>(api: &Api<B>, query: B::Query) -> Response {
 /// the disk.
 pub(crate) async fn preview<B: Backend>(
     State(api): State<Arc<Api<B>>>,
+    uri: Uri,
     body: Result<Json<B::Task>, JsonRejection>,
 ) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
     let task = match body {
         Ok(Json(task)) => task,
         Err(rejection) => return refused(rejection),
@@ -136,8 +140,12 @@ pub(crate) async fn preview<B: Backend>(
 /// backend refused it, why nothing of it ran.
 pub(crate) async fn commands<B: Backend>(
     State(api): State<Arc<Api<B>>>,
+    uri: Uri,
     body: Result<Json<B::Task>, JsonRejection>,
 ) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
     let task = match body {
         Ok(Json(task)) => task,
         Err(rejection) => return refused(rejection),
@@ -158,8 +166,12 @@ pub(crate) async fn commands<B: Backend>(
 /// is no command, and every line the backend runs names what it acts on.
 pub(crate) async fn switch<B: Backend>(
     State(api): State<Arc<Api<B>>>,
+    uri: Uri,
     body: Result<Json<B::Switch>, JsonRejection>,
 ) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
     let to = match body {
         Ok(Json(to)) => to,
         Err(rejection) => return refused(rejection),
@@ -172,7 +184,10 @@ pub(crate) async fn switch<B: Backend>(
 }
 
 /// `GET /api/transcript`: every task the session ran, oldest first.
-pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>) -> Response {
+pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>, uri: Uri) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
     Json(api.transcript.entries()).into_response()
 }
 
@@ -190,7 +205,10 @@ pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>) -> Re
 /// connection for one that has died. The stream ends when the bus is
 /// closed, which a server stopping does first: until then it is a request
 /// under way, which a graceful stop would wait for without end.
-pub(crate) async fn events<B: Backend>(State(api): State<Arc<Api<B>>>) -> Response {
+pub(crate) async fn events<B: Backend>(State(api): State<Arc<Api<B>>>, uri: Uri) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
     let stream =
         futures_util::stream::unfold(api.events.subscribe(), |mut subscription| async move {
             let event = subscription.next().await?;
@@ -203,6 +221,16 @@ pub(crate) async fn events<B: Backend>(State(api): State<Arc<Api<B>>>) -> Respon
     Sse::new(stream)
         .keep_alive(KeepAlive::default())
         .into_response()
+}
+
+/// The refusal of a parameter sent to a route of the server's own, which
+/// takes none, as a backend's route refuses one it does not take: so a
+/// script's misspelling is said rather than passed over, under every route
+/// alike. None when none was sent.
+fn unasked(uri: &Uri) -> Option<Response> {
+    route::arguments(&[], uri.query())
+        .err()
+        .map(|unfit| error(StatusCode::BAD_REQUEST, &unfit.say(uri.path(), &[])))
 }
 
 /// Whether a path is the API's: `/api` and everything under it, where every

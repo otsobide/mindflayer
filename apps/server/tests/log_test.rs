@@ -9,17 +9,17 @@ async fn every_request_is_logged_once_answered() {
     let (server, lines) = launch_logged();
     let token = Auth::Bearer(server.token());
 
-    post(&server, "/api/query", token, json!({ "echo": "x" })).await;
-    post(&server, "/api/commands", token, json!({ "name": "a" })).await;
-    get(&server, "/api/transcript?view=all", Auth::Nothing).await;
+    post(&server, "/api/v1/judge", token, json!({ "echo": "x" })).await;
+    post(&server, "/api/v1/tasks", token, json!({ "name": "a" })).await;
+    get(&server, "/api/v1/transcript?view=all", Auth::Nothing).await;
     get(&server, "/api/nowhere", token).await;
 
     assert_eq!(
         *lines.lock().unwrap(),
         [
-            "POST /api/query 200",
-            "POST /api/commands 200",
-            "GET /api/transcript?view=all 401",
+            "POST /api/v1/judge 200",
+            "POST /api/v1/tasks 200",
+            "GET /api/v1/transcript?view=all 401",
             "GET /api/nowhere 404",
         ]
     );
@@ -40,11 +40,11 @@ async fn the_token_never_appears_in_a_logged_line() {
     )
     .await;
     get(&server, &format!("/?token={secret}x"), Auth::Nothing).await;
-    get(&server, "/api/transcript", Auth::Cookie(&cookie)).await;
-    get(&server, "/api/transcript", Auth::Bearer(&secret)).await;
+    get(&server, "/api/v1/transcript", Auth::Cookie(&cookie)).await;
+    get(&server, "/api/v1/transcript", Auth::Bearer(&secret)).await;
     get(
         &server,
-        &format!("/api/transcript?token={secret}"),
+        &format!("/api/v1/transcript?token={secret}"),
         Auth::Nothing,
     )
     .await;
@@ -52,7 +52,7 @@ async fn the_token_never_appears_in_a_logged_line() {
     let shouted = secret.to_ascii_uppercase();
     get(
         &server,
-        &format!("/api/transcript?t={shouted}"),
+        &format!("/api/v1/transcript?t={shouted}"),
         Auth::Nothing,
     )
     .await;
@@ -75,7 +75,7 @@ async fn the_token_never_appears_in_a_logged_line() {
 async fn a_server_given_nowhere_to_log_answers_all_the_same() {
     let (server, _) = launch();
 
-    let reply = get(&server, "/api/transcript", Auth::Bearer(server.token())).await;
+    let reply = get(&server, "/api/v1/transcript", Auth::Bearer(server.token())).await;
 
     assert_eq!(reply.status, StatusCode::OK);
 }

@@ -78,7 +78,7 @@ async fn a_preview_shows_a_tasks_lines_and_runs_nothing() {
 
     let reply = post(
         &server,
-        "/api/commands/preview",
+        "/api/v1/tasks/preview",
         Auth::Bearer(server.token()),
         json!({ "name": "link beta" }),
     )
@@ -100,7 +100,7 @@ async fn a_preview_carries_what_the_backend_says_to_confirm_as_it_says_it() {
 
     let reply = post(
         &server,
-        "/api/commands/preview",
+        "/api/v1/tasks/preview",
         Auth::Bearer(server.token()),
         json!({ "name": "unlink beta", "confirm": ["beta", "its copies"] }),
     )
@@ -123,7 +123,7 @@ async fn a_preview_the_backend_refuses_says_why_with_its_code() {
 
     let reply = post(
         &server,
-        "/api/commands/preview",
+        "/api/v1/tasks/preview",
         Auth::Bearer(server.token()),
         json!({ "name": "edit", "refuse": true }),
     )

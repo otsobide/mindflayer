@@ -156,7 +156,7 @@ async fn a_build_without_the_panel_says_how_to_build_it() {
     }
 
     // The API does not need the panel.
-    let reply = get(&server, "/api/transcript", Auth::Bearer(server.token())).await;
+    let reply = get(&server, "/api/v1/transcript", Auth::Bearer(server.token())).await;
     assert_eq!(reply.status, StatusCode::OK);
 }
 

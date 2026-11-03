@@ -21,13 +21,18 @@ fn unset(name: &'static str) -> Change {
 /// launch link set, and everything else a browser sends with it.
 fn from_the_panel(server: &Listening, changes: &[Change]) -> Request<Body> {
     let cookie = format!("{}={}", server.cookie(), server.token());
-    let mut request = request(
+    let request = request(
         server,
         Method::POST,
-        "/api/commands",
+        "/api/v1/tasks",
         Auth::Cookie(&cookie),
         Some(json!({ "name": "change" })),
     );
+    changed(request, changes)
+}
+
+/// `request` with `changes` made to its headers.
+fn changed(mut request: Request<Body>, changes: &[Change]) -> Request<Body> {
     let headers = request.headers_mut();
     for (name, value) in changes {
         match value {
@@ -259,7 +264,7 @@ async fn a_read_by_cookie_needs_no_fetch_metadata() {
     let mut request = request(
         &server,
         Method::GET,
-        "/api/transcript",
+        "/api/v1/transcript",
         Auth::Cookie(&cookie),
         None,
     );
@@ -290,11 +295,11 @@ async fn every_answer_carries_the_content_security_policy_and_nosniff() {
         ),
         (
             "the API",
-            get(&server, "/api/transcript", Auth::Bearer(token)).await,
+            get(&server, "/api/v1/transcript", Auth::Bearer(token)).await,
         ),
         (
             "the gate's refusal",
-            get(&server, "/api/transcript", Auth::Nothing).await,
+            get(&server, "/api/v1/transcript", Auth::Nothing).await,
         ),
         ("the guard's refusal", deliver(&server, rebound).await),
     ];
@@ -326,7 +331,7 @@ async fn no_answer_grants_another_origin_anything() {
         let mut preflight = request(
             &server,
             Method::OPTIONS,
-            "/api/commands",
+            "/api/v1/tasks",
             Auth::Nothing,
             None,
         );
@@ -414,4 +419,146 @@ async fn without_being_told_of_it_the_server_refuses_the_dev_servers_pages() {
         )
     );
     assert!(runs.lock().unwrap().is_empty());
+}
+
+/// Every route under the version as a script or the panel's page asks for
+/// it, with what it is sent: one for each of the fake's reads, and each of
+/// the server's own.
+fn versioned() -> [(Method, &'static str, Option<Value>); 8] {
+    [
+        (Method::GET, "/api/v1/echo?echo=hi", None),
+        (Method::GET, "/api/v1/words?word=a", None),
+        (Method::POST, "/api/v1/judge", Some(json!({ "echo": "hi" }))),
+        (
+            Method::POST,
+            "/api/v1/tasks/preview",
+            Some(json!({ "name": "a" })),
+        ),
+        (Method::POST, "/api/v1/tasks", Some(json!({ "name": "a" }))),
+        (
+            Method::POST,
+            "/api/v1/switch",
+            Some(json!({ "to": "beta" })),
+        ),
+        (Method::GET, "/api/v1/transcript", None),
+        (Method::GET, "/api/v1/events", None),
+    ]
+}
+
+/// The guards are the server's and know no route, so every one under the
+/// version, the backend's reads and the server's own alike, holds each of
+/// them, by Bearer and by cookie: a request with no token, or another
+/// server's, is a 401; one naming another host or sent from another page a
+/// 403, whichever way it holds the token; and a change by cookie that the
+/// panel's page would not send is refused as one to `/tasks` is. Every
+/// refusal, and every answer, carries the policy and `nosniff`; and either
+/// credential, sent as a script or the page sends it, is answered.
+#[tokio::test]
+async fn every_versioned_route_holds_every_guard_by_bearer_and_cookie_alike() {
+    let (server, _) = launch();
+    let port = server.address().port();
+    let cookie = format!("{}={}", server.cookie(), server.token());
+    for route in fake_routes() {
+        let served = format!("{API}{}", route.path);
+        assert!(
+            versioned()
+                .iter()
+                .any(|(_, path, _)| path.split('?').next().is_some_and(|path| path == served)),
+            "{served} is never asked for here"
+        );
+    }
+    let carries_the_policy = |reply_headers: &HeaderMap, case: &str| {
+        assert_eq!(
+            reply_headers
+                .get("content-security-policy")
+                .map(|value| value.to_str().unwrap()),
+            Some("default-src 'self'; frame-ancestors 'none'"),
+            "{case}"
+        );
+        assert_eq!(
+            reply_headers
+                .get("x-content-type-options")
+                .map(|value| value.to_str().unwrap()),
+            Some("nosniff"),
+            "{case}"
+        );
+    };
+
+    for (method, path, body) in versioned() {
+        let asked = |auth| request(&server, method.clone(), path, auth, body.clone());
+        let mut refused = vec![
+            ("no token", asked(Auth::Nothing), StatusCode::UNAUTHORIZED),
+            (
+                "another server's token",
+                asked(Auth::Bearer("0123456789abcdef")),
+                StatusCode::UNAUTHORIZED,
+            ),
+        ];
+        for (credential, auth) in [
+            ("by Bearer", Auth::Bearer(server.token())),
+            ("by cookie", Auth::Cookie(&cookie)),
+        ] {
+            let rebound = set("host", format!("attacker.example:{port}"));
+            let elsewhere = set(
+                "origin",
+                format!("http://127.0.0.1:{}", port.wrapping_add(1)),
+            );
+            refused.extend([
+                (
+                    credential,
+                    changed(asked(auth), &[rebound]),
+                    StatusCode::FORBIDDEN,
+                ),
+                (
+                    credential,
+                    changed(asked(auth), &[elsewhere]),
+                    StatusCode::FORBIDDEN,
+                ),
+            ]);
+        }
+        if method != Method::GET {
+            let by_cookie = || asked(Auth::Cookie(&cookie));
+            refused.extend([
+                (
+                    "by cookie, from another port as Fetch Metadata tells it",
+                    changed(by_cookie(), &[set("sec-fetch-site", "same-site")]),
+                    StatusCode::FORBIDDEN,
+                ),
+                (
+                    "by cookie, without X-Mindflayer",
+                    changed(by_cookie(), &[unset("x-mindflayer")]),
+                    StatusCode::FORBIDDEN,
+                ),
+                (
+                    "by cookie, as text",
+                    changed(by_cookie(), &[set("content-type", "text/plain")]),
+                    StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                ),
+            ]);
+        }
+        for (case, request, status) in refused {
+            let case = format!("{method} {path}, {case}");
+            let reply = deliver(&server, request).await;
+            assert_eq!(reply.status, status, "{case}: {}", reply.text());
+            assert!(reply.json()["error"].is_string(), "{case}");
+            carries_the_policy(&reply.headers, &case);
+        }
+
+        for (credential, auth) in [
+            ("by Bearer", Auth::Bearer(server.token())),
+            ("by cookie", Auth::Cookie(&cookie)),
+        ] {
+            let case = format!("{method} {path}, {credential}");
+            // A stream that stays open, read only as far as its answer.
+            let (status, headers) = if path == "/api/v1/events" {
+                let stream = subscribe(&server, auth).await;
+                (stream.status, stream.headers)
+            } else {
+                let reply = send(&server, method.clone(), path, auth, body.clone()).await;
+                (reply.status, reply.headers)
+            };
+            assert_eq!(status, StatusCode::OK, "{case}");
+            carries_the_policy(&headers, &case);
+        }
+    }
 }
