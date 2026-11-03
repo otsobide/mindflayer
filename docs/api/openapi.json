@@ -6223,6 +6223,139 @@
         "summary": "The workspace's own artifacts, as the snapshot lists them"
       }
     },
+    "/openapi.json": {
+      "get": {
+        "operationId": "get_openapi_json",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The API described, as an OpenAPI 3.1 document.",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "This document."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "unknown_parameter"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "What the request sent could not be read, a parameter or a body, as the code says."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "token_required"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Without the launch token, or with another server's.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "How to bring the token: as a Bearer token.",
+                "schema": {
+                  "const": "Bearer",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "unknown_host",
+                            "foreign_origin"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Turned away by a guard: a Host the server does not answer to, a page of another origin, or a change by cookie the panel's own page would not send."
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refused"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "method_not_allowed"
+                          ],
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Asked by another method than the one its path takes, which `Allow` names: the answer to every other method here, never to this one.",
+            "headers": {
+              "Allow": {
+                "description": "The methods the path takes.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "This description of the API, as an OpenAPI 3.1 document"
+      }
+    },
     "/plan": {
       "post": {
         "operationId": "post_plan",

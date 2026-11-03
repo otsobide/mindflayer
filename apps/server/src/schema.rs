@@ -285,6 +285,13 @@ pub fn answered(answer: Answer, describe: &mut impl Describe) -> Value {
                 },
             })
         }
+        Answer::Document => json_answer(
+            "This document.",
+            json!({
+                "description": "The API described, as an OpenAPI 3.1 document.",
+                "type": "object",
+            }),
+        ),
     }
 }
 

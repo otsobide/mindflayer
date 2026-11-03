@@ -257,12 +257,13 @@ fn the_servers_own_routes_are_pinned_by_what_a_description_says() {
             ),
             (Method::Get, "/transcript", None, Answer::Runs),
             (Method::Get, "/events", None, Answer::Events),
+            (Method::Get, "/openapi.json", None, Answer::Document),
         ]
     );
 }
 
-/// Each a path a backend's route could have been, as the router reads one,
-/// and none a backend's route may take.
+/// None a backend's route may take, and each refused as the server's own,
+/// whether or not it is a path a backend's route could have been.
 #[test]
 fn no_route_of_a_backends_may_take_a_path_the_server_answers_itself() {
     for own in Own::ALL {
@@ -359,6 +360,7 @@ fn each_of_the_servers_own_routes_may_be_refused_for_what_it_reaches() {
         (Own::Switch, ordered(&run)),
         (Own::Transcript, ordered(&EVERY)),
         (Own::Events, ordered(&EVERY)),
+        (Own::Document, ordered(&EVERY)),
     ] {
         assert_eq!(codes(own.conditions()), listed, "{own:?}");
     }

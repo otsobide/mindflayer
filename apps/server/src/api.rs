@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use axum::extract::rejection::{BytesRejection, FailedToBufferBody, JsonRejection};
 use axum::extract::State;
+use axum::http::header::CONTENT_TYPE;
 use axum::http::{Method, Uri};
 use axum::response::sse::{self, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
@@ -67,6 +68,7 @@ pub(crate) fn own<B: Backend>(own: Own) -> MethodRouter<Arc<Api<B>>> {
         Own::Switch => on(method, switch::<B>),
         Own::Transcript => on(method, transcript::<B>),
         Own::Events => on(method, events::<B>),
+        Own::Document => on(method, document::<B>),
     }
 }
 
@@ -231,6 +233,19 @@ pub(crate) async fn events<B: Backend>(State(api): State<Arc<Api<B>>>, uri: Uri)
     Sse::new(stream)
         .keep_alive(KeepAlive::default())
         .into_response()
+}
+
+/// `GET /api/v1/openapi.json`: the API described, as the backend hands the
+/// document over ([`Backend::document`]), its bytes as they are.
+///
+/// Behind the token as every route is, though it says nothing of the
+/// workspace: the server answers nobody without it, so what it serves is
+/// one rule rather than a list of what may be read without.
+pub(crate) async fn document<B: Backend>(uri: Uri) -> Response {
+    if let Some(refusal) = unasked(&uri) {
+        return refusal;
+    }
+    ([(CONTENT_TYPE, "application/json")], B::document()).into_response()
 }
 
 /// The refusal of a parameter sent to a route of the server's own, which

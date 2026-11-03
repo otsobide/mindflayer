@@ -108,6 +108,20 @@ impl Panel {
     /// One request over loopback: Host naming the server, what `auth` says,
     /// and a JSON body; and the status and the JSON that came back.
     fn send(&self, method: &str, path: &str, auth: Auth<'_>, body: Option<Value>) -> (u16, Value) {
+        let (status, _, body) = self.exchange(method, path, auth, body);
+        let body = serde_json::from_str(&body).unwrap_or_else(|error| panic!("{error}: {body}"));
+        (status, body)
+    }
+
+    /// [`send`](Self::send), and the status, the head and the body as
+    /// they came back, read as text.
+    fn exchange(
+        &self,
+        method: &str,
+        path: &str,
+        auth: Auth<'_>,
+        body: Option<Value>,
+    ) -> (u16, String, String) {
         let body = body.map(|body| body.to_string()).unwrap_or_default();
         let mut request = format!(
             "{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\
@@ -143,8 +157,7 @@ impl Panel {
 
         let (head, body) = response.split_once("\r\n\r\n").unwrap();
         let status = head.split(' ').nth(1).unwrap().parse().unwrap();
-        let body = serde_json::from_str(body).unwrap_or_else(|error| panic!("{error}: {body}"));
-        (status, body)
+        (status, head.to_owned(), body.to_owned())
     }
 
     fn post(&self, path: &str, body: Value) -> (u16, Value) {
@@ -396,6 +409,38 @@ fn a_save_writes_the_text_and_leaves_nothing_in_the_scratch_folder() {
     assert_eq!(fs::read_to_string(manifest).unwrap(), text);
     let scratch = FlayerWorkspace::open(dir.path()).unwrap().scratch_dir();
     assert_eq!(fs::read_dir(scratch).unwrap().count(), 0);
+}
+
+/// The description of the API the panel serves is the document committed,
+/// byte for byte, as JSON, to whoever holds the token; and nothing to
+/// whoever does not.
+#[test]
+fn the_api_s_document_is_the_one_committed_and_only_with_the_token() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let panel = serve("flayer", dir.path(), home.path());
+    let committed = include_str!("../../../docs/api/openapi.json");
+
+    let (status, head, document) =
+        panel.exchange("GET", "/api/v1/openapi.json", Auth::Bearer, None);
+    assert_eq!(status, 200, "{document}");
+    assert!(
+        head.to_ascii_lowercase()
+            .contains("\r\ncontent-type: application/json\r\n"),
+        "{head}"
+    );
+    assert_eq!(document, committed);
+
+    let (status, refusal) = panel.send("GET", "/api/v1/openapi.json", Auth::Nothing, None);
+    assert_eq!(status, 401, "{refusal}");
+    assert_eq!(refusal["code"], "token_required");
+    let (status, _) = panel.send(
+        "GET",
+        "/api/v1/openapi.json",
+        Auth::BearerOf("not-the-token"),
+        None,
+    );
+    assert_eq!(status, 401);
 }
 
 #[test]

@@ -61,6 +61,18 @@ pub trait Backend: Send + Sync + 'static {
     /// description needs no backend launched.
     fn routes() -> Vec<Route<Self::Query>>;
 
+    /// The API it serves described, its reads and the server's own routes,
+    /// as the OpenAPI 3.1 document `GET /api/v1/openapi.json` answers with,
+    /// as it is.
+    ///
+    /// The front end's to write, since only it knows every type a route
+    /// names, with the server's part of it (`schema::paths`), and handed
+    /// over as text rather than written at each launch: a description is
+    /// as fixed as the types it describes, so a front end writes it once,
+    /// as it builds, and embeds it, and a server built without schemars
+    /// still serves it. Without `self`, as [`routes`](Backend::routes) is.
+    fn document() -> &'static str;
+
     /// The command lines a task is, each as somebody would type it, without
     /// running any of them, and what of them the panel has somebody confirm
     /// first ([`Preview`]); or why none of them would run. The panel shows

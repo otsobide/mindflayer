@@ -455,6 +455,7 @@ fn the_servers_own_answers_say_what_the_backend_fills_them_with() {
         ]})
     );
     assert_eq!(events["text/event-stream"]["schema"]["type"], "string");
+    assert_eq!(answer("/openapi.json")["type"], "object");
     for (path, body) in [
         ("/tasks/preview", "Task"),
         ("/tasks", "Task"),

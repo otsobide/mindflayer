@@ -800,6 +800,15 @@ impl Backend for PanelBackend {
         routes::table()
     }
 
+    /// The document `make api/openapi` writes from the very tables served
+    /// and the schemas, under the `schema` feature (`openapi::document`),
+    /// committed, and embedded as those bytes: so a plain build serves it
+    /// without compiling schemars, and what it serves is what is
+    /// committed, which `make api/openapi/check` holds to what Rust writes.
+    fn document() -> &'static str {
+        include_str!("../../../docs/api/openapi.json")
+    }
+
     /// Each line as a shell would read it, and what the panel has somebody
     /// confirm first, both of the one plan: so what the panel asks about is
     /// the lines it shows, a `flayer init` in front of them counted.

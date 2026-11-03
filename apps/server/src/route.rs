@@ -58,23 +58,26 @@ pub enum Own {
     Transcript,
     /// `GET /events`.
     Events,
+    /// `GET /openapi.json`.
+    Document,
 }
 
 impl Own {
     /// Every one, in the order a description of the API lists them.
-    pub const ALL: [Own; 5] = [
+    pub const ALL: [Own; 6] = [
         Own::Preview,
         Own::Run,
         Own::Switch,
         Own::Transcript,
         Own::Events,
+        Own::Document,
     ];
 
     /// How it is asked for: a POST takes its body, and a GET nothing.
     pub fn method(self) -> Method {
         match self {
             Own::Preview | Own::Run | Own::Switch => Method::Post,
-            Own::Transcript | Own::Events => Method::Get,
+            Own::Transcript | Own::Events | Own::Document => Method::Get,
         }
     }
 
@@ -86,6 +89,7 @@ impl Own {
             Own::Switch => "/switch",
             Own::Transcript => "/transcript",
             Own::Events => "/events",
+            Own::Document => "/openapi.json",
         }
     }
 
@@ -109,6 +113,7 @@ impl Own {
                 "What happens as it happens, a change on disk or a run starting and \
                  finishing, as server-sent events"
             }
+            Own::Document => "This description of the API, as an OpenAPI 3.1 document",
         }
     }
 
@@ -117,7 +122,7 @@ impl Own {
         match self {
             Own::Preview | Own::Run => Some(Sent::Task),
             Own::Switch => Some(Sent::Switch),
-            Own::Transcript | Own::Events => None,
+            Own::Transcript | Own::Events | Own::Document => None,
         }
     }
 
@@ -129,6 +134,7 @@ impl Own {
             Own::Switch => Answer::Switched,
             Own::Transcript => Answer::Runs,
             Own::Events => Answer::Events,
+            Own::Document => Answer::Document,
         }
     }
 
@@ -147,7 +153,7 @@ impl Own {
         match self {
             Own::Preview => Reaches::Backend,
             Own::Run | Own::Switch => Reaches::Writer,
-            Own::Transcript | Own::Events => Reaches::Nothing,
+            Own::Transcript | Own::Events | Own::Document => Reaches::Nothing,
         }
     }
 }
@@ -183,6 +189,9 @@ pub enum Answer {
     /// Server-sent events (`text/event-stream`) rather than JSON: each one
     /// [`Event`](crate::Event), as a `data:` line of JSON.
     Events,
+    /// The API described, as an OpenAPI 3.1 document, the bytes the
+    /// backend hands over ([`Backend::document`](crate::Backend::document)).
+    Document,
 }
 
 /// How a route is asked for.
@@ -554,14 +563,17 @@ pub(crate) fn check<Q>(routes: &[Route<Q>]) -> io::Result<()> {
                     .bytes()
                     .all(|byte| matches!(byte, b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_'))
         };
-        if !words.is_some_and(|mut words| words.all(plain)) {
-            return invalid(format!(
-                "the route `{path}` is no path of lowercase words between slashes"
-            ));
-        }
+        // First, since one of the server's own is no path a backend's
+        // could have, `/openapi.json` among them, and that it is the
+        // server's says more.
         if Own::ALL.iter().any(|own| own.path() == path) {
             return invalid(format!(
                 "the route `{path}` is one the server answers itself"
+            ));
+        }
+        if !words.is_some_and(|mut words| words.all(plain)) {
+            return invalid(format!(
+                "the route `{path}` is no path of lowercase words between slashes"
             ));
         }
         if routes[..at].iter().any(|before| before.path == path) {
