@@ -1158,7 +1158,8 @@ These are easy to break from a single file without noticing.
   the panel's views render holds to the schema of what it answers, closed,
   so a field serde writes that a schema does not name fails. An answer's
   schema stays open to a field it does not name, since adding one moves no
-  version; a diff of `docs/api/schemas` that drops or renames a property,
+  version, a type sent closed only where it is sent
+  (`schema::given_settings`); a diff of `docs/api/schemas` that drops or renames a property,
   or changes what one holds, moves the API to `/api/v2`.
 - **The panel needs nothing the CSP refuses.** No URL naming another host,
   no inline `<script>` or `<style>`, no `data:` URL: fonts are Fontsource

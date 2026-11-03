@@ -5595,10 +5595,16 @@ answers, a preview, a run, each event and a refusal (`Preview`, `Ran`,
 - **Open where they are answers.** An answer's objects allow a field they
   do not name, so a field added, which moves no version, does not make a
   client that checks answers refuse it; what the API is sent is closed
-  where serde refuses a field it does not know (`deny_unknown_fields`). A
-  change to what a root holds shows as a diff of its file, and one that
-  drops or renames a property, or changes what it holds, is one that
-  moves the API to `/api/v2`, as the names it describes are.
+  where serde refuses a field it does not know (`deny_unknown_fields`).
+  schemars closes such a type whichever way it describes it, and a type
+  sent can be answered too (a task, a holder and a box are in what a plan
+  answers), so a root given is described with a transform that opens what
+  schemars closed (`schema::given_settings`, which `Schemas` and
+  `Together` both use), and a test holds no root given of any crate to
+  close an object. A change to what a root holds shows as a diff of its
+  file, and one that drops or renames a property, or changes what it
+  holds, is one that moves the API to `/api/v2`, as the names it
+  describes are.
 - **Held to real answers.** A test holds each schema written by hand to
   what serde writes of every variant, and to refusing what serde never
   writes: a word that is none, an issue missing what its code carries, an
@@ -5612,7 +5618,8 @@ answers, a preview, a run, each event and a refusal (`Preview`, `Ran`,
   backend's, a refusal to `Refused`; a fixture the test does not know
   fails it. Against the schemas closed, each object refusing a field it
   does not name, so a schema that names less than serde writes fails as
-  surely as one that says other. Validated with boon, a 2020-12 validator
+  surely as one that says other, and as written too, since an object
+  opened could match two members of a `oneOf` that closed match one. Validated with boon, a 2020-12 validator
   that passes the suite of tests JSON Schema publishes and builds nothing
   that reaches the network, its one loader, which reads a file, taken away
   in the tests; jsonschema was the other, whose default features build an
@@ -9713,12 +9720,15 @@ Rust](#the-apis-schemas-come-from-rust)).
   holder, a box of a plan and the agents of a toggle are sent, and are in
   what a plan is answered with too, and serde reads an `Option` field left
   out where it writes it every time, so `Task.json` leaves out of
-  `required` what `Planned.json`'s `Task` names. A file of one root holds
-  each type the way its root goes, but a document whose routes share
-  their definitions, as OpenAPI's components are shared, holds one of a
-  name: #218 either names the two apart or describes both by the way serde
-  reads them, which what serde writes holds to as well, since no field
-  here is left unwritten.
+  `required` what `Planned.json`'s `Task` names; and serde refuses a field
+  it does not know in each, so `Task.json` closes each object where
+  `Planned.json` leaves it open. A file of one root holds each type the
+  way its root goes, but a document whose routes share their definitions,
+  as OpenAPI's components are shared, holds one of a name: #218 either
+  names the two apart or describes both by the way serde reads them, which
+  what serde writes holds to as well, since no field here is left
+  unwritten, but which closes what a plan answers to a field added to a
+  task, so naming them apart is the one that keeps every answer open.
 - **Nothing builds the schemas without the TypeScript.** `make
   api/schemas` builds the `schema` feature with `ts`, for the test holding
   every root of the panel's types to a schema, and `make lint` lints the

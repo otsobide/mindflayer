@@ -24,8 +24,10 @@
 //!
 //! Each root is described the way the API uses it ([`Visitor`]): what it
 //! is answered with as serde writes it, every field there and an `Option`
-//! written as `null`; what it is sent as serde reads it, an `Option` that
-//! may be left out left out of `required`. [`roots`] names each, and
+//! written as `null`, open to a field it does not name ([`given_settings`]);
+//! what it is sent as serde reads it, an `Option` that may be left out left
+//! out of `required`, closed where serde refuses a field it does not know
+//! ([`taken_settings`]). [`roots`] names each, and
 //! [`Schemas`] writes each into a file of its own, every type it names in
 //! its `$defs`, in JSON Schema 2020-12, which OpenAPI 3.1 takes as it is.
 
@@ -36,6 +38,7 @@ use std::io;
 use std::path::Path;
 
 use schemars::generate::SchemaSettings;
+use schemars::transform::RecursiveTransform;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde_json::{json, Value};
 
@@ -86,6 +89,38 @@ pub fn roots(visitor: &mut impl Visitor) {
     visitor.given::<Switchable>();
     visitor.given::<Folders>();
     visitor.given::<CoreCode>();
+}
+
+/// How a root the API answers with is described: as serde writes it, and
+/// open to a field its objects do not name.
+///
+/// schemars closes an object whose type refuses a field it does not know
+/// (`deny_unknown_fields`) whichever way it describes it, and a type the
+/// API is sent can be answered too: a task, a holder and a box are in what
+/// a plan is answered with. Closed there, a field added to one, which moves
+/// no version, would make a client that checks answers refuse it.
+pub fn given_settings() -> SchemaSettings {
+    SchemaSettings::draft2020_12()
+        .for_serialize()
+        .with_transform(RecursiveTransform(open))
+}
+
+/// How a root the API is sent is described: as serde reads it, closed
+/// where serde refuses a field it does not know.
+pub fn taken_settings() -> SchemaSettings {
+    SchemaSettings::draft2020_12().for_deserialize()
+}
+
+/// `schema` no longer refusing a field it does not name, as schemars
+/// writes that refusal for `deny_unknown_fields`: `additionalProperties`,
+/// or `unevaluatedProperties` beside a flattened field, set to `false`. A
+/// map's `additionalProperties`, the schema of its values, is kept.
+fn open(schema: &mut Schema) {
+    for keyword in ["additionalProperties", "unevaluatedProperties"] {
+        if schema.get(keyword) == Some(&Value::Bool(false)) {
+            schema.remove(keyword);
+        }
+    }
 }
 
 /// Every root a visit names, each with its schema whole, as its file holds
@@ -148,11 +183,11 @@ impl Schemas {
 /// type it names in `$defs`.
 impl Visitor for Schemas {
     fn given<T: JsonSchema + ?Sized>(&mut self) {
-        self.add::<T>(SchemaSettings::draft2020_12().for_serialize());
+        self.add::<T>(given_settings());
     }
 
     fn taken<T: JsonSchema + ?Sized>(&mut self) {
-        self.add::<T>(SchemaSettings::draft2020_12().for_deserialize());
+        self.add::<T>(taken_settings());
     }
 }
 
@@ -173,12 +208,8 @@ pub struct Together {
 impl Default for Together {
     fn default() -> Self {
         Together {
-            given: SchemaSettings::draft2020_12()
-                .for_serialize()
-                .into_generator(),
-            taken: SchemaSettings::draft2020_12()
-                .for_deserialize()
-                .into_generator(),
+            given: given_settings().into_generator(),
+            taken: taken_settings().into_generator(),
         }
     }
 }

@@ -98,10 +98,42 @@ fn a_root_is_found_by_the_name_its_type_goes_by() {
     assert!(schemas.get("Nothing").is_none());
 }
 
+/// A type the API is sent and answers with both, as a task is, which
+/// serde refuses a field it does not know in, with a map in it.
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct Both {
+    name: String,
+    labels: BTreeMap<String, String>,
+}
+
+/// An answer holds a field it does not name, since one added moves no
+/// version, where what is sent refuses it as serde does; a map's values are
+/// still held to what they are, opened or not.
+#[test]
+fn an_answer_is_open_to_a_field_it_does_not_name_and_what_is_sent_is_closed() {
+    let mut schemas = Schemas::default();
+    schemas.given::<Both>();
+    let given = schemas.get("Both").unwrap().clone();
+    let mut schemas = Schemas::default();
+    schemas.taken::<Both>();
+    let taken = schemas.get("Both").unwrap().clone();
+
+    let row = json!({"name": "kit", "labels": {"team": "web"}});
+    holds(&given, &row).unwrap();
+    holds(&taken, &row).unwrap();
+    let added = json!({"name": "kit", "labels": {}, "added": 1});
+    holds(&given, &added).unwrap();
+    assert!(holds(&taken, &added).is_err());
+    let label = json!({"name": "kit", "labels": {"team": 1}});
+    assert!(holds(&given, &label).is_err());
+    assert!(holds(&taken, &label).is_err());
+}
+
 /// `T`'s schema as its file would hold it, the way it is given.
 fn given<T: JsonSchema>() -> Schema {
-    SchemaSettings::draft2020_12()
-        .for_serialize()
+    given_settings()
         .into_generator()
         .into_root_schema_for::<T>()
 }

@@ -59,7 +59,6 @@
               "const": "named"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "agents"
@@ -80,7 +79,6 @@
               "const": "removed"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "agents"
@@ -106,7 +104,6 @@
           "type": "boolean"
         }
       },
-      "additionalProperties": false,
       "required": [
         "project",
         "reference",
@@ -159,7 +156,6 @@
               "const": "workspace"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -176,7 +172,6 @@
               "const": "project"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "entry"
@@ -194,7 +189,6 @@
               "const": "elsewhere"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "entry"
@@ -237,7 +231,6 @@
           "type": "string"
         }
       },
-      "additionalProperties": false,
       "required": [
         "path",
         "change"
@@ -297,7 +290,6 @@
               "const": "init_workspace"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -311,7 +303,6 @@
               "const": "init_project"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -328,7 +319,6 @@
               "const": "link"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "path"
@@ -343,7 +333,6 @@
               "const": "link_here"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -360,7 +349,6 @@
               "const": "init_and_link"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "path"
@@ -378,7 +366,6 @@
               "const": "unlink"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "entry"
@@ -399,7 +386,6 @@
               "const": "relink"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "old",
@@ -418,7 +404,6 @@
               "const": "load"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "path"
@@ -436,7 +421,6 @@
               "const": "load_here"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "path"
@@ -454,7 +438,6 @@
               "const": "unload"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "entry"
@@ -472,7 +455,6 @@
               "const": "unload_here"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "path"
@@ -505,7 +487,6 @@
               "const": "add"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder",
@@ -530,7 +511,6 @@
               "const": "show"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder",
@@ -555,7 +535,6 @@
               "const": "edit"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder",
@@ -587,7 +566,6 @@
               "const": "save"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder",
@@ -618,7 +596,6 @@
               "const": "rename"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder",
@@ -651,7 +628,6 @@
               "type": "boolean"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder",
@@ -673,7 +649,6 @@
               "const": "validate"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder"
@@ -706,7 +681,6 @@
               }
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "init",
@@ -729,7 +703,6 @@
               "const": "marks"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "marks"
@@ -744,7 +717,6 @@
               "const": "shelf"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -758,7 +730,6 @@
               "const": "workspaces"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -784,7 +755,6 @@
               "type": "string"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "url",
@@ -816,7 +786,6 @@
               "const": "targets"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder",
@@ -861,7 +830,6 @@
               "const": "settings"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder",
@@ -888,7 +856,6 @@
               "$ref": "#/$defs/Toggles"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder",
@@ -917,7 +884,6 @@
               "const": "update"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder",
@@ -952,7 +918,6 @@
               "const": "install"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "projects",
@@ -985,7 +950,6 @@
               "const": "uninstall"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "projects",
@@ -1006,7 +970,6 @@
               "const": "uninstall_orphaned"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "holder"
@@ -1030,7 +993,6 @@
               "const": "adopt"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "project",
@@ -1053,7 +1015,6 @@
               "type": "boolean"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "project",
@@ -1069,7 +1030,6 @@
               "const": "open_install"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -1089,7 +1049,6 @@
               "const": "apply_install"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type",
             "changes"
@@ -1104,7 +1063,6 @@
               "const": "refresh"
             }
           },
-          "additionalProperties": false,
           "required": [
             "type"
           ]
@@ -1129,7 +1087,6 @@
           "$ref": "#/$defs/Share"
         }
       },
-      "additionalProperties": false,
       "required": [
         "agents",
         "share",

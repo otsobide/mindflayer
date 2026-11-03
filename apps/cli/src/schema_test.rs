@@ -8,7 +8,6 @@ use std::path::Path;
 use mindflayer_core::known::Switchable;
 use mindflayer_core::schema::{self as core, Schemas, Together};
 use mindflayer_server::Backend;
-use schemars::generate::SchemaSettings;
 
 use super::*;
 use crate::backend::PanelBackend;
@@ -97,10 +96,74 @@ fn holds(schema: &Schema, value: &Value) -> Result<(), String> {
 
 /// `T`'s schema as its file holds it, the way it is given.
 fn given<T: JsonSchema + ?Sized>() -> Schema {
-    SchemaSettings::draft2020_12()
-        .for_serialize()
+    core::given_settings()
         .into_generator()
         .into_root_schema_for::<T>()
+}
+
+/// Every root given, of core's, the CLI's and the server's: what the API
+/// answers with, each as its file holds it.
+#[derive(Default)]
+struct Given(Schemas);
+
+impl Visitor for Given {
+    fn given<T: JsonSchema + ?Sized>(&mut self) {
+        self.0.given::<T>();
+    }
+
+    fn taken<T: JsonSchema + ?Sized>(&mut self) {}
+}
+
+/// Where `schema`, at `at`, refuses a field it does not name, as schemars
+/// writes that for a type serde refuses one in.
+fn closings(schema: &Value, at: &str) -> Vec<String> {
+    match schema {
+        Value::Object(object) => object
+            .iter()
+            .flat_map(|(key, value)| {
+                let below = format!("{at}/{key}");
+                let closes = ["additionalProperties", "unevaluatedProperties"]
+                    .contains(&key.as_str())
+                    && value == &Value::Bool(false);
+                let mut found = closings(value, &below);
+                if closes {
+                    found.insert(0, below);
+                }
+                found
+            })
+            .collect(),
+        Value::Array(list) => list
+            .iter()
+            .enumerate()
+            .flat_map(|(index, value)| closings(value, &format!("{at}/{index}")))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// An answer stays open to a field it does not name, since one added moves
+/// no version: every root given, of every crate, a task in what a plan is
+/// answered with among them, which serde holds closed where it is sent.
+#[test]
+fn no_answer_of_any_crate_refuses_a_field_it_does_not_name() {
+    let mut given = Given::default();
+    core::roots(&mut given);
+    roots(&mut given);
+    let closing: Vec<String> = given
+        .0
+        .names()
+        .flat_map(|name| closings(given.0.get(name).unwrap().as_value(), name))
+        .collect();
+
+    assert_eq!(closing, Vec::<String>::new());
+    let planned = given.0.get("Planned").unwrap();
+    assert!(planned.pointer("/$defs/Task").is_some());
+    let mut taken = Schemas::default();
+    taken.taken::<Task>();
+    assert_ne!(
+        closings(taken.get("Task").unwrap().as_value(), "Task"),
+        Vec::<String>::new()
+    );
 }
 
 #[test]
@@ -218,7 +281,8 @@ fn closed(schema: &Value) -> Value {
     Value::Object(closed)
 }
 
-/// What a fixture holds is held to the schemas of every root, closed.
+/// What a fixture holds is held to the schemas of every root, as written
+/// and closed.
 struct Fixtures {
     schemas: Schemas,
     /// What each route answers with and is sent, by its path.
@@ -236,8 +300,10 @@ impl Fixtures {
         }
     }
 
-    /// That `value`, in the fixture `at`, holds to the root `name` closed,
-    /// or to a list of them for `name[]`.
+    /// That `value`, in the fixture `at`, holds to the root `name` as its
+    /// file says it, and closed, or to a list of them for `name[]`: as
+    /// written too, since an object opened to a field it does not name could
+    /// match two members of a `oneOf` where closed it matches one.
     fn is(&self, at: &str, name: &str, value: &Value) {
         if let Some(item) = name.strip_suffix("[]") {
             let items = value
@@ -252,9 +318,12 @@ impl Fixtures {
             .schemas
             .get(name)
             .unwrap_or_else(|| panic!("{at}: {name} is no root"));
+        if let Err(error) = holds(schema, value) {
+            panic!("{at}: what the fixture holds is no {name}: {error}");
+        }
         let schema = Schema::try_from(closed(schema.as_value())).unwrap();
         if let Err(error) = holds(&schema, value) {
-            panic!("{at}: what the fixture holds is no {name}: {error}");
+            panic!("{at}: what the fixture holds is no {name} closed: {error}");
         }
     }
 
