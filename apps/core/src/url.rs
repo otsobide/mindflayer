@@ -1,6 +1,6 @@
 //! What may be kept of a URL somebody typed.
 //!
-//! A module of its own rather than a helper inside [`crate::gather::git`],
+//! A module of its own rather than a helper inside [`crate::adapter::gix`],
 //! because the question is asked wherever a URL is stored, logged or shown,
 //! not only where a clone fails.
 

@@ -1459,7 +1459,9 @@ impl FlayerWorkspace {
         wait: Duration,
     ) -> Result<(Ledger, Scrub), LedgerError> {
         let ledger = self.ledger()?;
-        let scrub = gather::scrub(self, &ledger, wait)?;
+        // Through gix whatever a gather is handed: what is scrubbed is what
+        // an older build's gix clones kept, and only gix knows those files.
+        let scrub = gather::scrub(self, &ledger, wait, &crate::adapter::gix::Gix)?;
         let known = self.known();
         ledger.knew(&known.ids, &known.stale)?;
         Ok((ledger, scrub))

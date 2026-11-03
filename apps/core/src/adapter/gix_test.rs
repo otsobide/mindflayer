@@ -1,4 +1,4 @@
-//! Unit tests for `git.rs`, kept beside it rather than inside it.
+//! Unit tests for `gix.rs`, kept beside it rather than inside it.
 
 use super::*;
 

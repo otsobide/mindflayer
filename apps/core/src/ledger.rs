@@ -20,15 +20,17 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
 
 use rusqlite::backup::{Backup, StepResult};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Serialize, Serializer};
 use thiserror::Error;
 
+use crate::adapter::SystemClock;
 use crate::code::codes;
 use crate::kind::Kind;
+use crate::port::Clock;
 use crate::settings::ProjectId;
 use crate::url::{carries_credentials, redacted};
 use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision};
@@ -299,6 +301,8 @@ pub struct Entry {
 pub struct Ledger {
     connection: Connection,
     path: PathBuf,
+    /// What every row it writes is stamped by.
+    clock: Arc<dyn Clock>,
 }
 
 impl Ledger {
@@ -338,7 +342,11 @@ impl Ledger {
                 path: path.clone(),
                 source,
             })?;
-        let ledger = Self { connection, path };
+        let ledger = Self {
+            connection,
+            path,
+            clock: Arc::new(SystemClock),
+        };
         ledger.migrate(known)?;
         // And write-ahead logging, so that readers and a writer do not wait
         // for each other at all: a reader goes on reading the ledger as the
@@ -404,7 +412,11 @@ impl Ledger {
                 path: path.clone(),
                 source,
             })?;
-        let ledger = Self { connection, path };
+        let ledger = Self {
+            connection,
+            path,
+            clock: Arc::new(SystemClock),
+        };
         match ledger.migrate(known) {
             Ok(()) => Ok(Some(ledger)),
             Err(error) if cannot_make_the_log(&ledger.path, &error) => {
@@ -440,6 +452,7 @@ impl Ledger {
         let ledger = Self {
             connection,
             path: path.to_path_buf(),
+            clock: Arc::new(SystemClock),
         };
         ledger.migrate(Vec::new).ok()?;
         Some(ledger)
@@ -454,12 +467,25 @@ impl Ledger {
         let ledger = Self {
             connection,
             path: PathBuf::from(":memory:"),
+            clock: Arc::new(SystemClock),
         };
         ledger.migrate(Vec::new)?;
         Ok(ledger)
     }
 
     /// The file this ledger is.
+    /// Stamp what it writes by `clock` rather than [`SystemClock`]: the port
+    /// the ledger reads the time through, as a fixture pins it.
+    pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    /// Seconds since the Unix epoch, by its clock.
+    fn now(&self) -> i64 {
+        self.clock.now()
+    }
+
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -692,7 +718,7 @@ impl Ledger {
         }
 
         let directory = self.free_directory(&slug(&url))?;
-        let at = now();
+        let at = self.now();
         self.connection
             .execute(
                 "INSERT INTO sources
@@ -750,7 +776,7 @@ impl Ledger {
         self.connection
             .execute(
                 "UPDATE sources SET revision = ?2, last_seen = ?3 WHERE id = ?1",
-                rusqlite::params![id, revision, now()],
+                rusqlite::params![id, revision, self.now()],
             )
             .map(|_| ())
             .map_err(|source| self.failed("updating a source", source))
@@ -795,7 +821,7 @@ impl Ledger {
                      summary = excluded.summary,
                      revision = excluded.revision,
                      gathered_at = excluded.gathered_at",
-                rusqlite::params![kind.slug(), name, source.id, path, summary, revision, now()],
+                rusqlite::params![kind.slug(), name, source.id, path, summary, revision, self.now()],
             )
             .map(|_| ())
             .map_err(|error| self.failed("recording an artifact", error))
@@ -958,7 +984,7 @@ impl Ledger {
                     installation.source_id,
                     origin.as_deref(),
                     installation.content_hash,
-                    now()
+                    self.now()
                 ],
                 |row| row.get(0),
             )
@@ -1033,7 +1059,7 @@ impl Ledger {
                         record.source_id,
                         origin.as_deref(),
                         record.content_hash,
-                        now()
+                        self.now()
                     ],
                     |row| row.get(0),
                 )
@@ -1047,7 +1073,7 @@ impl Ledger {
             insert_targets(&transaction, id, &record.targets).map_err(failed)?;
         }
         for (path, created) in files {
-            set_created_in(&transaction, project, path, *created).map_err(failed)?;
+            set_created_in(&transaction, self.now(), project, path, *created).map_err(failed)?;
         }
         transaction.commit().map_err(failed)
     }
@@ -1383,6 +1409,7 @@ impl Ledger {
         for (action, detail) in log {
             insert_log(
                 &transaction,
+                self.now(),
                 *action,
                 Some(project),
                 Outcome::Ok,
@@ -1532,7 +1559,7 @@ impl Ledger {
     /// stopped being Mindflayer's. A file noted twice keeps the time it was
     /// first noted.
     pub fn set_created(&self, project: &str, path: &str, created: bool) -> Result<(), LedgerError> {
-        set_created_in(&self.connection, project, path, created)
+        set_created_in(&self.connection, self.now(), project, path, created)
             .map_err(|source| self.failed("noting which files Mindflayer made", source))
     }
 
@@ -1695,6 +1722,7 @@ impl Ledger {
             .map_err(failed)?;
         insert_log(
             &transaction,
+            self.now(),
             Action::Relink,
             Some(new),
             Outcome::Ok,
@@ -1932,8 +1960,15 @@ impl Ledger {
         outcome: Outcome,
         detail: Option<&str>,
     ) -> Result<(), LedgerError> {
-        insert_log(&self.connection, action, target, outcome, detail)
-            .map_err(|source| self.failed("writing to the action log", source))
+        insert_log(
+            &self.connection,
+            self.now(),
+            action,
+            target,
+            outcome,
+            detail,
+        )
+        .map_err(|source| self.failed("writing to the action log", source))
     }
 
     /// The most recent actions, newest first.
@@ -2059,6 +2094,7 @@ fn insert_targets(connection: &Connection, id: i64, targets: &[Target]) -> rusql
 /// transaction a caller keeps it in.
 fn set_created_in(
     connection: &Connection,
+    at: i64,
     project: &str,
     path: &str,
     created: bool,
@@ -2067,7 +2103,7 @@ fn set_created_in(
         connection.execute(
             "INSERT INTO created_files (project, path, created_at) VALUES (?1, ?2, ?3)
              ON CONFLICT (project, path) DO NOTHING",
-            rusqlite::params![project, path, now()],
+            rusqlite::params![project, path, at],
         )?;
     } else {
         connection.execute(
@@ -2082,6 +2118,7 @@ fn set_created_in(
 /// what it is about and what it says [`redacted`], as [`Ledger::log`] does.
 fn insert_log(
     connection: &Connection,
+    at: i64,
     action: Action,
     target: Option<&str>,
     outcome: Outcome,
@@ -2094,7 +2131,7 @@ fn insert_log(
             "INSERT INTO actions (at, action, target, outcome, detail)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             rusqlite::params![
-                now(),
+                at,
                 action.slug(),
                 target.as_deref(),
                 outcome.slug(),
@@ -2345,17 +2382,6 @@ impl rusqlite::types::FromSql for ContentHash {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         String::column_result(value).map(ContentHash::recorded)
     }
-}
-
-/// Seconds since the Unix epoch.
-///
-/// An integer rather than a formatted timestamp: it needs no date library, it
-/// sorts and compares as itself, and SQLite renders it for anyone reading the
-/// file by hand with `datetime(at, 'unixepoch')`.
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs() as i64)
 }
 
 /// Why the ledger could not be opened, read or written.

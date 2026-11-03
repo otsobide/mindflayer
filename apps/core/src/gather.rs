@@ -11,20 +11,20 @@
 //! lets two repositories both offer `commit-style`; [`crate::ledger`] is what
 //! remembers which is which.
 
-mod credentials;
-pub mod git;
 mod watch;
 
 use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::ser::{SerializeStruct, Serializer};
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::adapter::gix::Gix;
 use crate::artifact::{Artifact, ArtifactError, ValidationIssue};
 use crate::code::codes;
 use crate::copy::{self, Change};
@@ -32,6 +32,7 @@ use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
 use crate::lock::LockError;
 use crate::paths;
+use crate::port::{GitError, Remote};
 use crate::url::{carries_credentials, redacted};
 use crate::value::{ArtifactName, Redacted, Revision};
 use crate::workspace::FlayerWorkspace;
@@ -111,6 +112,9 @@ pub struct Request {
     /// builds requests in one place and runs them in another hands over both
     /// together.
     pub watch: Watch,
+    /// What fetches the source: [`Gix`] unless another [`Remote`] is handed
+    /// over ([`through`](Self::through)), as a test hands a fake.
+    pub remote: Arc<dyn Remote>,
 }
 
 impl Request {
@@ -124,6 +128,7 @@ impl Request {
             subdirectory: DEFAULT_SUBDIRECTORY.to_owned(),
             kind: Kind::Skill,
             watch: Watch::new(),
+            remote: Arc::new(Gix),
         }
     }
 
@@ -145,6 +150,13 @@ impl Request {
     /// Report to `watch`, and stop when it is cancelled.
     pub fn watched_by(mut self, watch: Watch) -> Self {
         self.watch = watch;
+        self
+    }
+
+    /// Fetch through `remote` rather than [`Gix`]: the port a gather's one
+    /// step outside core goes through, everything after it the same.
+    pub fn through(mut self, remote: Arc<dyn Remote>) -> Self {
+        self.remote = remote;
         self
     }
 }
@@ -327,10 +339,14 @@ impl Scrub {
 /// an artifact opening the ledger to drop a record does not wait behind a
 /// gather to do it. The sources are looked for again once it is held, since
 /// a scrub kept waiting may find that another has done its work.
+///
+/// Each clone is scrubbed through `remote`, the adapter that knows which of
+/// its files name the URL it was made from.
 pub(crate) fn scrub(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     wait: Duration,
+    remote: &dyn Remote,
 ) -> Result<Scrub, LedgerError> {
     let mut scrub = Scrub::default();
     let _lock = if ledger.tainted_sources()?.is_empty() {
@@ -341,7 +357,7 @@ pub(crate) fn scrub(
     for source in ledger.tainted_sources()? {
         // The clone first and the row after it: a row rewritten first would
         // no longer say that its clone still needs the same.
-        if let Err(error) = git::scrub(&workspace.cache_dir().join(&source.directory)) {
+        if let Err(error) = remote.scrub(&workspace.cache_dir().join(&source.directory)) {
             scrub.failures.push(ScrubFailure {
                 url: source.url.clone(),
                 source: error,
@@ -412,7 +428,7 @@ pub struct ScrubFailure {
     /// The source's URL, without them.
     pub url: Redacted,
     #[source]
-    pub source: git::GitError,
+    pub source: GitError,
 }
 
 codes!(ScrubFailure => "clone_unscrubbed");
@@ -495,9 +511,11 @@ fn take(
     let cache = workspace.cache_dir().join(&source.directory);
     watch.report(Progress::Connecting);
     let clone = match &request.source {
-        Source::Git { url, reference } => git::clone(url, reference.as_deref(), &cache, watch)
+        Source::Git { url, reference } => request
+            .remote
+            .fetch(url, reference.as_deref(), &cache, watch)
             .map_err(|error| match error {
-                git::GitError::Cancelled => GatherError::Cancelled,
+                GitError::Cancelled => GatherError::Cancelled,
                 error => error.into(),
             })?,
     };
@@ -725,7 +743,7 @@ impl fmt::Display for Warning {
 #[derive(Debug, Error)]
 pub enum GatherError {
     #[error(transparent)]
-    Git(#[from] git::GitError),
+    Git(#[from] GitError),
     #[error(transparent)]
     Ledger(#[from] LedgerError),
     #[error(transparent)]

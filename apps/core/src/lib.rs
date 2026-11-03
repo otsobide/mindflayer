@@ -12,6 +12,7 @@
 //! types return, so the two can never disagree about what a skill is.
 
 pub mod activate;
+pub mod adapter;
 pub mod adopt;
 pub mod agent;
 pub mod agents_md;
@@ -44,6 +45,7 @@ pub mod lock;
 pub mod migrate;
 pub mod paths;
 pub mod policy;
+pub mod port;
 pub mod reading;
 pub mod reapply;
 pub mod relink;
@@ -79,6 +81,7 @@ pub use known::{Known, KnownWorkspace};
 pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use lifecycle::{LifecycleError, Target};
 pub use lock::{LockError, WorkspaceLock};
+pub use port::{Clock, Remote};
 pub use reapply::{Change, ReapplyError};
 pub use resolve::{resolve, resolve_except, Inputs, Intent, Reason, ResolveError, Resolved};
 pub use rule::{Lenient, RuleManifest};
