@@ -266,7 +266,7 @@ impl Serialize for Does {
 }
 
 #[cfg(feature = "ts")]
-crate::typescript::words! {
+crate::described::words! {
     /// What an update does with one installation.
     Does by slug { Keep, Refresh, PutBack, WriteOver, Leave, Orphaned, Unsure }
 }

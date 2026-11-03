@@ -245,6 +245,15 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("workspace::WorkspaceError", WorkspaceError::CODES),
 ];
 
+/// Every code core gives ([`ALL`]), as one type a description of what a
+/// front end is handed names: the union of them in the panel's TypeScript.
+///
+/// A type with nothing in it, since what it stands for is the list, and
+/// here rather than beside the description, so that any description of
+/// core's types names the same one.
+#[cfg(feature = "ts")]
+pub struct CoreCode;
+
 /// An error as a serialized type holds one: its code, for a front end to act
 /// on, and its message, for whoever reads it.
 ///

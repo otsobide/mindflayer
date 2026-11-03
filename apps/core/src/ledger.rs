@@ -77,7 +77,7 @@ impl Serialize for SourceKind {
 }
 
 #[cfg(feature = "ts")]
-crate::typescript::words! {
+crate::described::words! {
     /// What kind of place a source is.
     SourceKind by slug { Git }
 }

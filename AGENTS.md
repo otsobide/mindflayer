@@ -178,8 +178,9 @@ under `apps/` with its own `Makefile`:
   write, by the command's own checks and in `validate`'s words, for a
   front end judging what is typed (`draft`). Its only I/O is files, and it never reads the
   environment. Under its `ts` feature, `typescript` gives what it hands a
-  front end TypeScript (the roots its export writes, `words!`,
-  `CoreCode`).
+  front end TypeScript (the roots its export writes), and `described` what
+  a type serde writes by hand says of itself (`words!`, and the fields
+  written through a function of their own).
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -1108,7 +1109,7 @@ These are easy to break from a single file without noticing.
   (`#[cfg_attr(feature = "ts", derive(ts_rs::TS))]`), so a plain build
   compiles none of it and a plain `cargo test` writes nothing. A type serde
   writes by hand says its TypeScript from what its serializer writes,
-  beside it, never from the variants: a word through `typescript::words!`,
+  beside it, never from the variants: a word through `described::words!`,
   from the function the serializer calls, anything else by hand or with
   `ts(as)`, each held to serde by a test in `typescript_test.rs`. What is
   exported is each crate's `typescript::roots`, into

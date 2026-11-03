@@ -523,7 +523,7 @@ impl Serialize for Health {
 }
 
 #[cfg(feature = "ts")]
-crate::typescript::words! {
+crate::described::words! {
     /// How a project stands as a whole.
     Health by slug { Ok, Attention, Broken, Stale }
 }

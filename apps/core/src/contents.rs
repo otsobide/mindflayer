@@ -210,7 +210,7 @@ impl Serialize for Withheld {
 }
 
 #[cfg(feature = "ts")]
-crate::typescript::words! {
+crate::described::words! {
     /// Why a file's text is not handed over, though the file was found.
     Withheld by slug { Binary, TooLarge }
 }

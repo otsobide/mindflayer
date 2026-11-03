@@ -33,6 +33,16 @@ pub const CODES: &[(&str, &[&str])] = &[
     ("task::Refusal", Refusal::CODES),
 ];
 
+/// Every code a front end is handed for what went wrong, as one type a
+/// description of what it is handed names: core's
+/// (`mindflayer_core::code::CoreCode`), the CLI's own ([`CODES`]) and the
+/// local server's (`mindflayer_server::Condition::CODES`).
+///
+/// A type with nothing in it, since what it stands for is the lists, and
+/// here, beside them, rather than beside one description of them.
+#[cfg(feature = "ts")]
+pub struct Code;
+
 /// Why a command could not run at all, as opposed to running and finding
 /// problems: those are in the [`Outcome`](crate::Outcome).
 #[derive(Debug, Error)]

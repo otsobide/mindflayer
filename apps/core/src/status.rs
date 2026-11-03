@@ -295,7 +295,7 @@ impl Serialize for State {
 }
 
 #[cfg(feature = "ts")]
-crate::typescript::words! {
+crate::described::words! {
     /// How an artifact stands in a project, as `status` says it.
     State by slug { Current, Outdated, Edited, Missing, Orphaned, Foreign, Authored }
 }

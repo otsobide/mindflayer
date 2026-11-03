@@ -131,13 +131,13 @@ fn every_code_the_cli_and_the_server_give_is_in_its_union_once_beside_core_s() {
 
 /// The CLI writes no field through a function of its own, which ts-rs would
 /// say of as of the field's type: one that does is held to its TypeScript
-/// first, as each of core's is (`core::field_serializers`).
+/// first, as each of core's is (`described::field_serializers`).
 #[test]
 fn no_field_of_the_cli_s_is_written_through_a_serializer_of_its_own() {
     let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
 
     assert_eq!(
-        core::field_serializers(&source).unwrap(),
+        mindflayer_core::described::field_serializers(&source).unwrap(),
         std::collections::BTreeSet::new()
     );
 }

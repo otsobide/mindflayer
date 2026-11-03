@@ -5436,7 +5436,7 @@ confirm are the generated `Confirm` and a change's scopes the generated
   and holds what serde writes to what ts-rs says of the field's type (a
   path is a `string` whatever its bytes, a redacted URL a `string` or
   `string | null`), and refuses a function it does not hold, read off the
-  source (`typescript::field_serializers`), core's and the CLI's, which
+  source (`described::field_serializers`), core's and the CLI's, which
   names none.
 - **What serde writes by hand is said from what it writes**, beside its
   serializer, never derived from the Rust variants, for the reason the
@@ -5444,7 +5444,7 @@ confirm are the generated `Confirm` and a change's scopes the generated
   serialize](#the-read-types-serialize)). A word (a kind, an agent, a
   state, a share mode, the rule that chose a workspace, a marker's file,
   why a scan found a directory worth linking) is
-  the union of its words, written by `typescript::words!` from the function
+  the union of its words, written by `described::words!` from the function
   the serializer calls, on every variant, matched with no wildcard so a
   variant added does not compile until it is in the union. A word whose
   type's name another's already has in TypeScript is declared under a name

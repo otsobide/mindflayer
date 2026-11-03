@@ -250,7 +250,7 @@ impl Serialize for Share {
 }
 
 #[cfg(feature = "ts")]
-crate::typescript::words! {
+crate::described::words! {
     /// Whether what is installed into a project reaches the team, as the
     /// settings file and `mind share` spell it.
     Share by name { Local, Shared }

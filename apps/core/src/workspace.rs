@@ -251,7 +251,7 @@ impl Serialize for MarkerFile {
 }
 
 #[cfg(feature = "ts")]
-crate::typescript::words! {
+crate::described::words! {
     /// The file inside `.mind` a project's marker is read from.
     MarkerFile by name { MindToml, SettingsJson, SettingsToml }
 }

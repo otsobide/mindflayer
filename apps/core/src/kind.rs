@@ -84,7 +84,7 @@ impl Serialize for Kind {
 }
 
 #[cfg(feature = "ts")]
-crate::typescript::words! {
+crate::described::words! {
     /// A kind of artifact, by the word a command line takes for it.
     Kind by slug { Skill, Rule }
 }

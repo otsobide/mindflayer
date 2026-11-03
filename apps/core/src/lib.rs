@@ -26,6 +26,8 @@ pub mod config_entry;
 pub mod contents;
 pub mod copy;
 pub mod create;
+#[cfg(feature = "ts")]
+pub mod described;
 pub mod draft;
 pub mod everywhere;
 pub mod exclude;

@@ -13,6 +13,7 @@ use crate::agent::Agent;
 use crate::artifact::ValidationIssue;
 use crate::browse;
 use crate::contents::Withheld;
+use crate::described::field_serializers;
 use crate::install::Place;
 use crate::kind::Kind;
 use crate::ledger::SourceKind;

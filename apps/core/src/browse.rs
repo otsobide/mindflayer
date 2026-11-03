@@ -174,7 +174,7 @@ impl Serialize for Is {
 // Under a name of its own: `Is` alone says nothing of what it is about in
 // a folder where every type of the panel's is a file.
 #[cfg(feature = "ts")]
-crate::typescript::words! {
+crate::described::words! {
     /// What a folder is, the strongest of what it holds: a mind project, a
     /// flayer workspace, a git repository, or any other folder.
     Is as "FolderIs", by slug { Project, Workspace, Repository, Folder }
