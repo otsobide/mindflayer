@@ -10,6 +10,7 @@
 //! changes. A test's fake is one more adapter, and lives with the test.
 
 pub mod gix;
+pub mod sqlite;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 

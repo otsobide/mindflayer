@@ -1440,7 +1440,7 @@ impl FlayerWorkspace {
     /// up as busy after [`lock::WAIT`].
     ///
     /// And told which id each project the workspace links holds now
-    /// ([`Ledger::knew`]), so it follows them: one linked since it was made,
+    /// ([`Ledger::knew`](crate::port::LedgerStore::knew)), so it follows them: one linked since it was made,
     /// one given a new id, one whose route held another project before. A
     /// stale entry keeps the id the ledger last saw there, which is what
     /// finds its project once it has moved ([`crate::relink`]). Every time,
@@ -1499,7 +1499,7 @@ impl FlayerWorkspace {
 
     /// Which id each project the workspace links holds, by the route the
     /// ledger names it by, and which entries open no project: what the
-    /// ledger is told of them ([`Ledger::knew`]).
+    /// ledger is told of them ([`Ledger::knew`](crate::port::LedgerStore::knew)).
     ///
     /// A project a `mind.toml` marks has no id, and is in neither. Nor is an
     /// id two linked directories hold: a project copied with its `.mind`,

@@ -13,6 +13,7 @@ use common::{skill, workspace};
 use mindflayer_core::gather::{self, GatherError, Request, Watch};
 use mindflayer_core::ledger::{Action, Ledger, Outcome};
 use mindflayer_core::port::{Clock, Cloned, GitError, Remote};
+use mindflayer_core::settings::ProjectId;
 use mindflayer_core::value::Revision;
 use mindflayer_core::Kind;
 
@@ -139,4 +140,25 @@ fn the_ledger_stamps_what_it_writes_by_the_clock_it_is_handed() {
 
     let history = ledger.history(1).unwrap();
     assert_eq!(history[0].at, 1_790_000_000);
+}
+
+#[test]
+fn a_relink_runs_a_write_of_any_type_inside_the_stores_move() {
+    let id = ProjectId::parse("0123456789abcdef0123456789abcdef").unwrap();
+    let ledger = Ledger::in_memory().unwrap();
+    ledger
+        .knew(&[(id.clone(), String::from("old"))], &[])
+        .unwrap();
+
+    let written = ledger
+        .relinked("old", "new", &id, || Ok::<_, ()>("marker"))
+        .unwrap();
+    let refused = ledger
+        .relinked("new", "newer", &id, || Err::<(), _>("refused"))
+        .unwrap();
+
+    assert_eq!(written, Ok(("marker", 0)));
+    assert_eq!(refused, Err("refused"));
+    assert_eq!(ledger.project_at("new").unwrap(), Some(id));
+    assert_eq!(ledger.project_at("newer").unwrap(), None);
 }

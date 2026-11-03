@@ -1,6 +1,7 @@
 //! Unit tests for `ledger.rs`, kept beside it rather than inside it.
 
 use super::*;
+use crate::ledger::LEDGER_FILE;
 
 /// A hash as the ledger holds what it is given, which these tests need not
 /// be a real one: what is stored is read back as it was written.
@@ -24,7 +25,7 @@ fn a_url_becomes_a_readable_directory_name() {
 
 #[test]
 fn registering_the_same_source_twice_returns_the_same_row() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let first = ledger
         .source_for(SourceKind::Git, "https://h/a", None, "skills")
         .unwrap();
@@ -36,7 +37,7 @@ fn registering_the_same_source_twice_returns_the_same_row() {
 
 #[test]
 fn two_urls_with_one_readable_name_get_separate_directories() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     // Both reduce to `h-a`, and both hold files, so they cannot share one.
     let first = ledger
         .source_for(SourceKind::Git, "https://h/a", None, "skills")
@@ -50,7 +51,7 @@ fn two_urls_with_one_readable_name_get_separate_directories() {
 
 #[test]
 fn a_forgotten_source_frees_its_directory_and_takes_its_artifacts() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let source = ledger
         .source_for(SourceKind::Git, "https://h/a", None, "skills")
         .unwrap();
@@ -84,7 +85,7 @@ fn a_forgotten_source_frees_its_directory_and_takes_its_artifacts() {
 
 #[test]
 fn a_reference_is_part_of_what_makes_a_source() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let main = ledger
         .source_for(SourceKind::Git, "https://h/a", Some("main"), "skills")
         .unwrap();
@@ -99,7 +100,7 @@ fn a_reference_is_part_of_what_makes_a_source() {
 /// for: the address alone is the remote's HEAD.
 #[test]
 fn a_sources_origin_is_its_address_with_the_branch_asked_for() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let head = ledger
         .source_for(SourceKind::Git, "https://h/a", None, "skills")
         .unwrap();
@@ -113,7 +114,7 @@ fn a_sources_origin_is_its_address_with_the_branch_asked_for() {
 
 #[test]
 fn one_name_from_two_sources_is_two_rows() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let a = ledger
         .source_for(SourceKind::Git, "https://h/a", None, "skills")
         .unwrap();
@@ -135,7 +136,7 @@ fn one_name_from_two_sources_is_two_rows() {
 
 #[test]
 fn gathering_the_same_name_again_updates_rather_than_duplicates() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let source = ledger
         .source_for(SourceKind::Git, "https://h/a", None, "skills")
         .unwrap();
@@ -154,7 +155,7 @@ fn gathering_the_same_name_again_updates_rather_than_duplicates() {
 
 #[test]
 fn the_log_keeps_failures_too_and_reads_back_newest_first() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .log(
             Action::Gather,
@@ -185,7 +186,7 @@ fn a_database_from_the_future_is_refused_by_its_version() {
     let path = dir.path().join(LEDGER_FILE);
     let future = SCHEMA_VERSION + 1;
     {
-        let ledger = Ledger::open(&path).unwrap();
+        let ledger = Sqlite::open(&path).unwrap();
         ledger
             .connection
             .pragma_update(None, "user_version", future)
@@ -193,8 +194,8 @@ fn a_database_from_the_future_is_refused_by_its_version() {
     }
 
     for error in [
-        Ledger::open(&path).unwrap_err(),
-        Ledger::open_existing(&path).unwrap_err(),
+        Sqlite::open(&path).unwrap_err(),
+        Sqlite::open_existing(&path).unwrap_err(),
     ] {
         assert!(
             matches!(error, LedgerError::Version { found, .. } if found == future),
@@ -215,7 +216,7 @@ fn a_database_from_the_future_is_refused_by_its_version() {
 
 /// Every text column `table` holds, as stored, for asserting on what reached
 /// the file rather than on what the ledger hands back.
-fn stored(ledger: &Ledger, table: &str) -> String {
+fn stored(ledger: &Sqlite, table: &str) -> String {
     let mut statement = ledger
         .connection
         .prepare(&format!("SELECT * FROM {table}"))
@@ -241,7 +242,7 @@ fn stored(ledger: &Ledger, table: &str) -> String {
 
 #[test]
 fn a_source_is_stored_and_found_without_the_credentials_in_its_url() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let source = ledger
         .source_for(SourceKind::Git, "https://me:hunter2@h/a", None, "skills")
         .unwrap();
@@ -257,7 +258,7 @@ fn a_source_is_stored_and_found_without_the_credentials_in_its_url() {
 
 #[test]
 fn the_log_keeps_no_credential_in_what_it_was_about_or_what_it_said() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .log(
             Action::Gather,
@@ -278,7 +279,7 @@ fn the_log_keeps_no_credential_in_what_it_was_about_or_what_it_said() {
 
 #[test]
 fn a_row_an_older_build_wrote_with_credentials_is_read_back_without_them() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .connection
         .execute_batch(
@@ -299,9 +300,9 @@ fn a_row_an_older_build_wrote_with_credentials_is_read_back_without_them() {
 
 /// A ledger on disk, as a Mindflayer from before the redaction left it: one
 /// source gathered with a token in its URL, and the log of that gather.
-fn ledger_with_a_token_in_it() -> (tempfile::TempDir, Ledger) {
+fn ledger_with_a_token_in_it() -> (tempfile::TempDir, Sqlite) {
     let dir = tempfile::TempDir::new().unwrap();
-    let ledger = Ledger::open(dir.path().join(LEDGER_FILE)).unwrap();
+    let ledger = Sqlite::open(dir.path().join(LEDGER_FILE)).unwrap();
     ledger
         .connection
         .execute_batch(
@@ -447,7 +448,7 @@ fn merging_keeps_the_fresher_rows_artifacts_and_lets_the_others_go_with_its_row(
 
 #[test]
 fn an_origin_is_recorded_and_read_back_without_credentials() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let mut written = installation_of("deploy", &[(None, "skills/deploy")]);
     written.origin = Some(Origin::from("https://me:hunter2@h/a#main"));
 
@@ -524,7 +525,7 @@ fn opening_only_an_existing_ledger_makes_nothing_when_there_is_none() {
     let folder = dir.path().join(".mindflayer");
     let path = folder.join(LEDGER_FILE);
 
-    assert!(Ledger::open_existing(&path).unwrap().is_none());
+    assert!(Sqlite::open_existing(&path).unwrap().is_none());
 
     // Not the database, and not the folder it would have gone in either.
     assert!(!folder.exists());
@@ -540,7 +541,7 @@ fn opening_only_an_existing_ledger_still_brings_an_older_one_up_to_date() {
         connection.pragma_update(None, "user_version", 1).unwrap();
     }
 
-    let ledger = Ledger::open_existing(&path).unwrap().unwrap();
+    let ledger = Sqlite::open_existing(&path).unwrap().unwrap();
 
     let version: u32 = ledger
         .connection
@@ -568,7 +569,7 @@ fn a_step_that_fails_leaves_the_ledger_as_it_was() {
         connection.pragma_update(None, "user_version", 1).unwrap();
     }
 
-    let error = Ledger::open(&path).unwrap_err();
+    let error = Sqlite::open(&path).unwrap_err();
 
     assert!(
         error.to_string().contains("adding the installations table"),
@@ -617,7 +618,7 @@ fn an_older_ledger_is_copied_aside_before_it_is_migrated() {
     let path = dir.path().join(LEDGER_FILE);
     version_1_at(&path);
 
-    Ledger::open(&path).unwrap();
+    Sqlite::open(&path).unwrap();
 
     let backup = dir.path().join("mindflayer.db.v1.bak");
     assert_eq!(backup_path(&path, 1), backup);
@@ -653,7 +654,7 @@ fn a_ledger_another_process_migrates_meanwhile_is_left_to_that_ones_copy() {
     other.execute_batch("BEGIN IMMEDIATE").unwrap();
     let opening = std::thread::spawn({
         let path = path.clone();
-        move || Ledger::open(path).map(drop)
+        move || Sqlite::open(path).map(drop)
     });
     // Long enough to read version 1 and wait for the lock, which is when a
     // copy taken outside it would be taken.
@@ -678,8 +679,8 @@ fn a_ledger_made_now_or_already_current_is_not_copied() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join(LEDGER_FILE);
 
-    Ledger::open(&path).unwrap();
-    Ledger::open(&path).unwrap();
+    Sqlite::open(&path).unwrap();
+    Sqlite::open(&path).unwrap();
 
     let names: Vec<_> = std::fs::read_dir(dir.path())
         .unwrap()
@@ -698,7 +699,7 @@ fn what_an_earlier_attempt_left_beside_the_ledger_is_replaced() {
     std::fs::write(dir.path().join("mindflayer.db.v1.bak.tmp"), "half a copy").unwrap();
     std::fs::write(dir.path().join("mindflayer.db.v1.bak.tmp-journal"), "junk").unwrap();
 
-    Ledger::open(&path).unwrap();
+    Sqlite::open(&path).unwrap();
 
     assert_eq!(version_of(&backup), 1);
     assert!(!dir.path().join("mindflayer.db.v1.bak.tmp").exists());
@@ -716,7 +717,7 @@ fn a_ledger_that_cannot_be_copied_is_not_migrated() {
     std::fs::create_dir(&backup).unwrap();
     std::fs::write(backup.join("keep"), "mine").unwrap();
 
-    let error = Ledger::open(&path).unwrap_err();
+    let error = Sqlite::open(&path).unwrap_err();
 
     assert!(matches!(error, LedgerError::Backup { .. }), "{error}");
     assert!(
@@ -737,7 +738,7 @@ fn the_copy_is_no_more_readable_than_the_ledger() {
     version_1_at(&path);
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
 
-    Ledger::open(&path).unwrap();
+    Sqlite::open(&path).unwrap();
 
     let mode = std::fs::metadata(backup_path(&path, 1))
         .unwrap()
@@ -785,7 +786,7 @@ fn installation_of(name: &str, targets: &[(Option<&str>, &str)]) -> InstallRecor
 
 #[test]
 fn each_copy_reads_back_with_the_hash_of_its_own_it_was_given() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let mut written = installation_of(
         "git/no-force-push",
         &[
@@ -815,7 +816,7 @@ fn each_copy_reads_back_with_the_hash_of_its_own_it_was_given() {
 
 #[test]
 fn a_file_shared_by_several_installations_is_one_copy() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     for name in ["commit-style", "review"] {
         let mut rule = installation_of(name, &[(None, "AGENTS.md")]);
         rule.kind = Kind::Rule;
@@ -850,7 +851,7 @@ fn rule_of(name: &str, targets: &[(Option<&str>, &str, &str)]) -> InstallRecord 
 
 #[test]
 fn a_render_records_every_rule_it_left_and_forgets_the_rest_of_its_kind() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let commits = rule_of("git/commits", &[(None, "AGENTS.md", "a")]);
     let review = rule_of("review", &[(None, "AGENTS.md", "b")]);
     ledger
@@ -905,7 +906,7 @@ fn a_render_records_every_rule_it_left_and_forgets_the_rest_of_its_kind() {
 
 #[test]
 fn a_render_keeps_the_time_an_installation_was_first_recorded_at() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let commits = rule_of("git/commits", &[(None, "AGENTS.md", "a")]);
     ledger
         .rendered("collapse", Kind::Rule, std::slice::from_ref(&commits), &[])
@@ -930,7 +931,7 @@ fn a_render_keeps_the_time_an_installation_was_first_recorded_at() {
 
 #[test]
 fn whether_mindflayer_made_a_file_is_kept_per_project_until_it_is_forgotten() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     assert!(!ledger.created("collapse", "AGENTS.md").unwrap());
 
     ledger.set_created("collapse", "AGENTS.md", true).unwrap();
@@ -949,7 +950,7 @@ fn whether_mindflayer_made_a_file_is_kept_per_project_until_it_is_forgotten() {
 
 #[test]
 fn an_installation_reads_back_with_every_copy_it_wrote() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let written = installation_of(
         "deploy",
         &[
@@ -982,7 +983,7 @@ fn an_installation_reads_back_with_every_copy_it_wrote() {
 
 #[test]
 fn installing_again_replaces_the_copies_recorded_rather_than_adding_to_them() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .installed(
             "collapse",
@@ -1011,7 +1012,7 @@ fn installing_again_replaces_the_copies_recorded_rather_than_adding_to_them() {
 
 #[test]
 fn a_record_naming_one_copy_twice_is_refused_and_the_old_one_stands() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let first = installation_of("deploy", &[(None, "skills/deploy")]);
     ledger.installed("collapse", &first).unwrap();
 
@@ -1031,7 +1032,7 @@ fn a_record_naming_one_copy_twice_is_refused_and_the_old_one_stands() {
 
 #[test]
 fn forgetting_an_installation_forgets_its_copies() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .installed(
             "collapse",
@@ -1064,7 +1065,7 @@ fn forgetting_an_installation_forgets_its_copies() {
 
 #[test]
 fn forgetting_one_copy_keeps_the_installation_until_its_last_copy_goes() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let written = installation_of(
         "deploy",
         &[
@@ -1101,10 +1102,10 @@ fn forgetting_one_copy_keeps_the_installation_until_its_last_copy_goes() {
 
 #[test]
 fn a_renamed_copy_takes_its_installation_with_it_when_it_was_the_only_one() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let written = installation_of("deploy", &[(None, "skills/deploy")]);
     ledger.installed("collapse", &written).unwrap();
-    let when = |ledger: &Ledger| -> i64 {
+    let when = |ledger: &Sqlite| -> i64 {
         ledger
             .connection
             .query_row("SELECT installed_at FROM installations", [], |row| {
@@ -1146,7 +1147,7 @@ fn a_renamed_copy_takes_its_installation_with_it_when_it_was_the_only_one() {
 
 #[test]
 fn a_renamed_copy_is_an_installation_of_its_own_beside_the_copies_it_left() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let mut written = installation_of(
         "git/no-force-push",
         &[(None, "AGENTS.md"), (None, "rules/git/no-force-push.md")],
@@ -1195,7 +1196,7 @@ fn a_renamed_copy_is_an_installation_of_its_own_beside_the_copies_it_left() {
 
 #[test]
 fn a_copy_renamed_onto_a_name_installed_already_is_forgotten() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .installed(
             "collapse",
@@ -1235,7 +1236,7 @@ fn a_copy_renamed_onto_a_name_installed_already_is_forgotten() {
 
 #[test]
 fn an_installation_recording_no_copy_is_forgotten_whole_by_any_one() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .installed("collapse", &installation_of("deploy", &[]))
         .unwrap();
@@ -1254,7 +1255,7 @@ fn an_installation_recording_no_copy_is_forgotten_whole_by_any_one() {
 
 #[test]
 fn a_rules_installation_recording_no_copy_is_kept_by_a_change_elsewhere() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let rule = InstallRecord {
         kind: Kind::Rule,
         ..installation_of("rust/errors", &[])
@@ -1282,10 +1283,10 @@ fn a_rules_installation_recording_no_copy_is_kept_by_a_change_elsewhere() {
 
 #[test]
 fn retargeting_an_installation_moves_its_copies_and_keeps_the_rest_of_its_record() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let written = installation_of("deploy", &[(Some("claude"), ".claude/skills/deploy")]);
     ledger.installed("collapse", &written).unwrap();
-    let when = |ledger: &Ledger| -> i64 {
+    let when = |ledger: &Sqlite| -> i64 {
         ledger
             .connection
             .query_row("SELECT installed_at FROM installations", [], |row| {
@@ -1315,7 +1316,7 @@ fn retargeting_an_installation_moves_its_copies_and_keeps_the_rest_of_its_record
 
 #[test]
 fn retargeting_an_installation_to_no_copy_forgets_it_and_one_never_made_is_nothing() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .installed(
             "collapse",
@@ -1349,7 +1350,7 @@ fn retargeting_an_installation_to_no_copy_forgets_it_and_one_never_made_is_nothi
 
 #[test]
 fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_at_once() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let hashed = installation_of("deploy", &[(None, "skills/deploy")]);
     let unhashed = InstallRecord {
         content_hash: None,
@@ -1418,7 +1419,7 @@ fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_
 
 #[test]
 fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .installed(
             "collapse",
@@ -1456,7 +1457,7 @@ fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
 
 #[test]
 fn every_copy_installed_into_a_project_is_listed_by_path_whichever_install_wrote_it() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .installed(
             "collapse",
@@ -1500,7 +1501,7 @@ fn every_copy_installed_into_a_project_is_listed_by_path_whichever_install_wrote
 
 #[test]
 fn every_installation_into_a_project_reads_back_with_its_copies_in_name_order() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     let deploy = installation_of(
         "deploy",
         &[
@@ -1544,7 +1545,7 @@ fn every_installation_into_a_project_reads_back_with_its_copies_in_name_order() 
 
 #[test]
 fn every_installation_reads_back_without_the_credentials_an_older_build_stored() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .installed(
             "collapse",
@@ -1571,8 +1572,8 @@ fn every_installation_reads_back_without_the_credentials_an_older_build_stored()
 fn a_ledger_waits_for_another_writer_as_long_as_a_writer_waits_for_the_workspace() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join(LEDGER_FILE);
-    let opened = Ledger::open(&path).unwrap();
-    let existing = Ledger::open_existing(&path).unwrap().unwrap();
+    let opened = Sqlite::open(&path).unwrap();
+    let existing = Sqlite::open_existing(&path).unwrap().unwrap();
 
     // Read off each connection rather than shown by two writers racing:
     // rusqlite waits five seconds of its own accord, which is long enough
@@ -1594,7 +1595,7 @@ fn id(digit: char) -> ProjectId {
 }
 
 /// The id each installation of `project` names, by name.
-fn project_ids(ledger: &Ledger, project: &str) -> Vec<(String, Option<String>)> {
+fn project_ids(ledger: &Sqlite, project: &str) -> Vec<(String, Option<String>)> {
     let mut statement = ledger
         .connection
         .prepare("SELECT name, project_id FROM installations WHERE project = ?1 ORDER BY name")
@@ -1608,7 +1609,7 @@ fn project_ids(ledger: &Ledger, project: &str) -> Vec<(String, Option<String>)> 
 
 #[test]
 fn an_install_names_the_id_known_at_its_route_and_none_where_none_is() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .knew(&[(id('a'), String::from("collapse"))], &[])
         .unwrap();
@@ -1634,7 +1635,7 @@ fn an_install_names_the_id_known_at_its_route_and_none_where_none_is() {
 
 #[test]
 fn a_route_known_by_an_id_is_read_back_both_ways() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
 
     let learned = ledger
         .knew(
@@ -1667,7 +1668,7 @@ fn a_route_known_by_an_id_is_read_back_both_ways() {
 
 #[test]
 fn a_route_whose_project_holds_another_id_now_is_known_by_that_one_with_its_records() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .knew(&[(id('a'), String::from("collapse"))], &[])
         .unwrap();
@@ -1692,7 +1693,7 @@ fn a_route_whose_project_holds_another_id_now_is_known_by_that_one_with_its_reco
 
 #[test]
 fn an_id_last_seen_at_a_stale_entry_stays_there_until_a_relink_moves_it() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger.knew(&[(id('a'), String::from("old"))], &[]).unwrap();
 
     ledger
@@ -1709,7 +1710,7 @@ fn an_id_last_seen_at_a_stale_entry_stays_there_until_a_relink_moves_it() {
 
 #[test]
 fn a_relink_moves_every_record_and_file_made_to_the_new_route() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger.knew(&[(id('a'), String::from("old"))], &[]).unwrap();
     for name in ["deploy", "review"] {
         let path = format!("skills/{name}");
@@ -1719,12 +1720,16 @@ fn a_relink_moves_every_record_and_file_made_to_the_new_route() {
     }
     ledger.set_created("old", "AGENTS.md", true).unwrap();
 
-    let (written, moved) = ledger
-        .relinked("old", "new", &id('a'), || Ok::<_, ()>("marker"))
-        .unwrap()
+    let mut wrote = false;
+    let moved = ledger
+        .relinked_by("old", "new", &id('a'), &mut || {
+            wrote = true;
+            true
+        })
         .unwrap();
 
-    assert_eq!((written, moved), ("marker", 2));
+    assert!(wrote, "the write runs inside the move");
+    assert_eq!(moved, Some(2));
     assert!(ledger.records("old", Kind::Skill).unwrap().is_empty());
     assert_eq!(
         ledger.installations("new", Kind::Skill).unwrap(),
@@ -1748,7 +1753,7 @@ fn a_relink_moves_every_record_and_file_made_to_the_new_route() {
 
 #[test]
 fn a_relink_drops_what_another_project_left_at_the_new_route() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .knew(
             &[
@@ -1773,7 +1778,7 @@ fn a_relink_drops_what_another_project_left_at_the_new_route() {
     ledger.set_created("new", "AGENTS.md", true).unwrap();
 
     ledger
-        .relinked("old", "new", &id('a'), || Ok::<_, ()>(()))
+        .relinked_by("old", "new", &id('a'), &mut || true)
         .unwrap()
         .unwrap();
 
@@ -1790,7 +1795,7 @@ fn a_relink_drops_what_another_project_left_at_the_new_route() {
 
 #[test]
 fn a_relink_whose_marker_is_not_written_moves_nothing() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger.knew(&[(id('a'), String::from("old"))], &[]).unwrap();
     ledger
         .installed(
@@ -1800,10 +1805,10 @@ fn a_relink_whose_marker_is_not_written_moves_nothing() {
         .unwrap();
 
     let refused = ledger
-        .relinked("old", "new", &id('a'), || Err::<(), _>("refused"))
+        .relinked_by("old", "new", &id('a'), &mut || false)
         .unwrap();
 
-    assert_eq!(refused, Err("refused"));
+    assert_eq!(refused, None);
     assert_eq!(
         ledger.installations("old", Kind::Skill).unwrap(),
         ["deploy"]
@@ -1814,7 +1819,7 @@ fn a_relink_whose_marker_is_not_written_moves_nothing() {
 
 #[test]
 fn a_route_holds_what_an_install_or_a_made_file_records_there() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     assert!(!ledger.holds("collapse").unwrap());
 
     ledger.set_created("collapse", "AGENTS.md", true).unwrap();
@@ -1831,7 +1836,7 @@ fn a_route_holds_what_an_install_or_a_made_file_records_there() {
 
 #[test]
 fn a_new_ledger_knows_each_project_it_is_told_of_once() {
-    let ledger = Ledger::open_knowing(":memory:", || {
+    let ledger = Sqlite::open_knowing(":memory:", || {
         vec![
             (id('a'), String::from("collapse")),
             (id('a'), String::from("copy")),
@@ -1933,7 +1938,7 @@ fn an_action_log_entry_serializes_every_field() {
     );
 }
 
-/// An entry built some other way than [`Ledger::history`] reads one may
+/// An entry built some other way than [`Sqlite::history`] reads one may
 /// hold a credential, in its target or quoted in its detail, and a report
 /// must not print it whatever built it.
 #[test]
@@ -1965,7 +1970,7 @@ fn an_action_log_entry_is_serialized_without_the_credentials_its_urls_carry() {
 /// stored in it.
 #[test]
 fn every_source_is_listed_in_url_order_without_credentials() {
-    let ledger = Ledger::in_memory().unwrap();
+    let ledger = Sqlite::in_memory().unwrap();
     ledger
         .source_for(SourceKind::Git, "https://h/b", None, "skills")
         .unwrap();

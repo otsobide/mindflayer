@@ -148,7 +148,7 @@ under `apps/` with its own `Makefile`:
   (`settings`, the marker from v3 on), workspaces, which workspace a command
   uses (`resolve`), the shell code that activates one (`activate`), kinds, the
   agents and where each kind goes for them (`agent`), the catalog, gathering
-  (through `port::Remote`), the SQLite ledger, installing, keeping installs out of git
+  (through `port::Remote`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
   (`agents_md`) and into Claude's rules folder (`claude_rules`), whether
   Claude reads that block and the `@AGENTS.md` import in a project's
@@ -195,10 +195,13 @@ under `apps/` with its own `Makefile`:
   `ContentHash`, a `Redacted` URL or message, an `Origin`, an
   `ArtifactName`, a `Revision`, a `ProjectId`). Its only I/O beyond files
   goes through a port (`port`: a `Remote` a gather fetches through, a
-  `Clock` the ledger stamps by), each implemented by an adapter in
-  `adapter` (`adapter::gix::Gix`, its credentials callback in
-  `adapter/gix/credentials.rs`, and `SystemClock`), and it never reads the
-  environment. Under its `ts` feature, `typescript` gives what it hands a
+  `LedgerStore` the ledger keeps its records in, a `Clock` it stamps them
+  by), each implemented by an adapter in `adapter` (`adapter::gix::Gix`,
+  its credentials callback in `adapter/gix/credentials.rs`;
+  `adapter::sqlite::Sqlite`, every query and schema step, its tests in
+  `adapter/sqlite_test.rs`; and `SystemClock`). `ledger::Ledger` is the
+  facade every caller holds, reaching its store's methods through `Deref`.
+  It never reads the environment. Under its `ts` feature, `typescript` gives what it hands a
   front end TypeScript (the roots its export writes), under its `schema`
   feature `schema` gives it JSON Schema (the roots its export writes, each
   given or taken, `Schemas`, `Together`), and under either `described` says
@@ -414,9 +417,11 @@ These are easy to break from a single file without noticing.
   Whatever core needs of the world beyond its files is a trait in `port`,
   in core's own words, its library's errors and types turned into those at
   the adapter: a gather fetches only through `Request::remote` (`Gix`
-  unless `through` hands another), the ledger reads the time only through
-  its `Clock` (`with_clock`), and no module but `adapter` names `gix` for
-  a fetch. A new library outside core is an adapter of a port, injected
+  unless `through` hands another), the ledger keeps its records only in its
+  `LedgerStore` (SQLite unless `Ledger::new` hands another) and reads the
+  time only through its `Clock` (`with_clock`), and no module but
+  `adapter` names `gix` for a fetch or `rusqlite` at all: a store's error
+  reaches `LedgerError` boxed, so the port names no store's type. A new library outside core is an adapter of a port, injected
   with the default built in, as D-14 has it for HTTP; a new front end is
   one more driver of the command lines (`commands::run_line`), never a
   path of its own into core (docs/architecture.md, "Values, ports and
@@ -983,9 +988,10 @@ These are easy to break from a single file without noticing.
   when asked, never on a read (`flayer migrate --library`, `mind migrate`).
   A key an older build reads past without misreading anything moves no
   version, as the default workspace's `known` did not.
-  - A ledger schema step is one more block in `Ledger::migrate`, which takes
+  - A ledger schema step is one more block in the SQLite store's migration
+    (`adapter::sqlite::Sqlite::migrate`), which takes
     the write lock, copies the file to `mindflayer.db.v<old>.bak`
-    (`Ledger::back_up`) and runs every step in one transaction. A step fills
+    (`Sqlite::back_up`) and runs every step in one transaction. A step fills
     in old rows in its own SQL, not through today's code, and adds a fixture
     of what the version before it wrote
     (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to migrate.

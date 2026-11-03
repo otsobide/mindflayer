@@ -241,7 +241,8 @@ is `FlayerWorkspace::pick`.
 Core is written hexagonally, at the owner's request
 ([D-25](#d-25-core-is-values-and-ports)): the rules in the middle, built of
 value objects, depend on nothing outside them; what they need from outside
-is a port; and an adapter on the edge implements each port with a library.
+is a port; and an adapter on the edge implements each port with a library:
+`gix` for a source, SQLite for the ledger, the system's clock for the time.
 The front ends are the other side's adapters, so a new store or a new
 interaction module is written against what is there, and no rule changes
 for it.
@@ -283,23 +284,32 @@ the same way.
 
 **Ports.** `port` holds what core needs of the world beyond its files, each
 a trait in core's own words: a `Remote` fetches a source into the cache and
-scrubs a clone of what a credential left in it, and a `Clock` tells the time
-the ledger stamps by. A port speaks only core's types: what an adapter's
+scrubs a clone of what a credential left in it, a `LedgerStore` keeps a
+workspace's records (its sources and what each supplied, every installation
+and its copies, the projects it knew, the action log), and a `Clock` tells
+the time the ledger stamps by. A port speaks only core's types: what an adapter's
 library says is turned into those at the edge (an error into text, a commit
 into a `Revision`), never carried through, which would tie core's public API
 to the library's version and let a rule lean on how one library works. So
 `GitError` and the clone a fetch answers with (`port::Cloned`) are the
-port's, since they carry only text.
+port's, since they carry only text, and `LedgerError` carries what a store
+said boxed (`Box<dyn Error + Send + Sync>`), so it names no store's type;
+the SQLite adapter, which alone knows what it put there, looks inside it
+with a `downcast_ref` where it has to tell one failure from another.
 
 **Adapters.** `adapter` implements them: `adapter::gix::Gix`, which clones
 with `gix` and asks the credential helpers through the callback that never
 prompts ([a gather never prompts for a credential
-itself](#d-16-credentials-come-from-the-front-end-never-from-a-prompt)), and
+itself](#d-16-credentials-come-from-the-front-end-never-from-a-prompt));
+`adapter::sqlite::Sqlite`, every query, every schema step and the backup
+before one ([why the ledger is SQLite](#why-the-ledger-is-sqlite)); and
 `SystemClock`. Each is the default its port is given wherever nothing else
 is handed over, the seam [D-14](#d-14-core-owns-http-behind-a-seam) chose
 for HTTP: a gather's `Request` fetches through the remote it is handed
 (`Request::through`), `Gix` unless another is, and the ledger stamps by the
-clock it is given (`Ledger::with_clock`), the system's unless another is. A
+clock it is given (`Ledger::with_clock`), the system's unless another is,
+and keeps its records in the store it is handed (`Ledger::new`), SQLite
+unless another is: every other constructor opens a `Sqlite`. A
 test's fake is one more adapter: `port_test.rs` gathers through a remote
 that writes files and has no git at all, and stamps the ledger by a clock
 that does not move, and what each comes to is what it comes to through the
@@ -316,11 +326,20 @@ a filesystem port would invite, and every test already runs on real
 temporary folders. Reading what git keeps of a project, where its common
 folder is and whether its index tracks a copy (`exclude`), is the same: it
 reads files git wrote, through `gix` with every system and user setting
-left out, and nothing of it reaches out of the machine. Nor, yet, is the ledger's store. It is one concrete type,
-`ledger::Ledger`, over SQLite, whose public methods are already the port it
-would become: every caller holds a `&Ledger` and asks it in core's words,
-none writes SQL. Making it a trait is the next step, and an open question
-below.
+left out, and nothing of it reaches out of the machine.
+
+**The ledger, a facade over its store.** Every caller holds a
+`ledger::Ledger`, as it did when that was SQLite itself, and asks it in
+core's words; none writes SQL. It holds a `Box<dyn LedgerStore>` and hands
+each call to it through `Deref`, so the methods are declared once, on the
+port, and no caller changed when they moved there. The two things a trait
+object cannot carry stay on the facade: the constructors, which open the
+SQLite store, and `relinked`, whose write is of any type, run by the
+store as an erased one (`LedgerStore::relinked_by`, a write that says
+whether to keep what it moved). The store's own tests are the adapter's
+(`adapter/sqlite_test.rs`), since they reach its connection to make a row
+an older build wrote; what any store must do is held by the suites that run
+core through the facade.
 
 **The driving side.** A front end drives core through its functions, and
 every change through the command lines every front end runs
@@ -2480,7 +2499,8 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
-The schema has had five versions, each a block in `Ledger::migrate` and a
+The schema has had five versions, each a block in the SQLite store's
+migration (`adapter::sqlite::Sqlite::migrate`) and a
 constant beside it:
 
 1. `sources`, `artifacts` and `actions`: what was gathered, from where, and
@@ -2512,7 +2532,7 @@ An older ledger is migrated step by step, so one made two versions ago ends
 where one made today begins, and two rules hold for every step:
 
 - **The file is copied aside first.** Before the first step, the ledger is
-  copied beside itself as `mindflayer.db.v<old>.bak` (`Ledger::back_up`), and
+  copied beside itself as `mindflayer.db.v<old>.bak` (`Sqlite::back_up`), and
   nothing is migrated unless the copy is whole and opens at the old version.
   A step that turns out wrong then leaves the file it started from: the copy
   opens at the old version, and the build that wrote it reads it as it
@@ -7468,7 +7488,7 @@ schema and no other, so declining would leave the file unreadable rather than
 untouched; that step is upkeep of Mindflayer's own file, not a change anybody
 asked for. Every migration copies the database aside before its first step
 ([Why the ledger is SQLite](#why-the-ledger-is-sqlite)), and a read migrates
-through the same `Ledger::migrate`, so it leaves that copy too: the first
+through the same migration (`Sqlite::migrate`), so it leaves that copy too: the first
 `flayer gather list` after an upgrade puts `mindflayer.db.v2.bak` beside a
 ledger version 2 wrote.
 
@@ -9018,7 +9038,7 @@ other, and none of them makes a reader wait for the workspace.
   ([open questions](#open-questions)).
 - **Opening the ledger takes no lock**, though it is when a ledger is made or
   migrated. A migration is one transaction that reads the version again once
-  it holds SQLite's write lock (`Ledger::migrate`), so two processes opening
+  it holds SQLite's write lock (`Sqlite::migrate`), so two processes opening
   one an older build left take turns there and the second finds nothing to
   do (a read's migration included, which the workspace's lock could not keep
   apart, since readers never take it). Taking that lock as well made every
@@ -9731,29 +9751,30 @@ can change, and interaction modules be added, with the least change to the
 rules. Carried out on the branch that asked for it ([values, ports and
 adapters](#values-ports-and-adapters)): `value` holds a hash, a redacted
 text, an origin, an artifact's name, a revision and a project's id, each
-going out as the text it is, so no contract moves; `port` holds a `Remote`
-and a `Clock`, and `adapter` holds `gix` and the system clock as their
-defaults, injected as [D-14](#d-14-core-owns-http-behind-a-seam) injects
-HTTP. The driving side is the command line every front end already runs,
+going out as the text it is, so no contract moves; `port` holds a `Remote`,
+a `LedgerStore` and a `Clock`, and `adapter` holds `gix`, SQLite and the
+system clock as their defaults, injected as
+[D-14](#d-14-core-owns-http-behind-a-seam) injects HTTP, the ledger a
+facade over its store so no caller changed. The driving side is the command line every front end already runs,
 so a new front end stays one more driver of it
 ([D-18](#d-18-the-panel-writes-by-running-commands)). Rejected: a port over
 the filesystem, whose promises are the operating system's own calls, and a
 second crate for each adapter, which would split one engine's rules from
 the code that keeps them for no reader that needs the split yet. Still to
-carry out: the ledger's store as a port, and the values not named yet (a
-project's name, a registry entry), the open questions below.
+carry out: the values not named yet (a project's name, a registry entry),
+an open question below.
 
 ## Open questions
 
-- **The ledger's store is not a port yet.** `ledger::Ledger` is the one
-  concrete store, over SQLite, and every caller holds it by that type
-  ([values, ports and adapters](#values-ports-and-adapters)). Making it a
-  trait means its public methods become the port, its schema steps and
-  backups the SQLite adapter's own, and the one generic method, `relinked`,
-  which runs a caller's write inside the store's transaction, a method that
-  takes the write as a trait object. Nothing reaches for another store yet,
-  so it waits for the first that does, and nothing written since makes it
-  harder: no caller writes SQL.
+- **The ledger's port is shaped by the store it came from.** `LedgerStore`
+  is the SQLite store's public methods as they were
+  ([values, ports and adapters](#values-ports-and-adapters)), so a second
+  store implements what only SQLite's past needs: `tainted_sources`,
+  `scrub_source` and `scrub_log` repair rows an older build wrote with a
+  credential in them, which a store made today never holds, and `path`
+  names a file a store kept elsewhere may not have. Splitting the repairs
+  off into a port of their own waits for a second store to say which of
+  them it can answer, rather than guessing now.
 - **Values not named yet.** A project's name, a registry entry and a path
   inside a project are still `String`s, and so are an error's fields, as
   the read types that hold them were. Each joins `value` when a rule is

@@ -9,7 +9,7 @@
 //! ([`Ledger::records`]); it cannot see that one has gone since, nor a copy
 //! it never wrote.
 //!
-//! [`Ledger::records`]: crate::ledger::Ledger::records
+//! [`Ledger::records`]: crate::port::LedgerStore::records
 //!
 //! Core builds and orders the report, so every front end shows the same
 //! states in the same order: the CLI's table and its JSON, and the TUI's rows.

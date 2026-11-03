@@ -305,7 +305,7 @@ pub enum Stranded {
 /// put in place together (`copy::Stage::place`); the untouched copies taken
 /// out, moved into that stage rather than deleted; the settings, with
 /// `create_new`; the `mind.toml` moved into `.mind/tmp`; and last the ledger,
-/// in one transaction ([`Ledger::migrated`]). A step that fails puts back
+/// in one transaction ([`Ledger::migrated`](crate::port::LedgerStore::migrated)). A step that fails puts back
 /// every one before it, the last first, so the `mind.toml` marks the project
 /// again and the ledger names what it named; what cannot be put back is
 /// said ([`MigrateError::left_behind`]). Only once the ledger holds the move

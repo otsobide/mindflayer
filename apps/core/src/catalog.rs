@@ -298,7 +298,7 @@ impl Catalog {
     /// What makes a skill in a folder a project authors in its own or an
     /// install's, and one in an agent's folder an install's or somebody
     /// else's: the ledger, by the path of each copy it records
-    /// ([`Ledger::copies`]), not by name, so an install of one name into one
+    /// ([`Ledger::copies`](crate::port::LedgerStore::copies)), not by name, so an install of one name into one
     /// folder does not claim what somebody keeps under that name in another.
     /// Apart from discovery, which reads files and nothing else: a listing
     /// that says nothing of who put what where opens no ledger, and one that
