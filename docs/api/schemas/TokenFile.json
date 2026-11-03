@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TokenFile",
+  "description": "What `--token-file` writes, for a script to read where the API is and\nthe token to send it: a contract, as the envelope's names are, so\ndropping or renaming a field, or changing what it holds, moves\n[`TOKEN_FILE_VERSION`], and adding one does not.\n\nIts schema goes by what it is to the script, the token file, rather\nthan by what this end does, which hands it over.",
+  "type": "object",
+  "properties": {
+    "api": {
+      "description": "Where every route is served: `http://127.0.0.1:<port>/api/v1`.",
+      "type": "string"
+    },
+    "token": {
+      "description": "The launch token, to send as `Authorization: Bearer <token>`.",
+      "type": "string"
+    },
+    "version": {
+      "description": "[`TOKEN_FILE_VERSION`], so a script can tell a layout it was not\nwritten for.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "version",
+    "api",
+    "token"
+  ]
+}

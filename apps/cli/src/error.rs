@@ -40,7 +40,7 @@ pub const CODES: &[(&str, &[&str])] = &[
 ///
 /// A type with nothing in it, since what it stands for is the lists, and
 /// here, beside them, rather than beside one description of them.
-#[cfg(feature = "ts")]
+#[cfg(any(feature = "ts", feature = "schema"))]
 pub struct Code;
 
 /// Why a command could not run at all, as opposed to running and finding

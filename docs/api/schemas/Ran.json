@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ran",
+  "description": "What one write did: the lines it was, and what running them produced.\n\nWhat a run is answered with, and each entry of the transcript: named as\nits route's answer is ([`Answer::Ran`](crate::Answer::Ran)), rather than\nas an entry, which a description of the API would put beside the\nledger's.",
+  "type": "object",
+  "properties": {
+    "lines": {
+      "description": "The command lines, each as somebody would type it.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outcome": {
+      "description": "What running them produced: the backend's\n[`Outcome`](crate::Backend::Outcome), as its JSON, carried unread."
+    }
+  },
+  "required": [
+    "lines",
+    "outcome"
+  ]
+}

@@ -25,6 +25,7 @@ use crate::task::Holder;
 /// What `POST /api/v1/plan` is sent: the boxes of projects and offers,
 /// ticked or not, whose plan it answers with ([`Query::Plan`]).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct Selected {
     pub selection: Vec<Cell>,
@@ -33,6 +34,7 @@ pub struct Selected {
 /// What `POST /api/v1/validate` is sent: a draft, and what it would be
 /// written in ([`Query::Validate`]).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct Drafted {
     pub holder: Holder,

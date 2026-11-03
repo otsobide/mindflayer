@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Switch",
+  "description": "What the panel asks to switch to: a workspace by its path, as the\nanswer to [`Query::Workspaces`] lists it, `{\"path\": \"/home/you/work\"}`.\n\nA path matched against that list, read again when the switch arrives,\nand never opened as sent ([`policy::switched`]): a browser goes to no\nworkspace that list does not offer. A field it does not have is\nrefused, as a task's is.",
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "path"
+  ]
+}

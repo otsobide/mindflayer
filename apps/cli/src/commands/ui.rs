@@ -163,8 +163,16 @@ fn announce(
 /// the token to send it: a contract, as the envelope's names are, so
 /// dropping or renaming a field, or changing what it holds, moves
 /// [`TOKEN_FILE_VERSION`], and adding one does not.
+///
+/// Its schema goes by what it is to the script, the token file, rather
+/// than by what this end does, which hands it over.
 #[derive(Serialize)]
-struct Handed<'a> {
+#[cfg_attr(
+    feature = "schema",
+    derive(schemars::JsonSchema),
+    schemars(rename = "TokenFile")
+)]
+pub(crate) struct Handed<'a> {
     /// [`TOKEN_FILE_VERSION`], so a script can tell a layout it was not
     /// written for.
     version: u32,
@@ -176,7 +184,7 @@ struct Handed<'a> {
 
 /// What `--token-file` holds: [`Handed`], a field to a line for whoever
 /// opens it, and ended as a text file is.
-fn handed(api: &str, token: &str) -> Vec<u8> {
+pub(crate) fn handed(api: &str, token: &str) -> Vec<u8> {
     let handed = Handed {
         version: TOKEN_FILE_VERSION,
         api,

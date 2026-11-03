@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Preview",
+  "description": "What a task would run, worked out with none of it run: what\n[`Backend::preview`] answers, and `POST /api/v1/tasks/preview` sends as\nit is, `{\"lines\": [...], \"confirm\": [...]}`.",
+  "type": "object",
+  "properties": {
+    "confirm": {
+      "description": "What the panel has somebody confirm before it asks for the run, one\nitem for each thing a line takes away; none for a task the panel\nruns once it is asked to.\n\nThe backend's own JSON, carried to the panel unread, as a watched\npath's scope is: which lines take something away is a rule of the\nfront end's, and so are the words for it. Said where the lines are,\nso the panel is told it of the very lines it shows, rather than\nasking a second time about a disk that may have changed between.\nThe server only carries it: a run sent without the panel having\nasked anybody is run, as a shell runs the line typed into it, since\nwhoever holds the token is the person at this machine and the\nquestion is for their slips, which is the panel's to ask.",
+      "type": "array",
+      "items": true
+    },
+    "lines": {
+      "description": "The command lines, each as somebody would type it.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "lines",
+    "confirm"
+  ]
+}

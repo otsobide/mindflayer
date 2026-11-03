@@ -2778,12 +2778,14 @@ dependencies = [
 name = "mindflayer-cli"
 version = "0.1.0"
 dependencies = [
+ "boon",
  "clap",
  "gix",
  "mindflayer-core",
  "mindflayer-server",
  "ratatui",
  "rusqlite",
+ "schemars",
  "serde",
  "serde_json",
  "tempfile",

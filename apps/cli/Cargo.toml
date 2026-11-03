@@ -41,6 +41,12 @@ ui = ["dep:mindflayer-server", "dep:tokio", "dep:webbrowser"]
 # it to write them into the panel, and nothing else does. With `ui`, whose
 # backend the panel's queries and outcomes are.
 ts = ["ui", "dep:ts-rs", "mindflayer-core/ts"]
+# The JSON Schema of what the CLI's backend is sent and answers with, the
+# token file `ui --token-file` writes, core's and the server's own beside
+# them (#217): `make api/schemas` builds with it to write them into
+# docs/api/schemas, and nothing else does. With `ui`, whose backend and
+# server they describe.
+schema = ["ui", "dep:schemars", "mindflayer-core/schema", "mindflayer-server/schema"]
 
 [dependencies]
 mindflayer-core = { path = "../core" }
@@ -68,6 +74,9 @@ serde_json = "1"
 # an enum's `deny_unknown_fields`, which says what a task may hold when it is
 # read, not what one is.
 ts-rs = { version = "12", optional = true, features = ["no-serde-warnings"] }
+# What derives their JSON Schema, under `schema`, as core's and the
+# server's are derived: the version both take.
+schemars = { version = "1.2", optional = true }
 
 [dev-dependencies]
 # `dirwalk`, to ask in process what git would list as untracked in a project
@@ -82,3 +91,7 @@ tempfile = "3"
 # To wait, bounded, for what the panel's watcher tells (`live_test`): the
 # runtime and timers the server's own suites use, and the version it builds.
 tokio = { version = "1", features = ["macros", "rt", "time"] }
+# What holds every schema to what serde writes, the panel's fixtures among
+# it: the 2020-12 validator core's tests use, for the reasons its manifest
+# gives.
+boon = { version = "0.6", default-features = false }
