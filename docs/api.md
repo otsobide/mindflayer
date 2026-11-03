@@ -6,8 +6,11 @@ the server nothing a script cannot: what a project holds, what an install
 would do, and every change Mindflayer makes, previewed and then run as the
 command line it is.
 
-This guide walks through it with `curl` on a small workspace, every
-answer it shows the one the server gives. [The
+This guide walks through it with `curl` on a small workspace. Every answer
+it shows is what the server answers: a test
+(`apps/cli/tests/api_guide_test.rs`) builds the same workspace with the
+commands shown, starts `flayer ui` as shown, sends every request below and
+fails when an answer here is not the one the server gives. [The
 reference](reference.md#control-panel) has the API beside the panel, and
 [its description](#its-description) every route, parameter, field and code.
 
