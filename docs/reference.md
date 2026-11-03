@@ -1808,7 +1808,7 @@ a script to read; what it prints once it stops (below) follows it there.
 be opened, as on a machine with no display, is a warning, not a failure.
 `--token-file` writes where the API is and the token to a file of its own
 as well, for a script that did not start the panel (below, with the HTTP
-API).
+API, and in [the API's guide](api.md), which walks through it with curl).
 `mind ui` is the same command from inside a project. Either serves the
 workspace a command run there would use, decided once as it starts, from
 `-C`, `--home`, `-W` and the agent homes, until you switch to another this
@@ -2220,6 +2220,10 @@ the one in the link `flayer ui` prints, sent as `Authorization: Bearer
 ```sh
 curl -H "Authorization: Bearer <token>" 'http://127.0.0.1:<port>/api/v1/project?entry=api'
 ```
+
+[The API's guide](api.md) walks through it with curl on a small
+workspace, every answer it shows the one the server gives, as a test holds
+it; what follows here is the whole of it, in short.
 
 **With no browser**, `--no-open` and `--token-file` serve the API to
 scripts alone: nothing is opened, and where the API is and the token go to
