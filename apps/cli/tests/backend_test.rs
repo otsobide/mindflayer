@@ -1251,6 +1251,108 @@ fn a_folder_is_listed_only_where_the_policy_allows_and_nothing_is_written() {
     .is_err());
 }
 
+/// A read whose parameters name what is not there is refused as absent,
+/// a 404, with core's code: an entry no registry holds, an artifact
+/// nothing holds, a file or a folder that does not exist, or that is no
+/// file or folder. What is there and still refused is unfit, a 422, as is
+/// anything a body names, a draft's holder or a task's project, whose
+/// route is there whatever the body holds.
+#[test]
+fn a_read_naming_what_is_not_there_is_absent_and_a_body_naming_it_unfit() {
+    let (dir, backend, skill) = contents_fixture();
+    let root = dir.path();
+    fs::create_dir(skill.join("references")).unwrap();
+    let alpha = json!({"type": "project", "entry": "alpha"});
+    let ghost = json!({"type": "project", "entry": "ghost"});
+    let gone = under(root, &["gone"]);
+    let skill_file = skill.join("SKILL.md");
+    let not_a_folder = skill_file.to_str().unwrap();
+
+    for (what, sent, code, grounds) in [
+        (
+            "an entry no registry holds",
+            json!({"type": "project", "entry": "ghost"}),
+            "not_registered",
+            Grounds::Absent,
+        ),
+        (
+            "an artifact's files, of an entry no registry holds",
+            json!({"type": "files", "holder": ghost, "reference": "skill:alpha"}),
+            "not_registered",
+            Grounds::Absent,
+        ),
+        (
+            "an artifact nothing holds",
+            json!({"type": "files", "holder": alpha, "reference": "skill:ghost"}),
+            "not_found",
+            Grounds::Absent,
+        ),
+        (
+            "a file that is not there",
+            json!({"type": "contents", "holder": alpha, "reference": "skill:alpha", "file": "GHOST.md"}),
+            "contents_missing",
+            Grounds::Absent,
+        ),
+        (
+            "a folder asked for as a file",
+            json!({"type": "contents", "holder": alpha, "reference": "skill:alpha", "file": "references"}),
+            "contents_not_a_file",
+            Grounds::Absent,
+        ),
+        (
+            "a file's route that climbs out",
+            json!({"type": "contents", "holder": alpha, "reference": "skill:alpha", "file": "../x"}),
+            "contents_route_unfit",
+            Grounds::Unfit,
+        ),
+        (
+            "a folder that does not exist",
+            json!({"type": "folders", "path": gone, "hidden": false}),
+            "browse_missing",
+            Grounds::Absent,
+        ),
+        (
+            "a file asked for as a folder",
+            json!({"type": "folders", "path": not_a_folder, "hidden": false}),
+            "browse_not_a_folder",
+            Grounds::Absent,
+        ),
+        (
+            "a folder the policy refuses",
+            json!({"type": "folders", "path": "Projects", "hidden": false}),
+            "path_relative",
+            Grounds::Unfit,
+        ),
+        (
+            "a draft's holder no registry holds, in a body",
+            json!({"type": "validate", "holder": ghost, "draft": {
+                "type": "edit", "reference": "skill:alpha", "text": "x",
+            }}),
+            "not_registered",
+            Grounds::Unfit,
+        ),
+    ] {
+        let refusal = backend.query(query(sent.clone())).unwrap_err();
+        assert_eq!(
+            (refusal.code, refusal.grounds),
+            (code, grounds),
+            "{what}: {sent}"
+        );
+    }
+
+    let sent = add_to(json!({"type": "project", "entry": "ghost"}));
+    for refusal in [
+        backend.preview(&task(sent.clone())).unwrap_err(),
+        backend.run(task(sent.clone())).unwrap_err(),
+    ] {
+        assert_eq!(
+            (refusal.code, refusal.grounds),
+            ("not_registered", Grounds::Unfit),
+            "a task's project, in a body"
+        );
+    }
+}
+
 /// A project found moved offers no link beside the entry it left stale,
 /// but names that entry as the marker spells it, which a relink takes.
 #[test]

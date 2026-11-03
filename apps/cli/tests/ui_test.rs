@@ -411,6 +411,40 @@ fn a_request_without_the_token_is_refused_with_a_401() {
     assert_eq!(status, 401);
 }
 
+/// A read naming what is not there is a 404 with core's code for it, an
+/// entry no registry holds or a folder that does not exist; one naming a
+/// path the policy refuses, which is there or not, is a 422 with its own.
+#[test]
+fn a_read_naming_what_is_not_there_is_a_404_and_a_refused_path_a_422() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let panel = serve("flayer", dir.path(), home.path());
+    let gone = dir.path().join("gone");
+
+    for (asked, status, code) in [
+        (
+            "/api/v1/project?entry=ghost".to_owned(),
+            404,
+            "not_registered",
+        ),
+        (
+            format!("/api/v1/folders?path={}", encoded(gone.to_str().unwrap())),
+            404,
+            "browse_missing",
+        ),
+        (
+            "/api/v1/folders?path=Projects".to_owned(),
+            422,
+            "path_relative",
+        ),
+    ] {
+        let (answered, refusal) = panel.get(&asked);
+        assert_eq!(answered, status, "{asked}: {refusal}");
+        assert_eq!(refusal["code"], code, "{asked}: {refusal}");
+        assert!(refusal["error"].is_string(), "{asked}: {refusal}");
+    }
+}
+
 /// What a front end without a terminal does not run is a 422 that names the
 /// command, with its code, and nothing of it runs.
 #[test]
