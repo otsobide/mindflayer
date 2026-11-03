@@ -421,9 +421,9 @@ fn a_save_writes_the_text_and_leaves_nothing_in_the_scratch_folder() {
 const PATIENCE: Duration = Duration::from_secs(10);
 
 /// Every event the stream tells over loopback, each as its `data:` line
-/// holds it, until `until` is told or [`PATIENCE`] has passed; `run` once
-/// the first is told, so what it does is told after it.
-fn events(panel: &Panel, run: impl FnOnce(), until: &str) -> Vec<Value> {
+/// holds it, until one `until` picks is told or [`PATIENCE`] has passed;
+/// `run` once the first is told, so what it does is told after it.
+fn events(panel: &Panel, run: impl FnOnce(), until: impl Fn(&Value) -> bool) -> Vec<Value> {
     let mut stream = TcpStream::connect(panel.address).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_millis(200)))
@@ -438,7 +438,7 @@ fn events(panel: &Panel, run: impl FnOnce(), until: &str) -> Vec<Value> {
     let mut run = Some(run);
     let mut line = String::new();
     let deadline = std::time::Instant::now() + PATIENCE;
-    while std::time::Instant::now() < deadline && !told.iter().any(|event| event["type"] == until) {
+    while std::time::Instant::now() < deadline && !told.iter().any(&until) {
         // What a timeout cut off stays in `line`, for the read after it.
         match reader.read_line(&mut line) {
             Ok(0) => break,
@@ -483,6 +483,15 @@ fn every_event_the_stream_tells_holds_to_the_document() {
         "type": "install", "projects": ["alpha"], "kind": "skill", "name": "commit-style",
         "from": null,
     });
+    // Waiting for the change by the project's holder, not for any change:
+    // the ledger's is the workspace's, which a debounce may tell apart.
+    let alpha = json!({"type": "project", "entry": "alpha"});
+    let reaches_alpha = |event: &Value| {
+        event["type"] == "changed"
+            && event["scopes"]
+                .as_array()
+                .is_some_and(|scopes| scopes.contains(&alpha))
+    };
 
     let told = events(
         &panel,
@@ -490,7 +499,7 @@ fn every_event_the_stream_tells_holds_to_the_document() {
             let (status, ran) = panel.post("/api/v1/tasks", install);
             assert_eq!(status, 200, "{ran}");
         },
-        "changed",
+        reaches_alpha,
     );
 
     let kinds: Vec<&str> = told
@@ -501,6 +510,7 @@ fn every_event_the_stream_tells_holds_to_the_document() {
     for kind in ["command_started", "command_finished"] {
         assert!(kinds.contains(&kind), "{kind}: {told:?}");
     }
+    assert!(told.iter().any(reaches_alpha), "{told:?}");
     for event in &told {
         contract::told("/api/v1/events", event);
     }
