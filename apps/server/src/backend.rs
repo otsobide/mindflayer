@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+use crate::route::Route;
+
 /// The front end on the other side of the server: whatever knows what a
 /// query, a task and an outcome are.
 ///
@@ -40,6 +42,18 @@ pub trait Backend: Send + Sync + 'static {
     /// its own, and one type standing for all of them would be an enum whose
     /// only job is to serialize untagged.
     fn query(&self, query: Self::Query) -> Result<serde_json::Value, Refusal>;
+
+    /// Every read it serves, each under [`API`](crate::API) at its path,
+    /// with what it takes, what it answers and how what a request sends
+    /// becomes a [`Query`](Backend::Query) ([`Route`]).
+    ///
+    /// A table rather than a handler of its own, so the server matches a
+    /// path, reads its parameters and refuses one no route takes without
+    /// knowing what any of them means, and a description of the API is
+    /// written from the very table that is served. Without `self`: which
+    /// reads there are is the front end's, as fixed as its types, so that
+    /// description needs no backend launched.
+    fn routes() -> Vec<Route<Self::Query>>;
 
     /// The command lines a task is, each as somebody would type it, without
     /// running any of them, and what of them the panel has somebody confirm

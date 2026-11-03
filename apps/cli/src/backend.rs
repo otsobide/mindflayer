@@ -81,12 +81,13 @@ use mindflayer_core::{paths, policy, watch};
 use mindflayer_core::{
     FlayerWorkspace, Found, Kind, MindProject, Reference, Scan, FLAYER_CONFIG, FLAYER_DIR,
 };
-use mindflayer_server::{Backend, Preview, Refusal, Watched};
+use mindflayer_server::{Backend, Preview, Refusal, Route, Watched};
 use serde::{Deserialize, Serialize};
 
 use crate::admit::Admission;
 use crate::commands::project::{scan_warned, worth_linking};
 use crate::commands::{run_line, Ran};
+use crate::routes;
 use crate::task::{self, cautioned, shell, Caution, Holder, MindsChange, Task};
 use crate::tui::state::{transcript, Done};
 use crate::{CliError, Lookup, Warning};
@@ -770,6 +771,12 @@ impl Backend for PanelBackend {
                 Ok(serde_json::to_value(listed).expect("a list serializes"))
             }
         }
+    }
+
+    /// The panel's reads, and the snapshot's parts, each the query the panel
+    /// sends for it ([`routes::table`]).
+    fn routes() -> Vec<Route<Query>> {
+        routes::table()
     }
 
     /// Each line as a shell would read it, and what the panel has somebody

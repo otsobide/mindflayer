@@ -15,6 +15,7 @@ use crate::events::Events;
 use crate::guard::{self, Hosts};
 use crate::log::{self, Log, Sink};
 use crate::panel::{self, Panel};
+use crate::route::{self, API};
 use crate::token::Token;
 use crate::transcript::Transcript;
 use crate::watcher::Watcher;
@@ -95,6 +96,10 @@ impl<B: Backend> Server<B> {
     ///
     /// Synchronous, and std's listener rather than tokio's, so that a front
     /// end can learn the port and print the link before it has a runtime.
+    ///
+    /// Fails, with nothing served, on a table of routes the backend hands
+    /// over that cannot be served ([`Backend::routes`]): a path taken twice,
+    /// or no path the router could take as it is spelled.
     pub fn bind(self) -> io::Result<Listening> {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, self.port))?;
         let address = listener.local_addr()?;
@@ -197,6 +202,8 @@ fn route<B: Backend>(
     port: u16,
     events: Events,
 ) -> io::Result<Router> {
+    let routes = B::routes();
+    route::check(&routes)?;
     let gate = Arc::new(Gate::new(token.clone(), port));
     let log = server
         .log
@@ -220,7 +227,14 @@ fn route<B: Backend>(
         transcript,
         events,
     });
-    let router = Router::new()
+    // Each of the backend's reads at its path under the version, as its
+    // table says: the server matches it, and knows nothing of what it is.
+    let mut router = Router::new();
+    for read in routes {
+        let path = format!("{API}{}", read.path);
+        router = router.route(&path, endpoint(api::read::<B>(read)));
+    }
+    let router = router
         .route("/api/query", endpoint(post(api::query::<B>)))
         .route("/api/commands/preview", endpoint(post(api::preview::<B>)))
         .route("/api/commands", endpoint(post(api::commands::<B>)))

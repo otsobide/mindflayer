@@ -8,7 +8,9 @@
 
 pub use axum::body::{Body, Bytes};
 pub use axum::http::{header, HeaderMap, Method, Request, StatusCode};
-pub use mindflayer_server::{Backend, Listening, Preview, Refusal, Server, Watched};
+pub use mindflayer_server::{
+    Arguments, Backend, Listening, Parameter, Preview, Refusal, Route, Server, Shape, Watched, API,
+};
 pub use serde_json::{json, Value};
 pub use std::sync::{Arc, Condvar, Mutex};
 
@@ -21,13 +23,92 @@ use tower::ServiceExt;
 // The fake backend
 // ---------------------------------------------------------------------------
 
-/// The fake's read: say back what was sent, so a test can tell it arrived,
-/// or refuse to.
-#[derive(Deserialize)]
+/// The fake's read: say back what was sent, so a test can tell it arrived
+/// as the route it was sent to makes it, or refuse to. What it answers is
+/// itself, each field left at its default left out.
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct FakeQuery {
     pub echo: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub refuse: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub words: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub times: Option<u64>,
+}
+
+/// What `GET /api/v1/words` sends: a parameter named otherwise than the
+/// field it fills, as a route may name one.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Words {
+    #[serde(default)]
+    word: Vec<String>,
+    times: Option<u64>,
+}
+
+/// The fake's reads, one of each shape a parameter has and a POST:
+///
+/// - `GET /echo?echo=...&refuse=true`, read as the query whole, and refused
+///   by the route itself when there is nothing to echo;
+/// - `GET /words?word=a&word=b&times=2`, its words in `words`;
+/// - `POST /judge`, its body read as the query whole, and refused by the
+///   route as the echo route refuses.
+pub fn fake_routes() -> Vec<Route<FakeQuery>> {
+    vec![
+        Route {
+            method: mindflayer_server::Method::Get,
+            path: "/echo",
+            about: "What was sent, said back",
+            parameters: vec![
+                Parameter::required("echo", Shape::Text, "What to say back"),
+                Parameter::optional("refuse", Shape::Flag, "Whether to refuse it"),
+            ],
+            body: None,
+            answers: "FakeQuery",
+            query: echoed,
+        },
+        Route {
+            method: mindflayer_server::Method::Get,
+            path: "/words",
+            about: "Words, said back",
+            parameters: vec![
+                Parameter::optional("word", Shape::List, "One of the words"),
+                Parameter::optional("times", Shape::Number, "How many times"),
+            ],
+            body: None,
+            answers: "FakeQuery",
+            query: |sent| {
+                let Words { word, times } = sent.read()?;
+                Ok(FakeQuery {
+                    echo: String::from("words"),
+                    refuse: false,
+                    words: word,
+                    times,
+                })
+            },
+        },
+        Route {
+            method: mindflayer_server::Method::Post,
+            path: "/judge",
+            about: "What was sent in the body, said back",
+            parameters: Vec::new(),
+            body: Some("FakeQuery"),
+            answers: "FakeQuery",
+            query: echoed,
+        },
+    ]
+}
+
+/// What was sent, read as the query whole, or refused by the route when
+/// there is nothing to echo.
+fn echoed(sent: Arguments) -> Result<FakeQuery, String> {
+    let query: FakeQuery = sent.read()?;
+    if query.echo.is_empty() {
+        return Err(String::from("there is nothing to echo"));
+    }
+    Ok(query)
 }
 
 /// The fake's task: a name to run under, whether to wait at the fake's hold
@@ -126,7 +207,11 @@ impl Backend for Fake {
         if query.refuse {
             return Err(refusal(&query.echo));
         }
-        Ok(json!({ "echo": query.echo }))
+        Ok(serde_json::to_value(query).unwrap())
+    }
+
+    fn routes() -> Vec<Route<FakeQuery>> {
+        fake_routes()
     }
 
     fn preview(&self, task: &FakeTask) -> Result<Preview, Refusal> {

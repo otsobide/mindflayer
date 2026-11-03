@@ -8,10 +8,12 @@ use axum::extract::State;
 use axum::http::{Method, StatusCode, Uri};
 use axum::response::sse::{self, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
+use axum::routing::{get, post, MethodRouter};
 use axum::Json;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::events::Events;
+use crate::route::{self, Arguments, Route};
 use crate::transcript::Transcript;
 use crate::watcher::Watcher;
 use crate::writer::Writer;
@@ -29,18 +31,72 @@ pub(crate) struct Api<B: Backend> {
 }
 
 /// `POST /api/query`: a read, answered by the backend.
-///
-/// On the blocking pool, because a query reads the disk and the runtime's
-/// own threads are for moving bytes: one slow read there would stall every
-/// other request waiting on that thread.
 pub(crate) async fn query<B: Backend>(
     State(api): State<Arc<Api<B>>>,
     body: Result<Json<B::Query>, JsonRejection>,
 ) -> Response {
-    let query = match body {
-        Ok(Json(query)) => query,
-        Err(rejection) => return refused(rejection),
+    match body {
+        Ok(Json(query)) => ask(&api, query).await,
+        Err(rejection) => refused(rejection),
+    }
+}
+
+/// A read one of the backend's routes serves ([`Route`]), as the method
+/// it is asked by: a GET by its parameters, a POST by its body.
+pub(crate) fn read<B: Backend>(route: Route<B::Query>) -> MethodRouter<Arc<Api<B>>> {
+    let route = Arc::new(route);
+    match route.method {
+        route::Method::Get => get(move |State(api): State<Arc<Api<B>>>, uri: Uri| {
+            let route = Arc::clone(&route);
+            async move { answer(&api, &route, &uri, None).await }
+        }),
+        route::Method::Post => post(
+            move |State(api): State<Arc<Api<B>>>,
+                  uri: Uri,
+                  body: Result<Json<Value>, JsonRejection>| {
+                let route = Arc::clone(&route);
+                async move { answer(&api, &route, &uri, Some(body)).await }
+            },
+        ),
+    }
+}
+
+/// What `route` answers to a request for `uri`, with `body` for a POST:
+/// its parameters read as the table says, every one it does not take
+/// refused, the backend's query made of them by the route, and that query
+/// answered.
+///
+/// What a GET sends that the route cannot read is a 400, as a query string
+/// is refused anywhere; what a POST's body holds that it cannot read is a
+/// 422, as a body a task cannot be read from is, since the request arrived
+/// whole. The route's own words come after its path, so a script learns
+/// which of its requests they are about.
+async fn answer<B: Backend>(
+    api: &Api<B>,
+    route: &Route<B::Query>,
+    uri: &Uri,
+    body: Option<Result<Json<Value>, JsonRejection>>,
+) -> Response {
+    let path = uri.path();
+    let parameters = match route::arguments(&route.parameters, uri.query()) {
+        Ok(parameters) => Value::Object(parameters),
+        Err(unfit) => return error(StatusCode::BAD_REQUEST, &unfit.say(path, &route.parameters)),
     };
+    let (sent, unfit) = match body {
+        None => (parameters, StatusCode::BAD_REQUEST),
+        Some(Ok(Json(body))) => (body, StatusCode::UNPROCESSABLE_ENTITY),
+        Some(Err(rejection)) => return refused(rejection),
+    };
+    match (route.query)(Arguments::new(sent)) {
+        Ok(query) => ask(api, query).await,
+        Err(message) => error(unfit, &format!("{path}: {message}")),
+    }
+}
+
+/// The backend's answer to `query`, on the blocking pool, because a query
+/// reads the disk and the runtime's own threads are for moving bytes: one
+/// slow read there would stall every other request waiting on that thread.
+async fn ask<B: Backend>(api: &Api<B>, query: B::Query) -> Response {
     let backend = Arc::clone(&api.backend);
     match tokio::task::spawn_blocking(move || backend.query(query)).await {
         Ok(Ok(answer)) => Json(answer).into_response(),

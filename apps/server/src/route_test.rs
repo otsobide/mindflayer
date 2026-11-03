@@ -1,0 +1,213 @@
+use serde_json::json;
+
+use super::*;
+
+/// A route taking one of each shape, `reference` the one it needs.
+fn taken() -> Vec<Parameter> {
+    vec![
+        Parameter::required("reference", Shape::Text, "what to read"),
+        Parameter::optional("depth", Shape::Number, "how deep"),
+        Parameter::optional("hidden", Shape::Flag, "whether hidden ones too"),
+        Parameter::optional("root", Shape::List, "where to look"),
+    ]
+}
+
+fn read(query: &str) -> Result<Value, Unfit> {
+    arguments(&taken(), Some(query)).map(Value::Object)
+}
+
+#[test]
+fn each_parameter_is_read_as_its_shape_says() {
+    assert_eq!(
+        read("reference=skill%3Adeploy&depth=3&hidden=true&root=%2Fa&root=/b+c").unwrap(),
+        json!({
+            "reference": "skill:deploy",
+            "depth": 3,
+            "hidden": true,
+            "root": ["/a", "/b c"],
+        })
+    );
+    assert_eq!(
+        read("hidden=false&reference=").unwrap(),
+        json!({ "reference": "", "hidden": false })
+    );
+}
+
+#[test]
+fn what_is_left_out_is_absent_and_no_query_is_no_parameter() {
+    assert_eq!(read("reference=x").unwrap(), json!({ "reference": "x" }));
+    assert_eq!(arguments(&[], None), Ok(Map::new()));
+    assert_eq!(arguments(&[], Some("")), Ok(Map::new()));
+}
+
+#[test]
+fn a_parameter_the_route_does_not_take_is_refused_by_its_name() {
+    for (query, name) in [
+        ("reference=x&token=secret", "token"),
+        ("Reference=x", "Reference"),
+        ("reference=x&depth[]=1", "depth[]"),
+        ("reference=x&=1", ""),
+    ] {
+        assert_eq!(
+            read(query),
+            Err(Unfit::Unknown {
+                name: name.to_owned()
+            }),
+            "{query}"
+        );
+    }
+}
+
+#[test]
+fn a_parameter_that_takes_one_value_given_twice_is_refused() {
+    for (query, name) in [
+        ("reference=a&reference=b", "reference"),
+        ("reference=a&depth=1&depth=1", "depth"),
+        ("reference=a&hidden=true&hidden=false", "hidden"),
+    ] {
+        assert_eq!(read(query), Err(Unfit::Twice { name }), "{query}");
+    }
+}
+
+#[test]
+fn a_value_its_shape_does_not_read_is_refused() {
+    for (query, name, shape, value) in [
+        ("reference=a&depth=-1", "depth", Shape::Number, "-1"),
+        ("reference=a&depth=1.5", "depth", Shape::Number, "1.5"),
+        ("reference=a&depth=", "depth", Shape::Number, ""),
+        ("reference=a&hidden=yes", "hidden", Shape::Flag, "yes"),
+        ("reference=a&hidden", "hidden", Shape::Flag, ""),
+        ("reference=a&hidden=TRUE", "hidden", Shape::Flag, "TRUE"),
+    ] {
+        assert_eq!(
+            read(query),
+            Err(Unfit::Malformed {
+                name,
+                shape,
+                value: value.to_owned()
+            }),
+            "{query}"
+        );
+    }
+}
+
+#[test]
+fn a_parameter_the_route_needs_left_out_is_refused() {
+    assert_eq!(read("depth=1"), Err(Unfit::Missing { name: "reference" }));
+    let roots = [Parameter::required("root", Shape::List, "where")];
+    assert_eq!(
+        arguments(&roots, None),
+        Err(Unfit::Missing { name: "root" })
+    );
+}
+
+#[test]
+fn each_refusal_says_the_route_and_the_parameter() {
+    let path = "/api/v1/files";
+    let said = |unfit: Unfit, parameters: &[Parameter]| unfit.say(path, parameters);
+    let unknown = || Unfit::Unknown {
+        name: "token".to_owned(),
+    };
+
+    assert_eq!(
+        said(unknown(), &taken()),
+        "/api/v1/files takes no parameter `token`, only `reference`, `depth`, `hidden` or `root`"
+    );
+    assert_eq!(
+        said(unknown(), &taken()[..1]),
+        "/api/v1/files takes no parameter `token`, only `reference`"
+    );
+    assert_eq!(
+        said(unknown(), &[]),
+        "/api/v1/files takes no parameter, and was sent `token`"
+    );
+    assert_eq!(
+        said(Unfit::Twice { name: "depth" }, &taken()),
+        "/api/v1/files takes one `depth`, and was sent more than one"
+    );
+    assert_eq!(
+        said(
+            Unfit::Malformed {
+                name: "hidden",
+                shape: Shape::Flag,
+                value: "yes".to_owned()
+            },
+            &taken()
+        ),
+        "/api/v1/files takes `hidden` as `true` or `false`, not `yes`"
+    );
+    assert_eq!(
+        said(Unfit::Missing { name: "reference" }, &taken()),
+        "/api/v1/files needs `reference`, and was sent none"
+    );
+}
+
+/// A route answering nothing, under `path`: a POST with a body, as one
+/// must have.
+fn route(method: Method, path: &'static str) -> Route<()> {
+    Route {
+        method,
+        path,
+        about: "nothing",
+        parameters: Vec::new(),
+        body: (method == Method::Post).then_some("Nothing"),
+        answers: "null",
+        query: |_| Ok(()),
+    }
+}
+
+#[test]
+fn a_table_of_plain_paths_taken_once_can_be_served() {
+    let routes = [
+        route(Method::Get, "/snapshot"),
+        route(Method::Get, "/library/files"),
+        route(Method::Post, "/plan-2_a"),
+    ];
+
+    assert!(check(&routes).is_ok());
+}
+
+#[test]
+fn a_table_the_router_would_misread_or_panic_on_is_refused() {
+    let mut doubled = route(Method::Get, "/files");
+    doubled.parameters = vec![
+        Parameter::optional("project", Shape::Text, "whose"),
+        Parameter::optional("project", Shape::List, "whose"),
+    ];
+    let mut bodied = route(Method::Get, "/plan");
+    bodied.body = Some("Selection");
+    let mut bodiless = route(Method::Post, "/plan");
+    bodiless.body = None;
+    let mut asked = route(Method::Post, "/plan");
+    asked.parameters = vec![Parameter::optional("depth", Shape::Number, "how deep")];
+    let tables = [
+        (vec![route(Method::Get, "snapshot")], "no path"),
+        (vec![route(Method::Get, "/")], "no path"),
+        (vec![route(Method::Get, "/files/")], "no path"),
+        (vec![route(Method::Get, "/a//b")], "no path"),
+        (vec![route(Method::Get, "/{entry}")], "no path"),
+        (vec![route(Method::Get, "/{*rest}")], "no path"),
+        (vec![route(Method::Get, "/Snapshot")], "no path"),
+        (vec![route(Method::Get, "/tasks")], "answers itself"),
+        (
+            vec![route(Method::Post, "/tasks/preview")],
+            "answers itself",
+        ),
+        (vec![route(Method::Get, "/events")], "answers itself"),
+        (
+            vec![route(Method::Get, "/files"), route(Method::Post, "/files")],
+            "twice",
+        ),
+        (vec![doubled], "`project` twice"),
+        (vec![bodied], "takes no body"),
+        (vec![bodiless], "in its body"),
+        (vec![asked], "not in parameters"),
+    ];
+
+    for (routes, why) in tables {
+        let path = routes.last().unwrap().path;
+        let error = check(&routes).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput, "{path}");
+        assert!(error.to_string().contains(why), "{path}: {error}");
+    }
+}
