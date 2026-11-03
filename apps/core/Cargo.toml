@@ -78,3 +78,15 @@ schema = ["dep:schemars", "dep:serde_json"]
 # prints as JSON is a contract. The version the server already builds.
 serde_json = "1"
 tempfile = "3"
+# What holds each schema written by hand to what serde writes: a JSON
+# Schema 2020-12 validator that passes the suite of tests JSON Schema
+# publishes, and builds no HTTP client, nor anything else that reaches the
+# network: its one loader of a `$ref` reads a file, and the tests take even
+# that away. Its default features off all the same, so a later release that
+# adds a loader by default does not bring it in. MIT or Apache-2.0; what it
+# brings is MIT (appendlist, fluent-uri), MIT or Apache-2.0 (ahash),
+# BSD-2-Clause, Apache-2.0 or MIT (zerocopy) and MIT-0 (borrow-or-share),
+# each a licence GPL-3.0-only takes in. jsonschema was the other, whose
+# defaults build reqwest for a remote `$ref`, and which brings some thirty
+# crates to this one's six.
+boon = { version = "0.6", default-features = false }
