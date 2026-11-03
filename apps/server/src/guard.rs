@@ -173,9 +173,13 @@ pub(crate) async fn same_origin(
 /// does its harm whether or not anybody reads the reply.
 ///
 /// A change is any method but GET and HEAD. By method rather than by
-/// endpoint, so an endpoint added later is covered without being listed; a
-/// query is a POST, since it has a body, and is held to the same, which costs
-/// the panel nothing, as it sends every POST alike.
+/// endpoint, so an endpoint added later is covered without being listed. A
+/// read is a GET, and needs nothing here; one that takes a body is a POST
+/// ([`route::Method::Post`]) that changes nothing, and is held to the same
+/// all the same, which costs the panel nothing, as it sends every POST
+/// alike.
+///
+/// [`route::Method::Post`]: crate::route::Method::Post
 ///
 /// A refusal is its status and what to say, for the caller to answer in the
 /// API's JSON.
