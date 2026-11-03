@@ -1828,10 +1828,10 @@ TUI does. It sends a task; the server turns it into the command lines you
 could have typed, shows them before they run, and runs them through the same
 parser, one at a time. A command that would open a screen, an editor or a
 shell, or read standard input, is refused, and so is a path outside what
-the workspace allows, each with a reason and a code. The first Ctrl-C lets
-whatever is running finish, a second stops at once, and on the way out it
-prints every command that changed something, with what each said, as the
-TUI does when it closes:
+the workspace allows, each with a reason and a code. The first Ctrl-C (or,
+on Unix, the `SIGTERM` `kill` sends) lets whatever is running finish, a
+second stops at once, and on the way out it prints every command that
+changed something, with what each said, as the TUI does when it closes:
 
 ```
 $ flayer -W /home/you/Projects install -p /home/you/Projects/collapse skill:commit-style
@@ -2258,10 +2258,13 @@ a script that started the panel and waits for the link finds it whole.
 the path, a file, a folder or a link, is left as it is and the panel is not
 served, nor is it when the file's folder does not exist. When the panel
 stops the file goes with it, unless it no longer holds what was written
-there: it is then somebody's, left as it is, and a note says so. A panel
-killed rather than stopped leaves it, holding a token that opens nothing
-any more, and the path is refused until it is taken away. Each launch has
-a token of its own, so name a file for each panel served at once.
+there: it is then somebody's, left as it is, and a note says so. A script
+that runs the panel in the background stops it with `kill`, whose
+`SIGTERM` is taken as a Ctrl-C, and the file goes. A panel killed rather
+than stopped (`kill -KILL`), or hung up (`SIGHUP`, which `nohup` ignores),
+leaves it, holding a token that opens nothing any more, and the path is
+refused until it is taken away. Each launch has a token of its own, so
+name a file for each panel served at once.
 
 A read is a GET naming what it reads in its parameters, and a read that
 takes a structure is a POST that changes nothing:

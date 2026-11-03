@@ -13,6 +13,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::task::Poll;
 
 use mindflayer_server::{Listening, Server};
 use serde::Serialize;
@@ -81,10 +82,10 @@ pub(crate) fn ui_command(
         .build()
         .map_err(unserved)?;
     let served = runtime.block_on(async {
-        let interrupts = Interrupts::listen().map_err(unserved)?;
-        // Once Ctrl-C is listened for, so one sent as soon as the file is
-        // there stops the panel as every other does; and before the link,
-        // so a script that waits for the link finds the file whole.
+        let stops = Stops::listen().map_err(unserved)?;
+        // Once a stop is listened for, so one sent as soon as the file is
+        // there takes it away as every other does; and before the link, so
+        // a script that waits for the link finds the file whole.
         let handed = token_file
             .as_deref()
             .map(|path| TokenFile::write(path, &listening.api(), listening.token()))
@@ -105,7 +106,7 @@ pub(crate) fn ui_command(
         tokio::task::spawn_blocking(move || {
             open(&url, no_open, &mut io::stderr(), webbrowser::open);
         });
-        serve(listening, interrupts).await.map_err(unserved)?;
+        serve(listening, stops).await.map_err(unserved)?;
         Ok::<_, CliError>(handed)
     });
     // Without waiting for a browser still open in the foreground, which the
@@ -354,61 +355,91 @@ fn open(
     }
 }
 
-/// Answer requests until the first Ctrl-C, then finish those under way; or,
-/// at a second, stop at once.
+/// Answer requests until the first stop asked for ([`Stops`]), then finish
+/// those under way; or, at a second, stop at once.
 ///
 /// Gracefully first, so a run the panel asked for is answered rather than
 /// cut off half way, which would leave the disk as a command killed half way
 /// does. The second is for whoever would rather have that than wait.
-async fn serve(listening: Listening, mut interrupts: Interrupts) -> io::Result<()> {
+async fn serve(listening: Listening, mut stops: Stops) -> io::Result<()> {
     let (stop, stopped) = oneshot::channel::<()>();
     let serving = tokio::spawn(listening.serve(async {
         let _ = stopped.await;
     }));
     let abort = serving.abort_handle();
     tokio::spawn(async move {
-        interrupts.next().await;
+        stops.next().await;
         let _ = stop.send(());
-        interrupts.next().await;
+        stops.next().await;
         abort.abort();
     });
     match serving.await {
         Ok(served) => served,
-        // The second Ctrl-C, which is a stop asked for.
+        // Aborted at the second stop, which is one asked for.
         Err(error) if error.is_cancelled() => Ok(()),
         Err(error) => std::panic::resume_unwind(error.into_panic()),
     }
 }
 
-/// Ctrl-C, listened for from the moment [`Interrupts::listen`] returns.
+/// A stop asked for, listened for from the moment [`Stops::listen`]
+/// returns: Ctrl-C, and on Unix the `SIGTERM` that `kill`, `timeout` and a
+/// service manager stop a process with, taken as a Ctrl-C.
 ///
 /// The platform's own listener rather than `tokio::signal::ctrl_c`, which
 /// installs its handler only once it is first awaited, after the link is
 /// out: a Ctrl-C pressed in between would end the process by the default
 /// it replaces, rather than the way every other one does.
-struct Interrupts {
+///
+/// A `SIGTERM` too, since a script that serves itself the API runs the
+/// panel in the background and stops it as it stops any process: ended by
+/// that signal's default, `ui` would leave its token file behind, and the
+/// next launch naming that path refused. Not a `SIGHUP`, which a handler
+/// would answer even under `nohup`, whose ignoring it replaces: a panel
+/// somebody meant to outlive the terminal would stop with it. On Windows
+/// the console's Ctrl-C alone; its close and shutdown events are #154's,
+/// with the rest of Windows.
+struct Stops {
     #[cfg(unix)]
-    signal: tokio::signal::unix::Signal,
+    interrupt: tokio::signal::unix::Signal,
+    #[cfg(unix)]
+    terminate: tokio::signal::unix::Signal,
     #[cfg(windows)]
-    signal: tokio::signal::windows::CtrlC,
+    interrupt: tokio::signal::windows::CtrlC,
 }
 
-impl Interrupts {
+impl Stops {
     /// Start listening. Inside the runtime, which delivers them.
     fn listen() -> io::Result<Self> {
         #[cfg(unix)]
-        let signal = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+        let stops = {
+            use tokio::signal::unix::{signal, SignalKind};
+            Self {
+                interrupt: signal(SignalKind::interrupt())?,
+                terminate: signal(SignalKind::terminate())?,
+            }
+        };
         #[cfg(windows)]
-        let signal = tokio::signal::windows::ctrl_c()?;
-        Ok(Self { signal })
+        let stops = Self {
+            interrupt: tokio::signal::windows::ctrl_c()?,
+        };
+        Ok(stops)
     }
 
-    /// The next Ctrl-C; never, once the listener has stopped, which leaves
-    /// whatever waits for one waiting rather than taking it for one.
+    /// The next stop asked for, of either kind; never, once every listener
+    /// has stopped, which leaves whatever waits for one waiting rather than
+    /// taking it for one. One stopped leaves the other's to wait for.
     async fn next(&mut self) {
-        if self.signal.recv().await.is_none() {
-            std::future::pending::<()>().await;
-        }
+        std::future::poll_fn(|context| {
+            #[cfg(unix)]
+            if let Poll::Ready(Some(())) = self.terminate.poll_recv(context) {
+                return Poll::Ready(());
+            }
+            match self.interrupt.poll_recv(context) {
+                Poll::Ready(Some(())) => Poll::Ready(()),
+                _ => Poll::Pending,
+            }
+        })
+        .await;
     }
 }
 

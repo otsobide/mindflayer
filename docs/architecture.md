@@ -5221,7 +5221,13 @@ otherwise wait in turn on a server that never started.
 Ctrl-C is listened for before the link is out, through the platform's own
 listener, a Unix signal or the Windows console's Ctrl-C, rather than
 `tokio::signal::ctrl_c`, which installs its handler only once it is first
-awaited. The first stops the server taking connections and lets every
+awaited (`Stops`). On Unix a `SIGTERM` is taken as a Ctrl-C, since it is
+how `kill`, `timeout` and a service manager stop a process, and so how a
+script stops a panel it serves itself the API with: ended by the signal's
+default, `ui` would leave its token file behind (below). Not a `SIGHUP`,
+which a handler would answer even under `nohup`, replacing the ignoring
+`nohup` asks for, so a panel meant to outlive its terminal would stop with
+it. The first stops the server taking connections and lets every
 request under way be answered, a run above all, so a change is not cut off
 half way, and ends every event stream, which would otherwise be answered
 for as long as a tab stays open ([live updates](#live-updates)); the
@@ -9528,11 +9534,13 @@ panel, through a file only the account reads (`flayer ui --token-file`,
   token beside it for a moment, and of file systems that make no hard
   links.
 - **A panel killed leaves its token file.** Only a stop `ui` sees takes it
-  away: a `SIGKILL`, an abort or a machine that goes down leaves the file,
-  holding a token that opens nothing, and the next launch naming that path
-  is refused until somebody takes it away. A file that said which process
-  wrote it would let a launch tell one left behind from a live panel's,
-  but a process id is reused, and telling the two apart is then a guess.
+  away, a Ctrl-C or, on Unix, a `SIGTERM`: a `SIGKILL`, a `SIGHUP` (left
+  to its default for `nohup`'s sake), a Windows console closed, an abort or
+  a machine that goes down leaves the file, holding a token that opens
+  nothing, and the next launch naming that path is refused until somebody
+  takes it away. A file that said which process wrote it would let a
+  launch tell one left behind from a live panel's, but a process id is
+  reused, and telling the two apart is then a guess.
 - **On Windows the token file is as private as its folder.** It takes the
   permissions its folder passes on, which in the account's own folders
   keep other accounts out but in a shared one do not; an ACL of its own,
@@ -10519,8 +10527,8 @@ panel, through a file only the account reads (`flayer ui --token-file`,
   a second Ctrl-C. The server could hand the front end that thread to join
   once it stops, at the price of a Ctrl-C that waits for a run nobody
   watches.
-- **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, sent by
-  `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
+- **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, and with
+  SIGTERM, sent by `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
   Ctrl-C (`tokio::signal::windows::ctrl_c`), which no test sends yet (#154).
 - **A release compiled from nothing on every run.** `build (cli)` builds the
   release profile from scratch each time: every job shares one cargo cache

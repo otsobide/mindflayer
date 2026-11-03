@@ -727,6 +727,54 @@ fn a_script_reaches_the_api_through_the_token_file_which_goes_when_ui_stops() {
     }
 }
 
+/// How a script stops a panel it runs in the background: `kill`, `timeout`
+/// or a service manager, whose SIGTERM `ui` takes as a Ctrl-C. So the
+/// file goes as it does at a Ctrl-C, rather than stay behind, holding a
+/// dead token, to refuse the next launch naming its path; and the panel
+/// prints what it changed and exits as a command that went well does.
+#[cfg(unix)]
+#[test]
+fn a_sigterm_stops_the_panel_as_ctrl_c_does_and_takes_the_token_file_away() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let run = TempDir::new().unwrap();
+    let path = run.path().join("api.json");
+    let token_file = ["--token-file", path.to_str().unwrap()];
+    let mut panel = serve_with("flayer", dir.path(), home.path(), &token_file);
+    let install = json!({
+        "type": "install",
+        "projects": ["alpha"],
+        "kind": "skill",
+        "name": "commit-style",
+        "from": null,
+    });
+    let (status, ran) = panel.post("/api/v1/tasks", install);
+    assert_eq!(status, 200, "{ran}");
+
+    let (exited, rest, said) = signal(&mut panel, "-TERM");
+
+    assert!(exited.success(), "{exited:?}");
+    assert!(
+        fs::symlink_metadata(&path).is_err(),
+        "the file is still there"
+    );
+    let named = format!("$ flayer -W {} install -p ", dir.path().display());
+    assert!(rest.starts_with(&named), "{rest}");
+    assert_eq!(
+        said,
+        format!(
+            "note: serving the workspace at {} on {} until Ctrl-C\n",
+            dir.path().display(),
+            panel.address
+        )
+    );
+    let mut again = serve_with("flayer", dir.path(), home.path(), &token_file);
+    assert_eq!(handed(&path).token, again.token);
+    let (exited, _, _) = signal(&mut again, "-TERM");
+    assert!(exited.success(), "{exited:?}");
+    assert!(fs::symlink_metadata(&path).is_err());
+}
+
 /// Somebody's once it holds something else: left where it is when the
 /// panel stops, as it was written, and said, with nothing gone wrong.
 #[cfg(unix)]
@@ -905,9 +953,15 @@ fn a_token_file_is_refused_without_a_path() {
 /// exited, what it printed after the link, and all it said on stderr.
 #[cfg(unix)]
 fn interrupt(panel: &mut Panel) -> (std::process::ExitStatus, String, String) {
+    signal(panel, "-INT")
+}
+
+/// [`interrupt`], with the signal `kill` is given (`-INT`, `-TERM`).
+#[cfg(unix)]
+fn signal(panel: &mut Panel, name: &str) -> (std::process::ExitStatus, String, String) {
     let pid = panel.started.child.id().to_string();
     let sent = std::process::Command::new("kill")
-        .args(["-INT", &pid])
+        .args([name, &pid])
         .status()
         .expect("run kill");
     assert!(sent.success());
