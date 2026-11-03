@@ -121,11 +121,12 @@ fn stopped() -> Failed {
     }
 }
 
-/// The backend panicked while it did `what`, so there is no answer to give.
-fn panicked(what: &'static str) -> Failed {
+/// The backend panicked, as `message` says where, so there is no answer
+/// to give.
+fn panicked(message: &'static str) -> Failed {
     Failed {
         condition: Condition::BackendFailed,
-        message: what,
+        message,
     }
 }
 

@@ -273,16 +273,16 @@ pub(crate) fn refused(rejection: JsonRejection) -> Response {
     error(unread(&rejection), &rejection.body_text())
 }
 
-/// The condition each of axum's ways to refuse a JSON body is.
+/// The condition each of axum's ways to refuse a JSON body is, answered
+/// with the status axum gives it, so a description of the API lists each
+/// beforehand.
 ///
-/// Its status is the condition's, which is the status axum gives each, so
-/// a description of the API lists it beforehand. The rejection is
-/// `#[non_exhaustive]`, as is what it carries when the body could not be
-/// read, so a way to fail axum adds later needs an arm here no match can
-/// name. A body that could not be read whole, however axum comes to say it,
-/// is `body_unreadable`, the one condition that is; anything else is
-/// `body_refused`, a code of its own, a 400, rather than an answer with no
-/// code, or one with a code that says something else.
+/// The rejection is `#[non_exhaustive]`, and so is what it carries when the
+/// body could not be read, so this match is the one place among the
+/// server's codes with a fallback. Whatever keeps a body from being read
+/// whole is `body_unreadable`, however axum comes to say it; a rejection
+/// axum adds later is `body_refused`, a 400 with a code of its own, rather
+/// than an answer with no code, or with one that says something else.
 fn unread(rejection: &JsonRejection) -> Condition {
     match rejection {
         JsonRejection::JsonDataError(_) => Condition::InvalidBody,
@@ -298,9 +298,9 @@ fn unread(rejection: &JsonRejection) -> Condition {
 
 /// What the backend refused, as `{"error": "...", "code": "..."}`, its
 /// code the backend's own: a 404 when what the request named is not there,
-/// and a 422 otherwise, as a body it could not read is, since in both the
-/// request arrived whole and is not one to act on. Which, the backend says
-/// ([`Grounds`](crate::Grounds)); the server never reads the code.
+/// and a 422 when it is not one to act on, as a body the server cannot read
+/// is. Which of the two, the backend says ([`Grounds`](crate::Grounds)); the
+/// server never reads the code to tell.
 pub(crate) fn refused_by(refusal: Refusal) -> Response {
     (
         refusal.grounds.status(),
