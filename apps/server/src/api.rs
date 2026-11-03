@@ -160,7 +160,7 @@ pub(crate) async fn run<B: Backend>(
         Err(rejection) => return refused(rejection),
     };
     match api.writer.run(task).await {
-        Ok(Ok(entry)) => Json(entry).into_response(),
+        Ok(Ok(ran)) => Json(ran).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
         Err(failed) => error(failed.condition, failed.message),
     }

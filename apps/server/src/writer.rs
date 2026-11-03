@@ -10,13 +10,13 @@ use tokio::sync::oneshot;
 
 use crate::code::Condition;
 use crate::events::{Event, Events};
-use crate::transcript::{Entry, Transcript};
+use crate::transcript::{Ran, Transcript};
 use crate::watcher::Watcher;
 use crate::{Backend, Refusal};
 
 /// What came of a task: what it ran, or why the backend ran none of it;
 /// and, around that, why the thread could not say, when it could not.
-type Done = Result<Result<Entry, Refusal>, Failed>;
+type Done = Result<Result<Ran, Refusal>, Failed>;
 
 /// What came of a switch: what the backend acts on now, as it says it, or
 /// why it switched to nothing; and, around that, why the thread could not
@@ -168,12 +168,12 @@ fn perform<B: Backend>(
             let outcome = serde_json::to_value(outcome).unwrap_or_else(
                 |error| json!({ "error": format!("the backend's outcome is not JSON: {error}") }),
             );
-            let entry = Entry {
+            let ran = Ran {
                 lines: lines.clone(),
                 outcome,
             };
-            transcript.record(entry.clone());
-            Ok(Ok(entry))
+            transcript.record(ran.clone());
+            Ok(Ok(ran))
         }
         Ok(Err(refusal)) => Ok(Err(refusal)),
         Err(_) => Err(failed()),
