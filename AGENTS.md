@@ -206,7 +206,9 @@ under `apps/` with its own `Makefile`:
   panel alike. `src/admit.rs` holds a task sent from outside to the path
   policy (`Admission`), and `src/backend.rs` is the panel's backend
   (`PanelBackend`, the server's `Backend` with the CLI's `Query`, `Task`
-  and `Outcome`), which `ui` serves (`src/commands/ui.rs`). The backend,
+  and `Outcome`), which `ui` serves (`src/commands/ui.rs`), its reads
+  served under `/api/v1` from the table in `src/routes.rs`
+  (`routes::table`), each route the query it becomes. The backend,
   `ui` and the server they need are behind the crate's `ui` feature, on by
   default: `--no-default-features` builds the rest without axum
   (`tests/crate_test.rs`), and `make cli/build` builds it that way first.
@@ -215,12 +217,14 @@ under `apps/` with its own `Makefile`:
   and `Code`. `src/tui/` and `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
-  trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
+  trait, `src/route.rs` the table of reads a backend hands over (`Route`,
+  `Parameter`, `Shape`, `API`) and a query string read by it,
+  `src/server.rs` binds and routes, `src/auth.rs` holds the token's
   cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
   Metadata checks and the CSP, `src/api.rs` the JSON endpoints,
   `src/writer.rs` the thread every run and every switch goes through,
   `src/transcript.rs` what
-  the session ran, `src/events.rs` the bus `/api/events` streams,
+  the session ran, `src/events.rs` the bus `/api/v1/events` streams,
   `src/watcher.rs` what watches the paths the backend names and tells the
   bus what changed, `src/log.rs` the redacting request log and
   `src/panel.rs` the embedded panel (`apps/web/dist`).
@@ -971,14 +975,29 @@ These are easy to break from a single file without noticing.
   written there is one the panel could disagree with the CLI about: it
   belongs in core, reached through the backend, which says it as a
   `Refusal`, a code and a message, sent as a 422; a task refused when its
-  lines are asked for is never run, nor kept in the transcript. A preview
+  lines are asked for is never run, nor kept in the transcript. Everything
+  it serves is under `/api/v1` (D-24), and a route, a parameter or a field
+  once served is a contract, as the envelope's names are: dropping or
+  renaming one, or changing what it holds, moves the API to `/api/v2`,
+  adding one does not, and no unversioned route answers. Its reads are the
+  backend's, handed over as a table (`Backend::routes`, `route::Route`):
+  each route's method, path, parameters by name and shape, body and answer
+  are data, which the server matches, reads a query string by and refuses
+  by (a 400 for a parameter no route takes, one given twice, one it cannot
+  read or one it needs, as `deny_unknown_fields` refuses a field), and the
+  route makes the backend's `Query` of what was sent; the server never
+  writes a handler of a read of its own, and an identifier goes in a
+  parameter, never the path, since an entry or a reference can hold a `/`.
+  A read with a structure is a POST that changes nothing; a write is a
+  task, previewed and run at `/api/v1/tasks/preview` and `/api/v1/tasks`.
+  A preview
   is the server's `Preview`, the lines and what the backend says to
   confirm, carried unread as a watched path's scope is; the server
   enforces none of it, so a run sent without the question is run, as a
   shell runs what is typed into it. Queries and
   previews run on tokio's blocking pool, and every run on the one writer
   thread, in the order it arrived, and so does a switch of what the backend
-  acts on (`POST /api/switch`, `Backend::switch`), which only the backend
+  acts on (`POST /api/v1/switch`, `Backend::switch`), which only the backend
   can say it may make: once it is taken, the watcher asks for the paths
   again and drops those no longer named (`Watcher::again`) before every
   subscriber is told `switched`, and nothing of it is kept in the
@@ -1002,7 +1021,10 @@ These are easy to break from a single file without noticing.
   TypeScript. Every request goes through the `Transport` from
   `useTransport()`, and only `src/api/http.ts` may use `fetch`,
   `EventSource`, `WebSocket` or `XMLHttpRequest` (an ESLint rule, tested in
-  `tests/lint.test.ts`). Authentication is the transport's: relative URLs,
+  `tests/lint.test.ts`). It asks each query at the route the backend's
+  table serves it at under `/api/v1`, one case for every query
+  (`route`), and spells no route the table does not hold. Authentication
+  is the transport's: relative URLs,
   the `HttpOnly` cookie, the `X-Mindflayer: 1` header. What the server
   answers belongs in Vue Query; Pinia holds UI state only. The server's
   events reach the views only as Vue Query marking what they reached stale
@@ -1154,7 +1176,11 @@ These are easy to break from a single file without noticing.
   except under `$CI`, where it fails the test: the `test (cli)` job
   installs zsh so that both shells run there.
 - The server's suites run against a fake backend with types of its own
-  (`common::Fake`), never the CLI's. They bind 127.0.0.1 on port 0 and send
+  (`common::Fake`, its reads `common::fake_routes`), never the CLI's.
+  `routes_test.rs` holds the server to the table: a path and its
+  parameters reach the backend as the route makes them, and what no route
+  takes is refused with its status; `guard_test.rs` holds every route
+  under `/api/v1` to every guard. They bind 127.0.0.1 on port 0 and send
   requests through the router in process (`common::send`), or over loopback,
   and serve a fixture panel (`tests/panel`), so they need no Node. Every
   request names the server in Host, and `Auth::Cookie` sends what the panel's
@@ -1166,10 +1192,12 @@ These are easy to break from a single file without noticing.
   expects at most `common::PATIENCE`. The CLI's backend has a suite
   of its own (`apps/cli/tests/backend_test.rs`), which drives `PanelBackend`
   through the `Backend` trait with the JSON a browser sends, binding no
-  port, and `apps/cli/tests/live_test.rs` starts the server's watcher over
-  it on a temporary workspace; `apps/cli/tests/ui_test.rs` starts the
-  binaries' `ui` on port 0
-  (`common::start`) and sends the panel's requests over loopback. No test
+  port, `apps/cli/tests/routes_test.rs` pins every route of its table by
+  name and holds each to the query the panel sends for the same read, and
+  `apps/cli/tests/live_test.rs` starts the server's watcher over it on a
+  temporary workspace; `apps/cli/tests/ui_test.rs` starts the binaries'
+  `ui` on port 0 (`common::start`) and sends the panel's requests over
+  loopback, every read route among them. No test
   opens a browser: every `ui` one starts passes `--no-open`, and the opener
   is a stand-in in `ui`'s unit tests. A suite or test about the panel is
   `#[cfg(feature = "ui")]`, so a build without the feature leaves it out;

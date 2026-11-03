@@ -2206,31 +2206,67 @@ Linux is the limit `fs.inotify.max_user_watches` sets, each page says so
 above what it shows, with a button that reads everything again.
 
 Every page works from the keyboard, its keys listed on `?`, and says every
-state in words, never by colour alone. The API under it is there for a script holding the token as a
-Bearer token: `POST /api/query` for a read (`{"type": "snapshot"}` answers
-what the panel draws, `{"type": "files", ...}` what one artifact holds,
-`{"type": "contents", ...}` one file of it, as text, `{"type": "scan",
-"roots": ["/home/you/Projects"], "depth": null}` what Discover lists,
-`{"type": "folders", "path": "/home/you/Projects", "hidden": false}` what
-the explorer lists of a folder, `null` for the workspace's, and
-`{"type": "plan", "selection": [{"project": "alpha", "reference":
-"skill:deploy", "origin": "workspace", "wanted": true}]}` what boxes of a
-project and an offer, ticked or not, amount to: the tasks that carry them
-out, beside what clashes and what is locked, with nothing run, and
-`{"type": "workspaces"}` what the header may switch to), `POST
-/api/commands/preview` for the lines a task is and what of them the panel
+state in words, never by colour alone.
+
+**An HTTP API for scripts.** What the panel asks the server is an API under
+`/api/v1`, there for any script on this machine holding the launch token,
+the one in the link `flayer ui` prints, sent as `Authorization: Bearer
+<token>`:
+
+```sh
+curl -H "Authorization: Bearer <token>" 'http://127.0.0.1:<port>/api/v1/project?entry=api'
+```
+
+A read is a GET naming what it reads in its parameters, and a read that
+takes a structure is a POST that changes nothing:
+
+- `GET /api/v1/snapshot`: everything the panel draws; `GET
+  /api/v1/projects`, `GET /api/v1/library` and `GET
+  /api/v1/project?entry=api`: its projects, its library and one project by
+  its entry, each as the snapshot says it.
+- `GET /api/v1/files?reference=skill:deploy` and `GET
+  /api/v1/contents?reference=skill:deploy&file=SKILL.md`: what one artifact
+  holds, and one file of it as text, with `&project=<entry>` for a project's
+  rather than the workspace's own.
+- `GET /api/v1/scan?root=/home/you/Projects&depth=2`: what Discover lists,
+  one `root` for each folder to look under, the workspace's root without
+  one.
+- `GET /api/v1/folders?path=/home/you/Projects&hidden=true`: what the
+  explorer lists of a folder, the workspace's without `path`.
+- `GET /api/v1/updates`: what Update all would do, with nothing run.
+- `GET /api/v1/workspaces`: what the header may switch to.
+- `POST /api/v1/plan` with `{"selection": [{"project": "alpha",
+  "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`:
+  what boxes of a project and an offer, ticked or not, amount to, the tasks
+  that carry them out beside what clashes and what is locked, with nothing
+  run.
+- `POST /api/v1/validate` with `{"holder": {"type": "workspace"}, "draft":
+  {"type": "add", "kind": "skill", "name": "deploy", "description": "Ship
+  a release", "template": null}}`: what Mindflayer says of an artifact
+  about to be written, with nothing written.
+
+Every change is a task, the command lines it is, as the panel's are: `POST
+/api/v1/tasks/preview` for the lines a task is and what of them the panel
 asks you to confirm (`{"lines": [...], "confirm": [...]}`), `POST
-/api/commands` to run them, which asks nobody, `POST /api/switch` with
-`{"path": "/home/you/Notes"}` to switch to a workspace that list holds,
-answered with its row, `GET
-/api/transcript` for everything the session ran, and `GET /api/events` for
-what happens as it happens, as server-sent events: `resync`, to read
-everything again, first and whenever a reader fell behind; right after it
-`watching`, or `unwatched` with a `reason` when the server cannot watch
-everything, and either again whenever that changes; `changed` when something
-watched changed; `command_started` and `command_finished` around each
-run; and `switched` once the panel acts on another workspace, to read
-everything again.
+/api/v1/tasks` to run them, which asks nobody, answered with what each line
+said, `POST /api/v1/switch` with `{"path": "/home/you/Notes"}` to switch to
+a workspace `/api/v1/workspaces` lists, answered with its row, `GET
+/api/v1/transcript` for everything the session ran, and `GET
+/api/v1/events` for what happens as it happens, as server-sent events:
+`resync`, to read everything again, first and whenever a reader fell
+behind; right after it `watching`, or `unwatched` with a `reason` when the
+server cannot watch everything, and either again whenever that changes;
+`changed` when something watched changed; `command_started` and
+`command_finished` around each run; and `switched` once the panel acts on
+another workspace, to read everything again.
+
+What goes wrong is `{"error": "..."}`, with a `code` beside it when what was
+asked broke one of Mindflayer's rules, a 422: otherwise a 400 for a
+parameter a route does not take, takes once or needs, a 401 without the
+token, a 404 for a path no route names, `/api` without its version among
+them, and a 405 for a method a route does not take. A route, a parameter or
+a field once there stays as it is under `/api/v1`: one dropped, renamed or
+holding something else moves the API to `/api/v2`.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
