@@ -179,6 +179,11 @@ pub fn absence(what: &str) -> Refusal {
 /// Every code the fake refuses with, beside the server's own.
 pub const FAKE_CODES: [&str; 2] = ["fake_refused", "fake_absent"];
 
+/// The fake's description of the API, which the server serves as it is:
+/// laid out as no serializer would write it, so a server that read it and
+/// wrote it again would be caught.
+pub const FAKE_DOCUMENT: &str = "{\"openapi\": \"3.1.1\",\n  \"info\": {\"title\": \"the fake\", \"version\": \"1\"}, \"paths\": {}}\n";
+
 /// What running a fake task says.
 #[derive(Serialize)]
 pub struct FakeOutcome {
@@ -236,6 +241,10 @@ impl Backend for Fake {
 
     fn routes() -> Vec<Route<FakeQuery>> {
         fake_routes()
+    }
+
+    fn document() -> &'static str {
+        FAKE_DOCUMENT
     }
 
     fn preview(&self, task: &FakeTask) -> Result<Preview, Refusal> {

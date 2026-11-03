@@ -301,6 +301,7 @@ async fn the_servers_own_routes_take_no_parameter() {
         ),
         (Method::GET, "/api/v1/transcript", "view", None),
         (Method::GET, "/api/v1/events", "since", None),
+        (Method::GET, "/api/v1/openapi.json", "format", None),
     ] {
         let asked = format!("{path}?{sent}=1");
         let reply = send(&server, method.clone(), &asked, token, body).await;
@@ -343,6 +344,29 @@ async fn the_servers_own_routes_are_served_as_their_table_says() {
     assert!(runs.lock().unwrap().is_empty(), "nothing ran nor switched");
 }
 
+/// The description of the API is the backend's, served as the bytes it
+/// hands over, as JSON, to whoever holds the token and to nobody else, as
+/// every route is.
+#[tokio::test]
+async fn the_document_the_backend_hands_over_is_served_as_it_is_behind_the_token() {
+    let (server, _) = launch();
+    let path = format!("{API}/openapi.json");
+
+    let reply = get(&server, &path, Auth::Bearer(server.token())).await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(reply.header("content-type"), Some("application/json"));
+    assert_eq!(reply.text(), FAKE_DOCUMENT);
+    let cookie = format!("{}={}", server.cookie(), server.token());
+    let reply = get(&server, &path, Auth::Cookie(&cookie)).await;
+    assert_eq!(reply.text(), FAKE_DOCUMENT);
+
+    let refused = get(&server, &path, Auth::Nothing).await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(refused.json()["code"], "token_required");
+    let other = get(&server, &path, Auth::Bearer("not-the-token")).await;
+    assert_eq!(other.status, StatusCode::UNAUTHORIZED);
+}
+
 /// A backend whose table cannot be served: one path twice.
 struct Crooked;
 
@@ -360,6 +384,10 @@ impl Backend for Crooked {
         let mut routes = fake_routes();
         routes.extend(fake_routes().into_iter().take(1));
         routes
+    }
+
+    fn document() -> &'static str {
+        unreachable!("never served")
     }
 
     fn preview(&self, _: &FakeTask) -> Result<Preview, Refusal> {

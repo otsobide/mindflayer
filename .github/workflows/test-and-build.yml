@@ -123,11 +123,12 @@ jobs:
   # a test that failed, and is required on its own. The snapshots the
   # panel's tests render from are written from Rust and committed the same
   # way, so they drift the same way and are checked here too, under the
-  # name the rulesets already require; and so are the API's JSON Schemas,
-  # here rather than in a job of their own, whose name the rulesets would
-  # have to be changed by hand to require. Those last, once the fixtures are
-  # written again from Rust: their check holds every fixture to its schema,
-  # so it holds the schemas to what Rust answers now.
+  # name the rulesets already require; and so are the API's JSON Schemas
+  # and its OpenAPI document, here rather than in a job of their own, whose
+  # name the rulesets would have to be changed by hand to require. Those
+  # last, once the fixtures are written again from Rust: their check holds
+  # every fixture to its schema, so it holds the schemas to what Rust
+  # answers now, and the document, which holds the schemas, after them.
   types-drift:
     name: types drift (web)
     needs: test-core
@@ -158,6 +159,9 @@ jobs:
 
       - name: Check the API's schemas are the ones Rust writes
         run: make api/schemas/check
+
+      - name: Check the API's OpenAPI document is the one Rust writes
+        run: make api/openapi/check
 
   # The server depends on no mindflayer crate, core included, so nothing here
   # needs core's tests to pass first. It waits for them anyway: core is the

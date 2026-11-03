@@ -78,3 +78,17 @@ test('the panel itself is refused to another origin', async ({ request, served }
   const own = await request.get(`${served.origin}/`, { headers: { Origin: served.origin }, failOnStatusCode: false })
   expect(own.status()).toBe(200)
 })
+
+test('the API\'s description is served behind the token, as every route is', async ({ request, served }) => {
+  const path = `${served.origin}/api/v1/openapi.json`
+  const without = await request.get(path, { failOnStatusCode: false })
+  expect(without.status()).toBe(401)
+  expect(await without.json()).toMatchObject({ code: 'token_required' })
+
+  const asked = await request.get(path, { headers: { Authorization: `Bearer ${served.token}` } })
+  expect(asked.status()).toBe(200)
+  expect(asked.headers()['content-type']).toBe('application/json')
+  const document = await asked.json()
+  expect(document.openapi).toMatch(/^3\.1\./)
+  expect(Object.keys(document.paths)).toContain('/openapi.json')
+})

@@ -7,6 +7,37 @@
       "$ref": "#/$defs/CoreCode"
     },
     {
+      "$ref": "#/$defs/CliCode"
+    },
+    {
+      "type": "string",
+      "enum": [
+        "token_required",
+        "unknown_host",
+        "foreign_origin",
+        "same_origin_required",
+        "x_mindflayer_required",
+        "json_required",
+        "malformed_json",
+        "invalid_body",
+        "body_too_large",
+        "body_unreadable",
+        "body_refused",
+        "unknown_parameter",
+        "repeated_parameter",
+        "malformed_parameter",
+        "missing_parameter",
+        "invalid_parameters",
+        "unknown_route",
+        "method_not_allowed",
+        "backend_failed",
+        "writer_stopped"
+      ]
+    }
+  ],
+  "$defs": {
+    "CliCode": {
+      "description": "Every code the CLI gives of its own, for what went wrong: unique beside\ncore's and the local server's, and never renamed once given.",
       "type": "string",
       "enum": [
         "current_directory_unreadable",
@@ -45,31 +76,9 @@
         "prints_shell_code",
         "gather_unwatched",
         "show_unheld",
-        "serves_panel",
-        "token_required",
-        "unknown_host",
-        "foreign_origin",
-        "same_origin_required",
-        "x_mindflayer_required",
-        "json_required",
-        "malformed_json",
-        "invalid_body",
-        "body_too_large",
-        "body_unreadable",
-        "body_refused",
-        "unknown_parameter",
-        "repeated_parameter",
-        "malformed_parameter",
-        "missing_parameter",
-        "invalid_parameters",
-        "unknown_route",
-        "method_not_allowed",
-        "backend_failed",
-        "writer_stopped"
+        "serves_panel"
       ]
-    }
-  ],
-  "$defs": {
+    },
     "CoreCode": {
       "description": "Every code core gives, for what went wrong: unique across core, and never renamed once given.",
       "type": "string",

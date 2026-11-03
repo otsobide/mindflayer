@@ -535,7 +535,7 @@ async fn without_being_told_of_it_the_server_refuses_the_dev_servers_pages() {
 /// Every route under the version as a script or the panel's page asks for
 /// it, with what it is sent: one for each of the fake's reads, and each of
 /// the server's own.
-fn versioned() -> [(Method, &'static str, Option<Value>); 8] {
+fn versioned() -> [(Method, &'static str, Option<Value>); 9] {
     [
         (Method::GET, "/api/v1/echo?echo=hi", None),
         (Method::GET, "/api/v1/words?word=a", None),
@@ -553,6 +553,7 @@ fn versioned() -> [(Method, &'static str, Option<Value>); 8] {
         ),
         (Method::GET, "/api/v1/transcript", None),
         (Method::GET, "/api/v1/events", None),
+        (Method::GET, "/api/v1/openapi.json", None),
     ]
 }
 

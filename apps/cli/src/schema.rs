@@ -26,7 +26,7 @@ use serde_json::{json, Value};
 
 use crate::backend::{Confirm, Outcome, Planned, Query, Scanned, Switch};
 use crate::commands::ui::Handed;
-use crate::error::Code;
+use crate::error::{CliCode, Code};
 use crate::render::Envelope;
 use crate::routes::{Drafted, Selected};
 use crate::task::Task;
@@ -68,8 +68,8 @@ impl<V: Visitor> mindflayer_server::schema::Visitor for Server<'_, V> {
 }
 
 /// Every code a front end is handed for what went wrong, as a string that
-/// is one of them: core's ([`CoreCode`]), which it names as its own
-/// definition, or one of the CLI's own ([`CODES`]) or the server's
+/// is one of them: core's ([`CoreCode`]) or the CLI's own ([`CliCode`]),
+/// which it names as their own definitions, or the server's
 /// ([`Condition::CODES`]), as the TypeScript's union says it.
 impl JsonSchema for Code {
     fn schema_name() -> Cow<'static, str> {
@@ -81,11 +81,6 @@ impl JsonSchema for Code {
     }
 
     fn json_schema(generator: &mut SchemaGenerator) -> Schema {
-        let own: Vec<&str> = CODES
-            .iter()
-            .flat_map(|(_, codes)| codes.iter().copied())
-            .chain(Condition::CODES.iter().copied())
-            .collect();
         schema(json!({
             "description": description(&[
                 " Every code a front end is handed for what went wrong: core's, the CLI's",
@@ -94,8 +89,38 @@ impl JsonSchema for Code {
             ]),
             "anyOf": [
                 generator.subschema_for::<CoreCode>(),
-                {"type": "string", "enum": own},
+                generator.subschema_for::<CliCode>(),
+                {"type": "string", "enum": Condition::CODES},
             ],
+        }))
+    }
+}
+
+/// Every code the CLI gives of its own ([`CODES`]), as a string that is
+/// one of them, as core's are its [`CoreCode`]: a definition of its own,
+/// so a description of the API names what the CLI's backend refuses with
+/// as core's and these, never the server's.
+impl JsonSchema for CliCode {
+    fn schema_name() -> Cow<'static, str> {
+        "CliCode".into()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        concat!(module_path!(), "::CliCode").into()
+    }
+
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        let codes: Vec<&str> = CODES
+            .iter()
+            .flat_map(|(_, codes)| codes.iter().copied())
+            .collect();
+        schema(json!({
+            "description": description(&[
+                " Every code the CLI gives of its own, for what went wrong: unique beside",
+                " core's and the local server's, and never renamed once given.",
+            ]),
+            "type": "string",
+            "enum": codes,
         }))
     }
 }

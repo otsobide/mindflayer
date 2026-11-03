@@ -118,6 +118,8 @@ make web/types         # write the types from Rust, then check the panel's (vue-
 make web/types/check   # fail when the types from Rust are not the ones committed
 make api/schemas       # write the API's JSON Schemas from Rust into docs/api/schemas
 make api/schemas/check # fail when the schemas from Rust are not the ones committed
+make api/openapi       # write the API's OpenAPI document from Rust into docs/api/openapi.json
+make api/openapi/check # fail when the document from Rust is not the one committed
 make web/typecheck     # check the panel's types alone (vue-tsc)
 make web/clean         # remove dist/, what the browser suite wrote, and the tools' caches
 
@@ -149,7 +151,14 @@ described as JSON Schema in `docs/api/schemas`, written from the same Rust
 the same way: after changing such a type, `make api/schemas` writes them
 again, and `make api/schemas/check`, which CI runs in the same check,
 fails when they are not what Rust writes, or when a fixture the panel's
-views render does not hold to the schema of what it answers.
+views render does not hold to the schema of what it answers. The API
+whole, its routes with those schemas, is described as an OpenAPI 3.1
+document, `docs/api/openapi.json`, written from the tables the server
+serves: after changing a route, or a type a route names, `make
+api/openapi` writes it again, and `make api/openapi/check`, in the same
+check, fails when it is not what Rust writes. The binaries embed the
+document as it is committed, and `make test` holds every answer the CLI's
+suites get from the panel to it.
 
 `make web/build` writes `apps/web/dist`, which the server embeds as it
 compiles, and marks the server to compile again, so the next build of the

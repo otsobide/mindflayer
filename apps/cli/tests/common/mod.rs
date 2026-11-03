@@ -6,6 +6,8 @@
 
 #![allow(dead_code, unused_imports)]
 
+pub mod contract;
+
 pub use clap::Parser;
 pub use mindflayer_cli::install::state::{Focus, Screen, Step};
 pub use mindflayer_cli::install::{self as install_screen, ui};

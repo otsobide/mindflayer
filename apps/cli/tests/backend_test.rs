@@ -10,18 +10,19 @@ mod common;
 
 use std::collections::BTreeMap;
 
+use common::contract;
 use common::*;
 use mindflayer_cli::backend::{Outcome, PanelBackend, Query, Switch};
 use mindflayer_cli::task::{naming, shell, Caution};
 use mindflayer_core::watch;
-use mindflayer_server::{Backend, Grounds, Refusal};
+use mindflayer_server::{Backend, Grounds, Own, Preview, Ran, Refusal, API};
 use serde_json::{json, Value};
 
 /// The backend over the workspace at `root`, launched there with nothing
 /// named, activated or at home, and no agent home: it can reach no
 /// workspace but the fixture's.
-fn backend(root: &Path) -> PanelBackend {
-    PanelBackend::launch(root, &Lookup::default()).unwrap()
+fn backend(root: &Path) -> Checked {
+    Checked(PanelBackend::launch(root, &Lookup::default()).unwrap())
 }
 
 /// What a browser sent, read as the server reads it.
@@ -29,8 +30,91 @@ fn task(sent: Value) -> Task {
     serde_json::from_value(sent.clone()).unwrap_or_else(|error| panic!("{sent}: {error}"))
 }
 
-fn query(sent: Value) -> Query {
-    serde_json::from_value(sent.clone()).unwrap_or_else(|error| panic!("{sent}: {error}"))
+/// A read a browser asked for: the query the server hands the backend,
+/// and the JSON it was read from, whose `type` names the route asked.
+struct Asked {
+    query: Query,
+    sent: Value,
+}
+
+fn query(sent: Value) -> Asked {
+    Asked {
+        query: serde_json::from_value(sent.clone())
+            .unwrap_or_else(|error| panic!("{sent}: {error}")),
+        sent,
+    }
+}
+
+/// The panel's backend, each answer it gives held to what the API's
+/// document says the route it answers answers with, as the server would
+/// send it: a read's at its route, a preview's, a run's and a switch's at
+/// the server's own, and a refusal as `{"code", "error"}` under the
+/// status its grounds say. So the suite that holds the backend to its
+/// rules holds its answers to the document too, and a route answering
+/// outside it fails here, where no port is bound.
+#[derive(Clone)]
+struct Checked(PanelBackend);
+
+impl std::ops::Deref for Checked {
+    type Target = PanelBackend;
+
+    fn deref(&self) -> &PanelBackend {
+        &self.0
+    }
+}
+
+impl Checked {
+    /// The route `asked` is the query of: the one its `type` names, as the
+    /// panel's transport asks it.
+    fn query(&self, asked: Asked) -> Result<Value, Refusal> {
+        let kind = asked.sent["type"].as_str().unwrap().to_owned();
+        let route = PanelBackend::routes()
+            .into_iter()
+            .find(|route| route.path.strip_prefix('/') == Some(&kind))
+            .unwrap_or_else(|| panic!("no route reads {kind}"));
+        let answer = Backend::query(&self.0, asked.query);
+        answered(route.method.as_str(), route.path, &answer);
+        answer
+    }
+
+    fn preview(&self, task: &Task) -> Result<Preview, Refusal> {
+        let answer = Backend::preview(&self.0, task);
+        answered("POST", Own::Preview.path(), &answer);
+        answer
+    }
+
+    /// Answered, as the server answers a run, with the lines that ran
+    /// beside what they produced.
+    fn run(&self, task: Task) -> Result<Outcome, Refusal> {
+        let answer = Backend::run(&self.0, task);
+        let ran = answer.as_ref().map(|outcome| Ran {
+            lines: outcome.runs.iter().map(|run| run.command.clone()).collect(),
+            outcome: serde_json::to_value(outcome).unwrap(),
+        });
+        answered("POST", Own::Run.path(), &ran.map_err(Clone::clone));
+        answer
+    }
+
+    fn switch(&self, to: Switch) -> Result<Value, Refusal> {
+        let answer = Backend::switch(&self.0, to);
+        answered("POST", Own::Switch.path(), &answer);
+        answer
+    }
+}
+
+/// That `answer`, given to `method` at `path` under the API's version,
+/// holds to the document as the server would send it.
+fn answered<T: serde::Serialize>(method: &str, path: &str, answer: &Result<T, Refusal>) {
+    let path = format!("{API}{path}");
+    match answer {
+        Ok(answer) => {
+            contract::answered(method, &path, 200, &serde_json::to_value(answer).unwrap());
+        }
+        Err(refusal) => {
+            let refused = json!({"code": refusal.code, "error": refusal.message});
+            contract::answered(method, &path, refusal.grounds.status().as_u16(), &refused);
+        }
+    }
 }
 
 /// Every file under `dir` with what it holds, to tell that nothing changed.
@@ -492,14 +576,14 @@ fn a_query_sent_with_a_field_it_does_not_have_is_refused() {
 
 /// `alpha`'s own skill, holding beside its `SKILL.md` what a gathered skill
 /// might carry to run in a browser.
-fn contents_fixture() -> (TempDir, PanelBackend, PathBuf) {
+fn contents_fixture() -> (TempDir, Checked, PathBuf) {
     let dir = workspace_with_two();
     let skill = directory_for(&dir.path().join("alpha"), Kind::Skill).join("alpha");
     let backend = backend(dir.path());
     (dir, backend, skill)
 }
 
-fn contents(backend: &PanelBackend, file: &str) -> Result<Value, Refusal> {
+fn contents(backend: &Checked, file: &str) -> Result<Value, Refusal> {
     backend.query(query(json!({
         "type": "contents",
         "holder": {"type": "project", "entry": "alpha"},
@@ -755,7 +839,7 @@ fn the_default_workspace_is_made_by_the_first_change_and_said_first() {
     fs::create_dir_all(&home).unwrap();
     fs::create_dir_all(&fresh).unwrap();
     new_project(&fresh);
-    let backend = PanelBackend::launch(&home, &Lookup::at_home(Some(&home))).unwrap();
+    let backend = Checked(PanelBackend::launch(&home, &Lookup::at_home(Some(&home))).unwrap());
 
     let snapshot = backend.query(query(json!({"type": "snapshot"}))).unwrap();
     assert_eq!(snapshot["workspace"]["made"], false);
@@ -783,7 +867,7 @@ fn the_default_workspace_asked_to_be_made_is_made_by_one_line() {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
     fs::create_dir_all(&home).unwrap();
-    let backend = PanelBackend::launch(&home, &Lookup::at_home(Some(&home))).unwrap();
+    let backend = Checked(PanelBackend::launch(&home, &Lookup::at_home(Some(&home))).unwrap());
     let init = json!({"type": "init_workspace"});
 
     assert_eq!(
@@ -932,7 +1016,7 @@ fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
         home: Some(home.clone()),
         ..Lookup::default()
     };
-    let backend = PanelBackend::launch(&home, &lookup).unwrap();
+    let backend = Checked(PanelBackend::launch(&home, &lookup).unwrap());
 
     let preview = backend
         .preview(&task(json!({
@@ -1159,7 +1243,7 @@ fn a_folder_listing_names_the_launchs_home() {
         home: Some(home.clone()),
         ..Lookup::default()
     };
-    let backend = PanelBackend::launch(dir.path(), &lookup).unwrap();
+    let backend = Checked(PanelBackend::launch(dir.path(), &lookup).unwrap());
 
     let root = backend
         .query(query(
@@ -1612,7 +1696,7 @@ fn loaded_from_the_screen(app: &mut App, typed: Option<&str>) -> Task {
 fn loading_and_unloading_from_the_panel_are_the_tuis_tasks_for_the_same_workspace() {
     let (_dir, home, root) = knowing();
     let lookup = Lookup::at_home(Some(&home));
-    let backend = PanelBackend::launch(&root, &lookup).unwrap();
+    let backend = Checked(PanelBackend::launch(&root, &lookup).unwrap());
     let mut app =
         App::new(root.clone(), tui::load(&root, &lookup).unwrap()).with_lookup(lookup.clone());
     let named = root.to_str().unwrap().to_owned();
@@ -1717,7 +1801,7 @@ fn assigning() -> (TempDir, PathBuf) {
     (dir, home)
 }
 
-fn plan(backend: &PanelBackend, selection: Value) -> Result<Value, Refusal> {
+fn plan(backend: &Checked, selection: Value) -> Result<Value, Refusal> {
     backend.query(query(json!({"type": "plan", "selection": selection})))
 }
 
@@ -2260,7 +2344,7 @@ fn what_an_update_would_do_in_a_home_where_nothing_is_made_is_nothing_and_makes_
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
     fs::create_dir_all(&home).unwrap();
-    let backend = PanelBackend::launch(&home, &Lookup::at_home(Some(&home))).unwrap();
+    let backend = Checked(PanelBackend::launch(&home, &Lookup::at_home(Some(&home))).unwrap());
 
     let answer = backend.query(query(json!({"type": "updates"}))).unwrap();
 
@@ -2456,7 +2540,7 @@ fn an_edited_copy_nothing_offers_any_more_is_taken_out_by_the_forced_uninstall_c
 }
 
 /// A draft as the panel sends it to be judged.
-fn judge(holder: Value, draft: Value) -> Query {
+fn judge(holder: Value, draft: Value) -> Asked {
     query(json!({"type": "validate", "holder": holder, "draft": draft}))
 }
 
@@ -2722,13 +2806,13 @@ fn switch(sent: Value) -> Switch {
 
 /// The backend over `root`, launched there, at `home`, with `root` found
 /// above where it starts, as `flayer ui` run in it finds it.
-fn launched_knowing(home: &Path, root: &Path) -> PanelBackend {
-    PanelBackend::launch(root, &Lookup::at_home(Some(home))).unwrap()
+fn launched_knowing(home: &Path, root: &Path) -> Checked {
+    Checked(PanelBackend::launch(root, &Lookup::at_home(Some(home))).unwrap())
 }
 
 /// The path, name, and whether in use, launched on and offered, of each
 /// workspace the backend may switch to.
-fn offered(backend: &PanelBackend) -> Vec<(String, bool, bool, bool)> {
+fn offered(backend: &Checked) -> Vec<(String, bool, bool, bool)> {
     let answer = backend.query(query(json!({"type": "workspaces"}))).unwrap();
     answer
         .as_array()
@@ -2746,7 +2830,7 @@ fn offered(backend: &PanelBackend) -> Vec<(String, bool, bool, bool)> {
 }
 
 /// The workspace a snapshot is of, and the rule it says chose it.
-fn snapshot_of(backend: &PanelBackend) -> (Value, Value) {
+fn snapshot_of(backend: &Checked) -> (Value, Value) {
     let snapshot = backend.query(query(json!({"type": "snapshot"}))).unwrap();
     (
         snapshot["workspace"]["path"].clone(),

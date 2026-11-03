@@ -13,6 +13,7 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::process::ChildStdout;
 use std::time::Duration;
 
+use common::contract;
 use common::*;
 use mindflayer_cli::backend::PanelBackend;
 use mindflayer_cli::{Command, FlayerCommand, UiOptions};
@@ -106,8 +107,26 @@ enum Auth<'a> {
 
 impl Panel {
     /// One request over loopback: Host naming the server, what `auth` says,
-    /// and a JSON body; and the status and the JSON that came back.
+    /// and a JSON body; and the status and the JSON that came back, held to
+    /// what the API's document says that route answers with that status
+    /// (`contract::answered`), so a route answering outside its document
+    /// fails whichever test met it.
     fn send(&self, method: &str, path: &str, auth: Auth<'_>, body: Option<Value>) -> (u16, Value) {
+        let (status, _, body) = self.exchange(method, path, auth, body);
+        let body = serde_json::from_str(&body).unwrap_or_else(|error| panic!("{error}: {body}"));
+        contract::answered(method, path, status, &body);
+        (status, body)
+    }
+
+    /// [`send`](Self::send), and the status, the head and the body as
+    /// they came back, read as text.
+    fn exchange(
+        &self,
+        method: &str,
+        path: &str,
+        auth: Auth<'_>,
+        body: Option<Value>,
+    ) -> (u16, String, String) {
         let body = body.map(|body| body.to_string()).unwrap_or_default();
         let mut request = format!(
             "{method} {path} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\
@@ -143,8 +162,7 @@ impl Panel {
 
         let (head, body) = response.split_once("\r\n\r\n").unwrap();
         let status = head.split(' ').nth(1).unwrap().parse().unwrap();
-        let body = serde_json::from_str(body).unwrap_or_else(|error| panic!("{error}: {body}"));
-        (status, body)
+        (status, head.to_owned(), body.to_owned())
     }
 
     fn post(&self, path: &str, body: Value) -> (u16, Value) {
@@ -396,6 +414,138 @@ fn a_save_writes_the_text_and_leaves_nothing_in_the_scratch_folder() {
     assert_eq!(fs::read_to_string(manifest).unwrap(), text);
     let scratch = FlayerWorkspace::open(dir.path()).unwrap().scratch_dir();
     assert_eq!(fs::read_dir(scratch).unwrap().count(), 0);
+}
+
+/// How long a test waits for an event it expects: long past the watcher's
+/// debounce, for a machine under load, and still bounded.
+const PATIENCE: Duration = Duration::from_secs(10);
+
+/// Every event the stream tells over loopback, each as its `data:` line
+/// holds it, until one `until` picks is told or [`PATIENCE`] has passed;
+/// `run` once the first is told, so what it does is told after it.
+fn events(panel: &Panel, run: impl FnOnce(), until: impl Fn(&Value) -> bool) -> Vec<Value> {
+    let mut stream = TcpStream::connect(panel.address).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_millis(200)))
+        .unwrap();
+    let request = format!(
+        "GET /api/v1/events HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\n\r\n",
+        panel.address, panel.token
+    );
+    stream.write_all(request.as_bytes()).unwrap();
+    let mut reader = BufReader::new(stream);
+    let mut told: Vec<Value> = Vec::new();
+    let mut run = Some(run);
+    let mut line = String::new();
+    let deadline = std::time::Instant::now() + PATIENCE;
+    while std::time::Instant::now() < deadline && !told.iter().any(&until) {
+        // What a timeout cut off stays in `line`, for the read after it.
+        match reader.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                continue
+            }
+            Err(error) => panic!("{error}"),
+        }
+        if !line.ends_with('\n') {
+            continue;
+        }
+        let whole = std::mem::take(&mut line);
+        // A chunk's size, a comment that keeps the connection open, or the
+        // end of a message: everything but the event itself.
+        let Some(data) = whole.trim_end().strip_prefix("data:") else {
+            continue;
+        };
+        told.push(serde_json::from_str(data.trim()).unwrap());
+        if let Some(run) = run.take() {
+            run();
+        }
+    }
+    told
+}
+
+/// What the stream tells over loopback, from the `resync` it starts with
+/// to a run's start and finish and the change it made on disk, each held
+/// to what the document says an event holds: a change's scopes the
+/// holders a query names, which only the CLI's backend fills.
+#[test]
+fn every_event_the_stream_tells_holds_to_the_document() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let panel = serve("flayer", dir.path(), home.path());
+    let install = json!({
+        "type": "install", "projects": ["alpha"], "kind": "skill", "name": "commit-style",
+        "from": null,
+    });
+    // Waiting for the change by the project's holder, not for any change:
+    // the ledger's is the workspace's, which a debounce may tell apart.
+    let alpha = json!({"type": "project", "entry": "alpha"});
+    let reaches_alpha = |event: &Value| {
+        event["type"] == "changed"
+            && event["scopes"]
+                .as_array()
+                .is_some_and(|scopes| scopes.contains(&alpha))
+    };
+
+    let told = events(
+        &panel,
+        || {
+            let (status, ran) = panel.post("/api/v1/tasks", install);
+            assert_eq!(status, 200, "{ran}");
+        },
+        reaches_alpha,
+    );
+
+    let kinds: Vec<&str> = told
+        .iter()
+        .map(|event| event["type"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds.first(), Some(&"resync"), "{told:?}");
+    for kind in ["command_started", "command_finished"] {
+        assert!(kinds.contains(&kind), "{kind}: {told:?}");
+    }
+    assert!(told.iter().any(reaches_alpha), "{told:?}");
+    for event in &told {
+        contract::told("/api/v1/events", event);
+    }
+}
+
+/// The description of the API the panel serves is the document committed,
+/// byte for byte, as JSON, to whoever holds the token; and nothing to
+/// whoever does not.
+#[test]
+fn the_api_s_document_is_the_one_committed_and_only_with_the_token() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let panel = serve("flayer", dir.path(), home.path());
+    let committed = include_str!("../../../docs/api/openapi.json");
+
+    let (status, head, document) =
+        panel.exchange("GET", "/api/v1/openapi.json", Auth::Bearer, None);
+    assert_eq!(status, 200, "{document}");
+    assert!(
+        head.to_ascii_lowercase()
+            .contains("\r\ncontent-type: application/json\r\n"),
+        "{head}"
+    );
+    assert_eq!(document, committed);
+
+    let (status, refusal) = panel.send("GET", "/api/v1/openapi.json", Auth::Nothing, None);
+    assert_eq!(status, 401, "{refusal}");
+    assert_eq!(refusal["code"], "token_required");
+    let (status, _) = panel.send(
+        "GET",
+        "/api/v1/openapi.json",
+        Auth::BearerOf("not-the-token"),
+        None,
+    );
+    assert_eq!(status, 401);
 }
 
 #[test]
