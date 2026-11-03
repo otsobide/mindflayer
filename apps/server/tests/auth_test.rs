@@ -161,6 +161,32 @@ async fn the_launch_link_trades_its_token_for_a_cookie() {
     assert_eq!(reply.status, StatusCode::OK);
 }
 
+/// What a front end hands a script instead of the link: where the API is,
+/// which the token reaches as Bearer, at the server's own address even
+/// through a dev server, whose origin the link names instead.
+#[tokio::test]
+async fn the_api_is_at_the_servers_own_address_whatever_the_link_names() {
+    for dev_server in [None, Some("http://127.0.0.1:5173")] {
+        let mut server = Server::new(Fake::default());
+        if let Some(origin) = dev_server {
+            server = server.dev_server(origin);
+        }
+        let server = server.bind().unwrap();
+        let origin = format!("http://127.0.0.1:{}", server.address().port());
+        assert_eq!(server.api(), format!("{origin}/api/v1"), "{dev_server:?}");
+        let path = server.api().replace(&origin, "");
+
+        let reply = get(
+            &server,
+            &format!("{path}/transcript"),
+            Auth::Bearer(server.token()),
+        )
+        .await;
+
+        assert_eq!(reply.status, StatusCode::OK, "{dev_server:?}");
+    }
+}
+
 #[tokio::test]
 async fn a_launch_link_with_another_token_sets_no_cookie() {
     let (server, _) = launch();

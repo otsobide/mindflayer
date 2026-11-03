@@ -154,6 +154,17 @@ impl Listening {
         format!("{origin}/?{}={}", auth::PARAMETER, self.token.as_str())
     }
 
+    /// Where the API is served, every route under it:
+    /// `http://127.0.0.1:<port>/api/v1`, for a front end that hands it to a
+    /// script beside [`Listening::token`].
+    ///
+    /// The server's own address even through a dev server
+    /// ([`Server::dev_server`]), unlike the link: a script sends the token
+    /// as Bearer, which needs no page, and so no dev server to serve one.
+    pub fn api(&self) -> String {
+        format!("http://{}{API}", self.address)
+    }
+
     /// The name of the cookie the token is kept in on this port.
     pub fn cookie(&self) -> String {
         auth::cookie_name(self.address.port())
