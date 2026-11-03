@@ -8324,8 +8324,10 @@ one machine at a time.
 ## Decisions
 
 The roadmap in [#15](https://github.com/otsobide/mindflayer/issues/15) rests on
-twenty-three decisions: twenty-two validated by the owner on 2026-10-26, and
-[D-20](#d-20-opencode-subagents-pending), still pending. They are written down
+twenty-four decisions: twenty-two validated by the owner on 2026-10-26,
+[D-24](#d-24-the-local-server-is-a-versioned-http-api) on 2026-11-03 with the
+milestone it opens, and [D-20](#d-20-opencode-subagents-pending), still
+pending. They are written down
 here so that the PRs carrying them out do not reopen them: a change that
 disagrees with one starts by changing the decision, here, with the owner. Each
 says what was chosen, why, what was turned down, and which issues it unblocks;
@@ -8879,6 +8881,39 @@ to change through `lifecycle::find_to_change`, which refuses a name the
 project authors nothing of but the ledger records as a rule it received
 (`LifecycleError::Received`), where "nothing named" would deny what `status`
 just listed.
+
+### D-24: The local server is a versioned HTTP API
+
+Validated by the owner on 2026-11-03, opening M8 (#215 to #219). The server's
+HTTP is an API for scripts and tools on this machine, and the panel is its
+first client: it stays bound to 127.0.0.1 behind the launch token, with every
+guard it has ([who it answers](#who-it-answers), [what keeps other pages
+out](#what-keeps-other-pages-out)). Reads are resources, each a `GET` with its
+identifiers as query parameters, since a registry entry or a reference can
+hold a `/`; a read that takes a structured body, a plan or a draft to judge,
+is a `POST` that changes nothing. Writes stay typed tasks, previewed and then
+run ([D-18](#d-18-the-panel-writes-by-running-commands)): every write is
+still a command line run through the real parser, so the API can do nothing
+the CLI cannot, and the transcript keeps it. A write answers with what the
+command said, its outcome, its text, each warning with its code and whether
+it succeeded, and the state is read again afterwards. Everything is under
+`/api/v1`, and a route, a parameter or a field once published is a contract,
+as the envelope's names are under `ENVELOPE_VERSION`: dropping or renaming
+one, or changing what it holds, moves the API to `/api/v2`, and adding one
+does not, while the snapshot's own `view::FORMAT` keeps versioning what the
+snapshot holds. It is described by JSON Schema written from the Rust types
+with `schemars`, and an OpenAPI 3.1 document written from the routes and
+those schemas, committed and checked for drift in CI (#217, #218);
+`schemars` because JSON Schema is also how an MCP tool describes its input,
+so a later MCP front end would reuse the schemas, though none is started
+until the owner says so. Rejected: keeping the private protocol and only
+documenting it, which leaves every read behind one endpoint and a tagged
+body; a REST resource for every write, which would put a second way to
+change things beside the command lines; a typed result for each write, which
+every command would have to build; reaching it from another machine, with
+TLS and accounts; and an API server or daemon of its own, which
+[D-17](#d-17-the-next-front-end-is-a-local-web-panel) already rejected.
+Unblocks #215 to #219.
 
 ## Open questions
 
