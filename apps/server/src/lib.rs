@@ -10,6 +10,7 @@
 mod api;
 mod auth;
 mod backend;
+mod code;
 mod events;
 mod guard;
 mod log;
@@ -22,6 +23,7 @@ mod watcher;
 mod writer;
 
 pub use backend::{Backend, Preview, Refusal, Watched};
+pub use code::Condition;
 pub use events::{Event, Events, Subscription, CAPACITY};
 pub use panel::Panel;
 pub use route::{Answer, Arguments, Method, Own, Parameter, Route, Sent, Shape, API};
