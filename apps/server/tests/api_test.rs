@@ -88,7 +88,10 @@ async fn an_unknown_api_path_gets_a_json_404() {
         assert_eq!(reply.header("content-type"), Some("application/json"));
         assert_eq!(
             reply.json(),
-            json!({ "error": format!("no such endpoint: GET {path}") })
+            json!({
+                "error": format!("no such endpoint: GET {path}"),
+                "code": "unknown_route",
+            })
         );
     }
 }
@@ -120,7 +123,10 @@ async fn no_unversioned_route_answers_any_more() {
             assert_eq!(reply.status, StatusCode::NOT_FOUND, "{method} {path}");
             assert_eq!(
                 reply.json(),
-                json!({ "error": format!("no such endpoint: {method} {path}") })
+                json!({
+                    "error": format!("no such endpoint: {method} {path}"),
+                    "code": "unknown_route",
+                })
             );
         }
         let reply = get(&server, path, Auth::Nothing).await;
@@ -139,8 +145,62 @@ async fn an_endpoint_asked_with_the_wrong_method_says_so_in_json() {
     assert_eq!(reply.header("allow"), Some("POST"));
     assert_eq!(
         reply.json(),
-        json!({ "error": "/api/v1/tasks does not take GET" })
+        json!({
+            "error": "/api/v1/tasks does not take GET",
+            "code": "method_not_allowed",
+        })
     );
+}
+
+/// What a body is made of, before any route reads it: JSON at all, of a
+/// size the server reads, and there whole. Each refused with its own code,
+/// and the words axum has for it, and nothing runs.
+#[tokio::test]
+async fn a_body_that_is_no_json_too_large_or_cut_off_is_refused_with_its_code() {
+    let (server, runs) = launch();
+    let token = Auth::Bearer(server.token());
+    let sent = |body: Body| {
+        let mut request = request(
+            &server,
+            Method::POST,
+            "/api/v1/tasks",
+            token,
+            Some(json!({})),
+        );
+        *request.body_mut() = body;
+        request
+    };
+    let cut_off = Body::from_stream(futures_util::stream::iter([
+        Ok(Bytes::from_static(b"{\"name\": ")),
+        Err(std::io::Error::other("the connection was lost")),
+    ]));
+
+    for (case, body, status, code) in [
+        (
+            "no JSON",
+            Body::from("{\"name\": link beta}"),
+            StatusCode::BAD_REQUEST,
+            "malformed_json",
+        ),
+        (
+            "too large",
+            Body::from(format!("{{\"name\": \"{}\"}}", "a".repeat(3 << 20))),
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "body_too_large",
+        ),
+        (
+            "cut off",
+            cut_off,
+            StatusCode::BAD_REQUEST,
+            "body_unreadable",
+        ),
+    ] {
+        let reply = deliver(&server, sent(body)).await;
+        assert_eq!(reply.status, status, "{case}: {}", reply.text());
+        assert_eq!(reply.json()["code"], code, "{case}");
+        assert!(reply.json()["error"].is_string(), "{case}");
+    }
+    assert!(runs.lock().unwrap().is_empty());
 }
 
 #[tokio::test(flavor = "multi_thread")]

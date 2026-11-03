@@ -105,7 +105,7 @@ async fn a_switch_the_backend_cannot_read_is_refused_like_any_other_body() {
 
         assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
         assert!(reply.json()["error"].is_string(), "{body}");
-        assert_eq!(reply.json()["code"], Value::Null, "{body}");
+        assert_eq!(reply.json()["code"], "invalid_body", "{body}");
     }
     assert!(runs.lock().unwrap().is_empty());
 }

@@ -63,11 +63,12 @@ test('no unversioned route answers, the panel\'s old ones among them', async ({ 
   for (const path of ['/api/query', '/api/commands/preview', '/api/commands', '/api/switch']) {
     const asked = await request.post(`${served.origin}${path}`, { data: { type: 'snapshot' }, headers: bearer, failOnStatusCode: false })
     expect(asked.status(), path).toBe(404)
-    expect(await asked.json()).toEqual({ error: `no such endpoint: POST ${path}` })
+    expect(await asked.json()).toEqual({ error: `no such endpoint: POST ${path}`, code: 'unknown_route' })
   }
   for (const path of ['/api/transcript', '/api/events', '/api/snapshot']) {
     const asked = await request.get(`${served.origin}${path}`, { headers: bearer, failOnStatusCode: false })
     expect(asked.status(), path).toBe(404)
+    expect(await asked.json(), path).toMatchObject({ code: 'unknown_route' })
   }
 })
 

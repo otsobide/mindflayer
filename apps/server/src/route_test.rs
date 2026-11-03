@@ -142,6 +142,28 @@ fn each_refusal_says_the_route_and_the_parameter() {
     );
 }
 
+/// Each its own code, whatever the words say of it.
+#[test]
+fn each_refusal_is_a_condition_of_its_own() {
+    let refused = [
+        read("reference=a&what=1"),
+        read("reference=a&reference=b"),
+        read("reference=a&depth=deep"),
+        read("depth=1"),
+    ]
+    .map(|read| read.unwrap_err().condition().code());
+
+    assert_eq!(
+        refused,
+        [
+            "unknown_parameter",
+            "repeated_parameter",
+            "malformed_parameter",
+            "missing_parameter"
+        ]
+    );
+}
+
 /// A route answering nothing, under `path`: a POST with a body, as one
 /// must have.
 fn route(method: Method, path: &'static str) -> Route<()> {

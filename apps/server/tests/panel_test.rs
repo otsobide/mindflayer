@@ -125,7 +125,10 @@ async fn an_unknown_api_path_gets_json_and_not_the_page() {
     assert_eq!(reply.status, StatusCode::NOT_FOUND);
     assert_eq!(
         reply.json(),
-        json!({ "error": "no such endpoint: GET /api/projects" })
+        json!({
+            "error": "no such endpoint: GET /api/projects",
+            "code": "unknown_route",
+        })
     );
 }
 

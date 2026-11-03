@@ -4,7 +4,7 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
-use axum::extract::rejection::JsonRejection;
+use axum::extract::rejection::{BytesRejection, FailedToBufferBody, JsonRejection};
 use axum::extract::State;
 use axum::http::{Method, StatusCode, Uri};
 use axum::response::sse::{self, KeepAlive, Sse};
@@ -75,10 +75,11 @@ pub(crate) fn own<B: Backend>(own: Own) -> MethodRouter<Arc<Api<B>>> {
 /// answered.
 ///
 /// What a GET sends that the route cannot read is a 400, as a query string
-/// is refused anywhere; what a POST's body holds that it cannot read is a
-/// 422, as a body a task cannot be read from is, since the request arrived
-/// whole. The route's own words come after its path, so a script learns
-/// which of its requests they are about.
+/// is refused anywhere (`invalid_parameters`); what a POST's body holds that
+/// it cannot read is a 422, as a body a task cannot be read from is, since
+/// the request arrived whole (`invalid_body`). The route's own words come
+/// after its path, so a script learns which of its requests they are
+/// about.
 async fn answer<B: Backend>(
     api: &Api<B>,
     route: &Route<B::Query>,
@@ -88,16 +89,16 @@ async fn answer<B: Backend>(
     let path = uri.path();
     let parameters = match route::arguments(&route.parameters, uri.query()) {
         Ok(parameters) => Value::Object(parameters),
-        Err(unfit) => return uncoded(StatusCode::BAD_REQUEST, &unfit.say(path, &route.parameters)),
+        Err(unfit) => return error(unfit.condition(), &unfit.say(path, &route.parameters)),
     };
     let (sent, unfit) = match body {
-        None => (parameters, StatusCode::BAD_REQUEST),
-        Some(Ok(Json(body))) => (body, StatusCode::UNPROCESSABLE_ENTITY),
+        None => (parameters, Condition::InvalidParameters),
+        Some(Ok(Json(body))) => (body, Condition::InvalidBody),
         Some(Err(rejection)) => return refused(rejection),
     };
     match (route.query)(Arguments::new(sent)) {
         Ok(query) => ask(api, query).await,
-        Err(message) => uncoded(unfit, &format!("{path}: {message}")),
+        Err(message) => error(unfit, &format!("{path}: {message}")),
     }
 }
 
@@ -238,7 +239,7 @@ pub(crate) async fn events<B: Backend>(State(api): State<Arc<Api<B>>>, uri: Uri)
 fn unasked(uri: &Uri) -> Option<Response> {
     route::arguments(&[], uri.query())
         .err()
-        .map(|unfit| uncoded(StatusCode::BAD_REQUEST, &unfit.say(uri.path(), &[])))
+        .map(|unfit| error(unfit.condition(), &unfit.say(uri.path(), &[])))
 }
 
 /// Whether a path is the API's: `/api` and everything under it, where every
@@ -250,24 +251,49 @@ pub(crate) fn is_api(path: &str) -> bool {
 /// Any other path under `/api`: a 404 a script can read, rather than the
 /// panel's page, which is what a path outside `/api` that names no file gets.
 pub(crate) async fn missing(method: Method, uri: Uri) -> Response {
-    uncoded(
-        StatusCode::NOT_FOUND,
+    error(
+        Condition::UnknownRoute,
         &format!("no such endpoint: {method} {}", uri.path()),
     )
 }
 
-/// A known path asked for with a method it does not take.
+/// A known path asked for with a method it does not take, the methods it
+/// does take in `Allow`, which the router adds.
 pub(crate) async fn not_allowed(method: Method, uri: Uri) -> Response {
-    uncoded(
-        StatusCode::METHOD_NOT_ALLOWED,
+    error(
+        Condition::MethodNotAllowed,
         &format!("{} does not take {method}", uri.path()),
     )
 }
 
 /// A body that is not the JSON a handler expects, in the same shape as every
-/// other error here rather than axum's plain text.
+/// other error here rather than axum's plain text, with axum's words for
+/// what it found and the code of the condition it is.
 pub(crate) fn refused(rejection: JsonRejection) -> Response {
-    uncoded(rejection.status(), &rejection.body_text())
+    error(unread(&rejection), &rejection.body_text())
+}
+
+/// The condition each of axum's ways to refuse a JSON body is.
+///
+/// Its status is the condition's, which is the status axum gives each, so
+/// a description of the API lists it beforehand. The rejection is
+/// `#[non_exhaustive]`, as is what it carries when the body could not be
+/// read, so a way to fail axum adds later needs an arm here no match can
+/// name. A body that could not be read whole, however axum comes to say it,
+/// is `body_unreadable`, the one condition that is; anything else is
+/// `body_refused`, a code of its own, a 400, rather than an answer with no
+/// code, or one with a code that says something else.
+fn unread(rejection: &JsonRejection) -> Condition {
+    match rejection {
+        JsonRejection::JsonDataError(_) => Condition::InvalidBody,
+        JsonRejection::JsonSyntaxError(_) => Condition::MalformedJson,
+        JsonRejection::MissingJsonContentType(_) => Condition::JsonRequired,
+        JsonRejection::BytesRejection(BytesRejection::FailedToBufferBody(
+            FailedToBufferBody::LengthLimitError(_),
+        )) => Condition::BodyTooLarge,
+        JsonRejection::BytesRejection(_) => Condition::BodyUnreadable,
+        _ => Condition::BodyRefused,
+    }
 }
 
 /// What the backend refused, as `{"error": "...", "code": "..."}`: a 422,

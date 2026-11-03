@@ -42,6 +42,7 @@ async fn a_task_the_backend_cannot_read_runs_nothing() {
     .await;
 
     assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(reply.json()["code"], "invalid_body");
     assert!(reply.json()["error"].as_str().unwrap().contains("name"));
     assert!(runs.lock().unwrap().is_empty());
 }

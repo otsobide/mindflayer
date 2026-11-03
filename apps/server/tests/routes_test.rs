@@ -51,48 +51,61 @@ async fn a_path_and_its_parameters_reach_the_backend_as_the_query_the_table_make
 }
 
 /// Each refused with a 400, as a query string is, and what it says names
-/// the route and the parameter: the backend is never asked.
+/// the route and the parameter, its code the condition: the backend is
+/// never asked.
 #[tokio::test]
 async fn a_parameter_no_route_takes_or_needs_or_reads_is_refused_with_a_400() {
     let (server, _) = launch();
 
-    for (path, said) in [
+    for (path, code, said) in [
         (
             "/api/v1/echo?echo=hi&token=secret",
+            "unknown_parameter",
             "/api/v1/echo takes no parameter `token`, only `echo` or `refuse`",
         ),
         (
             "/api/v1/echo?echo=hi&Echo=hi",
+            "unknown_parameter",
             "/api/v1/echo takes no parameter `Echo`, only `echo` or `refuse`",
         ),
         (
             "/api/v1/echo",
+            "missing_parameter",
             "/api/v1/echo needs `echo`, and was sent none",
         ),
         (
             "/api/v1/echo?refuse=true",
+            "missing_parameter",
             "/api/v1/echo needs `echo`, and was sent none",
         ),
         (
             "/api/v1/echo?echo=a&echo=b",
+            "repeated_parameter",
             "/api/v1/echo takes one `echo`, and was sent more than one",
         ),
         (
             "/api/v1/echo?echo=a&refuse=yes",
+            "malformed_parameter",
             "/api/v1/echo takes `refuse` as `true` or `false`, not `yes`",
         ),
         (
             "/api/v1/words?times=-2",
+            "malformed_parameter",
             "/api/v1/words takes `times` as a whole number, not `-2`",
         ),
         (
             "/api/v1/echo?echo=",
+            "invalid_parameters",
             "/api/v1/echo: there is nothing to echo",
         ),
     ] {
         let reply = read(&server, path).await;
         assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{path}");
-        assert_eq!(reply.json(), json!({ "error": said }), "{path}");
+        assert_eq!(
+            reply.json(),
+            json!({ "error": said, "code": code }),
+            "{path}"
+        );
     }
 }
 
@@ -108,17 +121,22 @@ async fn a_body_a_post_route_cannot_read_is_refused_and_so_is_a_parameter() {
     for body in [json!({ "echo": "hi", "wrong": 1 }), json!({}), json!([1])] {
         let reply = post(&server, "/api/v1/judge", token, body.clone()).await;
         assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+        assert_eq!(reply.json()["code"], "invalid_body", "{body}");
         let error = reply.json()["error"].as_str().unwrap().to_owned();
         assert!(error.starts_with("/api/v1/judge: "), "{body}: {error}");
     }
     let reply = post(&server, "/api/v1/judge", token, json!({ "echo": "" })).await;
     assert_eq!(
         reply.json(),
-        json!({ "error": "/api/v1/judge: there is nothing to echo" })
+        json!({
+            "error": "/api/v1/judge: there is nothing to echo",
+            "code": "invalid_body",
+        })
     );
 
     let reply = send(&server, Method::POST, "/api/v1/judge", token, None).await;
     assert_eq!(reply.status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    assert_eq!(reply.json()["code"], "json_required");
     assert!(reply.json()["error"].is_string());
 
     let reply = post(
@@ -131,7 +149,10 @@ async fn a_body_a_post_route_cannot_read_is_refused_and_so_is_a_parameter() {
     assert_eq!(reply.status, StatusCode::BAD_REQUEST);
     assert_eq!(
         reply.json(),
-        json!({ "error": "/api/v1/judge takes no parameter, and was sent `echo`" })
+        json!({
+            "error": "/api/v1/judge takes no parameter, and was sent `echo`",
+            "code": "unknown_parameter",
+        })
     );
 }
 
@@ -171,7 +192,10 @@ async fn a_route_asked_with_a_method_it_does_not_take_says_so_in_json() {
         assert_eq!(reply.header("allow"), Some(allowed), "{method} {path}");
         assert_eq!(
             reply.json(),
-            json!({ "error": format!("{path} does not take {method}") })
+            json!({
+                "error": format!("{path} does not take {method}"),
+                "code": "method_not_allowed",
+            })
         );
     }
 }
@@ -195,7 +219,10 @@ async fn a_path_no_route_names_is_a_json_404() {
         assert_eq!(reply.status, StatusCode::NOT_FOUND, "{path}");
         assert_eq!(
             reply.json(),
-            json!({ "error": format!("no such endpoint: GET {path}") })
+            json!({
+                "error": format!("no such endpoint: GET {path}"),
+                "code": "unknown_route",
+            })
         );
     }
 }
@@ -235,7 +262,10 @@ async fn the_servers_own_routes_take_no_parameter() {
         assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{asked}");
         assert_eq!(
             reply.json(),
-            json!({ "error": format!("{path} takes no parameter, and was sent `{sent}`") })
+            json!({
+                "error": format!("{path} takes no parameter, and was sent `{sent}`"),
+                "code": "unknown_parameter",
+            })
         );
     }
     assert!(runs.lock().unwrap().is_empty(), "nothing ran nor switched");
@@ -263,6 +293,7 @@ async fn the_servers_own_routes_are_served_as_their_table_says() {
             "{other} {path}"
         );
         assert_eq!(reply.header("allow"), Some(allowed), "{other} {path}");
+        assert_eq!(reply.json()["code"], "method_not_allowed", "{other} {path}");
     }
     assert!(runs.lock().unwrap().is_empty(), "nothing ran nor switched");
 }

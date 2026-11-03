@@ -21,6 +21,8 @@ use std::io;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
+use crate::code::Condition;
+
 /// Where every route of the API is served, its version in its path.
 ///
 /// A route, a parameter or a field once served is a contract (D-24):
@@ -327,6 +329,18 @@ pub(crate) enum Unfit {
 }
 
 impl Unfit {
+    /// The condition it is, whose code a refusal of it carries: one for
+    /// each way a query string is unfit, so a script tells a misspelled
+    /// parameter from a forgotten one without reading the words.
+    pub(crate) fn condition(&self) -> Condition {
+        match self {
+            Unfit::Unknown { .. } => Condition::UnknownParameter,
+            Unfit::Twice { .. } => Condition::RepeatedParameter,
+            Unfit::Malformed { .. } => Condition::MalformedParameter,
+            Unfit::Missing { .. } => Condition::MissingParameter,
+        }
+    }
+
     /// Said of the route at `path` that takes `parameters`.
     pub(crate) fn say(&self, path: &str, parameters: &[Parameter]) -> String {
         match self {
