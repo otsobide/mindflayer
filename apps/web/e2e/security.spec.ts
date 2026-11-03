@@ -53,6 +53,19 @@ test('a read sent with the token as Bearer from another origin is refused', asyn
   expect(foreign.status()).toBe(403)
 })
 
+test('no unversioned route answers, the panel\'s old ones among them', async ({ request, served }) => {
+  const bearer = { Authorization: `Bearer ${served.token}` }
+  for (const path of ['/api/query', '/api/commands/preview', '/api/commands', '/api/switch']) {
+    const asked = await request.post(`${served.origin}${path}`, { data: { type: 'snapshot' }, headers: bearer, failOnStatusCode: false })
+    expect(asked.status(), path).toBe(404)
+    expect(await asked.json()).toEqual({ error: `no such endpoint: POST ${path}` })
+  }
+  for (const path of ['/api/transcript', '/api/events', '/api/snapshot']) {
+    const asked = await request.get(`${served.origin}${path}`, { headers: bearer, failOnStatusCode: false })
+    expect(asked.status(), path).toBe(404)
+  }
+})
+
 test('the panel itself is refused to another origin', async ({ request, served }) => {
   const foreign = await request.get(`${served.origin}/`, { headers: { Origin: FOREIGN }, failOnStatusCode: false })
   expect(foreign.status()).toBe(403)

@@ -1,76 +1,12 @@
 //! The JSON endpoints: what reaches the backend, what comes back, and what a
-//! request the API does not know gets.
+//! request the API does not know gets. The backend's reads, served from its
+//! table, have a suite of their own (`routes_test`).
 
 mod common;
 
 use common::*;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
-
-#[tokio::test]
-async fn a_query_reaches_the_backend_and_its_answer_comes_back() {
-    let (server, runs) = launch();
-
-    let reply = post(
-        &server,
-        "/api/query",
-        Auth::Bearer(server.token()),
-        json!({ "echo": "what is linked" }),
-    )
-    .await;
-
-    assert_eq!(reply.status, StatusCode::OK);
-    assert_eq!(reply.header("content-type"), Some("application/json"));
-    assert_eq!(reply.json(), json!({ "echo": "what is linked" }));
-    assert!(runs.lock().unwrap().is_empty(), "a query runs nothing");
-}
-
-#[tokio::test]
-async fn a_query_the_backend_cannot_read_gets_a_json_error() {
-    let (server, _) = launch();
-
-    let reply = post(
-        &server,
-        "/api/query",
-        Auth::Bearer(server.token()),
-        json!({ "wrong": 1 }),
-    )
-    .await;
-    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(reply.json()["error"].as_str().unwrap().contains("echo"));
-
-    let reply = send(
-        &server,
-        Method::POST,
-        "/api/query",
-        Auth::Bearer(server.token()),
-        None,
-    )
-    .await;
-    assert_eq!(reply.status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
-    assert!(reply.json()["error"].is_string());
-}
-
-/// A query the backend read and will not answer, as its front end's rules
-/// say: a 422, the code beside the message for the panel to act on.
-#[tokio::test]
-async fn a_query_the_backend_refuses_says_why_with_its_code() {
-    let (server, _) = launch();
-
-    let reply = post(
-        &server,
-        "/api/query",
-        Auth::Bearer(server.token()),
-        json!({ "echo": "/etc/passwd", "refuse": true }),
-    )
-    .await;
-
-    assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(
-        reply.json(),
-        json!({ "error": "/etc/passwd is refused", "code": "fake_refused" })
-    );
-}
 
 #[tokio::test]
 async fn a_preview_shows_a_tasks_lines_and_runs_nothing() {
@@ -143,7 +79,7 @@ async fn an_unknown_api_path_gets_a_json_404() {
 
     for path in [
         "/api/no-such-endpoint",
-        "/api/query/deeper",
+        "/api/v1/tasks/deeper",
         "/api",
         "/api/",
     ] {
@@ -157,17 +93,53 @@ async fn an_unknown_api_path_gets_a_json_404() {
     }
 }
 
+/// What the panel's private protocol answered before the API was versioned
+/// answers nothing now, by any method, with the token or without: the panel
+/// was its only client, and ships in the same binary as the server.
+#[tokio::test]
+async fn no_unversioned_route_answers_any_more() {
+    let (server, runs) = launch();
+    let token = Auth::Bearer(server.token());
+
+    for path in [
+        "/api/query",
+        "/api/commands",
+        "/api/commands/preview",
+        "/api/switch",
+        "/api/transcript",
+        "/api/events",
+        "/api/snapshot",
+        "/api/echo",
+        "/api/v0/echo",
+        "/api/v2/tasks",
+        "/api/V1/tasks",
+    ] {
+        for method in [Method::GET, Method::POST] {
+            let body = (method == Method::POST).then(|| json!({ "name": "a", "echo": "a" }));
+            let reply = send(&server, method.clone(), path, token, body).await;
+            assert_eq!(reply.status, StatusCode::NOT_FOUND, "{method} {path}");
+            assert_eq!(
+                reply.json(),
+                json!({ "error": format!("no such endpoint: {method} {path}") })
+            );
+        }
+        let reply = get(&server, path, Auth::Nothing).await;
+        assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{path}");
+    }
+    assert!(runs.lock().unwrap().is_empty());
+}
+
 #[tokio::test]
 async fn an_endpoint_asked_with_the_wrong_method_says_so_in_json() {
     let (server, _) = launch();
 
-    let reply = get(&server, "/api/query", Auth::Bearer(server.token())).await;
+    let reply = get(&server, "/api/v1/tasks", Auth::Bearer(server.token())).await;
 
     assert_eq!(reply.status, StatusCode::METHOD_NOT_ALLOWED);
     assert_eq!(reply.header("allow"), Some("POST"));
     assert_eq!(
         reply.json(),
-        json!({ "error": "/api/query does not take GET" })
+        json!({ "error": "/api/v1/tasks does not take GET" })
     );
 }
 
@@ -184,13 +156,11 @@ async fn the_server_answers_on_loopback_on_a_port_the_system_chose() {
         let _ = stopped.await;
     }));
     let response = tokio::task::spawn_blocking(move || {
-        let body = r#"{"echo":"over the wire"}"#;
         let mut stream = TcpStream::connect(address).unwrap();
         write!(
             stream,
-            "POST /api/query HTTP/1.1\r\nHost: {address}\r\nAuthorization: Bearer {token}\r\n\
-             Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
+            "GET /api/v1/echo?echo=over+the+wire HTTP/1.1\r\nHost: {address}\r\n\
+             Authorization: Bearer {token}\r\nConnection: close\r\n\r\n",
         )
         .unwrap();
         let mut response = String::new();

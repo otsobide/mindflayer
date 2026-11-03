@@ -4,7 +4,7 @@
 //! hands each event to every receiver and keeps the latest few for one that
 //! has not read them. Free of axum, as the watcher is, so a desktop shell
 //! answering the panel without HTTP (D-17) takes its events from the same
-//! bus; the stream at `/api/events` is only one way of carrying them.
+//! bus; the stream at `/api/v1/events` is only one way of carrying them.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, PoisonError};

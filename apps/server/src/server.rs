@@ -126,7 +126,7 @@ pub struct Listening {
     router: Router,
     /// Where the panel is served from instead, when that is a dev server.
     dev_server: Option<String>,
-    /// What `/api/events` streams.
+    /// What `/api/v1/events` streams.
     events: Events,
 }
 
@@ -159,7 +159,7 @@ impl Listening {
         auth::cookie_name(self.address.port())
     }
 
-    /// The bus `/api/events` streams, for a front end that tells the panel
+    /// The bus `/api/v1/events` streams, for a front end that tells the panel
     /// something of its own or listens without HTTP, as a desktop shell
     /// would.
     pub fn events(&self) -> Events {
@@ -239,21 +239,18 @@ fn route<B: Backend>(
             &format!("{API}/tasks/preview"),
             endpoint(post(api::preview::<B>)),
         )
-        .route(&format!("{API}/tasks"), endpoint(post(api::commands::<B>)))
+        .route(&format!("{API}/tasks"), endpoint(post(api::run::<B>)))
         .route(&format!("{API}/switch"), endpoint(post(api::switch::<B>)))
         .route(
             &format!("{API}/transcript"),
             endpoint(get(api::transcript::<B>)),
         )
         .route(&format!("{API}/events"), endpoint(get(api::events::<B>)))
-        .route("/api/query", endpoint(post(api::query::<B>)))
-        .route("/api/commands/preview", endpoint(post(api::preview::<B>)))
-        .route("/api/commands", endpoint(post(api::commands::<B>)))
-        .route("/api/switch", endpoint(post(api::switch::<B>)))
-        .route("/api/transcript", endpoint(get(api::transcript::<B>)))
-        .route("/api/events", endpoint(get(api::events::<B>)))
         // The bare prefix and everything under it that names no endpoint,
-        // so a typo in a script gets a JSON 404 rather than the panel. `/api/`
+        // so a typo in a script gets a JSON 404 rather than the panel, and
+        // so does a path of another version, or of none: the panel's own
+        // unversioned endpoints went when it moved under the version, since
+        // it ships in the same binary and was their only client. `/api/`
         // needs a route of its own: the catch-all wants at least one
         // character after the slash, and without one the prefix would reach
         // the panel past the gate.

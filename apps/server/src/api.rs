@@ -1,4 +1,5 @@
-//! The JSON endpoints under `/api`.
+//! The JSON endpoints under `/api/v1`, and what answers every other path
+//! under `/api`.
 
 use std::convert::Infallible;
 use std::sync::Arc;
@@ -28,17 +29,6 @@ pub(crate) struct Api<B: Backend> {
     /// Held for as long as the routes are, and by the writer's thread, which
     /// has it watch anew after a switch; dropped with both, which stops it.
     pub(crate) _watcher: Arc<Watcher>,
-}
-
-/// `POST /api/query`: a read, answered by the backend.
-pub(crate) async fn query<B: Backend>(
-    State(api): State<Arc<Api<B>>>,
-    body: Result<Json<B::Query>, JsonRejection>,
-) -> Response {
-    match body {
-        Ok(Json(query)) => ask(&api, query).await,
-        Err(rejection) => refused(rejection),
-    }
 }
 
 /// A read one of the backend's routes serves ([`Route`]), as the method
@@ -108,7 +98,7 @@ async fn ask<B: Backend>(api: &Api<B>, query: B::Query) -> Response {
     }
 }
 
-/// `POST /api/commands/preview`: the command lines a task is, and what of
+/// `POST /api/v1/tasks/preview`: the command lines a task is, and what of
 /// them the panel has somebody confirm, with nothing run. On the blocking
 /// pool for the same reason as a query: working out a line can mean reading
 /// the disk.
@@ -135,10 +125,10 @@ pub(crate) async fn preview<B: Backend>(
     }
 }
 
-/// `POST /api/commands`: run a task, once every task that arrived before it
+/// `POST /api/v1/tasks`: run a task, once every task that arrived before it
 /// has run, and say what its lines were and what came of them; or, when the
 /// backend refused it, why nothing of it ran.
-pub(crate) async fn commands<B: Backend>(
+pub(crate) async fn run<B: Backend>(
     State(api): State<Arc<Api<B>>>,
     uri: Uri,
     body: Result<Json<B::Task>, JsonRejection>,
@@ -157,7 +147,7 @@ pub(crate) async fn commands<B: Backend>(
     }
 }
 
-/// `POST /api/switch`: act on what the body names from now on, once every
+/// `POST /api/v1/switch`: act on what the body names from now on, once every
 /// task that arrived before it has run, and say what that is; or, when the
 /// backend refused it, why nothing changed.
 ///
@@ -183,7 +173,7 @@ pub(crate) async fn switch<B: Backend>(
     }
 }
 
-/// `GET /api/transcript`: every task the session ran, oldest first.
+/// `GET /api/v1/transcript`: every task the session ran, oldest first.
 pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>, uri: Uri) -> Response {
     if let Some(refusal) = unasked(&uri) {
         return refusal;
@@ -191,7 +181,7 @@ pub(crate) async fn transcript<B: Backend>(State(api): State<Arc<Api<B>>>, uri: 
     Json(api.transcript.entries()).into_response()
 }
 
-/// `GET /api/events`: every event from now on ([`crate::Event`]), as
+/// `GET /api/v1/events`: every event from now on ([`crate::Event`]), as
 /// server-sent events, one `data:` line of JSON each, `resync` first.
 ///
 /// Server-sent events rather than a WebSocket: the stream goes one way, a

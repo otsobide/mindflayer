@@ -29,7 +29,7 @@ impl Log {
         Self { sink, token }
     }
 
-    /// `GET /api/transcript 200`: the method, what was asked for and the
+    /// `GET /api/v1/transcript 200`: the method, what was asked for and the
     /// status. Headers never, since the cookie and the Bearer token are in
     /// them, and no body, since a body is the user's business.
     fn line(&self, method: &str, uri: &Uri, status: u16) -> String {

@@ -12,10 +12,12 @@ use crate::route::Route;
 ///
 /// The three are associated types rather than types this crate defines, so
 /// the server deserializes, hands over and serializes without ever naming
-/// one. That is what lets the CLI implement this trait with its own `Task`
-/// while depending on the server, and not the other way round: a protocol
-/// crate holding the shared types would do the same at the price of a third
-/// crate for every change to a task to pass through.
+/// one; a query it never reads at all, since the backend's own table of
+/// routes makes one of what a request sends ([`Backend::routes`]). That is
+/// what lets the CLI implement this trait with its own `Task` while
+/// depending on the server, and not the other way round: a protocol crate
+/// holding the shared types would do the same at the price of a third crate
+/// for every change to a task to pass through.
 ///
 /// Every method is called off the async runtime: queries and previews on
 /// tokio's blocking pool, runs on the one thread that does all the writing.
@@ -25,8 +27,11 @@ use crate::route::Route;
 /// of the front end's, which paths a task may name or which commands run
 /// without a terminal, reaches the browser without the server knowing it.
 pub trait Backend: Send + Sync + 'static {
-    /// A read the panel asks for.
-    type Query: DeserializeOwned + Send + 'static;
+    /// A read the panel asks for: what a route of [`routes`] makes of a
+    /// request, so the server never reads one itself.
+    ///
+    /// [`routes`]: Backend::routes
+    type Query: Send + 'static;
     /// A change the panel asks for.
     type Task: DeserializeOwned + Send + 'static;
     /// What carrying out a task produced, sent back as it is.
@@ -100,7 +105,7 @@ pub trait Backend: Send + Sync + 'static {
 }
 
 /// What a task would run, worked out with none of it run: what
-/// [`Backend::preview`] answers, and `POST /api/commands/preview` sends as
+/// [`Backend::preview`] answers, and `POST /api/v1/tasks/preview` sends as
 /// it is, `{"lines": [...], "confirm": [...]}`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Preview {

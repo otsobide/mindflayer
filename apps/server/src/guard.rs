@@ -237,8 +237,8 @@ const POLICY: &str = "default-src 'self'; frame-ancestors 'none'";
 
 /// Send the policy with every answer, and `nosniff`, so the browser takes an
 /// answer for what its Content-Type says it is and never guesses: a page on
-/// another port that loads `/api/transcript` as a script has it refused, not
-/// run, and JSON is never mistaken for a page.
+/// another port that loads `/api/v1/transcript` as a script has it refused,
+/// not run, and JSON is never mistaken for a page.
 ///
 /// No CORS layer goes with them, on purpose: without one, no answer grants
 /// another origin the right to read it, and a preflight is never passed.

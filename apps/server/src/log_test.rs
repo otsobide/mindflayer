@@ -33,7 +33,7 @@ fn the_token_is_scrubbed_wherever_else_it_turns_up() {
         "GET /<redacted>/x?t=<redacted> 404"
     );
     assert_eq!(
-        scrub("GET /api/transcript 200", token),
-        "GET /api/transcript 200"
+        scrub("GET /api/v1/transcript 200", token),
+        "GET /api/v1/transcript 200"
     );
 }

@@ -532,7 +532,7 @@ fn a_skills_file_comes_back_as_text_inside_json() {
 #[test]
 fn an_html_asset_or_an_svg_holding_a_script_is_not_served_as_content() {
     let (_dir, backend, skill) = contents_fixture();
-    let page = "<!doctype html><script>fetch('/api/commands',{method:'POST'})</script>\n";
+    let page = "<!doctype html><script>fetch('/api/v1/tasks',{method:'POST'})</script>\n";
     let image =
         "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(document.cookie)</script></svg>\n";
     fs::write(skill.join("page.html"), page).unwrap();
