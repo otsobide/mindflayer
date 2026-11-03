@@ -158,10 +158,12 @@ export interface Transport {
  * with something that is not JSON, or could not be reached or stopped
  * before its answer was whole (status 0).
  *
- * With the code of the condition when the backend refused it, as every
- * refusal it reads a request through says one (`{"error", "code"}`): the
- * panel acts on a refusal by its code, as on a run's warnings, and never on
- * its words.
+ * With the code of the condition whenever the server answered, as every
+ * answer under `/api` that is no success says one (`{"error", "code"}`),
+ * the backend's for what it refused and the server's own for the rest, each
+ * one of the generated `Code`: the panel acts on a refusal by its code, as
+ * on a run's warnings, and never on its words. None for an answer that came
+ * from something else on the way, or for no answer at all.
  */
 export class TransportError extends Error {
   readonly status: number

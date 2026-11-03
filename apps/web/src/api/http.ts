@@ -184,7 +184,10 @@ async function ask<Reply>(method: 'GET' | 'POST', path: string, body?: unknown):
   return reply as Reply
 }
 
-/** What the server said was wrong, which it says as `{"error": "..."}`. */
+/**
+ * What the server said was wrong, which it says as `{"error": "...",
+ * "code": "..."}`, the code read apart (`code`).
+ */
 function refusal(response: Response, reply: unknown): string {
   if (response.status === 401) {
     return 'this browser does not hold the launch token: open the link `flayer ui` printed'

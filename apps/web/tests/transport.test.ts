@@ -130,22 +130,32 @@ describe('the HTTP transport', () => {
     expect(run).toEqual({ lines: ['flayer install demo -p app'], outcome })
   })
 
-  it('says what the server refused, from its error body', async () => {
-    serve(() => json(404, { error: 'no such endpoint: GET /api/v1/nothing' }))
+  it('says what the server refused, from its error body, with the code beside it', async () => {
+    serve(() => json(404, { error: 'no such endpoint: GET /api/v1/nothing', code: 'unknown_route' }))
 
     const refused = await httpTransport().query({ type: 'snapshot' }).catch((error: unknown) => error)
 
     expect(refused).toBeInstanceOf(TransportError)
-    expect(refused).toMatchObject({ status: 404, message: 'no such endpoint: GET /api/v1/nothing', code: undefined })
+    expect(refused).toMatchObject({ status: 404, message: 'no such endpoint: GET /api/v1/nothing', code: 'unknown_route' })
+  })
+
+  it('keeps the code of a read naming what is not there, a 404 as a refusal is', async () => {
+    serve(() => json(404, { error: 'ghost: not registered in the workspace at /home/you/Projects', code: 'not_registered' }))
+
+    const refused = await httpTransport().query({ type: 'project', entry: 'ghost' }).catch((error: unknown) => error)
+
+    expect(refused).toBeInstanceOf(TransportError)
+    expect(refused).toMatchObject({ status: 404, message: 'ghost: not registered in the workspace at /home/you/Projects', code: 'not_registered' })
   })
 
   it('says how to get the token when the server asks for it', async () => {
-    serve(() => json(401, { error: 'this needs the launch token' }))
+    serve(() => json(401, { error: 'this needs the launch token', code: 'token_required' }))
 
     const refused = await httpTransport().query({ type: 'snapshot' }).catch((error: unknown) => error) as TransportError
 
     expect(refused.unauthorized).toBe(true)
     expect(refused.message).toBe('this browser does not hold the launch token: open the link `flayer ui` printed')
+    expect(refused.code).toBe('token_required')
   })
 
   it('names the status when a refusal is not JSON', async () => {
