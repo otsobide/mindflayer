@@ -13,6 +13,7 @@ use axum::routing::{get, on, post, MethodFilter, MethodRouter};
 use axum::Json;
 use serde_json::{json, Value};
 
+use crate::code::Condition;
 use crate::events::Events;
 use crate::route::{self, Arguments, Own, Route};
 use crate::transcript::Transcript;
@@ -87,7 +88,7 @@ async fn answer<B: Backend>(
     let path = uri.path();
     let parameters = match route::arguments(&route.parameters, uri.query()) {
         Ok(parameters) => Value::Object(parameters),
-        Err(unfit) => return error(StatusCode::BAD_REQUEST, &unfit.say(path, &route.parameters)),
+        Err(unfit) => return uncoded(StatusCode::BAD_REQUEST, &unfit.say(path, &route.parameters)),
     };
     let (sent, unfit) = match body {
         None => (parameters, StatusCode::BAD_REQUEST),
@@ -96,7 +97,7 @@ async fn answer<B: Backend>(
     };
     match (route.query)(Arguments::new(sent)) {
         Ok(query) => ask(api, query).await,
-        Err(message) => error(unfit, &format!("{path}: {message}")),
+        Err(message) => uncoded(unfit, &format!("{path}: {message}")),
     }
 }
 
@@ -108,7 +109,7 @@ async fn ask<B: Backend>(api: &Api<B>, query: B::Query) -> Response {
     match tokio::task::spawn_blocking(move || backend.query(query)).await {
         Ok(Ok(answer)) => Json(answer).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
-        Err(_) => error(
+        Err(_) => uncoded(
             StatusCode::INTERNAL_SERVER_ERROR,
             "the backend failed while answering the query",
         ),
@@ -135,7 +136,7 @@ pub(crate) async fn preview<B: Backend>(
     match tokio::task::spawn_blocking(move || backend.preview(&task)).await {
         Ok(Ok(preview)) => Json(preview).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
-        Err(_) => error(
+        Err(_) => uncoded(
             StatusCode::INTERNAL_SERVER_ERROR,
             "the backend failed while previewing the task",
         ),
@@ -160,7 +161,7 @@ pub(crate) async fn run<B: Backend>(
     match api.writer.run(task).await {
         Ok(Ok(entry)) => Json(entry).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
-        Err(message) => error(StatusCode::INTERNAL_SERVER_ERROR, &message),
+        Err(message) => uncoded(StatusCode::INTERNAL_SERVER_ERROR, &message),
     }
 }
 
@@ -186,7 +187,7 @@ pub(crate) async fn switch<B: Backend>(
     match api.writer.switch(to).await {
         Ok(Ok(answer)) => Json(answer).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
-        Err(message) => error(StatusCode::INTERNAL_SERVER_ERROR, &message),
+        Err(message) => uncoded(StatusCode::INTERNAL_SERVER_ERROR, &message),
     }
 }
 
@@ -237,7 +238,7 @@ pub(crate) async fn events<B: Backend>(State(api): State<Arc<Api<B>>>, uri: Uri)
 fn unasked(uri: &Uri) -> Option<Response> {
     route::arguments(&[], uri.query())
         .err()
-        .map(|unfit| error(StatusCode::BAD_REQUEST, &unfit.say(uri.path(), &[])))
+        .map(|unfit| uncoded(StatusCode::BAD_REQUEST, &unfit.say(uri.path(), &[])))
 }
 
 /// Whether a path is the API's: `/api` and everything under it, where every
@@ -249,7 +250,7 @@ pub(crate) fn is_api(path: &str) -> bool {
 /// Any other path under `/api`: a 404 a script can read, rather than the
 /// panel's page, which is what a path outside `/api` that names no file gets.
 pub(crate) async fn missing(method: Method, uri: Uri) -> Response {
-    error(
+    uncoded(
         StatusCode::NOT_FOUND,
         &format!("no such endpoint: {method} {}", uri.path()),
     )
@@ -257,7 +258,7 @@ pub(crate) async fn missing(method: Method, uri: Uri) -> Response {
 
 /// A known path asked for with a method it does not take.
 pub(crate) async fn not_allowed(method: Method, uri: Uri) -> Response {
-    error(
+    uncoded(
         StatusCode::METHOD_NOT_ALLOWED,
         &format!("{} does not take {method}", uri.path()),
     )
@@ -266,7 +267,7 @@ pub(crate) async fn not_allowed(method: Method, uri: Uri) -> Response {
 /// A body that is not the JSON a handler expects, in the same shape as every
 /// other error here rather than axum's plain text.
 pub(crate) fn refused(rejection: JsonRejection) -> Response {
-    error(rejection.status(), &rejection.body_text())
+    uncoded(rejection.status(), &rejection.body_text())
 }
 
 /// What the backend refused, as `{"error": "...", "code": "..."}`: a 422,
@@ -280,7 +281,19 @@ pub(crate) fn refused_by(refusal: Refusal) -> Response {
         .into_response()
 }
 
-/// An error, as `{"error": "..."}`.
-pub(crate) fn error(status: StatusCode, message: &str) -> Response {
+/// A condition of the server's own, as `{"error": "...", "code": "..."}`
+/// with the status it is answered with: the words of what was found, the
+/// route, the parameter or the header, beside the one word a script acts
+/// on.
+pub(crate) fn error(condition: Condition, message: &str) -> Response {
+    (
+        condition.status(),
+        Json(json!({ "error": message, "code": condition.code() })),
+    )
+        .into_response()
+}
+
+/// An error with no code yet, as `{"error": "..."}`.
+pub(crate) fn uncoded(status: StatusCode, message: &str) -> Response {
     (status, Json(json!({ "error": message }))).into_response()
 }

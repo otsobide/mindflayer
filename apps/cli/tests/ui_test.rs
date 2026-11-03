@@ -401,7 +401,10 @@ fn a_request_without_the_token_is_refused_with_a_401() {
         assert_eq!(status, 401, "{path}");
         assert_eq!(
             refusal,
-            json!({"error": "this needs the launch token, as the cookie its link sets or as a Bearer token"})
+            json!({
+                "error": "this needs the launch token, as the cookie its link sets or as a Bearer token",
+                "code": "token_required",
+            })
         );
     }
     let (status, _) = panel.send("GET", "/api/v1/transcript", Auth::Nothing, None);
@@ -501,6 +504,7 @@ fn through_the_dev_server_the_link_is_its_own_and_its_changes_are_taken() {
         Some(shelf),
     );
     assert_eq!(status, 403, "{refusal}");
+    assert_eq!(refusal["code"], "foreign_origin", "{refusal}");
     assert!(
         refusal["error"]
             .as_str()

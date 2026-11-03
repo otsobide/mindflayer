@@ -26,7 +26,10 @@ test('a read sent with the cookie from another origin is refused', async ({ page
 
   const foreign = await ask(FOREIGN)
   expect(foreign.status()).toBe(403)
-  expect(await foreign.json()).toEqual({ error: `this server takes requests only from its own pages, at ${served.origin}` })
+  expect(await foreign.json()).toEqual({
+    error: `this server takes requests only from its own pages, at ${served.origin}`,
+    code: 'foreign_origin'
+  })
 })
 
 test('a preview sent with the cookie from another origin is refused', async ({ page, panel, served }) => {
@@ -43,6 +46,7 @@ test('a preview sent with the cookie from another origin is refused', async ({ p
 
   const foreign = await preview(FOREIGN)
   expect(foreign.status()).toBe(403)
+  expect(await foreign.json()).toMatchObject({ code: 'foreign_origin' })
 })
 
 test('a read sent with the token as Bearer from another origin is refused', async ({ request, served }) => {
@@ -51,6 +55,7 @@ test('a read sent with the token as Bearer from another origin is refused', asyn
     failOnStatusCode: false
   })
   expect(foreign.status()).toBe(403)
+  expect(await foreign.json()).toMatchObject({ code: 'foreign_origin' })
 })
 
 test('no unversioned route answers, the panel\'s old ones among them', async ({ request, served }) => {

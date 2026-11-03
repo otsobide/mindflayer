@@ -61,20 +61,28 @@ async fn a_request_the_panel_would_not_send_is_refused() {
     let json = "must be JSON";
     let custom = "X-Mindflayer: 1";
 
-    let cases: Vec<(&str, Vec<Change>, StatusCode, &str)> = vec![
+    let cases: Vec<(&str, Vec<Change>, StatusCode, &str, &str)> = vec![
         (
             "a name rebound to 127.0.0.1",
             vec![set("host", format!("attacker.example:{port}"))],
             StatusCode::FORBIDDEN,
+            "unknown_host",
             host,
         ),
         (
             "another port",
             vec![set("host", format!("127.0.0.1:{}", port.wrapping_add(1)))],
             StatusCode::FORBIDDEN,
+            "unknown_host",
             host,
         ),
-        ("no Host", vec![unset("host")], StatusCode::FORBIDDEN, host),
+        (
+            "no Host",
+            vec![unset("host")],
+            StatusCode::FORBIDDEN,
+            "unknown_host",
+            host,
+        ),
         (
             "a rebound name, forwarded as this one",
             vec![
@@ -82,12 +90,14 @@ async fn a_request_the_panel_would_not_send_is_refused() {
                 set("x-forwarded-host", format!("127.0.0.1:{port}")),
             ],
             StatusCode::FORBIDDEN,
+            "unknown_host",
             host,
         ),
         (
             "a page on another site",
             vec![set("origin", "https://attacker.example")],
             StatusCode::FORBIDDEN,
+            "foreign_origin",
             origin,
         ),
         (
@@ -97,72 +107,84 @@ async fn a_request_the_panel_would_not_send_is_refused() {
                 format!("http://127.0.0.1:{}", port.wrapping_add(1)),
             )],
             StatusCode::FORBIDDEN,
+            "foreign_origin",
             origin,
         ),
         (
             "a page under another of the server's names",
             vec![set("origin", format!("http://localhost:{port}"))],
             StatusCode::FORBIDDEN,
+            "foreign_origin",
             origin,
         ),
         (
             "a sandboxed frame or a file",
             vec![set("origin", "null")],
             StatusCode::FORBIDDEN,
+            "foreign_origin",
             origin,
         ),
         (
             "the same site from another port, as Fetch Metadata tells it",
             vec![unset("origin"), set("sec-fetch-site", "same-site")],
             StatusCode::FORBIDDEN,
+            "same_origin_required",
             fetch,
         ),
         (
             "another site, as Fetch Metadata tells it",
             vec![unset("origin"), set("sec-fetch-site", "cross-site")],
             StatusCode::FORBIDDEN,
+            "same_origin_required",
             fetch,
         ),
         (
             "no token",
             vec![unset("cookie")],
             StatusCode::UNAUTHORIZED,
+            "token_required",
             "launch token",
         ),
         (
             "a text body, which a page may send anywhere unasked",
             vec![set("content-type", "text/plain")],
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "json_required",
             json,
         ),
         (
             "a form",
             vec![set("content-type", "application/x-www-form-urlencoded")],
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "json_required",
             json,
         ),
         (
             "no content type",
             vec![unset("content-type")],
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "json_required",
             json,
         ),
         (
             "no X-Mindflayer",
             vec![unset("x-mindflayer")],
             StatusCode::FORBIDDEN,
+            "x_mindflayer_required",
             custom,
         ),
         (
             "X-Mindflayer other than 1",
             vec![set("x-mindflayer", "yes")],
             StatusCode::FORBIDDEN,
+            "x_mindflayer_required",
             custom,
         ),
     ];
-    for (case, changes, status, refusal) in cases {
+    for (case, changes, status, code, refusal) in cases {
         let reply = deliver(&server, from_the_panel(&server, &changes)).await;
         assert_eq!(reply.status, status, "{case}");
+        assert_eq!(reply.json()["code"], code, "{case}");
         let error = reply.json()["error"].clone();
         assert!(
             error.as_str().is_some_and(|error| error.contains(refusal)),
@@ -232,6 +254,7 @@ async fn a_page_on_a_rebound_name_gets_neither_the_panel_nor_a_cookie() {
         );
         assert_eq!(reply.header("set-cookie"), None);
         assert!(reply.text().contains("answers only as 127.0.0.1:"));
+        assert!(!reply.text().contains("unknown_host"), "{}", reply.text());
     }
 }
 
@@ -241,6 +264,7 @@ async fn a_change_by_cookie_without_fetch_metadata_is_refused_and_taken_by_beare
 
     let reply = deliver(&server, from_the_panel(&server, &[unset("sec-fetch-site")])).await;
     assert_eq!(reply.status, StatusCode::FORBIDDEN);
+    assert_eq!(reply.json()["code"], "same_origin_required");
     assert!(reply.json()["error"]
         .as_str()
         .unwrap()
@@ -454,16 +478,26 @@ async fn through_its_dev_server_the_panel_changes_things_and_nothing_else_does()
     );
     assert_eq!(deliver(&server, own).await.status, StatusCode::OK);
 
-    for (case, changes) in [
-        ("another port", vec![set("origin", "http://127.0.0.1:5174")]),
-        ("another name", vec![set("origin", "http://localhost:5173")]),
+    for (case, changes, code) in [
+        (
+            "another port",
+            vec![set("origin", "http://127.0.0.1:5174")],
+            "foreign_origin",
+        ),
+        (
+            "another name",
+            vec![set("origin", "http://localhost:5173")],
+            "foreign_origin",
+        ),
         (
             "naming the dev server in Host",
             vec![set("host", "127.0.0.1:5173"), set("origin", DEV_SERVER)],
+            "unknown_host",
         ),
     ] {
         let reply = deliver(&server, from_the_panel(&server, &changes)).await;
         assert_eq!(reply.status, StatusCode::FORBIDDEN, "{case}");
+        assert_eq!(reply.json()["code"], code, "{case}");
     }
 
     assert_eq!(
@@ -486,11 +520,14 @@ async fn without_being_told_of_it_the_server_refuses_the_dev_servers_pages() {
 
     assert_eq!(reply.status, StatusCode::FORBIDDEN);
     assert_eq!(
-        reply.json()["error"],
-        format!(
-            "this server takes requests only from its own pages, at http://{}",
-            server.address()
-        )
+        reply.json(),
+        json!({
+            "error": format!(
+                "this server takes requests only from its own pages, at http://{}",
+                server.address()
+            ),
+            "code": "foreign_origin",
+        })
     );
     assert!(runs.lock().unwrap().is_empty());
 }
@@ -524,8 +561,9 @@ fn versioned() -> [(Method, &'static str, Option<Value>); 8] {
 /// them, by Bearer and by cookie: a request with no token, or another
 /// server's, is a 401; one naming another host or sent from another page a
 /// 403, whichever way it holds the token; and a change by cookie that the
-/// panel's page would not send is refused as one to `/tasks` is. Every
-/// refusal, and every answer, carries the policy, `nosniff` and `no-store`;
+/// panel's page would not send is refused as one to `/tasks` is, each with
+/// the code of the guard that turned it away. Every refusal, and every
+/// answer, carries the policy, `nosniff` and `no-store`;
 /// and either credential, sent as a script or the page sends it, is
 /// answered.
 #[tokio::test]
@@ -573,11 +611,17 @@ async fn every_versioned_route_holds_every_guard_by_bearer_and_cookie_alike() {
     for (method, path, body) in versioned() {
         let asked = |auth| request(&server, method.clone(), path, auth, body.clone());
         let mut refused = vec![
-            ("no token", asked(Auth::Nothing), StatusCode::UNAUTHORIZED),
+            (
+                "no token",
+                asked(Auth::Nothing),
+                StatusCode::UNAUTHORIZED,
+                "token_required",
+            ),
             (
                 "another server's token",
                 asked(Auth::Bearer("0123456789abcdef")),
                 StatusCode::UNAUTHORIZED,
+                "token_required",
             ),
         ];
         for (credential, auth) in [
@@ -594,11 +638,13 @@ async fn every_versioned_route_holds_every_guard_by_bearer_and_cookie_alike() {
                     credential,
                     changed(asked(auth), &[rebound]),
                     StatusCode::FORBIDDEN,
+                    "unknown_host",
                 ),
                 (
                     credential,
                     changed(asked(auth), &[elsewhere]),
                     StatusCode::FORBIDDEN,
+                    "foreign_origin",
                 ),
             ]);
         }
@@ -609,23 +655,27 @@ async fn every_versioned_route_holds_every_guard_by_bearer_and_cookie_alike() {
                     "by cookie, from another port as Fetch Metadata tells it",
                     changed(by_cookie(), &[set("sec-fetch-site", "same-site")]),
                     StatusCode::FORBIDDEN,
+                    "same_origin_required",
                 ),
                 (
                     "by cookie, without X-Mindflayer",
                     changed(by_cookie(), &[unset("x-mindflayer")]),
                     StatusCode::FORBIDDEN,
+                    "x_mindflayer_required",
                 ),
                 (
                     "by cookie, as text",
                     changed(by_cookie(), &[set("content-type", "text/plain")]),
                     StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                    "json_required",
                 ),
             ]);
         }
-        for (case, request, status) in refused {
+        for (case, request, status, code) in refused {
             let case = format!("{method} {path}, {case}");
             let reply = deliver(&server, request).await;
             assert_eq!(reply.status, status, "{case}: {}", reply.text());
+            assert_eq!(reply.json()["code"], code, "{case}");
             assert!(reply.json()["error"].is_string(), "{case}");
             carries_the_policy(&reply.headers, &case);
         }

@@ -204,8 +204,12 @@ fn a_change_from_any_other_page_or_from_no_browser_is_not() {
     ] {
         for method in [Method::POST, Method::PUT, Method::DELETE, Method::PATCH] {
             let headers = panel(&[("sec-fetch-site", site)]);
-            let (status, _) = from_the_panel(&method, &headers).unwrap_err();
-            assert_eq!(status, StatusCode::FORBIDDEN, "{method} {site:?}");
+            let (condition, _) = from_the_panel(&method, &headers).unwrap_err();
+            assert_eq!(
+                condition,
+                Condition::SameOriginRequired,
+                "{method} {site:?}"
+            );
         }
     }
 
@@ -218,8 +222,8 @@ fn a_change_from_any_other_page_or_from_no_browser_is_not() {
 fn a_change_without_the_panels_own_header_is_refused() {
     for value in [None, Some("0"), Some("true"), Some("")] {
         let headers = panel(&[("x-mindflayer", value)]);
-        let (status, message) = from_the_panel(&Method::POST, &headers).unwrap_err();
-        assert_eq!(status, StatusCode::FORBIDDEN, "{value:?}");
+        let (condition, message) = from_the_panel(&Method::POST, &headers).unwrap_err();
+        assert_eq!(condition, Condition::XMindflayerRequired, "{value:?}");
         assert!(message.contains("X-Mindflayer: 1"), "{message}");
     }
 }
@@ -234,8 +238,8 @@ fn a_change_that_is_not_sent_as_json_is_refused() {
         None,
     ] {
         let headers = panel(&[("content-type", value)]);
-        let (status, _) = from_the_panel(&Method::POST, &headers).unwrap_err();
-        assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE, "{value:?}");
+        let (condition, _) = from_the_panel(&Method::POST, &headers).unwrap_err();
+        assert_eq!(condition, Condition::JsonRequired, "{value:?}");
     }
 }
 

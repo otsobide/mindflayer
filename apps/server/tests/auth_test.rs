@@ -31,7 +31,15 @@ async fn a_request_without_the_token_is_refused() {
         let reply = send(&server, method.clone(), path, Auth::Nothing, body).await;
         assert_eq!(reply.status, StatusCode::UNAUTHORIZED, "{method} {path}");
         assert_eq!(reply.header("www-authenticate"), Some("Bearer"));
-        assert!(reply.json()["error"].as_str().unwrap().contains("token"));
+        assert_eq!(
+            reply.json(),
+            json!({
+                "error": "this needs the launch token, as the cookie its link sets or as a \
+                          Bearer token",
+                "code": "token_required",
+            }),
+            "{method} {path}"
+        );
     }
     assert!(runs.lock().unwrap().is_empty());
 }
@@ -48,6 +56,7 @@ async fn a_wrong_token_is_refused() {
     ] {
         let reply = post(&server, "/api/v1/judge", auth, json!({ "echo": "hi" })).await;
         assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(reply.json()["code"], "token_required");
     }
 }
 
@@ -103,6 +112,7 @@ async fn the_token_under_another_ports_cookie_is_refused() {
 
     assert_eq!(server.cookie(), format!("mf_{port}"));
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(reply.json()["code"], "token_required");
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +175,11 @@ async fn a_launch_link_with_another_token_sets_no_cookie() {
 
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
     assert_eq!(reply.header("set-cookie"), None);
+    assert_eq!(
+        reply.header("content-type"),
+        Some("text/plain; charset=utf-8"),
+        "a person reads it, in a browser"
+    );
     assert!(reply.text().contains("not this server's"));
 }
 
@@ -228,4 +243,5 @@ async fn two_servers_on_different_ports_set_differently_named_cookies() {
     )
     .await;
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(reply.json()["code"], "token_required");
 }
