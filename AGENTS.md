@@ -435,7 +435,8 @@ These are easy to break from a single file without noticing.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
   The two that run until they are stopped write as they run, the TUI its
-  screen and `ui` its link and a note, and hand back their transcript.
+  screen and `ui` its link, a note and the token file it is asked for, and
+  hand back their transcript.
   Each stderr line, and each of a `Failure`'s warnings, is a
   `render::Warning`: the text a terminal shows, word for word, and beside
   it the code of what it says (`code()` of the core error, refusal or
@@ -641,6 +642,13 @@ These are easy to break from a single file without noticing.
     rewritten. A changed file goes through `replace_bytes_unresolved`,
     keeping its permissions; a new one is made with `create_new`. The module
     knows no agent: the file, the key path and the entry are the caller's.
+  - `ui --token-file` (`TokenFile`, in `src/commands/ui.rs`) makes its
+    file with `create_new`, mode 0600 on Unix, so whatever is at the path,
+    a link included, is refused and never written over or through, and
+    takes it away when `ui` stops only while it holds, byte for byte, what
+    was written: anything else there is somebody's, left as it is and said.
+    It holds the token, which goes nowhere else new: not to stderr, not to
+    a `Debug`, and the link and the transcript stay as they were.
   - `flayer init` refuses a directory for the workspace's own that overlaps
     the shelf or the cache, which are reserved for gathering
     (`gathered_overlap`). `flayer init` and the workspace's own artifacts
@@ -1215,7 +1223,8 @@ These are easy to break from a single file without noticing.
   `apps/cli/tests/live_test.rs` starts the server's watcher over it on a
   temporary workspace; `apps/cli/tests/ui_test.rs` starts the binaries'
   `ui` on port 0 (`common::start`) and sends the panel's requests over
-  loopback, every read route among them. No test
+  loopback, every read route among them, and a script's with the token
+  read from the file `--token-file` writes, in a temporary folder. No test
   opens a browser: every `ui` one starts passes `--no-open`, and the opener
   is a stand-in in `ui`'s unit tests. A suite or test about the panel is
   `#[cfg(feature = "ui")]`, so a build without the feature leaves it out;
