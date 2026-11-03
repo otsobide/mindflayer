@@ -158,7 +158,10 @@ serves: after changing a route, or a type a route names, `make
 api/openapi` writes it again, and `make api/openapi/check`, in the same
 check, fails when it is not what Rust writes. The binaries embed the
 document as it is committed, and `make test` holds every answer the CLI's
-suites get from the panel to it.
+suites get from the panel to it. [The API's guide](api.md) shows literal
+answers, which `api_guide_test.rs` holds to what the server answers: after
+changing what a route answers, or adding one, run it, and write into the
+guide what it says the server answers.
 
 `make web/build` writes `apps/web/dist`, which the server embeds as it
 compiles, and marks the server to compile again, so the next build of the

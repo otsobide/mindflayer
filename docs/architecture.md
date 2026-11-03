@@ -91,6 +91,56 @@ enough for that, skipping fenced blocks and code spans, where a link or a
 `#` is an example. Its first run found one anchor that led nowhere, in
 this document since before the move, which no check had read until then.
 
+### The API's guide runs its examples
+
+[docs/api.md](api.md) is what somebody calling [the HTTP
+API](#d-24-the-local-server-is-a-versioned-http-api) reads first (#219):
+starting the server for a script, the token, the versioning rule, every
+read with its answer, a change previewed and then run, what goes wrong and
+its codes, the events and where the API is described. Its answers are
+literal, as the reference's are, and `apps/cli/tests/api_guide_test.rs`
+holds them to the server as `examples_test.rs` holds the reference's
+walk-through to the commands. It builds the guide's workspace with the
+commands its first block shows, run in process, and finds what they
+printed there; starts `flayer ui` as the guide does, `--token-file`
+included, on port 0 with a temporary home and every agent home empty; and
+sends every `curl` line of a `console` block over loopback with the
+client `ui_test` uses (`common::panel`), holding each answer to the
+OpenAPI document (`common::contract`) before it holds it to what the guide
+shows under the line. Once it stops the server with a `SIGTERM`, as the
+guide does, what `ui` printed after its link is in the guide too, and the
+token file is gone. Every route of both tables has an example, and the
+guide's table of the server's codes is held to `Condition::ALL`, each with
+its status, so a route or a condition added fails the test until the guide
+says it.
+
+**The lines are read, not run.** curl and jq are not on every machine the
+suites run on, and a missing one would have to fail under `$CI` and be
+skipped elsewhere, as a shell is in `shells_test`, for a check that needs
+neither. So the test reads each line as a POSIX shell and curl would, as
+far as the guide writes them: single and double quotes, `$api` and
+`$token`, `-s`, `-N`, `-H`, `-d`, `-w` and `-X`, one URL, and an answer
+piped through jq with a filter that is a path. Anything else fails, naming
+it, rather than be sent as something the line does not say. It sends what
+curl sends besides, a body with no `Content-Type` as a form, so a line
+that forgets the header is answered the 415 a reader would get. An answer
+jq lays out is held to the guide's as JSON, the same values whatever the
+spaces between them, since jq's layout is not serde's; one printed as it
+came, its status after it by `-w`, as text, byte for byte. An example
+that shows no status is a 200. The few lines of shell that start the
+server in the background and wait for its link are a recipe with no
+answer, and are not run.
+
+**Pinned as the reference's examples are.** The home is a temporary folder
+that reads as `/home/you`, the port and the token are the reference's, and
+each project's id the panel's fixtures'; the guide says which of a
+reader's own values differ, and shows no time, so none is pinned. The
+event stream is shown to its first two events, `resync` and the watcher's
+word, which a subscriber is told before anything else: what follows a run
+waits on the watcher's debounce, and would come in an order no literal
+example could hold. Unix alone, as the guide's lines are a POSIX shell's
+and the server is stopped by `kill`.
+
 ### No em dash in what the repository says
 
 The owner finds the em dash reads as machine-written, so none is written:
@@ -4228,7 +4278,9 @@ front end, and serves the panel's files. What it carries is an HTTP API for
 scripts and tools on this machine as much as for the panel, its first
 client, versioned under `/api/v1`
 ([D-24](#d-24-the-local-server-is-a-versioned-http-api), [its
-routes](#its-routes-under-apiv1)). `flayer ui` runs it, over the CLI's
+routes](#its-routes-under-apiv1)), which [its guide](api.md) walks through
+with examples a test runs ([the API's guide runs its
+examples](#the-apis-guide-runs-its-examples)). `flayer ui` runs it, over the CLI's
 backend ([launching it](#launching-it-flayer-ui), [what a browser may
 name](#what-a-browser-may-name)). The token keeps out a process that
 connects without it, and [the guards](#what-keeps-other-pages-out) keep out
@@ -9558,7 +9610,12 @@ OpenAPI 3.1 document written from both tables and those schemas, the
 server writing what is HTTP and the CLI each type a route names, served at
 `/api/v1/openapi.json` as it is committed, and holds every answer the
 tests get to it ([the API's description is written from both
-tables](#the-apis-description-is-written-from-both-tables)).
+tables](#the-apis-description-is-written-from-both-tables)). #219 writes
+the guide somebody calling the API reads first, [docs/api.md](api.md),
+every example in it a `curl` line and its answer, which a test sends to
+the server and holds to what it answers ([the API's guide runs its
+examples](#the-apis-guide-runs-its-examples)). The guide says no MCP front
+end is there, and nothing more: none is started until the owner says so.
 
 ## Open questions
 

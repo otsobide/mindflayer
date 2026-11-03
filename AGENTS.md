@@ -11,6 +11,8 @@ friendly and centred on the control panel (`flayer ui`), with screenshots
 `make docs/screenshots` takes and no command's output. `docs/reference.md`
 is the user-facing reference: every command with its literal output, the
 formats, `--json`, the TUI, the panel in full and upgrading.
+`docs/api.md` is the guide to the HTTP API `flayer ui` serves, every
+example a `curl` line and its literal answer, which a test replays.
 `docs/development.md` is how to build, test and work on the panel.
 `docs/architecture.md` records why each mechanism is the way it is: read the
 section for whatever you are about to change before changing it, and keep it
@@ -1301,12 +1303,14 @@ These are easy to break from a single file without noticing.
   `apps/cli/tests/live_test.rs` starts the server's watcher over it on a
   temporary workspace; `apps/cli/tests/ui_test.rs` starts the binaries'
   `ui` on port 0 (`common::start`) and sends the panel's requests over
-  loopback, every read route among them, and a script's with the token
-  read from the file `--token-file` writes, in a temporary folder. No test
-  opens a browser: every `ui` one starts passes `--no-open`, and the opener
-  is a stand-in in `ui`'s unit tests. A suite or test about the panel is
-  `#[cfg(feature = "ui")]`, so a build without the feature leaves it out;
-  `make cli/test` runs the unit tests in that build too.
+  loopback (`common::panel`, the client of plain `TcpStream`s every suite
+  that calls a served panel uses), every read route among them, and a
+  script's with the token read from the file `--token-file` writes, in a
+  temporary folder. No test opens a browser: every `ui` one starts passes
+  `--no-open`, and the opener is a stand-in in `ui`'s unit tests. A suite
+  or test about the panel is `#[cfg(feature = "ui")]`, so a build without
+  the feature leaves it out; `make cli/test` runs the unit tests in that
+  build too.
 - Every answer the CLI's HTTP suites get is held to the API's OpenAPI
   document as it is committed (`common::contract`, with boon): `ui_test`'s
   `Panel::send` holds what each route answered, with its status, to the
@@ -1418,7 +1422,16 @@ These are easy to break from a single file without noticing.
   GitHub spells it, and each image in `docs/images` is shown by some page.
   A link to another site is not followed. `examples_test.rs` finds the
   reference's "Try it with the examples" walk-through in what the commands
-  print.
+  print. `api_guide_test.rs` replays the API's guide, `docs/api.md`: it
+  builds the guide's workspace with the commands its first block shows,
+  starts `ui` with `--token-file` as the guide does, reads every `curl`
+  line of a `console` block as curl would and sends it over loopback with
+  `common::panel`, holding each answer to the OpenAPI document and then to
+  the guide's, with the home read as `/home/you`, the port, the token and
+  each project's id pinned. It reads the lines rather than run them, so it
+  needs neither curl nor jq, and fails on an option or a filter it does
+  not read. Every route of both tables needs an example there, and the
+  guide's table of the server's codes is held to `Condition::ALL`.
 
 ## Workflow
 
@@ -1453,7 +1466,9 @@ These are easy to break from a single file without noticing.
   a change spans two apps).
 - When behaviour changes, update `docs/reference.md` (its examples are
   literal output, so re-run them) and `docs/architecture.md`, including its
-  "Open questions". Literal output belongs in the reference, never in the
+  "Open questions". A change to what the API answers, a route added among
+  them, updates `docs/api.md` too, whose answers `api_guide_test` holds to
+  the server's. Literal output belongs in the reference, never in the
   README, which says what Mindflayer is and tours the panel in a few
   screens. A change to what the panel shows, a page, a view or its look,
   runs `make docs/screenshots`, and its PR carries the images it wrote; a
