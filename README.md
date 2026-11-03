@@ -253,6 +253,13 @@ The transcript keeps every line the session ran, with what each said, and
 These pictures are taken by `make docs/screenshots` from a demo workspace,
 so they show the panel as it is.
 
+## An API for scripts
+
+What the panel asks of the server is an HTTP API, there for your scripts
+too: `flayer ui --no-open --token-file <file>` serves it without a
+browser, and writes where it is and its token to the file. [The API's
+guide](docs/api.md) walks through it with curl.
+
 ## From the terminal
 
 Everything the panel does is a command, and so is everything it does not do
