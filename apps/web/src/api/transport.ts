@@ -5,8 +5,10 @@ import type { Files } from './generated/Files'
 import type { Folders } from './generated/Folders'
 import type { Holder } from './generated/Holder'
 import type { Judged } from './generated/Judged'
+import type { Library } from './generated/Library'
 import type { Outcome } from './generated/Outcome'
 import type { Planned } from './generated/Planned'
+import type { Project } from './generated/Project'
 import type { Query } from './generated/Query'
 import type { Scanned } from './generated/Scanned'
 import type { Snapshot } from './generated/Snapshot'
@@ -31,6 +33,9 @@ export type { Outcome, Query, Switch, Switchable, Task }
  */
 export interface Answers {
   snapshot: Snapshot
+  projects: Project[]
+  library: Library
+  project: Project
   files: Files
   contents: Contents
   scan: Scanned

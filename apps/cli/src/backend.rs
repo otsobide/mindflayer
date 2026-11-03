@@ -94,7 +94,8 @@ use crate::{CliError, Lookup, Warning};
 /// A read the panel asks for.
 ///
 /// Tagged as a task is, by its name in snake_case beside its fields:
-/// `{"type": "snapshot"}`, `{"type": "files", "holder": {"type":
+/// `{"type": "snapshot"}`, `{"type": "projects"}`, `{"type": "library"}`,
+/// `{"type": "project", "entry": "alpha"}`, `{"type": "files", "holder": {"type":
 /// "workspace"}, "reference": "skill:deploy"}`, `{"type": "contents",
 /// "holder": {"type": "workspace"}, "reference": "skill:deploy", "file":
 /// "SKILL.md"}`, `{"type": "scan", "roots": ["/home/you/Work"], "depth":
@@ -115,6 +116,21 @@ pub enum Query {
     /// read from an object holding any field at all: with braces there is
     /// something for `deny_unknown_fields` to hold the object to.
     Snapshot {},
+    /// Every entry of the workspace's registry and the project it opens,
+    /// the snapshot's own list of them ([`Snapshot::projects`]).
+    ///
+    /// Cut from the snapshot rather than read another way, for a script
+    /// that wants only them: each is what the snapshot says of it, its
+    /// health and its tally included, and nothing a second reading could
+    /// say otherwise.
+    Projects {},
+    /// The workspace's own artifacts, the snapshot's own part of them
+    /// ([`Snapshot::library`]), cut from it as the projects are.
+    Library {},
+    /// One entry of the registry and the project it opens, by the entry as
+    /// the snapshot lists it ([`Snapshot::project`]): the snapshot's own row
+    /// of it, and an entry no registry holds refused as an unlink of it is.
+    Project { entry: String },
     /// Every file and folder of one artifact ([`Files`]), named as for
     /// [`Contents`](Self::Contents), whose `file` each route it lists is.
     Files { holder: Holder, reference: String },
@@ -630,14 +646,32 @@ impl Backend for PanelBackend {
         // Each is strings, numbers and lists of them, and maps keyed by
         // field names, with every path written as text whatever its bytes:
         // nothing in either can fail to serialize.
+        let snapshot = |workspace| {
+            let resolved = Resolved {
+                workspace,
+                reason: pin.reason,
+            };
+            Snapshot::of(&resolved, self.lookup.home.as_deref())
+        };
         match query {
             Query::Snapshot {} => {
-                let resolved = Resolved {
-                    workspace,
-                    reason: pin.reason,
-                };
-                let snapshot = Snapshot::of(&resolved, self.lookup.home.as_deref());
-                Ok(serde_json::to_value(snapshot).expect("a snapshot serializes"))
+                Ok(serde_json::to_value(snapshot(workspace)).expect("a snapshot serializes"))
+            }
+            // Each the snapshot's own part, read whole and cut, so it says
+            // what the snapshot says to the letter.
+            Query::Projects {} => {
+                Ok(serde_json::to_value(snapshot(workspace).projects)
+                    .expect("a snapshot serializes"))
+            }
+            Query::Library {} => {
+                Ok(serde_json::to_value(snapshot(workspace).library)
+                    .expect("a snapshot serializes"))
+            }
+            Query::Project { entry } => {
+                let project = snapshot(workspace)
+                    .project(&entry)
+                    .map_err(|error| refused(error.code(), error))?;
+                Ok(serde_json::to_value(project).expect("a snapshot serializes"))
             }
             Query::Files { holder, reference } => {
                 let files = match linked(&workspace, holder)? {

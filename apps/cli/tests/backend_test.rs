@@ -446,6 +446,33 @@ fn a_snapshot_is_of_the_workspace_the_panel_was_launched_on() {
     assert_eq!(entries, [&json!("alpha"), &json!("beta")]);
 }
 
+/// The projects, the library and one project are the snapshot's own parts,
+/// each exactly as the snapshot holds it; one project by its entry as the
+/// snapshot lists it, and nothing else that names it.
+#[test]
+fn the_projects_the_library_and_one_project_are_the_snapshots_own_parts() {
+    let dir = workspace_with_own();
+    let backend = backend(dir.path());
+    let snapshot = backend.query(query(json!({"type": "snapshot"}))).unwrap();
+
+    let projects = backend.query(query(json!({"type": "projects"}))).unwrap();
+    let library = backend.query(query(json!({"type": "library"}))).unwrap();
+    let beta = backend
+        .query(query(json!({"type": "project", "entry": "beta"})))
+        .unwrap();
+
+    assert_eq!(projects, snapshot["projects"]);
+    assert_eq!(library, snapshot["library"]);
+    assert_eq!(beta, snapshot["projects"][1]);
+    let alpha = dir.path().join("alpha");
+    for entry in ["./beta", "gamma", alpha.to_str().unwrap(), ""] {
+        let refused = backend
+            .query(query(json!({"type": "project", "entry": entry})))
+            .unwrap_err();
+        assert_eq!(refused.code, "not_registered", "{entry}");
+    }
+}
+
 #[test]
 fn a_query_sent_with_a_field_it_does_not_have_is_refused() {
     for sent in [
