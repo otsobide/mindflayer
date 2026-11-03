@@ -27,7 +27,9 @@ the probe behind [docs/agents.md](agents.md), run by hand against the real
 agents with the operator's own login, which is why CI never runs it.
 `scripts/serves-panel.sh` is not one either: it is what `make
 cli/release/check` runs on a release CI built ([in `make test`, and in
-CI](#in-make-test-and-in-ci)).
+CI](#in-make-test-and-in-ci)). Nor is `docs/api/schemas`, the API's JSON
+Schemas, which the crates' tests write and `make api/schemas` writes
+again ([the API's schemas come from Rust](#the-apis-schemas-come-from-rust)).
 
 ### The examples are a workspace
 
@@ -163,7 +165,10 @@ outside to the path policy and `backend.rs` is the panel's backend ([what a
 browser may name](#what-a-browser-may-name)), which `commands/ui.rs` serves
 ([launching it](#launching-it-flayer-ui)), and `lib.rs` only says what is
 public. The backend, `ui` and the server they need are behind the crate's
-`ui` feature, on by default.
+`ui` feature, on by default. `typescript.rs` and `schema.rs` describe what
+the CLI hands the panel and the API, under the `ts` and `schema` features
+([its types come from Rust](#its-types-come-from-rust), [the API's schemas
+come from Rust](#the-apis-schemas-come-from-rust)).
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -4315,7 +4320,10 @@ away, is JSON of one shape, an object of two fields and no other, with no
 exception: `error`, the words a person reads of what happened, naming the
 route, the parameter or the header, what was expected and what came; and
 `code`, the one word a script acts on, which never changes when the words
-are made clearer:
+are made clearer. One type of the server's says it, `Refused`, whichever
+turned the request away, rather than an object spelled where each is
+answered, and its schema is the API's ([the API's schemas come from
+Rust](#the-apis-schemas-come-from-rust)):
 
 ```json
 {"code":"missing_parameter","error":"/api/v1/project needs `entry`, and was sent none"}
@@ -4430,7 +4438,9 @@ front end. So the server matches the path, reads the query string into
 JSON as each parameter's shape says, refuses what no route takes, and hands
 the rest over without knowing what any of it is; and #218 writes the
 OpenAPI document by walking the very table that is served, rather than a
-second description beside the handlers that could disagree with them. A handler per read in the server was the alternative, which would
+second description beside the handlers that could disagree with them,
+each body and answer the schema of the type it names, found by that name
+([the API's schemas come from Rust](#the-apis-schemas-come-from-rust)). A handler per read in the server was the alternative, which would
 put the CLI's reads in a crate that depends on no mindflayer crate, or a
 trait method per read, which the server would have to grow with every read
 the CLI adds.
@@ -4486,7 +4496,11 @@ a type's name, as a backend's route names its own: a body is the backend's
 `Task` or `Switch`, a run's answer carries its `Outcome` and a switch's is
 its JSON, all types the server never names, so the description names each
 as the backend's types do, and `Answer::Events` says the stream is
-server-sent events rather than JSON. A string naming each type, as a
+server-sent events rather than JSON. What the server answers with of its
+own, a `Preview`, a `Ran`, each `Event` and a `Refused`, has a schema of
+the server's, where what it carries of the backend's is any JSON: which of
+the backend's types fills each is what the description names from these
+words. A string naming each type, as a
 backend's route has, was the alternative, and it would have the server
 spell the CLI's names, or the trait grow one constant for each. A test pins
 the table by method, path, body and answer, and another holds each route to
@@ -5498,10 +5512,130 @@ confirm are the generated `Confirm` and a change's scopes the generated
 
 OpenAPI, which #70 left out, would describe the server's routes as well as
 their bodies, at the price of a schema between the Rust and the TypeScript
-that ts-rs does without. A protocol crate holding the types, which both the
-CLI and the server would depend on, was rejected with
+that ts-rs does without. The panel still does without it: since
+[D-24](#d-24-the-local-server-is-a-versioned-http-api) the same types are
+described as JSON Schema too, for every other client ([the API's schemas
+come from Rust](#the-apis-schemas-come-from-rust)), beside the TypeScript
+rather than in its place. A protocol crate holding the types, which both
+the CLI and the server would depend on, was rejected with
 [D-17](#d-17-the-next-front-end-is-a-local-web-panel)'s B; the types stay
 where serde's are, and the feature only reads them.
+
+### The API's schemas come from Rust
+
+What the API takes and gives is described as JSON Schema 2020-12, which
+OpenAPI 3.1 takes as it is, written from the Rust types (#217,
+[D-24](#d-24-the-local-server-is-a-versioned-http-api)) as the panel's
+TypeScript is: `docs/api/schemas`, a file a root, each holding the root's
+schema at the top and every type it names in its `$defs`, committed and
+never edited by hand. Every type the TypeScript describes is described
+there too, and beside them what the API takes or gives that the panel's
+types leave to `transport.ts` or never needed: the bodies of the two reads
+that take one (`Selected`, `Drafted`), the snapshot's projects, one project
+and its library, which three routes answer with alone, the server's own
+answers, a preview, a run, each event and a refusal (`Preview`, `Ran`,
+`Event`, `Refused`), and the token file a script reads first
+(`TokenFile`).
+
+- **Derived beside serde, as the TypeScript is.** Each type derives
+  `schemars::JsonSchema` beside its serde derive and its TypeScript, under
+  a `schema` feature of core's, the CLI's and the server's
+  (`#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]`), so a
+  plain build compiles none of it and a plain `cargo test` writes nothing.
+  schemars reads the attributes serde reads (`tag`, `content`, `flatten`,
+  `rename_all`, `skip`, `deny_unknown_fields`, `default`), so a schema
+  says what serde writes or reads; schemars 1.x, the current major, whose
+  default is 2020-12. The server derives its own under its own feature: it
+  may depend on schemars, which is no mindflayer crate, and what it carries
+  of the backend's unread, an item of a preview's `confirm`, a run's
+  `outcome`, a change's scope, is any JSON in its schemas, which backend
+  type fills it being the front end's to say, as a route's answer is.
+- **Each the way the API uses it.** serde's derive writes a field that is
+  an `Option` every time, `null` when it is none, and reads one left out
+  as none, so a schema of one way for both would call a field written
+  every time optional, or refuse a request that leaves out what serde
+  reads as none. A root the API answers with is given, described as serde
+  writes it, every field in `required`; one it is sent, a query, a task, a
+  switch and the two bodies, is taken, described as serde reads it
+  (schemars' contract). Each crate's `schema::roots` names every root and
+  which way it goes through a `Visitor`, as `typescript::roots` names the
+  TypeScript's; the server's names its own through a visitor of its own,
+  since it depends on no mindflayer crate, and the CLI lists them beside
+  its own, as the API they are part of is the one it serves.
+- **What serde writes by hand is said from what it writes**, beside its
+  serializer, as its TypeScript is, for the same reason. A word is a
+  string, one of its words, written by the same `described::words!` that
+  writes its TypeScript, from the function the serializer calls, so the
+  two descriptions cannot differ on a word; its schema's id is its Rust
+  path, so the two `Reason`s, named apart, are never taken for one. A
+  `ValidationIssue` is one object of each code, its code a constant, read
+  off the match its serializer writes from (`oneOf`); a project's id is the
+  text of its own spelling (a `pattern`); a template's origin and a skill's
+  metadata say what they are written as with `schemars(with)`, as their
+  TypeScript says it with `ts(as)`; and `CoreCode` and `Code` are the
+  strings every code is, `Code` naming `CoreCode`'s definition. A path or
+  a URL written through a function of its own is a string, which is what
+  schemars says of the type it takes, held so by a test as the
+  TypeScript's is, and the finder of such functions
+  (`described::field_serializers`) passes over a `with` of schemars',
+  which names a type rather than a function.
+- **Named as the routes name them.** A root's file is its type's name,
+  as a route names what it is sent and answers with
+  ([a table of reads](#a-table-of-reads)) and as the TypeScript names its
+  file, and `Schemas::get` finds a root's schema by it, which is how the
+  description of the routes (#218) is to find the schema of each body and
+  answer. A test holds every type a route of the CLI's names to be a root,
+  another every root of the panel's types to have a schema of its name,
+  and a third no two roots of the three crates to share a file. schemars
+  names each type once in a document and gives a second type of a name
+  already taken a number after it, without a word, so a test visits every
+  root of every crate into one document for each way, as a description of
+  the whole API would hold them (`Together`), and fails on a name taken
+  twice.
+- **Open where they are answers.** An answer's objects allow a field they
+  do not name, so a field added, which moves no version, does not make a
+  client that checks answers refuse it; what the API is sent is closed
+  where serde refuses a field it does not know (`deny_unknown_fields`). A
+  change to what a root holds shows as a diff of its file, and one that
+  drops or renames a property, or changes what it holds, is one that
+  moves the API to `/api/v2`, as the names it describes are.
+- **Held to real answers.** A test holds each schema written by hand to
+  what serde writes of every variant, and to refusing what serde never
+  writes: a word that is none, an issue missing what its code carries, an
+  id of another spelling, the list of pairs a skill's metadata is in Rust.
+  And every fixture the panel's views render, which the real backend and
+  server answer ([its fixtures come from
+  Rust](#its-fixtures-come-from-rust)), is held to the schema of what it is
+  an answer to, or was sent as: a snapshot to `Snapshot`, a read's query to
+  `Query` and its answer to what its route answers, a task, its preview and
+  its run to the CLI's and the server's types and what each carries of the
+  backend's, a refusal to `Refused`; a fixture the test does not know
+  fails it. Against the schemas closed, each object refusing a field it
+  does not name, so a schema that names less than serde writes fails as
+  surely as one that says other. Validated with boon, a 2020-12 validator
+  that passes the suite of tests JSON Schema publishes and builds nothing
+  that reaches the network, its one loader, which reads a file, taken away
+  in the tests; jsonschema was the other, whose default features build an
+  HTTP client for a remote `$ref`, and which brings some thirty crates to
+  boon's six.
+- **Written again by cargo alone.** `make api/schemas` empties the folder,
+  since an export writes and never deletes, and runs the tests named for
+  it with the three crates' `schema` feature (`--lib schema`), and with
+  `ts` beside it, so the test holding every root of the panel's types to a
+  schema runs too. `make api/schemas/check` writes them the same way and
+  fails when git sees them differ from the ones committed, a file new to
+  git among them; CI runs it in `types drift (web)`, after the fixtures'
+  check, rather than in a job of its own, whose name the rulesets would
+  have to be changed by hand to require ([in `make test`, and in
+  CI](#in-make-test-and-in-ci)).
+
+Replacing ts-rs with a TypeScript written from these schemas was the other
+way, one description where there are two, and it would have the panel
+compile against what a generator makes of a schema rather than what ts-rs
+reads off serde's own attributes, and change the panel to describe the
+API. The two are written from the same attributes and the same
+hand-written words, and a test holds the TypeScript's roots within the
+schemas', so they describe one set of types.
 
 ### Its views
 
@@ -6280,7 +6414,10 @@ writes nothing; written again by `make web/fixtures`, which empties the
 folder first, with cargo alone; and checked by `make web/fixtures/check`,
 which fails when git sees them differ from the ones committed, in CI's
 `types drift (web)`. A fixture drawn by hand was the other way, which
-would pass its tests while the snapshot moved under it.
+would pass its tests while the snapshot moved under it. Each is held to
+the schema of what it is an answer to as well, which holds the API's
+schemas to what the real backend answers ([the API's schemas come from
+Rust](#the-apis-schemas-come-from-rust)).
 
 ### Nothing the CSP refuses
 
@@ -6614,7 +6751,12 @@ CI gives the panel jobs of its own:
   (cli)` it was, so a drift is a check named for it, required on its own.
   It runs `make web/fixtures/check` too, for the snapshots the views' tests
   render, which drift the same way ([its fixtures come from
-  Rust](#its-fixtures-come-from-rust)).
+  Rust](#its-fixtures-come-from-rust)), and then `make api/schemas/check`,
+  for the API's schemas, which holds every fixture, as Rust has just
+  written it again, to its schema ([the API's schemas come from
+  Rust](#the-apis-schemas-come-from-rust)): a step of a job the rulesets
+  require already, rather than a job of its own, whose name they would have
+  to be changed by hand to require.
 - **`build (cli)`** waits for `test (web)`, downloads that `dist/` before
   anything compiles, and builds the release for the runner's own triple,
   which embeds it. The runner has Node and no pnpm, so `make cli/release`
@@ -9252,7 +9394,12 @@ whether a refusal names what is not there, a 404, or is unfit, a 422
 ([every refusal with a code](#every-refusal-with-a-code)). #216 hands the
 launch token, and where the API is, to a script that did not start the
 panel, through a file only the account reads (`flayer ui --token-file`,
-[launching it](#launching-it-flayer-ui)).
+[launching it](#launching-it-flayer-ui)). #217 describes what the API takes
+and gives as JSON Schema written from the Rust types, the server's own
+answers and the token file among them, a file a root in `docs/api/schemas`,
+each found by the name a route gives its type, and checked for drift with
+the panel's types ([the API's schemas come from
+Rust](#the-apis-schemas-come-from-rust)).
 
 ## Open questions
 
@@ -9486,13 +9633,13 @@ panel, through a file only the account reads (`flayer ui --token-file`,
   and the like in them, so no preview stands in for them.
 - **The server's replies are spelled twice.** A preview's `{lines,
   confirm}` is the server's `Preview`, a run's `{lines, outcome}` its
-  transcript's `Entry`, a refusal's `{error, code}` is built with `json!` in
-  its `api.rs`, and the stream's events are its `Event`, and all are spelled
-  again in the panel's `transport.ts`, outside
-  what is written from Rust ([its types come from
+  `Ran`, a refusal's `{error, code}` its `Refused`, and the stream's events
+  are its `Event`, each with a schema of the API's under the server's
+  `schema` feature, and all are spelled again in the panel's
+  `transport.ts`, outside what is written from Rust ([its types come from
   Rust](#its-types-come-from-rust)): the server has no `ts` feature, and its
-  own tests hold what it answers and tells. Structs of its own deriving `Serialize`,
-  and `TS` under a feature, would bring them under the drift check, at the
+  own tests hold what it answers and tells. `TS` derived beside their
+  schemas under a feature would bring them under the drift check, at the
   price of ts-rs in the one crate that depends on no mindflayer crate.
 - **The TUI asks its own questions.** It asks before an unlink, a removal,
   a relink, an adoption and applying the install screen, whatever its marks
@@ -9547,12 +9694,38 @@ panel, through a file only the account reads (`flayer ui --token-file`,
   for the account alone, is #154's, with the rest of Windows.
 - **The routes are described in prose.** Each route's parameters, body and
   answer are listed here and pinned by a test of the CLI's or the server's,
-  but a route names its body and its answer by a type's name alone, or by
-  what it is for one of the server's own, and nothing says what a field of
-  them holds outside the Rust and the panel's types. #217 writes JSON
-  Schema from the Rust types with `schemars`, and #218 an OpenAPI 3.1
-  document from both tables and those schemas, both committed and checked
-  for drift.
+  and what each body and answer holds has a schema of the name the route
+  gives its type ([the API's schemas come from
+  Rust](#the-apis-schemas-come-from-rust)), but no document says which
+  route takes and answers which, with what parameters and what refusals:
+  #218 writes an OpenAPI 3.1 document from both tables and those schemas,
+  committed and checked for drift.
+- **What the server carries of the backend's is any JSON in its
+  schemas.** An item of a preview's `confirm`, a run's `outcome`, a
+  change's scope and a switch's answer are the backend's JSON, which the
+  server carries unread, so its schemas say any JSON there; the CLI's
+  types they are, `Confirm`, `Outcome`, `Holder` and a `Switchable` or
+  none, are said only in this document and the panel's `transport.ts`.
+  The description of the routes (#218), written in the CLI, which knows
+  both, is where each is to be put in its place, from the server's table's
+  words (`Sent`, `Answer`).
+- **A type both sent and answered has a schema for each way.** A task, a
+  holder, a box of a plan and the agents of a toggle are sent, and are in
+  what a plan is answered with too, and serde reads an `Option` field left
+  out where it writes it every time, so `Task.json` leaves out of
+  `required` what `Planned.json`'s `Task` names. A file of one root holds
+  each type the way its root goes, but a document whose routes share
+  their definitions, as OpenAPI's components are shared, holds one of a
+  name: #218 either names the two apart or describes both by the way serde
+  reads them, which what serde writes holds to as well, since no field
+  here is left unwritten.
+- **Nothing builds the schemas without the TypeScript.** `make
+  api/schemas` builds the `schema` feature with `ts`, for the test holding
+  every root of the panel's types to a schema, and `make lint` lints the
+  two together, so code under `schema` that leaned on `ts` would compile
+  everywhere it is built, and fail only for whoever builds `schema` alone.
+  A run of clippy with each feature on its own would catch it, at the
+  price of another check of the workspace in every lint.
 - **WebKit where Playwright builds none.** Playwright's WebKit is built
   against Ubuntu's libraries, which its `--with-deps` installs there and on
   Debian only, so on Arch and most other systems the browser suite runs in
@@ -9579,7 +9752,8 @@ panel, through a file only the account reads (`flayer ui --token-file`,
   shell's line.
 - **What no view reads has no TypeScript.** `status` and `workspaces`
   print a `Status` and a `Known`, and `gather list` its `Offer`s, which no
-  root names, so the panel has no type for them yet; nor does `scan --json`
+  root names, so the panel has no type for them yet, nor the API a
+  schema; nor does `scan --json`
   have one for its envelope's `Scan`, the panel reading each `Found` inside
   the backend's own answer (`Scanned`), nor core's `install::Plan` and its
   `Change`, a plan reaching the panel as the backend's `Planned`, its

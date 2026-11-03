@@ -2365,6 +2365,16 @@ A route, a parameter or a field once there stays as it is under
 `/api/v1`: one dropped, renamed or holding something else moves the API to
 `/api/v2`. A code is never renamed, nor given to something else.
 
+What each body and answer holds is described as JSON Schema (2020-12, the
+dialect OpenAPI 3.1 takes), one file for each in the repository's
+[`docs/api/schemas`](api/schemas), named as the type it describes:
+`Snapshot.json` for what `/api/v1/snapshot` answers, `Task.json` for a
+task as it is sent, `Ran.json` for what a run is answered with,
+`Event.json` for each event, `Refused.json` for what goes wrong, and
+`TokenFile.json` for the token file. An answer's schema leaves room for a
+field it does not name, since one added keeps the version, so a script
+that checks what it is answered with does not refuse an answer for one.
+
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
 and with it the server and what only the panel needs (axum, the embedded

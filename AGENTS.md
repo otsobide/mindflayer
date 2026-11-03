@@ -57,6 +57,8 @@ make web/types            # write the types from Rust into src/api/generated, th
 make web/types/check      # cargo and git only (CI): fail when they are not the ones committed
 make web/fixtures         # write the snapshots and answers the views' tests render, from Rust (cargo only)
 make web/fixtures/check   # cargo and git only (CI): fail when they are not the ones committed
+make api/schemas          # write the API's JSON Schemas from Rust into docs/api/schemas (cargo only)
+make api/schemas/check    # cargo and git only (CI): fail when they are not the ones committed
 make web/typecheck        # vue-tsc alone
 make web/test PNPM='npx --yes pnpm@12.15.0'
 pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
@@ -77,7 +79,11 @@ the panel runs `make web/types` and commits what it writes: CI's `types
 drift (web)` runs `make web/types/check`, which needs no Node. A change to
 what the snapshot holds runs `make web/fixtures` too, and commits the
 snapshots it writes into `apps/web/tests/fixtures`, which the same job
-checks with `make web/fixtures/check`. The other way
+checks with `make web/fixtures/check`. A change to a type the API takes or
+gives, core's, the CLI's or the server's, runs `make api/schemas` and
+commits the schemas it writes into `docs/api/schemas`, which the same job
+checks with `make api/schemas/check`, once the fixtures are written again,
+since it holds each to its schema. The other way
 round, `make install` and `make cli/release` build the panel before the
 binaries that embed it where Node and pnpm run, and warn otherwise (`make
 web/build/if-node`), and `make web/build` touches
@@ -178,9 +184,11 @@ under `apps/` with its own `Makefile`:
   write, by the command's own checks and in `validate`'s words, for a
   front end judging what is typed (`draft`). Its only I/O is files, and it never reads the
   environment. Under its `ts` feature, `typescript` gives what it hands a
-  front end TypeScript (the roots its export writes), and `described` what
-  a type serde writes by hand says of itself (`words!`, and the fields
-  written through a function of their own).
+  front end TypeScript (the roots its export writes), under its `schema`
+  feature `schema` gives it JSON Schema (the roots its export writes, each
+  given or taken, `Schemas`, `Together`), and under either `described` says
+  what a type serde writes by hand says of itself (`words!`, which writes
+  both, and the fields written through a function of their own).
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -215,7 +223,10 @@ under `apps/` with its own `Makefile`:
   (`tests/crate_test.rs`), and `make cli/build` builds it that way first.
   Under its `ts` feature, `src/typescript.rs` lists the roots of the
   panel's types the CLI gives (a query, a task, an outcome, the envelope)
-  and `Code`. `src/tui/` and `src/install/` are the two screens.
+  and `Code`, and under its `schema` feature `src/schema.rs` the roots of
+  the API's schemas it gives, those and the bodies of the reads that take
+  one, the token file and the server's own answers. `src/tui/` and
+  `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
   trait and the `Refusal` it answers with (with its `Grounds`),
@@ -232,8 +243,10 @@ under `apps/` with its own `Makefile`:
   `src/transcript.rs` what
   the session ran, `src/events.rs` the bus `/api/v1/events` streams,
   `src/watcher.rs` what watches the paths the backend names and tells the
-  bus what changed, `src/log.rs` the redacting request log and
-  `src/panel.rs` the embedded panel (`apps/web/dist`).
+  bus what changed, `src/log.rs` the redacting request log,
+  `src/panel.rs` the embedded panel (`apps/web/dist`), and under its
+  `schema` feature `src/schema.rs` the roots of the API's schemas it gives
+  of its own (`Preview`, `Ran`, `Event`, `Refused`).
 - `apps/web` (`mindflayer-web`): the web panel, in Vue and Nuxt UI on Vite,
   with pnpm. `src/main.ts` mounts what `src/panel.ts` installs (router,
   Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
@@ -328,6 +341,9 @@ isolates a run and checks the real home is left alone, and `<agent>.sh` holds
 one agent's checks (only `claude.sh` so far). `scripts/serves-panel.sh` is
 what `make cli/release/check` runs: it starts a release's `flayer ui` with a
 home of its own and every agent home empty, and asks it for the panel.
+`docs/api/schemas` holds the API's JSON Schemas, a file a root, which the
+crates' `schema` tests write (`make api/schemas`) and nothing edits by
+hand.
 
 ## Invariants that hold the design together
 
@@ -1119,6 +1135,31 @@ These are easy to break from a single file without noticing.
   not what Rust writes.
   A type a view starts to read joins `roots`; the panel spells no shape of
   core's or the CLI's in TypeScript of its own.
+- **The API's schemas are written from Rust too, and are its contract.**
+  Every type the TypeScript describes, and whatever else the API takes or
+  gives whole (the bodies of the reads that take one, the server's own
+  answers, the token file), derives `schemars::JsonSchema` beside serde's
+  derive under a `schema` feature of core's, the CLI's and the server's
+  (`#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]`), so a
+  plain build compiles none of it and a plain `cargo test` writes nothing.
+  A type serde writes by hand says its schema from what its serializer
+  writes, beside it, as its TypeScript: a word through the same
+  `described::words!`, anything else by hand or with `schemars(with)`, each
+  held to serde by a test in `schema_test.rs`. Each crate's
+  `schema::roots` names every root and whether it is given, described as
+  serde writes it, or taken, as serde reads it; the CLI's lists the
+  server's beside its own. A root is written as `docs/api/schemas/<its
+  type's name>.json`, JSON Schema 2020-12 with every type it names in
+  `$defs`, committed and never edited by hand: `make api/schemas` writes
+  them again, and `make api/schemas/check`, run in CI's `types drift
+  (web)`, fails when they are not what Rust writes. A type a route names
+  is a root, every root of the panel's types has a schema of its name, no
+  two types of any crate go by one name (`Together`), and every fixture
+  the panel's views render holds to the schema of what it answers, closed,
+  so a field serde writes that a schema does not name fails. An answer's
+  schema stays open to a field it does not name, since adding one moves no
+  version; a diff of `docs/api/schemas` that drops or renames a property,
+  or changes what one holds, moves the API to `/api/v2`.
 - **The panel needs nothing the CSP refuses.** No URL naming another host,
   no inline `<script>` or `<style>`, no `data:` URL: fonts are Fontsource
   files, icons are bundled Lucide (`i-lucide-<name>` in a `.vue` file) drawn
@@ -1303,6 +1344,17 @@ These are easy to break from a single file without noticing.
   (`export_bindings`), which writes into the panel, and every type serde
   writes by hand held to what its TypeScript says. `make web/types` and
   `make web/types/check` run them; `make test` does not.
+- The tests of the API's schemas are core's, the CLI's and the server's
+  `src/schema_test.rs`, compiled only with the `schema` feature, and named
+  so `--lib schema` picks them out: each export (`export_schemas`, core's
+  and the CLI's, which writes into `docs/api/schemas`), every schema
+  written by hand held to what serde writes and to refusing what it never
+  writes, and the CLI's holding every fixture in `apps/web/tests/fixtures`
+  to its schema, and, with `ts` too, every root of the panel's types to
+  one. They validate with boon, a dev-dependency that reaches no network,
+  with its loader taken away. `make api/schemas` and `make
+  api/schemas/check` run them, with `ts` beside `schema`; `make test` does
+  not.
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
   the event loops in `tui.rs` and `install.rs` go untested, so keep logic out
@@ -1333,7 +1385,8 @@ These are easy to break from a single file without noticing.
   `apps/web/dist`, runs `make cli/release/check` and uploads the release's
   binaries, which `e2e (web)` downloads and drives in Chromium and WebKit
   (`make web/e2e/run`), uploading the traces of what fails. `types drift
-  (web)` runs `make web/types/check` and `make web/fixtures/check`. Development targets Linux only for now: macOS
+  (web)` runs `make web/types/check`, `make web/fixtures/check` and `make
+  api/schemas/check`. Development targets Linux only for now: macOS
   and Windows (`test (macos)`, `test (windows)`, which set up Node too) run
   only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
   the compatibility pass (#154) puts them back on pushes to `dev`/`main` and
