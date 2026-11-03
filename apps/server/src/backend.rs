@@ -209,6 +209,9 @@ pub enum Grounds {
 }
 
 impl Grounds {
+    /// Both, in the order a description of the API lists them.
+    pub const ALL: [Grounds; 2] = [Grounds::Absent, Grounds::Unfit];
+
     /// The status a refusal on these grounds is answered with.
     pub fn status(self) -> StatusCode {
         match self {

@@ -137,12 +137,18 @@ impl Own {
     /// API lists among its answers, beside what the backend refuses a
     /// preview, a run or a switch for.
     pub fn conditions(self) -> Vec<Condition> {
-        let reaches = match self {
+        conditions(self.method(), &[], false, self.reaches())
+    }
+
+    /// What it hands a request on to: a preview the backend, a run and a
+    /// switch the writer thread, and the rest nothing, answered from what
+    /// the server holds.
+    pub(crate) fn reaches(self) -> Reaches {
+        match self {
             Own::Preview => Reaches::Backend,
             Own::Run | Own::Switch => Reaches::Writer,
             Own::Transcript | Own::Events => Reaches::Nothing,
-        };
-        conditions(self.method(), &[], false, reaches)
+        }
     }
 }
 
@@ -315,7 +321,7 @@ impl<Q> Route<Q> {
 /// What a route hands a request on to, past the server's own checks,
 /// which can fail under it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Reaches {
+pub(crate) enum Reaches {
     /// Nothing: the server answers from what it holds.
     Nothing,
     /// The backend, on the blocking pool.
