@@ -43,6 +43,13 @@ pub const CODES: &[(&str, &[&str])] = &[
 #[cfg(any(feature = "ts", feature = "schema"))]
 pub struct Code;
 
+/// Every code the CLI gives of its own ([`CODES`]), as one type a
+/// description names: beside core's, what the CLI's backend refuses a
+/// request with, which a description of the API lists, and part of
+/// [`Code`].
+#[cfg(feature = "schema")]
+pub struct CliCode;
+
 /// Why a command could not run at all, as opposed to running and finding
 /// problems: those are in the [`Outcome`](crate::Outcome).
 #[derive(Debug, Error)]

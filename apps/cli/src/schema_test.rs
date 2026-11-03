@@ -184,6 +184,29 @@ fn every_code_a_front_end_is_handed_holds_to_its_schema_and_nothing_else_does() 
     assert!(holds(&schema, &Value::from("nope")).is_err());
 }
 
+/// The CLI's own codes, and neither core's nor the server's, which a
+/// description of the API lists beside core's as what the CLI's backend
+/// refuses with.
+#[test]
+fn every_code_the_cli_gives_of_its_own_holds_to_its_schema_and_no_other_does() {
+    let schema = given::<CliCode>();
+    let own = CODES.iter().flat_map(|(_, codes)| codes.iter());
+    let others = mindflayer_core::code::ALL
+        .iter()
+        .flat_map(|(_, codes)| codes.iter())
+        .chain(Condition::CODES);
+
+    for code in own {
+        let code = Value::from(*code);
+        if let Err(error) = holds(&schema, &code) {
+            panic!("{code}: {error}");
+        }
+    }
+    for code in others {
+        assert!(holds(&schema, &Value::from(*code)).is_err(), "{code}");
+    }
+}
+
 /// What `--token-file` writes, the bytes a script reads, as its schema
 /// says them; and a file without the token, which it never writes, not.
 #[test]
