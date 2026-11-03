@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use axum::extract::rejection::{BytesRejection, FailedToBufferBody, JsonRejection};
 use axum::extract::State;
-use axum::http::{Method, StatusCode, Uri};
+use axum::http::{Method, Uri};
 use axum::response::sse::{self, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, on, post, MethodFilter, MethodRouter};
@@ -296,12 +296,14 @@ fn unread(rejection: &JsonRejection) -> Condition {
     }
 }
 
-/// What the backend refused, as `{"error": "...", "code": "..."}`: a 422,
-/// as a body it could not read is, since in both the request arrived whole
-/// and is not one to act on.
+/// What the backend refused, as `{"error": "...", "code": "..."}`, its
+/// code the backend's own: a 404 when what the request named is not there,
+/// and a 422 otherwise, as a body it could not read is, since in both the
+/// request arrived whole and is not one to act on. Which, the backend says
+/// ([`Grounds`](crate::Grounds)); the server never reads the code.
 pub(crate) fn refused_by(refusal: Refusal) -> Response {
     (
-        StatusCode::UNPROCESSABLE_ENTITY,
+        refusal.grounds.status(),
         Json(json!({ "error": refusal.message, "code": refusal.code })),
     )
         .into_response()

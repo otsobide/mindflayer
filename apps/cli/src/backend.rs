@@ -1040,10 +1040,8 @@ impl From<&Run> for Done {
     }
 }
 
-/// A refusal of `code`, saying `message`.
+/// A refusal of `code`, saying `message`, of a request that is not one to
+/// act on.
 fn refused(code: &'static str, message: impl Display) -> Refusal {
-    Refusal {
-        code,
-        message: message.to_string(),
-    }
+    Refusal::unfit(code, message.to_string())
 }

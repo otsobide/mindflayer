@@ -61,12 +61,12 @@ async fn a_parameter_no_route_takes_or_needs_or_reads_is_refused_with_a_400() {
         (
             "/api/v1/echo?echo=hi&token=secret",
             "unknown_parameter",
-            "/api/v1/echo takes no parameter `token`, only `echo` or `refuse`",
+            "/api/v1/echo takes no parameter `token`, only `echo`, `refuse` or `absent`",
         ),
         (
             "/api/v1/echo?echo=hi&Echo=hi",
             "unknown_parameter",
-            "/api/v1/echo takes no parameter `Echo`, only `echo` or `refuse`",
+            "/api/v1/echo takes no parameter `Echo`, only `echo`, `refuse` or `absent`",
         ),
         (
             "/api/v1/echo",
@@ -197,6 +197,22 @@ async fn a_read_the_backend_refuses_says_why_with_its_code() {
     assert_eq!(
         reply.json(),
         json!({ "error": "/etc/passwd is refused", "code": "fake_refused" })
+    );
+}
+
+/// A query naming what the backend says is not there: a 404, because the
+/// backend said so, with its own code; the server reads no code to tell.
+#[tokio::test]
+async fn a_read_naming_what_is_not_there_is_a_404_with_the_backends_code() {
+    let (server, _) = launch();
+
+    let reply = read(&server, "/api/v1/echo?echo=ghost&absent=true").await;
+
+    assert_eq!(reply.status, StatusCode::NOT_FOUND);
+    assert_eq!(reply.header("content-type"), Some("application/json"));
+    assert_eq!(
+        reply.json(),
+        json!({ "error": "ghost is not there", "code": "fake_absent" })
     );
 }
 

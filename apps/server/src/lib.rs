@@ -22,7 +22,7 @@ mod transcript;
 mod watcher;
 mod writer;
 
-pub use backend::{Backend, Preview, Refusal, Watched};
+pub use backend::{Backend, Grounds, Preview, Refusal, Watched};
 pub use code::Condition;
 pub use events::{Event, Events, Subscription, CAPACITY};
 pub use panel::Panel;

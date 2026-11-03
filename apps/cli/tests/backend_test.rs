@@ -14,7 +14,7 @@ use common::*;
 use mindflayer_cli::backend::{Outcome, PanelBackend, Query, Switch};
 use mindflayer_cli::task::{naming, shell, Caution};
 use mindflayer_core::watch;
-use mindflayer_server::{Backend, Refusal};
+use mindflayer_server::{Backend, Grounds, Refusal};
 use serde_json::{json, Value};
 
 /// The backend over the workspace at `root`, launched there with nothing
@@ -278,6 +278,7 @@ fn a_refused_command_is_named_in_what_the_refusal_says() {
             message: String::from(
                 "`flayer edit skill:x` opens an editor, which needs a terminal to draw on"
             ),
+            grounds: Grounds::Unfit,
         }
     );
 }

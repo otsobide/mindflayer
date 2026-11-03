@@ -9,8 +9,8 @@
 pub use axum::body::{Body, Bytes};
 pub use axum::http::{header, HeaderMap, Method, Request, StatusCode};
 pub use mindflayer_server::{
-    Arguments, Backend, Listening, Own, Parameter, Preview, Refusal, Route, Server, Shape, Watched,
-    API,
+    Arguments, Backend, Condition, Grounds, Listening, Own, Parameter, Preview, Refusal, Route,
+    Server, Shape, Watched, API,
 };
 pub use serde_json::{json, Value};
 pub use std::sync::{Arc, Condvar, Mutex};
@@ -35,6 +35,8 @@ pub struct FakeQuery {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub refuse: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub absent: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub panic: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub words: Vec<String>,
@@ -55,7 +57,8 @@ struct Words {
 /// The fake's reads, one of each shape a parameter has and a POST:
 ///
 /// - `GET /echo?echo=...&refuse=true`, read as the query whole, and refused
-///   by the route itself when there is nothing to echo;
+///   by the route itself when there is nothing to echo; with `absent=true`
+///   in place of `refuse`, refused as naming what is not there;
 /// - `GET /words?word=a&word=b&times=2`, its words in `words`;
 /// - `POST /judge`, its body read as the query whole, and refused by the
 ///   route as the echo route refuses; the one a query that panics is sent
@@ -69,6 +72,7 @@ pub fn fake_routes() -> Vec<Route<FakeQuery>> {
             parameters: vec![
                 Parameter::required("echo", Shape::Text, "What to say back"),
                 Parameter::optional("refuse", Shape::Flag, "Whether to refuse it"),
+                Parameter::optional("absent", Shape::Flag, "Whether it is not there"),
             ],
             body: None,
             answers: "FakeQuery",
@@ -89,6 +93,7 @@ pub fn fake_routes() -> Vec<Route<FakeQuery>> {
                 Ok(FakeQuery {
                     echo: String::from("words"),
                     refuse: false,
+                    absent: false,
                     panic: false,
                     words: word,
                     times,
@@ -159,13 +164,20 @@ pub struct FakeSwitch {
 }
 
 /// What the fake refuses with: a code of its own, which a real backend's
-/// would be one of its front end's.
+/// would be one of its front end's, on the grounds of a request it will not
+/// act on.
 pub fn refusal(what: &str) -> Refusal {
-    Refusal {
-        code: "fake_refused",
-        message: format!("{what} is refused"),
-    }
+    Refusal::unfit("fake_refused", format!("{what} is refused"))
 }
+
+/// What the fake refuses a read naming what is not there with: a code of
+/// its own, on the grounds that it is absent.
+pub fn absence(what: &str) -> Refusal {
+    Refusal::absent("fake_absent", format!("{what} is not there"))
+}
+
+/// Every code the fake refuses with, beside the server's own.
+pub const FAKE_CODES: [&str; 2] = ["fake_refused", "fake_absent"];
 
 /// What running a fake task says.
 #[derive(Serialize)]
@@ -212,6 +224,9 @@ impl Backend for Fake {
     fn query(&self, query: FakeQuery) -> Result<Value, Refusal> {
         if query.refuse {
             return Err(refusal(&query.echo));
+        }
+        if query.absent {
+            return Err(absence(&query.echo));
         }
         if query.panic {
             panic!("the read of {} panics, as asked", query.echo);

@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use axum::http::StatusCode;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -144,18 +145,74 @@ pub struct Watched {
 }
 
 /// Why a backend will not do what it was asked, though it read the request:
-/// a value the front end's rules do not let a browser name, or a task no
-/// front end without a terminal of its own runs.
+/// what the request names is not there, a value the front end's rules do
+/// not let a browser name, or a task no front end without a terminal of its
+/// own runs.
 ///
 /// A code beside the message, as every error core gives has one: the panel
 /// acts on a condition by its code, where the message is reworded whenever
 /// it is made clearer. A struct of the server's own rather than a fourth
-/// associated type, because the server builds the reply from it, a 422 of
+/// associated type, because the server builds the reply from it,
 /// `{"error": <message>, "code": <code>}`, the shape of every refusal under
-/// `/api` with the code added, and knows nothing more of it than that. A
-/// code is a fixed word, never one built at run time, hence `'static`.
+/// `/api`, with the status its [`Grounds`] say, and knows nothing more of it
+/// than that. A code is a fixed word, never one built at run time, hence
+/// `'static`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refusal {
     pub code: &'static str,
     pub message: String,
+    pub grounds: Grounds,
+}
+
+impl Refusal {
+    /// A refusal of a request naming what is not there: a 404.
+    pub fn absent(code: &'static str, message: impl Into<String>) -> Self {
+        Refusal {
+            code,
+            message: message.into(),
+            grounds: Grounds::Absent,
+        }
+    }
+
+    /// A refusal of a request naming nothing missing that is still not one
+    /// to act on: a 422.
+    pub fn unfit(code: &'static str, message: impl Into<String>) -> Self {
+        Refusal {
+            code,
+            message: message.into(),
+            grounds: Grounds::Unfit,
+        }
+    }
+}
+
+/// What a refusal is on the grounds of, which picks the status it is
+/// answered with: the backend's to say, since only it knows what a value it
+/// was sent names.
+///
+/// Said by the backend where it builds each refusal, never worked out here
+/// from its code: a code is a word of the front end's, and a server that
+/// read one would hold a rule of the front end's, which a second front end
+/// could disagree with. Two, because those are the two a request the
+/// server could read, and the backend could not act on, can be: a 404 says
+/// what it named is not there, and a 422 that it is not one to act on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Grounds {
+    /// What the request names is not there: an entry the registry does
+    /// not hold, a folder or a file that does not exist, an artifact
+    /// nothing holds. A 404.
+    Absent,
+    /// The request names nothing missing, and is still not one to act on:
+    /// a value the front end's rules refuse, a task that would need a
+    /// terminal. A 422.
+    Unfit,
+}
+
+impl Grounds {
+    /// The status a refusal on these grounds is answered with.
+    pub fn status(self) -> StatusCode {
+        match self {
+            Grounds::Absent => StatusCode::NOT_FOUND,
+            Grounds::Unfit => StatusCode::UNPROCESSABLE_ENTITY,
+        }
+    }
 }
