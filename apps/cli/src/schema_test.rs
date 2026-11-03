@@ -1,8 +1,11 @@
 //! Unit tests for `schema.rs`: the export of the API's schemas the CLI
-//! gives, and what they say held to what serde writes.
+//! gives, and what they say held to what serde writes, the answers the
+//! panel's tests render among it.
 
+use std::fs;
 use std::path::Path;
 
+use mindflayer_core::known::Switchable;
 use mindflayer_core::schema::{self as core, Schemas, Together};
 use mindflayer_server::Backend;
 use schemars::generate::SchemaSettings;
@@ -77,7 +80,7 @@ fn every_type_a_route_is_sent_or_answers_with_is_a_root() {
 /// Whether `value` is one `schema` describes, and what keeps it from being
 /// one when it is not, as a JSON Schema 2020-12 validator says it, with no
 /// loader at all: every schema holds what it names in its own `$defs`.
-pub(super) fn holds(schema: &Schema, value: &Value) -> Result<(), String> {
+fn holds(schema: &Schema, value: &Value) -> Result<(), String> {
     let mut compiler = boon::Compiler::new();
     compiler.use_loader(Box::new(boon::SchemeUrlLoader::new()));
     compiler
@@ -161,4 +164,237 @@ fn every_root_the_panel_s_types_export_has_a_schema_of_its_name() {
         exported.0.difference(&described).collect::<Vec<_>>(),
         Vec::<&String>::new()
     );
+}
+
+/// The fixtures the panel's views render, written from the real backend
+/// (`tests/fixtures_test.rs`, `make web/fixtures`) and committed beside the
+/// panel's tests.
+const FIXTURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../web/tests/fixtures");
+
+/// The keywords whose values are schemas, or lists or maps of schemas: what
+/// [`closed`] follows, so a field's name is never taken for a keyword.
+const BELOW: [&str; 2] = ["items", "not"];
+const LISTS: [&str; 4] = ["oneOf", "anyOf", "allOf", "prefixItems"];
+const MAPS: [&str; 2] = ["properties", "$defs"];
+
+/// `schema` with every object it describes by its fields closed to any
+/// other field, as serde writes no field its type does not name.
+///
+/// What the schemas say of an answer leaves it open, so that a field added
+/// to one, which moves no version, does not make a client that checks
+/// answers refuse it. Closed here, so a field serde writes that a schema
+/// does not name fails rather than pass as one more allowed: a schema that
+/// says less than serde writes is caught, as well as one that says other.
+/// Only where the object is described by its fields alone, as every one
+/// is here, since a closed object beside a `oneOf` would refuse what the
+/// branch it matches names.
+fn closed(schema: &Value) -> Value {
+    let Value::Object(object) = schema else {
+        return schema.clone();
+    };
+    let mut closed = serde_json::Map::new();
+    for (key, value) in object {
+        let value = match (key.as_str(), value) {
+            (key, value) if BELOW.contains(&key) => self::closed(value),
+            (key, Value::Array(list)) if LISTS.contains(&key) => {
+                Value::Array(list.iter().map(self::closed).collect())
+            }
+            (key, Value::Object(map)) if MAPS.contains(&key) => Value::Object(
+                map.iter()
+                    .map(|(name, below)| (name.clone(), self::closed(below)))
+                    .collect(),
+            ),
+            ("additionalProperties", Value::Object(_)) => self::closed(value),
+            _ => value.clone(),
+        };
+        closed.insert(key.clone(), value);
+    }
+    let combined = LISTS.iter().any(|list| closed.contains_key(*list));
+    if closed.contains_key("properties") && !combined {
+        closed
+            .entry("additionalProperties")
+            .or_insert(Value::Bool(false));
+    }
+    Value::Object(closed)
+}
+
+/// What a fixture holds is held to the schemas of every root, closed.
+struct Fixtures {
+    schemas: Schemas,
+    /// What each route answers with and is sent, by its path.
+    routes: Vec<(String, &'static str, Option<&'static str>)>,
+}
+
+impl Fixtures {
+    fn new() -> Self {
+        Fixtures {
+            schemas: every_root(),
+            routes: PanelBackend::routes()
+                .into_iter()
+                .map(|route| (route.path.to_owned(), route.answers, route.body))
+                .collect(),
+        }
+    }
+
+    /// That `value`, in the fixture `at`, holds to the root `name` closed,
+    /// or to a list of them for `name[]`.
+    fn is(&self, at: &str, name: &str, value: &Value) {
+        if let Some(item) = name.strip_suffix("[]") {
+            let items = value
+                .as_array()
+                .unwrap_or_else(|| panic!("{at}: {value} is no list of {item}"));
+            for (index, value) in items.iter().enumerate() {
+                self.is(&format!("{at}/{index}"), item, value);
+            }
+            return;
+        }
+        let schema = self
+            .schemas
+            .get(name)
+            .unwrap_or_else(|| panic!("{at}: {name} is no root"));
+        let schema = Schema::try_from(closed(schema.as_value())).unwrap();
+        if let Err(error) = holds(&schema, value) {
+            panic!("{at}: what the fixture holds is no {name}: {error}");
+        }
+    }
+
+    /// A read as the panel asks it, `{"query", "answer"}`: the query as the
+    /// backend reads it, the answer as its route says, and for a route
+    /// that takes a body, the query but its type as the body.
+    fn asked(&self, at: &str, asked: &Value) {
+        let query = &asked["query"];
+        self.is(&format!("{at}/query"), "Query", query);
+        let kind = query["type"].as_str().unwrap();
+        let (_, answers, body) = self
+            .routes
+            .iter()
+            .find(|(path, ..)| path.strip_prefix('/') == Some(kind))
+            .unwrap_or_else(|| panic!("{at}: no route reads {kind}"));
+        self.is(&format!("{at}/answer"), answers, &asked["answer"]);
+        if let Some(body) = body {
+            let mut sent = query.clone();
+            sent.as_object_mut().unwrap().remove("type");
+            self.is(&format!("{at}/query"), body, &sent);
+        }
+    }
+
+    /// A task previewed and run, `{"task", "preview", "ran"}`: the task as
+    /// the backend reads it, the server's preview and run, and in them what
+    /// the backend handed over, what to confirm and what the run produced.
+    fn ran(&self, at: &str, ran: &Value) {
+        self.is(&format!("{at}/task"), "Task", &ran["task"]);
+        self.is(&format!("{at}/preview"), "Preview", &ran["preview"]);
+        self.is(
+            &format!("{at}/preview/confirm"),
+            "Confirm[]",
+            &ran["preview"]["confirm"],
+        );
+        self.is(&format!("{at}/ran"), "Ran", &ran["ran"]);
+        self.is(
+            &format!("{at}/ran/outcome"),
+            "Outcome",
+            &ran["ran"]["outcome"],
+        );
+    }
+
+    /// A refusal, its `{"code", "error"}` as every answer under `/api` that
+    /// is no success holds it, beside what was sent, under `sent`.
+    fn refused(&self, at: &str, refused: &Value, sent: &str, name: &str) {
+        self.is(&format!("{at}/{sent}"), name, &refused[sent]);
+        let body = json!({"code": refused["code"], "error": refused["error"]});
+        self.is(at, "Refused", &body);
+    }
+
+    /// Each item of `list`, in the fixture `at`, held by `each`.
+    fn each(&self, at: &str, list: &Value, each: impl Fn(&Self, &str, &Value)) {
+        let items = list.as_array().unwrap_or_else(|| panic!("{at} is no list"));
+        for (index, item) in items.iter().enumerate() {
+            each(self, &format!("{at}/{index}"), item);
+        }
+    }
+
+    /// The fixture `name`, by what each part of it is an answer to.
+    fn hold(&self, name: &str, fixture: &Value) {
+        match name {
+            "workspace" | "candidates" | "unmade" | "assigning" | "updating" => {
+                self.is(name, "Snapshot", fixture);
+            }
+            "library" | "scan" | "plans" | "updates" | "drafts" => {
+                self.each(name, fixture, Self::asked);
+            }
+            "commands" | "applied" | "loads" | "updated" | "authored" => {
+                self.each(name, fixture, Self::ran);
+            }
+            "folders" => {
+                self.each(&format!("{name}/walked"), &fixture["walked"], Self::asked);
+                let at = format!("{name}/refused");
+                self.refused(&at, &fixture["refused"], "query", "Query");
+            }
+            "switches" => {
+                self.asked(&format!("{name}/workspaces"), &fixture["workspaces"]);
+                let switched = &fixture["switched"];
+                let at = format!("{name}/switched");
+                self.is(&format!("{at}/to"), "Switch", &switched["to"]);
+                self.is(&format!("{at}/answer"), "Switchable", &switched["answer"]);
+                self.is(&format!("{at}/snapshot"), "Snapshot", &switched["snapshot"]);
+                self.asked(&format!("{at}/workspaces"), &switched["workspaces"]);
+                let at = format!("{name}/refused");
+                self.refused(&at, &fixture["refused"], "to", "Switch");
+            }
+            // What `flayer validate` prints, as text, which the editor's
+            // verdict is held to word for word: no answer of the API's.
+            "validated" => {}
+            other => panic!(
+                "{other}.json is a fixture this test does not know: say here what each \
+                 part of it is an answer to"
+            ),
+        }
+    }
+}
+
+/// Every fixture the panel's views render holds to the schema of what it is
+/// an answer to, or was sent as: so the schemas are held to what the real
+/// backend and server answer, not only to values a test made, and a
+/// fixture this test does not know fails it.
+#[test]
+fn every_fixture_the_panel_renders_holds_to_the_schema_of_what_it_answers() {
+    let fixtures = Fixtures::new();
+    let mut names: Vec<String> = fs::read_dir(FIXTURES)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    assert!(names.len() > 10, "{names:?}");
+
+    for file in names {
+        let name = file
+            .strip_suffix(".json")
+            .unwrap_or_else(|| panic!("{file} is no JSON fixture"));
+        let text = fs::read_to_string(Path::new(FIXTURES).join(&file)).unwrap();
+        let fixture: Value = serde_json::from_str(&text).unwrap();
+        fixtures.hold(name, &fixture);
+    }
+}
+
+/// What closes the schemas, which a test that closed nothing would pass
+/// unseen: a field the schema does not name holds open and is refused
+/// closed, in a list and in a definition alike, and a map, whose keys are
+/// any, stays open.
+#[test]
+fn a_closed_schema_refuses_a_field_it_does_not_name() {
+    let schema = given::<Switchable>();
+    let mut row = json!({
+        "name": "kit", "path": "/home/you/kit", "default": false, "remembered": true,
+        "in_use": false, "projects": 0, "stale_projects": 0, "stale": null,
+        "launched": false, "reason": "explicit", "switchable": true,
+    });
+    holds(&schema, &row).unwrap();
+    let closed_schema = Schema::try_from(closed(schema.as_value())).unwrap();
+    holds(&closed_schema, &row).unwrap();
+
+    row["extra"] = json!(1);
+    holds(&schema, &row).unwrap();
+    assert!(holds(&closed_schema, &row).is_err());
+    let map = json!({"type": "object", "additionalProperties": {"type": "string"}});
+    assert_eq!(closed(&map), map);
 }
