@@ -12,7 +12,7 @@ async fn a_command_runs_on_the_writer_thread_and_says_what_it_was() {
 
     let reply = post(
         &server,
-        "/api/commands",
+        "/api/v1/tasks",
         Auth::Bearer(server.token()),
         json!({ "name": "link beta" }),
     )
@@ -35,13 +35,14 @@ async fn a_task_the_backend_cannot_read_runs_nothing() {
 
     let reply = post(
         &server,
-        "/api/commands",
+        "/api/v1/tasks",
         Auth::Bearer(server.token()),
         json!({ "nombre": "link beta" }),
     )
     .await;
 
     assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(reply.json()["code"], "invalid_body");
     assert!(reply.json()["error"].as_str().unwrap().contains("name"));
     assert!(runs.lock().unwrap().is_empty());
 }
@@ -56,7 +57,7 @@ async fn a_task_the_backend_refuses_runs_nothing_and_is_no_run() {
 
     let reply = post(
         &server,
-        "/api/commands",
+        "/api/v1/tasks",
         token,
         json!({ "name": "unlink -rf", "refuse": true }),
     )
@@ -69,7 +70,7 @@ async fn a_task_the_backend_refuses_runs_nothing_and_is_no_run() {
     );
     assert!(runs.lock().unwrap().is_empty());
     assert_eq!(
-        get(&server, "/api/transcript", token).await.json(),
+        get(&server, "/api/v1/transcript", token).await.json(),
         json!([])
     );
 }
@@ -84,7 +85,7 @@ async fn a_task_the_backend_refuses_when_it_is_run_is_no_run_either() {
 
     let reply = post(
         &server,
-        "/api/commands",
+        "/api/v1/tasks",
         token,
         json!({ "name": "link gone", "refuse_run": true }),
     )
@@ -94,9 +95,37 @@ async fn a_task_the_backend_refuses_when_it_is_run_is_no_run_either() {
     assert_eq!(reply.json()["code"], "fake_refused");
     assert!(runs.lock().unwrap().is_empty());
     assert_eq!(
-        get(&server, "/api/transcript", token).await.json(),
+        get(&server, "/api/v1/transcript", token).await.json(),
         json!([])
     );
+}
+
+/// A backend with a bug loses that one answer, a 500 with its code, and
+/// not the thread: the next task runs.
+#[tokio::test]
+async fn a_run_that_panics_is_a_500_and_the_next_runs() {
+    let (server, runs) = launch();
+    let token = Auth::Bearer(server.token());
+
+    let reply = post(
+        &server,
+        "/api/v1/tasks",
+        token,
+        json!({ "name": "broken", "panic": true }),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        reply.json(),
+        json!({
+            "error": "the backend panicked while running the task",
+            "code": "backend_failed",
+        })
+    );
+
+    let reply = post(&server, "/api/v1/tasks", token, json!({ "name": "after" })).await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(*runs.lock().unwrap(), ["start after", "end after"]);
 }
 
 #[tokio::test]
@@ -106,7 +135,7 @@ async fn a_run_whose_outcome_is_not_json_is_still_transcribed() {
 
     let reply = post(
         &server,
-        "/api/commands",
+        "/api/v1/tasks",
         token,
         json!({ "name": "odd", "unwritable": true }),
     )
@@ -121,7 +150,7 @@ async fn a_run_whose_outcome_is_not_json_is_still_transcribed() {
     assert_eq!(reply.status, StatusCode::OK);
     assert_eq!(reply.json(), entry);
     assert_eq!(*runs.lock().unwrap(), ["start odd", "end odd"]);
-    let transcript = get(&server, "/api/transcript", token).await;
+    let transcript = get(&server, "/api/v1/transcript", token).await;
     assert_eq!(transcript.json(), json!([entry]));
 }
 
@@ -134,7 +163,7 @@ async fn concurrent_writes_run_one_at_a_time_in_arrival_order() {
     let write = |task: Value| {
         let server = Arc::clone(&server);
         tokio::spawn(async move {
-            post(&server, "/api/commands", Auth::Bearer(server.token()), task).await
+            post(&server, "/api/v1/tasks", Auth::Bearer(server.token()), task).await
         })
     };
 
@@ -174,7 +203,7 @@ async fn concurrent_writes_run_one_at_a_time_in_arrival_order() {
         ]
     );
 
-    let transcript = get(&server, "/api/transcript", Auth::Bearer(server.token())).await;
+    let transcript = get(&server, "/api/v1/transcript", Auth::Bearer(server.token())).await;
     assert_eq!(
         transcript.json(),
         Value::Array(replies.iter().map(Reply::json).collect()),
@@ -186,24 +215,24 @@ async fn concurrent_writes_run_one_at_a_time_in_arrival_order() {
 async fn the_transcript_keeps_runs_and_nothing_that_only_read() {
     let (server, _) = launch();
     let token = Auth::Bearer(server.token());
-    let transcript = || get(&server, "/api/transcript", token);
+    let transcript = || get(&server, "/api/v1/transcript", token);
     assert_eq!(transcript().await.json(), json!([]));
 
-    post(&server, "/api/query", token, json!({ "echo": "x" })).await;
+    post(&server, "/api/v1/judge", token, json!({ "echo": "x" })).await;
     post(
         &server,
-        "/api/commands/preview",
+        "/api/v1/tasks/preview",
         token,
         json!({ "name": "a" }),
     )
     .await;
-    post(&server, "/api/commands", token, json!({ "nombre": "nope" })).await;
+    post(&server, "/api/v1/tasks", token, json!({ "nombre": "nope" })).await;
     assert_eq!(transcript().await.json(), json!([]));
 
-    post(&server, "/api/commands", token, json!({ "name": "init" })).await;
+    post(&server, "/api/v1/tasks", token, json!({ "name": "init" })).await;
     post(
         &server,
-        "/api/commands",
+        "/api/v1/tasks",
         token,
         json!({ "name": "link beta" }),
     )

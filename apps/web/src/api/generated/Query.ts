@@ -7,7 +7,8 @@ import type { Holder } from "./Holder";
  * A read the panel asks for.
  *
  * Tagged as a task is, by its name in snake_case beside its fields:
- * `{"type": "snapshot"}`, `{"type": "files", "holder": {"type":
+ * `{"type": "snapshot"}`, `{"type": "projects"}`, `{"type": "library"}`,
+ * `{"type": "project", "entry": "alpha"}`, `{"type": "files", "holder": {"type":
  * "workspace"}, "reference": "skill:deploy"}`, `{"type": "contents",
  * "holder": {"type": "workspace"}, "reference": "skill:deploy", "file":
  * "SKILL.md"}`, `{"type": "scan", "roots": ["/home/you/Work"], "depth":
@@ -19,4 +20,4 @@ import type { Holder } from "./Holder";
  * "text": "..."}}`, `{"type": "workspaces"}`. A field a query does not
  * have is refused, as a task's is.
  */
-export type Query = { "type": "snapshot", } | { "type": "files", holder: Holder, reference: string, } | { "type": "contents", holder: Holder, reference: string, file: string, } | { "type": "scan", roots: Array<string>, depth: number | null, } | { "type": "folders", path: string | null, hidden: boolean, } | { "type": "plan", selection: Array<Cell>, } | { "type": "updates", } | { "type": "validate", holder: Holder, draft: Draft, } | { "type": "workspaces", };
+export type Query = { "type": "snapshot", } | { "type": "projects", } | { "type": "library", } | { "type": "project", entry: string, } | { "type": "files", holder: Holder, reference: string, } | { "type": "contents", holder: Holder, reference: string, file: string, } | { "type": "scan", roots: Array<string>, depth: number | null, } | { "type": "folders", path: string | null, hidden: boolean, } | { "type": "plan", selection: Array<Cell>, } | { "type": "updates", } | { "type": "validate", holder: Holder, draft: Draft, } | { "type": "workspaces", };

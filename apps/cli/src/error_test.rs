@@ -2,18 +2,36 @@
 
 use super::*;
 
+/// Every code the CLI gives of its own, by the type that gives it, and,
+/// in a build with the panel, the server's beside them: what reaches a
+/// client beside core's.
+///
+/// The server's are held here because only here can they be: the server
+/// depends on no mindflayer crate, so it cannot see core's or the CLI's,
+/// and the CLI depends on all three.
+fn given() -> Vec<(&'static str, &'static [&'static str])> {
+    #[allow(unused_mut)]
+    let mut given = CODES.to_vec();
+    #[cfg(feature = "ui")]
+    given.push((
+        "mindflayer_server::Condition",
+        mindflayer_server::Condition::CODES,
+    ));
+    given
+}
+
 /// A code reaches the panel without the type it came from, so one the CLI
-/// gives that core gives too, or that two of the CLI's types give, would be
-/// two conditions a front end cannot tell apart.
+/// or the server gives that core gives too, or that two of their types
+/// give, would be two conditions a front end cannot tell apart.
 #[test]
-fn no_code_the_cli_gives_is_given_twice_here_or_in_core() {
+fn no_code_the_cli_or_the_server_gives_is_given_twice_here_or_in_core() {
     let mut seen: Vec<(&str, &str)> = mindflayer_core::code::ALL
         .iter()
         .flat_map(|(owner, codes)| codes.iter().map(move |code| (*owner, *code)))
         .collect();
     let mut twice: Vec<String> = Vec::new();
-    for (owner, codes) in CODES {
-        for code in *codes {
+    for (owner, codes) in given() {
+        for code in codes {
             if let Some((first, _)) = seen.iter().find(|(_, seen)| seen == code) {
                 twice.push(format!("`{code}` in {first} and {owner}"));
             }
@@ -24,9 +42,22 @@ fn no_code_the_cli_gives_is_given_twice_here_or_in_core() {
     assert!(twice.is_empty(), "codes given twice: {twice:?}");
 }
 
+/// The server's codes are among those held, wherever the panel is built.
+#[cfg(feature = "ui")]
 #[test]
-fn every_code_the_cli_gives_is_snake_case() {
-    let unfit: Vec<&str> = CODES
+fn the_servers_codes_are_held_beside_the_cli_s() {
+    let held: Vec<&str> = given()
+        .iter()
+        .flat_map(|(_, codes)| codes.iter().copied())
+        .collect();
+
+    assert!(held.contains(&"token_required"), "{held:?}");
+    assert!(held.contains(&"unknown_route"), "{held:?}");
+}
+
+#[test]
+fn every_code_the_cli_or_the_server_gives_is_snake_case() {
+    let unfit: Vec<&str> = given()
         .iter()
         .flat_map(|(_, codes)| codes.iter().copied())
         .filter(|code| {

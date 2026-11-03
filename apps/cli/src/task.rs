@@ -44,6 +44,7 @@ use crate::{Cli, Command, Editing, FlayerCli, FlayerCommand, GatherCommand, Give
 /// field of its own for them to be named by.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(
     tag = "type",
     content = "agents",
@@ -69,6 +70,7 @@ pub enum AgentsLine {
 /// settings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct Toggles {
     /// As its settings name them, in their order; ticked, in any.
@@ -84,6 +86,7 @@ pub struct Toggles {
 /// holding one string cannot take inside the object the tag is in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(
     tag = "type",
     content = "entry",
@@ -120,6 +123,7 @@ pub enum Holder {
 /// report's is, so a test pins every one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Task {
     /// `flayer init`, where the TUI was opened.
@@ -406,6 +410,7 @@ impl From<Change> for Task {
 /// from. By its name in snake_case in JSON: `"init_and_link"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum MindsChange {
     Link,
@@ -434,6 +439,7 @@ impl MindsChange {
 /// a batch from. `{"path": "/home/you/blog", "change": "link"}` in JSON.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct Mark {
     pub path: String,
@@ -1075,6 +1081,7 @@ pub fn refused(words: &[String]) -> Option<Refusal> {
 /// nothing away, and says what it would.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Error)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum Caution {
     /// `remove --yes`, at either level: the artifact deleted.

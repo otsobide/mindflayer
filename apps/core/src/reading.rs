@@ -26,6 +26,7 @@ use crate::paths;
 /// its front matter declares that `show` prints, and the body after it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Shown {
     pub kind: Kind,
     pub name: String,
@@ -58,6 +59,10 @@ pub struct Shown {
     #[cfg_attr(
         feature = "ts",
         ts(as = "Option<std::collections::BTreeMap<String, String>>")
+    )]
+    #[cfg_attr(
+        feature = "schema",
+        schemars(with = "Option<std::collections::BTreeMap<String, String>>")
     )]
     pub metadata: Option<Vec<(String, String)>>,
     /// The files a rule is about, as glob patterns, when it says.
@@ -118,6 +123,7 @@ fn in_order<S: Serializer>(
 /// it, and the counts its verdict follows.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Validation {
     /// Each artifact checked, in the order the catalog lists them.
     pub artifacts: Vec<Checked>,
@@ -136,6 +142,7 @@ pub struct Validation {
 /// One artifact `validate` checked.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Checked {
     pub kind: Kind,
     pub name: String,

@@ -249,8 +249,8 @@ impl Serialize for Share {
     }
 }
 
-#[cfg(feature = "ts")]
-crate::typescript::words! {
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
     /// Whether what is installed into a project reaches the team, as the
     /// settings file and `mind share` spell it.
     Share by name { Local, Shared }
@@ -389,6 +389,29 @@ impl ProjectId {
 impl Serialize for ProjectId {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&self.0)
+    }
+}
+
+/// As the text serde writes it, which only an id's own spelling matches:
+/// written by hand, as the serializer is, rather than derived, which says
+/// any string.
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for ProjectId {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ProjectId".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::ProjectId").into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        crate::schema::schema(serde_json::json!({
+            "description": "A project's id: 128 random bits, written as 32 lowercase \
+                            hexadecimal digits.",
+            "type": "string",
+            "pattern": format!("^[0-9a-f]{{{}}}$", ProjectId::LEN),
+        }))
     }
 }
 

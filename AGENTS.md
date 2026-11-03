@@ -11,6 +11,8 @@ friendly and centred on the control panel (`flayer ui`), with screenshots
 `make docs/screenshots` takes and no command's output. `docs/reference.md`
 is the user-facing reference: every command with its literal output, the
 formats, `--json`, the TUI, the panel in full and upgrading.
+`docs/api.md` is the guide to the HTTP API `flayer ui` serves, every
+example a `curl` line and its literal answer, which a test replays.
 `docs/development.md` is how to build, test and work on the panel.
 `docs/architecture.md` records why each mechanism is the way it is: read the
 section for whatever you are about to change before changing it, and keep it
@@ -57,6 +59,10 @@ make web/types            # write the types from Rust into src/api/generated, th
 make web/types/check      # cargo and git only (CI): fail when they are not the ones committed
 make web/fixtures         # write the snapshots and answers the views' tests render, from Rust (cargo only)
 make web/fixtures/check   # cargo and git only (CI): fail when they are not the ones committed
+make api/schemas          # write the API's JSON Schemas from Rust into docs/api/schemas (cargo only)
+make api/schemas/check    # cargo and git only (CI): fail when they are not the ones committed
+make api/openapi          # write the API's OpenAPI document from Rust into docs/api/openapi.json (cargo only)
+make api/openapi/check    # cargo and git only (CI): fail when it is not the one committed
 make web/typecheck        # vue-tsc alone
 make web/test PNPM='npx --yes pnpm@12.15.0'
 pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
@@ -77,7 +83,15 @@ the panel runs `make web/types` and commits what it writes: CI's `types
 drift (web)` runs `make web/types/check`, which needs no Node. A change to
 what the snapshot holds runs `make web/fixtures` too, and commits the
 snapshots it writes into `apps/web/tests/fixtures`, which the same job
-checks with `make web/fixtures/check`. The other way
+checks with `make web/fixtures/check`. A change to a type the API takes or
+gives, core's, the CLI's or the server's, runs `make api/schemas` and
+commits the schemas it writes into `docs/api/schemas`, which the same job
+checks with `make api/schemas/check`, once the fixtures are written again,
+since it holds each to its schema. Such a change, or one to a route of
+the CLI's table or the server's own, runs `make api/openapi` too, which
+writes the API's OpenAPI document, `docs/api/openapi.json`, from the routes
+and those schemas, and which the same job checks with `make
+api/openapi/check`. The other way
 round, `make install` and `make cli/release` build the panel before the
 binaries that embed it where Node and pnpm run, and warn otherwise (`make
 web/build/if-node`), and `make web/build` touches
@@ -178,8 +192,11 @@ under `apps/` with its own `Makefile`:
   write, by the command's own checks and in `validate`'s words, for a
   front end judging what is typed (`draft`). Its only I/O is files, and it never reads the
   environment. Under its `ts` feature, `typescript` gives what it hands a
-  front end TypeScript (the roots its export writes, `words!`,
-  `CoreCode`).
+  front end TypeScript (the roots its export writes), under its `schema`
+  feature `schema` gives it JSON Schema (the roots its export writes, each
+  given or taken, `Schemas`, `Together`), and under either `described` says
+  what a type serde writes by hand says of itself (`words!`, which writes
+  both, and the fields written through a function of their own).
 - `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
@@ -206,24 +223,45 @@ under `apps/` with its own `Makefile`:
   panel alike. `src/admit.rs` holds a task sent from outside to the path
   policy (`Admission`), and `src/backend.rs` is the panel's backend
   (`PanelBackend`, the server's `Backend` with the CLI's `Query`, `Task`
-  and `Outcome`), which `ui` serves (`src/commands/ui.rs`). The backend,
+  and `Outcome`), which `ui` serves (`src/commands/ui.rs`), its reads
+  served under `/api/v1` from the table in `src/routes.rs`
+  (`routes::table`), each route the query it becomes. The backend,
   `ui` and the server they need are behind the crate's `ui` feature, on by
   default: `--no-default-features` builds the rest without axum
   (`tests/crate_test.rs`), and `make cli/build` builds it that way first.
   Under its `ts` feature, `src/typescript.rs` lists the roots of the
   panel's types the CLI gives (a query, a task, an outcome, the envelope)
-  and `Code`. `src/tui/` and `src/install/` are the two screens.
+  and `Code`, and under its `schema` feature `src/schema.rs` the roots of
+  the API's schemas it gives, those and the bodies of the reads that take
+  one, the token file and the server's own answers, and `src/openapi.rs`
+  the API's OpenAPI document, written from both tables and those schemas,
+  each type a route names found among the roots (`openapi::document`,
+  `Described`, the server's `schema::Describe`). `src/tui/` and
+  `src/install/` are the two screens.
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
-  trait, `src/server.rs` binds and routes, `src/auth.rs` holds the token's
+  trait and the `Refusal` it answers with (with its `Grounds`),
+  `src/code.rs` the conditions the server turns a request away for itself,
+  each with its code and its status (`Condition`), `src/route.rs` the
+  table of reads a backend hands over (`Route`, `Parameter`, `Shape`,
+  `API`), a query string read by it, and the table of the server's own
+  routes it serves beside them (`Own`, `Sent`, `Answer`), which a
+  description of the API walks with the backend's, each route with what a
+  request to it may be refused for (`conditions`),
+  `src/server.rs` binds and routes, `src/auth.rs` holds the token's
   cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
   Metadata checks and the CSP, `src/api.rs` the JSON endpoints,
   `src/writer.rs` the thread every run and every switch goes through,
   `src/transcript.rs` what
-  the session ran, `src/events.rs` the bus `/api/events` streams,
+  the session ran, `src/events.rs` the bus `/api/v1/events` streams,
   `src/watcher.rs` what watches the paths the backend names and tells the
-  bus what changed, `src/log.rs` the redacting request log and
-  `src/panel.rs` the embedded panel (`apps/web/dist`).
+  bus what changed, `src/log.rs` the redacting request log,
+  `src/panel.rs` the embedded panel (`apps/web/dist`), and under its
+  `schema` feature `src/schema.rs` the roots of the API's schemas it gives
+  of its own (`Preview`, `Ran`, `Event`, `Refused`) and its part of the
+  API's OpenAPI document, what is HTTP of each route of both tables
+  (`paths`), each type a route names asked of the front end (`Describe`,
+  `Carried`, `Way`).
 - `apps/web` (`mindflayer-web`): the web panel, in Vue and Nuxt UI on Vite,
   with pnpm. `src/main.ts` mounts what `src/panel.ts` installs (router,
   Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
@@ -318,6 +356,11 @@ isolates a run and checks the real home is left alone, and `<agent>.sh` holds
 one agent's checks (only `claude.sh` so far). `scripts/serves-panel.sh` is
 what `make cli/release/check` runs: it starts a release's `flayer ui` with a
 home of its own and every agent home empty, and asks it for the panel.
+`docs/api/schemas` holds the API's JSON Schemas, a file a root, which the
+crates' `schema` tests write (`make api/schemas`) and nothing edits by
+hand, and `docs/api/openapi.json` its OpenAPI document, which the CLI's
+`openapi` test writes (`make api/openapi`) and the binaries embed and
+serve.
 
 ## Invariants that hold the design together
 
@@ -426,7 +469,8 @@ These are easy to break from a single file without noticing.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
   The two that run until they are stopped write as they run, the TUI its
-  screen and `ui` its link and a note, and hand back their transcript.
+  screen and `ui` its link, a note and the token file it is asked for, and
+  hand back their transcript.
   Each stderr line, and each of a `Failure`'s warnings, is a
   `render::Warning`: the text a terminal shows, word for word, and beside
   it the code of what it says (`code()` of the core error, refusal or
@@ -506,7 +550,14 @@ These are easy to break from a single file without noticing.
   `update::Left` says an edit left alone by `install::Refused`'s
   `edited`. A new error type joins
   `code::ALL`; `code_test.rs` holds no two codes alike and finds a type
-  that derives `Error` and never joined.
+  that derives `Error` and never joined. The server, which can use no
+  mindflayer crate, gives its own conditions codes the same way with a
+  `codes!` of its own (`apps/server/src/code.rs`, `Condition`, its status
+  beside each code), and the CLI's `error_test.rs` holds them unique
+  beside core's and the CLI's, which only the CLI can see together; every
+  answer under `/api` that is no success is `{"error", "code"}`, a
+  backend's refusal with its front end's code and anything else with the
+  server's, and the TypeScript `Code` holds all three lists.
 - **Failures are collected, not raised.** One unreadable artifact or stale
   registry entry is a `warning:` on stderr (in the envelope too, under
   `--json`) and a non-zero exit, never a reason to hide the rest. An absence (no
@@ -625,6 +676,13 @@ These are easy to break from a single file without noticing.
     rewritten. A changed file goes through `replace_bytes_unresolved`,
     keeping its permissions; a new one is made with `create_new`. The module
     knows no agent: the file, the key path and the entry are the caller's.
+  - `ui --token-file` (`TokenFile`, in `src/commands/ui.rs`) makes its
+    file with `create_new`, mode 0600 on Unix, so whatever is at the path,
+    a link included, is refused and never written over or through, and
+    takes it away when `ui` stops only while it holds, byte for byte, what
+    was written: anything else there is somebody's, left as it is and said.
+    It holds the token, which goes nowhere else new: not to stderr, not to
+    a `Debug`, and the link and the transcript stay as they were.
   - `flayer init` refuses a directory for the workspace's own that overlaps
     the shelf or the cache, which are reserved for gathering
     (`gathered_overlap`). `flayer init` and the workspace's own artifacts
@@ -970,15 +1028,35 @@ These are easy to break from a single file without noticing.
   (`backend.rs`), never the other way. A check, path rule or naming rule
   written there is one the panel could disagree with the CLI about: it
   belongs in core, reached through the backend, which says it as a
-  `Refusal`, a code and a message, sent as a 422; a task refused when its
-  lines are asked for is never run, nor kept in the transcript. A preview
+  `Refusal`, a code, a message and its grounds, sent as a 404 when it is
+  `Grounds::Absent` (in the CLI's backend, a read whose parameters name
+  what is not there, decided where the refusal is built, `Absence`) and a
+  422 when it is `Grounds::Unfit` (everything else, whatever a body names
+  among it): the server never reads a code to pick a status. A task
+  refused when its lines are asked for is never run, nor kept in the
+  transcript. Everything
+  it serves is under `/api/v1` (D-24), and a route, a parameter or a field
+  once served is a contract, as the envelope's names are: dropping or
+  renaming one, or changing what it holds, moves the API to `/api/v2`,
+  adding one does not, and no unversioned route answers. Its reads are the
+  backend's, handed over as a table (`Backend::routes`, `route::Route`):
+  each route's method, path, parameters by name and shape, body and answer
+  are data, which the server matches, reads a query string by and refuses
+  by (a 400 for a parameter no route takes, one given twice, one it cannot
+  read or one it needs, as `deny_unknown_fields` refuses a field), and the
+  route makes the backend's `Query` of what was sent; the server never
+  writes a handler of a read of its own, and an identifier goes in a
+  parameter, never the path, since an entry or a reference can hold a `/`.
+  A read with a structure is a POST that changes nothing; a write is a
+  task, previewed and run at `/api/v1/tasks/preview` and `/api/v1/tasks`.
+  A preview
   is the server's `Preview`, the lines and what the backend says to
   confirm, carried unread as a watched path's scope is; the server
   enforces none of it, so a run sent without the question is run, as a
   shell runs what is typed into it. Queries and
   previews run on tokio's blocking pool, and every run on the one writer
   thread, in the order it arrived, and so does a switch of what the backend
-  acts on (`POST /api/switch`, `Backend::switch`), which only the backend
+  acts on (`POST /api/v1/switch`, `Backend::switch`), which only the backend
   can say it may make: once it is taken, the watcher asks for the paths
   again and drops those no longer named (`Watcher::again`) before every
   subscriber is told `switched`, and nothing of it is kept in the
@@ -994,15 +1072,22 @@ These are easy to break from a single file without noticing.
   `mf_<port>`, or as Bearer), and takes a change by cookie only with
   `Sec-Fetch-Site: same-origin`, `X-Mindflayer: 1` and `application/json`.
   The one widening is the panel's dev server's origin, exactly, when a front
-  end names it (`Server::dev_server`, `flayer ui --dev`).
-  Every answer carries the CSP and `nosniff`; there is no CORS layer, and the
-  token is never logged.
+  end names it (`Server::dev_server`, `flayer ui --dev`). The API's
+  description is the front end's, handed over as text
+  (`Backend::document`) and served at `GET /api/v1/openapi.json` as it is,
+  behind the token like every route.
+  Every answer carries the CSP and `nosniff`, and every one under `/api`
+  `Cache-Control: no-store`, since a read is a GET a browser would keep;
+  there is no CORS layer, and the token is never logged.
 - **The panel holds no rules either, and talks only through its
   transport.** It asks and draws: nothing a query answers is worked out in
   TypeScript. Every request goes through the `Transport` from
   `useTransport()`, and only `src/api/http.ts` may use `fetch`,
   `EventSource`, `WebSocket` or `XMLHttpRequest` (an ESLint rule, tested in
-  `tests/lint.test.ts`). Authentication is the transport's: relative URLs,
+  `tests/lint.test.ts`). It asks each query at the route the backend's
+  table serves it at under `/api/v1`, one case for every query
+  (`route`), and spells no route the table does not hold. Authentication
+  is the transport's: relative URLs,
   the `HttpOnly` cookie, the `X-Mindflayer: 1` header. What the server
   answers belongs in Vue Query; Pinia holds UI state only. The server's
   events reach the views only as Vue Query marking what they reached stale
@@ -1060,7 +1145,7 @@ These are easy to break from a single file without noticing.
   (`#[cfg_attr(feature = "ts", derive(ts_rs::TS))]`), so a plain build
   compiles none of it and a plain `cargo test` writes nothing. A type serde
   writes by hand says its TypeScript from what its serializer writes,
-  beside it, never from the variants: a word through `typescript::words!`,
+  beside it, never from the variants: a word through `described::words!`,
   from the function the serializer calls, anything else by hand or with
   `ts(as)`, each held to serde by a test in `typescript_test.rs`. What is
   exported is each crate's `typescript::roots`, into
@@ -1070,6 +1155,49 @@ These are easy to break from a single file without noticing.
   not what Rust writes.
   A type a view starts to read joins `roots`; the panel spells no shape of
   core's or the CLI's in TypeScript of its own.
+- **The API's schemas are written from Rust too, and are its contract.**
+  Every type the TypeScript describes, and whatever else the API takes or
+  gives whole (the bodies of the reads that take one, the server's own
+  answers, the token file), derives `schemars::JsonSchema` beside serde's
+  derive under a `schema` feature of core's, the CLI's and the server's
+  (`#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]`), so a
+  plain build compiles none of it and a plain `cargo test` writes nothing.
+  A type serde writes by hand says its schema from what its serializer
+  writes, beside it, as its TypeScript: a word through the same
+  `described::words!`, anything else by hand or with `schemars(with)`, each
+  held to serde by a test in `schema_test.rs`. Each crate's
+  `schema::roots` names every root and whether it is given, described as
+  serde writes it, or taken, as serde reads it; the CLI's lists the
+  server's beside its own. A root is written as `docs/api/schemas/<its
+  type's name>.json`, JSON Schema 2020-12 with every type it names in
+  `$defs`, committed and never edited by hand: `make api/schemas` writes
+  them again, and `make api/schemas/check`, run in CI's `types drift
+  (web)`, fails when they are not what Rust writes. A type a route names
+  is a root, every root of the panel's types has a schema of its name, no
+  two types of any crate go by one name (`Together`), and every fixture
+  the panel's views render holds to the schema of what it answers, closed,
+  so a field serde writes that a schema does not name fails. An answer's
+  schema stays open to a field it does not name, since adding one moves no
+  version, a type sent closed only where it is sent
+  (`schema::given_settings`); a diff of `docs/api/schemas` that drops or renames a property,
+  or changes what one holds, moves the API to `/api/v2`.
+- **The API's description is written from both tables, and every answer
+  holds to it.** `docs/api/openapi.json`, an OpenAPI 3.1 document, is
+  written by the CLI under `schema` (`openapi::document`), never by hand:
+  the server writes what is HTTP of each route of `Backend::routes` and
+  `Own::ALL` as it serves them (`schema::paths`), each status a route may
+  be refused with from what its table says (`Route::conditions`,
+  `Own::conditions`), and asks the CLI for every type a route names
+  (`schema::Describe`), by the name its table gives it among the roots, by
+  `Sent`, or by a word for what the server carries of the backend's
+  (`Carried`), so the server still names no type of the front end's. A
+  type sent and answered that is described otherwise each way is two
+  definitions, the one sent named with `Sent` after it (`TaskSent`). The
+  CLI's backend embeds the file as it is committed (`include_str!`), so a
+  plain build serves it without schemars; `make api/openapi` writes it
+  again and `make api/openapi/check`, run in `types drift (web)`, fails
+  when it is not what Rust writes. A route, or a type it names, changed is
+  written again into it.
 - **The panel needs nothing the CSP refuses.** No URL naming another host,
   no inline `<script>` or `<style>`, no `data:` URL: fonts are Fontsource
   files, icons are bundled Lucide (`i-lucide-<name>` in a `.vue` file) drawn
@@ -1154,7 +1282,11 @@ These are easy to break from a single file without noticing.
   except under `$CI`, where it fails the test: the `test (cli)` job
   installs zsh so that both shells run there.
 - The server's suites run against a fake backend with types of its own
-  (`common::Fake`), never the CLI's. They bind 127.0.0.1 on port 0 and send
+  (`common::Fake`, its reads `common::fake_routes`), never the CLI's.
+  `routes_test.rs` holds the server to the table: a path and its
+  parameters reach the backend as the route makes them, and what no route
+  takes is refused with its status; `guard_test.rs` holds every route
+  under `/api/v1` to every guard. They bind 127.0.0.1 on port 0 and send
   requests through the router in process (`common::send`), or over loopback,
   and serve a fixture panel (`tests/panel`), so they need no Node. Every
   request names the server in Host, and `Auth::Cookie` sends what the panel's
@@ -1166,14 +1298,32 @@ These are easy to break from a single file without noticing.
   expects at most `common::PATIENCE`. The CLI's backend has a suite
   of its own (`apps/cli/tests/backend_test.rs`), which drives `PanelBackend`
   through the `Backend` trait with the JSON a browser sends, binding no
-  port, and `apps/cli/tests/live_test.rs` starts the server's watcher over
-  it on a temporary workspace; `apps/cli/tests/ui_test.rs` starts the
-  binaries' `ui` on port 0
-  (`common::start`) and sends the panel's requests over loopback. No test
-  opens a browser: every `ui` one starts passes `--no-open`, and the opener
-  is a stand-in in `ui`'s unit tests. A suite or test about the panel is
-  `#[cfg(feature = "ui")]`, so a build without the feature leaves it out;
-  `make cli/test` runs the unit tests in that build too.
+  port, `apps/cli/tests/routes_test.rs` pins every route of its table by
+  name and holds each to the query the panel sends for the same read, and
+  `apps/cli/tests/live_test.rs` starts the server's watcher over it on a
+  temporary workspace; `apps/cli/tests/ui_test.rs` starts the binaries'
+  `ui` on port 0 (`common::start`) and sends the panel's requests over
+  loopback (`common::panel`, the client of plain `TcpStream`s every suite
+  that calls a served panel uses), every read route among them, and a
+  script's with the token read from the file `--token-file` writes, in a
+  temporary folder. No test opens a browser: every `ui` one starts passes
+  `--no-open`, and the opener is a stand-in in `ui`'s unit tests. A suite
+  or test about the panel is `#[cfg(feature = "ui")]`, so a build without
+  the feature leaves it out; `make cli/test` runs the unit tests in that
+  build too.
+- Every answer the CLI's HTTP suites get is held to the API's OpenAPI
+  document as it is committed (`common::contract`, with boon): `ui_test`'s
+  `Panel::send` holds what each route answered, with its status, to the
+  schema the document gives that route and status, and the events the
+  stream tells to theirs, and `backend_test` drives the backend through a
+  stand-in (`Checked`) that holds each answer as the server would send it,
+  a refusal under the status its grounds say. A route answering outside
+  its document, or with a status it does not list, fails the test that met
+  it. `apps/cli/tests/openapi_test.rs` reads the document with oas3, a
+  reader of OpenAPI 3.1 that reaches no network, holds every schema in it
+  to JSON Schema 2020-12's meta-schema, which boon carries, and walks both
+  tables against its routes; the server's `api_test` holds every refusal
+  it brings about to a condition its route lists.
 - The panel's suites are `apps/web/tests/<area>.test.ts`, in Vitest. The
   components run in happy-dom, mounted through `createPanel` with a fake
   `Transport` and a memory history, so they never reach a server. The
@@ -1247,6 +1397,17 @@ These are easy to break from a single file without noticing.
   (`export_bindings`), which writes into the panel, and every type serde
   writes by hand held to what its TypeScript says. `make web/types` and
   `make web/types/check` run them; `make test` does not.
+- The tests of the API's schemas are core's, the CLI's and the server's
+  `src/schema_test.rs`, compiled only with the `schema` feature, and named
+  so `--lib schema` picks them out: each export (`export_schemas`, core's
+  and the CLI's, which writes into `docs/api/schemas`), every schema
+  written by hand held to what serde writes and to refusing what it never
+  writes, and the CLI's holding every fixture in `apps/web/tests/fixtures`
+  to its schema, and, with `ts` too, every root of the panel's types to
+  one. They validate with boon, a dev-dependency that reaches no network,
+  with its loader taken away. `make api/schemas` and `make
+  api/schemas/check` run them, with `ts` beside `schema`; `make test` does
+  not.
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
   the event loops in `tui.rs` and `install.rs` go untested, so keep logic out
@@ -1261,7 +1422,16 @@ These are easy to break from a single file without noticing.
   GitHub spells it, and each image in `docs/images` is shown by some page.
   A link to another site is not followed. `examples_test.rs` finds the
   reference's "Try it with the examples" walk-through in what the commands
-  print.
+  print. `api_guide_test.rs` replays the API's guide, `docs/api.md`: it
+  builds the guide's workspace with the commands its first block shows,
+  starts `ui` with `--token-file` as the guide does, reads every `curl`
+  line of a `console` block as curl would and sends it over loopback with
+  `common::panel`, holding each answer to the OpenAPI document and then to
+  the guide's, with the home read as `/home/you`, the port, the token and
+  each project's id pinned. It reads the lines rather than run them, so it
+  needs neither curl nor jq, and fails on an option or a filter it does
+  not read. Every route of both tables needs an example there, and the
+  guide's table of the server's codes is held to `Condition::ALL`.
 
 ## Workflow
 
@@ -1277,7 +1447,8 @@ These are easy to break from a single file without noticing.
   `apps/web/dist`, runs `make cli/release/check` and uploads the release's
   binaries, which `e2e (web)` downloads and drives in Chromium and WebKit
   (`make web/e2e/run`), uploading the traces of what fails. `types drift
-  (web)` runs `make web/types/check` and `make web/fixtures/check`. Development targets Linux only for now: macOS
+  (web)` runs `make web/types/check`, `make web/fixtures/check`, `make
+  api/schemas/check` and `make api/openapi/check`. Development targets Linux only for now: macOS
   and Windows (`test (macos)`, `test (windows)`, which set up Node too) run
   only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
   the compatibility pass (#154) puts them back on pushes to `dev`/`main` and
@@ -1295,7 +1466,9 @@ These are easy to break from a single file without noticing.
   a change spans two apps).
 - When behaviour changes, update `docs/reference.md` (its examples are
   literal output, so re-run them) and `docs/architecture.md`, including its
-  "Open questions". Literal output belongs in the reference, never in the
+  "Open questions". A change to what the API answers, a route added among
+  them, updates `docs/api.md` too, whose answers `api_guide_test` holds to
+  the server's. Literal output belongs in the reference, never in the
   README, which says what Mindflayer is and tours the panel in a few
   screens. A change to what the panel shows, a page, a view or its look,
   runs `make docs/screenshots`, and its PR carries the images it wrote; a

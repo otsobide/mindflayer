@@ -21,9 +21,15 @@ pub(crate) mod commands;
 pub(crate) mod error;
 pub(crate) mod homes;
 pub mod install;
+#[cfg(feature = "schema")]
+pub mod openapi;
 pub(crate) mod parse;
 pub(crate) mod progress;
 pub(crate) mod render;
+#[cfg(feature = "ui")]
+pub mod routes;
+#[cfg(feature = "schema")]
+pub mod schema;
 pub mod task;
 pub mod tui;
 #[cfg(feature = "ts")]

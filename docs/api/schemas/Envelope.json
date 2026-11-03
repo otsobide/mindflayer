@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Envelope",
+  "description": "What every reading command's `--json` prints:\n`{\"version\": 2, \"data\": ..., \"warnings\": [...], \"coded_warnings\": [...]}`.\n\nOne shape for every command, so a script reads each the same way, and the\nwarnings inside it beside the data rather than on stderr alone: failures\nare collected, not raised, in JSON as in text. On stderr as well, as the\ntext says them, for whoever pipes the JSON into `jq` at a terminal.\n\n`coded_warnings` says each of `warnings` again, in the same order, with\nits code beside it ([`Warning::code`]), for a reader that acts on a\ncondition rather than on English that is reworded whenever it is made\nclearer. A name of its own rather than objects in `warnings`, whose\nstrings a version 2 script reads: changing what a field holds moves the\nversion, and adding one does not ([`ENVELOPE_VERSION`]). A list of codes\nbeside the strings, a reader pairing them by place, was the other way,\nrejected as a [`Warning`] keeps its code on the line rather than in a\nlist beside the lines.",
+  "type": "object",
+  "properties": {
+    "coded_warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CodedWarning"
+      }
+    },
+    "data": true,
+    "version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "version",
+    "data",
+    "warnings",
+    "coded_warnings"
+  ],
+  "$defs": {
+    "CodedWarning": {
+      "description": "One warning in the envelope's `coded_warnings`: its code, none for a line\nno code is given to, and what it says, as `warnings` says it.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}

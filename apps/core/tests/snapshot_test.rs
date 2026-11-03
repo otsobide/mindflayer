@@ -1022,6 +1022,29 @@ fn a_project_with_nothing_to_do_is_ok_and_one_that_opens_none_is_stale() {
     assert_eq!(healths, [Health::Ok, Health::Stale]);
 }
 
+/// One project is cut from the snapshot by its entry, as the snapshot
+/// lists it, a stale one included: and an entry no registry holds, a name
+/// or another spelling of a linked folder among them, is refused as an
+/// unlink of it is.
+#[test]
+fn one_project_is_the_snapshots_own_by_its_entry_and_no_other_spelling() {
+    let fixture = fixture();
+    let snapshot = || {
+        Snapshot::read(&naming(&fixture.hub, None))
+            .unwrap()
+            .unwrap()
+    };
+    let listed = snapshot().projects;
+
+    for (entry, at) in [("api", 0), ("gone", 1)] {
+        assert_eq!(snapshot().project(entry).unwrap(), listed[at], "{entry}");
+    }
+    for entry in ["./api", "api/", "hub", ""] {
+        let refused = snapshot().project(entry).unwrap_err();
+        assert_eq!(refused.code(), "not_registered", "{entry}");
+    }
+}
+
 /// A project an older marker marks, a `mind.toml` or a `settings.json`, is
 /// one `mind migrate` moves, and the snapshot says so of those alone: one
 /// its `settings.toml` marks, and an entry that opens no project, have

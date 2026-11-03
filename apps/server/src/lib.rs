@@ -10,18 +10,26 @@
 mod api;
 mod auth;
 mod backend;
+mod code;
 mod events;
 mod guard;
 mod log;
 mod panel;
+mod route;
+#[cfg(feature = "schema")]
+pub mod schema;
 mod server;
 mod token;
 mod transcript;
 mod watcher;
 mod writer;
 
-pub use backend::{Backend, Preview, Refusal, Watched};
+pub use api::Refused;
+pub use backend::{Backend, Grounds, Preview, Refusal, Watched};
+pub use code::Condition;
 pub use events::{Event, Events, Subscription, CAPACITY};
 pub use panel::Panel;
+pub use route::{Answer, Arguments, Method, Own, Parameter, Route, Sent, Shape, API};
 pub use server::{Listening, Server};
+pub use transcript::Ran;
 pub use watcher::{Watcher, DEBOUNCE};

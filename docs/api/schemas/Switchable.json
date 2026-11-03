@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Switchable",
+  "description": "A workspace a front end that stays on one may switch to, as\n[`switchable`] lists it: the row `flayer workspaces` prints, with how it\nstands with the front end.\n\nBeside the row rather than in it, as [`crate::view::KnownHere`] stands\nbeside it: the row is the machine's list, the same whoever asks, and\nwhich one a front end was launched on is the front end's.",
+  "type": "object",
+  "properties": {
+    "default": {
+      "description": "The default workspace, in home: listed for being the default,\nwhatever its own `known` says.",
+      "type": "boolean"
+    },
+    "in_use": {
+      "description": "The one in use where the list was asked for, as `resolve` chose it.",
+      "type": "boolean"
+    },
+    "launched": {
+      "description": "Whether it is the one the front end was launched on.",
+      "type": "boolean"
+    },
+    "name": {
+      "description": "What its marker calls it; none for one that would not open, which has\nno marker to read.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "path": {
+      "description": "Where it is.",
+      "type": "string"
+    },
+    "projects": {
+      "description": "How many projects it links, each directory once, stale ones among\nthem: its own count, which says which of several flayers is which.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "reason": {
+      "description": "The rule it is chosen by once switched to, as a snapshot of it says:\nthe launch's, for the one the front end was launched on, and named,\nas `-W` names it, for every other, since a switch names it to every\nline the front end runs from then on, and nothing else chose it.",
+      "$ref": "#/$defs/Reason"
+    },
+    "remembered": {
+      "description": "Whether the default workspace's `known` names it, which is what\n`flayer workspaces forget` takes out. False for the default itself,\nand for the one in use when nothing remembers it.",
+      "type": "boolean"
+    },
+    "stale": {
+      "description": "Why it would not open, when it would not: listed rather than left\nout, since a workspace that has gone is the one somebody has to find\nto forget it.\n\nWritten through [`redacted`](crate::url::redacted), as an error's\nmessage is in a [`Said`](crate::code::Said): a marker that does not\nparse is quoted in its own words, a source's URL among them perhaps,\nand whoever wrote that file is no promise that it holds no\ncredential.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stale_projects": {
+      "description": "How many of those would not open.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "switchable": {
+      "description": "Whether a switch to it is offered: it opens, it is not the one in\nuse, and its path is text a command line can hold, since every line\nnames the workspace by it.",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "name",
+    "path",
+    "default",
+    "remembered",
+    "in_use",
+    "projects",
+    "stale_projects",
+    "stale",
+    "launched",
+    "reason",
+    "switchable"
+  ],
+  "$defs": {
+    "Reason": {
+      "description": "The rule that chose a workspace: named on the command line,\nactivated for the shell, found walking up, or the default in home.",
+      "type": "string",
+      "enum": [
+        "explicit",
+        "activated",
+        "above",
+        "home"
+      ]
+    }
+  }
+}

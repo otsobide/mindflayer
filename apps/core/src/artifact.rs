@@ -1001,10 +1001,62 @@ impl ts_rs::TS for ValidationIssue {
     }
 }
 
-#[cfg(feature = "ts")]
+/// One object of each code, its code a constant, so a reader tells an issue
+/// by its `code` alone, as the TypeScript's union is told: each holds what
+/// it carries, read off [`carried`](ValidationIssue::carried) as the
+/// serializer writes it, each said as schemars says its type, then
+/// `warning` and `message`.
+#[cfg(feature = "schema")]
+impl schemars::JsonSchema for ValidationIssue {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ValidationIssue".into()
+    }
+
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        concat!(module_path!(), "::ValidationIssue").into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        let members: Vec<serde_json::Value> = ValidationIssue::every()
+            .iter()
+            .map(|issue| {
+                let mut fields = vec![("code", serde_json::json!({ "const": issue.code() }))];
+                for (name, carried) in issue.carried() {
+                    let typed = match carried {
+                        Carried::Text(_) => generator.subschema_for::<str>(),
+                        Carried::Count(_) => generator.subschema_for::<usize>(),
+                    };
+                    fields.push((name, typed.to_value()));
+                }
+                fields.push(("warning", generator.subschema_for::<bool>().to_value()));
+                fields.push(("message", generator.subschema_for::<str>().to_value()));
+                let required: Vec<&str> = fields.iter().map(|(name, _)| *name).collect();
+                let properties: serde_json::Map<String, serde_json::Value> = fields
+                    .into_iter()
+                    .map(|(name, typed)| (name.to_owned(), typed))
+                    .collect();
+                serde_json::json!({
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                })
+            })
+            .collect();
+        crate::schema::schema(serde_json::json!({
+            "description": crate::schema::description(&[
+                " Something that stops an artifact from being usable, or will: its code,",
+                " what it is about, whether it is only worth a warning, and its message.",
+            ]),
+            "oneOf": members,
+        }))
+    }
+}
+
+#[cfg(any(feature = "ts", feature = "schema"))]
 impl ValidationIssue {
     /// One issue of each code, in the order [`CODES`](Self::CODES) lists
-    /// them, which a test holds it to: what the TypeScript is read off.
+    /// them, which a test holds it to: what the TypeScript and the schema
+    /// are read off.
     pub(crate) fn every() -> Vec<ValidationIssue> {
         let text = String::new;
         vec![

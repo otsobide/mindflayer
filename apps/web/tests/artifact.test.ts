@@ -276,12 +276,12 @@ describe('what somebody else wrote in one', () => {
       Object.assign(each.query, { reference: `skill:${untrusted}` })
     }
     const contents = answer<Contents>(answered, 'contents', `skill:${untrusted}`, 'SKILL.md')
-    const text = `---\nname: ${untrusted}\ndescription: Read it\n---\n\n# ${untrusted}\n\n<script>fetch('/api/commands', {method: 'POST'})</script>\n`
+    const text = `---\nname: ${untrusted}\ndescription: Read it\n---\n\n# ${untrusted}\n\n<script>fetch('/api/v1/tasks', {method: 'POST'})</script>\n`
     Object.assign(contents, {
       text,
       manifest: {
         front_matter: [{ key: 'name', value: untrusted }, { key: 'description', value: 'Read it' }],
-        body: `\n# ${untrusted}\n\n<script>fetch('/api/commands', {method: 'POST'})</script>\n`
+        body: `\n# ${untrusted}\n\n<script>fetch('/api/v1/tasks', {method: 'POST'})</script>\n`
       }
     })
 
@@ -298,7 +298,7 @@ describe('what somebody else wrote in one', () => {
     expect(page.get('[data-testid="declaration"] td').text()).toBe(untrusted)
     const body = page.get('[data-testid="body"]')
     expect(body.get('h3').text()).toBe(untrusted)
-    expect(body.text()).toContain('<script>fetch(\'/api/commands\', {method: \'POST\'})</script>')
+    expect(body.text()).toContain('<script>fetch(\'/api/v1/tasks\', {method: \'POST\'})</script>')
     expect(page.get('[data-testid="text"]').text()).toBe(text.trimEnd())
   })
 })

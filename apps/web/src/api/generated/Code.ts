@@ -2,8 +2,9 @@
 import type { CoreCode } from "./CoreCode";
 
 /**
- * Every code a front end is handed for what went wrong: core's, and the
- * CLI's own beside them. Unique across both, and never renamed once given.
+ * Every code a front end is handed for what went wrong: core's, the CLI's
+ * own and the local server's beside them. Unique across the three, and
+ * never renamed once given.
  */
 export type Code =
   | CoreCode
@@ -33,10 +34,34 @@ export type Code =
   | "line_unparsed"
   | "panel_unbound"
   | "panel_failed"
+  | "token_file_exists"
+  | "token_file_folder_missing"
+  | "token_file_unwritable"
+  | "token_file_unremoved"
   | "opens_screen"
   | "opens_editor"
   | "reads_stdin"
   | "prints_shell_code"
   | "gather_unwatched"
   | "show_unheld"
-  | "serves_panel";
+  | "serves_panel"
+  | "token_required"
+  | "unknown_host"
+  | "foreign_origin"
+  | "same_origin_required"
+  | "x_mindflayer_required"
+  | "json_required"
+  | "malformed_json"
+  | "invalid_body"
+  | "body_too_large"
+  | "body_unreadable"
+  | "body_refused"
+  | "unknown_parameter"
+  | "repeated_parameter"
+  | "malformed_parameter"
+  | "missing_parameter"
+  | "invalid_parameters"
+  | "unknown_route"
+  | "method_not_allowed"
+  | "backend_failed"
+  | "writer_stopped";

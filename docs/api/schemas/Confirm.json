@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Confirm",
+  "description": "One thing a line of a task takes away, which the panel has somebody\nconfirm before it asks for the run: an item of a preview's `confirm`,\none for each [`Caution`] of each line ([`cautioned`]).\n\nThe words beside the word, so the panel says what a line takes in the\nCLI's words rather than its own, and draws by the word alone.",
+  "type": "object",
+  "properties": {
+    "caution": {
+      "description": "What it takes away.",
+      "$ref": "#/$defs/Caution"
+    },
+    "line": {
+      "description": "Which of the preview's lines, by its place among them, from 0.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "message": {
+      "description": "The same, said for whoever is asked.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "line",
+    "caution",
+    "message"
+  ],
+  "$defs": {
+    "Caution": {
+      "description": "What a command line takes away, which a front end asks somebody to\nconfirm before it runs the line: what [`cautions`] reads off the parsed\ncommand, as [`refused`] reads a refusal, so a line is asked about the\nsame way whatever task it came from, and by every front end.\n\nOne list, here, rather than one per front end: the panel holds no rules\n(D-18), so which of its lines need a yes first is said with each preview\nit is answered with, in these words, and a list in TypeScript would be a\nsecond place for a command to be forgotten. The TUI asks its own\nquestions, worded for the row they are about, before it builds a task.\n\nOnly what takes something away, or writes over somebody's work: a line\nthat only adds, or that changes what is installed where its agents now\nread, is shown before it runs and runs once asked. And never a dry run,\nwhich a line of a command that takes `--yes` is without it: it takes\nnothing away, and says what it would.",
+      "oneOf": [
+        {
+          "description": "`remove --yes`, at either level: the artifact deleted.",
+          "type": "string",
+          "const": "removes"
+        },
+        {
+          "description": "`uninstall`, every form of it, and `flayer remove --everywhere\n--yes`, which uninstalls from every project first.",
+          "type": "string",
+          "const": "uninstalls"
+        },
+        {
+          "description": "`unlink`, at either level.",
+          "type": "string",
+          "const": "unlinks"
+        },
+        {
+          "description": "`unload`, at either level: `unlink`'s twin, for a loaded workspace,\nwhose copies in the projects are left orphaned.",
+          "type": "string",
+          "const": "unloads"
+        },
+        {
+          "description": "`--force`: on `install` and `uninstall`, and on `update` that is\ntold `--yes`.",
+          "type": "string",
+          "const": "forces"
+        }
+      ]
+    }
+  }
+}

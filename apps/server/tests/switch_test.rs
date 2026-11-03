@@ -25,7 +25,7 @@ async fn a_switch_is_answered_with_what_the_backend_acts_on_and_told_to_every_su
     let token = Auth::Bearer(server.token());
     let mut stream = opened(&server, token).await;
 
-    let reply = post(&server, "/api/switch", token, json!({ "to": "beta" })).await;
+    let reply = post(&server, "/api/v1/switch", token, json!({ "to": "beta" })).await;
 
     assert_eq!(reply.status, StatusCode::OK, "{}", reply.text());
     assert_eq!(reply.json(), json!({ "on": "beta" }));
@@ -45,8 +45,8 @@ async fn a_stream_opened_after_a_switch_is_told_how_many_there_were() {
     let (server, _) = launch();
     let token = Auth::Bearer(server.token());
 
-    post(&server, "/api/switch", token, json!({ "to": "beta" })).await;
-    post(&server, "/api/switch", token, json!({ "to": "gamma" })).await;
+    post(&server, "/api/v1/switch", token, json!({ "to": "beta" })).await;
+    post(&server, "/api/v1/switch", token, json!({ "to": "gamma" })).await;
     let mut stream = subscribe(&server, token).await;
 
     assert_eq!(
@@ -54,7 +54,7 @@ async fn a_stream_opened_after_a_switch_is_told_how_many_there_were() {
         json!({"type": "resync", "switches": 2})
     );
     assert_eq!(stream.next().await, json!({"type": "watching"}));
-    post(&server, "/api/switch", token, json!({ "to": "beta" })).await;
+    post(&server, "/api/v1/switch", token, json!({ "to": "beta" })).await;
     assert_eq!(
         stream.next().await,
         json!({"type": "switched", "switches": 3})
@@ -72,7 +72,7 @@ async fn a_switch_the_backend_refuses_is_a_422_with_its_code_and_switches_nothin
 
     let reply = post(
         &server,
-        "/api/switch",
+        "/api/v1/switch",
         token,
         json!({ "to": "/etc", "refuse": true }),
     )
@@ -101,11 +101,11 @@ async fn a_switch_the_backend_cannot_read_is_refused_like_any_other_body() {
         json!("beta"),
         json!({ "to": ["beta"] }),
     ] {
-        let reply = post(&server, "/api/switch", token, body.clone()).await;
+        let reply = post(&server, "/api/v1/switch", token, body.clone()).await;
 
         assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
         assert!(reply.json()["error"].is_string(), "{body}");
-        assert_eq!(reply.json()["code"], Value::Null, "{body}");
+        assert_eq!(reply.json()["code"], "invalid_body", "{body}");
     }
     assert!(runs.lock().unwrap().is_empty());
 }
@@ -121,18 +121,25 @@ async fn a_switch_that_panics_is_a_500_still_told_and_the_next_is_taken() {
 
     let reply = post(
         &server,
-        "/api/switch",
+        "/api/v1/switch",
         token,
         json!({ "to": "broken", "panic": true }),
     )
     .await;
     assert_eq!(reply.status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(
+        reply.json(),
+        json!({
+            "error": "the backend panicked while switching",
+            "code": "backend_failed",
+        })
+    );
+    assert_eq!(
         stream.next().await,
         json!({"type": "switched", "switches": 1})
     );
 
-    let reply = post(&server, "/api/switch", token, json!({ "to": "after" })).await;
+    let reply = post(&server, "/api/v1/switch", token, json!({ "to": "after" })).await;
     assert_eq!(reply.status, StatusCode::OK);
     assert_eq!(*runs.lock().unwrap(), ["switch after"]);
 }
@@ -151,14 +158,14 @@ async fn a_switch_waits_for_the_run_before_it_and_the_run_after_it_waits_for_it(
     };
 
     let release = Release(Arc::clone(&hold));
-    let first = sent("/api/commands", json!({ "name": "first", "hold": true }));
+    let first = sent("/api/v1/tasks", json!({ "name": "first", "hold": true }));
     let reached = Arc::clone(&hold);
     tokio::task::spawn_blocking(move || reached.reached())
         .await
         .unwrap();
-    let switched = sent("/api/switch", json!({ "to": "beta" }));
+    let switched = sent("/api/v1/switch", json!({ "to": "beta" }));
     tokio::time::sleep(Duration::from_millis(100)).await;
-    let after = sent("/api/commands", json!({ "name": "after" }));
+    let after = sent("/api/v1/tasks", json!({ "name": "after" }));
     tokio::time::sleep(Duration::from_millis(100)).await;
     assert_eq!(*runs.lock().unwrap(), ["start first"], "it landed mid-run");
     drop(release);
@@ -184,10 +191,10 @@ async fn a_switch_is_kept_in_no_transcript() {
     let (server, _) = launch();
     let token = Auth::Bearer(server.token());
 
-    post(&server, "/api/commands", token, json!({ "name": "a" })).await;
-    post(&server, "/api/switch", token, json!({ "to": "beta" })).await;
+    post(&server, "/api/v1/tasks", token, json!({ "name": "a" })).await;
+    post(&server, "/api/v1/switch", token, json!({ "to": "beta" })).await;
 
-    let transcript = get(&server, "/api/transcript", token).await.json();
+    let transcript = get(&server, "/api/v1/transcript", token).await.json();
     assert_eq!(transcript.as_array().unwrap().len(), 1, "{transcript}");
 }
 
@@ -207,7 +214,7 @@ async fn once_switched_what_the_backend_names_now_is_watched_and_not_what_it_nam
 
     let reply = post(
         &server,
-        "/api/switch",
+        "/api/v1/switch",
         token,
         json!({ "to": "beta", "watch": [after.path()] }),
     )
@@ -238,7 +245,7 @@ async fn a_switch_naming_paths_where_nothing_was_watched_starts_watching_them() 
 
     post(
         &server,
-        "/api/switch",
+        "/api/v1/switch",
         token,
         json!({ "to": "beta", "watch": [after.path()] }),
     )

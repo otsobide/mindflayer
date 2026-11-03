@@ -1,0 +1,908 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Project",
+  "description": "One entry in a workspace's registry, and the project it opens.",
+  "type": "object",
+  "properties": {
+    "agents": {
+      "description": "The agents its settings name, in report order: a slot each for every\nartifact's own, so they line up.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Agent"
+      }
+    },
+    "artifacts": {
+      "description": "Everything it holds, authored, received or somebody's, by kind and\nthen name, the rules its `AGENTS.md` block holds among them (D-23).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Held"
+      }
+    },
+    "directories": {
+      "description": "Where it authors each kind, as a route from it.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Directory"
+      }
+    },
+    "entry": {
+      "description": "The entry as the marker spells it, which `-p` and `unlink` take; none\nfor a project no workspace links.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "failures": {
+      "description": "What could not be read in it and is no artifact's: a folder that\ncannot be listed, the ledger, its templates.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Said"
+      }
+    },
+    "health": {
+      "description": "How it stands as a whole, from everything below. A [`Listing`] read\nfor some kinds tells it from what it read of them, as it counts the\ntally, and from `misplaced`, which no listing narrows: a skill that\ndoes not read leaves `ok` a project listed for its rules. Reading\nevery kind for the health alone was the other way, which would weigh\na failure the listing says nowhere.",
+      "$ref": "#/$defs/Health"
+    },
+    "id": {
+      "description": "The id its settings name it by (D-09), which a move is followed by.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectId"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "marker": {
+      "description": "The file its marker is read from, which says an older one `mind\nmigrate` moves.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MarkerFile"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "migrates": {
+      "description": "Whether `mind migrate` has it to move: an older marker marks it, a\n`mind.toml` or a `settings.json`, whose settings nothing but that\nmove changes ([`MindProject::changeable`]); false for an entry that\nopens no project. Told here rather than by a front end comparing\n`marker` with the file it knows to be the newest, which would be the\nrule written again, and wrong once a newer one is.",
+      "type": "boolean"
+    },
+    "misplaced": {
+      "description": "Each folder its settings name in `targets` that no install uses.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Said"
+      }
+    },
+    "missed": {
+      "description": "Each rule it received that some of its agents read nowhere.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Missed"
+      }
+    },
+    "name": {
+      "description": "What its marker calls it; none for an entry that opens no project.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "path": {
+      "description": "Where it points.",
+      "type": "string"
+    },
+    "settings": {
+      "description": "What its settings say, which a change of them starts from; none for\na project a `mind.toml` marks, which has none to change.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectSettings"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stale": {
+      "description": "Why its entry opens no project, when it does not: listed rather than\nleft out, since it is the one somebody has to find to unlink it.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Said"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tally": {
+      "description": "How many of them are of each kind, and stand in each state.",
+      "$ref": "#/$defs/Tally"
+    },
+    "templates": {
+      "description": "What `mind add --template` can start from in it.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Template"
+      }
+    },
+    "unreached": {
+      "description": "Each kind it installs only where some of its agents do not read, as\n`status` says it.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Unreached"
+      }
+    }
+  },
+  "required": [
+    "entry",
+    "path",
+    "name",
+    "marker",
+    "migrates",
+    "id",
+    "agents",
+    "settings",
+    "stale",
+    "health",
+    "directories",
+    "artifacts",
+    "tally",
+    "templates",
+    "unreached",
+    "missed",
+    "misplaced",
+    "failures"
+  ],
+  "$defs": {
+    "Agent": {
+      "description": "A coding agent, by the name `--agents` and a project's settings take.",
+      "type": "string",
+      "enum": [
+        "claude",
+        "codex",
+        "opencode"
+      ]
+    },
+    "Directory": {
+      "description": "Where a holder keeps one kind.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "path": {
+          "description": "A route from the holder, `/` separated, or the path itself when no\nroute leads there.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ]
+    },
+    "Health": {
+      "description": "How a project stands as a whole.",
+      "type": "string",
+      "enum": [
+        "ok",
+        "attention",
+        "broken",
+        "stale"
+      ]
+    },
+    "Held": {
+      "description": "One artifact a holder holds, and how it stands there.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "The agents among its project's that read a copy of it, in report\norder.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "issues": {
+          "description": "Everything `validate` says of it, warnings included, each saying\nwhether it is one.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValidationIssue"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where what was installed came from, as `--from` takes it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "How its name stands in its project, as `status` says; none for the\nlibrary's own, which are no project's. Only a copy that reads has a\nstanding, so beside an [`unread`](Self::unread) one it is that of a\ncopy of the name elsewhere, in an agent's folder, and none when\nthere is no such copy.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/State"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "description": "The one line a listing shows; none for one whose file does not read,\nand for an install nothing of which is found.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targets": {
+          "description": "Where it is held, as routes from its holder, `/` separated, in path\norder: each copy discovery found, the one whose file does not read\namong them, and each place the ledger records putting one, found or\nnot.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unread": {
+          "description": "The copy whose file does not read, when one does not, and why.\nListed all the same, by the name its place gives it, because a file\nthat does not read is the one most in need of opening.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Unread"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "summary",
+        "state",
+        "agents",
+        "origin",
+        "targets",
+        "issues",
+        "unread"
+      ]
+    },
+    "Kind": {
+      "description": "A kind of artifact, by the word a command line takes for it.",
+      "type": "string",
+      "enum": [
+        "skill",
+        "rule"
+      ]
+    },
+    "KindCount": {
+      "description": "How many of one kind.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        }
+      },
+      "required": [
+        "kind",
+        "count"
+      ]
+    },
+    "KindTargets": {
+      "description": "The folders a project's settings install one kind in.",
+      "type": "object",
+      "properties": {
+        "folders": {
+          "description": "Each folder as the settings spell it, `/` separated.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        }
+      },
+      "required": [
+        "kind",
+        "folders"
+      ]
+    },
+    "MarkerFile": {
+      "description": "The file inside `.mind` a project's marker is read from.",
+      "type": "string",
+      "enum": [
+        "mind.toml",
+        "settings.json",
+        "settings.toml"
+      ]
+    },
+    "Missed": {
+      "description": "One artifact a project received that some of its agents read nowhere,\nand those agents.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "The agents among the project's that read it nowhere, in report\norder. Never empty.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "agents"
+      ]
+    },
+    "ProjectId": {
+      "description": "A project's id: 128 random bits, written as 32 lowercase hexadecimal digits.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    },
+    "ProjectSettings": {
+      "description": "What a project's settings say, as a change of them takes it.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "Its agents, in the order its settings name them, which a change\nkeeps for the ones it keeps: not report order, which\n[`Project::agents`] is in.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "edit_tracked": {
+          "type": "boolean"
+        },
+        "share": {
+          "$ref": "#/$defs/Share"
+        },
+        "targets": {
+          "description": "Each kind it names `targets` for, in report order: none when every\nkind goes where its agents read.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KindTargets"
+          }
+        }
+      },
+      "required": [
+        "agents",
+        "share",
+        "edit_tracked",
+        "targets"
+      ]
+    },
+    "Said": {
+      "description": "An error as a serialized type holds one: its code, for a front end to act\non, and its message, for whoever reads it.\n\nBuilt where the type is serialized, or kept in what a front end reads\n(the workspace's snapshot), in place of the error, since an error\nholds what JSON has no shape for (an `io::Error`, a parser's own), and\nonly these two are meant to leave core. Its fields are public for a\nfront end that reads the snapshot as Rust rather than as JSON, the TUI.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "Written through [`redacted`](crate::url::redacted), as every URL\nis: an error can quote one, a source's among them, and what built\nthe error is no promise that it carries no credential.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "Share": {
+      "description": "Whether what is installed into a project reaches the team, as the\nsettings file and `mind share` spell it.",
+      "type": "string",
+      "enum": [
+        "local",
+        "shared"
+      ]
+    },
+    "State": {
+      "description": "How an artifact stands in a project, as `status` says it.",
+      "type": "string",
+      "enum": [
+        "current",
+        "outdated",
+        "edited",
+        "missing",
+        "orphaned",
+        "foreign",
+        "authored"
+      ]
+    },
+    "StateCount": {
+      "description": "How many stand in one state.",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "state": {
+          "$ref": "#/$defs/State"
+        }
+      },
+      "required": [
+        "state",
+        "count"
+      ]
+    },
+    "Tally": {
+      "description": "How many artifacts a holder holds of each kind, and how many of them\nstand in each state.\n\nCounted here, from the rows it counts, rather than by each front end from\nthe rows it draws: a count is an answer, as which row is which artifact's\nis, and the panel counting its own would be a second set of them.",
+      "type": "object",
+      "properties": {
+        "kinds": {
+          "description": "How many of each kind it was read for, in report order, one it holds\nnone of among them: what a front end lays a column a kind out by.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KindCount"
+          }
+        },
+        "states": {
+          "description": "How many stand in each state, every state in report order, one none\nstands in among them. A row that stands in none, the library's own\nor one whose only copy does not read, is in no count here.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StateCount"
+          }
+        },
+        "total": {
+          "description": "How many, every kind together.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "total",
+        "kinds",
+        "states"
+      ]
+    },
+    "Template": {
+      "description": "A template `mind add` can start from.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "The folder or file it is, or none for one built in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "origin"
+      ]
+    },
+    "Unreached": {
+      "description": "A kind a project installs only in folders some of its agents do not read,\nand those agents.\n\nTold by where each agent reads ([`Agent::reads`]), matched by spelling and\nthen on disk, so a `.claude/skills` linked to the project's `.skills` is\nClaude reading it: pointing an agent at a folder is up to whoever keeps\nthe project, and a link is one way the report can see. An agent told\nsome other way, by a setting of its own, is beyond what docs/agents.md\nsays it reads, and is still said here.",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "description": "The agents among the project's that read none of them, in report\norder. Never empty.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Agent"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "targets": {
+          "description": "Every folder the kind is installed in, as a route from the project,\nwith `/` whatever the platform, in the order an install writes them.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "targets",
+        "agents"
+      ]
+    },
+    "Unread": {
+      "description": "A copy of an artifact whose file does not read, and why.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "The reason alone, without the path, which [`path`](Self::path)\nsays: written through [`redacted`](crate::url::redacted), as a\n[`Said`]'s message is.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Where the copy is, as a route from its holder, `/` separated: its\nplace in the folder the holder keeps its kind in, the one place a\nfile that does not read is named by ([`lifecycle::identify`]). Said\non its own, as well as among [`Held::targets`], since a copy that\nreads can sit beside it under the same name, elsewhere.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "code",
+        "message"
+      ]
+    },
+    "ValidationIssue": {
+      "description": "Something that stops an artifact from being usable, or will: its code,\nwhat it is about, whether it is only worth a warning, and its message.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_not_kebab_case"
+            },
+            "message": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "segment",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_segment_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "segment",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_directory_mismatch"
+            },
+            "directory": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "directory",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_not_a_string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_not_a_map"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_not_a_string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "key",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_repeated"
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "key",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "content_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "front_matter_unparsed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "reason",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "paths_not_strings"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_not_a_string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        }
+      ]
+    }
+  }
+}

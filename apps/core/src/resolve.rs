@@ -92,8 +92,8 @@ impl Serialize for Reason {
     }
 }
 
-#[cfg(feature = "ts")]
-crate::typescript::words! {
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
     /// The rule that chose a workspace: named on the command line,
     /// activated for the shell, found walking up, or the default in home.
     Reason by slug { Explicit, Activated, Above, Home }

@@ -1,0 +1,448 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Validation",
+  "description": "What `validate` found: each artifact it checked, with what is wrong with\nit, and the counts its verdict follows.",
+  "type": "object",
+  "properties": {
+    "artifacts": {
+      "description": "Each artifact checked, in the order the catalog lists them.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Checked"
+      }
+    },
+    "differing": {
+      "description": "How many of them have copies that do not all hold the same, which\nthe agents reading them do not all load alike.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "invalid": {
+      "description": "How many of them do not pass.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    },
+    "unreadable": {
+      "description": "How many files could not be read at all\n([`DiscoveryFailure::is_unreadable`]): none is among `artifacts`, and\neach is a warning beside them. Counted, so a check of a project whose\nfiles would not read does not pass for having found nothing wrong.",
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "artifacts",
+    "invalid",
+    "unreadable",
+    "differing"
+  ],
+  "$defs": {
+    "Checked": {
+      "description": "One artifact `validate` checked.",
+      "type": "object",
+      "properties": {
+        "copies_differ": {
+          "description": "Whether its copies do not all hold the same.",
+          "type": "boolean"
+        },
+        "invalid": {
+          "description": "Whether it does not pass: one issue that is no warning is enough\n([`ValidationIssue::is_warning`]).",
+          "type": "boolean"
+        },
+        "issues": {
+          "description": "Everything wrong with it, every copy's, warnings included, each\nsaying whether it is one.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValidationIssue"
+          }
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "description": "The directory a skill is, or the file a rule is: its first copy's.",
+          "type": "string"
+        },
+        "project": {
+          "description": "The root of what holds it: its project, or the workspace for the\nworkspace's own and what is on its shelf.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "path",
+        "project",
+        "issues",
+        "invalid",
+        "copies_differ"
+      ]
+    },
+    "Kind": {
+      "description": "A kind of artifact, by the word a command line takes for it.",
+      "type": "string",
+      "enum": [
+        "skill",
+        "rule"
+      ]
+    },
+    "ValidationIssue": {
+      "description": "Something that stops an artifact from being usable, or will: its code,\nwhat it is about, whether it is only worth a warning, and its message.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_not_kebab_case"
+            },
+            "message": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "segment",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_segment_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "segment": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "segment",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_directory_mismatch"
+            },
+            "directory": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "directory",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_too_long"
+            },
+            "length": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "length",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "compatibility_not_a_string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_not_a_map"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_not_a_string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "key",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "metadata_repeated"
+            },
+            "key": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "key",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "content_empty"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "front_matter_unparsed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "reason",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "paths_not_strings"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "description_not_a_string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "warning",
+            "message"
+          ]
+        }
+      ]
+    }
+  }
+}

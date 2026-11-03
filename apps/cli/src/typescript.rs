@@ -10,10 +10,13 @@
 
 use std::path::PathBuf;
 
-use mindflayer_core::typescript::{docs, lines, CoreCode};
+use mindflayer_core::code::CoreCode;
+use mindflayer_core::typescript::{docs, lines};
+use mindflayer_server::Condition;
 use ts_rs::{Config, TypeVisitor, TS};
 
 use crate::backend::{Confirm, Outcome, Planned, Query, Scanned, Switch};
+use crate::error::Code;
 use crate::render::Envelope;
 use crate::task::Task;
 use crate::CODES;
@@ -22,7 +25,8 @@ use crate::CODES;
 /// every type it names: a query, a task and a switch, which the panel
 /// sends; what a scan, a plan, a preview and a run are answered with, the
 /// last two what to confirm and what it produced; the envelope a reading
-/// command's `--json` prints; and every code either crate gives.
+/// command's `--json` prints; and every code core, the CLI and the server
+/// give.
 pub fn roots(visitor: &mut impl TypeVisitor) {
     visitor.visit::<Query>();
     visitor.visit::<Task>();
@@ -36,22 +40,23 @@ pub fn roots(visitor: &mut impl TypeVisitor) {
 }
 
 /// Every code what a front end hands on can hold, as the union of them:
-/// core's ([`CoreCode`]), and the CLI's own ([`CODES`]), which reach the
-/// panel beside core's in what a run says and in a refusal.
+/// core's ([`CoreCode`]), the CLI's own ([`CODES`]), which reach the panel
+/// beside core's in what a run says and in a refusal, and the server's
+/// ([`Condition::CODES`]), which every answer under `/api` it gives of its
+/// own carries: so any code a refusal hands the panel is one of these.
 ///
 /// Not the type of a warning's `code`, which stays a `string`, as a
 /// `Said`'s does: a union is a promise a test of the codes themselves
 /// keeps, and no test holds every line a command says to a code listed.
-pub struct Code;
-
 impl TS for Code {
     type WithoutGenerics = Self;
     type OptionInnerType = Self;
 
     fn docs() -> Option<String> {
         Some(docs(&[
-            " Every code a front end is handed for what went wrong: core's, and the",
-            " CLI's own beside them. Unique across both, and never renamed once given.",
+            " Every code a front end is handed for what went wrong: core's, the CLI's",
+            " own and the local server's beside them. Unique across the three, and",
+            " never renamed once given.",
         ]))
     }
 
@@ -73,6 +78,7 @@ impl TS for Code {
                 CODES
                     .iter()
                     .flat_map(|(_, codes)| codes.iter())
+                    .chain(Condition::CODES)
                     .map(|code| format!("{code:?}")),
             ),
         )

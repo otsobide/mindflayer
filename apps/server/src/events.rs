@@ -4,7 +4,7 @@
 //! hands each event to every receiver and keeps the latest few for one that
 //! has not read them. Free of axum, as the watcher is, so a desktop shell
 //! answering the panel without HTTP (D-17) takes its events from the same
-//! bus; the stream at `/api/events` is only one way of carrying them.
+//! bus; the stream at `/api/v1/events` is only one way of carrying them.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -26,6 +26,7 @@ pub const CAPACITY: usize = 64;
 /// Tagged by its name in snake_case beside its fields, as a task and a
 /// query are: `{"type": "changed", "scopes": [...]}`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
     /// Something a backend watches changed on disk, so what the panel shows

@@ -27,7 +27,13 @@ the probe behind [docs/agents.md](agents.md), run by hand against the real
 agents with the operator's own login, which is why CI never runs it.
 `scripts/serves-panel.sh` is not one either: it is what `make
 cli/release/check` runs on a release CI built ([in `make test`, and in
-CI](#in-make-test-and-in-ci)).
+CI](#in-make-test-and-in-ci)). Nor is `docs/api/schemas`, the API's JSON
+Schemas, which the crates' tests write and `make api/schemas` writes
+again ([the API's schemas come from Rust](#the-apis-schemas-come-from-rust)),
+nor `docs/api/openapi.json`, the API's OpenAPI document, which a test of
+the CLI's writes and `make api/openapi` writes again ([the API's
+description is written from both
+tables](#the-apis-description-is-written-from-both-tables)).
 
 ### The examples are a workspace
 
@@ -68,9 +74,10 @@ needs. It had grown into a reference of close to 2,800 lines, every
 command's literal output among them, which buried all of that. The
 reference moved, whole and unchanged in substance, into
 [docs/reference.md](reference.md), how to build and test into
-[docs/development.md](development.md), and literal output is the
-reference's alone: `examples_test.rs` reads its walk-through of the
-examples from there.
+[docs/development.md](development.md). No literal output is left in the
+README: the commands' is the reference's, where `examples_test.rs` reads
+its walk-through of the examples, and the HTTP API's is [its
+guide's](#the-apis-guide-runs-its-examples), written since.
 
 Every relative link in the README and under `docs/` is held to lead
 somewhere by `apps/cli/tests/docs_test.rs`: the file it names is there, an
@@ -84,6 +91,56 @@ or somebody else's outage would fail the build. It reads Markdown just far
 enough for that, skipping fenced blocks and code spans, where a link or a
 `#` is an example. Its first run found one anchor that led nowhere, in
 this document since before the move, which no check had read until then.
+
+### The API's guide runs its examples
+
+[docs/api.md](api.md) is what somebody calling [the HTTP
+API](#d-24-the-local-server-is-a-versioned-http-api) reads first (#219):
+starting the server for a script, the token, the versioning rule, every
+read with its answer, a change previewed and then run, what goes wrong and
+its codes, the events and where the API is described. Its answers are
+literal, as the reference's are, and `apps/cli/tests/api_guide_test.rs`
+holds them to the server as `examples_test.rs` holds the reference's
+walk-through to the commands. It builds the guide's workspace with the
+commands its first block shows, run in process, and finds what they
+printed there; starts `flayer ui` as the guide does, `--token-file`
+included, on port 0 with a temporary home and every agent home empty; and
+sends every `curl` line of a `console` block over loopback with the
+client `ui_test` uses (`common::panel`), holding each answer to the
+OpenAPI document (`common::contract`) before it holds it to what the guide
+shows under the line. Once it stops the server with a `SIGTERM`, as the
+guide does, what `ui` printed after its link is in the guide too, and the
+token file is gone. Every route of both tables has an example, and the
+guide's table of the server's codes is held to `Condition::ALL`, each with
+its status, so a route or a condition added fails the test until the guide
+says it.
+
+**The lines are read, not run.** curl and jq are not on every machine the
+suites run on, and a missing one would have to fail under `$CI` and be
+skipped elsewhere, as a shell is in `shells_test`, for a check that needs
+neither. So the test reads each line as a POSIX shell and curl would, as
+far as the guide writes them: single and double quotes, `$api` and
+`$token`, `-s`, `-N`, `-H`, `-d`, `-w` and `-X`, one URL, and an answer
+piped through jq with a filter that is a path. Anything else fails, naming
+it, rather than be sent as something the line does not say. It sends what
+curl sends besides, a body with no `Content-Type` as a form, so a line
+that forgets the header is answered the 415 a reader would get. An answer
+jq lays out is held to the guide's as JSON, the same values whatever the
+spaces between them, since jq's layout is not serde's; one printed as it
+came, its status after it by `-w`, as text, byte for byte. An example
+that shows no status is a 200. The few lines of shell that start the
+server in the background and wait for its link are a recipe with no
+answer, and are not run.
+
+**Pinned as the reference's examples are.** The home is a temporary folder
+that reads as `/home/you`, the port and the token are the reference's, and
+each project's id the panel's fixtures'; the guide says which of a
+reader's own values differ, and shows no time, so none is pinned. The
+event stream is shown to its first two events, `resync` and the watcher's
+word, which a subscriber is told before anything else: what follows a run
+waits on the watcher's debounce, and would come in an order no literal
+example could hold. Unix alone, as the guide's lines are a POSIX shell's
+and the server is stopped by `kill`.
 
 ### No em dash in what the repository says
 
@@ -163,7 +220,10 @@ outside to the path policy and `backend.rs` is the panel's backend ([what a
 browser may name](#what-a-browser-may-name)), which `commands/ui.rs` serves
 ([launching it](#launching-it-flayer-ui)), and `lib.rs` only says what is
 public. The backend, `ui` and the server they need are behind the crate's
-`ui` feature, on by default.
+`ui` feature, on by default. `typescript.rs` and `schema.rs` describe what
+the CLI hands the panel and the API, under the `ts` and `schema` features
+([its types come from Rust](#its-types-come-from-rust), [the API's schemas
+come from Rust](#the-apis-schemas-come-from-rust)).
 
 The split is by family. One file holding the parser, every command and the
 rendering was where every change to a command met every other, so pieces of
@@ -4215,8 +4275,14 @@ choice is made seeing where the project went.
 `apps/server` (`mindflayer-server`) is the transport under the web panel
 ([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
 binds a port, checks who is asking, carries JSON between the browser and a
-front end, and serves the panel's files. `flayer ui` runs it, over the
-CLI's backend ([launching it](#launching-it-flayer-ui), [what a browser may
+front end, and serves the panel's files. What it carries is an HTTP API for
+scripts and tools on this machine as much as for the panel, its first
+client, versioned under `/api/v1`
+([D-24](#d-24-the-local-server-is-a-versioned-http-api), [its
+routes](#its-routes-under-apiv1)), which [its guide](api.md) walks through
+with examples a test runs ([the API's guide runs its
+examples](#the-apis-guide-runs-its-examples)). `flayer ui` runs it, over the CLI's
+backend ([launching it](#launching-it-flayer-ui), [what a browser may
 name](#what-a-browser-may-name)). The token keeps out a process that
 connects without it, and [the guards](#what-keeps-other-pages-out) keep out
 other pages in the same browser: one on another port of 127.0.0.1, which the
@@ -4231,38 +4297,295 @@ It holds no rules. It cannot tell a valid task from an invalid one, a linked
 project from a path to refuse, or a skill from a rule, and it is not to learn:
 each of those answers is core's, reached through the backend, so the panel
 cannot disagree with the CLI and the TUI about any of them. What it knows is
-HTTP (routes, the token, cache headers, a log line), and none of that would
-differ between two front ends.
+HTTP (routes, the token, cache headers, a log line, the code and the status
+of each request it turns away itself, and its part of the API's
+description), and none of that would differ between two front ends.
 
-The panel's whole API is six endpoints, the first four
-[D-18](#d-18-the-panel-writes-by-running-commands) in HTTP:
+What it serves is the backend's reads, each at a route of its own from a
+table the backend hands over ([a table of reads](#a-table-of-reads)), and
+six routes of its own, from a table of its own (`Own`):
+[D-18](#d-18-the-panel-writes-by-running-commands) in HTTP, with the
+switch, the transcript, the events and the API's description beside it.
 
-- `POST /api/query`: a read, answered with JSON of the backend's own shape.
-- `POST /api/commands/preview`: the command lines a task is, and what of them
-  the panel has somebody confirm first, with nothing run.
-- `POST /api/commands`: run a task; the reply is its lines and its outcome.
-- `GET /api/transcript`: every task the session ran, with what each produced.
-- `POST /api/switch`: have the backend act on something else from now on,
-  which only it can say it may; the reply is the backend's JSON for what
-  it acts on then ([switching what it acts on](#switching-what-it-acts-on)).
-- `GET /api/events`: what happens as it happens, a change on disk or a run
-  starting and finishing, as server-sent events ([live
+### Its routes, under `/api/v1`
+
+Every route is under `/api/v1`, the version in the path
+([D-24](#d-24-the-local-server-is-a-versioned-http-api)): a route, a
+parameter or a field once served is a contract, as the envelope's names are
+under `ENVELOPE_VERSION`, so dropping or renaming one, or changing what it
+holds, moves the API to `/api/v2`, and adding one does not. In the path
+rather than in a header, so a script names the version it was written for
+where it names everything else, and one written for another meets a 404
+rather than an answer it misreads. What the snapshot holds keeps its own
+version, `view::FORMAT`, which it carries as `format`.
+
+The reads, each the CLI's ([what a browser may
+name](#what-a-browser-may-name)) and each answered with the backend's JSON:
+
+- `GET /api/v1/snapshot`: everything the workspace holds, as the panel draws
+  it ([the read model](#the-read-model)).
+- `GET /api/v1/projects`, `GET /api/v1/library` and `GET
+  /api/v1/project?entry=<entry>`: the snapshot's projects, its library, and
+  one project by its entry as the registry spells it, each read whole and
+  cut in Rust (`Snapshot::project`), so it says what the snapshot says to
+  the letter; an entry no registry holds is refused as an unlink of it is
+  (`not_registered`), a 404.
+- `GET /api/v1/files?reference=<reference>&project=<entry>` and `GET
+  /api/v1/contents?reference=<reference>&file=<route>&project=<entry>`:
+  what one artifact holds, and one file of it as text, of the project
+  `project` names or, without one, of the workspace's own.
+- `GET /api/v1/scan?root=<path>&root=<path>&depth=<n>`: what could be
+  linked under each root, as `flayer scan --suggest` finds it; no root is
+  the workspace's, and no depth the command's own.
+- `GET /api/v1/folders?path=<path>&hidden=true`: the folders directly
+  inside one, for choosing one ([choosing a folder](#choosing-a-folder)).
+- `GET /api/v1/updates`: what updating every project would do, as `flayer
+  update --all` says it without `--yes`.
+- `GET /api/v1/workspaces`: every workspace a switch may go to.
+- `POST /api/v1/plan` with `{"selection": [...]}`: what boxes of projects
+  and offers, ticked or not, amount to, the tasks that carry them out among
+  it, with nothing run.
+- `POST /api/v1/validate` with `{"holder": ..., "draft": ...}`: what core
+  says of an artifact a command is about to write, with nothing written.
+
+The server's own:
+
+- `POST /api/v1/tasks/preview`: the command lines a task is, and what of
+  them the panel has somebody confirm first, with nothing run.
+- `POST /api/v1/tasks`: run a task; the reply is its lines and what the
+  command said, its outcome, its text and each warning with its code, and
+  the state is read again afterwards, as D-24 has it, rather than answered
+  with a typed result every command would have to build.
+- `POST /api/v1/switch`: have the backend act on something else from now
+  on, which only it can say it may; the reply is the backend's JSON for
+  what it acts on then ([switching what it acts on](#switching-what-it-acts-on)).
+- `GET /api/v1/transcript`: every task the session ran, with what each
+  produced.
+- `GET /api/v1/events`: what happens as it happens, a change on disk or a
+  run starting and finishing, as server-sent events ([live
   updates](#live-updates)).
+- `GET /api/v1/openapi.json`: the API described, every route above and
+  below with what it takes, what it answers and every way it may be
+  refused, as an OpenAPI 3.1 document the backend hands over ([the API's
+  description is written from both
+  tables](#the-apis-description-is-written-from-both-tables)).
 
-Any other path under `/api` is a JSON 404, and every refusal, a body the
-backend cannot read included, is `{"error": "..."}`, so a script never has to
-parse the panel's page to learn that it typed a path wrong. One the backend
-refuses, having read it, is a 422 with the backend's code beside it,
-`{"error": "...", "code": "..."}`.
+Every answer that is no success carries a code beside its words, the
+backend's or the server's own ([every refusal with a
+code](#every-refusal-with-a-code)), so a script never has to parse the
+panel's page, nor the English, to learn what it got wrong.
+
+### Every refusal with a code
+
+Every answer under `/api` that is no success, whoever turned the request
+away, is JSON of one shape, an object of two fields and no other, with no
+exception: `error`, the words a person reads of what happened, naming the
+route, the parameter or the header, what was expected and what came; and
+`code`, the one word a script acts on, which never changes when the words
+are made clearer. One type of the server's says it, `Refused`, whichever
+turned the request away, rather than an object spelled where each is
+answered, and its schema is the API's ([the API's schemas come from
+Rust](#the-apis-schemas-come-from-rust)):
+
+```json
+{"code":"missing_parameter","error":"/api/v1/project needs `entry`, and was sent none"}
+```
+
+A 401 carries `WWW-Authenticate: Bearer` besides, and a 405 `Allow`. Outside `/api` what answers is for a person at a browser and stays
+plain text: the panel's files, the launch link's refusal of a token that
+is not this server's, a 403 for a page asked for under another name, and a
+405 for a method the panel's files do not take. None of them has a client
+that acts on a code.
+
+The code is of one of two kinds. A backend's refusal carries its front
+end's code, core's or the CLI's ([what a browser may
+name](#what-a-browser-may-name)), under a 404 or a 422 as the backend says.
+Everything else the server finds itself, and each such condition has a code
+of the server's own (`Condition`, `apps/server/src/code.rs`):
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `malformed_json` | a body that is not JSON at all |
+| 400 | `body_unreadable` | a body that could not be read whole, the connection failing under it |
+| 400 | `body_refused` | a body axum refuses in a way the server does not know by name |
+| 400 | `unknown_parameter` | a parameter the route does not take, one of the server's own routes included |
+| 400 | `repeated_parameter` | a parameter that takes one value, given more than once |
+| 400 | `malformed_parameter` | a value its parameter's shape does not read |
+| 400 | `missing_parameter` | a parameter the route needs, left out |
+| 400 | `invalid_parameters` | a GET whose parameters its route cannot make a query of |
+| 401 | `token_required` | no launch token, or another server's |
+| 403 | `unknown_host` | a Host the server does not answer to |
+| 403 | `foreign_origin` | an Origin other than the server's own page's |
+| 403 | `same_origin_required` | a change by cookie without `Sec-Fetch-Site: same-origin` |
+| 403 | `x_mindflayer_required` | a change by cookie without `X-Mindflayer: 1` |
+| 404 | `unknown_route` | a path under `/api` no route names, a version not served and the panel's old unversioned endpoints among them |
+| 404 | the backend's | a read whose parameters name what is not there |
+| 405 | `method_not_allowed` | a method the route does not take |
+| 413 | `body_too_large` | a body larger than the server reads |
+| 415 | `json_required` | a body not sent as `application/json` |
+| 422 | `invalid_body` | JSON that is not what the route reads: a task, a switch, or a read's body its route cannot make a query of |
+| 422 | the backend's | anything else the backend refuses |
+| 500 | `backend_failed` | the backend panicked while it answered, previewed, ran or switched |
+| 500 | `writer_stopped` | the thread every run and switch goes through has stopped |
+
+**The server's codes are its own**, written once. Core's `codes!` would
+write them, but the server depends on no mindflayer crate, so a macro of its
+own mirrors that one's rules: one arm for each condition, `Self::` and its
+name with its status and its code, from which a match with no wildcard
+writes `code()` and `status()`, and the same arms `ALL` and `CODES`. So a
+condition added does not compile without both, and none can be left off
+the list, which is data each route's answers are listed from rather than
+by hand: each route of either table says which conditions a request to it
+may be refused for (`Route::conditions`, `Own::conditions`), by its
+method, its parameters and what it hands the request on to, decided for
+each condition by a match with no wildcard, so a condition added is placed
+among the routes before it compiles. Named for the condition in snake_case, and never
+renamed nor moved to another condition once given, as core's are. A code
+reaches a client without the crate that gave it, so `invalid_body` must
+mean one thing whoever says it: the server cannot see core's list or the
+CLI's, and the CLI, which depends on all three crates, holds the three
+apart in the test that holds its own (`error_test.rs`), as the TypeScript
+`Code` holds all three. A test of the server's sends a request for every
+way it turns one away and holds each answer to the shape, its code one of
+`CODES` or the fake backend's, its status the one its condition names, and
+its condition one its route lists.
+
+The 415 is one condition whoever finds it, the guard on a change by cookie
+or axum's JSON extractor on a request with the token as Bearer. axum's
+rejection of a body is `#[non_exhaustive]`, as is what it carries when the
+body could not be read, so the match over it is the one place with a
+fallback: any way of not reading the body whole is `body_unreadable`, and
+a rejection axum adds later is `body_refused`, a 400, a code of its own
+rather than an answer without one, or with a code that says something
+else.
+
+Leaving the server's own conditions without a code, their status naming
+each, was #215's first choice: a code was the backend's word for a rule of
+its own, which the server has none of, and a list of the server's would be
+a second to keep unique beside core's and the CLI's. The owner's review of
+it undid that. Several conditions share a status, a 403 being any of four
+guards and a 400 any of eight, and a script tells them apart only by
+reading the words, which change whenever they are made clearer.
+
+**A backend's refusal is a 404 or a 422 as the backend says**: each
+`Refusal` carries its grounds (`Grounds::Absent` or `Grounds::Unfit`),
+set where the backend builds it (`Refusal::absent`, `Refusal::unfit`), and
+the server answers the first with a 404 and the second with a 422, never
+working out which from the code, which is the front end's word: a server
+that read it would hold a rule of the front end's, which a second front end
+could disagree with. The CLI's backend says absent for a read whose
+parameters name what is not there: an entry no registry holds (`/project`,
+or the `project` of `/files` and `/contents`), or one whose folder holds no
+project any more; an artifact nothing holds; a file or a folder that does
+not exist, or that is no file or no folder. Everything else is unfit: a
+path the policy refuses, which is refused for how it is spelled whether or
+not it is there; a task no front end without a terminal runs; a workspace
+in use that will not open, which the request names nothing of; and
+whatever a body names. A GET's parameters are part of the address of what
+it reads, so a value naming nothing makes the address name nothing, as a
+path no route serves does. A body is sent to a route that is there, so a
+task, a switch, a plan or a draft naming an entry no registry holds is a
+request not to act on, `not_registered` under a 422. Each is decided by a
+match with no wildcard over the core error it comes from
+(`backend::Absence`), so a variant core adds is decided before it
+compiles. Not core's: a status is HTTP's, and a front end with no server
+has no use for one.
+
+### A table of reads
+
+Which reads there are is the backend's, as everything a request means is:
+`Backend::routes` hands the server a table, each `Route` with its method,
+its path under the version, its parameters by name with the `Shape` each is
+read as and whether it is needed, what a POST's body holds and what it
+answers, each by the name of the backend's type for it, and a sentence on
+each. The one thing the server calls rather than reads is the route's
+`query`, how what a request sent becomes the backend's `Query`, since a
+parameter naming a holder, or a list of roots, means something only to the
+front end. So the server matches the path, reads the query string into
+JSON as each parameter's shape says, refuses what no route takes, and hands
+the rest over without knowing what any of it is; and the OpenAPI document
+is written by walking the very table that is served, rather than a second
+description beside the handlers that could disagree with them, each body
+and answer the schema of the type it names, found by that name ([the API's
+description is written from both
+tables](#the-apis-description-is-written-from-both-tables)). A handler per read in the server was the alternative, which would
+put the CLI's reads in a crate that depends on no mindflayer crate, or a
+trait method per read, which the server would have to grow with every read
+the CLI adds.
+
+- **Identifiers in parameters, never in the path.** A registry entry or a
+  reference can hold a `/` (`apps/api`, `rule:git/commits`), which a path
+  segment cannot carry without an escape every client spells its own way.
+  A route's path is words of lowercase letters, digits, `-` and `_`, which
+  the server checks as it binds (`route::check`), refusing as well a path
+  it answers itself, one taken twice and a parameter named twice, so a
+  table that cannot be served fails `bind` with why rather than panic in
+  the router or have `{name}` in a path read as a place for a value.
+- **Four shapes.** Text, a whole number, `true` or `false`, and a list, the
+  parameter given once for each value (`root=/a&root=/b`), the form a
+  browser's form and every HTTP library write one in, rather than one value
+  split at a comma a path may hold. Each read into the JSON a body would
+  hold for it, so a route reads its parameters as it would a body, into a
+  struct of its own that refuses a field it does not name; one left out is
+  absent, which the route reads as the panel's query leaves it.
+- **A parameter no route takes is refused**, as `deny_unknown_fields`
+  refuses a field: a 400 naming it and the parameters the route does take,
+  so a misspelled `projet` is said rather than read as the workspace's own.
+  So is a parameter that takes one value given twice, since which of the
+  two a read went by would be the server's guess, a value its shape does not
+  read, and one the route needs left out. The server's own routes take
+  none, and refuse one sent the same way.
+- **A read with a structure is a POST that changes nothing.** The boxes of
+  a plan and a draft to judge hold more than a query string should: their
+  route takes a body, read as a task's is, and no parameter, so a read has
+  one place for what it is sent. Never a write: a change is a task, and
+  every task is a command line ([D-18](#d-18-the-panel-writes-by-running-commands)).
+  A POST is held to the guards on a change by cookie as any is, which costs
+  the panel nothing.
+
+The CLI's table is `routes::table` (`apps/cli/src/routes.rs`): the panel's
+own reads, each the very query the panel sends for it, which a test holds
+it to, and the snapshot's projects, library and one project, which the
+panel takes from the snapshot it already holds. A test pins every route by
+its method, path, parameters, body and answer, as a test pins a report's
+JSON names, so one renamed fails it rather than reach a script written
+against the old name unnoticed, and the change is made as one that moves
+the API to `/api/v2`; `ui_test` calls every one over loopback with the
+token as Bearer.
+
+The server's own six routes are data too, so the description walks two
+tables and describes nothing by hand: `Own::ALL`, each with its method, its path,
+what its body holds and what it answers, and a sentence on each. The
+server serves each from there, its handler asked by the method the table
+says, so the table and what answers cannot disagree, and `route::check`
+keeps a backend's route off every path in it. What a body holds and what an
+answer carries are named by what they are (`Sent`, `Answer`) rather than by
+a type's name, as a backend's route names its own: a body is the backend's
+`Task` or `Switch`, a run's answer carries its `Outcome` and a switch's is
+its JSON, all types the server never names, so the description names each
+as the backend's types do, and `Answer::Events` says the stream is
+server-sent events rather than JSON. What the server answers with of its
+own, a `Preview`, a `Ran`, each `Event` and a `Refused`, has a schema of
+the server's, where what it carries of the backend's is any JSON: which of
+the backend's types fills each the description names from these words,
+and from a word for each place it carries the backend's JSON (`Carried`).
+A string naming each type, as a
+backend's route has, was the alternative, and it would have the server
+spell the CLI's names, or the trait grow one constant for each. A test pins
+the table by method, path, body and answer, and another holds each route to
+be served by its method alone.
 
 ### Generic over a backend
 
 The server is generic over a `Backend` trait whose `Query`, `Task`,
-`Outcome` and `Switch` are associated types. It deserializes into them, hands them over and
-serializes what comes back, without ever naming one. So the CLI can implement
-`Backend` with its own `Task` and depend on the server, while the server
-depends on no mindflayer crate at all, which `crate_test` checks through
-`cargo metadata`. A protocol crate holding the shared types was the
+`Outcome` and `Switch` are associated types. It deserializes into them,
+hands them over and serializes what comes back, without ever naming one; a
+`Query` it never deserializes at all, since a route of the backend's table
+makes one of what a request sent ([a table of reads](#a-table-of-reads)), so
+the trait asks nothing of it but that it can be sent to the pool. So the CLI
+can implement `Backend` with its own `Task` and depend on the server, while
+the server depends on no mindflayer crate at all, which `crate_test` checks
+through `cargo metadata`. A protocol crate holding the shared types was the
 alternative, and it would put a third crate between every change to a task
 and the code that runs it. The server's own suites use a fake backend whose
 types know nothing of mindflayer, which is the property the CLI relies on.
@@ -4281,14 +4604,27 @@ path with its scope (`Watched`), a word of the backend's own carried to the
 panel as JSON, as a query's answer is, so the server names no type of the
 front end's here either.
 
+`document` hands the server the API described, which `GET
+/api/v1/openapi.json` answers with as it is: text the front end wrote, as
+it alone knows every type a route names, with the server's part of it
+([the API's description is written from both
+tables](#the-apis-description-is-written-from-both-tables)). Without
+`self`, as `routes` is, since a description is as fixed as the types it
+describes; and text rather than a description the server would write at
+each launch, so a front end writes it once, as it builds, and a server
+built without schemars still serves it. An option of `Server`'s was the
+other place for it, and it would make a route of the server's own one it
+serves or not as a front end remembers to hand it over.
+
 Each of `query`, `preview` and `run` may refuse what it was asked with a
-`Refusal`, a code and a message, which is how a rule of the front end's
-reaches the browser without the server knowing it: a value the path policy
-does not let a browser name, or a task no front end without a terminal
-runs. A struct of the server's own rather than a fourth associated type,
-since the server builds the reply from it (a 422 of `{"error", "code"}`)
-and knows nothing more of it, and its code a `&'static str`, as a code is a
-fixed word. An answer of the backend's own shape that says it refused was
+`Refusal`, a code, a message and its grounds, which is how a rule of the
+front end's reaches the browser without the server knowing it: what a read
+names is not there, a value the path policy does not let a browser name, or
+a task no front end without a terminal runs. A struct of the server's own
+rather than a fourth associated type, since the server builds the reply
+from it (`{"error", "code"}`, a 404 or a 422 as its grounds say, [every
+refusal with a code](#every-refusal-with-a-code)) and knows nothing more of
+it, and its code a `&'static str`, as a code is a fixed word. An answer of the backend's own shape that says it refused was
 the alternative, and a preview, whose answer is the server's `Preview`, has
 no room for one.
 
@@ -4337,8 +4673,9 @@ after its reply always finds its own run there. A client that stops waiting
 does not take its task back: it was queued, and it runs. An outcome that will
 not serialize is still a run, so it is recorded, and replied, as
 `{"error": ...}` beside the lines that ran rather than turned into a 500 that
-leaves the transcript a run short. A backend that panics loses that one reply
-but not the thread, so the tasks behind it still run.
+leaves the transcript a run short. A backend that panics loses that one reply,
+a 500 of `backend_failed`, but not the thread, so the tasks behind it still
+run.
 
 The transcript is the TUI's, kept where the panel can ask for it at any time:
 runs only, since a query or a preview changes nothing there is to replay, and
@@ -4369,7 +4706,9 @@ under one name, a panel launched on a second port would overwrite the first
 one's token in the browser and lock it out.
 
 Scripts and tests send `Authorization: Bearer <token>` instead, and either is
-compared in constant time. Only `/api` asks for it: the panel's files are the
+compared in constant time. A script that did not start the panel reads the
+token from the file `flayer ui --token-file` writes
+([launching it](#launching-it-flayer-ui)). Only `/api` asks for it: the panel's files are the
 same for everybody, and a browser that has not been through the link yet still
 needs the page that will tell it so.
 
@@ -4408,7 +4747,7 @@ in `src/auth.rs`):
 
 1. **Host**, on every request: exactly one Host header, naming
    `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>` in any case, or a
-   403. The raw header and never `X-Forwarded-Host`, since no proxy stands in
+   403 (`unknown_host`). The raw header and never `X-Forwarded-Host`, since no proxy stands in
    front to have forwarded anything. An allow-list of loopback's own names,
    because a deny-list would have to guess every name an attacker can buy.
    No browser sends `[::1]` yet: the listener binds only 127.0.0.1, so a
@@ -4416,20 +4755,22 @@ in `src/auth.rs`):
    because accepting it costs nothing, and a server that also bound ::1
    would then need no change here.
 2. **Origin**, on every request that sends one: `http://` and the name in
-   Host, or a 403. That one origin, not any of the three: a page loaded as
+   Host, or a 403 (`foreign_origin`). That one origin, not any of the three: a page loaded as
    `localhost` that asks `127.0.0.1` is another origin to the browser, and
    `null`, from a sandboxed frame or a file, is no origin of the server's.
    Its absence proves nothing, since a browser leaves it off a same-origin GET
    and a script off everything. A front end may name exactly one more, the
    panel's dev server's ([through the dev
    server](#through-the-panels-dev-server)).
-3. **The token**, under `/api` only: a 401 without it.
+3. **The token**, under `/api` only: a 401 without it (`token_required`).
 4. **A change by cookie** (any method but GET and HEAD, on a request whose
    token came as the cookie) must carry `Sec-Fetch-Site: same-origin` (or a
-   403), `X-Mindflayer: 1` (or a 403) and `Content-Type: application/json`
-   (or a 415). By method rather than by endpoint, so an endpoint added later
-   is covered without being listed; `POST /api/query` is held to it as well,
-   at no cost, because the panel sends every POST alike.
+   403, `same_origin_required`), `X-Mindflayer: 1` (or a 403,
+   `x_mindflayer_required`) and `Content-Type: application/json` (or a 415,
+   `json_required`). By method rather than by endpoint, so an endpoint added later
+   is covered without being listed; a POST that only reads, `POST
+   /api/v1/plan` or `POST /api/v1/validate`, is held to it as well, at no
+   cost, because the panel sends every POST alike.
 
 Fetch Metadata answers the third kind of page directly: the browser writes
 `Sec-Fetch-Site` itself, no page can change it, and it says `same-site` for a
@@ -4462,9 +4803,18 @@ reached the page by some mistake, a gathered skill's say, could not bring a
 script with it; `script-src` is left to `default-src` and never allows
 `'unsafe-inline'`. No page can frame the panel to steer a click onto one of
 its buttons. `nosniff` holds the browser to each answer's Content-Type, so a
-page on another port that loads `/api/transcript` with a `<script>` tag has
+page on another port that loads `/api/v1/transcript` with a `<script>` tag has
 it refused rather than run. And there is no CORS layer at all: no answer
 grants another origin anything, and a preflight is never passed.
+
+Every answer under `/api`, a refusal as much as a read, carries
+`Cache-Control: no-store` besides. A read is a GET, and a browser is free
+to keep a GET's answer in the profile's cache on disk for as long as it
+likes, the whole text of an artifact's file (`/api/v1/contents`) among
+them, where a POST's was never kept. The panel loses nothing by it: what it
+read stays in Vue Query's cache while the page is open, and is asked for
+again whenever the disk changes. The panel's own files keep theirs
+([the panel's files](#the-panels-files)).
 
 What none of this stops is the server behind such a page. The browser sends
 `mf_<port>` to every port of 127.0.0.1, since cookies are not isolated by port
@@ -4630,7 +4980,9 @@ command holds each to its own rules, and the rule that no value is read as a
 flag keeps each a value.
 
 Each refusal has a code, core's or the CLI's, and the server sends it as a
-422. Nothing of a refused task runs: the server asks for its lines on the
+404 when a read's parameters name what is not there, and as a 422
+otherwise, as the backend says where it builds it ([every refusal with a
+code](#every-refusal-with-a-code)). Nothing of a refused task runs: the server asks for its lines on the
 writer thread first and never hands a refused task over, and the backend's
 run plans the task again rather than trusting that it was asked, so it meets
 the disk as it is. What does run comes back line by line
@@ -4638,7 +4990,11 @@ the disk as it is. What does run comes back line by line
 code, and the code of what stopped it, a line the parsers did not take among
 them (`line_unparsed`).
 
-Reads are held the same way. A snapshot is of the pinned workspace. A file
+Reads are held the same way. A snapshot is of the pinned workspace, and so
+are the parts of it served alone, its projects, its library and one project
+(`Query::Project`), whose entry is matched by its spelling as a task's is
+and refused as an unlink of one no registry holds is (`not_registered`, a
+404). A file
 (`Query::Contents`) is asked of the workspace's own or of a linked project by
 its entry, its artifact by a reference, and the file by its route of plain
 names from the artifact's folder, or a rule's own file name
@@ -4698,9 +5054,9 @@ A front end may keep its backend on one thing at a time and let the panel
 move it to another, as the CLI's keeps one workspace and lets the header
 switch it ([what a browser may name](#what-a-browser-may-name)). The trait
 says so generically: a fourth associated type, `Switch`, which the server
-deserializes `POST /api/switch` into and hands to `Backend::switch`, whose
-answer goes back as the backend's JSON, or a `Refusal`, sent as a 422.
-Which values may be named, and what each means, are the front end's, as a
+deserializes `POST /api/v1/switch` into and hands to `Backend::switch`, whose
+answer goes back as the backend's JSON, or a `Refusal`, sent as a 422,
+since what it names is in its body. Which values may be named, and what each means, are the front end's, as a
 task's are: the server knows no workspace, and only carries the request.
 
 It is carried to the backend on the writer thread, behind every run sent
@@ -4813,7 +5169,7 @@ before `bind` returns, so a change made as soon as the link is out is told.
 A backend that names nothing costs no watcher at all.
 
 **The events** go through a bus (`Events`), a tokio broadcast channel every
-subscriber hears all of, and out at `GET /api/events` as server-sent events,
+subscriber hears all of, and out at `GET /api/v1/events` as server-sent events,
 one `data:` line of JSON each, tagged by `type` as a task is:
 
 - `changed`, with `scopes`, each scope a change reached;
@@ -4880,7 +5236,7 @@ folder in each repository would reach it with one `node_modules`.
 
 The server prints nothing of its own accord. A front end that wants a log hands
 `Server::log` a function, and gets a line per request once it is answered,
-like `GET /api/transcript 200`: the method, the path and query, the status.
+like `GET /api/v1/transcript 200`: the method, the path and query, the status.
 Never a header, since the cookie and the Bearer token travel in them, and never
 a body.
 The value of a `token` parameter is replaced by `<redacted>` however its name
@@ -4944,9 +5300,9 @@ launch decided. The server binds 127.0.0.1 on a port the system picks, or the
 one `--port` names, and a port somebody holds fails the command
 (`panel_unbound`) rather than move to another.
 
-The link goes to stdout as soon as the server listens, the first line there
-and the only one until the transcript follows it once it stops, so a script
-reads it, and stderr says which workspace is served, on which address, and
+The link goes to stdout as soon as the server listens, and a token file
+named is written (below), the first line there and the only one until the
+transcript follows it once it stops, so a script reads it, and stderr says which workspace is served, on which address, and
 that Ctrl-C stops it. That is where `ui` parts from the rule
 that a command builds its output and hands it back to be printed
 (`Outcome`), as the TUI's screen does: the link cannot wait for the command
@@ -4960,7 +5316,13 @@ otherwise wait in turn on a server that never started.
 Ctrl-C is listened for before the link is out, through the platform's own
 listener, a Unix signal or the Windows console's Ctrl-C, rather than
 `tokio::signal::ctrl_c`, which installs its handler only once it is first
-awaited. The first stops the server taking connections and lets every
+awaited (`Stops`). On Unix a `SIGTERM` is taken as a Ctrl-C, since it is
+how `kill`, `timeout` and a service manager stop a process, and so how a
+script stops a panel it serves itself the API with: ended by the signal's
+default, `ui` would leave its token file behind (below). Not a `SIGHUP`,
+which a handler would answer even under `nohup`, replacing the ignoring
+`nohup` asks for, so a panel meant to outlive its terminal would stop with
+it. The first stops the server taking connections and lets every
 request under way be answered, a run above all, so a change is not cut off
 half way, and ends every event stream, which would otherwise be answered
 for as long as a tab stays open ([live updates](#live-updates)); the
@@ -4970,6 +5332,50 @@ closes: every line the panel ran for a task that changes something
 (`PanelBackend::transcript`), so a session in the browser can be read and
 run again from a shell. The server's own transcript, the one the panel
 shows, holds reads as well, and goes with the server.
+
+`--token-file PATH` hands what the link carries to a script that did not
+start the panel, and so cannot read its stdout (#216). Once the port is
+taken and Ctrl-C is listened for, and before the link is printed, `ui`
+writes there, as JSON, `version`, how the file is laid out (1, moved as
+`ENVELOPE_VERSION` is, when a name is dropped or renamed or holds
+something else, and not when one is added), `api`, where every route is
+served, and `token` (`TokenFile`, in `src/commands/ui.rs`). `api` is the
+server's own address under the version (`Listening::api`,
+`http://127.0.0.1:<port>/api/v1`), even with `--dev`, whose link names the
+dev server: a script sends the token as Bearer, which needs no page and so
+no dev server to serve one. The path is typed from the directory the
+command works in, as every path a command takes is, and it is one the
+person names rather than one of Mindflayer's own, in its home say: several
+panels may be served at once, each with a token of its own, and only
+whoever starts one knows which script it is for.
+
+The file is made with `create_new`, mode 0600 on Unix, and written in one
+go: whatever is at the path already, a file, a folder or a link wherever
+it leads, is refused and left as it is (`token_file_exists`), and so is a
+path whose folder is not there (`token_file_folder_missing`, since
+`--token-file` makes no folder) and one that cannot be written for any
+other reason (`token_file_unwritable`), each before anything is served
+and with no link printed. Not a temporary renamed into place, which would
+replace a link or a file somebody put there in the meantime, and never
+through a link. A link among the folders on the way is followed: the path
+is the person's own, typed on their command line, unlike one a
+repository or a browser names. Windows has no mode bits, and the file
+takes the permissions its folder passes on, which is #154's to tighten.
+
+When `ui` stops, the file is taken away, and so it is when the command
+fails once it is written, but only while it still holds what was written
+there: looked at as a link, never through one, by its length and then
+byte for byte. Anything else at the path is somebody's, left as it is,
+and said in a note, which fails nothing; one that could not be looked at
+or taken away is a warning (`token_file_unremoved`), and the command exits
+as one that went wrong, since a file it was to take away may still be
+there. A copy of what was written, put back by somebody, goes all the
+same, holding a token that opens nothing any more. Nothing else changes:
+the link, the note and the transcript are as they were, the token is
+printed nowhere the link was not, and `TokenFile` has no `Debug` to print
+it with. Nor can the panel ask for a file: a front end with no terminal
+refuses `ui` whatever its options (`Refusal::Panel`), so a browser never
+names one for it to write.
 
 The runtime is tokio's with one thread: every query goes to the blocking pool
 and every run to the server's writer thread, so it only moves bytes. `--dev`
@@ -5045,6 +5451,17 @@ the server streams ([live updates](#live-updates)). Views get it from
 `fetch`, `EventSource`, `WebSocket` or `XMLHttpRequest`: an ESLint rule
 refuses them in every other file, and a test runs the rule.
 
+It is the versioned API's first client, under `/api/v1` ([its
+routes](#its-routes-under-apiv1)): each query is asked for at the route the
+backend serves it at (`route` in `http.ts`), a GET naming what it reads in
+its parameters, a holder as the `project` its entry names, or, for a plan
+and a draft to judge, a POST whose body holds the query's own fields. One
+case for every query, so a query Rust adds is a function with no route for
+it, and the panel does not compile until it is spelled. Spelling a route is
+the transport's, as spelling a URL is; which routes there are, and what each
+becomes, is the backend's table, which a test of the CLI's holds to the
+very query the panel sends for each read, and the browser suite calls.
+
 So authentication lives in one place. The transport uses relative URLs, so
 the panel talks to whichever server sent it, on whatever port it took. The
 token travels in the cookie the launch link set, which is `HttpOnly`, so the
@@ -5114,7 +5531,7 @@ confirm are the generated `Confirm` and a change's scopes the generated
   and holds what serde writes to what ts-rs says of the field's type (a
   path is a `string` whatever its bytes, a redacted URL a `string` or
   `string | null`), and refuses a function it does not hold, read off the
-  source (`typescript::field_serializers`), core's and the CLI's, which
+  source (`described::field_serializers`), core's and the CLI's, which
   names none.
 - **What serde writes by hand is said from what it writes**, beside its
   serializer, never derived from the Rust variants, for the reason the
@@ -5122,7 +5539,7 @@ confirm are the generated `Confirm` and a change's scopes the generated
   serialize](#the-read-types-serialize)). A word (a kind, an agent, a
   state, a share mode, the rule that chose a workspace, a marker's file,
   why a scan found a directory worth linking) is
-  the union of its words, written by `typescript::words!` from the function
+  the union of its words, written by `described::words!` from the function
   the serializer calls, on every variant, matched with no wildcard so a
   variant added does not compile until it is in the union. A word whose
   type's name another's already has in TypeScript is declared under a name
@@ -5174,12 +5591,255 @@ confirm are the generated `Confirm` and a change's scopes the generated
   again; the vue-tsc half is `test (web)`'s ([in `make test`, and in
   CI](#in-make-test-and-in-ci)).
 
-OpenAPI, which #70 left out, would describe the server's routes as well as
-their bodies, at the price of a schema between the Rust and the TypeScript
-that ts-rs does without. A protocol crate holding the types, which both the
-CLI and the server would depend on, was rejected with
+The panel compiles against no OpenAPI. #70 left a description of the
+routes out, a schema between the Rust and the TypeScript that ts-rs does
+without; since [D-24](#d-24-the-local-server-is-a-versioned-http-api) the
+API is described for every other client, its types as JSON Schema ([the
+API's schemas come from Rust](#the-apis-schemas-come-from-rust)) and its
+routes as an OpenAPI 3.1 document written from the tables that serve them
+([the API's description is written from both
+tables](#the-apis-description-is-written-from-both-tables)), both beside
+the TypeScript rather than in its place: the panel's types are still read
+off serde's own attributes, and its transport still spells each route ([open
+questions](#open-questions)). A protocol crate holding the types, which both
+the CLI and the server would depend on, was rejected with
 [D-17](#d-17-the-next-front-end-is-a-local-web-panel)'s B; the types stay
 where serde's are, and the feature only reads them.
+
+### The API's schemas come from Rust
+
+What the API takes and gives is described as JSON Schema 2020-12, which
+OpenAPI 3.1 takes as it is, written from the Rust types (#217,
+[D-24](#d-24-the-local-server-is-a-versioned-http-api)) as the panel's
+TypeScript is: `docs/api/schemas`, a file a root, each holding the root's
+schema at the top and every type it names in its `$defs`, committed and
+never edited by hand. Every type the TypeScript describes is described
+there too, and beside them what the API takes or gives that the panel's
+types leave to `transport.ts` or never needed: the bodies of the two reads
+that take one (`Selected`, `Drafted`), the snapshot's projects, one project
+and its library, which three routes answer with alone, the server's own
+answers, a preview, a run, each event and a refusal (`Preview`, `Ran`,
+`Event`, `Refused`), and the token file a script reads first
+(`TokenFile`).
+
+- **Derived beside serde, as the TypeScript is.** Each type derives
+  `schemars::JsonSchema` beside its serde derive and its TypeScript, under
+  a `schema` feature of core's, the CLI's and the server's
+  (`#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]`), so a
+  plain build compiles none of it and a plain `cargo test` writes nothing.
+  schemars reads the attributes serde reads (`tag`, `content`, `flatten`,
+  `rename_all`, `skip`, `deny_unknown_fields`, `default`), so a schema
+  says what serde writes or reads; schemars 1.x, the current major, whose
+  default is 2020-12. The server derives its own under its own feature: it
+  may depend on schemars, which is no mindflayer crate, and what it carries
+  of the backend's unread, an item of a preview's `confirm`, a run's
+  `outcome`, a change's scope, is any JSON in its schemas, which backend
+  type fills it being the front end's to say, as a route's answer is.
+- **Each the way the API uses it.** serde's derive writes a field that is
+  an `Option` every time, `null` when it is none, and reads one left out
+  as none, so a schema of one way for both would call a field written
+  every time optional, or refuse a request that leaves out what serde
+  reads as none. A root the API answers with is given, described as serde
+  writes it, every field in `required`; one it is sent, a query, a task, a
+  switch and the two bodies, is taken, described as serde reads it
+  (schemars' contract). Each crate's `schema::roots` names every root and
+  which way it goes through a `Visitor`, as `typescript::roots` names the
+  TypeScript's; the server's names its own through a visitor of its own,
+  since it depends on no mindflayer crate, and the CLI lists them beside
+  its own, as the API they are part of is the one it serves.
+- **What serde writes by hand is said from what it writes**, beside its
+  serializer, as its TypeScript is, for the same reason. A word is a
+  string, one of its words, written by the same `described::words!` that
+  writes its TypeScript, from the function the serializer calls, so the
+  two descriptions cannot differ on a word; its schema's id is its Rust
+  path, so the two `Reason`s, named apart, are never taken for one. A
+  `ValidationIssue` is one object of each code, its code a constant, read
+  off the match its serializer writes from (`oneOf`); a project's id is the
+  text of its own spelling (a `pattern`); a template's origin and a skill's
+  metadata say what they are written as with `schemars(with)`, as their
+  TypeScript says it with `ts(as)`; and `CoreCode` and `Code` are the
+  strings every code is, `Code` naming `CoreCode`'s definition. A path or
+  a URL written through a function of its own is a string, which is what
+  schemars says of the type it takes, held so by a test as the
+  TypeScript's is, and the finder of such functions
+  (`described::field_serializers`) passes over a `with` of schemars',
+  which names a type rather than a function.
+- **Named as the routes name them.** A root's file is its type's name,
+  as a route names what it is sent and answers with
+  ([a table of reads](#a-table-of-reads)) and as the TypeScript names its
+  file, and `Schemas::get` finds a root's schema by it, as the API's
+  description finds the schema of each body and answer by the same name
+  among the roots ([the API's description is written from both
+  tables](#the-apis-description-is-written-from-both-tables)). A test holds every type a route of the CLI's names to be a root,
+  another every root of the panel's types to have a schema of its name,
+  and a third no two roots of the three crates to share a file. schemars
+  names each type once in a document and gives a second type of a name
+  already taken a number after it, without a word, so a test visits every
+  root of every crate into one document for each way, as a description of
+  the whole API would hold them (`Together`), and fails on a name taken
+  twice.
+- **Open where they are answers.** An answer's objects allow a field they
+  do not name, so a field added, which moves no version, does not make a
+  client that checks answers refuse it; what the API is sent is closed
+  where serde refuses a field it does not know (`deny_unknown_fields`).
+  schemars closes such a type whichever way it describes it, and a type
+  sent can be answered too (a task, a holder and a box are in what a plan
+  answers), so a root given is described with a transform that opens what
+  schemars closed (`schema::given_settings`, which `Schemas` and
+  `Together` both use), and a test holds no root given of any crate to
+  close an object. A change to what a root holds shows as a diff of its
+  file, and one that drops or renames a property, or changes what it
+  holds, is one that moves the API to `/api/v2`, as the names it
+  describes are.
+- **Held to real answers.** A test holds each schema written by hand to
+  what serde writes of every variant, and to refusing what serde never
+  writes: a word that is none, an issue missing what its code carries, an
+  id of another spelling, the list of pairs a skill's metadata is in Rust.
+  And every fixture the panel's views render, which the real backend and
+  server answer ([its fixtures come from
+  Rust](#its-fixtures-come-from-rust)), is held to the schema of what it is
+  an answer to, or was sent as: a snapshot to `Snapshot`, a read's query to
+  `Query` and its answer to what its route answers, a task, its preview and
+  its run to the CLI's and the server's types and what each carries of the
+  backend's, a refusal to `Refused`; a fixture the test does not know
+  fails it. Against the schemas closed, each object refusing a field it
+  does not name, so a schema that names less than serde writes fails as
+  surely as one that says other, and as written too, since an object
+  opened could match two members of a `oneOf` that closed match one. Validated with boon, a 2020-12 validator
+  that passes the suite of tests JSON Schema publishes and builds nothing
+  that reaches the network, its one loader, which reads a file, taken away
+  in the tests; jsonschema was the other, whose default features build an
+  HTTP client for a remote `$ref`, and which brings some thirty crates to
+  boon's six.
+- **Written again by cargo alone.** `make api/schemas` empties the folder,
+  since an export writes and never deletes, and runs the tests named for
+  it with the three crates' `schema` feature (`--lib schema`), and with
+  `ts` beside it, so the test holding every root of the panel's types to a
+  schema runs too. `make api/schemas/check` writes them the same way and
+  fails when git sees them differ from the ones committed, a file new to
+  git among them; CI runs it in `types drift (web)`, after the fixtures'
+  check, rather than in a job of its own, whose name the rulesets would
+  have to be changed by hand to require ([in `make test`, and in
+  CI](#in-make-test-and-in-ci)).
+
+Replacing ts-rs with a TypeScript written from these schemas was the other
+way, one description where there are two, and it would have the panel
+compile against what a generator makes of a schema rather than what ts-rs
+reads off serde's own attributes, and change the panel to describe the
+API. The two are written from the same attributes and the same
+hand-written words, and a test holds the TypeScript's roots within the
+schemas', so they describe one set of types.
+
+### The API's description is written from both tables
+
+The API is described, routes and all, as an OpenAPI 3.1 document (#218,
+[D-24](#d-24-the-local-server-is-a-versioned-http-api)):
+`docs/api/openapi.json`, written from Rust, committed and never edited by
+hand, and served at `GET /api/v1/openapi.json` behind the token, as every
+route is. It holds every route of the backend's table and of the server's
+own, with its method, its parameters (each name, whether it is needed and
+the schema its shape is read into, a list given once for each value), its
+body, what it answers and every status it may be refused with, the codes of
+each listed; the token's two ways in, as a Bearer token and as the launch
+link's cookie, as security schemes; the events as `text/event-stream`, with
+what each holds; and the API's version, in its server's URL, `/api/v1`,
+relative to where the document is served, and as `info.version`.
+
+- **Put together where every type is known, from the very tables served.**
+  The CLI writes it, under its `schema` feature (`openapi::document`), as
+  only the CLI knows every type a route names. The server writes its part,
+  what is HTTP and the same whatever the backend (`schema::paths`), walking
+  `Backend::routes` and `Own::ALL` as it serves them, and asks the CLI for
+  each type a route names through a trait of its own (`schema::Describe`):
+  a backend's type by the name its route gives it, found among the roots
+  of core, the CLI and the server as a file of `docs/api/schemas` is, the
+  way the route uses it; a body of the server's own by `Sent`; and what the
+  server carries of the backend's by a word of the server's (`Carried`). So
+  the server names no type of the front end's and depends on no mindflayer
+  crate still, and the CLI spells none of HTTP's rules: the statuses, the
+  headers beside a 401 and a 405, the media types and the security schemes
+  are the server's. A document written by hand beside the handlers was the
+  alternative, a second description that could disagree with them; and one
+  the server wrote whole at each launch, which would compile schemars into
+  every build.
+- **What the server carries is said of the CLI's types, on the route that
+  answers with it.** The server's own schemas say any JSON where it carries
+  the backend's ([the API's schemas come from
+  Rust](#the-apis-schemas-come-from-rust)): an item of a preview's
+  `confirm`, a run's `outcome`, a change's scope and a switch's answer.
+  Its definitions stay that, one whatever the backend, and each route's
+  answer is an `allOf` of the server's type and what fills each place, from
+  the CLI: a `Confirm`, an `Outcome`, or the `{"error"}` the writer thread
+  answers in its place when it would not serialize, a `Holder`, and a
+  `Switchable` or `null`. Filled in the definitions instead, the server's
+  own types would be described for one backend.
+- **A type sent and answered, described otherwise each way, is two
+  definitions.** schemars describes a type as serde writes it, every field
+  required and its objects open, or as serde reads it, a field read as none
+  left out of `required` and closed where serde refuses one it does not
+  know. A task, and the holders, boxes, marks and toggles it holds, are
+  sent, and are in what a plan answers too, so `components.schemas` holds
+  each way: answered under the type's name, and sent with `Sent`
+  after it (`TaskSent`), every reference to it named to match. A type both
+  ways describe alike, a word, is one definition under its own name, found
+  by narrowing the names taken alike until none is dropped, since a
+  definition naming one named apart differs too. Describing both as serde
+  reads them, which what serde writes holds to as well, was the other way,
+  and it would close what a plan answers to a field added to a task, which
+  moves no version.
+- **Every way a route may be refused, with its codes.** Every refusal is a
+  `Refused` ([every refusal with a code](#every-refusal-with-a-code)), each
+  status an answer of its own, its `code` one of an enum: the server's own
+  conditions of that status the route may meet, which its table says
+  (`Route::conditions`, `Own::conditions`), and, where the request reaches
+  the backend, what the CLI says its backend refuses with on the grounds
+  that status is (`Describe::refused`): core's codes and the CLI's own
+  (`CoreCode`, `CliCode`), as absent, a 404, only for a read named by its
+  parameters, and as unfit, a 422, anything it reaches. A 405 is listed
+  under each route, though it is the answer to another method there, since
+  OpenAPI has no place for a path's other methods; a path no route names, a
+  404 of `unknown_route`, is said in the document's description, as it is
+  no route's.
+- **The stream's events beside it.** OpenAPI 3.1 has no place for what each
+  item of a stream holds, so the events' schema is under `x-itemSchema`,
+  OpenAPI 3.2's `itemSchema` as a 3.1 document may carry it, beside a
+  `string` for the stream whole. A document of 3.2, which few tools read
+  yet, was the other way.
+- **Served as it is committed.** The CLI's backend hands the server the
+  committed file, embedded with `include_str!` (`Backend::document`), so a
+  plain build serves it without compiling schemars, and what it serves is
+  what the check holds to what Rust writes. Behind the token, though it
+  says nothing of a workspace: one rule for every route is simpler to hold
+  than a list of what may be read without it.
+- **Held to OpenAPI 3.1, offline.** A test reads the committed document with
+  oas3, a reader of OpenAPI 3.1 alone, into types of its own whose required
+  fields and closed words it must have, every operation's parameters, body
+  and answers resolved; holds every Schema Object in it to JSON Schema
+  2020-12's own meta-schema, which boon carries, and compiles each from the
+  document, so every reference names a definition it holds; and walks both
+  tables, every route served in the document and every route in it served.
+  oas3 is handed the text, and nothing is fetched. roas was the other
+  reader, which models every keyword of a schema and refuses the `uint64`
+  format schemars writes, which 3.1 allows; openapi-spec-validator-rs
+  carries 3.1's own meta-schema, but builds jsonschema, which boon was
+  chosen over, and turns on serde_json's `preserve_order` for every crate a
+  test builds, as oas3's default feature would, which it is taken without:
+  every map schemars and the commands write would come out in another
+  order.
+- **Held to every answer the tests get.** Every answer `ui_test` gets over
+  loopback, every event the stream tells it, and every answer the backend's
+  suite gets from the backend, as the server would send it, is held to the
+  schema the document gives that route for that status, with boon
+  (`common::contract`): a route answering outside its document, or with a
+  status it does not list, fails whichever test met it. The server's own
+  suite holds every refusal it brings about to a condition its route lists.
+- **Written again by cargo alone.** `make api/openapi` runs the CLI's export
+  test (`--lib openapi`) with the features `make api/schemas` builds with,
+  so the two share one build, and writes the one file over; `make
+  api/openapi/check` writes it the same way and fails when git sees it
+  differ from the one committed. CI runs it in `types drift (web)`, after
+  the schemas' check ([in `make test`, and in
+  CI](#in-make-test-and-in-ci)).
 
 ### Its views
 
@@ -5426,7 +6086,7 @@ hands it a task (`ask`) and is answered once that task's run is over, or
 was let go.
 
 - **The lines are the server's.** The preview (`POST
-  /api/commands/preview`) answers the lines the backend planned, and the
+  /api/v1/tasks/preview`) answers the lines the backend planned, and the
   dialog (`CommandDialog.vue`) shows exactly those, each as `$ line`: the
   panel puts no line together itself, so what it shows is what will run,
   quoted for a shell by the CLI. A refused preview runs nothing and says
@@ -5472,7 +6132,7 @@ was let go.
 - **The transcript is the server's.** Every page's header opens it
   (`TranscriptDrawer.vue`): every task the session ran, from any tab or
   script holding the token, each line with what it printed, read from `GET
-  /api/transcript` only while the drawer is open and again whenever a run
+  /api/v1/transcript` only while the drawer is open and again whenever a run
   finishes, since a finish and a resync mark it stale too. **Copy as
   script** copies the lines each task ran, exactly as the server previewed
   and ran them, one to a line, and nothing of the panel's own: pasted into a
@@ -5699,7 +6359,7 @@ be chosen. So a state is said by the check, the words and whether it can be
 chosen, never by colour.
 
 A choice is sent by its path as the list spells it (`Transport.switch`,
-`POST /api/switch`), and a refusal, `switch_unlisted` for a list read
+`POST /api/v1/switch`), and a refusal, `switch_unlisted` for a list read
 before it changed or `not_a_workspace` for one gone since, is a toast with
 its code and changes nothing. The server tells every tab `switched` once it
 is taken, and each lets go of the workspace before then: it resets every
@@ -5958,7 +6618,10 @@ writes nothing; written again by `make web/fixtures`, which empties the
 folder first, with cargo alone; and checked by `make web/fixtures/check`,
 which fails when git sees them differ from the ones committed, in CI's
 `types drift (web)`. A fixture drawn by hand was the other way, which
-would pass its tests while the snapshot moved under it.
+would pass its tests while the snapshot moved under it. Each is held to
+the schema of what it is an answer to as well, which holds the API's
+schemas to what the real backend answers ([the API's schemas come from
+Rust](#the-apis-schemas-come-from-rust)).
 
 ### Nothing the CSP refuses
 
@@ -6292,7 +6955,15 @@ CI gives the panel jobs of its own:
   (cli)` it was, so a drift is a check named for it, required on its own.
   It runs `make web/fixtures/check` too, for the snapshots the views' tests
   render, which drift the same way ([its fixtures come from
-  Rust](#its-fixtures-come-from-rust)).
+  Rust](#its-fixtures-come-from-rust)), and then `make api/schemas/check`,
+  for the API's schemas, which holds every fixture, as Rust has just
+  written it again, to its schema ([the API's schemas come from
+  Rust](#the-apis-schemas-come-from-rust)), and `make api/openapi/check`,
+  for the API's OpenAPI document, which holds those schemas ([the API's
+  description is written from both
+  tables](#the-apis-description-is-written-from-both-tables)): steps of a
+  job the rulesets require already, rather than a job of their own, whose
+  name they would have to be changed by hand to require.
 - **`build (cli)`** waits for `test (web)`, downloads that `dist/` before
   anything compiles, and builds the release for the runner's own triple,
   which embeds it. The runner has Node and no pnpm, so `make cli/release`
@@ -8324,8 +8995,10 @@ one machine at a time.
 ## Decisions
 
 The roadmap in [#15](https://github.com/otsobide/mindflayer/issues/15) rests on
-twenty-three decisions: twenty-two validated by the owner on 2026-10-26, and
-[D-20](#d-20-opencode-subagents-pending), still pending. They are written down
+twenty-four decisions: twenty-two validated by the owner on 2026-10-26,
+[D-24](#d-24-the-local-server-is-a-versioned-http-api) on 2026-11-03 with the
+milestone it opens, and [D-20](#d-20-opencode-subagents-pending), still
+pending. They are written down
 here so that the PRs carrying them out do not reopen them: a change that
 disagrees with one starts by changing the decision, here, with the owner. Each
 says what was chosen, why, what was turned down, and which issues it unblocks;
@@ -8880,6 +9553,71 @@ project authors nothing of but the ledger records as a rule it received
 (`LifecycleError::Received`), where "nothing named" would deny what `status`
 just listed.
 
+### D-24: The local server is a versioned HTTP API
+
+Validated by the owner on 2026-11-03, opening M8 (#215 to #219). The server's
+HTTP is an API for scripts and tools on this machine, and the panel is its
+first client: it stays bound to 127.0.0.1 behind the launch token, with every
+guard it has ([who it answers](#who-it-answers), [what keeps other pages
+out](#what-keeps-other-pages-out)). Reads are resources, each a `GET` with its
+identifiers as query parameters, since a registry entry or a reference can
+hold a `/`; a read that takes a structured body, a plan or a draft to judge,
+is a `POST` that changes nothing. Writes stay typed tasks, previewed and then
+run ([D-18](#d-18-the-panel-writes-by-running-commands)): every write is
+still a command line run through the real parser, so the API can do nothing
+the CLI cannot, and the transcript keeps it. A write answers with what the
+command said, its outcome, its text, each warning with its code and whether
+it succeeded, and the state is read again afterwards. Everything is under
+`/api/v1`, and a route, a parameter or a field once published is a contract,
+as the envelope's names are under `ENVELOPE_VERSION`: dropping or renaming
+one, or changing what it holds, moves the API to `/api/v2`, and adding one
+does not, while the snapshot's own `view::FORMAT` keeps versioning what the
+snapshot holds. It is described by JSON Schema written from the Rust types
+with `schemars`, and an OpenAPI 3.1 document written from the routes and
+those schemas, committed and checked for drift in CI (#217, #218);
+`schemars` because JSON Schema is also how an MCP tool describes its input,
+so a later MCP front end would reuse the schemas, though none is started
+until the owner says so. Rejected: keeping the private protocol and only
+documenting it, which leaves every read behind one endpoint and a tagged
+body; a REST resource for every write, which would put a second way to
+change things beside the command lines; a typed result for each write, which
+every command would have to build; reaching it from another machine, with
+TLS and accounts; and an API server or daemon of its own, which
+[D-17](#d-17-the-next-front-end-is-a-local-web-panel) already rejected.
+Unblocks #215 to #219.
+
+Carrying it out, #215 serves the reads from a table the backend hands the
+server, each route's method, path, parameters and answer as data, so the
+server matches and refuses by it without a rule of its own and the OpenAPI
+document can be written from it, and moves the tasks, the switch, the
+transcript and the events under the version, served from a table of the
+server's own in the same way ([its routes](#its-routes-under-apiv1), [a
+table of reads](#a-table-of-reads)). The panel's unversioned endpoints went in
+the same change, since the panel ships in the same binary and was their only
+client. Its follow-up, asked for in the owner's review, gives every answer
+under `/api` that is no success a code beside its words, the server's own
+conditions codes of the server's own (`Condition`), and has the backend say
+whether a refusal names what is not there, a 404, or is unfit, a 422
+([every refusal with a code](#every-refusal-with-a-code)). #216 hands the
+launch token, and where the API is, to a script that did not start the
+panel, through a file only the account reads (`flayer ui --token-file`,
+[launching it](#launching-it-flayer-ui)). #217 describes what the API takes
+and gives as JSON Schema written from the Rust types, the server's own
+answers and the token file among them, a file a root in `docs/api/schemas`,
+each found by the name a route gives its type, and checked for drift with
+the panel's types ([the API's schemas come from
+Rust](#the-apis-schemas-come-from-rust)). #218 describes the API as an
+OpenAPI 3.1 document written from both tables and those schemas, the
+server writing what is HTTP and the CLI each type a route names, served at
+`/api/v1/openapi.json` as it is committed, and holds every answer the
+tests get to it ([the API's description is written from both
+tables](#the-apis-description-is-written-from-both-tables)). #219 writes
+the guide somebody calling the API reads first, [docs/api.md](api.md),
+every example in it a `curl` line and its answer, which a test sends to
+the server and holds to what it answers ([the API's guide runs its
+examples](#the-apis-guide-runs-its-examples)). The guide says no MCP front
+end is there, and nothing more: none is started until the owner says so.
+
 ## Open questions
 
 - **A known workspace that has gone is offered nothing.** The page of
@@ -9112,13 +9850,13 @@ just listed.
   and the like in them, so no preview stands in for them.
 - **The server's replies are spelled twice.** A preview's `{lines,
   confirm}` is the server's `Preview`, a run's `{lines, outcome}` its
-  transcript's `Entry`, a refusal's `{error, code}` is built with `json!` in
-  its `api.rs`, and the stream's events are its `Event`, and all are spelled
-  again in the panel's `transport.ts`, outside
-  what is written from Rust ([its types come from
+  `Ran`, a refusal's `{error, code}` its `Refused`, and the stream's events
+  are its `Event`, each with a schema of the API's under the server's
+  `schema` feature, and all are spelled again in the panel's
+  `transport.ts`, outside what is written from Rust ([its types come from
   Rust](#its-types-come-from-rust)): the server has no `ts` feature, and its
-  own tests hold what it answers and tells. Structs of its own deriving `Serialize`,
-  and `TS` under a feature, would bring them under the drift check, at the
+  own tests hold what it answers and tells. `TS` derived beside their
+  schemas under a feature would bring them under the drift check, at the
   price of ts-rs in the one crate that depends on no mindflayer crate.
 - **The TUI asks its own questions.** It asks before an unlink, a removal,
   a relink, an adoption and applying the install screen, whatever its marks
@@ -9144,6 +9882,62 @@ just listed.
   holds it to name every query, but nothing holds the pairing to what the
   backend answers, since `Backend::query` answers any JSON. A query type
   that says its answer in Rust, written into the TypeScript with it, would.
+- **The panel spells each route again.** `route` in `http.ts` turns each
+  query into its route and parameters by hand, beside the CLI's table: a
+  route the table renames is a 404 the panel meets only once it asks,
+  which the CLI's test of each route's query and the browser suite catch
+  between them, but no type does. The table written into the panel, as its
+  types are, would let the transport build each request from it; the
+  OpenAPI document written from the table ([the API's description is
+  written from both tables](#the-apis-description-is-written-from-both-tables))
+  is one way there, which the panel does not read yet.
+- **A token file can be read before it is whole.** It is made empty and
+  written at once, before the link is printed, so a script that waits for
+  the link finds it whole, but one that waits for the file to appear may
+  read it in between, and has to read it again until it parses. A
+  temporary linked into place with `link`, which never replaces anything,
+  would have it appear whole, at the price of a second file holding the
+  token beside it for a moment, and of file systems that make no hard
+  links.
+- **A panel killed leaves its token file.** Only a stop `ui` sees takes it
+  away, a Ctrl-C or, on Unix, a `SIGTERM`: a `SIGKILL`, a `SIGHUP` (left
+  to its default for `nohup`'s sake), a Windows console closed, an abort or
+  a machine that goes down leaves the file, holding a token that opens
+  nothing, and the next launch naming that path is refused until somebody
+  takes it away. A file that said which process wrote it would let a
+  launch tell one left behind from a live panel's, but a process id is
+  reused, and telling the two apart is then a guess.
+- **On Windows the token file is as private as its folder.** It takes the
+  permissions its folder passes on, which in the account's own folders
+  keep other accounts out but in a shared one do not; an ACL of its own,
+  for the account alone, is #154's, with the rest of Windows.
+- **A refusal lists every code core and the CLI give.** The 404 and the
+  422 a backend's refusal is answered with list every code of core's and
+  the CLI's own, not those the route's query can meet, which nothing says
+  but the code each query runs; and a 404 is listed for every read named
+  by its parameters, `/scan` among them, whose roots are refused for how
+  they are spelled and never found missing. Each route naming the codes it
+  can give would hold the document closer, at the price of a list beside
+  each query that no type holds to the errors it returns.
+- **The cookie's scheme names no cookie a tool can send.** The launch
+  link's cookie is `mf_` and the server's port, one for each port so two
+  panels open at once keep their tokens apart, and OpenAPI's security
+  scheme for a cookie names one name: the document says `mf_<port>`, which
+  a client generated from it would send as it is. A script sends the
+  token as Bearer, which the document says too, and the cookie is the
+  panel's page's.
+- **The events' schema is under an extension.** OpenAPI 3.1 has no place
+  for what each item of a stream holds, so the document says it under
+  `x-itemSchema`, 3.2's `itemSchema` as a 3.1 document may carry it, which
+  no tool of 3.1 reads. Moving the document to 3.2, once the tools that
+  read OpenAPI read it, would put it where they look.
+- **Nothing builds the schemas without the TypeScript.** `make
+  api/schemas` builds the `schema` feature with `ts`, for the test holding
+  every root of the panel's types to a schema, and `make lint` lints the
+  two together, so code under `schema` that leaned on `ts` would compile
+  everywhere it is built, and fail only for whoever builds `schema` alone.
+  A run of clippy with each feature on its own would catch it, at the
+  price of another check of the workspace in every lint.
 - **WebKit where Playwright builds none.** Playwright's WebKit is built
   against Ubuntu's libraries, which its `--with-deps` installs there and on
   Debian only, so on Arch and most other systems the browser suite runs in
@@ -9170,7 +9964,8 @@ just listed.
   shell's line.
 - **What no view reads has no TypeScript.** `status` and `workspaces`
   print a `Status` and a `Known`, and `gather list` its `Offer`s, which no
-  root names, so the panel has no type for them yet; nor does `scan --json`
+  root names, so the panel has no type for them yet, nor the API a
+  schema; nor does `scan --json`
   have one for its envelope's `Scan`, the panel reading each `Found` inside
   the backend's own answer (`Scanned`), nor core's `install::Plan` and its
   `Change`, a plan reaching the panel as the backend's `Planned`, its
@@ -10118,8 +10913,8 @@ just listed.
   a second Ctrl-C. The server could hand the front end that thread to join
   once it stops, at the price of a Ctrl-C that waits for a run nobody
   watches.
-- **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, sent by
-  `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
+- **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, and with
+  SIGTERM, sent by `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
   Ctrl-C (`tokio::signal::windows::ctrl_c`), which no test sends yet (#154).
 - **A release compiled from nothing on every run.** `build (cli)` builds the
   release profile from scratch each time: every job shares one cargo cache

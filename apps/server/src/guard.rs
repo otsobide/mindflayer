@@ -11,13 +11,15 @@ use std::sync::Arc;
 
 use axum::extract::{Request, State};
 use axum::http::header::{
-    AsHeaderName, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HOST, ORIGIN, X_CONTENT_TYPE_OPTIONS,
+    AsHeaderName, CACHE_CONTROL, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HOST, ORIGIN,
+    X_CONTENT_TYPE_OPTIONS,
 };
-use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
+use axum::http::{HeaderMap, HeaderValue, Method};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 use crate::api;
+use crate::code::Condition;
 
 /// The names the server answers to, each with the server's port.
 ///
@@ -147,12 +149,14 @@ pub(crate) async fn same_origin(
     let Some(name) = hosts.named(request.headers()) else {
         return forbidden(
             path,
+            Condition::UnknownHost,
             &format!("this server answers only as {}", hosts.listed()),
         );
     };
     if !hosts.sent_from(name, request.headers()) {
         return forbidden(
             path,
+            Condition::ForeignOrigin,
             &format!(
                 "this server takes requests only from its own pages, at {}",
                 hosts.pages(name)
@@ -172,16 +176,20 @@ pub(crate) async fn same_origin(
 /// does its harm whether or not anybody reads the reply.
 ///
 /// A change is any method but GET and HEAD. By method rather than by
-/// endpoint, so an endpoint added later is covered without being listed; a
-/// query is a POST, since it has a body, and is held to the same, which costs
-/// the panel nothing, as it sends every POST alike.
+/// endpoint, so an endpoint added later is covered without being listed. A
+/// read is a GET, and needs nothing here; one that takes a body is a POST
+/// ([`route::Method::Post`]) that changes nothing, and is held to the same
+/// all the same, which costs the panel nothing, as it sends every POST
+/// alike.
 ///
-/// A refusal is its status and what to say, for the caller to answer in the
-/// API's JSON.
+/// [`route::Method::Post`]: crate::route::Method::Post
+///
+/// A refusal is its condition and what to say, for the caller to answer in
+/// the API's JSON.
 pub(crate) fn from_the_panel(
     method: &Method,
     headers: &HeaderMap,
-) -> Result<(), (StatusCode, &'static str)> {
+) -> Result<(), (Condition, &'static str)> {
     if matches!(*method, Method::GET | Method::HEAD) {
         return Ok(());
     }
@@ -191,7 +199,7 @@ pub(crate) fn from_the_panel(
     // script, and a script that should be here holds the token to send.
     if single(headers, "sec-fetch-site") != Some("same-origin") {
         return Err((
-            StatusCode::FORBIDDEN,
+            Condition::SameOriginRequired,
             "a change sent with the cookie must come from the panel's own page \
              (Sec-Fetch-Site: same-origin); a script sends the token as Bearer instead",
         ));
@@ -204,13 +212,13 @@ pub(crate) fn from_the_panel(
     // these say it again by other means, in case a browser gets one wrong.
     if single(headers, "x-mindflayer") != Some("1") {
         return Err((
-            StatusCode::FORBIDDEN,
+            Condition::XMindflayerRequired,
             "a change sent with the cookie must carry X-Mindflayer: 1, as the panel's do",
         ));
     }
     if !single(headers, CONTENT_TYPE).is_some_and(is_json) {
         return Err((
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            Condition::JsonRequired,
             "a change sent with the cookie must be JSON, sent as application/json",
         ));
     }
@@ -237,16 +245,27 @@ const POLICY: &str = "default-src 'self'; frame-ancestors 'none'";
 
 /// Send the policy with every answer, and `nosniff`, so the browser takes an
 /// answer for what its Content-Type says it is and never guesses: a page on
-/// another port that loads `/api/transcript` as a script has it refused, not
-/// run, and JSON is never mistaken for a page.
+/// another port that loads `/api/v1/transcript` as a script has it refused,
+/// not run, and JSON is never mistaken for a page.
+///
+/// And `no-store` with every answer under `/api`, refusals included, so the
+/// browser keeps none of them in the profile's cache on disk: a read is a
+/// GET, whose answer it is otherwise free to store there, the whole text of
+/// an artifact's file among them. Nothing is lost by it, since the panel
+/// keeps what it read in a cache of its own while the page is open, and
+/// asks again whenever the disk changes.
 ///
 /// No CORS layer goes with them, on purpose: without one, no answer grants
 /// another origin the right to read it, and a preflight is never passed.
 pub(crate) async fn restrict(request: Request, next: Next) -> Response {
+    let of_the_api = api::is_api(request.uri().path());
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
     headers.insert(CONTENT_SECURITY_POLICY, HeaderValue::from_static(POLICY));
     headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    if of_the_api {
+        headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
     response
 }
 
@@ -261,14 +280,16 @@ fn single<K: AsHeaderName>(headers: &HeaderMap, name: K) -> Option<&str> {
     }
 }
 
-/// A 403, in JSON under `/api` like every other refusal there, and as text
-/// anywhere else, where it is a person at a browser who reads it.
-fn forbidden(path: &str, message: &str) -> Response {
+/// A 403, in JSON with its code under `/api` like every other refusal
+/// there, and as text anywhere else, where it is a person at a browser who
+/// reads it, and the panel's files and the launch link have no client that
+/// acts on a code.
+fn forbidden(path: &str, condition: Condition, message: &str) -> Response {
     if api::is_api(path) {
-        return api::error(StatusCode::FORBIDDEN, message);
+        return api::error(condition, message);
     }
     (
-        StatusCode::FORBIDDEN,
+        condition.status(),
         [(CONTENT_TYPE, "text/plain; charset=utf-8")],
         format!("{message}\n"),
     )

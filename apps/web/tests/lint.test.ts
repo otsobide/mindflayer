@@ -14,19 +14,19 @@ async function broken(path: string, code: string): Promise<string[]> {
 
 describe('the rule that keeps the network in the transport', () => {
   it('refuses fetch anywhere but the transport', async () => {
-    expect(await broken('src/pages/sneaky.ts', 'export const answer = fetch(\'/api/query\')\n'))
+    expect(await broken('src/pages/sneaky.ts', 'export const answer = fetch(\'/api/v1/snapshot\')\n'))
       .toEqual(['no-restricted-globals'])
   })
 
   it('refuses it reached through window or globalThis', async () => {
-    expect(await broken('src/stores/sneaky.ts', 'export const answer = window.fetch(\'/api/query\')\n'))
+    expect(await broken('src/stores/sneaky.ts', 'export const answer = window.fetch(\'/api/v1/snapshot\')\n'))
       .toEqual(['no-restricted-properties'])
-    expect(await broken('src/stores/sneaky.ts', 'export const answer = globalThis.fetch(\'/api/query\')\n'))
+    expect(await broken('src/stores/sneaky.ts', 'export const answer = globalThis.fetch(\'/api/v1/snapshot\')\n'))
       .toEqual(['no-restricted-properties'])
   })
 
   it('refuses the other ways a page talks to a server', async () => {
-    for (const code of ['new EventSource(\'/api/events\')', 'new WebSocket(\'ws://127.0.0.1\')', 'new XMLHttpRequest()']) {
+    for (const code of ['new EventSource(\'/api/v1/events\')', 'new WebSocket(\'ws://127.0.0.1\')', 'new XMLHttpRequest()']) {
       expect(await broken('src/components/Sneaky.ts', `export const channel = ${code}\n`), code)
         .toEqual(['no-restricted-globals'])
     }
@@ -35,7 +35,7 @@ describe('the rule that keeps the network in the transport', () => {
   it('refuses fetch in a component as well', async () => {
     const component = [
       '<script setup lang="ts">',
-      'const answer = fetch(\'/api/query\')',
+      'const answer = fetch(\'/api/v1/snapshot\')',
       '</script>',
       '',
       '<template>',
@@ -48,6 +48,6 @@ describe('the rule that keeps the network in the transport', () => {
   })
 
   it('lets the transport use it', async () => {
-    expect(await broken('src/api/http.ts', 'export const answer = fetch(\'/api/query\')\n')).toEqual([])
+    expect(await broken('src/api/http.ts', 'export const answer = fetch(\'/api/v1/snapshot\')\n')).toEqual([])
   })
 })

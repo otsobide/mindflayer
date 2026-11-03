@@ -9,16 +9,20 @@
 //! back when it closes: every line that changed something, with what each
 //! said, so the session can be read and done again without the panel.
 
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::task::Poll;
 
 use mindflayer_server::{Listening, Server};
+use serde::Serialize;
 use tokio::sync::oneshot;
 
+use super::typed;
 use crate::backend::PanelBackend;
 use crate::parse::UiOptions;
-use crate::{CliError, Failure, Lookup, Outcome};
+use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// Where the panel's dev server serves it while it is worked on (`make
 /// web/dev`), as a browser writes the origin: `server.host` and
@@ -30,19 +34,30 @@ const DEV_SERVER: &str = "http://127.0.0.1:5173";
 /// in the same file): the port `--dev` listens on unless told another.
 const DEV_PORT: u16 = 7878;
 
+/// How what `--token-file` writes is laid out ([`Handed`]).
+const TOKEN_FILE_VERSION: u32 = 1;
+
 /// Serve the panel over the workspace `lookup` resolves from `directory`
 /// until Ctrl-C: what `flayer ui` and `mind ui` do.
 ///
 /// The workspace is resolved once, here, before anything listens, from the
 /// `-C`, `--home`, `-W` and agent homes this command line was given
 /// ([`PanelBackend::launch`]), and nothing the browser sends changes it. So
-/// a workspace that cannot be used, or a port that cannot be taken, is said
-/// as any command's failure is, and no link is printed.
+/// a workspace that cannot be used, a port that cannot be taken, or a token
+/// file that cannot be written ([`TokenFile::write`]), is said as any
+/// command's failure is, and no link is printed. The file is written once
+/// the port is taken, which it names, and before anything is served; it is
+/// taken away once nothing is ([`TokenFile::take_away`]).
 pub(crate) fn ui_command(
     directory: &Path,
     options: &UiOptions,
     lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
+    let token_file = options
+        .token_file
+        .as_deref()
+        .map(|path| typed(directory, path))
+        .transpose()?;
     let backend = PanelBackend::launch(directory, lookup)?;
     let root = backend.root();
     // A clone keeps what the server's ran, for the transcript.
@@ -67,7 +82,14 @@ pub(crate) fn ui_command(
         .build()
         .map_err(unserved)?;
     let served = runtime.block_on(async {
-        let interrupts = Interrupts::listen()?;
+        let stops = Stops::listen().map_err(unserved)?;
+        // Once a stop is listened for, so one sent as soon as the file is
+        // there takes it away as every other does; and before the link, so
+        // a script that waits for the link finds the file whole.
+        let handed = token_file
+            .as_deref()
+            .map(|path| TokenFile::write(path, &listening.api(), listening.token()))
+            .transpose()?;
         announce(
             &url,
             address,
@@ -75,7 +97,8 @@ pub(crate) fn ui_command(
             options,
             &mut io::stdout(),
             &mut io::stderr(),
-        )?;
+        )
+        .map_err(unserved)?;
         // Off the runtime, beside the server rather than before it: a text
         // browser runs in the foreground until it is closed, and would
         // otherwise wait for a server that never started.
@@ -83,13 +106,18 @@ pub(crate) fn ui_command(
         tokio::task::spawn_blocking(move || {
             open(&url, no_open, &mut io::stderr(), webbrowser::open);
         });
-        serve(listening, interrupts).await
+        serve(listening, stops).await.map_err(unserved)?;
+        Ok::<_, CliError>(handed)
     });
     // Without waiting for a browser still open in the foreground, which the
     // runtime would otherwise do before it let go.
     runtime.shutdown_background();
-    served.map_err(unserved)?;
-    Ok(Outcome::plain(kept.transcript()))
+    let handed = served?;
+    let mut outcome = Outcome::plain(kept.transcript());
+    if let Some(handed) = handed {
+        handed.take_away(&mut outcome);
+    }
+    Ok(outcome)
 }
 
 /// The port to listen on: the one named, or else the dev server's proxy's
@@ -131,6 +159,189 @@ fn announce(
     Ok(())
 }
 
+/// What `--token-file` writes, for a script to read where the API is and
+/// the token to send it: a contract, as the envelope's names are, so
+/// dropping or renaming a field, or changing what it holds, moves
+/// [`TOKEN_FILE_VERSION`], and adding one does not.
+///
+/// Its schema goes by what it is to the script, the token file, rather
+/// than by what this end does, which hands it over.
+#[derive(Serialize)]
+#[cfg_attr(
+    feature = "schema",
+    derive(schemars::JsonSchema),
+    schemars(rename = "TokenFile")
+)]
+pub(crate) struct Handed<'a> {
+    /// [`TOKEN_FILE_VERSION`], so a script can tell a layout it was not
+    /// written for.
+    version: u32,
+    /// Where every route is served: `http://127.0.0.1:<port>/api/v1`.
+    api: &'a str,
+    /// The launch token, to send as `Authorization: Bearer <token>`.
+    token: &'a str,
+}
+
+/// What `--token-file` holds: [`Handed`], a field to a line for whoever
+/// opens it, and ended as a text file is.
+pub(crate) fn handed(api: &str, token: &str) -> Vec<u8> {
+    let handed = Handed {
+        version: TOKEN_FILE_VERSION,
+        api,
+        token,
+    };
+    let mut text = serde_json::to_vec_pretty(&handed).expect("strings serialize");
+    text.push(b'\n');
+    text
+}
+
+/// The file `--token-file` named, written for this run, and taken away
+/// once the panel stops, only while it still holds what was written there:
+/// by [`TokenFile::take_away`], which says what kept it, or when it is
+/// dropped before that, on a failure once it was written, saying nothing.
+///
+/// Compared with what was written rather than taken away whatever it
+/// holds: the path is somebody's to write as much as the panel's, and once
+/// it holds something else that something is theirs, kept as everything
+/// somebody wrote is. A copy of what was written, put there by somebody,
+/// goes all the same: it holds a token that opens nothing any more.
+///
+/// No `Debug`, which would print the token it holds.
+struct TokenFile {
+    path: PathBuf,
+    written: Vec<u8>,
+    /// Whether [`TokenFile::take_away`] has seen to it, which dropping it
+    /// then leaves alone.
+    settled: bool,
+}
+
+/// What became of a [`TokenFile`] once the panel stopped.
+enum Settled {
+    /// It held what was written, and is gone.
+    Taken,
+    /// Somebody took it away first.
+    Gone,
+    /// It holds something else, or something else is at its path, a link
+    /// among them, which is left as it is.
+    Kept,
+}
+
+impl TokenFile {
+    /// Write where the API is and its token to `path`.
+    ///
+    /// With `create_new`, so whatever is there already, a file, a folder
+    /// or a link, is refused and left as it is: never written over, and
+    /// never written through, wherever a link would lead, as a temporary
+    /// renamed onto the path would replace it. A link among the folders on
+    /// the way is followed: the path is the person's own, typed on their
+    /// command line, unlike one a repository or a browser names. In one
+    /// write, which is done before the link is printed.
+    ///
+    /// Mode 0600 on Unix, so no account but this one reads the token.
+    /// Windows has no mode bits: the file takes the permissions its folder
+    /// passes on, which in the account's own folders let in the account,
+    /// the system and the administrators, and in a folder others share
+    /// them too. An ACL of the file's own is #154's, with the rest of
+    /// Windows.
+    fn write(path: &Path, api: &str, token: &str) -> Result<Self, CliError> {
+        let mut made = OpenOptions::new();
+        made.write(true).create_new(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut made, 0o600);
+        let mut file = made.open(path).map_err(|source| match source.kind() {
+            io::ErrorKind::AlreadyExists => CliError::TokenFileExists(path.to_owned()),
+            io::ErrorKind::NotFound => CliError::TokenFileFolderMissing(path.to_owned()),
+            _ => CliError::TokenFileUnwritable {
+                path: path.to_owned(),
+                source,
+            },
+        })?;
+        let written = handed(api, token);
+        let wrote = file.write_all(&written);
+        // Closed first, which Windows needs of a file before it is removed.
+        drop(file);
+        match wrote {
+            Ok(()) => Ok(Self {
+                path: path.to_owned(),
+                written,
+                settled: false,
+            }),
+            Err(source) => {
+                // Made a moment ago, and of no use half written.
+                let _ = fs::remove_file(path);
+                Err(CliError::TokenFileUnwritable {
+                    path: path.to_owned(),
+                    source,
+                })
+            }
+        }
+    }
+
+    /// Take the file away now the panel has stopped, and say in `outcome`
+    /// what kept it: a note when it holds something else, which is
+    /// somebody's to keep and no fault of the command's, or a warning,
+    /// which fails it, when it could not be looked at or taken away, and
+    /// a token is perhaps still there.
+    fn take_away(mut self, outcome: &mut Outcome) {
+        self.settled = true;
+        match self.settle() {
+            Ok(Settled::Taken | Settled::Gone) => {}
+            Ok(Settled::Kept) => outcome.stderr.push(Warning::from(format!(
+                "note: {}: changed since the API's address and token were written there, so \
+                 it is left as it is",
+                self.path.display()
+            ))),
+            Err(source) => {
+                let error = CliError::TokenFileUnremoved {
+                    path: self.path.clone(),
+                    source,
+                };
+                outcome
+                    .stderr
+                    .push(Warning::coded(error.code(), format!("warning: {error}")));
+                outcome.ok = false;
+            }
+        }
+    }
+
+    /// Take the file away if it holds what was written.
+    ///
+    /// Looked at as a link, never through one: a link put at the path is
+    /// somebody's, whatever it leads to. By its length first, so a large
+    /// file put in its place is never read.
+    fn settle(&self) -> io::Result<Settled> {
+        let found = match fs::symlink_metadata(&self.path) {
+            Ok(found) => found,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Settled::Gone),
+            Err(error) => return Err(error),
+        };
+        if !found.is_file() || found.len() != self.written.len() as u64 {
+            return Ok(Settled::Kept);
+        }
+        match fs::read(&self.path) {
+            Ok(held) if held == self.written => {}
+            Ok(_) => return Ok(Settled::Kept),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Settled::Gone),
+            Err(error) => return Err(error),
+        }
+        match fs::remove_file(&self.path) {
+            Ok(()) => Ok(Settled::Taken),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Settled::Gone),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+/// On a failure once the file was written: taken away all the same, with
+/// nothing said beside the failure, which is what there is to say.
+impl Drop for TokenFile {
+    fn drop(&mut self) {
+        if !self.settled {
+            let _ = self.settle();
+        }
+    }
+}
+
 /// Open the link with `opener`, unless told not to.
 ///
 /// A browser that cannot be opened is said rather than failed on: the link
@@ -152,61 +363,91 @@ fn open(
     }
 }
 
-/// Answer requests until the first Ctrl-C, then finish those under way; or,
-/// at a second, stop at once.
+/// Answer requests until the first stop asked for ([`Stops`]), then finish
+/// those under way; or, at a second, stop at once.
 ///
 /// Gracefully first, so a run the panel asked for is answered rather than
 /// cut off half way, which would leave the disk as a command killed half way
 /// does. The second is for whoever would rather have that than wait.
-async fn serve(listening: Listening, mut interrupts: Interrupts) -> io::Result<()> {
+async fn serve(listening: Listening, mut stops: Stops) -> io::Result<()> {
     let (stop, stopped) = oneshot::channel::<()>();
     let serving = tokio::spawn(listening.serve(async {
         let _ = stopped.await;
     }));
     let abort = serving.abort_handle();
     tokio::spawn(async move {
-        interrupts.next().await;
+        stops.next().await;
         let _ = stop.send(());
-        interrupts.next().await;
+        stops.next().await;
         abort.abort();
     });
     match serving.await {
         Ok(served) => served,
-        // The second Ctrl-C, which is a stop asked for.
+        // Aborted at the second stop, which is one asked for.
         Err(error) if error.is_cancelled() => Ok(()),
         Err(error) => std::panic::resume_unwind(error.into_panic()),
     }
 }
 
-/// Ctrl-C, listened for from the moment [`Interrupts::listen`] returns.
+/// A stop asked for, listened for from the moment [`Stops::listen`]
+/// returns: Ctrl-C, and on Unix the `SIGTERM` that `kill`, `timeout` and a
+/// service manager stop a process with, taken as a Ctrl-C.
 ///
 /// The platform's own listener rather than `tokio::signal::ctrl_c`, which
 /// installs its handler only once it is first awaited, after the link is
 /// out: a Ctrl-C pressed in between would end the process by the default
 /// it replaces, rather than the way every other one does.
-struct Interrupts {
+///
+/// A `SIGTERM` too, since a script that serves itself the API runs the
+/// panel in the background and stops it as it stops any process: ended by
+/// that signal's default, `ui` would leave its token file behind, and the
+/// next launch naming that path refused. Not a `SIGHUP`, which a handler
+/// would answer even under `nohup`, whose ignoring it replaces: a panel
+/// somebody meant to outlive the terminal would stop with it. On Windows
+/// the console's Ctrl-C alone; its close and shutdown events are #154's,
+/// with the rest of Windows.
+struct Stops {
     #[cfg(unix)]
-    signal: tokio::signal::unix::Signal,
+    interrupt: tokio::signal::unix::Signal,
+    #[cfg(unix)]
+    terminate: tokio::signal::unix::Signal,
     #[cfg(windows)]
-    signal: tokio::signal::windows::CtrlC,
+    interrupt: tokio::signal::windows::CtrlC,
 }
 
-impl Interrupts {
+impl Stops {
     /// Start listening. Inside the runtime, which delivers them.
     fn listen() -> io::Result<Self> {
         #[cfg(unix)]
-        let signal = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+        let stops = {
+            use tokio::signal::unix::{signal, SignalKind};
+            Self {
+                interrupt: signal(SignalKind::interrupt())?,
+                terminate: signal(SignalKind::terminate())?,
+            }
+        };
         #[cfg(windows)]
-        let signal = tokio::signal::windows::ctrl_c()?;
-        Ok(Self { signal })
+        let stops = Self {
+            interrupt: tokio::signal::windows::ctrl_c()?,
+        };
+        Ok(stops)
     }
 
-    /// The next Ctrl-C; never, once the listener has stopped, which leaves
-    /// whatever waits for one waiting rather than taking it for one.
+    /// The next stop asked for, of either kind; never, once every listener
+    /// has stopped, which leaves whatever waits for one waiting rather than
+    /// taking it for one. One stopped leaves the other's to wait for.
     async fn next(&mut self) {
-        if self.signal.recv().await.is_none() {
-            std::future::pending::<()>().await;
-        }
+        std::future::poll_fn(|context| {
+            #[cfg(unix)]
+            if let Poll::Ready(Some(())) = self.terminate.poll_recv(context) {
+                return Poll::Ready(());
+            }
+            match self.interrupt.poll_recv(context) {
+                Poll::Ready(Some(())) => Poll::Ready(()),
+                _ => Poll::Pending,
+            }
+        })
+        .await;
     }
 }
 

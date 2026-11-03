@@ -52,6 +52,7 @@ pub const FOLDERS_CAP: usize = 1000;
 /// them to be chosen.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Folders {
     /// The folder listed, absolute, as it was asked for.
     #[serde(serialize_with = "paths::lossy")]
@@ -87,6 +88,7 @@ pub struct Folders {
 /// One folder on the way down to the one listed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Crumb {
     /// Its name, or the root's path for the root, which has none.
     pub name: String,
@@ -97,6 +99,7 @@ pub struct Crumb {
 /// One folder directly inside the one listed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Folder {
     pub name: String,
     /// Where it is, absolute, as a request names it to list it in turn.
@@ -173,8 +176,8 @@ impl Serialize for Is {
 
 // Under a name of its own: `Is` alone says nothing of what it is about in
 // a folder where every type of the panel's is a file.
-#[cfg(feature = "ts")]
-crate::typescript::words! {
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
     /// What a folder is, the strongest of what it holds: a mind project, a
     /// flayer workspace, a git repository, or any other folder.
     Is as "FolderIs", by slug { Project, Workspace, Repository, Folder }

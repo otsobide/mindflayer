@@ -434,9 +434,10 @@ mind migrate [--agents AGENTS] [--local|--shared] [--yes]
                            # agents read
 
 flayer                     # the TUI: everything below, a key each
-flayer ui [--port PORT] [--no-open] [--dev]
+flayer ui [--port PORT] [--no-open] [--dev] [--token-file PATH]
                            # the control panel, in a browser, until Ctrl-C;
-                           # mind ui is the same
+                           # mind ui is the same; with --no-open and
+                           # --token-file, its API for scripts alone
 flayer init [PATH] [--skills DIR] [--rules DIR]
                            # create a .mindflayer here, or in PATH
 flayer activate [DIR] [--shell SHELL]
@@ -1805,6 +1806,9 @@ The link is the first line on stdout, and the only one while it serves, for
 a script to read; what it prints once it stops (below) follows it there.
 `--no-open` prints it without opening a browser, and a browser that cannot
 be opened, as on a machine with no display, is a warning, not a failure.
+`--token-file` writes where the API is and the token to a file of its own
+as well, for a script that did not start the panel (below, with the HTTP
+API, and in [the API's guide](api.md), which walks through it with curl).
 `mind ui` is the same command from inside a project. Either serves the
 workspace a command run there would use, decided once as it starts, from
 `-C`, `--home`, `-W` and the agent homes, until you switch to another this
@@ -1824,10 +1828,10 @@ TUI does. It sends a task; the server turns it into the command lines you
 could have typed, shows them before they run, and runs them through the same
 parser, one at a time. A command that would open a screen, an editor or a
 shell, or read standard input, is refused, and so is a path outside what
-the workspace allows, each with a reason and a code. The first Ctrl-C lets
-whatever is running finish, a second stops at once, and on the way out it
-prints every command that changed something, with what each said, as the
-TUI does when it closes:
+the workspace allows, each with a reason and a code. The first Ctrl-C (or,
+on Unix, the `SIGTERM` `kill` sends) lets whatever is running finish, a
+second stops at once, and on the way out it prints every command that
+changed something, with what each said, as the TUI does when it closes:
 
 ```
 $ flayer -W /home/you/Projects install -p /home/you/Projects/collapse skill:commit-style
@@ -2206,31 +2210,191 @@ Linux is the limit `fs.inotify.max_user_watches` sets, each page says so
 above what it shows, with a button that reads everything again.
 
 Every page works from the keyboard, its keys listed on `?`, and says every
-state in words, never by colour alone. The API under it is there for a script holding the token as a
-Bearer token: `POST /api/query` for a read (`{"type": "snapshot"}` answers
-what the panel draws, `{"type": "files", ...}` what one artifact holds,
-`{"type": "contents", ...}` one file of it, as text, `{"type": "scan",
-"roots": ["/home/you/Projects"], "depth": null}` what Discover lists,
-`{"type": "folders", "path": "/home/you/Projects", "hidden": false}` what
-the explorer lists of a folder, `null` for the workspace's, and
-`{"type": "plan", "selection": [{"project": "alpha", "reference":
-"skill:deploy", "origin": "workspace", "wanted": true}]}` what boxes of a
-project and an offer, ticked or not, amount to: the tasks that carry them
-out, beside what clashes and what is locked, with nothing run, and
-`{"type": "workspaces"}` what the header may switch to), `POST
-/api/commands/preview` for the lines a task is and what of them the panel
+state in words, never by colour alone.
+
+**An HTTP API for scripts.** What the panel asks the server is an API under
+`/api/v1`, there for any script on this machine holding the launch token,
+the one in the link `flayer ui` prints, sent as `Authorization: Bearer
+<token>`:
+
+```sh
+curl -H "Authorization: Bearer <token>" 'http://127.0.0.1:<port>/api/v1/project?entry=api'
+```
+
+[The API's guide](api.md) walks through it with curl on a small
+workspace, every answer it shows the one the server gives, as a test holds
+it; what follows here is the whole of it, in short.
+
+**With no browser**, `--no-open` and `--token-file` serve the API to
+scripts alone: nothing is opened, and where the API is and the token go to
+the file named, as well as to the link. A script that did not start the
+panel reads them there rather than from what `flayer ui` printed:
+
+```
+$ flayer ui --no-open --token-file /home/you/.local/state/mindflayer.json
+http://127.0.0.1:40185/?token=bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513
+note: serving the workspace at /home/you/Projects on 127.0.0.1:40185 until Ctrl-C
+$ cat /home/you/.local/state/mindflayer.json
+{
+  "version": 1,
+  "api": "http://127.0.0.1:40185/api/v1",
+  "token": "bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513"
+}
+```
+
+```sh
+file=/home/you/.local/state/mindflayer.json
+curl -H "Authorization: Bearer $(jq -r .token "$file")" "$(jq -r .api "$file")/snapshot"
+```
+
+The file is JSON, its names a contract as the API's are:
+
+- `version`: how the file is laid out, `1`. A name dropped or renamed, or
+  holding something else, moves it; one added does not.
+- `api`: where every route is served, `http://127.0.0.1:<port>/api/v1`,
+  the server's own address even with `--dev`.
+- `token`: the launch token, to send as `Authorization: Bearer <token>`.
+
+It is a new file, which only your account can read (mode 0600; on Windows,
+whoever its folder lets in), written whole before the link is printed, so
+a script that started the panel and waits for the link finds it whole.
+`--token-file` writes over nothing and makes no folder: anything already at
+the path, a file, a folder or a link, is left as it is and the panel is not
+served, nor is it when the file's folder does not exist. When the panel
+stops the file goes with it, unless it no longer holds what was written
+there: it is then somebody's, left as it is, and a note says so. A script
+that runs the panel in the background stops it with `kill`, whose
+`SIGTERM` is taken as a Ctrl-C, and the file goes. A panel killed rather
+than stopped (`kill -KILL`), or hung up (`SIGHUP`, which `nohup` ignores),
+leaves it, holding a token that opens nothing any more, and the path is
+refused until it is taken away. Each launch has a token of its own, so
+name a file for each panel served at once.
+
+A read is a GET naming what it reads in its parameters, and a read that
+takes a structure is a POST that changes nothing:
+
+- `GET /api/v1/snapshot`: everything the panel draws; `GET
+  /api/v1/projects`, `GET /api/v1/library` and `GET
+  /api/v1/project?entry=api`: its projects, its library and one project by
+  its entry, each as the snapshot says it.
+- `GET /api/v1/files?reference=skill:deploy` and `GET
+  /api/v1/contents?reference=skill:deploy&file=SKILL.md`: what one artifact
+  holds, and one file of it as text, with `&project=<entry>` for a project's
+  rather than the workspace's own.
+- `GET /api/v1/scan?root=/home/you/Projects&depth=2`: what Discover lists,
+  one `root` for each folder to look under, the workspace's root without
+  one.
+- `GET /api/v1/folders?path=/home/you/Projects&hidden=true`: what the
+  explorer lists of a folder, the workspace's without `path`.
+- `GET /api/v1/updates`: what Update all would do, with nothing run.
+- `GET /api/v1/workspaces`: what the header may switch to.
+- `POST /api/v1/plan` with `{"selection": [{"project": "alpha",
+  "reference": "skill:deploy", "origin": "workspace", "wanted": true}]}`:
+  what boxes of a project and an offer, ticked or not, amount to, the tasks
+  that carry them out beside what clashes and what is locked, with nothing
+  run.
+- `POST /api/v1/validate` with `{"holder": {"type": "workspace"}, "draft":
+  {"type": "add", "kind": "skill", "name": "deploy", "description": "Ship
+  a release", "template": null}}`: what Mindflayer says of an artifact
+  about to be written, with nothing written.
+
+Every change is a task, the command lines it is, as the panel's are: `POST
+/api/v1/tasks/preview` for the lines a task is and what of them the panel
 asks you to confirm (`{"lines": [...], "confirm": [...]}`), `POST
-/api/commands` to run them, which asks nobody, `POST /api/switch` with
-`{"path": "/home/you/Notes"}` to switch to a workspace that list holds,
-answered with its row, `GET
-/api/transcript` for everything the session ran, and `GET /api/events` for
-what happens as it happens, as server-sent events: `resync`, to read
-everything again, first and whenever a reader fell behind; right after it
-`watching`, or `unwatched` with a `reason` when the server cannot watch
-everything, and either again whenever that changes; `changed` when something
-watched changed; `command_started` and `command_finished` around each
-run; and `switched` once the panel acts on another workspace, to read
-everything again.
+/api/v1/tasks` to run them, which asks nobody, answered with what each line
+said, `POST /api/v1/switch` with `{"path": "/home/you/Notes"}` to switch to
+a workspace `/api/v1/workspaces` lists, answered with its row, `GET
+/api/v1/transcript` for everything the session ran, and `GET
+/api/v1/events` for what happens as it happens, as server-sent events:
+`resync`, to read everything again, first and whenever a reader fell
+behind; right after it `watching`, or `unwatched` with a `reason` when the
+server cannot watch everything, and either again whenever that changes;
+`changed` when something watched changed; `command_started` and
+`command_finished` around each run; and `switched` once the panel acts on
+another workspace, to read everything again.
+
+A POST sends its body as JSON, and says so in `Content-Type`, which curl's
+`-d` alone does not (it says a form):
+
+```sh
+curl -H "Authorization: Bearer <token>" -H 'Content-Type: application/json' \
+  -d '{"type": "link", "path": "/home/you/Projects/beta"}' \
+  'http://127.0.0.1:<port>/api/v1/tasks/preview'
+```
+
+What goes wrong is an object of two fields, `error`, what happened in
+words, naming the route, the parameter or the header, and `code`, one word
+for it that never changes when the words do, which is what a script acts
+on:
+
+```sh
+$ curl -H "Authorization: Bearer <token>" 'http://127.0.0.1:<port>/api/v1/project?entry=web'
+{"code":"not_registered","error":"web: not registered in the workspace at /home/you/Projects"}
+```
+
+Its status says which kind of thing went wrong, and the code which one:
+
+| Status | Code | What went wrong |
+| --- | --- | --- |
+| 400 | `malformed_json` | the body is not JSON |
+| 400 | `body_unreadable` | the body could not be read whole |
+| 400 | `body_refused` | the body was refused some other way |
+| 400 | `unknown_parameter` | a parameter the route does not take |
+| 400 | `repeated_parameter` | a parameter that takes one value, given twice |
+| 400 | `malformed_parameter` | a value its parameter cannot read: `depth=deep`, `hidden=yes` |
+| 400 | `missing_parameter` | a parameter the route needs, left out |
+| 400 | `invalid_parameters` | parameters the route cannot read together |
+| 401 | `token_required` | no launch token, or another server's (with `WWW-Authenticate: Bearer`) |
+| 403 | `unknown_host` | the server named otherwise than as `127.0.0.1`, `localhost` or `[::1]` on its port |
+| 403 | `foreign_origin` | sent from a page of another origin |
+| 403 | `same_origin_required` | a change sent with the panel's cookie from anywhere but its page |
+| 403 | `x_mindflayer_required` | a change sent with the panel's cookie without `X-Mindflayer: 1` |
+| 404 | `unknown_route` | a path no route names, `/api` without its version among them |
+| 404 | Mindflayer's | a read naming what is not there: `not_registered` for an entry, `not_found` for an artifact, `contents_missing` for a file, `browse_missing` for a folder |
+| 405 | `method_not_allowed` | a method the route does not take (with `Allow`) |
+| 413 | `body_too_large` | a body larger than the server reads |
+| 415 | `json_required` | a body not sent as `application/json` |
+| 422 | `invalid_body` | JSON that is not what the route reads |
+| 422 | Mindflayer's | what Mindflayer will not do, by the code of its rule: `path_relative` for a path that is not absolute, `opens_editor` for a task that needs a terminal |
+| 500 | `backend_failed` | Mindflayer failed while it answered |
+| 500 | `writer_stopped` | the thread that runs tasks has stopped |
+
+A task, a switch, a plan or a draft that names what is not there, an entry
+no registry holds say, is a 422 rather than a 404: the route it was sent
+to is there, and the code says the rest. Outside `/api`, what the server
+answers is for a person in a browser and stays text: the panel's pages, and
+the launch link's refusal of a token that is not this server's.
+
+A route, a parameter or a field once there stays as it is under
+`/api/v1`: one dropped, renamed or holding something else moves the API to
+`/api/v2`. A code is never renamed, nor given to something else.
+
+What each body and answer holds is described as JSON Schema (2020-12, the
+dialect OpenAPI 3.1 takes), one file for each in the repository's
+[`docs/api/schemas`](api/schemas), named as the type it describes:
+`Snapshot.json` for what `/api/v1/snapshot` answers, `Task.json` for a
+task as it is sent, `Ran.json` for what a run is answered with,
+`Event.json` for each event, `Refused.json` for what goes wrong, and
+`TokenFile.json` for the token file. An answer's schema leaves room for a
+field it does not name, since one added keeps the version, so a script
+that checks what it is answered with does not refuse an answer for one.
+
+The API whole, every route with its parameters, its body, its answer and
+each status it may be refused with, the codes of each listed, is described
+as an OpenAPI 3.1 document, which the panel serves behind the token, as
+every route, and the repository holds as
+[`docs/api/openapi.json`](api/openapi.json):
+
+```sh
+curl -H "Authorization: Bearer <token>" 'http://127.0.0.1:<port>/api/v1/openapi.json'
+```
+
+Its definitions are those schemas, by the same names, but for a type the
+API is both sent and answered with that is described otherwise each way, a
+task above all: as it is sent, it is named with `Sent` after it
+(`TaskSent`). What each event of `/api/v1/events` holds is under
+`x-itemSchema` on that route, as OpenAPI 3.1 has no place for what each
+item of a stream holds.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
 default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,

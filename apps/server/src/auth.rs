@@ -11,6 +11,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 
 use crate::api;
+use crate::code::Condition;
 use crate::guard;
 use crate::token::Token;
 
@@ -112,7 +113,7 @@ pub(crate) async fn require(
     match gate.credential(request.headers()) {
         None => {
             let mut response = api::error(
-                StatusCode::UNAUTHORIZED,
+                Condition::TokenRequired,
                 "this needs the launch token, as the cookie its link sets or as a Bearer token",
             );
             response
@@ -123,10 +124,10 @@ pub(crate) async fn require(
         // The browser sends the cookie for any page on the same site; only
         // the token's holder can write the header.
         Some(Credential::Cookie) => {
-            if let Err((status, message)) =
+            if let Err((condition, message)) =
                 guard::from_the_panel(request.method(), request.headers())
             {
-                return api::error(status, message);
+                return api::error(condition, message);
             }
         }
         Some(Credential::Bearer) => {}

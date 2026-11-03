@@ -83,6 +83,7 @@ impl Outcome {
 /// the code beside it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Warning {
     pub text: String,
     pub code: Option<&'static str>,
@@ -223,6 +224,7 @@ pub const ENVELOPE_VERSION: u32 = 2;
 // serializes nothing, which such a bound would refuse.
 #[derive(Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub(crate) struct Envelope<'a, T> {
     version: u32,
     data: &'a T,
@@ -234,6 +236,11 @@ pub(crate) struct Envelope<'a, T> {
 /// no code is given to, and what it says, as `warnings` says it.
 #[derive(Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(rename = "CodedWarning"))]
+#[cfg_attr(
+    feature = "schema",
+    derive(schemars::JsonSchema),
+    schemars(rename = "CodedWarning")
+)]
 struct Coded<'a> {
     code: Option<&'static str>,
     message: &'a str,

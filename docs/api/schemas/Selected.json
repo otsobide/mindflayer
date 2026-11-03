@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Selected",
+  "description": "What `POST /api/v1/plan` is sent: the boxes of projects and offers,\nticked or not, whose plan it answers with ([`Query::Plan`]).",
+  "type": "object",
+  "properties": {
+    "selection": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Cell"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "selection"
+  ],
+  "$defs": {
+    "Cell": {
+      "description": "One box of a selection: whether `project` should hold what `reference`\nnames, as `origin` offers it.\n\n`{\"project\": \"alpha\", \"reference\": \"skill:deploy\", \"origin\": \"workspace\",\n\"wanted\": true}` in JSON, which the panel sends: the project by its entry\nas the workspace's marker spells it, as a snapshot lists it, the artifact\nas a command line names it, and the origin as `--from` takes it, which\nevery listing prints. A field it does not name is refused, as a task's\nis.",
+      "type": "object",
+      "properties": {
+        "origin": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "reference": {
+          "type": "string"
+        },
+        "wanted": {
+          "description": "Whether the project should hold it from there: ticked, or not.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "reference",
+        "origin",
+        "wanted"
+      ]
+    }
+  }
+}
