@@ -218,7 +218,9 @@ under `apps/` with its own `Makefile`:
 - `apps/server` (`mindflayer-server`): the local server behind the web
   panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
   trait, `src/route.rs` the table of reads a backend hands over (`Route`,
-  `Parameter`, `Shape`, `API`) and a query string read by it,
+  `Parameter`, `Shape`, `API`), a query string read by it, and the table
+  of the server's own routes it serves beside them (`Own`, `Sent`,
+  `Answer`), which a description of the API walks with the backend's,
   `src/server.rs` binds and routes, `src/auth.rs` holds the token's
   cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
   Metadata checks and the CSP, `src/api.rs` the JSON endpoints,

@@ -533,8 +533,12 @@ async fn every_versioned_route_holds_every_guard_by_bearer_and_cookie_alike() {
     let (server, _) = launch();
     let port = server.address().port();
     let cookie = format!("{}={}", server.cookie(), server.token());
-    for route in fake_routes() {
-        let served = format!("{API}{}", route.path);
+    let paths = fake_routes()
+        .into_iter()
+        .map(|route| route.path)
+        .chain(Own::ALL.iter().map(|own| own.path()));
+    for path in paths {
+        let served = format!("{API}{path}");
         assert!(
             versioned()
                 .iter()

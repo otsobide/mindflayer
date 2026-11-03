@@ -188,12 +188,6 @@ fn a_table_the_router_would_misread_or_panic_on_is_refused() {
         (vec![route(Method::Get, "/{entry}")], "no path"),
         (vec![route(Method::Get, "/{*rest}")], "no path"),
         (vec![route(Method::Get, "/Snapshot")], "no path"),
-        (vec![route(Method::Get, "/tasks")], "answers itself"),
-        (
-            vec![route(Method::Post, "/tasks/preview")],
-            "answers itself",
-        ),
-        (vec![route(Method::Get, "/events")], "answers itself"),
         (
             vec![route(Method::Get, "/files"), route(Method::Post, "/files")],
             "twice",
@@ -209,5 +203,54 @@ fn a_table_the_router_would_misread_or_panic_on_is_refused() {
         let error = check(&routes).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::InvalidInput, "{path}");
         assert!(error.to_string().contains(why), "{path}: {error}");
+    }
+}
+
+/// The server's own routes, as a description of the API walks them, each
+/// pinned by its method, path, body and answer: a contract, as a backend's
+/// route is, so one changed fails here rather than reach a script written
+/// against it unnoticed.
+#[test]
+fn the_servers_own_routes_are_pinned_by_what_a_description_says() {
+    let pinned: Vec<_> = Own::ALL
+        .iter()
+        .map(|own| (own.method(), own.path(), own.body(), own.answers()))
+        .collect();
+
+    assert_eq!(
+        pinned,
+        [
+            (
+                Method::Post,
+                "/tasks/preview",
+                Some(Sent::Task),
+                Answer::Preview
+            ),
+            (Method::Post, "/tasks", Some(Sent::Task), Answer::Ran),
+            (
+                Method::Post,
+                "/switch",
+                Some(Sent::Switch),
+                Answer::Switched
+            ),
+            (Method::Get, "/transcript", None, Answer::Runs),
+            (Method::Get, "/events", None, Answer::Events),
+        ]
+    );
+}
+
+/// Each a path a backend's route could have been, as the router reads one,
+/// and none a backend's route may take.
+#[test]
+fn no_route_of_a_backends_may_take_a_path_the_server_answers_itself() {
+    for own in Own::ALL {
+        let error = check(&[route(own.method(), own.path())]).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "the route `{}` is one the server answers itself",
+                own.path()
+            )
+        );
     }
 }

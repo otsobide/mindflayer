@@ -24,6 +24,6 @@ mod writer;
 pub use backend::{Backend, Preview, Refusal, Watched};
 pub use events::{Event, Events, Subscription, CAPACITY};
 pub use panel::Panel;
-pub use route::{Arguments, Method, Parameter, Route, Shape, API};
+pub use route::{Answer, Arguments, Method, Own, Parameter, Route, Sent, Shape, API};
 pub use server::{Listening, Server};
 pub use watcher::{Watcher, DEBOUNCE};

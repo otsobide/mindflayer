@@ -9,12 +9,12 @@ use axum::extract::State;
 use axum::http::{Method, StatusCode, Uri};
 use axum::response::sse::{self, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, MethodRouter};
+use axum::routing::{get, on, post, MethodFilter, MethodRouter};
 use axum::Json;
 use serde_json::{json, Value};
 
 use crate::events::Events;
-use crate::route::{self, Arguments, Route};
+use crate::route::{self, Arguments, Own, Route};
 use crate::transcript::Transcript;
 use crate::watcher::Watcher;
 use crate::writer::Writer;
@@ -48,6 +48,23 @@ pub(crate) fn read<B: Backend>(route: Route<B::Query>) -> MethodRouter<Arc<Api<B
                 async move { answer(&api, &route, &uri, Some(body)).await }
             },
         ),
+    }
+}
+
+/// One of the server's own routes ([`Own`]), its handler asked by the
+/// method the table says rather than one spelled again here, so a
+/// description written from the table says how it is served.
+pub(crate) fn own<B: Backend>(own: Own) -> MethodRouter<Arc<Api<B>>> {
+    let method = match own.method() {
+        route::Method::Get => MethodFilter::GET,
+        route::Method::Post => MethodFilter::POST,
+    };
+    match own {
+        Own::Preview => on(method, preview::<B>),
+        Own::Run => on(method, run::<B>),
+        Own::Switch => on(method, switch::<B>),
+        Own::Transcript => on(method, transcript::<B>),
+        Own::Events => on(method, events::<B>),
     }
 }
 

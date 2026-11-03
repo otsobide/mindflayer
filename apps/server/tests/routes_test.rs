@@ -241,6 +241,32 @@ async fn the_servers_own_routes_take_no_parameter() {
     assert!(runs.lock().unwrap().is_empty(), "nothing ran nor switched");
 }
 
+/// The server's own routes are served from their table (`Own::ALL`), at
+/// its path and by its method alone, so a description written from it says
+/// how each is asked for: any other method is a 405 naming that one.
+#[tokio::test]
+async fn the_servers_own_routes_are_served_as_their_table_says() {
+    let (server, runs) = launch();
+    let token = Auth::Bearer(server.token());
+
+    for own in Own::ALL {
+        let path = format!("{API}{}", own.path());
+        let (other, allowed) = match own.method() {
+            mindflayer_server::Method::Get => (Method::POST, "GET,HEAD"),
+            mindflayer_server::Method::Post => (Method::GET, "POST"),
+        };
+        let body = (other == Method::POST).then(|| json!({ "name": "a" }));
+        let reply = send(&server, other.clone(), &path, token, body).await;
+        assert_eq!(
+            reply.status,
+            StatusCode::METHOD_NOT_ALLOWED,
+            "{other} {path}"
+        );
+        assert_eq!(reply.header("allow"), Some(allowed), "{other} {path}");
+    }
+    assert!(runs.lock().unwrap().is_empty(), "nothing ran nor switched");
+}
+
 /// A backend whose table cannot be served: one path twice.
 struct Crooked;
 

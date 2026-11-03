@@ -1,6 +1,6 @@
-//! The reads a backend serves, as a table of routes: what the server
-//! matches a request against, and what a description of the API is written
-//! from.
+//! The reads a backend serves, as a table of routes, and the routes the
+//! server answers itself: what the server matches a request against, and
+//! what a description of the API is written from.
 //!
 //! Which reads there are, what each is called, what it takes and what it
 //! answers are the backend's, since each is a rule of its front end's: the
@@ -9,7 +9,9 @@
 //! values each parameter's [`Shape`] says, and a body. So it can refuse what
 //! no route takes before the backend is asked anything, as
 //! `deny_unknown_fields` refuses a field, and hand over the rest without
-//! knowing what any of it means.
+//! knowing what any of it means. Its own routes, a task previewed or run, a
+//! switch, the transcript and the events, are data too ([`Own`]), so a
+//! description walks both and describes nothing by hand.
 //!
 //! [`Backend::routes`]: crate::Backend::routes
 
@@ -29,16 +31,138 @@ use serde_json::{Map, Value};
 /// misreads.
 pub const API: &str = "/api/v1";
 
-/// The paths under [`API`] the server answers itself, which no backend's
-/// route may take: running and previewing tasks, switching, the transcript
-/// and the events.
-pub(crate) const OWN: [&str; 5] = [
-    "/tasks/preview",
-    "/tasks",
-    "/switch",
-    "/transcript",
-    "/events",
-];
+/// One route the server answers itself under [`API`], whatever the
+/// backend, which no route of the backend's may take.
+///
+/// Data, as a backend's [`Route`] is, so a description of the API (#218)
+/// walks these beside the backend's table, rather than describing the
+/// writes by hand beside the handlers that serve them: the server serves
+/// each from here ([`Own::ALL`]), by the method and at the path it says, so
+/// the two cannot disagree. None takes a parameter. What each is sent and
+/// answers is named by what it is ([`Sent`], [`Answer`]) rather than by a
+/// type's name, as a backend's route names its own: a body is the
+/// backend's `Task` or `Switch`, and an answer carries its `Outcome` or its
+/// JSON, types the server never names, so a description names each as the
+/// backend's types do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Own {
+    /// `POST /tasks/preview`.
+    Preview,
+    /// `POST /tasks`.
+    Run,
+    /// `POST /switch`.
+    Switch,
+    /// `GET /transcript`.
+    Transcript,
+    /// `GET /events`.
+    Events,
+}
+
+impl Own {
+    /// Every one, in the order a description of the API lists them.
+    pub const ALL: [Own; 5] = [
+        Own::Preview,
+        Own::Run,
+        Own::Switch,
+        Own::Transcript,
+        Own::Events,
+    ];
+
+    /// How it is asked for: a POST takes its body, and a GET nothing.
+    pub fn method(self) -> Method {
+        match self {
+            Own::Preview | Own::Run | Own::Switch => Method::Post,
+            Own::Transcript | Own::Events => Method::Get,
+        }
+    }
+
+    /// Its path under [`API`], from its `/`, as a [`Route::path`] is.
+    pub fn path(self) -> &'static str {
+        match self {
+            Own::Preview => "/tasks/preview",
+            Own::Run => "/tasks",
+            Own::Switch => "/switch",
+            Own::Transcript => "/transcript",
+            Own::Events => "/events",
+        }
+    }
+
+    /// What it answers, in a sentence, for a description of the API to say.
+    pub fn about(self) -> &'static str {
+        match self {
+            Own::Preview => {
+                "The command lines a task is, and what of them to confirm before it runs, \
+                 with nothing run"
+            }
+            Own::Run => {
+                "Run a task, once every one sent before it has run: its lines, and what \
+                 the command said"
+            }
+            Own::Switch => {
+                "Act on what the body names from now on, once every task sent before it \
+                 has run: what is acted on then"
+            }
+            Own::Transcript => "Every task the session ran, oldest first, with what each said",
+            Own::Events => {
+                "What happens as it happens, a change on disk or a run starting and \
+                 finishing, as server-sent events"
+            }
+        }
+    }
+
+    /// What its body holds; none for a GET, which takes none.
+    pub fn body(self) -> Option<Sent> {
+        match self {
+            Own::Preview | Own::Run => Some(Sent::Task),
+            Own::Switch => Some(Sent::Switch),
+            Own::Transcript | Own::Events => None,
+        }
+    }
+
+    /// What it answers with.
+    pub fn answers(self) -> Answer {
+        match self {
+            Own::Preview => Answer::Preview,
+            Own::Run => Answer::Ran,
+            Own::Switch => Answer::Switched,
+            Own::Transcript => Answer::Runs,
+            Own::Events => Answer::Events,
+        }
+    }
+}
+
+/// What the body of one of the server's own routes ([`Own`]) holds: one
+/// of the backend's types, which the server never names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sent {
+    /// A task, the backend's [`Task`](crate::Backend::Task).
+    Task,
+    /// What to act on from now on, the backend's
+    /// [`Switch`](crate::Backend::Switch).
+    Switch,
+}
+
+/// What one of the server's own routes ([`Own`]) answers with, as JSON
+/// unless it says otherwise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Answer {
+    /// What a task would run, the server's [`Preview`](crate::Preview):
+    /// `{"lines": [...], "confirm": [...]}`, each of `confirm` the
+    /// backend's JSON.
+    Preview,
+    /// What one run did: `{"lines": [...], "outcome": ...}`, its outcome
+    /// the backend's [`Outcome`](crate::Backend::Outcome).
+    Ran,
+    /// Every run the session made, oldest first: a list of what
+    /// [`Answer::Ran`] is.
+    Runs,
+    /// What the backend acts on after the switch, as its own JSON
+    /// ([`Backend::switch`](crate::Backend::switch)).
+    Switched,
+    /// Server-sent events (`text/event-stream`) rather than JSON: each one
+    /// [`Event`](crate::Event), as a `data:` line of JSON.
+    Events,
+}
 
 /// How a route is asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -319,7 +443,7 @@ pub(crate) fn check<Q>(routes: &[Route<Q>]) -> io::Result<()> {
                 "the route `{path}` is no path of lowercase words between slashes"
             ));
         }
-        if OWN.contains(&path) {
+        if Own::ALL.iter().any(|own| own.path() == path) {
             return invalid(format!(
                 "the route `{path}` is one the server answers itself"
             ));

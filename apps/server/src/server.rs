@@ -6,7 +6,7 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener};
 use std::sync::Arc;
 
 use axum::middleware;
-use axum::routing::{any, get, post, MethodRouter};
+use axum::routing::{any, MethodRouter};
 use axum::Router;
 
 use crate::api::{self, Api};
@@ -15,7 +15,7 @@ use crate::events::Events;
 use crate::guard::{self, Hosts};
 use crate::log::{self, Log, Sink};
 use crate::panel::{self, Panel};
-use crate::route::{self, API};
+use crate::route::{self, Own, API};
 use crate::token::Token;
 use crate::transcript::Transcript;
 use crate::watcher::Watcher;
@@ -229,23 +229,18 @@ fn route<B: Backend>(
     });
     // Each of the backend's reads at its path under the version, as its
     // table says: the server matches it, and knows nothing of what it is.
+    // Then each of its own, as its own table says, so what a description
+    // of the API walks is what is served.
     let mut router = Router::new();
     for read in routes {
         let path = format!("{API}{}", read.path);
         router = router.route(&path, endpoint(api::read::<B>(read)));
     }
+    for own in Own::ALL {
+        let path = format!("{API}{}", own.path());
+        router = router.route(&path, endpoint(api::own::<B>(own)));
+    }
     let router = router
-        .route(
-            &format!("{API}/tasks/preview"),
-            endpoint(post(api::preview::<B>)),
-        )
-        .route(&format!("{API}/tasks"), endpoint(post(api::run::<B>)))
-        .route(&format!("{API}/switch"), endpoint(post(api::switch::<B>)))
-        .route(
-            &format!("{API}/transcript"),
-            endpoint(get(api::transcript::<B>)),
-        )
-        .route(&format!("{API}/events"), endpoint(get(api::events::<B>)))
         // The bare prefix and everything under it that names no endpoint,
         // so a typo in a script gets a JSON 404 rather than the panel, and
         // so does a path of another version, or of none: the panel's own

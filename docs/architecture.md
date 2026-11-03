@@ -4240,8 +4240,9 @@ differ between two front ends.
 
 What it serves is the backend's reads, each at a route of its own from a
 table the backend hands over ([a table of reads](#a-table-of-reads)), and
-five routes of its own: [D-18](#d-18-the-panel-writes-by-running-commands)
-in HTTP, with the switch, the transcript and the events beside it.
+five routes of its own, from a table of its own (`Own`):
+[D-18](#d-18-the-panel-writes-by-running-commands) in HTTP, with the
+switch, the transcript and the events beside it.
 
 ### Its routes, under `/api/v1`
 
@@ -4376,6 +4377,23 @@ JSON names, so one renamed fails it rather than reach a script written
 against the old name unnoticed, and the change is made as one that moves
 the API to `/api/v2`; `ui_test` calls every one over loopback with the
 token as Bearer.
+
+The server's own five routes are data too, so #218 walks two tables and
+describes nothing by hand: `Own::ALL`, each with its method, its path,
+what its body holds and what it answers, and a sentence on each. The
+server serves each from there, its handler asked by the method the table
+says, so the table and what answers cannot disagree, and `route::check`
+keeps a backend's route off every path in it. What a body holds and what an
+answer carries are named by what they are (`Sent`, `Answer`) rather than by
+a type's name, as a backend's route names its own: a body is the backend's
+`Task` or `Switch`, a run's answer carries its `Outcome` and a switch's is
+its JSON, all types the server never names, so the description names each
+as the backend's types do, and `Answer::Events` says the stream is
+server-sent events rather than JSON. A string naming each type, as a
+backend's route has, was the alternative, and it would have the server
+spell the CLI's names, or the trait grow one constant for each. A test pins
+the table by method, path, body and answer, and another holds each route to
+be served by its method alone.
 
 ### Generic over a backend
 
@@ -9068,8 +9086,9 @@ Carrying it out, #215 serves the reads from a table the backend hands the
 server, each route's method, path, parameters and answer as data, so the
 server matches and refuses by it without a rule of its own and the OpenAPI
 document can be written from it, and moves the tasks, the switch, the
-transcript and the events under the version ([its
-routes](#its-routes-under-apiv1)). The panel's unversioned endpoints went in
+transcript and the events under the version, served from a table of the
+server's own in the same way ([its routes](#its-routes-under-apiv1), [a
+table of reads](#a-table-of-reads)). The panel's unversioned endpoints went in
 the same change, since the panel ships in the same binary and was their only
 client.
 
@@ -9350,12 +9369,13 @@ client.
   start the server has no way to it. #216 hands it over through a file
   only the account can read.
 - **The routes are described in prose.** Each route's parameters, body and
-  answer are listed here and pinned by a test of the CLI's, but a route
-  names its body and its answer by a type's name alone, and nothing says
-  what a field of them holds outside the Rust and the panel's types. #217
-  writes JSON Schema from the Rust types with `schemars`, and #218 an
-  OpenAPI 3.1 document from the table and those schemas, both committed and
-  checked for drift.
+  answer are listed here and pinned by a test of the CLI's or the server's,
+  but a route names its body and its answer by a type's name alone, or by
+  what it is for one of the server's own, and nothing says what a field of
+  them holds outside the Rust and the panel's types. #217 writes JSON
+  Schema from the Rust types with `schemars`, and #218 an OpenAPI 3.1
+  document from both tables and those schemas, both committed and checked
+  for drift.
 - **WebKit where Playwright builds none.** Playwright's WebKit is built
   against Ubuntu's libraries, which its `--with-deps` installs there and on
   Debian only, so on Arch and most other systems the browser suite runs in
