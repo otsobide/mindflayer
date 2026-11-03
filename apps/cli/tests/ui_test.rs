@@ -15,7 +15,9 @@ use std::time::Duration;
 
 use common::*;
 use mindflayer_cli::backend::PanelBackend;
+use mindflayer_cli::{Command, FlayerCommand, UiOptions};
 use mindflayer_server::Backend;
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 /// A panel being served, with what its link said.
@@ -39,7 +41,12 @@ const NO_AGENT_HOMES: [&str; 4] = [
 /// default workspace's home, nothing named and every agent home empty, and
 /// the link it printed read back into an address and a token.
 fn serve(binary: &str, dir: &Path, home: &Path) -> Panel {
-    let (started, stdout, link) = launch(binary, dir, home, &[]);
+    serve_with(binary, dir, home, &[])
+}
+
+/// [`serve`], with `options` besides.
+fn serve_with(binary: &str, dir: &Path, home: &Path, options: &[&str]) -> Panel {
+    let (started, stdout, link) = launch(binary, dir, home, options);
     let (address, token) = link
         .strip_prefix("http://")
         .and_then(|link| link.split_once("/?token="))
@@ -90,6 +97,8 @@ enum Auth<'a> {
     Nothing,
     /// The token, as a script sends it.
     Bearer,
+    /// A token as a script sends it, read from wherever it was handed.
+    BearerOf(&'a str),
     /// The cookie the link sets, with what the panel's page sends beside it,
     /// from a page at this origin.
     Cookie(&'a str),
@@ -109,6 +118,9 @@ impl Panel {
         match auth {
             Auth::Nothing => {}
             Auth::Bearer => request.push_str(&format!("Authorization: Bearer {}\r\n", self.token)),
+            Auth::BearerOf(token) => {
+                request.push_str(&format!("Authorization: Bearer {token}\r\n"))
+            }
             Auth::Cookie(origin) => request.push_str(&format!(
                 "Cookie: mf_{}={}\r\nOrigin: {origin}\r\nSec-Fetch-Site: same-origin\r\n\
                  X-Mindflayer: 1\r\n",
@@ -604,13 +616,7 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
     let (status, ran) = panel.post("/api/v1/tasks", install);
     assert_eq!(status, 200, "{ran}");
 
-    let pid = panel.started.child.id().to_string();
-    let sent = std::process::Command::new("kill")
-        .args(["-INT", &pid])
-        .status()
-        .expect("run kill");
-    assert!(sent.success());
-    let exited = exit(&mut panel.started, Duration::from_secs(60));
+    let (exited, rest, said) = interrupt(&mut panel);
 
     assert!(exited.success(), "{exited:?}");
     let run = &ran["outcome"]["runs"][0];
@@ -622,14 +628,9 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
     for line in run["stderr"].as_array().unwrap() {
         transcript.push_str(&format!("{}\n", line["text"].as_str().unwrap()));
     }
-    let mut rest = String::new();
-    panel.stdout.read_to_string(&mut rest).unwrap();
     assert_eq!(rest, transcript);
     let named = format!("$ flayer -W {} install -p ", dir.path().display());
     assert!(rest.starts_with(&named), "{rest}");
-    let mut said = String::new();
-    let mut stderr = panel.started.child.stderr.take().unwrap();
-    stderr.read_to_string(&mut said).unwrap();
     assert_eq!(
         said,
         format!(
@@ -638,6 +639,339 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
             panel.address
         )
     );
+}
+
+// ---------------------------------------------------------------------------
+// The token file
+// ---------------------------------------------------------------------------
+
+/// What `--token-file` holds, read back as a script reads it, into a struct
+/// that refuses a field it does not name: the contract, name by name.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Handed {
+    version: u32,
+    api: String,
+    token: String,
+}
+
+/// `path`, read as [`Handed`].
+fn handed(path: &Path) -> Handed {
+    let text = fs::read_to_string(path).unwrap();
+    serde_json::from_str(&text).unwrap_or_else(|error| panic!("{error}: {text}"))
+}
+
+/// What a script that did not start the panel does: read where the API is,
+/// and the token, from the file `--token-file` named, and call the API with
+/// it as Bearer. The file is whole by the time the link is out, it is the
+/// launch's own token, and no account but this one may read it. Once the
+/// panel stops it is gone, and nothing it said holds the token but the
+/// link it always printed.
+#[test]
+fn a_script_reaches_the_api_through_the_token_file_which_goes_when_ui_stops() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let run = TempDir::new().unwrap();
+    let path = run.path().join("api.json");
+    let panel = serve_with(
+        "flayer",
+        dir.path(),
+        home.path(),
+        &["--token-file", path.to_str().unwrap()],
+    );
+
+    let handed = handed(&path);
+
+    assert_eq!(handed.version, 1);
+    let origin = format!("http://{}", panel.address);
+    assert_eq!(handed.api, format!("{origin}/api/v1"));
+    assert_eq!(handed.token, panel.token);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mode = fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "{mode:o}");
+    }
+    let api = handed.api.strip_prefix(&origin).unwrap();
+    let (status, snapshot) = panel.send(
+        "GET",
+        &format!("{api}/snapshot"),
+        Auth::BearerOf(&handed.token),
+        None,
+    );
+    assert_eq!(status, 200, "{snapshot}");
+    assert_eq!(
+        snapshot["workspace"]["path"],
+        json!(dir.path().to_str().unwrap())
+    );
+
+    #[cfg(unix)]
+    {
+        let mut panel = panel;
+        let (exited, rest, said) = interrupt(&mut panel);
+
+        assert!(exited.success(), "{exited:?}");
+        assert!(
+            fs::symlink_metadata(&path).is_err(),
+            "the file is still there"
+        );
+        assert_eq!(rest, "");
+        assert_eq!(
+            said,
+            format!(
+                "note: serving the workspace at {} on {} until Ctrl-C\n",
+                dir.path().display(),
+                panel.address
+            )
+        );
+    }
+}
+
+/// How a script stops a panel it runs in the background: `kill`, `timeout`
+/// or a service manager, whose SIGTERM `ui` takes as a Ctrl-C. So the
+/// file goes as it does at a Ctrl-C, rather than stay behind, holding a
+/// dead token, to refuse the next launch naming its path; and the panel
+/// prints what it changed and exits as a command that went well does.
+#[cfg(unix)]
+#[test]
+fn a_sigterm_stops_the_panel_as_ctrl_c_does_and_takes_the_token_file_away() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let run = TempDir::new().unwrap();
+    let path = run.path().join("api.json");
+    let token_file = ["--token-file", path.to_str().unwrap()];
+    let mut panel = serve_with("flayer", dir.path(), home.path(), &token_file);
+    let install = json!({
+        "type": "install",
+        "projects": ["alpha"],
+        "kind": "skill",
+        "name": "commit-style",
+        "from": null,
+    });
+    let (status, ran) = panel.post("/api/v1/tasks", install);
+    assert_eq!(status, 200, "{ran}");
+
+    let (exited, rest, said) = signal(&mut panel, "-TERM");
+
+    assert!(exited.success(), "{exited:?}");
+    assert!(
+        fs::symlink_metadata(&path).is_err(),
+        "the file is still there"
+    );
+    let named = format!("$ flayer -W {} install -p ", dir.path().display());
+    assert!(rest.starts_with(&named), "{rest}");
+    assert_eq!(
+        said,
+        format!(
+            "note: serving the workspace at {} on {} until Ctrl-C\n",
+            dir.path().display(),
+            panel.address
+        )
+    );
+    let mut again = serve_with("flayer", dir.path(), home.path(), &token_file);
+    assert_eq!(handed(&path).token, again.token);
+    let (exited, _, _) = signal(&mut again, "-TERM");
+    assert!(exited.success(), "{exited:?}");
+    assert!(fs::symlink_metadata(&path).is_err());
+}
+
+/// Somebody's once it holds something else: left where it is when the
+/// panel stops, as it was written, and said, with nothing gone wrong.
+#[cfg(unix)]
+#[test]
+fn a_token_file_changed_while_the_panel_ran_is_left_where_it_is() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let run = TempDir::new().unwrap();
+    let path = run.path().join("api.json");
+    let mut panel = serve_with(
+        "flayer",
+        dir.path(),
+        home.path(),
+        &["--token-file", path.to_str().unwrap()],
+    );
+    fs::write(&path, "{\"mine\": true}\n").unwrap();
+
+    let (exited, _, said) = interrupt(&mut panel);
+
+    assert!(exited.success(), "{exited:?}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), "{\"mine\": true}\n");
+    assert_eq!(
+        said,
+        format!(
+            "note: serving the workspace at {} on {} until Ctrl-C\n\
+             note: {}: changed since the API's address and token were written there, so it \
+             is left as it is\n",
+            dir.path().display(),
+            panel.address,
+            path.display()
+        )
+    );
+}
+
+/// `ui --token-file path`, started as a held port's is, so a panel served
+/// after all fails the test once the wait is up rather than hang it; and
+/// what it printed on stdout and on stderr once it exited, which it must
+/// have done unsuccessfully.
+fn refused_token_file(path: &Path) -> (String, String) {
+    let dir = workspace_with_own();
+    let mut args = vec![
+        "ui",
+        "--no-open",
+        "--port",
+        "0",
+        "--home=",
+        "--workspace=",
+        "--token-file",
+        path.to_str().unwrap(),
+    ];
+    args.extend(NO_AGENT_HOMES);
+
+    let mut started = start("flayer", dir.path(), &args, &[]);
+    let exited = exit(&mut started, Duration::from_secs(60));
+
+    assert!(!exited.success(), "{exited:?}");
+    let stdout = std::io::read_to_string(started.child.stdout.take().unwrap()).unwrap();
+    let stderr = std::io::read_to_string(started.child.stderr.take().unwrap()).unwrap();
+    (stdout, stderr)
+}
+
+/// Somebody's file at the path refuses the launch before anything is
+/// served: no link, and the file exactly as it was, its bytes, its mode and
+/// when it was last written.
+#[test]
+fn a_token_file_already_there_is_refused_and_left_exactly_as_it_was() {
+    let run = TempDir::new().unwrap();
+    let path = run.path().join("api.json");
+    fs::write(&path, "{\"somebody\": \"else\"}\n").unwrap();
+    let before = fs::metadata(&path).unwrap();
+
+    let (stdout, stderr) = refused_token_file(&path);
+
+    assert_eq!(stdout, "");
+    assert_eq!(
+        stderr,
+        format!(
+            "error: {}: already exists, and is left alone, so the panel was not served: \
+             --token-file writes a file of its own, never over one\n",
+            path.display()
+        )
+    );
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        "{\"somebody\": \"else\"}\n"
+    );
+    let after = fs::metadata(&path).unwrap();
+    assert_eq!(after.permissions(), before.permissions());
+    assert_eq!(after.modified().unwrap(), before.modified().unwrap());
+}
+
+#[test]
+fn a_token_file_in_a_folder_not_there_is_refused_and_no_folder_is_made() {
+    let run = TempDir::new().unwrap();
+    let path = run.path().join("run").join("api.json");
+
+    let (stdout, stderr) = refused_token_file(&path);
+
+    assert_eq!(stdout, "");
+    assert_eq!(
+        stderr,
+        format!(
+            "error: {}: its folder does not exist, so the panel was not served: \
+             --token-file makes no folder\n",
+            path.display()
+        )
+    );
+    assert!(!run.path().join("run").exists());
+}
+
+/// The option on both binaries, as `mind ui`, `mind flayer ui` and `flayer
+/// ui` take it, in either spelling, the path kept as it was typed for the
+/// command to make it absolute from where it works; and none without it.
+#[test]
+fn both_binaries_take_a_token_file_for_ui() {
+    let given = UiOptions {
+        no_open: true,
+        token_file: Some(PathBuf::from("run/api.json")),
+        ..UiOptions::default()
+    };
+    let ui = |parsed: Option<FlayerCommand>| match parsed {
+        Some(FlayerCommand::Ui(options)) => options,
+        other => panic!("not ui: {other:?}"),
+    };
+
+    let mind =
+        Cli::try_parse_from(["mind", "ui", "--no-open", "--token-file", "run/api.json"]).unwrap();
+    let Some(Command::Ui(options)) = mind.command else {
+        panic!("not ui: {:?}", mind.command);
+    };
+    assert_eq!(options, given);
+    let nested = Cli::try_parse_from([
+        "mind",
+        "flayer",
+        "ui",
+        "--token-file=run/api.json",
+        "--no-open",
+    ])
+    .unwrap();
+    let Some(Command::Flayer { command }) = nested.command else {
+        panic!("not flayer: {:?}", nested.command);
+    };
+    assert_eq!(ui(command), given);
+    let flayer =
+        FlayerCli::try_parse_from(["flayer", "ui", "--no-open", "--token-file", "run/api.json"])
+            .unwrap();
+    assert_eq!(ui(flayer.command), given);
+
+    let bare = FlayerCli::try_parse_from(["flayer", "ui"]).unwrap();
+    assert_eq!(ui(bare.command).token_file, None);
+}
+
+#[test]
+fn a_token_file_is_refused_without_a_path() {
+    for line in [
+        &["mind", "ui", "--token-file"][..],
+        &["flayer", "ui", "--token-file"],
+        &["flayer", "ui", "--token-file="],
+    ] {
+        let error = match line[0] {
+            "mind" => Cli::try_parse_from(line).map(drop),
+            _ => FlayerCli::try_parse_from(line).map(drop),
+        }
+        .expect_err(&line.join(" "));
+
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::InvalidValue,
+            "{}",
+            line.join(" ")
+        );
+    }
+}
+
+/// Ctrl-C, as a terminal sends it: SIGINT, by `kill`. And how the panel
+/// exited, what it printed after the link, and all it said on stderr.
+#[cfg(unix)]
+fn interrupt(panel: &mut Panel) -> (std::process::ExitStatus, String, String) {
+    signal(panel, "-INT")
+}
+
+/// [`interrupt`], with the signal `kill` is given (`-INT`, `-TERM`).
+#[cfg(unix)]
+fn signal(panel: &mut Panel, name: &str) -> (std::process::ExitStatus, String, String) {
+    let pid = panel.started.child.id().to_string();
+    let sent = std::process::Command::new("kill")
+        .args([name, &pid])
+        .status()
+        .expect("run kill");
+    assert!(sent.success());
+    let exited = exit(&mut panel.started, Duration::from_secs(60));
+    let mut rest = String::new();
+    panel.stdout.read_to_string(&mut rest).unwrap();
+    let mut said = String::new();
+    let mut stderr = panel.started.child.stderr.take().unwrap();
+    stderr.read_to_string(&mut said).unwrap();
+    (exited, rest, said)
 }
 
 /// How a started binary exited, waited for until `limit` has passed.

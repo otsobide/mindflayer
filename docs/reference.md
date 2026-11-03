@@ -434,9 +434,10 @@ mind migrate [--agents AGENTS] [--local|--shared] [--yes]
                            # agents read
 
 flayer                     # the TUI: everything below, a key each
-flayer ui [--port PORT] [--no-open] [--dev]
+flayer ui [--port PORT] [--no-open] [--dev] [--token-file PATH]
                            # the control panel, in a browser, until Ctrl-C;
-                           # mind ui is the same
+                           # mind ui is the same; with --no-open and
+                           # --token-file, its API for scripts alone
 flayer init [PATH] [--skills DIR] [--rules DIR]
                            # create a .mindflayer here, or in PATH
 flayer activate [DIR] [--shell SHELL]
@@ -1805,6 +1806,9 @@ The link is the first line on stdout, and the only one while it serves, for
 a script to read; what it prints once it stops (below) follows it there.
 `--no-open` prints it without opening a browser, and a browser that cannot
 be opened, as on a machine with no display, is a warning, not a failure.
+`--token-file` writes where the API is and the token to a file of its own
+as well, for a script that did not start the panel (below, with the HTTP
+API).
 `mind ui` is the same command from inside a project. Either serves the
 workspace a command run there would use, decided once as it starts, from
 `-C`, `--home`, `-W` and the agent homes, until you switch to another this
@@ -1824,10 +1828,10 @@ TUI does. It sends a task; the server turns it into the command lines you
 could have typed, shows them before they run, and runs them through the same
 parser, one at a time. A command that would open a screen, an editor or a
 shell, or read standard input, is refused, and so is a path outside what
-the workspace allows, each with a reason and a code. The first Ctrl-C lets
-whatever is running finish, a second stops at once, and on the way out it
-prints every command that changed something, with what each said, as the
-TUI does when it closes:
+the workspace allows, each with a reason and a code. The first Ctrl-C (or,
+on Unix, the `SIGTERM` `kill` sends) lets whatever is running finish, a
+second stops at once, and on the way out it prints every command that
+changed something, with what each said, as the TUI does when it closes:
 
 ```
 $ flayer -W /home/you/Projects install -p /home/you/Projects/collapse skill:commit-style
@@ -2216,6 +2220,51 @@ the one in the link `flayer ui` prints, sent as `Authorization: Bearer
 ```sh
 curl -H "Authorization: Bearer <token>" 'http://127.0.0.1:<port>/api/v1/project?entry=api'
 ```
+
+**With no browser**, `--no-open` and `--token-file` serve the API to
+scripts alone: nothing is opened, and where the API is and the token go to
+the file named, as well as to the link. A script that did not start the
+panel reads them there rather than from what `flayer ui` printed:
+
+```
+$ flayer ui --no-open --token-file /home/you/.local/state/mindflayer.json
+http://127.0.0.1:40185/?token=bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513
+note: serving the workspace at /home/you/Projects on 127.0.0.1:40185 until Ctrl-C
+$ cat /home/you/.local/state/mindflayer.json
+{
+  "version": 1,
+  "api": "http://127.0.0.1:40185/api/v1",
+  "token": "bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513"
+}
+```
+
+```sh
+file=/home/you/.local/state/mindflayer.json
+curl -H "Authorization: Bearer $(jq -r .token "$file")" "$(jq -r .api "$file")/snapshot"
+```
+
+The file is JSON, its names a contract as the API's are:
+
+- `version`: how the file is laid out, `1`. A name dropped or renamed, or
+  holding something else, moves it; one added does not.
+- `api`: where every route is served, `http://127.0.0.1:<port>/api/v1`,
+  the server's own address even with `--dev`.
+- `token`: the launch token, to send as `Authorization: Bearer <token>`.
+
+It is a new file, which only your account can read (mode 0600; on Windows,
+whoever its folder lets in), written whole before the link is printed, so
+a script that started the panel and waits for the link finds it whole.
+`--token-file` writes over nothing and makes no folder: anything already at
+the path, a file, a folder or a link, is left as it is and the panel is not
+served, nor is it when the file's folder does not exist. When the panel
+stops the file goes with it, unless it no longer holds what was written
+there: it is then somebody's, left as it is, and a note says so. A script
+that runs the panel in the background stops it with `kill`, whose
+`SIGTERM` is taken as a Ctrl-C, and the file goes. A panel killed rather
+than stopped (`kill -KILL`), or hung up (`SIGHUP`, which `nohup` ignores),
+leaves it, holding a token that opens nothing any more, and the path is
+refused until it is taken away. Each launch has a token of its own, so
+name a file for each panel served at once.
 
 A read is a GET naming what it reads in its parameters, and a read that
 takes a structure is a POST that changes nothing:

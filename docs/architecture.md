@@ -4611,7 +4611,9 @@ under one name, a panel launched on a second port would overwrite the first
 one's token in the browser and lock it out.
 
 Scripts and tests send `Authorization: Bearer <token>` instead, and either is
-compared in constant time. Only `/api` asks for it: the panel's files are the
+compared in constant time. A script that did not start the panel reads the
+token from the file `flayer ui --token-file` writes
+([launching it](#launching-it-flayer-ui)). Only `/api` asks for it: the panel's files are the
 same for everybody, and a browser that has not been through the link yet still
 needs the page that will tell it so.
 
@@ -5203,9 +5205,9 @@ launch decided. The server binds 127.0.0.1 on a port the system picks, or the
 one `--port` names, and a port somebody holds fails the command
 (`panel_unbound`) rather than move to another.
 
-The link goes to stdout as soon as the server listens, the first line there
-and the only one until the transcript follows it once it stops, so a script
-reads it, and stderr says which workspace is served, on which address, and
+The link goes to stdout as soon as the server listens, and a token file
+named is written (below), the first line there and the only one until the
+transcript follows it once it stops, so a script reads it, and stderr says which workspace is served, on which address, and
 that Ctrl-C stops it. That is where `ui` parts from the rule
 that a command builds its output and hands it back to be printed
 (`Outcome`), as the TUI's screen does: the link cannot wait for the command
@@ -5219,7 +5221,13 @@ otherwise wait in turn on a server that never started.
 Ctrl-C is listened for before the link is out, through the platform's own
 listener, a Unix signal or the Windows console's Ctrl-C, rather than
 `tokio::signal::ctrl_c`, which installs its handler only once it is first
-awaited. The first stops the server taking connections and lets every
+awaited (`Stops`). On Unix a `SIGTERM` is taken as a Ctrl-C, since it is
+how `kill`, `timeout` and a service manager stop a process, and so how a
+script stops a panel it serves itself the API with: ended by the signal's
+default, `ui` would leave its token file behind (below). Not a `SIGHUP`,
+which a handler would answer even under `nohup`, replacing the ignoring
+`nohup` asks for, so a panel meant to outlive its terminal would stop with
+it. The first stops the server taking connections and lets every
 request under way be answered, a run above all, so a change is not cut off
 half way, and ends every event stream, which would otherwise be answered
 for as long as a tab stays open ([live updates](#live-updates)); the
@@ -5229,6 +5237,50 @@ closes: every line the panel ran for a task that changes something
 (`PanelBackend::transcript`), so a session in the browser can be read and
 run again from a shell. The server's own transcript, the one the panel
 shows, holds reads as well, and goes with the server.
+
+`--token-file PATH` hands what the link carries to a script that did not
+start the panel, and so cannot read its stdout (#216). Once the port is
+taken and Ctrl-C is listened for, and before the link is printed, `ui`
+writes there, as JSON, `version`, how the file is laid out (1, moved as
+`ENVELOPE_VERSION` is, when a name is dropped or renamed or holds
+something else, and not when one is added), `api`, where every route is
+served, and `token` (`TokenFile`, in `src/commands/ui.rs`). `api` is the
+server's own address under the version (`Listening::api`,
+`http://127.0.0.1:<port>/api/v1`), even with `--dev`, whose link names the
+dev server: a script sends the token as Bearer, which needs no page and so
+no dev server to serve one. The path is typed from the directory the
+command works in, as every path a command takes is, and it is one the
+person names rather than one of Mindflayer's own, in its home say: several
+panels may be served at once, each with a token of its own, and only
+whoever starts one knows which script it is for.
+
+The file is made with `create_new`, mode 0600 on Unix, and written in one
+go: whatever is at the path already, a file, a folder or a link wherever
+it leads, is refused and left as it is (`token_file_exists`), and so is a
+path whose folder is not there (`token_file_folder_missing`, since
+`--token-file` makes no folder) and one that cannot be written for any
+other reason (`token_file_unwritable`), each before anything is served
+and with no link printed. Not a temporary renamed into place, which would
+replace a link or a file somebody put there in the meantime, and never
+through a link. A link among the folders on the way is followed: the path
+is the person's own, typed on their command line, unlike one a
+repository or a browser names. Windows has no mode bits, and the file
+takes the permissions its folder passes on, which is #154's to tighten.
+
+When `ui` stops, the file is taken away, and so it is when the command
+fails once it is written, but only while it still holds what was written
+there: looked at as a link, never through one, by its length and then
+byte for byte. Anything else at the path is somebody's, left as it is,
+and said in a note, which fails nothing; one that could not be looked at
+or taken away is a warning (`token_file_unremoved`), and the command exits
+as one that went wrong, since a file it was to take away may still be
+there. A copy of what was written, put back by somebody, goes all the
+same, holding a token that opens nothing any more. Nothing else changes:
+the link, the note and the transcript are as they were, the token is
+printed nowhere the link was not, and `TokenFile` has no `Debug` to print
+it with. Nor can the panel ask for a file: a front end with no terminal
+refuses `ui` whatever its options (`Refusal::Panel`), so a browser never
+names one for it to write.
 
 The runtime is tokio's with one thread: every query goes to the blocking pool
 and every run to the server's writer thread, so it only moves bytes. `--dev`
@@ -9197,7 +9249,10 @@ client. Its follow-up, asked for in the owner's review, gives every answer
 under `/api` that is no success a code beside its words, the server's own
 conditions codes of the server's own (`Condition`), and has the backend say
 whether a refusal names what is not there, a 404, or is unfit, a 422
-([every refusal with a code](#every-refusal-with-a-code)).
+([every refusal with a code](#every-refusal-with-a-code)). #216 hands the
+launch token, and where the API is, to a script that did not start the
+panel, through a file only the account reads (`flayer ui --token-file`,
+[launching it](#launching-it-flayer-ui)).
 
 ## Open questions
 
@@ -9470,11 +9525,26 @@ whether a refusal names what is not there, a 404, or is unfit, a 422
   between them, but no type does. The table written into the panel, as its
   types are, would let the transport build each request from it; the
   OpenAPI document #218 writes from the table is one way there.
-- **A script finds the token only in the link.** The API is for scripts on
-  this machine as much as for the panel (D-24), but the launch token reaches
-  a script only through the link `flayer ui` prints, so one that did not
-  start the server has no way to it. #216 hands it over through a file
-  only the account can read.
+- **A token file can be read before it is whole.** It is made empty and
+  written at once, before the link is printed, so a script that waits for
+  the link finds it whole, but one that waits for the file to appear may
+  read it in between, and has to read it again until it parses. A
+  temporary linked into place with `link`, which never replaces anything,
+  would have it appear whole, at the price of a second file holding the
+  token beside it for a moment, and of file systems that make no hard
+  links.
+- **A panel killed leaves its token file.** Only a stop `ui` sees takes it
+  away, a Ctrl-C or, on Unix, a `SIGTERM`: a `SIGKILL`, a `SIGHUP` (left
+  to its default for `nohup`'s sake), a Windows console closed, an abort or
+  a machine that goes down leaves the file, holding a token that opens
+  nothing, and the next launch naming that path is refused until somebody
+  takes it away. A file that said which process wrote it would let a
+  launch tell one left behind from a live panel's, but a process id is
+  reused, and telling the two apart is then a guess.
+- **On Windows the token file is as private as its folder.** It takes the
+  permissions its folder passes on, which in the account's own folders
+  keep other accounts out but in a shared one do not; an ACL of its own,
+  for the account alone, is #154's, with the rest of Windows.
 - **The routes are described in prose.** Each route's parameters, body and
   answer are listed here and pinned by a test of the CLI's or the server's,
   but a route names its body and its answer by a type's name alone, or by
@@ -10457,8 +10527,8 @@ whether a refusal names what is not there, a 404, or is unfit, a 422
   a second Ctrl-C. The server could hand the front end that thread to join
   once it stops, at the price of a Ctrl-C that waits for a run nobody
   watches.
-- **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, sent by
-  `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
+- **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, and with
+  SIGTERM, sent by `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
   Ctrl-C (`tokio::signal::windows::ctrl_c`), which no test sends yet (#154).
 - **A release compiled from nothing on every run.** `build (cli)` builds the
   release profile from scratch each time: every job shares one cargo cache

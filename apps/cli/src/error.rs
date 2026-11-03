@@ -206,6 +206,34 @@ pub enum CliError {
         #[source]
         source: io::Error,
     },
+    /// Something is where `ui --token-file` was to write: a file, a folder
+    /// or a link, which `create_new` refuses alike, so nothing is written
+    /// over it or through it.
+    #[error("{0}: already exists, and is left alone, so the panel was not served: --token-file writes a file of its own, never over one")]
+    TokenFileExists(PathBuf),
+    /// The folder `ui --token-file` was to write in is not there.
+    #[error(
+        "{0}: its folder does not exist, so the panel was not served: --token-file makes no folder"
+    )]
+    TokenFileFolderMissing(PathBuf),
+    /// `ui --token-file` could not write there for any other reason: a
+    /// file on the way where a folder should be, or a folder it may not
+    /// write in.
+    #[error("{path}: the API's address and token cannot be written there, so the panel was not served: {source}")]
+    TokenFileUnwritable {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+    /// What `ui --token-file` wrote could not be taken away once the panel
+    /// stopped, nor looked at to tell whether it still held that: said as a
+    /// warning, since the panel was served all the same.
+    #[error("{path}: could not be taken away once the panel stopped: {source}")]
+    TokenFileUnremoved {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
 }
 
 // A variant that carries core's error takes its code, as one of core's does;
@@ -239,6 +267,10 @@ codes!(CliError {
     Self::Unparsed(_) => "line_unparsed",
     Self::Unbound { .. } => "panel_unbound",
     Self::Unserved { .. } => "panel_failed",
+    Self::TokenFileExists(_) => "token_file_exists",
+    Self::TokenFileFolderMissing(_) => "token_file_folder_missing",
+    Self::TokenFileUnwritable { .. } => "token_file_unwritable",
+    Self::TokenFileUnremoved { .. } => "token_file_unremoved",
 } carried {
     Self::Workspace(error) => error,
     Self::Chosen { source, .. } => source,
