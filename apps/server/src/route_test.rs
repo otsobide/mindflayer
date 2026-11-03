@@ -276,3 +276,107 @@ fn no_route_of_a_backends_may_take_a_path_the_server_answers_itself() {
         );
     }
 }
+
+/// The codes of what a request to a route may be refused for, as a
+/// description lists them.
+fn codes(conditions: Vec<Condition>) -> Vec<&'static str> {
+    conditions.into_iter().map(Condition::code).collect()
+}
+
+/// What every route may be refused for, whatever it is: the guards, the
+/// token, a parameter it does not take and another method.
+const EVERY: [&str; 5] = [
+    "token_required",
+    "unknown_host",
+    "foreign_origin",
+    "unknown_parameter",
+    "method_not_allowed",
+];
+
+/// A change sent by cookie, and a body read as JSON.
+const POSTED: [&str; 8] = [
+    "same_origin_required",
+    "x_mindflayer_required",
+    "json_required",
+    "malformed_json",
+    "invalid_body",
+    "body_too_large",
+    "body_unreadable",
+    "body_refused",
+];
+
+/// Each code `listed` holds, in the order of `Condition::ALL`.
+fn ordered(listed: &[&str]) -> Vec<&'static str> {
+    Condition::CODES
+        .iter()
+        .copied()
+        .filter(|code| listed.contains(code))
+        .collect()
+}
+
+#[test]
+fn a_read_by_its_parameters_may_be_refused_for_what_each_shape_and_need_allows() {
+    let bare = route(Method::Get, "/snapshot");
+    let mut each = route(Method::Get, "/files");
+    each.parameters = taken();
+    let mut lists = route(Method::Get, "/scan");
+    lists.parameters = vec![Parameter::optional("root", Shape::List, "where to look")];
+
+    let read = [&EVERY[..], &["invalid_parameters", "backend_failed"]].concat();
+    assert_eq!(codes(bare.conditions()), ordered(&read));
+    assert_eq!(codes(lists.conditions()), ordered(&read));
+    let checked = [
+        &read[..],
+        &[
+            "repeated_parameter",
+            "malformed_parameter",
+            "missing_parameter",
+        ],
+    ]
+    .concat();
+    assert_eq!(codes(each.conditions()), ordered(&checked));
+}
+
+#[test]
+fn a_read_by_its_body_may_be_refused_for_the_body_and_never_a_parameter_it_reads() {
+    let posted = route(Method::Post, "/plan");
+
+    let listed = [&EVERY[..], &POSTED, &["backend_failed"]].concat();
+    assert_eq!(codes(posted.conditions()), ordered(&listed));
+}
+
+/// Pinned, as their table is: what each of the server's own routes hands
+/// a request on to, and so what may fail under it.
+#[test]
+fn each_of_the_servers_own_routes_may_be_refused_for_what_it_reaches() {
+    let task = [&EVERY[..], &POSTED].concat();
+    let preview = [&task[..], &["backend_failed"]].concat();
+    let run = [&task[..], &["backend_failed", "writer_stopped"]].concat();
+
+    for (own, listed) in [
+        (Own::Preview, ordered(&preview)),
+        (Own::Run, ordered(&run)),
+        (Own::Switch, ordered(&run)),
+        (Own::Transcript, ordered(&EVERY)),
+        (Own::Events, ordered(&EVERY)),
+    ] {
+        assert_eq!(codes(own.conditions()), listed, "{own:?}");
+    }
+}
+
+/// A path no route names is no route's: the 404 a description says of
+/// the API as a whole, never among one route's answers.
+#[test]
+fn no_route_may_be_refused_as_a_route_that_is_not_there() {
+    let mut each = route(Method::Get, "/files");
+    each.parameters = taken();
+    let listed = Own::ALL
+        .iter()
+        .flat_map(|own| own.conditions())
+        .chain(each.conditions())
+        .chain(route(Method::Post, "/plan").conditions());
+
+    assert!(listed
+        .into_iter()
+        .all(|condition| condition != Condition::UnknownRoute));
+}

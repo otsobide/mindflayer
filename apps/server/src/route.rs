@@ -131,6 +131,19 @@ impl Own {
             Own::Events => Answer::Events,
         }
     }
+
+    /// Every condition of the server's own a request to it may be refused
+    /// for, in the order of [`Condition::ALL`]: what a description of the
+    /// API lists among its answers, beside what the backend refuses a
+    /// preview, a run or a switch for.
+    pub fn conditions(self) -> Vec<Condition> {
+        let reaches = match self {
+            Own::Preview => Reaches::Backend,
+            Own::Run | Own::Switch => Reaches::Writer,
+            Own::Transcript | Own::Events => Reaches::Nothing,
+        };
+        conditions(self.method(), &[], false, reaches)
+    }
 }
 
 /// What the body of one of the server's own routes ([`Own`]) holds: one
@@ -283,6 +296,89 @@ pub struct Route<Q> {
     /// parameters become a query is the backend's, a parameter naming a
     /// holder or a list of roots, and the server only hands them over.
     pub query: fn(Arguments) -> Result<Q, String>,
+}
+
+impl<Q> Route<Q> {
+    /// Every condition of the server's own a request to it may be refused
+    /// for, in the order of [`Condition::ALL`], as [`Own::conditions`]
+    /// says of the server's own routes: by its method and its parameters,
+    /// beside what the backend refuses its query for.
+    ///
+    /// What may be, from what the table says: `invalid_parameters` for a
+    /// GET whose `query` never fails as for one that does, since the
+    /// server cannot see inside a route's `query`.
+    pub fn conditions(&self) -> Vec<Condition> {
+        conditions(self.method, &self.parameters, true, Reaches::Backend)
+    }
+}
+
+/// What a route hands a request on to, past the server's own checks,
+/// which can fail under it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reaches {
+    /// Nothing: the server answers from what it holds.
+    Nothing,
+    /// The backend, on the blocking pool.
+    Backend,
+    /// The backend, on the writer thread every run and switch takes its
+    /// turn on.
+    Writer,
+}
+
+/// Every condition a request to a route asked by `method`, taking
+/// `parameters`, may be refused for: a read of the backend's (`read`),
+/// whose `query` makes what it sent into one, or one of the server's own,
+/// handing it on to what `reaches` says.
+///
+/// Decided for each condition by a match with no wildcard, so a condition
+/// added is placed among the routes before it compiles, rather than left
+/// out of every description. Each where the server finds it: the guards
+/// and the gate before a route is matched, a query string read by its
+/// parameters ([`arguments`]), a body by axum's JSON extractor, and what
+/// the request is handed on to.
+fn conditions(
+    method: Method,
+    parameters: &[Parameter],
+    read: bool,
+    reaches: Reaches,
+) -> Vec<Condition> {
+    let post = method == Method::Post;
+    let any = |test: fn(&Parameter) -> bool| parameters.iter().any(test);
+    let may = |condition: Condition| match condition {
+        // The Host and the Origin before anything, the token before any
+        // route; a parameter no route takes, one of the server's own
+        // included, and any method but its own at its path, by the route.
+        Condition::TokenRequired
+        | Condition::UnknownHost
+        | Condition::ForeignOrigin
+        | Condition::UnknownParameter
+        | Condition::MethodNotAllowed => true,
+        // A change, as every POST is, sent by cookie; and a body, read as
+        // JSON.
+        Condition::SameOriginRequired
+        | Condition::XMindflayerRequired
+        | Condition::JsonRequired
+        | Condition::MalformedJson
+        | Condition::InvalidBody
+        | Condition::BodyTooLarge
+        | Condition::BodyUnreadable
+        | Condition::BodyRefused => post,
+        Condition::RepeatedParameter => any(|parameter| parameter.shape != Shape::List),
+        Condition::MalformedParameter => {
+            any(|parameter| matches!(parameter.shape, Shape::Number | Shape::Flag))
+        }
+        Condition::MissingParameter => any(|parameter| parameter.required),
+        Condition::InvalidParameters => read && !post,
+        // A path no route names: never one route's.
+        Condition::UnknownRoute => false,
+        Condition::BackendFailed => reaches != Reaches::Nothing,
+        Condition::WriterStopped => reaches == Reaches::Writer,
+    };
+    Condition::ALL
+        .iter()
+        .copied()
+        .filter(|condition| may(*condition))
+        .collect()
 }
 
 /// What a request to a route sent, as JSON: an object of its parameters,

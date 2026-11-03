@@ -207,9 +207,12 @@ async fn a_body_that_is_no_json_too_large_or_cut_off_is_refused_with_its_code() 
 /// what a body holds, a backend's rules or a backend that failed, the answer
 /// is `{"error": ..., "code": ...}` and nothing else: the words for a person
 /// and the word for a script, the code one the server gives of its own or
-/// the backend's. Every condition the server has is met here but two no
-/// request can bring about, a way to fail axum has yet to add and a writer
-/// thread that has stopped, so one added later is met here too, or said.
+/// the backend's, and one of the server's a route lists among what it may
+/// be refused for (`Route::conditions`, `Own::conditions`), which a
+/// description of the API says. Every condition the server has is met here
+/// but two no request can bring about, a way to fail axum has yet to add
+/// and a writer thread that has stopped, so one added later is met here
+/// too, or said.
 #[tokio::test]
 async fn every_answer_under_the_api_that_is_no_success_carries_an_error_and_a_code() {
     let (server, _) = launch();
@@ -376,8 +379,22 @@ async fn every_answer_under_the_api_that_is_no_success_carries_an_error_and_a_co
         ),
     ];
 
+    let listed = |path: &str| {
+        let path = path.strip_prefix(API)?;
+        fake_routes()
+            .iter()
+            .find(|route| route.path == path)
+            .map(Route::conditions)
+            .or_else(|| {
+                Own::ALL
+                    .iter()
+                    .find(|own| own.path() == path)
+                    .map(|own| own.conditions())
+            })
+    };
     let mut met: Vec<String> = Vec::new();
     for (case, request) in asked {
+        let path = request.uri().path().to_owned();
         let reply = deliver(&server, request).await;
         assert!(!reply.status.is_success(), "{case}: {}", reply.status);
         assert_eq!(
@@ -407,6 +424,12 @@ async fn every_answer_under_the_api_that_is_no_success_carries_an_error_and_a_co
             .find(|condition| condition.code() == code)
         {
             assert_eq!(reply.status, condition.status(), "{case}: {said}");
+            if let Some(listed) = listed(&path) {
+                assert!(
+                    listed.contains(condition),
+                    "{case}: {path} lists {listed:?}, and was refused for {condition:?}"
+                );
+            }
         }
         met.push(code);
     }
