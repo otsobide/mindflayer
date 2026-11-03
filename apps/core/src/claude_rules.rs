@@ -292,7 +292,7 @@ pub fn render<'a>(
         // twice under one route with neither render refusing it.
         if !names.insert(rule.name()) {
             return Err(ClaudeRulesError::Twice {
-                route: rule.name().to_owned(),
+                route: rule.name().to_string(),
             });
         }
         let taken = match mode {

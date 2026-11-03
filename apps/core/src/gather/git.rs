@@ -23,6 +23,7 @@ use super::credentials::{self, Shortfall, Shortfalls};
 use super::{Progress, Watch};
 use crate::code::codes;
 use crate::url::redacted;
+use crate::value::Revision;
 use crate::workspace::{replace_file, WorkspaceError};
 
 /// How often `gix`'s counts are read while it fetches: ten times a second,
@@ -35,7 +36,7 @@ pub struct Clone {
     /// The working tree.
     pub root: PathBuf,
     /// The commit that was checked out, when it could be resolved.
-    pub revision: Option<String>,
+    pub revision: Option<Revision>,
 }
 
 /// Clone `url` into `into`, replacing whatever was there, telling `watch`
@@ -157,7 +158,10 @@ pub fn clone(
         // A repository with no commits has no HEAD to resolve, and that is not
         // a failure: it is an empty source, which the harvest then reports as
         // having nothing in it.
-        revision: repository.head_id().ok().map(|id| id.to_string()),
+        revision: repository
+            .head_id()
+            .ok()
+            .map(|id| Revision::from(id.to_string())),
     })
 }
 

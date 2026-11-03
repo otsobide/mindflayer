@@ -47,7 +47,7 @@ fn a_skills_manifest_comes_back_as_its_text() {
         contents,
         Contents {
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
             file: String::from("SKILL.md"),
             size: SKILL.len() as u64,
             hash: Some(hash::bytes(SKILL.as_bytes())),
@@ -424,7 +424,7 @@ fn a_skill_lists_every_file_by_its_route_a_folder_before_what_it_holds() {
         files,
         Files {
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
             manifest: String::from("SKILL.md"),
             entries: vec![
                 listed(".hidden", false, Some(0)),

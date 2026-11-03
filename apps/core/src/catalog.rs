@@ -156,7 +156,7 @@ impl Catalog {
         let mut gathered = Vec::new();
         let mut named: BTreeMap<String, Vec<Artifact>> = BTreeMap::new();
         for copy in copies {
-            named.entry(copy.name().to_owned()).or_default().push(copy);
+            named.entry(copy.name().to_string()).or_default().push(copy);
         }
         for (name, mut copies) in named {
             copies.sort_by(|a, b| {
@@ -657,7 +657,8 @@ impl Reference {
 
     /// Whether this names that artifact.
     fn matches(&self, artifact: &Artifact) -> bool {
-        artifact.name() == self.name && self.kind.is_none_or(|kind| kind == artifact.kind())
+        artifact.name().as_str() == self.name
+            && self.kind.is_none_or(|kind| kind == artifact.kind())
     }
 }
 

@@ -690,7 +690,7 @@ fn items(artifacts: &[Held]) -> Vec<Item> {
         .iter()
         .map(|held| Item {
             kind: held.kind,
-            name: held.name.clone(),
+            name: held.name.to_string(),
             summary: held.summary.clone().unwrap_or_default(),
             // What `validate` would call invalid: a warning is no reason
             // for a mark.

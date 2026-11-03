@@ -388,7 +388,7 @@ impl From<Change> for Task {
             } => Task::Install {
                 projects,
                 kind,
-                name,
+                name: name.into_string(),
                 from: Some(from.into_string()),
             },
             Change::Uninstall {
@@ -398,7 +398,7 @@ impl From<Change> for Task {
             } => Task::Uninstall {
                 projects,
                 kind,
-                name,
+                name: name.into_string(),
                 force: false,
             },
         }

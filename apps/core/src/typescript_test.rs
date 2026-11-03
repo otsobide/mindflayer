@@ -250,7 +250,7 @@ fn a_template_s_origin_is_a_string_or_null_in_both() {
 fn a_skill_s_metadata_is_an_object_in_both() {
     let shown = Shown {
         kind: Kind::Skill,
-        name: "deploy".to_owned(),
+        name: "deploy".to_owned().into(),
         path: PathBuf::from("/work/skills/deploy"),
         project: PathBuf::from("/work"),
         file: PathBuf::from("/work/skills/deploy/SKILL.md"),

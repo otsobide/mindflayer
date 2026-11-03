@@ -48,7 +48,7 @@ use crate::resolve::{self, Inputs, Intent, Reason, ResolveError, Resolved};
 use crate::settings::{ProjectId, Settings, Share};
 use crate::status::{ArtifactStatus, Missed, ProjectStatus, State, Unreached};
 use crate::template::{self, Template};
-use crate::value::{Origin, Redacted};
+use crate::value::{ArtifactName, Origin, Redacted};
 use crate::workspace::{
     same_directory, FlayerWorkspace, MarkerFile, Member, MindProject, WorkspaceError,
 };
@@ -236,7 +236,7 @@ pub struct Library {
 pub struct LibraryHolder {
     /// The one of the workspace's own it holds a copy of.
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// The project, as its registry entry spells it ([`Project::entry`]):
     /// its artifact of that kind and name is the copy. Each entry that
     /// spells one directory is a holder of its own, as each is a project
@@ -349,7 +349,7 @@ pub struct Directory {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Held {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// The one line a listing shows; none for one whose file does not read,
     /// and for an install nothing of which is found.
     pub summary: Option<String>,
@@ -699,7 +699,7 @@ impl ShelfSource {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Offered {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// The one line a listing shows.
     pub summary: Option<String>,
     /// Which place offers it.
@@ -762,7 +762,7 @@ pub struct Closed {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct HeldBox {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// The offer's, as [`Offered::origin`] says it.
     pub origin: Origin,
     /// How the name stands in the project, as every offer of it stands
@@ -1309,7 +1309,7 @@ fn holdings(
                 ),
             }),
             kind,
-            name,
+            name: ArtifactName::from(name),
         };
         match held
             .iter_mut()

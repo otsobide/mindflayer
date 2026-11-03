@@ -49,7 +49,7 @@ fn only_an_installation_left_as_edited_is_refused_and_by_an_install_s_code() {
 fn a_plan_that_writes_nothing_is_empty_whatever_it_says() {
     let update = |step| Update {
         kind: Kind::Skill,
-        name: String::from("deploy"),
+        name: "deploy".into(),
         origin: Some(Origin::from("workspace")),
         standing: Standing::Orphaned,
         step,
@@ -108,7 +108,7 @@ fn each_step_is_said_by_a_word_of_its_own() {
 fn update(standing: Standing, step: Step) -> Update {
     Update {
         kind: Kind::Skill,
-        name: String::from("deploy"),
+        name: "deploy".into(),
         origin: Some(Origin::from("workspace")),
         standing,
         step,

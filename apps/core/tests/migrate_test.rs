@@ -382,7 +382,11 @@ fn migrating_moves_them_and_points_the_marker_at_the_library() {
     // The workspace handed back is the one on disk, and finds them there.
     assert_eq!(workspace, FlayerWorkspace::open(&root).unwrap());
     let catalog = Catalog::discover(&[workspace.own()]);
-    let names: Vec<&str> = catalog.artifacts().iter().map(|a| a.name()).collect();
+    let names: Vec<&str> = catalog
+        .artifacts()
+        .iter()
+        .map(|a| a.name().as_str())
+        .collect();
     assert_eq!(names, ["commit-style", "git/no-force-push"]);
     assert!(catalog.failures().is_empty());
 }

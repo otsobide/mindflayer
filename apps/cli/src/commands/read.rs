@@ -428,7 +428,7 @@ fn label(artifact: &Artifact, qualify: Qualify, level: Level) -> String {
     let name = if qualify.kind {
         artifact.qualified_name()
     } else {
-        artifact.name().to_owned()
+        artifact.name().to_string()
     };
     let label = if qualify.project {
         format!("{name} ({})", holder_of(artifact, level))

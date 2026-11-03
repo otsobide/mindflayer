@@ -768,7 +768,7 @@ fn the_copy_is_no_more_readable_than_the_ledger_before_anything_is_in_it() {
 fn installation_of(name: &str, targets: &[(Option<&str>, &str)]) -> InstallRecord {
     InstallRecord {
         kind: Kind::Skill,
-        name: name.to_owned(),
+        name: name.to_owned().into(),
         source_id: None,
         origin: Some(Origin::from("workspace")),
         content_hash: Some(recorded("e3b0c442")),
@@ -833,7 +833,7 @@ fn a_file_shared_by_several_installations_is_one_copy() {
 fn rule_of(name: &str, targets: &[(Option<&str>, &str, &str)]) -> InstallRecord {
     InstallRecord {
         kind: Kind::Rule,
-        name: name.to_owned(),
+        name: name.to_owned().into(),
         source_id: None,
         origin: Some(Origin::from("workspace")),
         content_hash: Some(recorded(&format!("{name}-rule"))),
@@ -1137,7 +1137,7 @@ fn a_renamed_copy_takes_its_installation_with_it_when_it_was_the_only_one() {
             .installation("collapse", Kind::Skill, "ship")
             .unwrap(),
         Some(InstallRecord {
-            name: String::from("ship"),
+            name: "ship".into(),
             ..installation_of("ship", &[(None, "skills/ship")])
         })
     );
@@ -1182,7 +1182,7 @@ fn a_renamed_copy_is_an_installation_of_its_own_beside_the_copies_it_left() {
             .installation("collapse", Kind::Rule, "git/never-force-push")
             .unwrap(),
         Some(InstallRecord {
-            name: String::from("git/never-force-push"),
+            name: "git/never-force-push".into(),
             targets: vec![Target {
                 agent: None,
                 path: String::from("rules/git/never-force-push.md"),
@@ -1360,7 +1360,7 @@ fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_
     ledger.installed("collapse", &unhashed).unwrap();
     let moved = |name: &str, hash: Option<&str>| Moved {
         kind: Kind::Skill,
-        name: name.to_owned(),
+        name: name.to_owned().into(),
         targets: installation_of(name, &[(Some("claude"), &format!(".claude/skills/{name}"))])
             .targets,
         content_hash: hash.map(recorded),
@@ -1438,7 +1438,7 @@ fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
         &id('a'),
         &[Moved {
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
             targets: vec![twice.clone(), twice],
             content_hash: None,
         }],
@@ -1854,10 +1854,10 @@ fn a_new_ledger_knows_each_project_it_is_told_of_once() {
 fn gathered_from(url: &str) -> Gathered {
     Gathered {
         kind: Kind::Skill,
-        name: String::from("deploy"),
+        name: "deploy".into(),
         path: String::from(".mindflayer/skills/github.com-acme-skills/deploy"),
         summary: Some(String::from("Ship it")),
-        revision: Some(String::from("4f9c2a7")),
+        revision: Some(Revision::from("4f9c2a7")),
         gathered_at: 1_790_000_000,
         source: Source {
             id: 3,
@@ -1865,7 +1865,7 @@ fn gathered_from(url: &str) -> Gathered {
             url: Redacted::new(url),
             reference: Some(String::from("main")),
             subdirectory: String::from("skills"),
-            revision: Some(String::from("4f9c2a7")),
+            revision: Some(Revision::from("4f9c2a7")),
             directory: String::from("github.com-acme-skills"),
         },
     }

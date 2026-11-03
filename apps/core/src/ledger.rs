@@ -31,7 +31,7 @@ use crate::code::codes;
 use crate::kind::Kind;
 use crate::settings::ProjectId;
 use crate::url::{carries_credentials, redacted};
-use crate::value::{ContentHash, Origin, Redacted};
+use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision};
 
 /// The schema version this build writes.
 ///
@@ -108,7 +108,7 @@ pub struct Source {
     /// The folder inside the source that was harvested, `skills` by default.
     pub subdirectory: String,
     /// The commit last gathered from, once one has been resolved.
-    pub revision: Option<String>,
+    pub revision: Option<Revision>,
     /// The folder this source owns under `.mindflayer/<kind folder>/`.
     ///
     /// Stored rather than derived: two URLs can reduce to the same readable
@@ -140,13 +140,13 @@ impl Source {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Gathered {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// Where it sits, relative to the workspace root, `/` separated.
     pub path: String,
     /// The one line a listing shows, as it read when it was gathered.
     pub summary: Option<String>,
     /// The revision it was taken at.
-    pub revision: Option<String>,
+    pub revision: Option<Revision>,
     /// When it was gathered, in seconds since the Unix epoch.
     pub gathered_at: i64,
     pub source: Source,
@@ -201,7 +201,7 @@ impl Outcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallRecord {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// The shelf source it was copied from, while the ledger still has it;
     /// `None` for the workspace's own and a loaded workspace's.
     pub source_id: Option<i64>,
@@ -240,7 +240,7 @@ pub struct Target {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Moved {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// Every copy it has now, in place of those it recorded; none forgets it.
     pub targets: Vec<Target>,
     /// What every one of them holds ([`crate::hash::tree`]), for a record
@@ -850,7 +850,7 @@ impl Ledger {
             };
             found.push(Gathered {
                 kind,
-                name: row.name,
+                name: ArtifactName::from(row.name),
                 path: row.path,
                 summary: row.summary,
                 revision: row.revision,
@@ -1106,7 +1106,7 @@ impl Ledger {
 
         Ok(Some(InstallRecord {
             kind,
-            name: name.to_owned(),
+            name: ArtifactName::from(name),
             source_id,
             origin,
             content_hash,
@@ -1459,7 +1459,7 @@ impl Ledger {
                     id,
                     InstallRecord {
                         kind,
-                        name,
+                        name: ArtifactName::from(name),
                         source_id,
                         // Out as every URL comes out, as `installation` has it.
                         origin: origin.map(|text| Origin::from(redacted(&text))),
@@ -2110,14 +2110,14 @@ struct Row {
     name: String,
     path: String,
     summary: Option<String>,
-    revision: Option<String>,
+    revision: Option<Revision>,
     gathered_at: i64,
     source_id: i64,
     source_kind: String,
     url: String,
     reference: Option<String>,
     subdirectory: String,
-    source_revision: Option<String>,
+    source_revision: Option<Revision>,
     directory: String,
 }
 
@@ -2309,6 +2309,34 @@ fn slug(url: &str) -> String {
 impl rusqlite::ToSql for ContentHash {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         Ok(rusqlite::types::ToSqlOutput::from(self.as_str()))
+    }
+}
+
+/// A name as the ledger stores it, the text it is.
+impl rusqlite::ToSql for ArtifactName {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::from(self.as_str()))
+    }
+}
+
+/// A name as the ledger holds it: any text, as a name read from anywhere is.
+impl rusqlite::types::FromSql for ArtifactName {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        String::column_result(value).map(ArtifactName::from)
+    }
+}
+
+/// A revision as the ledger stores it, the text the remote named it by.
+impl rusqlite::ToSql for Revision {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::from(self.as_str()))
+    }
+}
+
+/// A revision as the ledger holds it.
+impl rusqlite::types::FromSql for Revision {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        String::column_result(value).map(Revision::from)
     }
 }
 

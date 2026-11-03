@@ -86,7 +86,7 @@ fn record(ledger: &Ledger, project: &str, name: &str, origin: &str, paths: &[&st
             project,
             &InstallRecord {
                 kind: Kind::Skill,
-                name: name.to_owned(),
+                name: name.into(),
                 source_id: None,
                 origin: Some(origin.into()),
                 content_hash: Some(written(name)),
@@ -260,7 +260,7 @@ fn an_install_gone_under_a_name_somebody_keeps_is_that_names_one_entry_as_what_i
         status.projects[0].artifacts,
         [ArtifactStatus {
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
             state: State::Foreign,
             agents: vec![Agent::Claude, Agent::OpenCode],
             origin: None,
@@ -657,7 +657,7 @@ fn reading_a_project_hands_back_the_catalog_it_read_with_the_records_marked() {
     let names: Vec<&str> = catalog
         .artifacts()
         .iter()
-        .map(|artifact| artifact.name())
+        .map(|artifact| artifact.name().as_str())
         .collect();
     assert_eq!(names, ["deploy", "review"]);
     assert_eq!(

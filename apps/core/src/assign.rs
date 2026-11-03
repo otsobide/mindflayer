@@ -31,6 +31,7 @@ use crate::gather::Scrub;
 use crate::install::{self, Candidate, Edits, InstallError, Installation, Removed};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
+use crate::value::ArtifactName;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject};
 
 /// What a batch did: [`install`] or [`uninstall`].
@@ -162,7 +163,7 @@ pub type Orphans = Result<Vec<Orphan>, InstallError>;
 #[derive(Debug)]
 pub struct Orphan {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     pub removed: Result<Removed, InstallError>,
 }
 
@@ -218,7 +219,7 @@ fn orphans(
                 install::uninstall_with(workspace, ledger, project, kind, &name, homes, edits);
             orphans.push(Orphan {
                 kind,
-                name,
+                name: ArtifactName::from(name),
                 removed,
             });
         }

@@ -455,7 +455,7 @@ fn carry_out(
         stage
             .place(source, &copies, source, &install::left_out_names())
             .map_err(|copy::PlaceError { target, source }| ProjectFailure::Copy {
-                name: retarget.name.clone(),
+                name: retarget.name.to_string(),
                 path: target.unwrap_or_else(|| copies[0].clone()),
                 source,
             })?;
@@ -476,7 +476,7 @@ fn carry_out(
             source,
         })?;
         undo.retired
-            .push((retarget.name.clone(), path.clone(), aside));
+            .push((retarget.name.to_string(), path.clone(), aside));
     }
 
     let text = plan.settings.text().map_err(ProjectFailure::Workspace)?;

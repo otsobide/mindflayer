@@ -44,7 +44,7 @@ use crate::install::{self, InstallError, WORKSPACE_ORIGIN};
 use crate::kind::Kind;
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::skill::SkillManifest;
-use crate::value::{ContentHash, Origin};
+use crate::value::{ArtifactName, ContentHash, Origin};
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// What the `metadata` keys start with that `gh skill` writes into a skill
@@ -58,7 +58,7 @@ pub struct Plan {
     /// The project it is adopted from.
     pub project: MindProject,
     /// The skill's name, which it declares and its folder is called.
-    pub name: String,
+    pub name: ArtifactName,
     /// Where its copy in the library goes: the workspace's own folder for
     /// skills, under its name.
     pub library: PathBuf,
@@ -363,7 +363,7 @@ fn into_library(plan: &Plan) -> Result<(), AdoptError> {
     }
     fs::create_dir(&plan.library).map_err(|source| match source.kind() {
         io::ErrorKind::AlreadyExists => AdoptError::InLibrary {
-            name: plan.name.clone(),
+            name: plan.name.to_string(),
             library: plan.library.clone(),
             copy: plan.source.clone(),
         },
@@ -527,7 +527,7 @@ fn plan_with(
         .collect();
     Ok(Plan {
         project: project.clone(),
-        name,
+        name: ArtifactName::from(name),
         library,
         copies,
         source: first.clone(),

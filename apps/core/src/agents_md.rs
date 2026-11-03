@@ -146,7 +146,7 @@ impl Section {
             return Ok(None);
         }
         let body = rule.contents()?;
-        Section::new(rule.name(), &body).map(Some)
+        Section::new(rule.name().as_str(), &body).map(Some)
     }
 
     /// The section for the rule at `route`, whose body, its front matter

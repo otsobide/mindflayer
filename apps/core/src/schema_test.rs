@@ -345,7 +345,7 @@ fn a_template_s_origin_holds_to_its_schema_as_serde_writes_it() {
 fn a_skill_s_metadata_holds_to_its_schema_as_an_object() {
     let shown = |metadata| Shown {
         kind: Kind::Skill,
-        name: "deploy".to_owned(),
+        name: "deploy".to_owned().into(),
         path: PathBuf::from("/work/skills/deploy"),
         project: PathBuf::from("/work"),
         file: PathBuf::from("/work/skills/deploy/SKILL.md"),

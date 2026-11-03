@@ -150,6 +150,18 @@ macro_rules! text_value {
             }
         }
 
+        impl PartialEq<&$name> for $name {
+            fn eq(&self, other: &&$name) -> bool {
+                self.0 == other.0
+            }
+        }
+
+        impl PartialEq<$name> for &$name {
+            fn eq(&self, other: &$name) -> bool {
+                self.0 == other.0
+            }
+        }
+
         impl PartialEq<Cow<'_, str>> for $name {
             fn eq(&self, other: &Cow<'_, str>) -> bool {
                 self.0 == **other

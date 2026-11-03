@@ -33,7 +33,7 @@ use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
 use crate::lock::LockError;
 use crate::paths;
 use crate::url::{carries_credentials, redacted};
-use crate::value::Redacted;
+use crate::value::{ArtifactName, Redacted, Revision};
 use crate::workspace::FlayerWorkspace;
 
 pub use watch::{Progress, Watch};
@@ -153,7 +153,7 @@ impl Request {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Harvested {
     /// The name it declares, which is what it will be asked for by.
-    pub name: String,
+    pub name: ArtifactName,
     /// The folder it came from inside the source, which is the folder it kept.
     pub directory: String,
     /// The one line a listing shows.
@@ -173,7 +173,7 @@ pub struct Harvested {
 #[derive(Debug, Default, Serialize)]
 pub struct Report {
     /// The revision that was gathered from, when there was one.
-    pub revision: Option<String>,
+    pub revision: Option<Revision>,
     /// The folder under `.mindflayer/<kind>/` this source owns.
     pub directory: String,
     pub added: Vec<Harvested>,

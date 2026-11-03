@@ -51,7 +51,7 @@ use crate::kind::Kind;
 use crate::ledger::{Action, InstallRecord, Ledger, Outcome, Target};
 use crate::paths;
 use crate::settings::Share;
-use crate::value::{ContentHash, Origin};
+use crate::value::{ArtifactName, ContentHash, Origin};
 use crate::workspace::{replace_bytes_unresolved, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// How the ledger names a project's `AGENTS.md`: its route from the project,
@@ -509,11 +509,11 @@ pub(crate) fn uninstall(
         return Ok(
             match Held::read(workspace, ledger, project)?.foreign(root, name) {
                 Some(path) => Removed::Foreign {
-                    name: name.to_owned(),
+                    name: ArtifactName::from(name),
                     path,
                 },
                 None => Removed::Absent {
-                    name: name.to_owned(),
+                    name: ArtifactName::from(name),
                 },
             },
         );
@@ -522,7 +522,7 @@ pub(crate) fn uninstall(
         let paths = super::edited(workspace, ledger, project, Kind::Rule, name)?;
         if !paths.is_empty() {
             return Ok(Removed::Edited {
-                name: name.to_owned(),
+                name: ArtifactName::from(name),
                 paths,
             });
         }
@@ -538,7 +538,7 @@ pub(crate) fn uninstall(
     let detail = format!("{name} from {}", project.name());
     ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
     Ok(Removed::Removed {
-        name: name.to_owned(),
+        name: ArtifactName::from(name),
         paths: record
             .targets
             .iter()
@@ -694,7 +694,7 @@ impl Wanted {
         let path = offer.source(workspace);
         let within = within(workspace, offer, &path);
         inside(&path, &within)?;
-        let artifact = Artifact::rule(&path, offer.name().to_owned(), &within)?;
+        let artifact = Artifact::rule(&path, offer.name().to_string(), &within)?;
         let bytes = fs::read(artifact.file()).map_err(|source| {
             InstallError::Artifact(crate::artifact::ArtifactError::Read {
                 path: artifact.file(),
@@ -742,7 +742,7 @@ impl Wanted {
         }
         InstallRecord {
             kind: Kind::Rule,
-            name: self.name().to_owned(),
+            name: ArtifactName::from(self.name()),
             source_id: None,
             origin: Some(self.origin.clone()),
             content_hash: self
@@ -880,7 +880,7 @@ fn render_held(
             (None, Change::Uninstall(_) | Change::Update { .. }) => unoffered.push(record),
             (None, _) => {
                 return Err(InstallError::NoLongerOffered {
-                    name: record.name.clone(),
+                    name: record.name.to_string(),
                     origin: record.origin.clone(),
                 })
             }
@@ -950,7 +950,7 @@ fn render_held(
                 let section =
                     text.section(&record.name)
                         .ok_or_else(|| InstallError::NoLongerOffered {
-                            name: record.name.clone(),
+                            name: record.name.to_string(),
                             origin: record.origin.clone(),
                         })?;
                 let recorded = record
@@ -959,7 +959,7 @@ fn render_held(
                     .find(|target| target.path == AGENTS_MD)
                     .and_then(|target| target.content_hash.clone());
                 sections.insert(
-                    record.name.clone(),
+                    record.name.to_string(),
                     recorded.unwrap_or_else(|| section.hash()),
                 );
                 held.push(section);
@@ -976,7 +976,7 @@ fn render_held(
                     .section(&record.name)
                     .ok_or_else(|| InstallError::Unread {
                         file: file.clone(),
-                        route: record.name.clone(),
+                        route: record.name.to_string(),
                     })?;
                 let recorded = record
                     .targets
@@ -984,7 +984,7 @@ fn render_held(
                     .find(|target| target.path == AGENTS_MD)
                     .and_then(|target| target.content_hash.clone());
                 sections.insert(
-                    record.name.clone(),
+                    record.name.to_string(),
                     recorded.unwrap_or_else(|| section.hash()),
                 );
                 held.push(section);
@@ -1062,7 +1062,7 @@ fn render_held(
             }
             copied.push(Copied {
                 path: super::recorded_copy(project, Kind::Rule, &record.name, &target.path)?,
-                name: record.name.clone(),
+                name: record.name.to_string(),
                 target: target.clone(),
             });
         }
@@ -1164,7 +1164,7 @@ fn render_held(
                     .then(|| held_file(&root.join(&file)))
                     .flatten();
                 Some(Recorded {
-                    route: record.name.clone(),
+                    route: record.name.to_string(),
                     hash: forced.or_else(|| target.content_hash.clone())?,
                 })
             })
@@ -1239,7 +1239,7 @@ fn render_held(
             };
             InstallRecord {
                 kind: Kind::Rule,
-                name: name.to_owned(),
+                name: ArtifactName::from(name),
                 source_id: None,
                 origin: Some(rule.origin.clone()),
                 content_hash,
@@ -1277,8 +1277,8 @@ fn render_held(
             .cloned()
             .collect();
         if let (true, Some(hash)) = (
-            rendered_routes.contains(&record.name),
-            sections.get(&record.name),
+            rendered_routes.iter().any(|route| *route == record.name),
+            sections.get(record.name.as_str()),
         ) {
             targets.push(Target {
                 agent: None,
@@ -1428,7 +1428,7 @@ fn render_held(
         });
         if !reached {
             warnings.push(Warning::Unreached {
-                route: record.name.clone(),
+                route: record.name.to_string(),
             });
         }
     }
@@ -1573,12 +1573,12 @@ fn copy_in_held(
     if !from.is_file() {
         return Err(match &candidate.offer {
             Offer::Loaded { entry, .. } => InstallError::Gone {
-                name,
+                name: name.into_string(),
                 path: from,
                 workspace: paths::normalize(&workspace.root().join(entry)),
             },
             _ => InstallError::Missing {
-                name,
+                name: name.into_string(),
                 path: from,
                 workspace: workspace.root().to_path_buf(),
             },

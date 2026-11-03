@@ -1529,13 +1529,13 @@ fn a_change_core_plans_is_the_install_or_uninstall_task_that_runs_it() {
     let install = Change::Install {
         projects: owned(&["alpha", "./beta"]),
         kind: Kind::Rule,
-        name: String::from("git/commits"),
+        name: "git/commits".into(),
         from: "load:../team".into(),
     };
     let uninstall = Change::Uninstall {
         projects: owned(&["alpha"]),
         kind: Kind::Skill,
-        name: String::from("deploy"),
+        name: "deploy".into(),
     };
 
     assert_eq!(

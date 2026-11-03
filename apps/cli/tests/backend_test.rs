@@ -1839,7 +1839,7 @@ fn held(
                 records.push((
                     project.to_owned(),
                     kind,
-                    record.name,
+                    record.name.into_string(),
                     record.origin.map(String::from),
                 ));
             }

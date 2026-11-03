@@ -55,7 +55,7 @@ use crate::kind::{Kind, Layout};
 use crate::lifecycle::{self, LifecycleError};
 use crate::paths;
 use crate::rule::RuleManifest;
-use crate::value::ContentHash;
+use crate::value::{ArtifactName, ContentHash};
 use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// The most a file may hold, in bytes, to have its text read: a mebibyte.
@@ -73,7 +73,7 @@ pub const CAP: u64 = 1 << 20;
 pub struct Contents {
     /// The artifact it belongs to.
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// The file, as it was asked for: a route from the artifact's folder,
     /// `/` separated, or a rule's own file name.
     pub file: String,
@@ -151,7 +151,7 @@ pub const FILES_CAP: usize = 1000;
 pub struct Files {
     /// The artifact they belong to.
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// The file it is read from, as [`Contents`] takes it: a skill's
     /// `SKILL.md`, or a rule's own file name. Said rather than left to a
     /// front end, which would otherwise spell where each kind keeps what
@@ -429,7 +429,7 @@ fn read(
     }
     let withheld = |size, hash, withheld| Contents {
         kind,
-        name: name.clone(),
+        name: ArtifactName::from(&name),
         file: file.to_owned(),
         size,
         hash,
@@ -454,7 +454,7 @@ fn read(
     match String::from_utf8(bytes) {
         Ok(text) if !text.contains('\0') => Ok(Contents {
             kind,
-            name,
+            name: ArtifactName::from(name),
             file: file.to_owned(),
             size,
             hash,
@@ -592,7 +592,7 @@ fn list(
     };
     Ok(Files {
         kind,
-        name,
+        name: ArtifactName::from(name),
         manifest,
         entries: walk.entries,
         truncated: walk.truncated,
@@ -759,7 +759,7 @@ fn artifact(
         .map(|artifact| {
             (
                 artifact.kind(),
-                artifact.name().to_owned(),
+                artifact.name().to_string(),
                 artifact.path().to_path_buf(),
             )
         })

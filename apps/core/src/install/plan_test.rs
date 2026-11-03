@@ -30,7 +30,7 @@ fn of(
     Asked {
         cell: Cell::of(project, kind, name, origin, wanted),
         kind,
-        name: name.to_owned(),
+        name: name.to_owned().into(),
         standing,
         held,
     }
@@ -40,7 +40,7 @@ fn install(projects: &[&str], kind: Kind, name: &str, from: &str) -> Change {
     Change::Install {
         projects: projects.iter().map(|&project| project.to_owned()).collect(),
         kind,
-        name: name.to_owned(),
+        name: name.to_owned().into(),
         from: Origin::from(from),
     }
 }
@@ -49,7 +49,7 @@ fn uninstall(projects: &[&str], kind: Kind, name: &str) -> Change {
     Change::Uninstall {
         projects: projects.iter().map(|&project| project.to_owned()).collect(),
         kind,
-        name: name.to_owned(),
+        name: name.to_owned().into(),
     }
 }
 
@@ -414,7 +414,7 @@ fn one_name_asked_for_from_two_places_in_one_project_clashes_and_nothing_of_it_i
         [Conflict {
             project: String::from("alpha"),
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
             cells: vec![asked[0].cell.clone(), asked[1].cell.clone()],
             why: Said {
                 code: "wanted_twice",
@@ -467,7 +467,7 @@ fn one_box_asked_both_ways_clashes_and_nothing_of_its_name_is_planned_there() {
         [Conflict {
             project: String::from("alpha"),
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
             cells: vec![asked[0].cell.clone(), asked[1].cell.clone()],
             why: Said {
                 code: "asked_both_ways",

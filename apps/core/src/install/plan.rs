@@ -36,7 +36,7 @@ use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
 use crate::policy::{self, PolicyError};
 use crate::url::redacted;
-use crate::value::{Origin, Redacted};
+use crate::value::{ArtifactName, Origin, Redacted};
 use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// What `selection` amounts to in `workspace` as the disk stands now: each
@@ -250,7 +250,7 @@ impl Read {
                     ..cell.clone()
                 },
                 kind,
-                name: name.to_owned(),
+                name: ArtifactName::from(name),
                 standing,
                 held,
             })),
@@ -364,13 +364,13 @@ pub fn holding(
         .collect();
     let mut told: Vec<(Kind, &str)> = Vec::new();
     for (index, candidate) in candidates.iter().enumerate() {
-        let named = (candidate.kind(), candidate.name());
+        let named = (candidate.kind(), candidate.name().as_str());
         if !held[index] || candidate.standing == Standing::Foreign || told.contains(&named) {
             continue;
         }
         told.push(named);
         let same: Vec<usize> = (0..candidates.len())
-            .filter(|&other| (candidates[other].kind(), candidates[other].name()) == named)
+            .filter(|&other| (candidates[other].kind(), candidates[other].name().as_str()) == named)
             .collect();
         if same.len() < 2 {
             continue;
@@ -443,7 +443,7 @@ pub struct Asked {
     pub cell: Cell,
     /// What its reference names.
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// How its name stands with its project, as every offer of the name
     /// stands ([`super::survey`]).
     pub standing: Standing,
@@ -484,7 +484,7 @@ pub enum Change {
     Install {
         projects: Vec<String>,
         kind: Kind,
-        name: String,
+        name: ArtifactName,
         from: Origin,
     },
     /// `flayer uninstall -p <project>... <kind:name>`: the name, whichever
@@ -492,7 +492,7 @@ pub enum Change {
     Uninstall {
         projects: Vec<String>,
         kind: Kind,
-        name: String,
+        name: ArtifactName,
     },
 }
 
@@ -505,7 +505,7 @@ pub enum Change {
 pub struct Conflict {
     pub project: String,
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// Each box that clashes, as it was asked.
     pub cells: Vec<Cell>,
     /// Why, by its code ([`Clash`]).
@@ -714,7 +714,7 @@ fn decide(asked: &[Asked], group: &[usize]) -> Decision {
             cells: cells(&seen.at),
             why: said(&Clash::BothWays {
                 project: project.clone(),
-                name: name.clone(),
+                name: name.to_string(),
                 origin: (*origin).clone(),
             }),
         })
@@ -733,7 +733,7 @@ fn decide(asked: &[Asked], group: &[usize]) -> Decision {
             why: said(&Clash::WantedTwice {
                 project: project.clone(),
                 kind,
-                name: name.clone(),
+                name: name.to_string(),
                 origins: wanted
                     .iter()
                     .map(|(origin, _)| (*origin).to_owned())

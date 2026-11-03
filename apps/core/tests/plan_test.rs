@@ -300,12 +300,12 @@ fn boxes_read_off_the_disk_plan_an_install_and_an_uninstall_naming_each_project_
             Change::Uninstall {
                 projects: owned(&["alpha"]),
                 kind: Kind::Skill,
-                name: String::from("deploy"),
+                name: "deploy".into(),
             },
             Change::Install {
                 projects: owned(&["beta"]),
                 kind: Kind::Skill,
-                name: String::from("deploy"),
+                name: "deploy".into(),
                 from: "load:../team".into(),
             },
         ]
@@ -328,7 +328,7 @@ fn an_offer_asked_for_in_place_of_the_one_a_project_holds_replaces_it() {
         [Change::Install {
             projects: owned(&["alpha"]),
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
             from: "load:../team".into(),
         }]
     );
@@ -355,7 +355,7 @@ fn an_installation_nothing_offers_any_more_is_asked_away_by_the_origin_it_came_f
         [Change::Uninstall {
             projects: owned(&["alpha"]),
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
         }]
     );
 }
@@ -383,7 +383,7 @@ fn a_credential_typed_into_a_box_is_its_origin_as_printed_and_never_said_back() 
         [Change::Install {
             projects: owned(&["alpha"]),
             kind: Kind::Skill,
-            name: String::from("lint"),
+            name: "lint".into(),
             from: address.clone().into(),
         }]
     );
@@ -416,13 +416,13 @@ fn a_bare_name_is_the_one_kind_its_origin_offers_it_as() {
             Change::Install {
                 projects: owned(&["alpha"]),
                 kind: Kind::Skill,
-                name: String::from("deploy"),
+                name: "deploy".into(),
                 from: "load:../team".into(),
             },
             Change::Install {
                 projects: owned(&["alpha"]),
                 kind: Kind::Rule,
-                name: String::from("deploy"),
+                name: "deploy".into(),
                 from: "workspace".into(),
             },
         ]
@@ -566,7 +566,7 @@ fn a_held_offer_asked_away_beside_an_offer_nothing_offers_is_held_back_with_it()
         [Change::Uninstall {
             projects: owned(&["beta"]),
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
         }]
     );
     assert_eq!(codes(&plan), (vec![], vec!["not_offered", "not_offered"]));

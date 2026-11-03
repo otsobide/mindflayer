@@ -54,7 +54,7 @@ use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
 use crate::paths;
 use crate::status::State;
-use crate::value::Origin;
+use crate::value::{ArtifactName, Origin};
 use crate::view::StateCount;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
@@ -103,7 +103,7 @@ pub struct ProjectPlan {
 #[derive(Debug)]
 pub struct Update {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// Where it came from, as `--from` takes it: none for a record from
     /// before origins were kept.
     pub origin: Option<Origin>,
@@ -292,7 +292,7 @@ pub enum Left {
     )]
     Edited {
         kind: Kind,
-        name: String,
+        name: ArtifactName,
         project: String,
         at: Vec<String>,
     },
@@ -307,7 +307,7 @@ pub enum Left {
     )]
     Orphaned {
         kind: Kind,
-        name: String,
+        name: ArtifactName,
         project: String,
         origin: Option<Origin>,
         edited: bool,
@@ -321,7 +321,7 @@ pub enum Left {
     )]
     Unsure {
         kind: Kind,
-        name: String,
+        name: ArtifactName,
         project: String,
         origins: Vec<Origin>,
     },
@@ -469,7 +469,7 @@ pub fn apply(
             if rendered {
                 renders = true;
                 if matches!(update.step, Step::WriteOver(_)) {
-                    forced.push(update.name.clone());
+                    forced.push(update.name.to_string());
                 }
                 continue;
             }
@@ -557,7 +557,7 @@ fn plan_with(
                     && update.standing == Standing::Edited
                     && !(*asked && matches!(update.step, Step::WriteOver(_)))
             })
-            .map(|(_, update)| update.name.clone())
+            .map(|(_, update)| update.name.to_string())
             .collect();
         let installations = updates
             .into_iter()
@@ -677,7 +677,7 @@ pub struct ProjectUpdates {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Pending {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// Where it came from, as `--from` takes it: none for a record from
     /// before origins were kept.
     pub origin: Option<Origin>,

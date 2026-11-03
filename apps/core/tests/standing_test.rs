@@ -566,7 +566,7 @@ fn reinstalling_after_a_hand_edit_of_a_copy_leaves_it_untouched_and_says_it_is_e
     assert_eq!(
         again,
         Installed::Edited {
-            name: String::from("deploy"),
+            name: "deploy".into(),
             paths: vec![agents.clone()],
         }
     );
@@ -602,7 +602,7 @@ fn uninstalling_an_edited_skill_takes_out_no_copy_until_it_is_forced() {
     assert_eq!(
         refused,
         Removed::Edited {
-            name: String::from("deploy"),
+            name: "deploy".into(),
             paths: vec![claude.clone()],
         }
     );
@@ -649,14 +649,14 @@ fn an_edited_section_refuses_the_rules_install_and_uninstall_until_they_are_forc
     assert_eq!(
         given.install(Kind::Rule, "git/no-force-push"),
         Installed::Edited {
-            name: String::from("git/no-force-push"),
+            name: "git/no-force-push".into(),
             paths: vec![given.agents_md()],
         }
     );
     assert_eq!(
         given.uninstall_with(Kind::Rule, "git/no-force-push", Edits::Kept),
         Removed::Edited {
-            name: String::from("git/no-force-push"),
+            name: "git/no-force-push".into(),
             paths: vec![given.agents_md()],
         }
     );

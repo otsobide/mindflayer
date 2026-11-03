@@ -384,7 +384,7 @@ fn a_version_2_installation_reads_back_through_the_ledger() {
             .unwrap(),
         Some(InstallRecord {
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
             source_id: Some(1),
             origin: Some(mindflayer_core::value::Origin::from(
                 "https://github.com/acme/skills#next"

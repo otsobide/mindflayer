@@ -444,7 +444,7 @@ fn holds(workspace: &FlayerWorkspace, offer: &Offer, copy: &Path) -> bool {
 fn section_of(workspace: &FlayerWorkspace, offer: &Offer) -> Option<ContentHash> {
     let rule = Artifact::rule(
         offer.source(workspace),
-        offer.name().to_owned(),
+        offer.name().to_string(),
         workspace.root(),
     )
     .ok()?;
