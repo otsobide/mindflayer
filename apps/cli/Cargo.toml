@@ -95,3 +95,17 @@ tokio = { version = "1", features = ["macros", "rt", "time"] }
 # it: the 2020-12 validator core's tests use, for the reasons its manifest
 # gives.
 boon = { version = "0.6", default-features = false }
+# What reads the API's OpenAPI document as OpenAPI 3.1 (`openapi_test`): a
+# reader of 3.1 alone, which tells a document of another version, into
+# types of its own whose every required field and closed word the document
+# must have, each `$ref` it reads resolved within it. MIT, a licence
+# GPL-3.0-only takes in, as is the one crate it adds to the tree. It
+# reaches no network: the text it is handed is all it reads. Without its
+# default feature, which only turns on serde_json's `preserve_order`: cargo
+# would build serde_json with it for every crate a test builds, and every
+# map schemars and the commands write would come out in another order. roas
+# was the other reader, which models every keyword of a schema and refuses
+# the `uint64` format schemars writes, which 3.1 allows; and
+# openapi-spec-validator-rs carries 3.1's own meta-schema, but builds
+# jsonschema and turns that same feature on.
+oas3 = { version = "0.22", default-features = false }
