@@ -203,6 +203,223 @@ async fn a_body_that_is_no_json_too_large_or_cut_off_is_refused_with_its_code() 
     assert!(runs.lock().unwrap().is_empty());
 }
 
+/// Whatever turned a request away under `/api`, a guard, the gate, a route,
+/// what a body holds, a backend's rules or a backend that failed, the answer
+/// is `{"error": ..., "code": ...}` and nothing else: the words for a person
+/// and the word for a script, the code one the server gives of its own or
+/// the backend's. Every condition the server has is met here but two no
+/// request can bring about, a way to fail axum has yet to add and a writer
+/// thread that has stopped, so one added later is met here too, or said.
+#[tokio::test]
+async fn every_answer_under_the_api_that_is_no_success_carries_an_error_and_a_code() {
+    let (server, _) = launch();
+    let port = server.address().port();
+    let token = Auth::Bearer(server.token());
+    let cookie = format!("{}={}", server.cookie(), server.token());
+    let by_cookie = || {
+        request(
+            &server,
+            Method::POST,
+            "/api/v1/tasks",
+            Auth::Cookie(&cookie),
+            Some(json!({ "name": "a" })),
+        )
+    };
+    let with = |mut request: Request<Body>, name: &'static str, value: String| {
+        request.headers_mut().insert(name, value.parse().unwrap());
+        request
+    };
+    let without = |mut request: Request<Body>, name: &'static str| {
+        request.headers_mut().remove(name);
+        request
+    };
+    let carrying = |body: Body| {
+        let mut request = request(
+            &server,
+            Method::POST,
+            "/api/v1/tasks",
+            token,
+            Some(json!({})),
+        );
+        *request.body_mut() = body;
+        request
+    };
+    let read = |path: &str| request(&server, Method::GET, path, token, None);
+    let sent = |path: &str, body: Value| request(&server, Method::POST, path, token, Some(body));
+
+    let asked: Vec<(&str, Request<Body>)> = vec![
+        (
+            "no token",
+            request(
+                &server,
+                Method::GET,
+                "/api/v1/echo?echo=x",
+                Auth::Nothing,
+                None,
+            ),
+        ),
+        (
+            "no token, the bare prefix",
+            request(&server, Method::GET, "/api", Auth::Nothing, None),
+        ),
+        (
+            "another host",
+            with(
+                read("/api/v1/echo?echo=x"),
+                "host",
+                format!("attacker.example:{port}"),
+            ),
+        ),
+        (
+            "another page",
+            with(
+                read("/api/v1/echo?echo=x"),
+                "origin",
+                format!("http://127.0.0.1:{}", port.wrapping_add(1)),
+            ),
+        ),
+        (
+            "a change by cookie from another port",
+            with(by_cookie(), "sec-fetch-site", String::from("same-site")),
+        ),
+        (
+            "a change by cookie without the header",
+            without(by_cookie(), "x-mindflayer"),
+        ),
+        (
+            "a change by cookie as text",
+            with(by_cookie(), "content-type", String::from("text/plain")),
+        ),
+        (
+            "a body with no type",
+            without(
+                sent("/api/v1/tasks", json!({ "name": "a" })),
+                "content-type",
+            ),
+        ),
+        ("a body that is no JSON", carrying(Body::from("{nope"))),
+        (
+            "a body the task cannot be read from",
+            sent("/api/v1/tasks", json!({ "nombre": "a" })),
+        ),
+        (
+            "a body too large",
+            carrying(Body::from(format!(
+                "{{\"name\": \"{}\"}}",
+                "a".repeat(3 << 20)
+            ))),
+        ),
+        (
+            "a body cut off",
+            carrying(Body::from_stream(futures_util::stream::iter([
+                Ok(Bytes::from_static(b"{")),
+                Err(std::io::Error::other("the connection was lost")),
+            ]))),
+        ),
+        (
+            "a parameter no route takes",
+            read("/api/v1/echo?echo=x&what=1"),
+        ),
+        (
+            "a parameter given twice",
+            read("/api/v1/echo?echo=a&echo=b"),
+        ),
+        (
+            "a parameter it cannot read",
+            read("/api/v1/words?times=many"),
+        ),
+        ("a parameter left out", read("/api/v1/echo")),
+        (
+            "parameters the route cannot read",
+            read("/api/v1/echo?echo="),
+        ),
+        (
+            "a parameter to a route of the server's own",
+            read("/api/v1/transcript?view=all"),
+        ),
+        ("a path no route names", read("/api/v1/nothing")),
+        ("the bare prefix", read("/api/")),
+        (
+            "a method a route does not take",
+            request(&server, Method::DELETE, "/api/v1/transcript", token, None),
+        ),
+        (
+            "a read the backend refuses",
+            read("/api/v1/echo?echo=x&refuse=true"),
+        ),
+        (
+            "a read naming what is not there",
+            read("/api/v1/echo?echo=x&absent=true"),
+        ),
+        (
+            "a read the backend fails at",
+            sent("/api/v1/judge", json!({ "echo": "x", "panic": true })),
+        ),
+        (
+            "a preview the backend refuses",
+            sent(
+                "/api/v1/tasks/preview",
+                json!({ "name": "a", "refuse": true }),
+            ),
+        ),
+        (
+            "a run the backend refuses",
+            sent("/api/v1/tasks", json!({ "name": "a", "refuse_run": true })),
+        ),
+        (
+            "a run the backend fails at",
+            sent("/api/v1/tasks", json!({ "name": "a", "panic": true })),
+        ),
+        (
+            "a switch the backend refuses",
+            sent("/api/v1/switch", json!({ "to": "a", "refuse": true })),
+        ),
+    ];
+
+    let mut met: Vec<String> = Vec::new();
+    for (case, request) in asked {
+        let reply = deliver(&server, request).await;
+        assert!(!reply.status.is_success(), "{case}: {}", reply.status);
+        assert_eq!(
+            reply.header("content-type"),
+            Some("application/json"),
+            "{case}"
+        );
+        let said = reply.json();
+        let fields: Vec<&String> = said
+            .as_object()
+            .map(|said| said.keys().collect())
+            .unwrap_or_default();
+        assert_eq!(fields, ["code", "error"], "{case}: {said}");
+        assert!(
+            said["error"]
+                .as_str()
+                .is_some_and(|error| !error.is_empty()),
+            "{case}: {said}"
+        );
+        let code = said["code"].as_str().unwrap_or_default().to_owned();
+        assert!(
+            Condition::CODES.contains(&code.as_str()) || FAKE_CODES.contains(&code.as_str()),
+            "{case}: {said}"
+        );
+        if let Some(condition) = Condition::ALL
+            .iter()
+            .find(|condition| condition.code() == code)
+        {
+            assert_eq!(reply.status, condition.status(), "{case}: {said}");
+        }
+        met.push(code);
+    }
+
+    let unmet: Vec<&str> = Condition::CODES
+        .iter()
+        .chain(&FAKE_CODES)
+        .copied()
+        .filter(|code| !met.iter().any(|met| met == code))
+        .collect();
+    assert_eq!(unmet, ["body_refused", "writer_stopped"]);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_server_answers_on_loopback_on_a_port_the_system_chose() {
     let (server, _) = launch();
