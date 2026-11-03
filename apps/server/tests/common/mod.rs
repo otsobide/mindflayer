@@ -25,14 +25,17 @@ use tower::ServiceExt;
 // ---------------------------------------------------------------------------
 
 /// The fake's read: say back what was sent, so a test can tell it arrived
-/// as the route it was sent to makes it, or refuse to. What it answers is
-/// itself, each field left at its default left out.
+/// as the route it was sent to makes it, or refuse to, or panic, as a
+/// backend with a bug would. What it answers is itself, each field left at
+/// its default left out.
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FakeQuery {
     pub echo: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub refuse: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub panic: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub words: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -55,7 +58,8 @@ struct Words {
 ///   by the route itself when there is nothing to echo;
 /// - `GET /words?word=a&word=b&times=2`, its words in `words`;
 /// - `POST /judge`, its body read as the query whole, and refused by the
-///   route as the echo route refuses.
+///   route as the echo route refuses; the one a query that panics is sent
+///   to, `{"echo": "x", "panic": true}`.
 pub fn fake_routes() -> Vec<Route<FakeQuery>> {
     vec![
         Route {
@@ -85,6 +89,7 @@ pub fn fake_routes() -> Vec<Route<FakeQuery>> {
                 Ok(FakeQuery {
                     echo: String::from("words"),
                     refuse: false,
+                    panic: false,
                     words: word,
                     times,
                 })
@@ -207,6 +212,9 @@ impl Backend for Fake {
     fn query(&self, query: FakeQuery) -> Result<Value, Refusal> {
         if query.refuse {
             return Err(refusal(&query.echo));
+        }
+        if query.panic {
+            panic!("the read of {} panics, as asked", query.echo);
         }
         Ok(serde_json::to_value(query).unwrap())
     }

@@ -156,6 +156,35 @@ async fn a_body_a_post_route_cannot_read_is_refused_and_so_is_a_parameter() {
     );
 }
 
+/// A backend with a bug, which panics on the blocking pool while it
+/// answers: a 500 with the server's code, and the next read answered.
+#[tokio::test]
+async fn a_read_the_backend_fails_at_is_a_500_with_its_code() {
+    let (server, _) = launch();
+    let token = Auth::Bearer(server.token());
+
+    let reply = post(
+        &server,
+        "/api/v1/judge",
+        token,
+        json!({ "echo": "x", "panic": true }),
+    )
+    .await;
+
+    assert_eq!(reply.status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        reply.json(),
+        json!({
+            "error": "the backend failed while answering the query",
+            "code": "backend_failed",
+        })
+    );
+    assert_eq!(
+        read(&server, "/api/v1/echo?echo=hi").await.status,
+        StatusCode::OK
+    );
+}
+
 /// A query the backend read and will not answer, as its front end's rules
 /// say: a 422, the code beside the message for a script to act on.
 #[tokio::test]

@@ -100,6 +100,34 @@ async fn a_task_the_backend_refuses_when_it_is_run_is_no_run_either() {
     );
 }
 
+/// A backend with a bug loses that one answer, a 500 with its code, and
+/// not the thread: the next task runs.
+#[tokio::test]
+async fn a_run_that_panics_is_a_500_and_the_next_runs() {
+    let (server, runs) = launch();
+    let token = Auth::Bearer(server.token());
+
+    let reply = post(
+        &server,
+        "/api/v1/tasks",
+        token,
+        json!({ "name": "broken", "panic": true }),
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        reply.json(),
+        json!({
+            "error": "the backend panicked while running the task",
+            "code": "backend_failed",
+        })
+    );
+
+    let reply = post(&server, "/api/v1/tasks", token, json!({ "name": "after" })).await;
+    assert_eq!(reply.status, StatusCode::OK);
+    assert_eq!(*runs.lock().unwrap(), ["start after", "end after"]);
+}
+
 #[tokio::test]
 async fn a_run_whose_outcome_is_not_json_is_still_transcribed() {
     let (server, runs) = launch();

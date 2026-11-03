@@ -128,6 +128,13 @@ async fn a_switch_that_panics_is_a_500_still_told_and_the_next_is_taken() {
     .await;
     assert_eq!(reply.status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(
+        reply.json(),
+        json!({
+            "error": "the backend panicked while switching",
+            "code": "backend_failed",
+        })
+    );
+    assert_eq!(
         stream.next().await,
         json!({"type": "switched", "switches": 1})
     );

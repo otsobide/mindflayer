@@ -110,8 +110,8 @@ async fn ask<B: Backend>(api: &Api<B>, query: B::Query) -> Response {
     match tokio::task::spawn_blocking(move || backend.query(query)).await {
         Ok(Ok(answer)) => Json(answer).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
-        Err(_) => uncoded(
-            StatusCode::INTERNAL_SERVER_ERROR,
+        Err(_) => error(
+            Condition::BackendFailed,
             "the backend failed while answering the query",
         ),
     }
@@ -137,8 +137,8 @@ pub(crate) async fn preview<B: Backend>(
     match tokio::task::spawn_blocking(move || backend.preview(&task)).await {
         Ok(Ok(preview)) => Json(preview).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
-        Err(_) => uncoded(
-            StatusCode::INTERNAL_SERVER_ERROR,
+        Err(_) => error(
+            Condition::BackendFailed,
             "the backend failed while previewing the task",
         ),
     }
@@ -162,7 +162,7 @@ pub(crate) async fn run<B: Backend>(
     match api.writer.run(task).await {
         Ok(Ok(entry)) => Json(entry).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
-        Err(message) => uncoded(StatusCode::INTERNAL_SERVER_ERROR, &message),
+        Err(failed) => error(failed.condition, failed.message),
     }
 }
 
@@ -188,7 +188,7 @@ pub(crate) async fn switch<B: Backend>(
     match api.writer.switch(to).await {
         Ok(Ok(answer)) => Json(answer).into_response(),
         Ok(Err(refusal)) => refused_by(refusal),
-        Err(message) => uncoded(StatusCode::INTERNAL_SERVER_ERROR, &message),
+        Err(failed) => error(failed.condition, failed.message),
     }
 }
 
@@ -317,9 +317,4 @@ pub(crate) fn error(condition: Condition, message: &str) -> Response {
         Json(json!({ "error": message, "code": condition.code() })),
     )
         .into_response()
-}
-
-/// An error with no code yet, as `{"error": "..."}`.
-pub(crate) fn uncoded(status: StatusCode, message: &str) -> Response {
-    (status, Json(json!({ "error": message }))).into_response()
 }
