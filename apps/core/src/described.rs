@@ -139,7 +139,10 @@ pub fn field_serializers(folder: &Path) -> io::Result<BTreeSet<String>> {
                 if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
                     continue;
                 }
-                if attribute(&text[..at]) != Some("serde") {
+                // Only a `with` of schemars' is passed over: an attribute
+                // read as any other counts, so a misreading names one more
+                // function for the test to refuse rather than hide one.
+                if attribute(&text[..at]) == Some("schemars") {
                     continue;
                 }
                 let rest = &text[at + opening.len()..];
@@ -157,12 +160,41 @@ pub fn field_serializers(folder: &Path) -> io::Result<BTreeSet<String>> {
 }
 
 /// The attribute `before`, the source up to a key, ends inside: the name
-/// before the last opening parenthesis, `serde` in `#[serde(default, ` and
-/// `schemars` in `#[cfg_attr(feature = "schema", schemars(`.
+/// before the opening parenthesis not closed again, `serde` in
+/// `#[serde(rename(serialize = "x"), ` and `schemars` in
+/// `#[cfg_attr(feature = "schema", schemars(`. Not the last one opened,
+/// which an argument before the key may have opened and closed, nor one in
+/// a string, as a `bound` may hold.
 fn attribute(before: &str) -> Option<&str> {
-    let opening = before.rfind('(')?;
-    let name = before[..opening]
-        .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
-        .next()?;
-    (!name.is_empty()).then_some(name)
+    let bytes = before.as_bytes();
+    let mut open = 0usize;
+    let mut quoted = false;
+    for at in (0..bytes.len()).rev() {
+        match bytes[at] {
+            b'"' if !escaped(&bytes[..at]) => quoted = !quoted,
+            _ if quoted => {}
+            b')' => open += 1,
+            b'(' if open > 0 => open -= 1,
+            b'(' => {
+                let name = before[..at]
+                    .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .next()?;
+                return (!name.is_empty()).then_some(name);
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Whether a quote after `before` is escaped: an odd number of
+/// backslashes in front of it.
+fn escaped(before: &[u8]) -> bool {
+    before
+        .iter()
+        .rev()
+        .take_while(|&&byte| byte == b'\\')
+        .count()
+        % 2
+        == 1
 }
