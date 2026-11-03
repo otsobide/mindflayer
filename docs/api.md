@@ -50,8 +50,12 @@ initialized mind project `web` in /home/you/Projects/web/.mind
 Your own answers differ from these where they name something of your
 machine's: the server's port, here `40185`, is the one the system picked,
 the token is made new at every launch, the paths are your own, and each
-project's id is the one `mind init` gave it at random. The rest is the
-same for the same workspace.
+project's id is the one `mind init` gave it at random. They are of a home
+with no default workspace yet: where yours has one (`~/.mindflayer`),
+`flayer init` also says the default remembered the new workspace, and
+`/workspaces` and the snapshot's `known` list the default beside it, the
+new one with `"remembered": true`. The rest is the same for the same
+workspace.
 
 The examples pipe what curl prints through [jq](https://jqlang.org), which
 lays the JSON out as it is shown here, or picks a part of it; without jq,
