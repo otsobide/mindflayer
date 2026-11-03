@@ -18,6 +18,7 @@ async fn the_stream_needs_the_launch_token() {
 
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
     assert!(reply.json()["error"].is_string());
+    assert_eq!(reply.json()["code"], "token_required");
 }
 
 /// The panel's own request: a GET by cookie, which needs no more than the
@@ -172,6 +173,7 @@ async fn a_task_whose_lines_are_refused_is_told_to_nobody() {
     server.events().publish(Event::Resync { switches: 0 });
 
     assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(reply.json()["code"], "fake_refused");
     assert_eq!(
         stream.next().await,
         json!({"type": "resync", "switches": 0})
