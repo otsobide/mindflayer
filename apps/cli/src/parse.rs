@@ -963,6 +963,10 @@ pub enum FlayerCommand {
     /// It prints the link that opens it, which carries the token that lets
     /// the browser in, and opens it. Everything the panel changes, it
     /// changes by running one of these commands, each shown before it runs.
+    ///
+    /// What the panel asks the server is an HTTP API under /api/v1, there
+    /// for scripts on this machine too: with --no-open and --token-file, it
+    /// serves them with no browser.
     #[cfg(feature = "ui")]
     Ui(UiOptions),
 }
@@ -988,6 +992,17 @@ pub struct UiOptions {
     /// there.
     #[arg(long)]
     pub dev: bool,
+
+    /// Write where the API is and the token to PATH, as JSON, for a script
+    /// to read: a new file only your account can read, never one already
+    /// there. With --no-open, the way to serve the API to scripts with no
+    /// browser.
+    //
+    // A path somebody names rather than one of Mindflayer's own, in its
+    // home say: several panels may be served at once, each with a token of
+    // its own, and only whoever starts one knows which script it is for.
+    #[arg(long, value_name = "PATH")]
+    pub token_file: Option<PathBuf>,
 }
 
 /// How `edit` changes an artifact, at either level: in an editor, or by

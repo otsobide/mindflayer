@@ -1,12 +1,17 @@
 use super::*;
 
+use tempfile::TempDir;
+
 const LINK: &str = "http://127.0.0.1:4000/?token=abc";
+
+/// What the same launch hands a script through `--token-file`.
+const API: &str = "http://127.0.0.1:4000/api/v1";
+const TOKEN: &str = "abc";
 
 fn options(dev: bool) -> UiOptions {
     UiOptions {
-        port: None,
-        no_open: false,
         dev,
+        ..UiOptions::default()
     }
 }
 
@@ -94,6 +99,7 @@ fn the_port_is_the_one_named_or_the_dev_servers_proxys_or_any() {
             port,
             no_open: true,
             dev,
+            ..UiOptions::default()
         })
     };
 
@@ -102,4 +108,133 @@ fn the_port_is_the_one_named_or_the_dev_servers_proxys_or_any() {
     assert_eq!(named(Some(9000), false), 9000);
     assert_eq!(named(Some(9000), true), 9000);
     assert_eq!(named(Some(0), true), 0);
+}
+
+// ---------------------------------------------------------------------------
+// The token file
+// ---------------------------------------------------------------------------
+
+/// Every name a script reads pinned, as the envelope's are: the version,
+/// where the API is and the token, a field to a line.
+#[test]
+fn the_token_file_holds_its_version_where_the_api_is_and_the_token() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("api.json");
+
+    write_token_file(&path, API, TOKEN).unwrap();
+
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        "{\n  \"version\": 1,\n  \"api\": \"http://127.0.0.1:4000/api/v1\",\n  \
+         \"token\": \"abc\"\n}\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn no_account_but_its_owners_may_read_the_token_file() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("api.json");
+
+    write_token_file(&path, API, TOKEN).unwrap();
+
+    let mode = fs::metadata(&path).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o600, "{mode:o}");
+}
+
+/// A file somebody wrote and a folder alike: refused by the one code, and
+/// left as they were.
+#[test]
+fn what_is_at_the_path_already_is_refused_with_its_code_and_left_as_it_was() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("api.json");
+    fs::write(&file, "somebody's\n").unwrap();
+    let folder = dir.path().join("run");
+    fs::create_dir(&folder).unwrap();
+
+    for path in [&file, &folder] {
+        let error = write_token_file(path, API, TOKEN).unwrap_err();
+
+        assert_eq!(error.code(), "token_file_exists", "{error}");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "{}: already exists, and is left alone, so the panel was not served: \
+                 --token-file writes a file of its own, never over one",
+                path.display()
+            )
+        );
+    }
+    assert_eq!(fs::read_to_string(&file).unwrap(), "somebody's\n");
+    assert_eq!(fs::read_dir(&folder).unwrap().count(), 0);
+}
+
+/// A link at the path is something there, wherever it leads: nothing is
+/// written through it, to a file that is there or to one that is not.
+#[cfg(unix)]
+#[test]
+fn a_link_at_the_path_is_refused_and_nothing_is_written_where_it_leads() {
+    let dir = TempDir::new().unwrap();
+    let kept = dir.path().join("kept");
+    fs::write(&kept, "somebody's\n").unwrap();
+    let nowhere = dir.path().join("nowhere");
+    let to_kept = dir.path().join("to-kept.json");
+    std::os::unix::fs::symlink(&kept, &to_kept).unwrap();
+    let to_nowhere = dir.path().join("to-nowhere.json");
+    std::os::unix::fs::symlink(&nowhere, &to_nowhere).unwrap();
+
+    for path in [&to_kept, &to_nowhere] {
+        let error = write_token_file(path, API, TOKEN).unwrap_err();
+
+        assert_eq!(error.code(), "token_file_exists", "{error}");
+    }
+    assert_eq!(fs::read_to_string(&kept).unwrap(), "somebody's\n");
+    assert!(
+        fs::symlink_metadata(&nowhere).is_err(),
+        "nothing made there"
+    );
+}
+
+#[test]
+fn a_folder_not_there_is_refused_with_its_code_and_none_is_made() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("run").join("api.json");
+
+    let error = write_token_file(&path, API, TOKEN).unwrap_err();
+
+    assert_eq!(error.code(), "token_file_folder_missing", "{error}");
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "{}: its folder does not exist, so the panel was not served: \
+             --token-file makes no folder",
+            path.display()
+        )
+    );
+    assert!(!dir.path().join("run").exists());
+}
+
+/// A file on the way where a folder should be, which Unix tells from a
+/// folder not there, and Windows does not.
+#[cfg(unix)]
+#[test]
+fn a_path_through_a_file_is_refused_as_unwritable() {
+    let dir = TempDir::new().unwrap();
+    let file = dir.path().join("notes");
+    fs::write(&file, "somebody's\n").unwrap();
+    let path = file.join("api.json");
+
+    let error = write_token_file(&path, API, TOKEN).unwrap_err();
+
+    assert_eq!(error.code(), "token_file_unwritable", "{error}");
+    assert!(
+        error.to_string().starts_with(&format!(
+            "{}: the API's address and token cannot be written there, so the panel was \
+             not served: ",
+            path.display()
+        )),
+        "{error}"
+    );
+    assert_eq!(fs::read_to_string(&file).unwrap(), "somebody's\n");
 }

@@ -1245,6 +1245,7 @@ fn a_front_end_that_runs_lines_refuses_the_panel() {
     for said in [
         "flayer ui",
         "flayer ui --no-open --port 0",
+        "flayer ui --no-open --token-file api.json",
         "mind ui",
         "mind -C alpha ui --dev",
         "mind flayer ui",
