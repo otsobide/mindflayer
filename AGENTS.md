@@ -219,10 +219,11 @@ under `apps/` with its own `Makefile`:
   panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
   trait and the `Refusal` it answers with (with its `Grounds`),
   `src/code.rs` the conditions the server turns a request away for itself,
-  each with its code and its status (`Condition`), `src/route.rs` the table of reads a backend hands over (`Route`,
-  `Parameter`, `Shape`, `API`), a query string read by it, and the table
-  of the server's own routes it serves beside them (`Own`, `Sent`,
-  `Answer`), which a description of the API walks with the backend's,
+  each with its code and its status (`Condition`), `src/route.rs` the
+  table of reads a backend hands over (`Route`, `Parameter`, `Shape`,
+  `API`), a query string read by it, and the table of the server's own
+  routes it serves beside them (`Own`, `Sent`, `Answer`), which a
+  description of the API walks with the backend's,
   `src/server.rs` binds and routes, `src/auth.rs` holds the token's
   cookie and Bearer checks, `src/guard.rs` the Host, Origin and Fetch
   Metadata checks and the CSP, `src/api.rs` the JSON endpoints,
