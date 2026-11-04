@@ -191,7 +191,11 @@ pub(crate) async fn same_origin(
 /// alone, what the refusal says taken from it, since the panel sends it by
 /// this name and a later one changes in one place. Looked up whatever its
 /// case, as every header name is.
-pub(crate) const PANEL_HEADER: &str = "X-Mindflayer";
+///
+/// Renamed outright from Mindflayer's `X-Mindflayer` (D-26), with nothing of
+/// the old read: the panel that sends it is embedded in the binary that
+/// checks it, so no panel of one name ever talks to a server of the other.
+pub(crate) const PANEL_HEADER: &str = "X-Mindweaver";
 
 /// What a change by cookie without [`PANEL_HEADER`] is told.
 static PANEL_HEADER_MISSING: LazyLock<String> = LazyLock::new(|| {

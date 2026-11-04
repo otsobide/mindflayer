@@ -22,7 +22,7 @@ function name(key: string): string {
  * Not localStorage, which is kept per origin: each `mindweaver ui` takes a port
  * of its own, so every launch would open on an empty one and forget what the
  * last was told. A cookie is kept per host, whatever the port (the reason the
- * server names its own `mf_<port>`), so a choice made under one launch is
+ * server names its own `mw_<port>`), so a choice made under one launch is
  * there for the next, and for `make web/dev` on 127.0.0.1 too.
  *
  * The price is that the browser sends them with every request to 127.0.0.1,

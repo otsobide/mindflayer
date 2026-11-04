@@ -46,7 +46,7 @@ describe('the HTTP transport', () => {
     expect(init.credentials).toBe('same-origin')
     expect(init.headers).toMatchObject({
       'Content-Type': 'application/json',
-      'X-Mindflayer': '1'
+      'X-Mindweaver': '1'
     })
     expect(init.body).toBeUndefined()
   })

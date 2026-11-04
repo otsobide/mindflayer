@@ -5158,9 +5158,9 @@
         "type": "http"
       },
       "cookie": {
-        "description": "The launch token, as the cookie the launch link sets, named `mf_` and the server's port: how the panel's page sends it. A change sent with it, which every POST is, needs `Sec-Fetch-Site: same-origin`, `X-Mindflayer: 1` and `Content-Type: application/json` beside it, which only the panel's own page sends.",
+        "description": "The launch token, as the cookie the launch link sets, named `mw_` and the server's port: how the panel's page sends it. A change sent with it, which every POST is, needs `Sec-Fetch-Site: same-origin`, `X-Mindweaver: 1` and `Content-Type: application/json` beside it, which only the panel's own page sends.",
         "in": "cookie",
-        "name": "mf_<port>",
+        "name": "mw_<port>",
         "type": "apiKey"
       }
     }

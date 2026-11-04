@@ -137,10 +137,10 @@ impl Panel {
             Auth::Bearer => headers.push(format!("Authorization: Bearer {}", self.token)),
             Auth::BearerOf(token) => headers.push(format!("Authorization: Bearer {token}")),
             Auth::Cookie(origin) => headers.extend([
-                format!("Cookie: mf_{}={}", self.address.port(), self.token),
+                format!("Cookie: mw_{}={}", self.address.port(), self.token),
                 format!("Origin: {origin}"),
                 String::from("Sec-Fetch-Site: same-origin"),
-                String::from("X-Mindflayer: 1"),
+                String::from("X-Mindweaver: 1"),
             ]),
         }
         self.request(method, path, &headers, &body)

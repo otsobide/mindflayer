@@ -156,7 +156,7 @@ async fn what_the_backend_names_since_a_change_is_watched() {
     let mut stream = opened(&server, Auth::Bearer(server.token())).await;
     list.lock().unwrap().push(watched(two.path(), "two"));
 
-    fs::write(one.path().join("flayer.toml"), "linked = true\n").unwrap();
+    fs::write(one.path().join("weaver.toml"), "linked = true\n").unwrap();
     assert_eq!(stream.next().await, changed("one"));
     fs::write(two.path().join("SKILL.md"), "# Two\n").unwrap();
 

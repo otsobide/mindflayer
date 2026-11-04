@@ -233,10 +233,10 @@ async fn a_cookie_that_is_not_the_token_under_its_name_is_no_token() {
 
     let mut refused: Vec<(&str, String)> = vec![
         ("its name in capitals", format!("MF_{port}={token}")),
-        ("another port's name", format!("mf_{other}={token}")),
+        ("another port's name", format!("mw_{other}={token}")),
         (
             "its port with a leading zero",
-            format!("mf_0{port}={token}"),
+            format!("mw_0{port}={token}"),
         ),
         ("a prefix to its name", format!("x{name}={token}")),
         ("a space before the equals sign", format!("{name} ={token}")),

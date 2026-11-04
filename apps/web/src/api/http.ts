@@ -7,7 +7,7 @@ import { TransportError, type Answer, type LiveEvent, type Preview, type Query, 
 /**
  * Sent with every request.
  *
- * `X-Mindflayer` is a header no form and no plain link can add, so a request
+ * `X-Mindweaver` is a header no form and no plain link can add, so a request
  * carrying it was made by a script on a page the browser let set it: the
  * server's own, since it answers no CORS preflight. JSON, because that is
  * all the server reads, and it too forces the preflight on any other origin.
@@ -15,7 +15,7 @@ import { TransportError, type Answer, type LiveEvent, type Preview, type Query, 
 const HEADERS = {
   'Accept': 'application/json',
   'Content-Type': 'application/json',
-  'X-Mindflayer': '1'
+  'X-Mindweaver': '1'
 }
 
 /**
@@ -146,7 +146,7 @@ function post<Reply>(path: string, body: unknown): Promise<Reply> {
 
 /**
  * A request to the server, and its answer as JSON; a GET carries no body.
- * Every one with the same headers: a read needs neither `X-Mindflayer` nor
+ * Every one with the same headers: a read needs neither `X-Mindweaver` nor
  * the JSON type, but one way to ask leaves no request without them.
  */
 async function ask<Reply>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Reply> {
