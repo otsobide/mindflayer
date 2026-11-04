@@ -20,12 +20,15 @@
 //! Only what Mindweaver wrote moves, and only as it wrote it: a rule file
 //! changed since, or something else in its place, is left where it is, its
 //! record naming it there, which a render finds; one nothing records is
-//! never looked at. A
-//! name already taken where something would go refuses the whole move, and
-//! so does a block that cannot be read, a project whose marker cannot, and
-//! a ledger another process has open, whose log a rename would leave
-//! behind. The ledger is renamed, never migrated: it is the same schema
-//! under another name.
+//! never looked at. A name already taken where something would go refuses
+//! the whole move, and so does a block that cannot be read, a project whose
+//! marker cannot, and a ledger another process has open, whose log a rename
+//! would leave behind. The ledger is renamed, never migrated: it is the
+//! same schema under another name.
+//!
+//! A workspace under Mindweaver's names is planned too, its projects alone,
+//! so a second move takes what the first could not: a project it did not
+//! find, a rule file put back as it was written.
 //!
 //! Git is never run. A project's rule files git tracks are moved from under
 //! it all the same, as the folder they are in is Mindweaver's, and the plan
@@ -61,7 +64,8 @@ use crate::workspace::{
 #[derive(Debug, Default)]
 pub struct NamesPlan {
     /// The workspace's folder and where it goes: `None` for a workspace
-    /// under Mindweaver's names already, which moves nothing.
+    /// under Mindweaver's names already, whose folder, marker and ledger
+    /// stay as they are, only its projects planned.
     pub folder: Option<Renamed>,
     /// Each file the folder holds that is named after the product, and
     /// where it is once the folder has moved: the marker, each copy of it a
@@ -83,10 +87,16 @@ pub struct NamesPlan {
 }
 
 impl NamesPlan {
-    /// Whether the workspace is under Mindweaver's names already, so that
-    /// moving changes nothing at all.
+    /// Whether moving changes nothing at all: the workspace is under
+    /// Mindweaver's names already, and nothing in its projects is left
+    /// under Mindflayer's that the move would change. What it leaves as it
+    /// is ([`ProjectNames::kept`], [`ProjectNames::left`]) is no change.
     pub fn is_empty(&self) -> bool {
         self.folder.is_none()
+            && self.excludes.is_empty()
+            && self.projects.iter().all(|project| {
+                project.blocks.is_empty() && project.rules.is_empty() && project.absent.is_empty()
+            })
     }
 }
 
@@ -227,18 +237,63 @@ codes!(NamesFailure {
 /// What moving `workspace` to Mindweaver's names would do, read from what
 /// is on disk and changing none of it, the ledger read without being made.
 ///
-/// Nothing for a workspace under them already, or one not made yet. For one
-/// a Mindflayer build made, every refusal at once, so a dry run says what
-/// the real one will.
+/// Nothing for a workspace not made yet. For one under Mindweaver's names
+/// already, only what its projects still hold under Mindflayer's: what an
+/// earlier move left, a project it could not open then, a rule file
+/// changed since and put back as it was, which a second move takes to the
+/// new names. Every refusal at once, so a dry run says what the real one
+/// will.
 pub fn names_plan(workspace: &WeaverWorkspace) -> Result<NamesPlan, MigrateError> {
     let mut plan = NamesPlan::default();
-    if !workspace.is_made() || workspace.names() == Names::Mindweaver {
+    if !workspace.is_made() {
         return Ok(plan);
     }
     // Read first, as any read of it is: a ledger an older schema left is
     // brought forward here, its copy kept beside it, which is then among
     // what is renamed.
     let ledger = workspace.ledger_for_reading()?;
+    if workspace.names() == Names::Mindflayer {
+        plan_folder(workspace, &ledger, &mut plan)?;
+    }
+    let mut excludes: Vec<PathBuf> = Vec::new();
+    for member in workspace.members() {
+        let project = match member.project {
+            Ok(project) => project,
+            // An entry that leads to nothing holds nothing to move.
+            Err(WorkspaceError::NotAProject { .. }) => continue,
+            Err(error) => {
+                plan.refusals.push(Refusal::Unopened(error));
+                continue;
+            }
+        };
+        let names = project_names(workspace, &ledger, &project, &mut plan.refusals)?;
+        match exclude_block(&project) {
+            Ok(Some(file)) if !excludes.contains(&file) => excludes.push(file),
+            Ok(_) => {}
+            Err(error) => plan.refusals.push(Refusal::Excluded(error)),
+        }
+        plan.projects.push(names);
+    }
+    plan.excludes = excludes;
+    // Closed first, so what is left beside it is another's. Only a ledger
+    // that is renamed is in the way of a process holding it open.
+    drop(ledger);
+    if plan.folder.is_some() {
+        if let Some(path) = ledger_in_use(workspace) {
+            plan.refusals.push(Refusal::LedgerOpen { path });
+        }
+    }
+    Ok(plan)
+}
+
+/// What moves of `workspace`'s own folder, a Mindflayer build's, into
+/// `plan`: the folder, the files in it named after the product, the
+/// marker's folders inside it and the shelf the ledger files there.
+fn plan_folder(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    plan: &mut NamesPlan,
+) -> Result<(), MigrateError> {
     let old = workspace.weaver_dir();
     let new = workspace.root().join(WEAVER_DIR);
     if is_there(&new) {
@@ -278,32 +333,7 @@ pub fn names_plan(workspace: &WeaverWorkspace) -> Result<NamesPlan, MigrateError
         .iter()
         .filter(|gathered| gathered.path.starts_with(&shelf_prefix(Names::Mindflayer)))
         .count();
-    let mut excludes: Vec<PathBuf> = Vec::new();
-    for member in workspace.members() {
-        let project = match member.project {
-            Ok(project) => project,
-            // An entry that leads to nothing holds nothing to move.
-            Err(WorkspaceError::NotAProject { .. }) => continue,
-            Err(error) => {
-                plan.refusals.push(Refusal::Unopened(error));
-                continue;
-            }
-        };
-        let names = project_names(workspace, &ledger, &project, &mut plan.refusals)?;
-        match exclude_block(&project) {
-            Ok(Some(file)) if !excludes.contains(&file) => excludes.push(file),
-            Ok(_) => {}
-            Err(error) => plan.refusals.push(Refusal::Excluded(error)),
-        }
-        plan.projects.push(names);
-    }
-    plan.excludes = excludes;
-    // Closed first, so what is left beside it is another's.
-    drop(ledger);
-    if let Some(path) = ledger_in_use(workspace) {
-        plan.refusals.push(Refusal::LedgerOpen { path });
-    }
-    Ok(plan)
+    Ok(())
 }
 
 /// Move `workspace` to Mindweaver's names, as [`names_plan`] says.
@@ -311,8 +341,9 @@ pub fn names_plan(workspace: &WeaverWorkspace) -> Result<NamesPlan, MigrateError
 /// Planned again once the workspace's lock is held, from the disk rather
 /// than `workspace`, so what is moved is what is there, and refused as a
 /// whole while the plan has any [`Refusal`]; a no-op, writing nothing, for
-/// a workspace under Mindweaver's names already, which is what makes a
-/// second run harmless.
+/// a workspace under Mindweaver's names already whose projects hold
+/// nothing more to move, which is what makes a second run harmless, and
+/// one that finishes what the first could not.
 ///
 /// Each project first, then the ledger's records, then the marker, the files
 /// in the folder and the folder itself, each step written whole: a file
@@ -323,7 +354,7 @@ pub fn names_plan(workspace: &WeaverWorkspace) -> Result<NamesPlan, MigrateError
 /// The lock is held throughout and follows its folder, so no writer gets in
 /// between.
 pub fn names(workspace: &mut WeaverWorkspace) -> Result<NamesMigrated, MigrateError> {
-    if !workspace.is_made() || workspace.names() == Names::Mindweaver {
+    if !workspace.is_made() {
         return Ok(NamesMigrated {
             plan: NamesPlan::default(),
         });
@@ -346,8 +377,9 @@ pub fn names(workspace: &mut WeaverWorkspace) -> Result<NamesMigrated, MigrateEr
             stranded,
         });
     }
-    let moved = current.root().join(WEAVER_DIR);
-    lock.moved(&moved);
+    if plan.folder.is_some() {
+        lock.moved(&current.root().join(WEAVER_DIR));
+    }
     *workspace = WeaverWorkspace::open(current.root())?;
     Ok(NamesMigrated { plan })
 }
@@ -464,8 +496,10 @@ fn carry_out(
         done.0.push(Step::Shelf);
     }
     drop(ledger);
-    if let Some(path) = ledger_in_use(workspace) {
-        return Err(NamesFailure::LedgerOpened { path });
+    if plan.folder.is_some() {
+        if let Some(path) = ledger_in_use(workspace) {
+            return Err(NamesFailure::LedgerOpened { path });
+        }
     }
 
     // The marker, the files beside it, and the folder.
@@ -530,7 +564,9 @@ impl Done {
     /// once the folder and the files in it are put back.
     fn put_back(self, workspace: &WeaverWorkspace) -> Vec<PathBuf> {
         let mut stranded = Vec::new();
-        let ledger_path = workspace.root().join(FLAYER_DIR).join(FLAYER_LEDGER_FILE);
+        // Where it was before the move, the folder and the files in it put
+        // back before any record is.
+        let ledger_path = workspace.ledger_path();
         let mut ledger: Option<Ledger> = None;
         for step in self.0.into_iter().rev() {
             match step {

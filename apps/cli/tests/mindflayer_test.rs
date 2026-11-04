@@ -356,6 +356,38 @@ fn migrate_names_names_each_tracked_rule_file_it_moves_and_none_it_leaves() {
 }
 
 #[test]
+fn a_second_migrate_names_says_what_it_leaves_and_moves_it_once_it_is_as_written() {
+    let dir = installed();
+    let root = dir.path();
+    let old = root.join("app/.claude/rules/mindflayer/rust.md");
+    let written = std::fs::read(&old).unwrap();
+    std::fs::write(&old, "Mine now.\n").unwrap();
+    weaver(root, &["migrate", "--names", "--yes"]).unwrap();
+
+    let again = weaver(root, &["migrate", "--names"]).unwrap();
+
+    assert_eq!(
+        again.stdout,
+        format!(
+            "would leave {} where it is: changed since Mindweaver wrote it, so it is somebody's\n\
+             nothing to move: the workspace is under Mindweaver's names already\n",
+            old.display()
+        )
+    );
+    std::fs::write(&old, &written).unwrap();
+    let moved = weaver(root, &["migrate", "--names", "--yes"]).unwrap();
+    assert_eq!(
+        moved.stdout,
+        format!(
+            "moved {} to {root}/app/.claude/rules/mindweaver/rust.md\n",
+            old.display(),
+            root = root.display()
+        )
+    );
+    assert!(!root.join("app/.claude/rules/mindflayer").exists());
+}
+
+#[test]
 fn mind_migrate_names_moves_the_workspace_the_project_uses() {
     let dir = installed();
     let root = dir.path();

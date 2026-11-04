@@ -557,6 +557,72 @@ fn a_move_whose_last_step_fails_puts_back_every_step_before_it() {
 }
 
 #[test]
+fn a_second_move_takes_what_a_project_away_at_the_first_still_holds_to_the_new_names() {
+    let fixture = fixture();
+    let away = fixture.root().join("away");
+    fs::rename(fixture.project.root(), &away).unwrap();
+    let mut workspace = fixture.workspace.clone();
+    migrate::names(&mut workspace).unwrap();
+    assert_eq!(workspace.names(), Names::Mindweaver);
+    fs::rename(&away, fixture.project.root()).unwrap();
+    assert!(fixture.exclude().contains("# mindflayer:begin"));
+
+    let plan = migrate::names_plan(&workspace).unwrap();
+
+    assert!(plan.refusals.is_empty(), "{:?}", plan.refusals);
+    assert!(!plan.is_empty());
+    assert!(plan.folder.is_none());
+    assert!(plan.files.is_empty() && plan.directories.is_empty());
+    assert_eq!(
+        plan.projects[0].blocks,
+        [fixture.app("AGENTS.md"), fixture.app("CLAUDE.md")]
+    );
+    assert_eq!(plan.projects[0].rules[0].route, "rust");
+    assert_eq!(plan.excludes, [fixture.root().join(".git/info/exclude")]);
+
+    migrate::names(&mut workspace).unwrap();
+
+    assert!(!fixture
+        .text(&fixture.app("AGENTS.md"))
+        .contains("mindflayer"));
+    assert!(!fixture
+        .text(&fixture.app("CLAUDE.md"))
+        .contains("mindflayer"));
+    assert!(fixture.app(".claude/rules/mindweaver/rust.md").is_file());
+    assert!(!fixture.app(".claude/rules/mindflayer").exists());
+    assert!(
+        !fixture.exclude().contains("mindflayer"),
+        "{}",
+        fixture.exclude()
+    );
+    assert_eq!(fixture.standing(&workspace, "rust"), Standing::Current);
+    assert_eq!(fixture.standing(&workspace, "team"), Standing::Current);
+    assert!(migrate::names_plan(&workspace).unwrap().is_empty());
+}
+
+#[test]
+fn a_rule_file_left_as_edited_and_put_back_as_written_is_taken_by_a_second_move() {
+    let fixture = fixture();
+    let old = fixture.app(".claude/rules/mindflayer/rust.md");
+    fs::write(&old, "Mine now.\n").unwrap();
+    let mut workspace = fixture.workspace.clone();
+    migrate::names(&mut workspace).unwrap();
+    assert!(migrate::names_plan(&workspace).unwrap().is_empty());
+    fs::write(&old, scoped("Return errors.")).unwrap();
+
+    let moved = migrate::names(&mut workspace).unwrap();
+
+    assert_eq!(moved.plan.projects[0].rules[0].from, old);
+    assert!(!old.exists());
+    assert_eq!(
+        fixture.text(&fixture.app(".claude/rules/mindweaver/rust.md")),
+        scoped("Return errors.")
+    );
+    assert_eq!(fixture.standing(&workspace, "rust"), Standing::Current);
+    assert!(!fixture.exclude().contains("mindflayer"));
+}
+
+#[test]
 fn a_workspace_under_mindweaver_s_names_plans_nothing() {
     let dir = TempDir::new().unwrap();
     let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();

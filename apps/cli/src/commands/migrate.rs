@@ -89,7 +89,7 @@ pub(crate) fn migrate_names(workspace: &WeaverWorkspace, yes: bool) -> Result<Ou
         let mut plan = migrate::names_plan(workspace).map_err(CliError::Migrate)?;
         refused(std::mem::take(&mut plan.refusals))?;
         if plan.is_empty() {
-            return Ok(Outcome::plain(String::from(NAMED)));
+            return Ok(Outcome::plain(named(&plan, false)));
         }
         let mut stdout = names_report(&plan, false);
         stdout.push_str("nothing moved: add --yes to go ahead\n");
@@ -100,7 +100,7 @@ pub(crate) fn migrate_names(workspace: &WeaverWorkspace, yes: bool) -> Result<Ou
 
     let mut migrating = workspace.clone();
     match migrate::names(&mut migrating) {
-        Ok(moved) if moved.plan.is_empty() => Ok(Outcome::plain(String::from(NAMED))),
+        Ok(moved) if moved.plan.is_empty() => Ok(Outcome::plain(named(&moved.plan, true))),
         Ok(moved) => {
             let mut outcome = Outcome::plain(names_report(&moved.plan, true));
             outcome.stderr.extend(tracked(&moved.plan));
@@ -133,6 +133,15 @@ pub(crate) fn migrate_names(workspace: &WeaverWorkspace, yes: bool) -> Result<Ou
 
 /// What a move to Mindweaver's names that has nothing to do says.
 const NAMED: &str = "nothing to move: the workspace is under Mindweaver's names already\n";
+
+/// What a move with nothing to do says: what it leaves as it is under
+/// Mindflayer's names, a rule file changed since or a block git tracks,
+/// which is why a name is still there, then that nothing moves.
+fn named(plan: &NamesPlan, done: bool) -> String {
+    let mut text = names_report(plan, done);
+    text.push_str(NAMED);
+    text
+}
 
 /// A line for each thing moving to Mindweaver's names does, as what would
 /// happen in a dry run and as what did: the workspace's folder and the

@@ -9918,7 +9918,13 @@ whose marker cannot and a ledger another process has open, whose log a
 rename would leave behind, refuse the whole move; a step that fails puts
 back every step before it. The ledger is renamed, never migrated: it is the
 same schema, and rows naming the old places are rewritten by the move, as
-`relink` rewrites a project's. No copy of the marker is kept, since only
+`relink` rewrites a project's. A workspace under the new names is planned
+too, its projects alone: what a first move could not take (a project it
+could not find, a rule file changed since and put back as it was written)
+is taken by a second, where a plan that looked no further than the
+workspace's own folder would leave it under the old names for good, and
+what is left as it is is said each time, as the reason a name is still
+there. No copy of the marker is kept, since only
 the values of its folders change, each by its first component. Git is
 never run: each rule file git tracks that the move carries is said with
 the `git rm --cached` and `git add` that take the move in, by its route

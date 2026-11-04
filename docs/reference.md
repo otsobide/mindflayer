@@ -3014,13 +3014,19 @@ file the database records in `.claude/rules/mindflayer` moves to
 with it; one you changed since is left where it is, its record naming it
 there, and the line says so, while one that is not there has its record
 and its line pointed at the new folder, so `mindweaver update` puts it
-back there. What was installed stays current, and a
-second run has nothing to do:
+back there. What was installed stays current, and a second run has nothing
+to do:
 
 ```
 $ mindweaver migrate --names --yes
 nothing to move: the workspace is under Mindweaver's names already
 ```
+
+Unless the first left something under the old names: a rule file you
+changed, which it says again each time, a block git tracks in a local
+project, or a project it could not find then. Run once the file is as it
+was written, or the project is back where the workspace links it, it moves
+what is left, and nothing else.
 
 `mind migrate --names`, in a project, moves the workspace its commands use
 the same way. The default workspace in your home is moved by the same
