@@ -170,6 +170,11 @@ fn a_home_a_mindflayer_build_read_from_its_variable_is_taken_and_said() {
 /// files (a file for Claude) and one about every file (a section of the
 /// block of `AGENTS.md`): what a move to the new names reaches.
 fn installed() -> TempDir {
+    installed_with(&["rust"])
+}
+
+/// [`installed`], with a rule about some files for each of `scoped`.
+fn installed_with(scoped: &[&str]) -> TempDir {
     let dir = TempDir::new().unwrap();
     gix::init(dir.path()).unwrap();
     let workspace = MindflayerMother::create(dir.path());
@@ -179,13 +184,19 @@ fn installed() -> TempDir {
     weaver(dir.path(), &["link", "app"]).unwrap();
     let rules = own_directory_for(dir.path(), Kind::Rule);
     std::fs::create_dir_all(&rules).unwrap();
-    std::fs::write(
-        rules.join("rust.md"),
-        "---\npaths:\n  - \"src/**\"\n---\nReturn errors.\n",
-    )
-    .unwrap();
+    for route in scoped {
+        std::fs::write(
+            rules.join(format!("{route}.md")),
+            "---\npaths:\n  - \"src/**\"\n---\nReturn errors.\n",
+        )
+        .unwrap();
+        weaver(
+            dir.path(),
+            &["install", "-p", "app", &format!("rule:{route}")],
+        )
+        .unwrap();
+    }
     std::fs::write(rules.join("team.md"), "Say what a change does first.\n").unwrap();
-    weaver(dir.path(), &["install", "-p", "app", "rule:rust"]).unwrap();
     weaver(dir.path(), &["install", "-p", "app", "rule:team"]).unwrap();
     let project = mindweaver_core::MindProject::open(&app).unwrap();
     MindflayerMother::installed_into(&workspace, &project);
@@ -307,6 +318,40 @@ fn migrate_names_leaves_a_block_git_tracks_in_a_local_project_and_says_so() {
     assert_eq!(
         std::fs::read_to_string(root.join("app/AGENTS.md")).unwrap(),
         agents
+    );
+}
+
+#[test]
+fn migrate_names_names_each_tracked_rule_file_it_moves_and_none_it_leaves() {
+    let dir = installed_with(&["go", "rust"]);
+    let root = dir.path();
+    indexed(root);
+    let left = root.join("app/.claude/rules/mindflayer/go.md");
+    std::fs::write(&left, "Mine now.\n").unwrap();
+
+    let planned = weaver(root, &["migrate", "--names"]).unwrap();
+
+    let hints: Vec<&str> = planned
+        .stderr
+        .iter()
+        .map(|line| line.text.as_str())
+        .filter(|line| line.contains("git rm"))
+        .collect();
+    assert_eq!(
+        hints,
+        [format!(
+            "hint: git tracks what moved from {0}/app/.claude/rules/mindflayer; `git rm --cached \
+             -- .claude/rules/mindflayer/rust.md` and `git add -- \
+             .claude/rules/mindweaver/rust.md` in {0}/app take the move into the index",
+            root.display()
+        )]
+    );
+    assert!(
+        planned
+            .stdout
+            .contains(&format!("would leave {} where it is", left.display())),
+        "{}",
+        planned.stdout
     );
 }
 

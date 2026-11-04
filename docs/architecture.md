@@ -9920,8 +9920,10 @@ back every step before it. The ledger is renamed, never migrated: it is the
 same schema, and rows naming the old places are rewritten by the move, as
 `relink` rewrites a project's. No copy of the marker is kept, since only
 the values of its folders change, each by its first component. Git is
-never run: a rules folder git tracks is said with the `git rm --cached`
-and `git add` that take the move in. A line typed on a workspace still
+never run: each rule file git tracks that the move carries is said with
+the `git rm --cached` and `git add` that take the move in, by its route
+rather than the folder's, since a `git rm -r --cached` of the old folder
+would take a file the move left there out of the team's repository too. A line typed on a workspace still
 under the old names ends with a hint naming the move, once a line, read or
 write, since whoever typed it is whoever can move it; the TUI's and the
 panel's lines read no environment and say nothing, their own launch saying

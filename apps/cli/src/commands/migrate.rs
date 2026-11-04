@@ -7,10 +7,11 @@
 //! everything about each; here it is said.
 
 use std::fmt::Write as _;
+use std::path::Path;
 
 use mindweaver_core::claude_rules;
 use mindweaver_core::migrate::{
-    self, LeftWhy, MigrateError, NamesPlan, Plan, ProjectNames, ProjectPlan, Stranded,
+    self, CarriedRule, LeftWhy, MigrateError, NamesPlan, Plan, ProjectNames, ProjectPlan, Stranded,
 };
 use mindweaver_core::{Agent, AgentHomes, MarkerFile, MindProject, Names, Share, WeaverWorkspace};
 
@@ -81,7 +82,7 @@ const NOTHING: &str = "nothing to move: the workspace keeps its own in its libra
 /// Mindweaver's names would do, or, with `yes`, doing it.
 ///
 /// A report, as `--library`'s dry run is, refused with every reason at
-/// once. Git is never run: a rules folder git tracks that the move empties
+/// once. Git is never run: each rule file git tracks that the move carries
 /// is said, with the lines that take the move into the index.
 pub(crate) fn migrate_names(workspace: &WeaverWorkspace, yes: bool) -> Result<Outcome, Failure> {
     if !yes {
@@ -246,25 +247,44 @@ fn project_names(text: &mut String, project: &ProjectNames, done: bool) {
     }
 }
 
-/// What the move says on stderr: for each project whose rules folder git
-/// tracks, how to take the move into the index, which Mindweaver runs no
-/// git to do.
+/// What the move says on stderr: for each project with a rule file git
+/// tracks that the move carries, how to take the move into the index,
+/// which Mindweaver runs no git to do.
+///
+/// Each file by its route, never the old folder, which may hold a file the
+/// move left there: a `git rm -r --cached` of the folder would take that one
+/// out of the index too, and out of the team's repository with the commit.
 fn tracked(plan: &NamesPlan) -> Vec<Warning> {
     plan.projects
         .iter()
-        .filter(|project| project.tracked)
-        .map(|project| {
-            let old = claude_rules::folder_under(Names::Mindflayer);
-            let new = claude_rules::folder_under(Names::Mindweaver);
-            format!(
-                "hint: git tracks {}; `git rm -r --cached {}` and `git add {}` in {} take the \
-                 move into the index",
-                project.root.join(&old).display(),
-                old.display(),
-                new.display(),
-                project.root.display()
+        .filter_map(|project| {
+            let routes = |of: fn(&CarriedRule) -> &Path| {
+                project
+                    .rules
+                    .iter()
+                    .filter(|carried| carried.tracked)
+                    .filter_map(|carried| of(carried).strip_prefix(&project.root).ok())
+                    .map(|route| route.display().to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            };
+            let from = routes(|carried| &carried.from);
+            if from.is_empty() {
+                return None;
+            }
+            Some(
+                format!(
+                    "hint: git tracks what moved from {}; `git rm --cached -- {from}` and \
+                     `git add -- {}` in {} take the move into the index",
+                    project
+                        .root
+                        .join(claude_rules::folder_under(Names::Mindflayer))
+                        .display(),
+                    routes(|carried| &carried.to),
+                    project.root.display()
+                )
+                .into(),
             )
-            .into()
         })
         .collect()
 }

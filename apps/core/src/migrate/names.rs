@@ -133,10 +133,6 @@ pub struct ProjectNames {
     /// Each one left in `.claude/rules/mindflayer`, its record naming it
     /// there, which a render finds as it does any recorded file.
     pub left: Vec<LeftRule>,
-    /// Whether git tracks something in `.claude/rules/mindflayer`, which a
-    /// move takes out from under it: for a front end to say what to commit,
-    /// which is not Mindweaver's to do.
-    pub tracked: bool,
 }
 
 /// A file whose block's markers are left as a Mindflayer build spelled them.
@@ -152,6 +148,11 @@ pub struct CarriedRule {
     pub route: String,
     pub from: PathBuf,
     pub to: PathBuf,
+    /// Whether git tracks the file where it was, which the move takes out
+    /// from under it: for a front end to say what to commit, which is not
+    /// Mindweaver's to do. Told of each file rather than of the folder,
+    /// which may hold one the move leaves there, still tracked.
+    pub tracked: bool,
 }
 
 /// One of Claude's rule files left where a Mindflayer build filed it.
@@ -774,21 +775,20 @@ fn project_names(
                     to: to.clone(),
                 });
             }
-            let carried = CarriedRule {
+            let mut carried = CarriedRule {
                 route: record.name.to_string(),
                 from,
                 to,
+                tracked: false,
             };
             if found.is_some() {
+                carried.tracked =
+                    exclude::tracks_file(&root, Path::new(&target.path)).unwrap_or(false);
                 names.rules.push(carried);
             } else {
                 names.absent.push(carried);
             }
         }
-    }
-    if !names.rules.is_empty() {
-        names.tracked =
-            exclude::tracks(&root, &claude_rules::folder_under(Names::Mindflayer)).unwrap_or(false);
     }
     Ok(names)
 }
