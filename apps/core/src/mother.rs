@@ -42,3 +42,7 @@ pub use value::{
     ArtifactNameMother, ContentHashMother, OriginMother, ProjectIdMother, RedactedMother,
     RevisionMother,
 };
+
+#[cfg(test)]
+#[path = "mother_test.rs"]
+mod tests;

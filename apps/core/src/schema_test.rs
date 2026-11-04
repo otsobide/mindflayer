@@ -454,3 +454,65 @@ fn every_field_serializer_in_core_is_one_held_to_its_schema() {
         "a field written through a function the test of `Written` does not hold"
     );
 }
+
+/// What every value object of [`crate::value`] says its schema is: a
+/// `String`'s, inline, with no definition of its own in `$defs`, holding
+/// what serde writes of one a mother drew and refusing anything but text.
+fn schema_is_a_strings<T: JsonSchema + Serialize>(value: &T) {
+    let name = std::any::type_name::<T>();
+
+    assert!(T::inline_schema(), "{name} is no inline schema");
+    assert_eq!(T::schema_name(), String::schema_name(), "{name}");
+    assert_eq!(
+        given::<T>().as_value(),
+        given::<String>().as_value(),
+        "{name}"
+    );
+    holds_to::<T>(&serde_json::to_value(value).unwrap());
+    for refused in [
+        serde_json::json!(7),
+        serde_json::json!(null),
+        serde_json::json!({}),
+    ] {
+        assert!(
+            holds(&given::<T>(), &refused).is_err(),
+            "{name} holds {refused}"
+        );
+    }
+}
+
+#[test]
+fn every_value_objects_schema_is_the_strings_serde_writes() {
+    use crate::mother::{
+        ArtifactNameMother, ContentHashMother, OriginMother, RedactedMother, RevisionMother,
+    };
+
+    for _ in 0..20 {
+        schema_is_a_strings(&ContentHashMother::random());
+        schema_is_a_strings(&RedactedMother::url());
+        schema_is_a_strings(&OriginMother::random());
+        schema_is_a_strings(&ArtifactNameMother::random());
+        schema_is_a_strings(&RevisionMother::random());
+    }
+}
+
+#[test]
+fn a_project_ids_schema_holds_every_new_id_and_refuses_every_text_that_is_none() {
+    use crate::mother::ProjectIdMother;
+
+    let schema = given::<ProjectId>();
+    for _ in 0..100 {
+        let id = ProjectIdMother::random();
+        assert_eq!(
+            holds(&schema, &serde_json::json!(id.as_str())),
+            Ok(()),
+            "{id}"
+        );
+    }
+    for (why, text) in ProjectIdMother::not_ids() {
+        assert!(
+            holds(&schema, &serde_json::json!(text)).is_err(),
+            "{why}: {text:?}"
+        );
+    }
+}

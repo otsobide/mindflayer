@@ -59,3 +59,76 @@ fn values_sort_as_the_text_they_hold() {
 
     assert_eq!(names, ["B", "a", "b"]);
 }
+
+// What only the crate can make: a hash as the recipe computed it and as the
+// ledger holds it, neither of which a caller outside can reach, so their
+// rules are held here, beside the type, rather than in `tests/value_test.rs`.
+
+#[test]
+fn a_hash_as_the_ledger_holds_it_is_kept_exactly_as_it_was_written() {
+    use crate::mother::ContentHashMother;
+
+    for _ in 0..100 {
+        let digits = ContentHashMother::digits().to_ascii_uppercase();
+
+        let recorded = ContentHash::recorded(digits.clone());
+
+        // Not judged again, so not lowercased: a row in capitals somebody
+        // edited by hand reads as a hash no recipe writes, and its copy as
+        // edited, rather than as the hash it would parse to.
+        assert_eq!(recorded.as_str(), digits);
+        assert_ne!(Some(recorded), ContentHash::parse(&digits));
+    }
+}
+
+#[test]
+fn a_row_holding_something_other_than_a_hash_is_still_read_as_one_no_copy_holds() {
+    use crate::mother::ContentHashMother;
+
+    for (why, text) in ContentHashMother::not_hashes() {
+        let recorded = ContentHash::recorded(text.clone());
+
+        assert_eq!(recorded.as_str(), text, "{why}");
+        assert_ne!(
+            recorded,
+            ContentHashMother::random(),
+            "{why}: equal to a hash the recipe wrote"
+        );
+    }
+}
+
+#[test]
+fn what_the_recipes_compute_is_what_parse_reads_back() {
+    let computed = ContentHash::computed("ab".repeat(ContentHash::LEN / 2));
+
+    assert_eq!(ContentHash::parse(&computed), Some(computed.clone()));
+}
+
+#[cfg(debug_assertions)]
+#[test]
+#[should_panic]
+fn a_computed_hash_of_the_wrong_length_is_caught_in_a_debug_build() {
+    ContentHash::computed(String::from("abc"));
+}
+
+#[test]
+fn a_new_id_is_drawn_from_two_random_numbers_written_in_full() {
+    for _ in 0..200 {
+        let id = ProjectId::generate();
+
+        // Two numbers of sixteen digits each, zero-padded: an id whose number
+        // happened to be small is still 32 digits, never a shorter one parse
+        // would refuse.
+        assert_eq!(id.as_str().len(), ProjectId::LEN, "{id}");
+        assert!(ProjectId::parse(id.as_str()).is_some(), "{id}");
+    }
+}
+
+#[test]
+fn redacted_is_the_one_constructor_and_it_redacts_through_url_redacted() {
+    use crate::mother::UrlMother;
+
+    for url in UrlMother::every_credentialed() {
+        assert_eq!(Redacted::new(&url.typed), redacted(&url.typed).as_ref());
+    }
+}

@@ -417,3 +417,63 @@ fn every_code_core_gives_is_in_its_union_once() {
     assert_eq!(said.len(), given.len());
     assert!(given.iter().all(|code| said.contains(*code)));
 }
+
+/// What every value object of [`crate::value`] says it is, beside what serde
+/// writes of one a mother drew: a `string`, inline, exporting no file of its
+/// own and naming no type a field holding one would import, so turning a
+/// field from a `String` into a value moves nothing the panel compiles
+/// against.
+fn says_it_is_a_string<T: TS + Serialize + 'static>(value: &T) {
+    let config = Config::new();
+    let name = std::any::type_name::<T>();
+
+    assert_eq!(T::name(&config), "string", "{name}");
+    assert_eq!(T::inline(&config), "string", "{name}");
+    assert_eq!(T::output_path(), None, "{name} exports a file of its own");
+    assert!(T::dependencies(&config).is_empty(), "{name} names a type");
+    assert!(
+        serde_json::to_value(value).unwrap().is_string(),
+        "{name} is written as no string"
+    );
+}
+
+#[test]
+fn every_value_object_is_said_as_the_string_serde_writes() {
+    use crate::mother::{
+        ArtifactNameMother, ContentHashMother, OriginMother, RedactedMother, RevisionMother,
+    };
+
+    for _ in 0..20 {
+        says_it_is_a_string(&ContentHashMother::random());
+        says_it_is_a_string(&RedactedMother::url());
+        says_it_is_a_string(&OriginMother::random());
+        says_it_is_a_string(&ArtifactNameMother::random());
+        says_it_is_a_string(&RevisionMother::random());
+    }
+}
+
+#[test]
+fn a_field_holding_a_value_object_reads_as_one_holding_a_string() {
+    use crate::value::{ArtifactName, ContentHash, Revision};
+
+    #[derive(Serialize, TS)]
+    struct Held {
+        hash: ContentHash,
+        name: ArtifactName,
+        revision: Option<Revision>,
+        names: Vec<ArtifactName>,
+    }
+
+    assert_eq!(
+        Held::inline(&Config::new()),
+        "{ hash: string, name: string, revision: string | null, names: Array<string>, }"
+    );
+}
+
+#[test]
+fn a_project_id_keeps_the_type_of_its_own_it_was_published_with() {
+    let config = Config::new();
+
+    assert_eq!(ProjectId::name(&config), "ProjectId");
+    assert_eq!(ProjectId::inline(&config), "string");
+}
