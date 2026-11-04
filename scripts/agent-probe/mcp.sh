@@ -45,8 +45,11 @@ mcp_need_python() {
 mcp_http_start() {
 	local run=$1 port_file=$results/$1.http.port i
 	rm -f -- "$port_file"
+	# Nothing of the probe's own output is handed to it: a server left
+	# running would hold a pipe the operator reads the probe through open
+	# after the probe is done.
 	"$mcp_python" -I "$mcp_script" http --name "$run" --log "$results/$run.http.jsonl" \
-		--port-file "$port_file" 2>"$results/$run.http.stderr" &
+		--port-file "$port_file" </dev/null >/dev/null 2>"$results/$run.http.stderr" &
 	mcp_http_pid=$!
 	for ((i = 0; i < 50; i++)); do
 		[[ -s $port_file ]] && break
