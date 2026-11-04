@@ -577,7 +577,7 @@ pub fn json_project(root: &Path) {
     gix::init(root).expect("initialize a repository");
     let mind = root.join(MIND_DIR);
     fs::create_dir_all(&mind).unwrap();
-    fs::write(mind.join(".gitignore"), mindweaver_core::MIND_IGNORE).unwrap();
+    fs::write(mind.join(".gitignore"), mindweaver_core::FLAYER_MIND_IGNORE).unwrap();
     let name = root.file_name().unwrap().to_str().unwrap();
     fs::write(
         mind.join(SETTINGS_JSON_FILE),

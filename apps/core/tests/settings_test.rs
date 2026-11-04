@@ -622,7 +622,7 @@ fn a_new_project_writes_exactly_its_settings_and_a_gitignore() {
     );
     assert_eq!(
         fs::read_to_string(mind.join(".gitignore")).unwrap(),
-        "# Mindflayer keeps this project's settings here, for this checkout alone.\n\
+        "# Mindweaver keeps this project's settings here, for this checkout alone.\n\
          # Nothing in this folder is meant to be committed.\n\
          *\n"
     );

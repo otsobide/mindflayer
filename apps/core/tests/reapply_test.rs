@@ -548,6 +548,27 @@ fn turning_local_writes_the_gitignore_and_keeps_every_copy_in_place_out_of_git()
     assert!(settings.edit_tracked);
 }
 
+/// The `.gitignore` a Mindflayer build gave a local project's `.mind` is
+/// Mindweaver's too, and goes as the one written now does.
+#[test]
+fn turning_shared_removes_the_gitignore_a_mindflayer_build_wrote() {
+    let (_dir, workspace, project) = installed(&Agent::ALL, Share::Local);
+    let ignore = project.root().join(MIND_DIR).join(".gitignore");
+    fs::write(&ignore, mindweaver_core::FLAYER_MIND_IGNORE).unwrap();
+    let change = Change::Share {
+        share: Share::Shared,
+        edit_tracked: false,
+    };
+
+    let plan = reapply::plan(Some(&workspace), &project, &change, &AgentHomes::default()).unwrap();
+    assert_eq!(plan.ignore, Some(Ignore::Remove(ignore.clone())));
+    let applied =
+        reapply::apply(Some(&workspace), &project, &change, &AgentHomes::default()).unwrap();
+
+    assert!(applied.failures.is_empty(), "{:?}", applied.failures);
+    assert!(!ignore.exists());
+}
+
 #[test]
 fn turning_local_keeps_no_copy_git_tracks_out_of_git() {
     let (_dir, workspace, project) = installed(&Agent::ALL, Share::Shared);

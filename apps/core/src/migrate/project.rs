@@ -49,9 +49,9 @@ use crate::ledger::{Action, Ledger, LedgerError, Moved, Target};
 use crate::reapply::{self, Retarget, Why};
 use crate::settings::{Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
 use crate::workspace::{
-    ignore_itself, misplaced_authored, same_directory, write_new, Directories, MarkerFile,
-    MindConfig, MindProject, ProjectConfig, WeaverWorkspace, WorkspaceError, DIRECTORIES_VERSION,
-    MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION,
+    ignore_itself, is_mind_ignore, misplaced_authored, same_directory, write_new, Directories,
+    MarkerFile, MindConfig, MindProject, ProjectConfig, WeaverWorkspace, WorkspaceError,
+    DIRECTORIES_VERSION, MIND_CONFIG, MIND_DIR, SETTINGS_TOML_VERSION,
 };
 
 /// What moving a project from its older marker to a `settings.toml` would
@@ -628,7 +628,7 @@ impl<'a> Undo<'a> {
         }
         if let Some(ignore) = self.ignore {
             // Only while it holds what was written.
-            let ours = fs::read(&ignore).is_ok_and(|bytes| bytes == MIND_IGNORE.as_bytes());
+            let ours = fs::read(&ignore).is_ok_and(|bytes| is_mind_ignore(&bytes));
             if ours && fs::remove_file(&ignore).is_err() {
                 stranded.push(Stranded::Ignore(ignore));
             }

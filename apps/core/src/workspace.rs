@@ -168,15 +168,33 @@ const fn scratch(names: Names) -> [&'static str; 2] {
 /// of git everything in the folder, this file included, as a Python venv
 /// ignores itself.
 ///
-/// It still says the product's old name: a project turning shared loses the
-/// file only while it holds exactly this, so new words would leave every
-/// one an older build wrote where it is. Reading both is #229's, with the
-/// other names written on the disk.
+/// A project turning shared loses the file only while it holds exactly what
+/// Mindweaver writes, this or the one a Mindflayer build wrote
+/// ([`FLAYER_MIND_IGNORE`], [`is_mind_ignore`]), so a new wording leaves no
+/// file an older build wrote where it is, and none somebody changed goes.
 pub const MIND_IGNORE: &str = "\
+# Mindweaver keeps this project's settings here, for this checkout alone.
+# Nothing in this folder is meant to be committed.
+*
+";
+
+/// [`MIND_IGNORE`] as a Mindflayer build wrote it, its old name for the
+/// product included (D-26): never written now, and still taken for
+/// Mindweaver's own when a project turning shared drops the file.
+pub const FLAYER_MIND_IGNORE: &str = "\
 # Mindflayer keeps this project's settings here, for this checkout alone.
 # Nothing in this folder is meant to be committed.
 *
 ";
+
+/// Whether `bytes`, what a `.mind/.gitignore` holds, are exactly what a
+/// build wrote there, this one's or a Mindflayer build's: the one test of
+/// whether the file is Mindweaver's to take away.
+pub(crate) fn is_mind_ignore(bytes: &[u8]) -> bool {
+    [MIND_IGNORE, FLAYER_MIND_IGNORE]
+        .iter()
+        .any(|ignore| bytes == ignore.as_bytes())
+}
 
 /// Which of the two marker files a version was read from.
 ///

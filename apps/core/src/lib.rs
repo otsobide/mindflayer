@@ -102,6 +102,6 @@ pub use workspace::{
     Directories, Initialization, Loaded, Marker, MarkerFile, Member, MindConfig, MindProject,
     Misplaced, MisplacedTarget, ProjectConfig, ProjectWarning, Registration, WeaverConfig,
     WeaverWorkspace, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR,
-    LIBRARY_DIR, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION, SETTINGS_VERSION,
-    TARGETS_VERSION, WEAVER_CONFIG, WEAVER_DIR,
+    FLAYER_MIND_IGNORE, LIBRARY_DIR, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION,
+    SETTINGS_VERSION, TARGETS_VERSION, WEAVER_CONFIG, WEAVER_DIR,
 };
