@@ -8,7 +8,16 @@ fn a_route_inside_the_old_folder_moves_with_it_and_no_other() {
         moved_route(Path::new(".mindflayer/library/skills")),
         Some(PathBuf::from(".mindweaver/library/skills"))
     );
+    assert_eq!(
+        moved_route(Path::new("./.mindflayer/library/skills")),
+        Some(PathBuf::from(".mindweaver/library/skills"))
+    );
+    assert_eq!(
+        moved_route(Path::new("rules/../.mindflayer/library/rules")),
+        Some(PathBuf::from(".mindweaver/library/rules"))
+    );
     assert_eq!(moved_route(Path::new("skills")), None);
+    assert_eq!(moved_route(Path::new(".mindflayer/../skills")), None);
     assert_eq!(moved_route(Path::new("a/.mindflayer/skills")), None);
     assert_eq!(moved_route(Path::new(".mindflayerish/skills")), None);
 }

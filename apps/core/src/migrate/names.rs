@@ -603,7 +603,13 @@ fn is_version(text: &str) -> bool {
 
 /// `route`, a folder the marker names, moved with the folder when it is
 /// inside `.mindflayer`: the same place inside `.mindweaver`.
+///
+/// Normalized first, as a marker's folder is when it is judged to stay
+/// inside the workspace, so one written as it was typed
+/// (`./.mindflayer/library/skills`) moves as the folder it names, rather
+/// than being left naming one the move takes away.
 fn moved_route(route: &Path) -> Option<PathBuf> {
+    let route = paths::normalize(route);
     let mut components = route.components();
     match components.next() {
         Some(Component::Normal(first)) if first == FLAYER_DIR => {
