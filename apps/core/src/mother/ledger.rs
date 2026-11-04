@@ -129,7 +129,7 @@ impl InstallRecordMother {
                 TargetMother::holding(None, "AGENTS.md", ContentHashMother::random()),
                 TargetMother::holding(
                     Some(Agent::Claude),
-                    &format!(".claude/rules/mindflayer/{route}.md"),
+                    &format!(".claude/rules/mindweaver/{route}.md"),
                     ContentHashMother::random(),
                 ),
             ],

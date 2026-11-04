@@ -141,7 +141,7 @@ fn a_tracked_agents_md_in_a_local_project_is_left_alone_and_the_agents_it_misses
     assert!(!installed.ok);
     assert_eq!(fs::read_to_string(alpha.join("AGENTS.md")).unwrap(), TEAM);
     // Claude has it from a file of its own instead, kept out of git.
-    let file = alpha.join(".claude/rules/mindflayer/git/commits.md");
+    let file = alpha.join(".claude/rules/mindweaver/git/commits.md");
     assert_eq!(fs::read_to_string(&file).unwrap(), COMMITS);
     assert!(
         !untracked(&alpha)
@@ -181,7 +181,7 @@ fn a_rule_about_some_files_reaches_claude_alone_and_says_so() {
     assert!(!installed.ok);
     assert!(!alpha.join("AGENTS.md").exists());
     assert_eq!(
-        fs::read_to_string(alpha.join(".claude/rules/mindflayer/style/comments.md")).unwrap(),
+        fs::read_to_string(alpha.join(".claude/rules/mindweaver/style/comments.md")).unwrap(),
         SCOPED
     );
 

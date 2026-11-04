@@ -305,11 +305,14 @@ pub(crate) fn rule_copies(
 ) -> Vec<Looked> {
     let name = &record.name;
     let rendered = project.settings().is_some();
-    let file = super::rules::claude_file(name);
     record
         .targets
         .iter()
-        .filter(|target| !rendered || target.path == agents_md::FILE || target.path == file)
+        .filter(|target| {
+            !rendered
+                || target.path == agents_md::FILE
+                || super::rules::is_claude_file(&target.path, name)
+        })
         .map(|target| {
             if target.path == agents_md::FILE {
                 let path = project.root().join(agents_md::FILE);

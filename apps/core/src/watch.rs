@@ -164,10 +164,14 @@ impl List {
             }
         }
         self.folders(scope, project);
-        // Filed by the rule's route, folders and all, as rules are kept.
-        let claude = project.root().join(claude_rules::folder());
-        for folder in Catalog::looked_in(&claude, Kind::Rule) {
-            self.add(scope, folder);
+        // Filed by the rule's route, folders and all, as rules are kept, in
+        // the folder a Mindflayer build filed them in too, where those it
+        // recorded stay until they are moved.
+        for names in Names::ALL {
+            let claude = project.root().join(claude_rules::folder_under(names));
+            for folder in Catalog::looked_in(&claude, Kind::Rule) {
+                self.add(scope, folder);
+            }
         }
         self.templates(scope, workspace, project);
     }

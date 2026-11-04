@@ -16,8 +16,10 @@ use tempfile::TempDir;
 use crate::agent::Agent;
 use crate::agents_md::AgentsMd;
 use crate::claude_md::ClaudeMd;
+use crate::claude_rules;
 use crate::exclude::ExcludeFile;
 use crate::gather::{self, Request};
+use crate::kind::Kind;
 use crate::ledger::Ledger;
 use crate::mother::artifact::SkillMother;
 use crate::mother::random;
@@ -104,6 +106,55 @@ impl MindflayerMother {
                 if file.renamed(Names::Mindflayer) {
                     fs::write(&location.file, file.to_bytes()).expect("write the block back");
                 }
+            }
+        }
+    }
+
+    /// [`rendered_into`](Self::rendered_into), and Claude's rule files filed
+    /// where such a build filed them: each file core wrote into
+    /// `.claude/rules/mindweaver` moved to `.claude/rules/mindflayer`, its
+    /// record in `workspace`'s ledger and its line in the exclude block with
+    /// it, as that build recorded and excluded them.
+    pub fn installed_into(workspace: &WeaverWorkspace, project: &MindProject) {
+        Self::rendered_into(project.root());
+        let root = project.root();
+        let new = root.join(claude_rules::folder_under(Names::Mindweaver));
+        let old = root.join(claude_rules::folder_under(Names::Mindflayer));
+        if new.exists() {
+            fs::create_dir_all(old.parent().expect("a folder above")).expect("make .claude/rules");
+            fs::rename(&new, &old).expect("move the rule files");
+        }
+        let ledger = workspace.ledger().expect("open the ledger");
+        let entry = crate::install::entry_for_root(workspace, root);
+        for record in ledger
+            .records(&entry, Kind::Rule)
+            .expect("read the records")
+        {
+            let targets: Vec<_> = record
+                .targets
+                .iter()
+                .cloned()
+                .map(|mut target| {
+                    if crate::install::rules::claude_file_names(&target.path, &record.name)
+                        == Some(Names::Mindweaver)
+                    {
+                        target.path = crate::install::rules::claude_file_under(
+                            Names::Mindflayer,
+                            &record.name,
+                        );
+                    }
+                    target
+                })
+                .collect();
+            ledger
+                .retargeted(&entry, Kind::Rule, &record.name, &targets)
+                .expect("record the files where they are");
+        }
+        if let Some(location) = crate::exclude::locate(root).expect("find the exclude file") {
+            if let Ok(text) = fs::read_to_string(&location.file) {
+                let moved =
+                    text.replace("/.claude/rules/mindweaver/", "/.claude/rules/mindflayer/");
+                fs::write(&location.file, moved).expect("write the exclude lines back");
             }
         }
     }

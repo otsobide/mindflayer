@@ -617,7 +617,7 @@ fn in_block(hash: ContentHash) -> Target {
 fn for_claude(route: &str, source: &str) -> Target {
     Target {
         agent: Some(String::from("claude")),
-        path: format!(".claude/rules/mindflayer/{route}.md"),
+        path: format!(".claude/rules/mindweaver/{route}.md"),
         content_hash: Some(hash::bytes(source.as_bytes())),
     }
 }
@@ -832,7 +832,7 @@ fn a_tracked_agents_md_in_a_local_project_is_left_alone_and_claude_gets_the_fall
         fs::read_to_string(fixture.claude_file("git/no-force-push")).unwrap(),
         NO_FORCE_PUSH
     );
-    assert!(fixture.ignored(".claude/rules/mindflayer/git/no-force-push.md"));
+    assert!(fixture.ignored(".claude/rules/mindweaver/git/no-force-push.md"));
     assert_eq!(
         rendered.warnings,
         [Warning::Withheld {
@@ -1001,7 +1001,7 @@ fn a_rule_about_some_files_is_a_file_for_claude_alone_and_says_so() {
     assert!(!fixture
         .project
         .root()
-        .join(".claude/rules/mindflayer")
+        .join(".claude/rules/mindweaver")
         .exists());
     assert!(fixture.records().is_empty());
 }
@@ -1991,4 +1991,96 @@ fn a_block_a_mindflayer_build_rendered_is_rendered_again_under_its_markers() {
     fixture.uninstall("a");
     fixture.uninstall("b");
     assert!(!fixture.agents_md().exists());
+}
+
+/// Claude's file of a rule a Mindflayer build installed stays in the folder
+/// it was filed in, written over and taken away there, while a rule given a
+/// file since goes into the new one.
+#[test]
+fn a_rule_file_a_mindflayer_build_filed_stays_where_its_record_says() {
+    let scoped = |says: &str| format!("---\npaths:\n  - \"src/**\"\n---\n{says}\n");
+    let fixture = fixture(Share::Local, &[Agent::Claude]);
+    fixture.rule("a", &scoped("Rule a."));
+    fixture.rule("b", &scoped("Rule b."));
+    fixture.install("a");
+    mindweaver_core::mother::MindflayerMother::installed_into(&fixture.workspace, &fixture.project);
+    let old = |route: &str| {
+        fixture
+            .project
+            .root()
+            .join(".claude/rules/mindflayer")
+            .join(format!("{route}.md"))
+    };
+    assert!(old("a").is_file());
+    assert_eq!(fixture.standing("a"), Standing::Current);
+
+    fixture.rule("a", &scoped("Rule a, changed."));
+    fixture.install("a");
+    fixture.install("b");
+
+    assert_eq!(
+        fs::read_to_string(old("a")).unwrap(),
+        scoped("Rule a, changed.")
+    );
+    assert!(!fixture.claude_file("a").exists());
+    assert_eq!(
+        fs::read_to_string(fixture.claude_file("b")).unwrap(),
+        scoped("Rule b.")
+    );
+    assert!(!old("b").exists());
+    assert!(fixture.ignored(".claude/rules/mindflayer/a.md"));
+    assert!(fixture.ignored(".claude/rules/mindweaver/b.md"));
+    let paths: Vec<String> = fixture
+        .records()
+        .into_iter()
+        .flat_map(|record| record.targets)
+        .map(|target| target.path)
+        .collect();
+    assert_eq!(
+        paths,
+        [
+            ".claude/rules/mindflayer/a.md",
+            ".claude/rules/mindweaver/b.md"
+        ]
+    );
+
+    fixture.uninstall("a");
+    assert!(!old("a").exists());
+    assert!(
+        !fixture
+            .project
+            .root()
+            .join(".claude/rules/mindflayer")
+            .exists(),
+        "its emptied folder goes with it"
+    );
+    assert!(!fixture.ignored(".claude/rules/mindflayer/a.md"));
+    assert_eq!(fixture.standing("b"), Standing::Current);
+}
+
+/// A file at a rule's place in the folder a Mindflayer build filed them in,
+/// that nothing records, is somebody's: the rule is not given a second file
+/// in the new folder, which Claude would read beside it.
+#[test]
+fn a_file_for_claude_in_mindflayer_s_folder_nothing_recorded_is_somebodys() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("rust/errors", SCOPED);
+    let file = fixture
+        .project
+        .root()
+        .join(".claude/rules/mindflayer/rust/errors.md");
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, SCOPED).unwrap();
+
+    let refused = fixture.install("rust/errors");
+
+    assert_eq!(
+        refused.installed,
+        Installed::Foreign {
+            name: "rust/errors".into(),
+            path: file,
+        }
+    );
+    assert!(!fixture.claude_file("rust/errors").exists());
+    assert!(fixture.records().is_empty());
 }

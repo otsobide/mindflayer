@@ -793,7 +793,7 @@ fn each_copy_reads_back_with_the_hash_of_its_own_it_was_given() {
             (None, "AGENTS.md"),
             (
                 Some("claude"),
-                ".claude/rules/mindflayer/git/no-force-push.md",
+                ".claude/rules/mindweaver/git/no-force-push.md",
             ),
         ],
     );
@@ -877,7 +877,7 @@ fn a_render_records_every_rule_it_left_and_forgets_the_rest_of_its_kind() {
             (None, "AGENTS.md", "c"),
             (
                 Some("claude"),
-                ".claude/rules/mindflayer/git/commits.md",
+                ".claude/rules/mindweaver/git/commits.md",
                 "d",
             ),
         ],

@@ -229,7 +229,7 @@ fn a_workspace_loads_the_examples_and_installs_their_rules_where_the_reference_s
         ]
     );
     assert_eq!(
-        fs::read(collapse.join(".claude/rules/mindflayer/style/comments.md")).unwrap(),
+        fs::read(collapse.join(".claude/rules/mindweaver/style/comments.md")).unwrap(),
         fs::read(examples().join("rules/style/comments.md")).unwrap()
     );
     assert!(!block.contains("style/comments"), "{block}");

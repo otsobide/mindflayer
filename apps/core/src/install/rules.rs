@@ -49,6 +49,7 @@ use crate::exclude::{self, Excluded};
 use crate::hash;
 use crate::kind::Kind;
 use crate::ledger::{Action, InstallRecord, Ledger, Outcome, Target};
+use crate::names::Names;
 use crate::paths;
 use crate::settings::Share;
 use crate::value::{ArtifactName, ContentHash, Origin};
@@ -345,8 +346,12 @@ impl Held {
         {
             return Some(root.join(AGENTS_MD));
         }
-        let file = root.join(claude_rules::file_for(route));
-        fs::symlink_metadata(&file).is_ok().then_some(file)
+        // At its place in either folder, a Mindflayer build's among them,
+        // as a render tells somebody's file.
+        Names::ALL
+            .into_iter()
+            .map(|names| root.join(claude_rules::file_under(names, route)))
+            .find(|file| fs::symlink_metadata(file).is_ok())
     }
 }
 
@@ -380,10 +385,33 @@ pub(crate) fn block_file(root: &Path) -> Option<AgentsMd> {
     AgentsMd::parse(&bytes).ok()
 }
 
-/// The route the ledger names the rule at `route`'s file for Claude by.
+/// The route the ledger names the rule at `route`'s file for Claude by,
+/// once a render makes it now: in Mindweaver's folder.
 pub(crate) fn claude_file(route: &str) -> String {
-    let file = claude_rules::file_for(route);
+    claude_file_under(Names::Mindweaver, route)
+}
+
+/// The route the ledger names the rule at `route`'s file for Claude by, in
+/// the folder of `names`: `.claude/rules/mindflayer/` for one a Mindflayer
+/// build recorded.
+pub(crate) fn claude_file_under(names: Names, route: &str) -> String {
+    let file = claude_rules::file_under(names, route);
     paths::to_config_string(&file).unwrap_or_else(|| file.display().to_string())
+}
+
+/// Whose folder `path`, a target a record names, is the rule at `route`'s
+/// file for Claude in: `None` when it is no such file. Under either names,
+/// so a record a Mindflayer build made is read where it says the file is.
+pub(crate) fn claude_file_names(path: &str, route: &str) -> Option<Names> {
+    Names::ALL
+        .into_iter()
+        .find(|names| path == claude_file_under(*names, route))
+}
+
+/// Whether `path`, a target a record names, is the rule at `route`'s file
+/// for Claude, in either folder.
+pub(crate) fn is_claude_file(path: &str, route: &str) -> bool {
+    claude_file_names(path, route).is_some()
 }
 
 /// Install `candidate`, a rule, into `project`: rendered with every other
@@ -731,7 +759,9 @@ impl Wanted {
             .unwrap_or_default();
         let file = claude_file(self.name());
         if claude
-            && !targets.iter().any(|target| target.path == file)
+            && !targets
+                .iter()
+                .any(|target| is_claude_file(&target.path, self.name()))
             && fs::symlink_metadata(root.join(&file)).is_err()
         {
             targets.push(Target {
@@ -1055,9 +1085,8 @@ fn render_held(
         .filter_map(|rule| rule.before.as_ref())
         .chain(going)
     {
-        let file = claude_file(&record.name);
         for target in &record.targets {
-            if target.path == AGENTS_MD || target.path == file {
+            if target.path == AGENTS_MD || is_claude_file(&target.path, &record.name) {
                 continue;
             }
             copied.push(Copied {
@@ -1158,14 +1187,16 @@ fn render_held(
                     .any(|kept| kept.name == record.name)
             })
             .filter_map(|record| {
-                let file = claude_file(&record.name);
-                let target = record.targets.iter().find(|target| target.path == file)?;
+                let (target, names) = record.targets.iter().find_map(|target| {
+                    claude_file_names(&target.path, &record.name).map(|names| (target, names))
+                })?;
                 let forced = (edits == Edits::Forced && change.forces(&record.name))
-                    .then(|| held_file(&root.join(&file)))
+                    .then(|| held_file(&root.join(&target.path)))
                     .flatten();
                 Some(Recorded {
                     route: record.name.to_string(),
                     hash: forced.or_else(|| target.content_hash.clone())?,
+                    names,
                 })
             })
             .collect();
@@ -1176,12 +1207,12 @@ fn render_held(
     // the file Claude's folder keeps of it, each by the hash of what it
     // holds, and the rule taken out forgotten. While the import or the files
     // failed, each rule's file is recorded as it was.
-    let kept: Option<BTreeMap<String, ContentHash>> = match &files {
+    let kept: Option<BTreeMap<String, (ContentHash, Names)>> = match &files {
         Some(Ok(files)) => Some(
             files
                 .recorded()
                 .into_iter()
-                .map(|kept| (kept.route, kept.hash))
+                .map(|kept| (kept.route, (kept.hash, kept.names)))
                 .collect(),
         ),
         _ => None,
@@ -1212,19 +1243,22 @@ fn render_held(
                     content_hash: Some(hash.clone()),
                 });
             }
-            let file = claude_file(name);
-            let hash = match &kept {
-                Some(kept) => kept.get(name).cloned(),
+            // Where the render left it, a Mindflayer build's folder among
+            // them, or where it was recorded while the render did not run.
+            let given = match &kept {
+                Some(kept) => kept
+                    .get(name)
+                    .map(|(hash, names)| (hash.clone(), claude_file_under(*names, name))),
                 None => pending
                     .targets
                     .iter()
-                    .find(|target| target.path == file)
-                    .and_then(|target| target.content_hash.clone()),
+                    .find(|target| is_claude_file(&target.path, name))
+                    .and_then(|target| Some((target.content_hash.clone()?, target.path.clone()))),
             };
-            if let Some(hash) = hash {
+            if let Some((hash, path)) = given {
                 targets.push(Target {
                     agent: Some(Agent::Claude.name().to_owned()),
-                    path: file,
+                    path,
                     content_hash: Some(hash),
                 });
             }
@@ -1251,12 +1285,11 @@ fn render_held(
     // Claude's files were not rendered, so the uninstall run again takes
     // the file away rather than finding it somebody's.
     if let (Change::Uninstall(going), None) = (change, &kept) {
-        let file = claude_file(going);
         if let Some(record) = pending.iter().find(|record| record.name == going) {
             let targets: Vec<Target> = record
                 .targets
                 .iter()
-                .filter(|target| target.path == file)
+                .filter(|target| is_claude_file(&target.path, going))
                 .cloned()
                 .collect();
             if !targets.is_empty() {
@@ -1353,8 +1386,10 @@ fn render_held(
         gone.extend(agents_entry.iter().cloned());
     }
     if let (Change::Uninstall(going), Some(kept)) = (change, &kept) {
-        if kept.contains_key(going) {
-            gone.push(exclude::Entry::file(claude_rules::file_for(going)));
+        if let Some((_, names)) = kept.get(going) {
+            gone.push(exclude::Entry::file(claude_rules::file_under(
+                *names, going,
+            )));
         }
     }
     let unexcluded = key
@@ -1381,7 +1416,7 @@ fn render_held(
                     && record
                         .targets
                         .iter()
-                        .any(|target| target.path == claude_file(&record.name))
+                        .any(|target| is_claude_file(&target.path, &record.name))
             })
     });
 
@@ -1419,9 +1454,11 @@ fn render_held(
     // reads the block, or through its file for Claude.
     let reads_block = claude && import.reach.mode() == Mode::Scoped;
     for record in &records {
-        let file = claude_file(&record.name);
         let in_block = record.targets.iter().any(|target| target.path == AGENTS_MD);
-        let in_file = record.targets.iter().any(|target| target.path == file);
+        let in_file = record
+            .targets
+            .iter()
+            .any(|target| is_claude_file(&target.path, &record.name));
         let reached = agents.iter().any(|agent| match agent {
             Agent::Claude => in_file || (in_block && reads_block),
             Agent::Codex | Agent::OpenCode => in_block,

@@ -66,7 +66,7 @@ fn claude_reads_agents_md_where_no_claude_md_is_found() {
     write(&app, "AGENTS.md", "# Working here\n");
     // None of these is a CLAUDE.md to Claude's check.
     write(&app, ".claude/AGENTS.md", "# Mine\n");
-    write(&app, ".claude/rules/mindflayer/style.md", "Be brief.\n");
+    write(&app, ".claude/rules/mindweaver/style.md", "Be brief.\n");
     write(
         &app,
         ".claude/skills/review/SKILL.md",

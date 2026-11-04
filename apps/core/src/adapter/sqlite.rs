@@ -1997,8 +1997,8 @@ UPDATE installations
 /// The fourth schema: what installing a rule writes (#45).
 ///
 /// A rule reaches a project marked by its settings as a section of the block
-/// in its `AGENTS.md` and, for Claude, as a file in
-/// `.claude/rules/mindflayer`, which hold different bytes: the section is the
+/// in its `AGENTS.md` and, for Claude, as a file in its rules folder
+/// (`.claude/rules/mindweaver`), which hold different bytes: the section is the
 /// rule without its front matter, the file the rule as written. So a target
 /// gains a `content_hash` of its own, which is what tells a section or a file
 /// edited since from the one written (D-04). A skill's copies leave it empty:
