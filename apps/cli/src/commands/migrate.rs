@@ -204,6 +204,15 @@ fn project_names(text: &mut String, project: &ProjectNames, done: bool) {
             file.display()
         );
     }
+    for kept in &project.kept {
+        let _ = writeln!(
+            text,
+            "{} the markers of the block in {} as Mindflayer's: {}",
+            would("left", "would leave"),
+            kept.path.display(),
+            kept.why
+        );
+    }
     for carried in &project.rules {
         let _ = writeln!(
             text,

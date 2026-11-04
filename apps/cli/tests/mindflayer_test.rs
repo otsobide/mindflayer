@@ -287,6 +287,30 @@ fn a_rule_file_not_there_is_put_back_under_the_new_name_once_the_workspace_moved
 }
 
 #[test]
+fn migrate_names_leaves_a_block_git_tracks_in_a_local_project_and_says_so() {
+    let dir = installed();
+    let root = dir.path();
+    indexed(root);
+    let agents = std::fs::read_to_string(root.join("app/AGENTS.md")).unwrap();
+
+    let moved = weaver(root, &["migrate", "--names", "--yes"]).unwrap();
+
+    assert!(
+        moved.stdout.contains(&format!(
+            "left the markers of the block in {}/app/AGENTS.md as Mindflayer's: git tracks it, \
+             and the project is local without edit_tracked\n",
+            root.display()
+        )),
+        "{}",
+        moved.stdout
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("app/AGENTS.md")).unwrap(),
+        agents
+    );
+}
+
+#[test]
 fn mind_migrate_names_moves_the_workspace_the_project_uses() {
     let dir = installed();
     let root = dir.path();

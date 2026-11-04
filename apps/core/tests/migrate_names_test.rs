@@ -12,6 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::rules::Withheld;
 use mindweaver_core::install::{self, Edits, Standing};
 use mindweaver_core::migrate::{self, LeftWhy, MigrateError, Refusal};
 use mindweaver_core::mother::{GitRepositoryMother, MindflayerMother};
@@ -419,6 +420,40 @@ fn a_link_in_a_rule_file_s_place_is_left_where_it_is_with_its_record() {
     assert!(fixture
         .exclude()
         .contains("/app/.claude/rules/mindflayer/rust.md"));
+}
+
+#[test]
+fn a_block_git_tracks_in_a_local_project_is_left_under_its_markers() {
+    let fixture = fixture();
+    GitRepositoryMother::index(fixture.root());
+    let agents = fixture.app("AGENTS.md");
+    let claude = fixture.app("CLAUDE.md");
+    let before = (fixture.text(&agents), fixture.text(&claude));
+    let mut workspace = fixture.workspace.clone();
+
+    let plan = migrate::names_plan(&workspace).unwrap();
+
+    assert!(plan.refusals.is_empty(), "{:?}", plan.refusals);
+    assert!(plan.projects[0].blocks.is_empty());
+    let kept: Vec<(PathBuf, Withheld)> = plan.projects[0]
+        .kept
+        .iter()
+        .map(|kept| (kept.path.clone(), kept.why.clone()))
+        .collect();
+    assert_eq!(
+        kept,
+        [
+            (agents.clone(), Withheld::Tracked),
+            (claude.clone(), Withheld::Tracked)
+        ]
+    );
+
+    migrate::names(&mut workspace).unwrap();
+
+    assert_eq!((fixture.text(&agents), fixture.text(&claude)), before);
+    assert!(before.0.contains("<!-- mindflayer:begin -->"));
+    assert_eq!(fixture.standing(&workspace, "team"), Standing::Current);
+    assert_eq!(fixture.standing(&workspace, "rust"), Standing::Current);
 }
 
 #[test]

@@ -3034,7 +3034,10 @@ or a TUI, which would go on writing to the old name: close it, and run the
 line again. A move that fails partway puts back every step it took. Git is
 never run: where git tracks the rules folder a move empties, the line says
 the `git rm --cached` and the `git add` that take the move into the index,
-and a tracked `AGENTS.md` shows the markers' change as yours to commit.
+and a tracked `AGENTS.md` or `CLAUDE.md` shows the markers' change as yours
+to commit. In a local project without `edit_tracked`, a block git tracks is
+left under its old markers, which every reader still takes, as a render
+leaves it, and the line says so.
 
 The panel keeps the colour mode and the sidebar its browser chose under
 Mindflayer: it reads them once, and keeps them under the new name. The

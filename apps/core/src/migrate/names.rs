@@ -46,6 +46,7 @@ use crate::code::codes;
 use crate::exclude::{self, Entry, ExcludeError, ExcludeFile};
 use crate::hash;
 use crate::install;
+use crate::install::rules::Withheld;
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, Target, FLAYER_LEDGER_FILE, LEDGER_FILE};
 use crate::names::Names;
@@ -113,6 +114,12 @@ pub struct ProjectNames {
     /// Its `AGENTS.md`, `CLAUDE.md` or `.claude/CLAUDE.md` whose block's
     /// markers are spelled the new way.
     pub blocks: Vec<PathBuf>,
+    /// Each of those left under Mindflayer's markers, which every reader
+    /// takes, because the project may not edit it: git tracks it in a local
+    /// project without `edit_tracked` (D-02), as a render leaves the block
+    /// or the import there too, a team's file being nobody's to change for
+    /// a name.
+    pub kept: Vec<KeptBlock>,
     /// Each of Claude's rule files carried to `.claude/rules/mindweaver`,
     /// its record with it.
     pub rules: Vec<CarriedRule>,
@@ -130,6 +137,13 @@ pub struct ProjectNames {
     /// move takes out from under it: for a front end to say what to commit,
     /// which is not Mindweaver's to do.
     pub tracked: bool,
+}
+
+/// A file whose block's markers are left as a Mindflayer build spelled them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeptBlock {
+    pub path: PathBuf,
+    pub why: Withheld,
 }
 
 /// One of Claude's rule files carried to the new folder.
@@ -675,7 +689,7 @@ fn project_names(
         Ok(bytes) => match AgentsMd::parse(&bytes) {
             Ok(file) if file.names() == Some(Names::Mindflayer) => {
                 match agents_md::linked_inside(&root, &agents) {
-                    Ok(()) => names.blocks.push(agents),
+                    Ok(()) => names.block(project, agents, Path::new(agents_md::FILE)),
                     Err(error) => refusals.push(Refusal::AgentsMd(error)),
                 }
             }
@@ -698,7 +712,11 @@ fn project_names(
     // the new way through the `AGENTS.md`, and read as a `CLAUDE.md` it is
     // a block of rules, which no import ever is.
     let agents_real = fs::canonicalize(root.join(agents_md::FILE)).ok();
-    for claude in [root.join(CLAUDE_MD), root.join(".claude").join(CLAUDE_MD)] {
+    for route in [
+        PathBuf::from(CLAUDE_MD),
+        Path::new(".claude").join(CLAUDE_MD),
+    ] {
+        let claude = root.join(&route);
         if !fs::symlink_metadata(&claude).is_ok_and(|found| found.is_file()) {
             continue;
         }
@@ -706,7 +724,9 @@ fn project_names(
             continue;
         }
         match fs::read(&claude).map(|bytes| ClaudeMd::parse(&bytes)) {
-            Ok(Ok(file)) if file.names() == Some(Names::Mindflayer) => names.blocks.push(claude),
+            Ok(Ok(file)) if file.names() == Some(Names::Mindflayer) => {
+                names.block(project, claude, &route);
+            }
             Ok(Ok(_)) => {}
             Ok(Err(problem)) => refusals.push(Refusal::ClaudeMd(ClaudeMdError::Malformed {
                 file: claude,
@@ -771,6 +791,17 @@ fn project_names(
             exclude::tracks(&root, &claude_rules::folder_under(Names::Mindflayer)).unwrap_or(false);
     }
     Ok(names)
+}
+
+impl ProjectNames {
+    /// `file`, at `route` from `project`'s root, among the blocks spelled
+    /// the new way, or kept as it is when the project may not edit it.
+    fn block(&mut self, project: &MindProject, file: PathBuf, route: &Path) {
+        match install::rules::withheld_from(project, route) {
+            None => self.blocks.push(file),
+            Some(why) => self.kept.push(KeptBlock { path: file, why }),
+        }
+    }
 }
 
 /// The exclude file git reads for `project`, when its block is spelled

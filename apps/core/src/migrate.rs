@@ -49,8 +49,8 @@ use crate::workspace::{
 };
 
 pub use names::{
-    names, names_plan, CarriedRule, Left as LeftWhy, LeftRule, NamesFailure, NamesMigrated,
-    NamesPlan, ProjectNames, Renamed, Repointed,
+    names, names_plan, CarriedRule, KeptBlock, Left as LeftWhy, LeftRule, NamesFailure,
+    NamesMigrated, NamesPlan, ProjectNames, Renamed, Repointed,
 };
 pub use project::{
     carries_installs, project, project_plan, ProjectFailure, ProjectMigrated, ProjectPlan, Stranded,

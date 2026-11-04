@@ -819,11 +819,20 @@ fn inside(path: &Path, within: &Path) -> Result<(), InstallError> {
 /// in a shared one or with `edit_tracked`, and otherwise while git does not
 /// track the file (D-02). `None` when it may, the reason when not.
 fn withholding(project: &MindProject) -> Option<Withheld> {
+    withheld_from(project, Path::new(AGENTS_MD))
+}
+
+/// [`withholding`] for the file at `route` from `project`'s root, a team's
+/// file Mindweaver edits only as D-02 lets it: what a move of a block's
+/// markers to Mindweaver's names asks of each file it would edit
+/// (`migrate::names`), as the render of the block and of the import in a
+/// `CLAUDE.md` ask it.
+pub(crate) fn withheld_from(project: &MindProject, route: &Path) -> Option<Withheld> {
     let settings = project.settings()?;
     if settings.share == Share::Shared || settings.edit_tracked {
         return None;
     }
-    match exclude::tracks_file(project.root(), Path::new(AGENTS_MD)) {
+    match exclude::tracks_file(project.root(), route) {
         Ok(false) => None,
         Ok(true) => Some(Withheld::Tracked),
         Err(error) => Some(Withheld::Untold(error.to_string())),

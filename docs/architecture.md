@@ -9902,7 +9902,10 @@ commands use: named for what moves, the names written on the disk, beside
 another rename, or `--rename`, which reads as the command that renames an
 artifact. A plan first, a dry run without `--yes`, as `migrate::library`
 and `migrate::project` have it, and under the workspace's lock: each
-project's blocks spelled the new way and each rule file it recorded
+project's blocks spelled the new way (but one git tracks in a local project
+without `edit_tracked`, left under the old markers as a render leaves it,
+`install::rules::withheld_from`, since D-02 keeps a team's file out of reach
+for a name as for a rule) and each rule file it recorded
 carried to the new folder with its record and its exclude line (one
 changed since left where it is, its record naming it there, and one not
 there pointed at the new folder all the same, since left naming the old
