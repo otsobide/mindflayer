@@ -1358,7 +1358,8 @@ These are easy to break from a single file without noticing.
 - The CLI end to end is `apps/cli/tests/e2e_test.rs`, one target whose
   modules under `tests/e2e/` group the use cases by what a person is
   doing (projects, authoring, installing, gathering, updating, reading,
-  workspaces, mistakes). Each test is one use case: it builds its own
+  workspaces, settings, adopting, removing, loading, upgrading, json,
+  mistakes). Each test is one use case: it builds its own
   scenario (`e2e/scenario.rs`, `Scenario`), runs one command line as a
   person types it, and holds its exit status, stdout and stderr word for
   word, and what it left on the disk. A scenario is a temporary folder read
@@ -1370,7 +1371,9 @@ These are easy to break from a single file without noticing.
   is given to that command alone (`run_with`). What a person or a git
   server makes is made directly (`repository`, `file`, `source`, `change`,
   with gix, so no `git` binary), and Mindflayer's own state only through
-  the commands (`given`), each held to exit 0 with nothing on stderr. A
+  the commands (`given`), each held to exit 0 with nothing on stderr, but
+  for what an older Mindflayer made, which no command of this build writes
+  (`older_project`, a `mind.toml` written by core's `MindProject::init`). A
   source is gathered by its path from the workspace (`../src/acme-skills`):
   a table pads every row to its longest, which a temporary folder's path
   would make depend on the system. No test shares a scenario, so any one
@@ -1381,7 +1384,7 @@ These are easy to break from a single file without noticing.
   crate since `flayer ui` is the server's only binary and the server may
   depend on no mindflayer crate. Its modules under `tests/api_e2e/` group
   the use cases by what a script or the panel's page does (access,
-  reading, changing, authoring, switching, following, launching,
+  reading, changing, authoring, managing, switching, following, launching,
   mistakes), and it builds the CLI suite's `Scenario`
   (`#[path = "e2e/scenario.rs"]`). Each test serves the scenario with
   `flayer ui --no-open` typed in one of its folders (`serve`, or
@@ -1401,7 +1404,8 @@ These are easy to break from a single file without noticing.
   is stopped by a SIGINT `kill` sends.
 - Core end to end is `apps/core/tests/e2e_test.rs`, its modules under
   `tests/e2e/` grouped by what a front end does (workspaces, projects,
-  authoring, installing, gathering, updating, reading). Each test builds
+  authoring, installing, gathering, updating, reading, settings, upgrading,
+  adopting). Each test builds
   its own world (`e2e/world.rs`, `World`), a temporary folder read as
   `/home` with `you` as the home, as the CLI suite's scenario is: what a
   person or a git server makes is made directly, and Mindflayer's state

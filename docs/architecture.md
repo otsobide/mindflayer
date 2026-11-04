@@ -166,7 +166,10 @@ and again. What Mindflayer keeps is made only by its commands (`given`),
 each held to exit 0 with nothing on stderr, as the panel's browser suite
 builds its fixture: a step that warned would be building something other
 than what the test names, and a database written by hand would test what no
-command writes.
+command writes. What an older Mindflayer made is the one exception, since no
+command of this build writes it: a project marked by a `mind.toml` is made
+by core's `MindProject::init`, kept to write that marker for such a test,
+and the rest of its state by the commands, as for any other.
 
 **The line run is the line typed.** A command is the binary
 (`CARGO_BIN_EXE_mind`, `CARGO_BIN_EXE_flayer`) started from the folder the
