@@ -19,7 +19,7 @@ says why each part is the way it is.
 ## Contents
 
 - [The two levels](#the-two-levels)
-- [The two kinds](#the-two-kinds)
+- [The kinds](#the-kinds)
 - [Getting started](#getting-started)
 - [Try it with the examples](#try-it-with-the-examples)
 - [Commands](#commands)
@@ -36,6 +36,7 @@ says why each part is the way it is.
 - [Control panel](#control-panel)
 - [Where a project keeps its artifacts](#where-a-project-keeps-its-artifacts)
 - [What a skill looks like](#what-a-skill-looks-like)
+- [What an MCP server looks like](#what-an-mcp-server-looks-like)
 - [Upgrading](#upgrading)
 
 ## The two levels
@@ -237,12 +238,21 @@ list in the envelope every reading command's `--json` shares, and `w` shows it
 in [the TUI](#the-tui). The [control panel](#control-panel)'s **Loads** page
 lists them too, and loads any of them into the workspace it shows.
 
-## The two kinds
+## The kinds
 
 | | Lives in | Shape | Declares |
 |---|---|---|---|
 | **Skill** | `skills/<name>/SKILL.md` | a directory each, so it can carry scripts and references beside its instructions | front matter in the [Agent Skills](https://agentskills.io/specification) format: `name`, `description`, and optionally `license`, `compatibility`, `metadata` and `allowed-tools` |
 | **Rule** | `rules/<name>.md` | one markdown file each | usually nothing (it is context, and its name is its filename), though it may open with front matter: `paths` and `description`, both optional |
+| **MCP server** | `mcp/<name>.toml` | one TOML file each, directly in `mcp/` | how an agent starts the server or reaches it, and what somebody supplies for it: [what an MCP server looks like](#what-an-mcp-server-looks-like) |
+
+MCP servers are kept in the workspace's library, `.mindweaver/library/mcp`,
+and listed, shown, validated, renamed and removed as skills and rules are.
+Installing one into a project, as an entry in each agent's own config file,
+is not done yet, and neither is adding one with `add`: you write its
+definition by hand. A project keeps none of its own unless its settings
+name a folder for them, so an `mcp/` that holds a server's code is never
+read as definitions.
 
 Folders under `rules/` group and mean nothing else, so
 `rules/git/no-force-push.md` is the rule `git/no-force-push`. Skills are flat,
@@ -1018,7 +1028,7 @@ why.
 ([below](#where-a-project-keeps-its-artifacts)), or into the directory a
 `mind.toml` names, and unticking it deletes those copies again. A rule is
 written into the project's `AGENTS.md`, and into Claude's own rule files
-where Claude needs it there ([the two kinds](#the-two-kinds)), and unticking
+where Claude needs it there ([the kinds](#the-kinds)), and unticking
 it takes it back out of both. With one exception, which is the rule the whole
 command works by:
 
@@ -1634,7 +1644,10 @@ workspace  rule   git/no-force-push  Never force-push a shared branch
 They live in the workspace's library, `.mindweaver/library/skills` and
 `.mindweaver/library/rules`, inside `.mindweaver` where no agent looks: they
 reach an agent by being installed into its project, never by sitting in a
-directory above it. `mindweaver init` writes both into `weaver.toml`:
+directory above it. Its [MCP servers](#what-an-mcp-server-looks-like) are
+kept there too, in `.mindweaver/library/mcp`, whatever `weaver.toml` says,
+since no marker written before them names a folder for them. `mindweaver
+init` writes the first two into `weaver.toml`:
 
 ```toml
 [directories]
@@ -2557,8 +2570,8 @@ with a warning, since Claude would load the skill as a plugin, hooks and MCP
 servers included. And a project at your home is refused an install, since its
 `.claude/skills` and `.agents/skills` are the ones every project reads.
 
-A rule goes into the block in the project's `AGENTS.md` instead ([the two
-kinds](#the-two-kinds)), rendered there with every other rule the project
+A rule goes into the block in the project's `AGENTS.md` instead ([the
+kinds](#the-kinds)), rendered there with every other rule the project
 has. An `AGENTS.md` Mindweaver makes for it is kept out of git by the same
 block in a local project, and goes with the last rule; one that was there is
 yours, and keeps everything outside the block. A local project writes into
@@ -2935,6 +2948,132 @@ command works in: `mindweaver`'s, wherever the project sits, or for `mind` the
 one named or activated, or else the workspace above the project, or else the
 one in your home. Another workspace that links the same project keeps its
 own (an [open question](architecture.md#open-questions)).
+
+## What an MCP server looks like
+
+An MCP server is one file in the workspace's library,
+`.mindweaver/library/mcp/<name>.toml`, saying how an agent starts the server
+or reaches it, in a format of its own that each agent's entry will be written
+from. `github.toml`:
+
+```toml
+format = 1
+name = "github"
+description = "GitHub's issues, pull requests and code"
+
+[transport]
+type = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env = { GITHUB_PERSONAL_ACCESS_TOKEN = "{token}" }
+
+[[inputs]]
+name = "token"
+kind = "env"
+description = "A personal access token the server signs in with"
+required = true
+secret = true
+env_var = "GITHUB_TOKEN"
+```
+
+| Key | | Holds |
+|---|---|---|
+| `format` | required | `1`; a definition written in a newer format is refused, and said to be |
+| `name` | required | the name agents will key it by, the same as its file's |
+| `description` | required | what it is for; its first line is what a listing shows |
+| `transport` | required | `type = "stdio"`, a program, with `command`, and optionally `args`, `env` and `cwd`; or `type = "http"` or `"sse"`, an address, with `url` and optionally `headers` |
+| `inputs` | optional | what somebody supplies when the agent starts the server: each a `name`, a `kind` (`env`, `header`, `arg` or `url_var`), and optionally a `description`, `required`, `secret` and the `env_var` it is read from |
+| `provenance` | optional | `registry`, `upstream_name`, `version` and `fetched_at`, for one imported from a registry |
+| `extras` | optional | a table for each agent, `[extras.claude]`, passed on to its entry as it is |
+
+An input's value is never in the file: write the input's name between braces
+where it goes, `{token}`, in a value of `env` for an `env` input, one of
+`args` for an `arg`, a value of `headers` for a `header`, or the `url` for a
+`url_var`, and the agent will read it from the environment variable when it
+starts the server. A brace naming no input is left as it is, so an argument
+such as `{"debug":true}` means what it says. Any other key is carried along
+untouched.
+
+They are listed beside the skills and rules, and narrowed with `mcp`:
+
+```
+$ mindweaver list
+skill  commit-style       How every repo here writes commits
+rule   git/no-force-push  Never force-push a shared branch
+mcp    github             GitHub's issues, pull requests and code
+mcp    sentry             Sentry's issues and releases
+
+$ mindweaver list mcp
+github  GitHub's issues, pull requests and code
+sentry  Sentry's issues and releases
+```
+
+`show` says what one is for, then prints its file:
+
+```
+$ mindweaver show github
+github
+/home/you/Projects/.mindweaver/library/mcp/github.toml
+
+GitHub's issues, pull requests and code
+
+format = 1
+name = "github"
+description = "GitHub's issues, pull requests and code"
+
+[transport]
+type = "stdio"
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env = { GITHUB_PERSONAL_ACCESS_TOKEN = "{token}" }
+
+[[inputs]]
+name = "token"
+kind = "env"
+description = "A personal access token the server signs in with"
+required = true
+secret = true
+env_var = "GITHUB_TOKEN"
+```
+
+`validate` holds each to its format: a name that is its file's, a transport
+that names what it needs to start or reach the server, and every input used
+where its kind says:
+
+```
+$ mindweaver validate mcp
+github: ok
+sentry: 1 problem
+  - input `token` is used nowhere: an input of kind `arg` is written `{token}` in one of the transport's `args`
+
+2 MCP servers checked, 1 invalid
+```
+
+`mindweaver rename mcp:github octocat` moves the file and rewrites its `name`
+and nothing else, and `mindweaver remove mcp:github --yes` takes it away;
+`mindweaver edit` opens it, and `--contents` refuses a definition that does
+not read or names another server. What is not done yet is refused, saying
+so:
+
+```
+$ mindweaver add mcp linear "Linear's issues"
+error: an MCP server cannot be added yet, since `add` takes no command or address to start or reach it by; write its definition as <name>.toml in /home/you/Projects/.mindweaver/library/mcp
+$ mindweaver install -p collapse mcp:github
+error: MCP servers cannot be installed into a project yet
+```
+
+A project keeps MCP servers of its own only where its settings name a folder
+for them, under `[directories]` as `mcp = "mcp"`; `mind init` names none, so
+an `mcp/` holding a server's code is not read, and adding one there says how:
+
+```
+$ cd collapse && mind add mcp github "GitHub"
+error: /home/you/Projects/collapse: keeps no MCP servers of its own, since its settings.toml names no folder for them; its `[directories]` can name one
+```
+
+A project an older Mindweaver made, marked by a `mind.toml` or a
+`settings.json`, keeps none either, whatever folders it has, and is pointed
+at `mind migrate` first.
 
 ## Upgrading
 
