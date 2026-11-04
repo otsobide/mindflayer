@@ -983,7 +983,15 @@ not write. Each run asks `opencode mcp list` from the project, with
 
 The background server is the question in `opencode-mcp-service`: whether it
 fills `{env:}` from the environment of whoever started it, or from one of
-its own, which V2's `opencode service set env` suggests it keeps.
+its own, which V2's `opencode service set env` suggests it keeps. Before
+anything starts it, the run gives it a port of its own, one the kernel has
+just found free, with `opencode service set port`, which writes only the
+temp home's service settings (`~/.config/opencode/service.json` there).
+The namespace shares the host's network, and a V2 server otherwise takes
+its channel's fixed port, 49374, where the operator's own OpenCode keeps
+its server: the probe's could not start, or the operator's could not while
+the probe's ran. A `service set port` that fails is a mismatch, and the run
+stops there.
 
 | Check | Expected | `opencode-mcp-v2` | `opencode-mcp-v1-shape` | `opencode-mcp-service` | `opencode-mcp-1-19` |
 |---|---|---|---|---|---|
