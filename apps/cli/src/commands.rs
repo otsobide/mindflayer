@@ -47,7 +47,7 @@ use artifact::{
 use gather::run_gather;
 use install::{install_named, uninstall_named, uninstall_orphans};
 use known::{forget_command, workspaces_command};
-use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
+use migrate::{migrate_all, migrate_here, migrate_library, migrate_names, migrate_one, Asked};
 use project::{
     init_project, init_workspace, link_here, link_projects, relink_project, renew_here,
     scan_workspace, unlink_here, unlink_projects,
@@ -279,7 +279,20 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             let (change, yes) = targets_change(change);
             change_here(&project_here(&directory)?, &change, yes, lookup)
         }
-        Command::Migrate { settings, yes } => migrate_here(
+        Command::Migrate {
+            names: true, yes, ..
+        } => {
+            let project = project_here(&directory)?;
+            match consulted(&project, lookup)? {
+                Some(workspace) => migrate_names(&workspace, *yes),
+                None => Err(CliError::NoWorkspaceAbove(project.root().to_path_buf()).into()),
+            }
+        }
+        Command::Migrate {
+            settings,
+            yes,
+            names: false,
+        } => migrate_here(
             &project_here(&directory)?,
             &Asked {
                 agents: &settings.agents,
@@ -673,6 +686,7 @@ fn run_weaver(
         // library from the start, and links no project to move.
         WeaverCommand::Migrate {
             library,
+            names,
             project,
             all_projects,
             settings,
@@ -683,6 +697,11 @@ fn run_weaver(
                 share: settings.share(),
                 yes: *yes,
             };
+            if *names {
+                return reading_workspace(directory, lookup, |workspace| {
+                    migrate_names(workspace, *yes)
+                });
+            }
             match (library, project, all_projects) {
                 (true, _, _) => reading_workspace(directory, lookup, |workspace| {
                     migrate_library(workspace, *yes)

@@ -164,3 +164,123 @@ fn a_home_a_mindflayer_build_read_from_its_variable_is_taken_and_said() {
     );
     assert!(!made_new(home.path()));
 }
+
+/// A workspace a Mindflayer build made, linking `app`, a local project in a
+/// git work tree for Claude, into which it installed a rule about some
+/// files (a file for Claude) and one about every file (a section of the
+/// block of `AGENTS.md`): what a move to the new names reaches.
+fn installed() -> TempDir {
+    let dir = TempDir::new().unwrap();
+    gix::init(dir.path()).unwrap();
+    let workspace = MindflayerMother::create(dir.path());
+    let app = dir.path().join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    mind(&app, &["init", "--agents", "claude,codex"]).unwrap();
+    weaver(dir.path(), &["link", "app"]).unwrap();
+    let rules = own_directory_for(dir.path(), Kind::Rule);
+    std::fs::create_dir_all(&rules).unwrap();
+    std::fs::write(
+        rules.join("rust.md"),
+        "---\npaths:\n  - \"src/**\"\n---\nReturn errors.\n",
+    )
+    .unwrap();
+    std::fs::write(rules.join("team.md"), "Say what a change does first.\n").unwrap();
+    weaver(dir.path(), &["install", "-p", "app", "rule:rust"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "app", "rule:team"]).unwrap();
+    let project = mindweaver_core::MindProject::open(&app).unwrap();
+    MindflayerMother::installed_into(&workspace, &project);
+    dir
+}
+
+#[test]
+fn migrate_names_says_what_it_would_move_and_moves_nothing() {
+    let dir = installed();
+    let root = dir.path();
+
+    let outcome = weaver(root, &["migrate", "--names"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "would move {root}/.mindflayer to {root}/.mindweaver\n\
+             would rename {root}/.mindflayer/flayer.toml to {root}/.mindweaver/weaver.toml\n\
+             would rename {root}/.mindflayer/mindflayer.db to {root}/.mindweaver/mindweaver.db\n\
+             would point skills in the marker at .mindweaver/library/skills\n\
+             would point rules in the marker at .mindweaver/library/rules\n\
+             would spell the markers of the block in {root}/app/AGENTS.md as Mindweaver's\n\
+             would move {root}/app/.claude/rules/mindflayer/rust.md to {root}/app/.claude/rules/mindweaver/rust.md\n\
+             would spell the markers of the block in {root}/.git/info/exclude as Mindweaver's\n\
+             nothing moved: add --yes to go ahead\n",
+            root = root.display()
+        )
+    );
+    assert!(outcome.ok);
+    assert!(root.join(".mindflayer/flayer.toml").is_file());
+    assert!(!made_new(root));
+}
+
+#[test]
+fn migrate_names_with_yes_moves_it_all_and_a_second_run_has_nothing_to_move() {
+    let dir = installed();
+    let root = dir.path();
+
+    let moved = weaver(root, &["migrate", "--names", "--yes"]).unwrap();
+
+    assert!(
+        moved.stdout.starts_with(&format!(
+            "moved {0}/.mindflayer to {0}/.mindweaver\n",
+            root.display()
+        )),
+        "{}",
+        moved.stdout
+    );
+    assert!(moved.ok, "{:?}", moved.stderr);
+    assert!(!root.join(".mindflayer").exists());
+    assert!(root.join(".mindweaver/weaver.toml").is_file());
+    assert!(root.join(".mindweaver/mindweaver.db").is_file());
+    assert!(root.join("app/.claude/rules/mindweaver/rust.md").is_file());
+    let agents = std::fs::read_to_string(root.join("app/AGENTS.md")).unwrap();
+    assert!(agents.contains("<!-- mindweaver:rule team -->"), "{agents}");
+    // Each rule as it was installed, wherever its copies went; the one
+    // about some files reaches Claude alone, as it did before.
+    let status = weaver(root, &["status"]).unwrap();
+    for word in ["missing", "edited", "foreign"] {
+        assert!(!status.stdout.contains(word), "{}", status.stdout);
+    }
+    let again = weaver(root, &["migrate", "--names", "--yes"]).unwrap();
+    assert_eq!(
+        again.stdout,
+        "nothing to move: the workspace is under Mindweaver's names already\n"
+    );
+}
+
+#[test]
+fn mind_migrate_names_moves_the_workspace_the_project_uses() {
+    let dir = installed();
+    let root = dir.path();
+
+    let moved = mind(&root.join("app"), &["migrate", "--names", "--yes"]).unwrap();
+
+    assert!(moved.ok, "{:?}", moved.stderr);
+    assert!(root.join(".mindweaver/weaver.toml").is_file());
+    assert!(!root.join(".mindflayer").exists());
+}
+
+#[test]
+fn migrate_names_refuses_a_name_taken_and_moves_nothing() {
+    let dir = installed();
+    let root = dir.path();
+    std::fs::create_dir(root.join(".mindweaver")).unwrap();
+
+    let refused = weaver(root, &["migrate", "--names", "--yes"]).unwrap_err();
+
+    assert_eq!(
+        refused.error.to_string(),
+        format!(
+            "nothing moved: {0}/.mindweaver: already there, so {0}/.mindflayer cannot be moved \
+             onto it",
+            root.display()
+        )
+    );
+    assert!(root.join(".mindflayer/flayer.toml").is_file());
+}

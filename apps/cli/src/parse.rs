@@ -372,6 +372,12 @@ pub enum Command {
     ///
     /// Without --yes nothing changes, and the command says what would.
     Migrate {
+        /// Move the workspace this project's commands use, made by a
+        /// Mindflayer build, to Mindweaver's names, as `mindweaver migrate
+        /// --names` does there.
+        #[arg(long, conflicts_with_all = ["agents", "local", "shared"])]
+        names: bool,
+
         #[command(flatten)]
         settings: Migrated,
 
@@ -921,7 +927,7 @@ pub enum WeaverCommand {
     // to migrate rather than shown clap's usage.
     #[command(group(
         ArgGroup::new("what")
-            .args(["library", "project", "all_projects"])
+            .args(["library", "names", "project", "all_projects"])
             .multiple(false)
     ))]
     Migrate {
@@ -930,6 +936,19 @@ pub enum WeaverCommand {
         /// the marker there, keeping it as it was beside it.
         #[arg(long, conflicts_with_all = ["agents", "local", "shared"])]
         library: bool,
+
+        /// Move a workspace a Mindflayer build made to Mindweaver's names:
+        /// its .mindflayer, flayer.toml and mindflayer.db to .mindweaver,
+        /// weaver.toml and mindweaver.db, and in each project it links the
+        /// markers Mindflayer wrote and Claude's rules folder.
+        //
+        // Named for what moves, the names written on the disk, beside
+        // `--library`, named for where the workspace's own go: not
+        // `--mindweaver`, which names the product and would be wrong again
+        // after another rename, nor `--rename`, which reads as the command
+        // that renames an artifact.
+        #[arg(long, conflicts_with_all = ["agents", "local", "shared"])]
+        names: bool,
 
         /// Move one project the workspace links, by name or path, from its
         /// mind.toml or settings.json to a settings.toml, as `mind migrate`
