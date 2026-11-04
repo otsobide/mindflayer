@@ -1167,15 +1167,19 @@ impl Absence for LifecycleError {
             | LifecycleError::Ambiguous { .. }
             | LifecycleError::Name { .. }
             | LifecycleError::Nested { .. }
+            | LifecycleError::McpNested { .. }
             | LifecycleError::Unfit { .. }
             | LifecycleError::Unchanged { .. }
             | LifecycleError::Exists { .. }
             | LifecycleError::Unreadable { .. }
+            | LifecycleError::DefinitionUnreadable { .. }
             | LifecycleError::Rewrite { .. }
             | LifecycleError::Outside { .. }
             | LifecycleError::NotText { .. }
             | LifecycleError::Unparsed { .. }
             | LifecycleError::NameChanged { .. }
+            | LifecycleError::DefinitionUnparsed { .. }
+            | LifecycleError::McpNameChanged { .. }
             | LifecycleError::ContentsUnfit { .. }
             | LifecycleError::HashMalformed { .. }
             | LifecycleError::Stale { .. }

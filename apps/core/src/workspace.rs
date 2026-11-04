@@ -409,6 +409,13 @@ impl Directories {
     pub fn default_for(kind: Kind) -> Option<PathBuf> {
         match kind {
             Kind::Skill | Kind::Rule => Some(PathBuf::from(kind.folder())),
+            // Added once a marker could say where each kind lives, and a
+            // folder called `mcp` at a repository's root is as likely to be
+            // the code of a server as anything Mindweaver should read. A
+            // project that authors definitions names the folder; the
+            // workspace's own are in its library whatever its marker says
+            // (D-05).
+            Kind::Mcp => None,
         }
     }
 
@@ -2950,9 +2957,16 @@ fn weaver_template(name: &str, directories: &Directories, names: Names) -> Strin
          [directories]\n\
          {}",
         toml_string(name),
-        directory_lines(
-            directories.resolved_with(|kind| Some(Directories::library_under(names, kind)))
-        ),
+        // Spelled out for the kinds every marker has named since markers
+        // said where a kind lives, the ones with a project's default too:
+        // one added since (MCP) is kept in the library whatever a marker
+        // says (D-05), as the comment above tells, so a line for it would
+        // tell a reader nothing, and make the marker a new workspace gets
+        // differ from the one an older build wrote for no reader of either.
+        // One `directories` names is written all the same.
+        directory_lines(directories.resolved_with(|kind| {
+            Directories::default_for(kind).map(|_| Directories::library_under(names, kind))
+        })),
     )
 }
 

@@ -458,7 +458,7 @@ pub(crate) fn remove_everywhere(
             // a rule of one word could be a skill's name too.
             let typed = match target.kind {
                 Kind::Skill => target.name.to_string(),
-                Kind::Rule => target.qualified_name(),
+                Kind::Rule | Kind::Mcp => target.qualified_name(),
             };
             for from in orphaned {
                 outcome.stderr.push(

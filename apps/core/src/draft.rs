@@ -130,6 +130,13 @@ pub fn edited(
             project.root(),
             contents,
         )),
+        Kind::Mcp => Artifact::mcp_holding(
+            &target.path,
+            target.name.to_string(),
+            project.root(),
+            contents,
+        )
+        .ok(),
     };
     Judged {
         issues: artifact

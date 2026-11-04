@@ -382,7 +382,8 @@
       "type": "string",
       "enum": [
         "skill",
-        "rule"
+        "rule",
+        "mcp"
       ]
     }
   }

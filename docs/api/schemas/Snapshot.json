@@ -377,7 +377,8 @@
       "type": "string",
       "enum": [
         "skill",
-        "rule"
+        "rule",
+        "mcp"
       ]
     },
     "KindCount": {
@@ -1338,6 +1339,33 @@
             "code",
             "name",
             "directory",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "name_file_mismatch"
+            },
+            "file": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "file",
             "warning",
             "message"
           ]

@@ -15,7 +15,7 @@ use crate::frontmatter;
 use crate::kind::Kind;
 use crate::names::Names;
 use crate::rule::RuleManifest;
-use crate::settings::Settings;
+use crate::settings::{Settings, Share};
 use crate::skill::SkillManifest;
 use crate::url::{carries_credentials, redacted};
 use crate::workspace::{MindProject, WeaverWorkspace};
@@ -280,6 +280,12 @@ fn the_fixture_mothers_make_a_workspace_a_project_and_a_repository() {
     let older = ProjectMother::older(&dir.path().join("older"));
     assert!(MindProject::is_marked(older.root()));
     assert!(older.settings().is_none());
+
+    let authoring = ProjectMother::with_mcp(&dir.path().join("authoring"), &[], Share::Local);
+    assert_eq!(
+        authoring.directory_for(Kind::Mcp),
+        Some(authoring.root().join("mcp"))
+    );
 
     let mut workspace = workspace;
     let linked = ProjectMother::linked(&mut workspace, "linked");

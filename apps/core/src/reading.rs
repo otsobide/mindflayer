@@ -103,6 +103,8 @@ impl Shown {
             Declared::Rule(manifest) => {
                 shown.paths = manifest.paths.stated().cloned();
             }
+            // Its transport and inputs are in the file, which is its body.
+            Declared::Mcp(_) => {}
         }
         Ok(shown)
     }

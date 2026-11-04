@@ -150,6 +150,33 @@
           "type": "object",
           "properties": {
             "code": {
+              "const": "name_file_mismatch"
+            },
+            "file": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "file",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
               "const": "description_empty"
             },
             "message": {

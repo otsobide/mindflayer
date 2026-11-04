@@ -3,7 +3,12 @@
 //! One file per server, `<name>.toml` in a library's `mcp` folder (D-10),
 //! which an install will render as one entry in each agent's own config
 //! file, keyed by that name (#90 to #94). Only what the file holds lives
-//! here: the half of a definition that is specific to MCP servers.
+//! here. A definition as a thing on disk is an
+//! [`Artifact`](crate::artifact::Artifact) of the kind [`Kind::Mcp`], found,
+//! shown, validated, renamed and removed as every kind is; this is the half
+//! that is specific to MCP servers.
+//!
+//! [`Kind::Mcp`]: crate::kind::Kind::Mcp
 //!
 //! Neutral rather than any agent's shape: a subset of the MCP registry's
 //! `server.json`, so an entry from the registry maps onto it (#106), with

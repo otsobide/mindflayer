@@ -406,7 +406,11 @@ fn plan_with(
         // `AGENTS.md`, rendered from the library; one somebody wrote is no
         // folder to copy, and taking rules out of a hand-written `AGENTS.md`
         // is a change of its own.
-        Some(kind @ Kind::Rule) => return Err(AdoptError::NotASkill { kind, name }),
+        //
+        // A server an agent is given is an entry in its own config file,
+        // never a folder to copy either; adopting one is a change of its own,
+        // once one is installed (#94).
+        Some(kind @ (Kind::Rule | Kind::Mcp)) => return Err(AdoptError::NotASkill { kind, name }),
     }
     let kind = Kind::Skill;
     // Joined onto the project's folders below, and onto the library's.

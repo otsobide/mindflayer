@@ -468,7 +468,7 @@ fn harvest(
     // answer this question before it can be added.
     match request.kind {
         Kind::Skill => {}
-        Kind::Rule => return Err(GatherError::NotGatherable { kind: request.kind }),
+        Kind::Rule | Kind::Mcp => return Err(GatherError::NotGatherable { kind: request.kind }),
     }
     let Layout::Directory { manifest } = request.kind.layout() else {
         return Err(GatherError::NotGatherable { kind: request.kind });

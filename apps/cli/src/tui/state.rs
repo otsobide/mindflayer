@@ -963,7 +963,7 @@ impl App {
             _ => {
                 let what = match kind.layout() {
                     Layout::Directory { .. } => "Its folder goes, and everything in it.",
-                    Layout::Files { .. } => "The file goes.",
+                    Layout::Files { .. } | Layout::Flat { .. } => "The file goes.",
                 };
                 let mut question = vec![
                     format!("Delete {kind} {name}?"),

@@ -353,6 +353,7 @@ fn plural(kind: Kind) -> &'static str {
     match kind {
         Kind::Skill => "Skills",
         Kind::Rule => "Rules",
+        Kind::Mcp => "MCP servers",
     }
 }
 
@@ -365,6 +366,9 @@ fn first(kind: Kind) -> String {
             "`mindweaver gather git <url>`, `mindweaver load <path>` or `mindweaver add skill`"
         }
         Kind::Rule => "`mindweaver load <path>` or `mindweaver add rule`",
+        Kind::Mcp => {
+            "`mindweaver load <path>`, or a definition written into the workspace's library,"
+        }
     };
     format!("{}; {commands} first", nothing(kind))
 }

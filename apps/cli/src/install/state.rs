@@ -657,6 +657,7 @@ pub fn nothing(kind: Kind) -> &'static str {
             "nothing on the shelf to install, and nothing loaded or of the workspace's own"
         }
         Kind::Rule => "no rules to install: none of the workspace's own, and none loaded",
+        Kind::Mcp => "no MCP servers to install: none of the workspace's own, and none loaded",
     }
 }
 

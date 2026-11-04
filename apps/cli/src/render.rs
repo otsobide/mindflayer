@@ -404,8 +404,8 @@ pub(crate) fn verdict(text: &mut String, label: &str, issues: &[ValidationIssue]
     problems > 0
 }
 
-/// "1 skill", "2 skills": a count of a kind, in the words core gives it for
-/// one and for more ([`Kind::noun`], [`Kind::plural`]).
+/// "1 skill", "2 skills", "1 MCP server": a count of a kind, in the words
+/// core gives it for one and for more ([`Kind::noun`], [`Kind::plural`]).
 pub(crate) fn counted_kind(count: usize, kind: Kind) -> String {
     let noun = if count == 1 {
         kind.noun()

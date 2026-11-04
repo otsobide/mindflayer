@@ -463,7 +463,8 @@ pub fn apply(
             // Matched on the kind, so a third one has to say how it is
             // written.
             let rendered = match update.kind {
-                Kind::Skill => false,
+                // A definition's is refused as its install is, saying why.
+                Kind::Skill | Kind::Mcp => false,
                 Kind::Rule => rendered_together,
             };
             if rendered {

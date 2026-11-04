@@ -9,6 +9,7 @@ export type ValidationIssue =
   | { code: "name_not_kebab_case", segment: string, warning: boolean, message: string }
   | { code: "name_segment_too_long", segment: string, length: number, warning: boolean, message: string }
   | { code: "name_directory_mismatch", name: string, directory: string, warning: boolean, message: string }
+  | { code: "name_file_mismatch", name: string, file: string, warning: boolean, message: string }
   | { code: "description_empty", warning: boolean, message: string }
   | { code: "description_too_long", length: number, warning: boolean, message: string }
   | { code: "compatibility_empty", warning: boolean, message: string }

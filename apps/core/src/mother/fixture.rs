@@ -187,6 +187,17 @@ impl ProjectMother {
             .0
     }
 
+    /// The project `root` is, marked by its settings as `mind init` marks
+    /// one, with a folder of MCP servers its settings name beside the
+    /// folders it is given by default, which name none.
+    pub fn with_mcp(root: &Path, agents: &[Agent], share: Share) -> MindProject {
+        fs::create_dir_all(root).expect("make the project's folder");
+        let directories = Directories::default().with(crate::kind::Kind::Mcp, "mcp");
+        MindProject::init_asked(root, agents, share, &directories)
+            .expect("make a project")
+            .0
+    }
+
     /// The project `root` is, marked by a `mind.toml` as a version 2 `mind
     /// init` did, so a copy is installed into the folder it authors in.
     pub fn older(root: &Path) -> MindProject {

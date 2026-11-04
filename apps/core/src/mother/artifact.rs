@@ -96,11 +96,41 @@ impl McpMother {
         (name, text)
     }
 
+    /// `name`, saying it is for `description`, reached over `transport`
+    /// (`stdio`, `http` or `sse`) as [`stdio`](Self::stdio),
+    /// [`http`](Self::http) and [`sse`](Self::sse) reach it: for a fixture
+    /// that has to read the same every run.
+    pub fn create(name: &str, description: &str, transport: &str) -> String {
+        let head = Self::head(name, description);
+        match transport {
+            "stdio" => Self::program(&head),
+            "http" => Self::streamed(&head),
+            "sse" => Self::evented(&head),
+            other => panic!("{other} is no transport the format has"),
+        }
+    }
+
     /// A program the agent starts: an environment holding a secret and a
     /// setting, an argument somebody supplies, and extras for Claude.
     pub fn stdio(name: &str) -> String {
+        Self::program(&Self::head(name, &SkillMother::description()))
+    }
+
+    /// A server at an address with a part of it supplied, reached over
+    /// streamable HTTP with a secret header, as a registry offered it.
+    pub fn http(name: &str) -> String {
+        Self::streamed(&Self::head(name, &SkillMother::description()))
+    }
+
+    /// A server at an address, reached over server-sent events with a
+    /// secret header.
+    pub fn sse(name: &str) -> String {
+        Self::evented(&Self::head(name, &SkillMother::description()))
+    }
+
+    fn program(head: &str) -> String {
         format!(
-            "{}\n\
+            "{head}\n\
              [transport]\n\
              type = \"stdio\"\n\
              command = \"npx\"\n\
@@ -123,15 +153,12 @@ impl McpMother {
              \n\
              [extras.claude]\n\
              timeout = 30000\n",
-            Self::head(name, &SkillMother::description())
         )
     }
 
-    /// A server at an address with a part of it supplied, reached over
-    /// streamable HTTP with a secret header, as a registry offered it.
-    pub fn http(name: &str) -> String {
+    fn streamed(head: &str) -> String {
         format!(
-            "{}\n\
+            "{head}\n\
              [transport]\n\
              type = \"http\"\n\
              url = \"https://{{tenant}}.example.com/mcp\"\n\
@@ -155,15 +182,12 @@ impl McpMother {
              upstream_name = \"com.example/server\"\n\
              version = \"1.2.0\"\n\
              fetched_at = 2026-11-04T09:30:00Z\n",
-            Self::head(name, &SkillMother::description())
         )
     }
 
-    /// A server at an address, reached over server-sent events with a
-    /// secret header.
-    pub fn sse(name: &str) -> String {
+    fn evented(head: &str) -> String {
         format!(
-            "{}\n\
+            "{head}\n\
              [transport]\n\
              type = \"sse\"\n\
              url = \"https://example.com/sse\"\n\
@@ -174,7 +198,6 @@ impl McpMother {
              kind = \"header\"\n\
              secret = true\n\
              env_var = \"EXAMPLE_KEY\"\n",
-            Self::head(name, &SkillMother::description())
         )
     }
 

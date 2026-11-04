@@ -338,13 +338,15 @@ fn a_version_1_marker_still_keeps_every_kind_inside_mind() {
 
     assert_eq!(project.config().version(), 1);
     assert_eq!(project.settings(), None);
-    for kind in Kind::ALL {
+    for kind in [Kind::Skill, Kind::Rule] {
         assert_eq!(
             project.directory_for(kind),
             Some(dir.path().join(MIND_DIR).join(kind.folder())),
             "{kind}"
         );
     }
+    // Every kind it knew: one added since was kept nowhere.
+    assert_eq!(project.directory_for(Kind::Mcp), None);
 }
 
 #[test]

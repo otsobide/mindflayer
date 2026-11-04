@@ -41,6 +41,7 @@ use crate::hash;
 use crate::install::{self, InstallError};
 use crate::kind::{Kind, Layout};
 use crate::ledger::Carried;
+use crate::mcp::McpDefinition;
 use crate::paths;
 use crate::skill::SkillManifest;
 use crate::template::Template;
@@ -295,7 +296,9 @@ pub fn place(project: &MindProject, kind: Kind, name: &str) -> Option<PathBuf> {
 fn place_in(directory: &Path, kind: Kind, name: &str) -> PathBuf {
     match kind.layout() {
         Layout::Directory { .. } => directory.join(name),
-        Layout::Files { extension } => directory.join(format!("{name}.{extension}")),
+        Layout::Files { extension } | Layout::Flat { extension } => {
+            directory.join(format!("{name}.{extension}"))
+        }
     }
 }
 
@@ -310,6 +313,7 @@ pub fn load(
     match kind {
         Kind::Skill => Artifact::skill(path, project.root()),
         Kind::Rule => Artifact::rule(path, name.to_owned(), project.root()),
+        Kind::Mcp => Artifact::mcp(path, name.to_owned(), project.root()),
     }
 }
 
@@ -333,6 +337,16 @@ pub fn identify(project: &MindProject, file: &Path) -> Option<(Kind, String)> {
                     .is_some_and(|found| found.eq_ignore_ascii_case(extension));
                 let name = paths::to_config_string(&below.with_extension(""))?;
                 matches.then_some((kind, name))
+            }
+            Layout::Flat { extension } => {
+                let mut parts = below.components();
+                let file = Path::new(parts.next()?.as_os_str());
+                let matches = parts.next().is_none()
+                    && file
+                        .extension()
+                        .is_some_and(|found| found.eq_ignore_ascii_case(extension));
+                let name = file.file_stem()?.to_str()?;
+                matches.then(|| (kind, name.to_owned()))
             }
         }
     })
@@ -548,7 +562,7 @@ fn written_at(
     // Matched on the layout, so a kind kept another way says what bounds it.
     let own = match target.kind.layout() {
         Layout::Directory { .. } => Some(target.path.as_path()),
-        Layout::Files { .. } => None,
+        Layout::Files { .. } | Layout::Flat { .. } => None,
     };
     let canonical = |path: &Path| {
         fs::canonicalize(path).map_err(|source| LifecycleError::Io {
@@ -627,6 +641,27 @@ fn fit(target: &Target, contents: &[u8]) -> Result<(), LifecycleError> {
             artifact::strict_issues(&manifest, &folder)
         }
         Kind::Rule => artifact::rule_text_issues(text),
+        Kind::Mcp => {
+            let definition =
+                McpDefinition::parse(text).map_err(|error| LifecycleError::DefinitionUnparsed {
+                    name: name.to_string(),
+                    reason: error.to_string(),
+                })?;
+            // The file is the name an install keys the entry by, so it is
+            // what the definition has to say, as a skill's folder is.
+            if definition.name != name {
+                return Err(LifecycleError::McpNameChanged {
+                    name: name.to_string(),
+                    to: definition.name.to_string(),
+                });
+            }
+            let file = target
+                .path
+                .file_name()
+                .map(|file| file.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            artifact::mcp_strict_issues(&definition, &name, &file)
+        }
     };
     if issues.is_empty() {
         Ok(())
@@ -676,7 +711,7 @@ pub fn files(target: &Target) -> usize {
     }
     match target.kind.layout() {
         Layout::Directory { .. } => count(&target.path),
-        Layout::Files { .. } => 1,
+        Layout::Files { .. } | Layout::Flat { .. } => 1,
     }
 }
 
@@ -715,6 +750,13 @@ pub fn remove(
                 source,
             })?;
             prune(&directory, target.path.parent());
+        }
+        // Directly in the kind's folder, so no folder of its own is left.
+        Layout::Flat { .. } => {
+            fs::remove_file(&target.path).map_err(|source| LifecycleError::Io {
+                path: target.path.clone(),
+                source,
+            })?;
         }
     }
     let mut scrub = Scrub::default();
@@ -780,6 +822,7 @@ pub fn rename(
     let renamed = match target.kind {
         Kind::Skill => rename_skill(project, target, &directory, to),
         Kind::Rule => rename_rule(project, target, &directory, to),
+        Kind::Mcp => rename_mcp(project, target, &directory, to),
     }?;
     let mut scrub = Scrub::default();
     // The stale one first: a record of an install gone from the new place
@@ -936,6 +979,136 @@ fn rename_rule(
     })
 }
 
+/// Give an MCP server's definition a new name: its file and the `name` it
+/// declares together, so it still passes `validate`, as a skill's folder
+/// and its manifest are renamed.
+fn rename_mcp(
+    project: &MindProject,
+    target: &Target,
+    directory: &Path,
+    to: &str,
+) -> Result<Target, LifecycleError> {
+    // A key in an agent's config holds no folder, so neither does the name
+    // an entry will be keyed by.
+    if to.contains('/') {
+        return Err(LifecycleError::McpNested {
+            name: to.to_owned(),
+        });
+    }
+    // The name lives in the definition too, and one that does not read
+    // cannot be trusted to have its name rewritten.
+    let Some(definition) = target.artifact.as_ref().and_then(Artifact::definition) else {
+        return Err(LifecycleError::DefinitionUnreadable {
+            path: target.file(),
+        });
+    };
+    let file = place_in(directory, Kind::Mcp, to);
+    let moves = file != target.path;
+    let renames = definition.name != to;
+    if !moves && !renames {
+        return Err(LifecycleError::Unchanged {
+            name: to.to_owned(),
+        });
+    }
+    if moves && occupied(&file) {
+        return Err(LifecycleError::Exists { path: file });
+    }
+
+    let rewritten = if renames {
+        let source = fs::read_to_string(&target.path).map_err(|source| LifecycleError::Io {
+            path: target.path.clone(),
+            source,
+        })?;
+        Some(
+            rewrite_key(&source, to).map_err(|reason| LifecycleError::Rewrite {
+                path: target.path.clone(),
+                reason,
+            })?,
+        )
+    } else {
+        None
+    };
+    // Held to what `validate` calls a definition invalid for, as it will
+    // be once renamed, as a skill is held to the strict rules: what is left
+    // behind is a definition Mindweaver wrote, if only its name.
+    let renamed = named(definition, to);
+    let file_name = file
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let issues = artifact::mcp_strict_issues(&renamed, to, &file_name);
+    if !issues.is_empty() {
+        return Err(LifecycleError::Unfit {
+            name: target.name.to_string(),
+            issues,
+        });
+    }
+
+    if moves {
+        fs::rename(&target.path, &file).map_err(|source| LifecycleError::Io {
+            path: target.path.clone(),
+            source,
+        })?;
+    }
+    if let Some(text) = rewritten {
+        if let Err(error) = replace_file(&file, &text) {
+            // Half a rename is a definition whose file and name disagree: put
+            // the file back rather than leave that behind.
+            if moves {
+                let _ = fs::rename(&file, &target.path);
+            }
+            return Err(error.into());
+        }
+    }
+
+    let artifact = Artifact::mcp(&file, to.to_owned(), project.root())?;
+    Ok(Target {
+        kind: Kind::Mcp,
+        name: ArtifactName::from(to),
+        path: file,
+        artifact: Some(artifact),
+    })
+}
+
+/// A definition with its `name` set to `to` and every other byte as it was,
+/// the comment on its line included: rewritten through `toml_edit`, as a
+/// marker is, and read back to make sure the one value changed what it was
+/// meant to and nothing else.
+fn rewrite_key(source: &str, to: &str) -> Result<String, String> {
+    let before = McpDefinition::parse(source).map_err(|error| error.to_string())?;
+    let mut document: toml_edit::DocumentMut = source
+        .parse()
+        .map_err(|error: toml_edit::TomlError| error.to_string())?;
+    let Some(value) = document
+        .get_mut("name")
+        .and_then(toml_edit::Item::as_value_mut)
+    else {
+        return Err(String::from(
+            "its `name` is not a value at the top of the file",
+        ));
+    };
+    let decor = value.decor().clone();
+    *value = toml_edit::Value::from(to);
+    *value.decor_mut() = decor;
+    let rewritten = document.to_string();
+
+    let after = McpDefinition::parse(&rewritten).map_err(|error| error.to_string())?;
+    if after != named(&before, to) {
+        return Err(String::from(
+            "rewriting that value would change more than the name",
+        ));
+    }
+    Ok(rewritten)
+}
+
+/// `definition`, declaring `to` as its name.
+fn named(definition: &McpDefinition, to: &str) -> McpDefinition {
+    McpDefinition {
+        name: ArtifactName::from(to),
+        ..definition.clone()
+    }
+}
+
 /// A manifest with its `name` set to `to` and every other byte as it was.
 fn rewrite_name(source: &str, to: &str) -> Result<String, String> {
     let document = frontmatter::split(source).map_err(|error| error.to_string())?;
@@ -1006,7 +1179,7 @@ pub(crate) fn prune(root: &Path, from: Option<&Path>) {
 fn file_of(kind: Kind, path: &Path) -> PathBuf {
     match kind.layout() {
         Layout::Directory { manifest } => path.join(manifest),
-        Layout::Files { .. } => path.to_path_buf(),
+        Layout::Files { .. } | Layout::Flat { .. } => path.to_path_buf(),
     }
 }
 
@@ -1092,6 +1265,8 @@ pub enum LifecycleError {
     },
     #[error("`{name}`: a skill's name cannot contain `/`; skills are flat, and only rules are filed in folders")]
     Nested { name: String },
+    #[error("`{name}`: an MCP server's name cannot contain `/`; it is the key an agent's config names the server by, which holds no folder")]
+    McpNested { name: String },
     #[error("`{name}` cannot be renamed until it is fixed: {}", issue_list(.issues))]
     Unfit {
         name: String,
@@ -1103,6 +1278,8 @@ pub enum LifecycleError {
     Exists { path: PathBuf },
     #[error("{path}: its front matter cannot be read, so its name cannot be rewritten; fix it with `mind edit` first")]
     Unreadable { path: PathBuf },
+    #[error("{path}: it cannot be read as an MCP server's definition, so its name cannot be rewritten; fix it with `mind edit` first")]
+    DefinitionUnreadable { path: PathBuf },
     #[error("{path}: the name cannot be rewritten on its own ({reason}); change it by hand")]
     Rewrite { path: PathBuf, reason: String },
     #[error("{path}: not inside {directory}, so it is not changed from here")]
@@ -1117,6 +1294,14 @@ pub enum LifecycleError {
     /// A skill's contents given whole that name it other than its folder.
     #[error("the contents given for `{name}` call it `{to}`: a skill's name is its folder's too, so it is changed with `mind rename`, which moves both, and nothing was written")]
     NameChanged { name: String, to: String },
+    /// An MCP server's contents given whole that do not read as a
+    /// definition.
+    #[error("the contents given for `{name}` cannot be read as an MCP server's definition, so nothing was written: {reason}")]
+    DefinitionUnparsed { name: String, reason: String },
+    /// An MCP server's contents given whole that name it other than its
+    /// file.
+    #[error("the contents given for `{name}` call it `{to}`: an MCP server's name is its file's too, so it is changed with `mind rename`, which changes both, and nothing was written")]
+    McpNameChanged { name: String, to: String },
     /// Contents given whole that break a rule Mindweaver holds a write to.
     #[error("the contents given for `{name}` break a rule, so nothing was written: {}", issue_list(.issues))]
     ContentsUnfit {
@@ -1163,15 +1348,19 @@ codes!(LifecycleError {
     Self::Ambiguous { .. } => "ambiguous_name",
     Self::Name { .. } => "rename_name_unfit",
     Self::Nested { .. } => "rename_skill_nested",
+    Self::McpNested { .. } => "rename_mcp_nested",
     Self::Unfit { .. } => "rename_unfit",
     Self::Unchanged { .. } => "rename_unchanged",
     Self::Exists { .. } => "rename_target_exists",
     Self::Unreadable { .. } => "rename_front_matter_unreadable",
+    Self::DefinitionUnreadable { .. } => "rename_definition_unreadable",
     Self::Rewrite { .. } => "rename_rewrite_failed",
     Self::Outside { .. } => "change_outside",
     Self::NotText { .. } => "edit_contents_not_text",
     Self::Unparsed { .. } => "edit_front_matter_unreadable",
     Self::NameChanged { .. } => "edit_name_changed",
+    Self::DefinitionUnparsed { .. } => "edit_definition_unreadable",
+    Self::McpNameChanged { .. } => "edit_mcp_name_changed",
     Self::ContentsUnfit { .. } => "edit_contents_unfit",
     Self::HashMalformed { .. } => "edit_hash_malformed",
     Self::Stale { .. } => "edit_stale",

@@ -385,7 +385,9 @@ pub(crate) fn deleting(path: &Path, kind: &Kind, files: &usize) -> String {
                 plural(*files, "file")
             )
         }
-        mindweaver_core::Layout::Files { .. } => path.display().to_string(),
+        mindweaver_core::Layout::Files { .. } | mindweaver_core::Layout::Flat { .. } => {
+            path.display().to_string()
+        }
     }
 }
 

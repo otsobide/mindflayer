@@ -117,14 +117,16 @@ pub(crate) enum Scaffold {
     },
 }
 
-/// Whether `add` writes `kind` from a name and a description, scaffolded so
-/// it passes `validate` from the moment it exists: what a front end
-/// offering `add` by kind offers it for. Matched on the kind, so a kind
-/// added says whether it is scaffolded before it compiles, as [`plan`]
-/// does.
+/// Whether `add` writes `kind` from a name and a description: a skill and a
+/// rule, and not an MCP server, whose definition passes `validate` only
+/// once it says how the server is started or reached, which neither says
+/// ([`CreateError::McpUnscaffolded`]). What a front end offering `add` by
+/// kind offers it for. Matched on the kind, so a kind added says whether
+/// it is scaffolded before it compiles, as [`plan`] does.
 pub const fn scaffolds(kind: Kind) -> bool {
     match kind {
         Kind::Skill | Kind::Rule => true,
+        Kind::Mcp => false,
     }
 }
 
@@ -153,6 +155,11 @@ pub(crate) fn plan(
     match kind {
         Kind::Skill => plan_skill(&directory, name, description, template),
         Kind::Rule => plan_rule(&directory, name, description, template),
+        // A definition passes `validate` only once it says how the server
+        // is started or reached, which a name and a description do not: a
+        // scaffold holding neither would be invalid from the moment it
+        // exists, which is what scaffolding is there to prevent.
+        Kind::Mcp => Err(CreateError::McpUnscaffolded { directory }),
     }
 }
 
@@ -585,6 +592,11 @@ pub enum CreateError {
         #[source]
         source: io::Error,
     },
+    #[error(
+        "an MCP server cannot be added yet, since `add` takes no command or address \
+         to start or reach it by; write its definition as <name>.toml in {directory}"
+    )]
+    McpUnscaffolded { directory: PathBuf },
     #[error(transparent)]
     Template(#[from] TemplateError),
     #[error(transparent)]
@@ -602,6 +614,7 @@ codes!(CreateError {
     Self::Exists { .. } => "add_exists",
     Self::Manifest { .. } => "add_manifest_unwritable",
     Self::Write { .. } => "add_write_failed",
+    Self::McpUnscaffolded { .. } => "add_mcp_unscaffolded",
 } carried {
     Self::Template(error) => error,
     Self::Artifact(error) => error,

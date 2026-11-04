@@ -109,6 +109,7 @@ fn edited(
             rules::block_file(project.root()).as_ref(),
             &offered,
         ),
+        Kind::Mcp => standing::mcp_copies(project, &record),
     };
     Ok(looked
         .into_iter()
@@ -415,6 +416,10 @@ pub fn is_installable_name(kind: Kind, name: &str) -> bool {
     match kind {
         Kind::Skill => is_folder_name(name),
         Kind::Rule => name_issues(name).is_empty(),
+        // A definition's file is named by it, as a skill's folder is, and an
+        // entry will be keyed by it, which #87 holds to what each agent
+        // takes.
+        Kind::Mcp => is_folder_name(name),
     }
 }
 
@@ -424,7 +429,7 @@ fn installable_name(kind: Kind, name: &str) -> Result<(), InstallError> {
         return Ok(());
     }
     Err(match kind {
-        Kind::Skill => InstallError::UnsafeName {
+        Kind::Skill | Kind::Mcp => InstallError::UnsafeName {
             name: name.to_owned(),
         },
         Kind::Rule => InstallError::UnsafeRoute {
@@ -532,6 +537,12 @@ pub(crate) fn agent_of(agents: &[Agent]) -> Option<String> {
 /// install may use (`NoUsableTarget`), or a `mind.toml` naming no folder for
 /// it (`NoDirectory`).
 pub fn targets(project: &MindProject, kind: Kind) -> Result<Vec<InstallTarget>, InstallError> {
+    // Refused here, where every install, adoption and survey of a project
+    // asks where a kind goes, so none of them reads a folder for one no
+    // install writes, or says a project has none.
+    if !installs(kind) {
+        return Err(InstallError::NotInstallable { kind });
+    }
     if project.settings().is_none() {
         return Ok(vec![InstallTarget {
             folder: project.required_directory(kind)?,
@@ -1019,7 +1030,7 @@ fn load_origin(loaded: &Loaded) -> Origin {
 fn block_of(project: &MindProject, kind: Kind) -> Option<AgentsMd> {
     // Matched on the kind, so a third one has to say how its copies are told.
     match kind {
-        Kind::Skill => None,
+        Kind::Skill | Kind::Mcp => None,
         Kind::Rule => rules::block_file(project.root()),
     }
 }
@@ -1045,6 +1056,11 @@ fn told(
         Kind::Rule => {
             let copies = standing::rule_copies(workspace, project, &record, block, &offered);
             let standing = standing::rule_standing(workspace, &record, &copies, &offered);
+            (copies, standing)
+        }
+        Kind::Mcp => {
+            let copies = standing::mcp_copies(project, &record);
+            let standing = standing::mcp_standing(&copies, !offered.is_empty());
             (copies, standing)
         }
     };
@@ -1361,13 +1377,15 @@ fn filed_as(name: &str) -> Vec<Kind> {
 }
 
 /// Whether an install writes `kind` into a project at all: a skill as a
-/// copy in a folder, and a rule as a section of a block or a file. What a
-/// name typed bare is asked of, and what a front end steps through to
-/// install. Matched on the kind, so a kind added says whether it is
-/// installed before it compiles.
+/// copy in a folder, a rule as a section of a block or a file, and not yet
+/// an MCP server, whose entry in each agent's own config file (D-10) no
+/// release writes. What a name typed bare is asked of, and what a front end
+/// steps through to install. Matched on the kind, so a kind added says
+/// whether it is installed before it compiles.
 pub const fn installs(kind: Kind) -> bool {
     match kind {
         Kind::Skill | Kind::Rule => true,
+        Kind::Mcp => false,
     }
 }
 
@@ -1428,6 +1446,7 @@ pub fn install_with(
     match kind {
         Kind::Skill => {}
         Kind::Rule => return rules::install(workspace, ledger, project, candidate, homes, edits),
+        Kind::Mcp => return Err(InstallError::NotInstallable { kind }),
     }
     let entry = project_entry(workspace, project);
     // The folder is named after the artifact, not after the folder it had on
@@ -1489,6 +1508,7 @@ pub(crate) fn install_held(
         Kind::Rule => {
             return rules::install_held(workspace, ledger, project, candidate, homes, edits)
         }
+        Kind::Mcp => return Err(InstallError::NotInstallable { kind }),
     }
     let entry = project_entry(workspace, project);
     let targets = targets(project, kind)?;
@@ -1870,8 +1890,9 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
         Kind::Skill => Artifact::skill(from, from)?,
         // A rule is held to its route, which `installable_name` asks, and
         // its front matter says nothing an agent would pass it over for;
-        // nor does an install of one come here ([`rules::install`]).
-        Kind::Rule => return Ok(Vec::new()),
+        // nor does an install of one come here ([`rules::install`]), nor of
+        // a definition, which is refused before.
+        Kind::Rule | Kind::Mcp => return Ok(Vec::new()),
     };
     Ok(artifact
         .manifest()
@@ -2059,7 +2080,9 @@ pub(crate) fn recorded_copy(
         .all(|component| matches!(component, Component::Normal(_)));
     let named = match kind.layout() {
         Layout::Directory { .. } => path.file_name() == Some(std::ffi::OsStr::new(name)),
-        Layout::Files { .. } => path.ends_with(copy_at(Path::new(""), kind, name)),
+        Layout::Files { .. } | Layout::Flat { .. } => {
+            path.ends_with(copy_at(Path::new(""), kind, name))
+        }
     };
     if !inside || !named {
         return Err(InstallError::Recorded {
@@ -2537,6 +2560,9 @@ fn standing(
         // Only into a project a `mind.toml` marks, as a copy of its file: one
         // marked by its settings has its rules told by `rules::survey`.
         Kind::Rule => standing::of_rule(workspace, project, record, None, &offered),
+        Kind::Mcp => {
+            standing::mcp_standing(&standing::mcp_copies(project, record), !offered.is_empty())
+        }
     }
 }
 
@@ -2563,6 +2589,7 @@ fn unrecorded(root: &Path, kind: Kind, copies: &[PathBuf], recorded: &[String]) 
 pub(crate) fn copy_at(folder: &Path, kind: Kind, name: &str) -> PathBuf {
     match kind.layout() {
         Layout::Directory { .. } => folder.join(name),
+        Layout::Flat { extension } => folder.join(format!("{name}.{extension}")),
         Layout::Files { extension } => {
             let mut path = folder.to_path_buf();
             path.extend(name.split('/'));
@@ -2580,7 +2607,7 @@ pub(crate) fn holds(copy: &Path, kind: Kind) -> bool {
         // notes somebody started by hand is theirs, and installing over it
         // would delete them.
         Layout::Directory { .. } => copy.exists(),
-        Layout::Files { .. } => copy.is_file(),
+        Layout::Files { .. } | Layout::Flat { .. } => copy.is_file(),
     }
 }
 
@@ -2687,6 +2714,8 @@ pub fn is_current(
     // Matched on the kind, so a third one has to say how it is told.
     match candidate.kind() {
         Kind::Skill => {}
+        // Nothing of one is in a project for it to be current there.
+        Kind::Mcp => return false,
         Kind::Rule => {
             let entry = project_entry(workspace, project);
             return ledger
@@ -2760,6 +2789,8 @@ pub enum InstallError {
     ClaudeMd(#[from] ClaudeMdError),
     #[error(transparent)]
     ClaudeRules(#[from] ClaudeRulesError),
+    #[error("{} cannot be installed into a project yet", .kind.plural())]
+    NotInstallable { kind: Kind },
     #[error("`{name}` cannot be installed: {}", issue_list(.issues))]
     Unfit {
         name: String,
@@ -2826,6 +2857,7 @@ codes!(InstallError {
     Self::NotRecorded { .. } => "rule_not_recorded",
     Self::Unread { .. } => "rule_section_unread",
     Self::Withheld { .. } => "rules_block_unedited",
+    Self::NotInstallable { .. } => "not_installable",
     Self::Unfit { .. } => "install_unfit",
     Self::Overlaps { .. } => "install_overlaps",
     Self::KeptByALoad { .. } => "kept_by_a_load",

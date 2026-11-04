@@ -536,6 +536,12 @@ pub(crate) fn show(
                     let _ = writeln!(text, "{}", parts.join("\n"));
                 }
             }
+            // What it says of itself is its description; the transport and
+            // the inputs are the file below it, which is its body.
+            Kind::Mcp => {
+                let _ = writeln!(text, "{}", shown.description.as_deref().unwrap_or(""));
+                let _ = writeln!(text);
+            }
         }
         // Blank lines trimmed at both ends, not indentation: the body usually
         // opens with a blank line after the fence, and the line above is

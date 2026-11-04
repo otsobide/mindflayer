@@ -13,8 +13,10 @@ fn a_kind_is_named_by_its_slug_or_its_folder() {
 #[test]
 fn a_word_that_is_not_a_kind_says_what_was_expected() {
     let error = "prompts".parse::<Kind>().unwrap_err();
-    assert!(error.to_string().contains("skills"));
-    assert!(error.to_string().contains("rules"));
+    assert_eq!(
+        error.to_string(),
+        "unknown kind `prompts`; expected skills, rules or mcp"
+    );
 }
 
 #[test]
@@ -30,18 +32,20 @@ fn every_kind_has_its_own_folder_and_slug() {
 }
 
 #[test]
-fn a_sentence_names_a_kind_by_the_words_a_command_line_takes_where_they_are_words() {
+fn a_sentence_names_a_kind_by_its_words_or_in_words_of_its_own() {
     for kind in [Kind::Skill, Kind::Rule] {
         assert_eq!(kind.noun(), kind.slug());
         assert_eq!(kind.plural(), kind.folder());
     }
+    assert_eq!(Kind::Mcp.noun(), "MCP server");
+    assert_eq!(Kind::Mcp.plural(), "MCP servers");
 }
 
 #[test]
 fn a_kind_is_serialized_as_the_word_a_command_line_takes() {
     let serialized = serde_json::to_string(&Kind::ALL).unwrap();
 
-    assert_eq!(serialized, r#"["skill","rule"]"#);
+    assert_eq!(serialized, r#"["skill","rule","mcp"]"#);
 }
 
 #[test]

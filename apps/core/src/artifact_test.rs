@@ -570,6 +570,16 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
             }),
         ),
         (
+            ValidationIssue::NameFileMismatch {
+                name: String::from("github"),
+                file: String::from("gh.toml"),
+            },
+            serde_json::json!({
+                "code": "name_file_mismatch", "name": "github", "file": "gh.toml",
+                "warning": false,
+            }),
+        ),
+        (
             ValidationIssue::DescriptionEmpty,
             serde_json::json!({"code": "description_empty", "warning": false}),
         ),

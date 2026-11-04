@@ -14,7 +14,15 @@
   ],
   "boxes": [
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "api",
       "held": [
         {
@@ -34,7 +42,15 @@
       ]
     },
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "web",
       "held": [
         {
@@ -54,7 +70,15 @@
       ]
     },
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "docs",
       "held": [
         {
@@ -81,6 +105,13 @@
             "code": "not_a_project",
             "message": "/home/you/Projects/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
           }
+        },
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_a_project",
+            "message": "/home/you/Projects/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
         }
       ],
       "entry": "gone",
@@ -101,13 +132,28 @@
             "code": "not_a_project",
             "message": "/home/you/Projects/old: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
           }
+        },
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_a_project",
+            "message": "/home/you/Projects/old: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
         }
       ],
       "entry": "old",
       "held": []
     },
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "legacy",
       "held": []
     }
@@ -172,7 +218,8 @@
   ],
   "kinds": [
     "skill",
-    "rule"
+    "rule",
+    "mcp"
   ],
   "known": [
     {
@@ -241,6 +288,19 @@
           ".mindweaver/library/rules/style/comments.md"
         ],
         "unread": null
+      },
+      {
+        "agents": [],
+        "issues": [],
+        "kind": "mcp",
+        "name": "github",
+        "origin": null,
+        "state": null,
+        "summary": "GitHub's issues, pull requests and code",
+        "targets": [
+          ".mindweaver/library/mcp/github.toml"
+        ],
+        "unread": null
       }
     ],
     "directories": [
@@ -251,6 +311,10 @@
       {
         "kind": "rule",
         "path": ".mindweaver/library/rules"
+      },
+      {
+        "kind": "mcp",
+        "path": ".mindweaver/library/mcp"
       }
     ],
     "failures": [],
@@ -345,6 +409,13 @@
       "origin": "workspace",
       "place": "workspace",
       "summary": "Comment the why, not the what"
+    },
+    {
+      "kind": "mcp",
+      "name": "github",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "GitHub's issues, pull requests and code"
     }
   ],
   "projects": [
@@ -440,6 +511,10 @@
           {
             "count": 1,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -584,6 +659,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -708,6 +787,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -789,6 +872,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -854,6 +941,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -925,6 +1016,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -1035,6 +1130,10 @@
         {
           "count": 1,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [
@@ -1078,6 +1177,10 @@
         {
           "count": 2,
           "kind": "rule"
+        },
+        {
+          "count": 1,
+          "kind": "mcp"
         }
       ],
       "states": [
@@ -1110,7 +1213,7 @@
           "state": "authored"
         }
       ],
-      "total": 4
+      "total": 5
     },
     "projects": 4,
     "shelf": {
@@ -1122,6 +1225,10 @@
         {
           "count": 0,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [

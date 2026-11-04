@@ -250,7 +250,7 @@ fn no_path_named_covers_a_whole_tree() {
         let under = roots.iter().find(|(root, kind)| match kind {
             Some(Kind::Skill) => *path == root || path.parent() == Some(root.as_path()),
             Some(Kind::Rule) => path.starts_with(root),
-            None => *path == root,
+            Some(Kind::Mcp) | None => *path == root,
         });
         assert!(under.is_some(), "{path:?} is no folder discovery looks in");
     }

@@ -652,6 +652,12 @@ fn each_create_error_of_its_own_gives_its_own_code() {
             },
             "add_write_failed",
         ),
+        (
+            CreateError::McpUnscaffolded {
+                directory: PathBuf::from("/p/mcp"),
+            },
+            "add_mcp_unscaffolded",
+        ),
     ];
     let given: Vec<&str> = errors.iter().map(|(_, code)| *code).collect();
     for (error, code) in errors {

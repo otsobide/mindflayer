@@ -323,7 +323,7 @@ fn together(
 pub(crate) fn named(kind: Kind, name: &str) -> String {
     match kind {
         Kind::Skill => name.to_owned(),
-        Kind::Rule => format!("{kind} {name}"),
+        Kind::Rule | Kind::Mcp => format!("{kind} {name}"),
     }
 }
 

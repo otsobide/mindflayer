@@ -41,11 +41,15 @@ fn summaries(root: &Path, holder: &Holder) -> Vec<((String, String), Value)> {
         .collect()
 }
 
+/// The kinds `add` writes: an MCP server is written by hand until `add`
+/// takes what starts or reaches one.
+const ADDED: [Kind; 2] = [Kind::Skill, Kind::Rule];
+
 /// A name no artifact `holder` holds goes by yet.
 fn fresh(kind: Kind, taken: &[(String, String)]) -> String {
     loop {
         let name = match kind {
-            Kind::Skill => ArtifactNameMother::random(),
+            Kind::Skill | Kind::Mcp => ArtifactNameMother::random(),
             Kind::Rule => ArtifactNameMother::route(),
         }
         .into_string();
@@ -79,7 +83,7 @@ fn a_description_reaches_the_file_as_it_was_typed() {
     for (dir, holder) in places() {
         let mut added: Vec<(String, String)> = Vec::new();
         for at in 0..12 {
-            let kind = Kind::ALL[at % Kind::ALL.len()];
+            let kind = ADDED[at % ADDED.len()];
             let name = fresh(kind, &added);
             let description = ValueMother::random();
             let task = Task::Add {
@@ -188,7 +192,7 @@ mod panel {
         let mut added: Vec<(String, String)> = Vec::new();
 
         for at in 0..8 {
-            let kind = Kind::ALL[at % Kind::ALL.len()];
+            let kind = ADDED[at % ADDED.len()];
             let (holder, root, read_as) = if at % 4 < 2 {
                 (json!({"type": "workspace"}), dir.path(), Holder::Workspace)
             } else {

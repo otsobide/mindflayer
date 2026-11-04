@@ -13,7 +13,7 @@ use crate::agent::Agent;
 use crate::code::codes;
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
-use crate::mcp::InputKind;
+use crate::mcp::{InputKind, McpDefinition, McpError};
 use crate::rule::{Lenient, RuleManifest};
 use crate::skill::{
     Compatibility, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN,
@@ -28,13 +28,20 @@ use crate::value::ArtifactName;
 /// what that kind requires: a skill without a description is not a state this
 /// type can hold, while a rule's description is as optional as the rest of its
 /// front matter.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `PartialEq` and no `Eq`: an MCP server's definition passes its extras
+/// through as the TOML they are, and TOML has floats, which are not equal to
+/// themselves when they are not a number. Holding them as text to keep `Eq`
+/// was the other way, and would hand a renderer a string to parse again.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Declared {
     /// A skill's front matter.
     Skill(SkillManifest),
     /// A rule's front matter, which is optional: most rules are a markdown
     /// file and that is all, and declare nothing.
     Rule(RuleManifest),
+    /// An MCP server's definition, the whole of its file.
+    Mcp(McpDefinition),
 }
 
 impl Declared {
@@ -43,6 +50,7 @@ impl Declared {
         match self {
             Declared::Skill(_) => Kind::Skill,
             Declared::Rule(_) => Kind::Rule,
+            Declared::Mcp(_) => Kind::Mcp,
         }
     }
 }
@@ -59,7 +67,7 @@ impl Declared {
 /// in, and discovery lists those as one artifact ([`crate::Catalog`]): what
 /// it declares is read from the first copy, the project's own when it has
 /// one, and every copy is still [validated](Self::validate) where it is.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Artifact {
     name: ArtifactName,
     path: PathBuf,
@@ -321,6 +329,53 @@ impl Artifact {
         }
     }
 
+    /// Load an MCP server's definition from its file, named by the file's
+    /// stem, which the caller knows, as it knows a rule's route.
+    pub fn mcp(
+        file: impl Into<PathBuf>,
+        name: String,
+        project: impl Into<PathBuf>,
+    ) -> Result<Self, ArtifactError> {
+        let path = file.into();
+        let source = read(&path)?;
+        Self::mcp_holding(path, name, project, &source)
+    }
+
+    /// A definition at `file` holding `source`, read as [`mcp`](Self::mcp)
+    /// reads one from the disk, as [`skill_holding`](Self::skill_holding)
+    /// reads a skill.
+    ///
+    /// Named by its file, as a rule is by its route, rather than by the
+    /// `name` it declares: the file is what a change finds it by, so one
+    /// whose two disagree is still the one its file names, and `validate`
+    /// says they disagree.
+    pub(crate) fn mcp_holding(
+        file: impl Into<PathBuf>,
+        name: String,
+        project: impl Into<PathBuf>,
+        source: &str,
+    ) -> Result<Self, ArtifactError> {
+        let path = file.into();
+        let definition =
+            McpDefinition::parse(source).map_err(|source| ArtifactError::Definition {
+                path: path.clone(),
+                source: Box::new(source),
+            })?;
+        // A definition says what it is, as a skill does: the summary is the
+        // first line of its description.
+        let summary = first_line(&definition.description);
+        Ok(Self {
+            name: ArtifactName::from(name),
+            path,
+            project: project.into(),
+            declared: Declared::Mcp(definition),
+            summary,
+            placement: Placement::authored(),
+            others: Vec::new(),
+            differ: false,
+        })
+    }
+
     /// What kind of artifact this is.
     pub fn kind(&self) -> Kind {
         self.declared.kind()
@@ -345,8 +400,8 @@ impl Artifact {
         )
     }
 
-    /// The directory a skill is, or the file a rule is: its first copy's,
-    /// when it has several.
+    /// The directory a skill is, or the file a rule or a definition is: its
+    /// first copy's, when it has several.
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -474,12 +529,13 @@ impl Artifact {
         self.summary.as_deref()
     }
 
-    /// The description, when this declares one: always for a skill, and for
-    /// a rule only when its front matter says.
+    /// The description, when this declares one: always for a skill and a
+    /// definition, and for a rule only when its front matter says.
     pub fn description(&self) -> Option<&str> {
         match &self.declared {
             Declared::Skill(manifest) => Some(&manifest.description),
             Declared::Rule(manifest) => manifest.description.stated().map(String::as_str),
+            Declared::Mcp(definition) => Some(&definition.description),
         }
     }
 
@@ -487,12 +543,21 @@ impl Artifact {
     pub fn manifest(&self) -> Option<&SkillManifest> {
         match &self.declared {
             Declared::Skill(manifest) => Some(manifest),
-            Declared::Rule(_) => None,
+            Declared::Rule(_) | Declared::Mcp(_) => None,
+        }
+    }
+
+    /// The MCP server's definition, when this is one.
+    pub fn definition(&self) -> Option<&McpDefinition> {
+        match &self.declared {
+            Declared::Mcp(definition) => Some(definition),
+            Declared::Skill(_) | Declared::Rule(_) => None,
         }
     }
 
     /// The markdown an agent reads: the body after the front matter, or the
-    /// whole file when there is none.
+    /// whole file when there is none. For a definition, which no agent reads
+    /// as it is, the whole of its file.
     ///
     /// What a renderer puts in front of an agent, so a rule's front matter is
     /// never pasted into a file that has no use for it, and what `show` prints
@@ -512,6 +577,9 @@ impl Artifact {
             // Decided again from the file as it is now, by the same reading
             // that loaded it.
             Declared::Rule(_) => Ok(RuleManifest::read(&source).1.to_owned()),
+            // What it says is the transport and its inputs, which the file
+            // holds whole: there is no body apart from what it declares.
+            Declared::Mcp(_) => Ok(source),
         }
     }
 
@@ -519,7 +587,7 @@ impl Artifact {
     pub fn file(&self) -> PathBuf {
         match self.kind().layout() {
             Layout::Directory { manifest } => self.path.join(manifest),
-            Layout::Files { .. } => self.path.clone(),
+            Layout::Files { .. } | Layout::Flat { .. } => self.path.clone(),
         }
     }
 
@@ -564,8 +632,54 @@ impl Artifact {
                 issues.extend(rule_issues(manifest));
                 issues
             }
+            Declared::Mcp(definition) => mcp_issues(
+                definition,
+                &self.name,
+                self.path.file_name().and_then(|name| name.to_str()),
+            ),
         }
     }
+}
+
+/// Everything wrong with a definition filed under `name`, in a file called
+/// `file` when that file has a name to compare.
+///
+/// Its name first, held to the rule every name is, then the file it is in,
+/// then the definition itself ([`McpDefinition::issues`]). Apart from
+/// [`Artifact::validate`], as [`skill_issues`] is, so that contents given
+/// whole are judged before they are written ([`mcp_text_issues`]).
+fn mcp_issues(definition: &McpDefinition, name: &str, file: Option<&str>) -> Vec<ValidationIssue> {
+    // Every kind is looked up by name, so every kind is checked for one.
+    let mut issues = name_issues(name);
+    // The file is what an install keys the entry by and what a change finds
+    // the definition by, so a `name` that says otherwise is one of two names
+    // for one server.
+    if definition.name != name {
+        issues.push(ValidationIssue::NameFileMismatch {
+            name: definition.name.to_string(),
+            file: file.unwrap_or(name).to_owned(),
+        });
+    }
+    issues.extend(definition.issues());
+    issues
+}
+
+/// Whatever a definition filed under `name`, in a file called `file`,
+/// breaks that Mindweaver will not write: every issue `validate` would call
+/// it invalid for, which in this format is every one it has.
+///
+/// A definition's half of [`strict_issues`], judged on what it will hold
+/// before a byte of it is written, as a rule's is ([`rule_text_issues`]):
+/// contents given whole, and a definition renamed.
+pub(crate) fn mcp_strict_issues(
+    definition: &McpDefinition,
+    name: &str,
+    file: &str,
+) -> Vec<ValidationIssue> {
+    mcp_issues(definition, name, Some(file))
+        .into_iter()
+        .filter(|issue| !issue.is_warning())
+        .collect()
 }
 
 /// Everything wrong with a skill that declares `manifest`, filed in a folder
@@ -698,7 +812,9 @@ fn read(path: &Path) -> Result<String, ArtifactError> {
 fn manifest_of(kind: Kind) -> &'static str {
     match kind.layout() {
         Layout::Directory { manifest } => manifest,
-        Layout::Files { .. } => unreachable!("{kind} is not a directory-shaped kind"),
+        Layout::Files { .. } | Layout::Flat { .. } => {
+            unreachable!("{kind} is not a directory-shaped kind")
+        }
     }
 }
 
@@ -790,6 +906,7 @@ pub enum ValidationIssue {
     NameNotKebabCase { segment: String },
     NameSegmentTooLong { segment: String, length: usize },
     NameDirectoryMismatch { name: String, directory: String },
+    NameFileMismatch { name: String, file: String },
     DescriptionEmpty,
     DescriptionTooLong { length: usize },
     CompatibilityEmpty,
@@ -812,6 +929,7 @@ codes!(ValidationIssue {
     Self::NameNotKebabCase { .. } => "name_not_kebab_case",
     Self::NameSegmentTooLong { .. } => "name_segment_too_long",
     Self::NameDirectoryMismatch { .. } => "name_directory_mismatch",
+    Self::NameFileMismatch { .. } => "name_file_mismatch",
     Self::DescriptionEmpty => "description_empty",
     Self::DescriptionTooLong { .. } => "description_too_long",
     Self::CompatibilityEmpty => "compatibility_empty",
@@ -879,6 +997,7 @@ impl ValidationIssue {
             | ValidationIssue::NameNotKebabCase { .. }
             | ValidationIssue::NameSegmentTooLong { .. }
             | ValidationIssue::NameDirectoryMismatch { .. }
+            | ValidationIssue::NameFileMismatch { .. }
             | ValidationIssue::DescriptionEmpty
             | ValidationIssue::DescriptionTooLong { .. }
             | ValidationIssue::Empty
@@ -948,6 +1067,9 @@ impl ValidationIssue {
                 ("name", Carried::Text(name)),
                 ("directory", Carried::Text(directory)),
             ],
+            ValidationIssue::NameFileMismatch { name, file } => {
+                vec![("name", Carried::Text(name)), ("file", Carried::Text(file))]
+            }
             ValidationIssue::DescriptionTooLong { length }
             | ValidationIssue::CompatibilityTooLong { length } => {
                 vec![("length", Carried::Count(*length))]
@@ -1090,6 +1212,10 @@ impl ValidationIssue {
                 name: text(),
                 directory: text(),
             },
+            ValidationIssue::NameFileMismatch {
+                name: text(),
+                file: text(),
+            },
             ValidationIssue::DescriptionEmpty,
             ValidationIssue::DescriptionTooLong { length: 0 },
             ValidationIssue::CompatibilityEmpty,
@@ -1130,6 +1256,10 @@ impl fmt::Display for ValidationIssue {
             ValidationIssue::NameDirectoryMismatch { name, directory } => write!(
                 f,
                 "`name` is `{name}` but the directory is `{directory}`; they have to match"
+            ),
+            ValidationIssue::NameFileMismatch { name, file } => write!(
+                f,
+                "`name` is `{name}` but the file is `{file}`; they have to match"
             ),
             ValidationIssue::DescriptionEmpty => write!(f, "`description` is empty"),
             ValidationIssue::DescriptionTooLong { length } => write!(
@@ -1213,6 +1343,14 @@ pub enum ArtifactError {
         #[source]
         source: serde_yaml_ng::Error,
     },
+    /// Boxed, since what TOML says of where it stopped is large, and every
+    /// error carrying this one would grow to its size.
+    #[error("{path}: {source}")]
+    Definition {
+        path: PathBuf,
+        #[source]
+        source: Box<McpError>,
+    },
 }
 
 codes!(ArtifactError {
@@ -1220,6 +1358,7 @@ codes!(ArtifactError {
     Self::Parse { .. } => "front_matter_invalid",
 } carried {
     Self::FrontMatter { source, .. } => source,
+    Self::Definition { source, .. } => source,
 });
 
 impl ArtifactError {
@@ -1228,7 +1367,8 @@ impl ArtifactError {
         match self {
             ArtifactError::Read { path, .. }
             | ArtifactError::FrontMatter { path, .. }
-            | ArtifactError::Parse { path, .. } => path,
+            | ArtifactError::Parse { path, .. }
+            | ArtifactError::Definition { path, .. } => path,
         }
     }
 }
