@@ -58,9 +58,10 @@
 #
 # Before and after the run it fingerprints the user-scope folders an agent
 # could write to (~/.agents, ~/.codex, ~/.claude/skills, ~/.claude/rules,
-# ~/.claude/CLAUDE.md and ~/.claude.json) and says whether they changed. Not
-# the whole ~/.claude: a Claude Code session running this script writes there
-# itself.
+# ~/.claude/CLAUDE.md, ~/.claude.json, ~/.config/opencode and OpenCode's two
+# logins in ~/.local/share/opencode) and says whether they changed. Not the
+# whole ~/.claude: a Claude Code session running this script writes there
+# itself, as an OpenCode session does in the rest of ~/.local/share/opencode.
 
 set -euo pipefail
 
@@ -76,6 +77,14 @@ die() {
 }
 
 say() { printf '%s\n' "$*"; }
+
+# A tool the checks run inside the namespace, where PATH is /usr/bin:/bin. One
+# found only in ~/.local/bin or a version manager's folder would pass out here
+# and be missing in there.
+namespace_tool() {
+	[[ -x /usr/bin/$1 || -x /bin/$1 ]] ||
+		die "needs $1 in /usr/bin or /bin, the only PATH inside the namespace${2:+, $2}"
+}
 
 in_list() {
 	local needle=$1 item
@@ -122,14 +131,9 @@ outside() {
 	for tool in bwrap sha256sum; do
 		command -v "$tool" >/dev/null || die "needs $tool on PATH"
 	done
-	# The checks run jq and git inside the namespace, where the real home is
-	# hidden. One found only in ~/.local/bin or a version manager's folder
-	# would pass out here and be missing in there, and every answer would
-	# then come out empty, as if the agent had loaded nothing.
-	for tool in jq git; do
-		[[ -x /usr/bin/$tool || -x /bin/$tool ]] ||
-			die "needs $tool in /usr/bin or /bin, the only PATH inside the namespace"
-	done
+	# The checks run jq and git inside the namespace; without them every
+	# answer would come out empty, as if the agent had loaded nothing.
+	for tool in jq git; do namespace_tool "$tool"; done
 	[[ -n ${HOME:-} && -d $HOME ]] || die "HOME is not a directory"
 	real_home=$(cd "$HOME" && pwd -P)
 	local repo
@@ -155,6 +159,9 @@ outside() {
 		"$real_home/.claude/rules"
 		"$real_home/.claude/CLAUDE.md"
 		"$real_home/.claude.json"
+		"$real_home/.config/opencode"
+		"$real_home/.local/share/opencode/auth.json"
+		"$real_home/.local/share/opencode/mcp-auth.json"
 	)
 	local before after
 	before=$(fingerprint "${watched[@]}")
@@ -323,6 +330,14 @@ selected() {
 	in_list "$1" $PROBE_ONLY
 }
 
+# Whether PROBE_ONLY lets any of these runs go: what a prepare asks before it
+# fetches or copies in something only those runs need.
+any_selected() {
+	local name
+	for name in "$@"; do selected "$name" && return 0; done
+	return 1
+}
+
 verdict() {
 	local name=$1 want=$2 got=$3 subject=$4 why=$5 status=ok
 	if [[ $want != "$got" ]]; then
@@ -333,6 +348,15 @@ verdict() {
 		"$status" "$name" "$subject" "$want" "$got" "$why" | tee -a "$results/summary.txt"
 }
 
+# observe <run> <subject> <got> <what it bears on>: a result with nothing
+# expected of it, for what an issue asks to find out rather than to confirm
+# (what an agent does with an entry it may not accept, say). It is never a
+# mismatch: docs/agents.md records it, and the decision it bears on reads it.
+observe() {
+	printf '%-8s %-22s %-28s got %-15s %s\n' \
+		record "$1" "$2" "$3" "$4" | tee -a "$results/summary.txt"
+}
+
 inside() {
 	agents_from "$@"
 	# The guard every check relies on: refuse unless HOME is the temp home and
@@ -341,13 +365,15 @@ inside() {
 	[[ ${HOME:-} == "$mount_root/home" ]] || die "HOME is '${HOME:-}', not $mount_root/home: refusing to run"
 	[[ -n ${PROBE_REAL_HOME:-} ]] || die "PROBE_REAL_HOME is not set"
 	local path
-	for path in .agents .codex .claude .claude.json; do
+	for path in .agents .codex .claude .claude.json .config/opencode .local/share/opencode; do
 		[[ ! -e $PROBE_REAL_HOME/$path ]] || die "the real home is visible at $PROBE_REAL_HOME: refusing to run"
 	done
 
 	results=$mount_root/results
 	stage=$mount_root/stage
 	mismatches=0
+	# shellcheck source=/dev/null
+	source "$mount_scripts/mcp.sh"
 	local agent
 	for agent in "${agents[@]}"; do
 		# shellcheck source=/dev/null
