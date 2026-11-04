@@ -286,7 +286,7 @@ with socket.socket() as s:
 # opencode_service_list <name> <dir>: the list through the background
 # server, which it starts when none is running. One asked before the server
 # has connected says pending, so it is asked again, a few seconds apart,
-# until it says nothing is; the server is stopped after.
+# until it says nothing is. Stopping the server is the caller's.
 opencode_service_list() {
 	local name=$1 dir=$2 attempt
 	for attempt in 1 2 3 4 5; do
