@@ -1362,7 +1362,7 @@ These are easy to break from a single file without noticing.
   have none above it (`claude_md_test.rs`'s `clean`).
 - Tests that run a shell (`apps/cli/tests/shells_test.rs`, Linux only) start
   it with no startup file and an environment holding only a `PATH`, a
-  temporary `HOME` and what the test sets, so no `MINDWEAVER_*` variable or
+  temporary `HOME` and what the test sets, so no `MINDFLAYER_*` variable or
   real shell configuration gets in. A shell, or a python3 to make a
   virtualenv with, that is not installed is skipped and said on stderr,
   except under `$CI`, where it fails the test: the `test (cli)` job
