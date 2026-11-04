@@ -25,4 +25,6 @@ export type ValidationIssue =
   | { code: "transport_incomplete", transport: string, field: string, warning: boolean, message: string }
   | { code: "input_repeated", name: string, warning: boolean, message: string }
   | { code: "input_unreferenced", name: string, kind: string, warning: boolean, message: string }
-  | { code: "input_in_userinfo", name: string, warning: boolean, message: string };
+  | { code: "input_in_userinfo", name: string, warning: boolean, message: string }
+  | { code: "input_name_malformed", name: string, warning: boolean, message: string }
+  | { code: "env_var_malformed", name: string, variable: string, warning: boolean, message: string };

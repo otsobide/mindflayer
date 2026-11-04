@@ -463,6 +463,8 @@
           "input_repeated",
           "input_unreferenced",
           "input_in_userinfo",
+          "input_name_malformed",
+          "env_var_malformed",
           "browse_missing",
           "browse_not_a_folder",
           "browse_unlisted",
@@ -5238,6 +5240,56 @@
             "required": [
               "code",
               "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "input_name_malformed"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "env_var_malformed"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "variable": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "variable",
               "warning",
               "message"
             ],

@@ -923,6 +923,8 @@ pub enum ValidationIssue {
     InputRepeated { name: String },
     InputUnreferenced { name: String, kind: InputKind },
     InputInUserinfo { name: String },
+    InputNameMalformed { name: String },
+    EnvVarMalformed { name: String, variable: String },
 }
 
 codes!(ValidationIssue {
@@ -947,6 +949,8 @@ codes!(ValidationIssue {
     Self::InputRepeated { .. } => "input_repeated",
     Self::InputUnreferenced { .. } => "input_unreferenced",
     Self::InputInUserinfo { .. } => "input_in_userinfo",
+    Self::InputNameMalformed { .. } => "input_name_malformed",
+    Self::EnvVarMalformed { .. } => "env_var_malformed",
 });
 
 impl ValidationIssue {
@@ -1006,7 +1010,9 @@ impl ValidationIssue {
             | ValidationIssue::TransportIncomplete { .. }
             | ValidationIssue::InputRepeated { .. }
             | ValidationIssue::InputUnreferenced { .. }
-            | ValidationIssue::InputInUserinfo { .. } => false,
+            | ValidationIssue::InputInUserinfo { .. }
+            | ValidationIssue::InputNameMalformed { .. }
+            | ValidationIssue::EnvVarMalformed { .. } => false,
         }
     }
 }
@@ -1086,9 +1092,15 @@ impl ValidationIssue {
                 ("transport", Carried::Text(transport)),
                 ("field", Carried::Text(field)),
             ],
-            ValidationIssue::InputRepeated { name } | ValidationIssue::InputInUserinfo { name } => {
+            ValidationIssue::InputRepeated { name }
+            | ValidationIssue::InputInUserinfo { name }
+            | ValidationIssue::InputNameMalformed { name } => {
                 vec![("name", Carried::Text(name))]
             }
+            ValidationIssue::EnvVarMalformed { name, variable } => vec![
+                ("name", Carried::Text(name)),
+                ("variable", Carried::Text(variable)),
+            ],
             ValidationIssue::InputUnreferenced { name, kind } => vec![
                 ("name", Carried::Text(name)),
                 ("kind", Carried::Text(kind.slug())),
@@ -1243,6 +1255,11 @@ impl ValidationIssue {
                 kind: InputKind::Env,
             },
             ValidationIssue::InputInUserinfo { name: text() },
+            ValidationIssue::InputNameMalformed { name: text() },
+            ValidationIssue::EnvVarMalformed {
+                name: text(),
+                variable: text(),
+            },
         ]
     }
 }
@@ -1329,6 +1346,17 @@ impl fmt::Display for ValidationIssue {
                  which no address is kept with, so no agent would be given it: write `{{{name}}}` \
                  after the host, or declare it of kind `header` and write it in a value of the \
                  transport's `headers`"
+            ),
+            ValidationIssue::InputNameMalformed { name } => write!(
+                f,
+                "input `{name}` cannot be written between braces where its value goes: an \
+                 input's name is letters, digits, hyphens and underscores"
+            ),
+            ValidationIssue::EnvVarMalformed { name, variable } => write!(
+                f,
+                "input `{name}` is read from `{variable}`, which not every agent can refer to: \
+                 an environment variable's name is letters, digits and underscores, and does \
+                 not start with a digit"
             ),
         }
     }

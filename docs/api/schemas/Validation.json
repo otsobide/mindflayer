@@ -569,6 +569,56 @@
             "warning",
             "message"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_name_malformed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "env_var_malformed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "variable": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "variable",
+            "warning",
+            "message"
+          ]
         }
       ]
     }

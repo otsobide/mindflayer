@@ -42,9 +42,9 @@
 //! `{"debug":true}` means what it says.
 //!
 //! Only the format is held here: a file that reads as one, a transport that
-//! names what it needs to start or reach the server, and every input used
-//! where its kind says. Which names an agent takes, and what a secret has to
-//! be, are #87's, and what each agent cannot express is its renderer's.
+//! names what it needs to start or reach the server, every input named so
+//! that its placeholder can be written and read from a variable every agent
+//! can refer to, and every input used where its kind says.
 
 use std::collections::BTreeMap;
 
@@ -248,10 +248,12 @@ impl McpDefinition {
 
     /// Everything wrong with it as a definition, in the order it is worth
     /// fixing: a description with nothing in it, a transport that names
-    /// nothing to start or reach, an input declared twice, and an input no
-    /// value uses where its kind says, each in the order written: one
-    /// written in the address's userinfo said as that, since it is written
-    /// where its kind says, only in a part no address is kept with.
+    /// nothing to start or reach, an input whose name no placeholder can be
+    /// written of or whose variable not every agent can refer to, an input
+    /// declared twice, and an input no value uses where its kind says, each
+    /// in the order written: one written in the address's userinfo said as
+    /// that, since it is written where its kind says, only in a part no
+    /// address is kept with.
     ///
     /// Not its name, which is the file's to say and the artifact's to judge
     /// ([`crate::artifact`]). Pure, as every check `validate` makes is.
@@ -271,6 +273,25 @@ impl McpDefinition {
                 transport: self.transport.slug().to_owned(),
                 field: field.to_owned(),
             });
+        }
+        for input in &self.inputs {
+            let mut named = Vec::new();
+            if !input.name.is_writable() {
+                named.push(ValidationIssue::InputNameMalformed {
+                    name: input.name.to_string(),
+                });
+            }
+            if let Some(variable) = input.env_var.as_ref().filter(|v| !v.is_portable()) {
+                named.push(ValidationIssue::EnvVarMalformed {
+                    name: input.name.to_string(),
+                    variable: variable.to_string(),
+                });
+            }
+            for issue in named {
+                if !issues.contains(&issue) {
+                    issues.push(issue);
+                }
+            }
         }
         let mut seen: Vec<&InputName> = Vec::new();
         for input in &self.inputs {

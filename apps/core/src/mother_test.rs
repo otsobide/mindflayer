@@ -208,9 +208,36 @@ fn input_and_variable_names_are_drawn_as_they_are_usually_written() {
             variable.chars().all(|c| c.is_ascii_uppercase() || c == '_'),
             "{variable}"
         );
+        assert!(input.is_writable(), "{input}");
+        assert!(variable.is_portable(), "{variable}");
         assert_eq!(InputNameMother::create(&input), input);
         assert_eq!(VariableNameMother::create(&variable), variable);
     }
+}
+
+#[test]
+fn input_and_variable_names_named_for_breaking_their_rule_break_it() {
+    for (why, text) in InputNameMother::unwritable() {
+        assert!(
+            !InputNameMother::create(&text).is_writable(),
+            "{why}: {text:?}"
+        );
+    }
+    for (why, text) in VariableNameMother::unportable() {
+        assert!(
+            !VariableNameMother::create(&text).is_portable(),
+            "{why}: {text:?}"
+        );
+    }
+    let misnamed =
+        crate::mcp::McpDefinition::parse(&McpMother::misnamed(&random::kebab())).unwrap();
+    assert!(matches!(
+        &misnamed.issues()[..],
+        [
+            ValidationIssue::InputNameMalformed { .. },
+            ValidationIssue::EnvVarMalformed { .. }
+        ]
+    ));
 }
 
 #[test]

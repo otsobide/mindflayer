@@ -260,6 +260,22 @@ impl InputNameMother {
     pub fn create(text: &str) -> InputName {
         InputName::from(text)
     }
+
+    /// Texts no placeholder can be written of, each beside why: what
+    /// [`InputName::is_writable`] refuses.
+    pub fn unwritable() -> Vec<(&'static str, String)> {
+        let word = random::word();
+        vec![
+            ("empty", String::new()),
+            ("a closing brace", format!("{word}}}{word}")),
+            ("an opening brace", format!("{{{word}")),
+            ("a space", format!("{word} {word}")),
+            ("a colon", format!("env:{word}")),
+            ("a dot", format!("{word}.{word}")),
+            ("a dollar", format!("${word}")),
+            ("a letter past ASCII", format!("{word}\u{e9}")),
+        ]
+    }
 }
 
 /// Makes [`VariableName`]s, as a shell names an environment variable.
@@ -275,5 +291,22 @@ impl VariableNameMother {
     /// Exactly `text`.
     pub fn create(text: &str) -> VariableName {
         VariableName::from(text)
+    }
+
+    /// Texts no agent can refer to as one variable, each beside why: what
+    /// [`VariableName::is_portable`] refuses.
+    pub fn unportable() -> Vec<(&'static str, String)> {
+        let word = random::word().to_ascii_uppercase();
+        vec![
+            ("empty", String::new()),
+            ("a leading digit", format!("9{word}")),
+            ("a hyphen", format!("{word}-{word}")),
+            ("a space", format!("{word} {word}")),
+            ("a closing brace", format!("{word}}}")),
+            ("a default after it", format!("{word}:-x")),
+            ("a dollar", format!("${word}")),
+            ("a dot", format!("{word}.{word}")),
+            ("a letter past ASCII", format!("{word}\u{c9}")),
+        ]
     }
 }

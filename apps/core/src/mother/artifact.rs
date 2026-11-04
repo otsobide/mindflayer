@@ -243,6 +243,17 @@ impl McpMother {
         )
     }
 
+    /// The program of [`stdio`](Self::stdio), its secret input named with
+    /// a brace in it, `api}key`, written where it goes all the same, and
+    /// read from a variable with hyphens, which no agent can refer to:
+    /// what `validate` says no placeholder and no reference can be made of.
+    pub fn misnamed(name: &str) -> String {
+        Self::stdio(name)
+            .replacen("name = \"api_key\"", "name = \"api}key\"", 1)
+            .replacen("\"{api_key}\"", "\"{api}key}\"", 1)
+            .replacen("\"EXAMPLE_API_KEY\"", "\"EXAMPLE-API-KEY\"", 1)
+    }
+
     /// What every definition opens with: its format, its name and what it
     /// is for, each a TOML string whatever it holds.
     pub fn head(name: &str, description: &str) -> String {

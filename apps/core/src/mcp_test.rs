@@ -357,6 +357,75 @@ fn an_input_written_in_an_addresss_userinfo_is_said_to_reach_no_agent_rather_tha
 }
 
 #[test]
+fn an_input_no_placeholder_can_be_written_of_and_a_variable_no_agent_can_name_are_said() {
+    let definition = parsed(&McpMother::misnamed(&random::kebab()));
+
+    assert_eq!(
+        definition.issues(),
+        [
+            ValidationIssue::InputNameMalformed {
+                name: String::from("api}key"),
+            },
+            ValidationIssue::EnvVarMalformed {
+                name: String::from("api}key"),
+                variable: String::from("EXAMPLE-API-KEY"),
+            },
+        ]
+    );
+    assert!(definition.issues().iter().all(|issue| !issue.is_warning()));
+    assert_eq!(definition.issues()[0].code(), "input_name_malformed");
+    assert_eq!(definition.issues()[1].code(), "env_var_malformed");
+}
+
+#[test]
+fn every_input_name_and_variable_the_rules_refuse_is_said_once() {
+    let name = random::kebab();
+    for (why, input) in crate::mother::InputNameMother::unwritable() {
+        let text = McpMother::stdio(&name)
+            .replacen(
+                "name = \"api_key\"",
+                &format!("name = {}", toml::Value::String(input.clone())),
+                1,
+            )
+            .replacen(
+                "\"{api_key}\"",
+                &toml::Value::String(format!("{{{input}}}")).to_string(),
+                1,
+            );
+
+        let issues = parsed(&text).issues();
+
+        let said: Vec<&ValidationIssue> = issues
+            .iter()
+            .filter(|issue| matches!(issue, ValidationIssue::InputNameMalformed { .. }))
+            .collect();
+        assert_eq!(
+            said,
+            [&ValidationIssue::InputNameMalformed {
+                name: input.clone()
+            }],
+            "{why}: {issues:?}"
+        );
+    }
+    for (why, variable) in crate::mother::VariableNameMother::unportable() {
+        let text = McpMother::stdio(&name).replacen(
+            "\"EXAMPLE_API_KEY\"",
+            &toml::Value::String(variable.clone()).to_string(),
+            1,
+        );
+
+        assert_eq!(
+            parsed(&text).issues(),
+            [ValidationIssue::EnvVarMalformed {
+                name: String::from("api_key"),
+                variable: variable.clone(),
+            }],
+            "{why}"
+        );
+    }
+}
+
+#[test]
 fn a_brace_naming_no_input_is_left_as_it_is_written() {
     let text = McpMother::stdio(&random::kebab()).replacen(
         "\"-y\",",

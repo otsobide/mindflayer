@@ -67,6 +67,8 @@ export type CoreCode =
   | "input_repeated"
   | "input_unreferenced"
   | "input_in_userinfo"
+  | "input_name_malformed"
+  | "env_var_malformed"
   | "browse_missing"
   | "browse_not_a_folder"
   | "browse_unlisted"

@@ -663,6 +663,22 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
             },
             serde_json::json!({"code": "input_in_userinfo", "name": "key", "warning": false}),
         ),
+        (
+            ValidationIssue::InputNameMalformed {
+                name: String::from("api}key"),
+            },
+            serde_json::json!({"code": "input_name_malformed", "name": "api}key", "warning": false}),
+        ),
+        (
+            ValidationIssue::EnvVarMalformed {
+                name: String::from("token"),
+                variable: String::from("GH-TOKEN"),
+            },
+            serde_json::json!({
+                "code": "env_var_malformed", "name": "token", "variable": "GH-TOKEN",
+                "warning": false,
+            }),
+        ),
     ];
     assert_eq!(
         issues.len(),
