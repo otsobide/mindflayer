@@ -254,6 +254,13 @@ impl McpMother {
             .replacen("\"EXAMPLE_API_KEY\"", "\"EXAMPLE-API-KEY\"", 1)
     }
 
+    /// The program of [`stdio`](Self::stdio), its secret input naming no
+    /// variable to be read from: what `validate` says no agent can be given
+    /// but as a value a file holds.
+    pub fn secret_without_variable(name: &str) -> String {
+        Self::stdio(name).replacen("env_var = \"EXAMPLE_API_KEY\"\n", "", 1)
+    }
+
     /// What every definition opens with: its format, its name and what it
     /// is for, each a TOML string whatever it holds.
     pub fn head(name: &str, description: &str) -> String {

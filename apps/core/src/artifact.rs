@@ -925,6 +925,7 @@ pub enum ValidationIssue {
     InputInUserinfo { name: String },
     InputNameMalformed { name: String },
     EnvVarMalformed { name: String, variable: String },
+    SecretWithoutEnvVar { name: String },
 }
 
 codes!(ValidationIssue {
@@ -951,6 +952,7 @@ codes!(ValidationIssue {
     Self::InputInUserinfo { .. } => "input_in_userinfo",
     Self::InputNameMalformed { .. } => "input_name_malformed",
     Self::EnvVarMalformed { .. } => "env_var_malformed",
+    Self::SecretWithoutEnvVar { .. } => "secret_without_env_var",
 });
 
 impl ValidationIssue {
@@ -1012,7 +1014,8 @@ impl ValidationIssue {
             | ValidationIssue::InputUnreferenced { .. }
             | ValidationIssue::InputInUserinfo { .. }
             | ValidationIssue::InputNameMalformed { .. }
-            | ValidationIssue::EnvVarMalformed { .. } => false,
+            | ValidationIssue::EnvVarMalformed { .. }
+            | ValidationIssue::SecretWithoutEnvVar { .. } => false,
         }
     }
 }
@@ -1094,7 +1097,8 @@ impl ValidationIssue {
             ],
             ValidationIssue::InputRepeated { name }
             | ValidationIssue::InputInUserinfo { name }
-            | ValidationIssue::InputNameMalformed { name } => {
+            | ValidationIssue::InputNameMalformed { name }
+            | ValidationIssue::SecretWithoutEnvVar { name } => {
                 vec![("name", Carried::Text(name))]
             }
             ValidationIssue::EnvVarMalformed { name, variable } => vec![
@@ -1260,6 +1264,7 @@ impl ValidationIssue {
                 name: text(),
                 variable: text(),
             },
+            ValidationIssue::SecretWithoutEnvVar { name: text() },
         ]
     }
 }
@@ -1357,6 +1362,12 @@ impl fmt::Display for ValidationIssue {
                 "input `{name}` is read from `{variable}`, which not every agent can refer to: \
                  an environment variable's name is letters, digits and underscores, and does \
                  not start with a digit"
+            ),
+            ValidationIssue::SecretWithoutEnvVar { name } => write!(
+                f,
+                "secret input `{name}` names no `env_var` to be read from, and a secret reaches \
+                 an agent only as a reference to an environment variable, never as a value a \
+                 file holds"
             ),
         }
     }

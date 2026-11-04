@@ -249,11 +249,11 @@ impl McpDefinition {
     /// Everything wrong with it as a definition, in the order it is worth
     /// fixing: a description with nothing in it, a transport that names
     /// nothing to start or reach, an input whose name no placeholder can be
-    /// written of or whose variable not every agent can refer to, an input
-    /// declared twice, and an input no value uses where its kind says, each
-    /// in the order written: one written in the address's userinfo said as
-    /// that, since it is written where its kind says, only in a part no
-    /// address is kept with.
+    /// written of or whose variable not every agent can refer to, a secret
+    /// read from no variable at all, an input declared twice, and an input
+    /// no value uses where its kind says, each in the order written: one
+    /// written in the address's userinfo said as that, since it is written
+    /// where its kind says, only in a part no address is kept with.
     ///
     /// Not its name, which is the file's to say and the artifact's to judge
     /// ([`crate::artifact`]). Pure, as every check `validate` makes is.
@@ -281,11 +281,26 @@ impl McpDefinition {
                     name: input.name.to_string(),
                 });
             }
-            if let Some(variable) = input.env_var.as_ref().filter(|v| !v.is_portable()) {
-                named.push(ValidationIssue::EnvVarMalformed {
+            match &input.env_var {
+                Some(variable) if !variable.is_portable() => {
+                    named.push(ValidationIssue::EnvVarMalformed {
+                        name: input.name.to_string(),
+                        variable: variable.to_string(),
+                    });
+                }
+                Some(_) => {}
+                // What "a secret input must be an environment reference"
+                // (D-11) asks of an input: a value is never in the file, so
+                // a secret is one only when it says the variable each
+                // agent's reference will name. One that names none could
+                // reach an agent only as a value written into its entry.
+                // An input that is no secret may name none: its value is
+                // somebody's to give when it is installed, and may be
+                // written as it is.
+                None if input.secret => named.push(ValidationIssue::SecretWithoutEnvVar {
                     name: input.name.to_string(),
-                    variable: variable.to_string(),
-                });
+                }),
+                None => {}
             }
             for issue in named {
                 if !issues.contains(&issue) {

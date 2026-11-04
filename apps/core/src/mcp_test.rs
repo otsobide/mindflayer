@@ -378,6 +378,29 @@ fn an_input_no_placeholder_can_be_written_of_and_a_variable_no_agent_can_name_ar
 }
 
 #[test]
+fn a_secret_input_is_one_only_when_it_names_the_variable_it_is_read_from() {
+    let name = random::kebab();
+    let definition = parsed(&McpMother::secret_without_variable(&name));
+
+    assert_eq!(input(&definition, "api_key").env_var, None);
+    assert_eq!(
+        definition.issues(),
+        [ValidationIssue::SecretWithoutEnvVar {
+            name: String::from("api_key"),
+        }]
+    );
+    assert_eq!(definition.issues()[0].code(), "secret_without_env_var");
+    assert!(!definition.issues()[0].is_warning());
+
+    // One that is no secret may name none: its value is somebody's to
+    // give when it is installed.
+    let plain = McpMother::stdio(&name).replacen("env_var = \"EXAMPLE_WORKSPACE\"\n", "", 1);
+    let plain = parsed(&plain);
+    assert_eq!(input(&plain, "workspace").env_var, None);
+    assert_eq!(plain.issues(), []);
+}
+
+#[test]
 fn every_input_name_and_variable_the_rules_refuse_is_said_once() {
     let name = random::kebab();
     for (why, input) in crate::mother::InputNameMother::unwritable() {

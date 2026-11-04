@@ -679,6 +679,12 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
                 "warning": false,
             }),
         ),
+        (
+            ValidationIssue::SecretWithoutEnvVar {
+                name: String::from("token"),
+            },
+            serde_json::json!({"code": "secret_without_env_var", "name": "token", "warning": false}),
+        ),
     ];
     assert_eq!(
         issues.len(),

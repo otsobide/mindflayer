@@ -229,6 +229,13 @@ fn input_and_variable_names_named_for_breaking_their_rule_break_it() {
             "{why}: {text:?}"
         );
     }
+    let unnamed =
+        crate::mcp::McpDefinition::parse(&McpMother::secret_without_variable(&random::kebab()))
+            .unwrap();
+    assert!(matches!(
+        &unnamed.issues()[..],
+        [ValidationIssue::SecretWithoutEnvVar { .. }]
+    ));
     let misnamed =
         crate::mcp::McpDefinition::parse(&McpMother::misnamed(&random::kebab())).unwrap();
     assert!(matches!(

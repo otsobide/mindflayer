@@ -69,6 +69,7 @@ export type CoreCode =
   | "input_in_userinfo"
   | "input_name_malformed"
   | "env_var_malformed"
+  | "secret_without_env_var"
   | "browse_missing"
   | "browse_not_a_folder"
   | "browse_unlisted"
