@@ -422,7 +422,7 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
         let mut text = vec![Line::from("nothing here yet"), Line::from("")];
         for (kind, directory) in &holdings.directories {
             text.push(Line::from(Span::styled(
-                format!("{} go in {}/", kind.folder(), printable(directory)),
+                format!("{} go in {}/", kind.plural(), printable(directory)),
                 dim(),
             )));
         }

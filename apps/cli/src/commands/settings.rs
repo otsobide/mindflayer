@@ -251,10 +251,14 @@ fn nothing(project: &MindProject, change: &Change, plan: &Plan) -> String {
         ),
         Change::Targets { kind, folders } => match folders {
             Some(_) => format!(
-                "{NOTHING}: {name} installs {kind}s in {} already\n",
+                "{NOTHING}: {name} installs {} in {} already\n",
+                kind.plural(),
                 targets(&plan.after, *kind)
             ),
-            None => format!("{NOTHING}: {name} installs {kind}s where its agents read already\n"),
+            None => format!(
+                "{NOTHING}: {name} installs {} where its agents read already\n",
+                kind.plural()
+            ),
         },
         Change::Agents(_) | Change::AddAgents(_) | Change::RemoveAgents(_) => format!(
             "{NOTHING}: {name} names {} already\n",
@@ -321,8 +325,9 @@ fn report(project: &MindProject, plan: &Plan, done: bool) -> String {
         if before.targets.get(kind) != after.targets.get(kind) {
             let _ = writeln!(
                 text,
-                "{} the targets of {kind}s to {} in {name}, where they were {}",
+                "{} the targets of {} to {} in {name}, where they were {}",
                 would("set", "would set"),
+                kind.plural(),
                 targets(after, kind),
                 targets(before, kind)
             );

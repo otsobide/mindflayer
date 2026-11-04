@@ -275,18 +275,19 @@ fn boxed(entry: &Row, label: String) -> Vec<Span<'static>> {
 /// has, so the longest still fits an 80-column terminal.
 fn footer(screen: &Screen, frame: &mut Frame, area: Rect) {
     let (kind, next) = (screen.kind, screen.next_kind(false));
+    let (kinds, nexts) = (kind.plural(), next.plural());
     let keys = match screen.focus {
         Focus::Projects => {
-            format!("↑↓ project  →/enter {kind}s  tab {next}s  v by {kind}  a apply  q quit")
+            format!("↑↓ project  →/enter {kinds}  tab {nexts}  v by {kind}  a apply  q quit")
         }
         Focus::Offers => {
-            format!("↑↓ {kind}  space mark  tab {next}s  ←/esc back  v by {kind}  a apply  q quit")
+            format!("↑↓ {kind}  space mark  tab {nexts}  ←/esc back  v by {kind}  a apply  q quit")
         }
         Focus::Artifacts => {
-            format!("↑↓ {kind}  →/enter projects  tab {next}s  v by project  a apply  q quit")
+            format!("↑↓ {kind}  →/enter projects  tab {nexts}  v by project  a apply  q quit")
         }
         Focus::Receivers => format!(
-            "↑↓ project  space mark  tab {next}s  ←/esc back  v by project  a apply  q quit"
+            "↑↓ project  space mark  tab {nexts}  ←/esc back  v by project  a apply  q quit"
         ),
     };
     let (install, remove) = screen.counts();
