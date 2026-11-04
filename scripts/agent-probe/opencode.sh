@@ -150,8 +150,12 @@ opencode_scenario() {
 	mcp_keep "$run" "$repo" opencode.json
 	# Auto-update and the models.dev fetch off: a list needs neither, and
 	# the run should reach nothing but the stand-ins and npm, for plugins.
-	opencode_env=(OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1
-		"PROBE_MCP_PYTHON=$mcp_python" "${mcp_env[@]}")
+	# Those two and the command's first word are what a background server
+	# started apart holds (opencode_mcp_service), without the five
+	# variables the list is given.
+	opencode_apart_env=(OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1
+		"PROBE_MCP_PYTHON=$mcp_python")
+	opencode_env=("${opencode_apart_env[@]}" "${mcp_env[@]}")
 	assert_clean_home
 	mcp_assert_clean_home
 	assert_ancestry "$repo"
@@ -235,20 +239,21 @@ opencode_mcp_v1_shape() {
 
 # opencode_service <name> <what> <dir> <arguments...>: `opencode service
 # <arguments>` from that folder, its output kept as <name>.<what> and its
-# exit status left in opencode_service_status.
+# exit status left in opencode_service_status. Each runs without the five
+# variables (opencode_apart_env), so a server it starts holds none of them.
 opencode_service() {
 	local name=$1 what=$2 dir=$3
 	shift 3
 	{
 		printf 'cd %q\n' "$dir"
-		printf '%s ' "${opencode_env[@]}"
+		printf '%s ' "${opencode_apart_env[@]}"
 		printf '%q service' "$PROBE_OPENCODE_BIN"
 		printf ' %q' "$@"
 		printf '\n'
 	} >"$results/$name.$what.command"
 	opencode_service_status=0
 	# A start waits for the server to answer, two minutes at most.
-	(cd "$dir" && env "${opencode_env[@]}" timeout --kill-after=10 150 \
+	(cd "$dir" && env "${opencode_apart_env[@]}" timeout --kill-after=10 150 \
 		"$PROBE_OPENCODE_BIN" service "$@") </dev/null >"$results/$name.$what" 2>&1 ||
 		opencode_service_status=$?
 	say "  \$ opencode service $*: exit $opencode_service_status"
@@ -278,24 +283,93 @@ with socket.socket() as s:
 	return 1
 }
 
-# D-11: V2's shape in V2 through its background server, the way a person runs
-# OpenCode, which the list starts when none is running. Whether {env:} is
-# filled from the environment of whoever started it, or from the server's
-# own, is the question. A list asked before the server has connected says
-# pending, so it is asked again, a few seconds apart, until it says nothing
-# is; the server is stopped after.
-opencode_mcp_service() {
-	local run=opencode-mcp-service attempt
-	opencode_scenario $run "$stage/$run" v2
-	opencode_own_port $run "$stage/$run" || return 0
+# opencode_service_list <name> <dir>: the list through the background
+# server, which it starts when none is running. One asked before the server
+# has connected says pending, so it is asked again, a few seconds apart,
+# until it says nothing is; the server is stopped after.
+opencode_service_list() {
+	local name=$1 dir=$2 attempt
 	for attempt in 1 2 3 4 5; do
-		opencode_list $run "$stage/$run" "$PROBE_OPENCODE_BIN"
-		grep -q pending -- "$results/$run.list" || break
+		opencode_list "$name" "$dir" "$PROBE_OPENCODE_BIN"
+		grep -q pending -- "$results/$name.list" || break
 		sleep 3
 	done
-	opencode_service $run stop "$stage/$run" stop
 	say "  asked $attempt time(s)"
-	opencode_expect $run "D-12: mcp.servers through $opencode_v2_version's background server"
+}
+
+# opencode_record <run> <what the shape shows>: what a run that asks whose
+# environment fills {env:} gives, its http stand-in stopped first. Both
+# servers are expected to load whichever it is, since the server started
+# apart holds the command's first word too; what each reference became is
+# recorded, and how many of the five took the list's values.
+opencode_record() {
+	local run=$1 stdio=$results/$1.probe-stdio.jsonl http=$results/$1.http.jsonl
+	local stdio_loaded http_loaded i expanded=0 whose got want
+	mcp_http_stop
+	mcp_report "$run" "$stdio"
+	mcp_report "$run" "$http" /probe-http/
+	stdio_loaded=$(mcp_handshake "$stdio")
+	http_loaded=$(mcp_handshake "$http" /probe-http/)
+	got=("$(mcp_arg "$stdio")" "$(mcp_env_of "$stdio" PROBE_MCP_ENV)"
+		"$(mcp_http_path "$http" /probe-http/)"
+		"$(mcp_http_header "$http" /probe-http/ x-probe-header)"
+		"$(mcp_http_header "$http" /probe-http/ authorization)")
+	want=(probe-arg-value probe-env-value /probe-http/probe-url-value
+		probe-header-value 'Bearer probe-token-value')
+	for i in "${!want[@]}"; do
+		if [[ ${got[i]} == "${want[i]}" ]]; then expanded=$((expanded + 1)); fi
+	done
+	if [[ $stdio_loaded == none && $http_loaded == none ]]; then
+		whose='neither server started'
+	elif ((expanded == 5)); then
+		whose="the list's: 5 of 5 expanded"
+	elif ((expanded == 0)); then
+		whose="not the list's: 0 of 5 expanded"
+	else
+		whose="mixed: $expanded of 5 expanded"
+	fi
+	verdict $run loaded "$stdio_loaded" 'probe-stdio stand-in' "$2: its local entry loads"
+	observe $run 'stdio argument' "${got[0]}" "D-11: {env:} in command, filled from whose environment"
+	observe $run 'stdio environment' "${got[1]}" 'D-11: {env:} in environment, the same'
+	verdict $run loaded "$http_loaded" 'probe-http stand-in' "$2: its remote entry loads"
+	observe $run 'http path' "${got[2]}" 'D-11: {env:} in url, the same'
+	observe $run 'header X-Probe-Header' "${got[3]}" 'D-11: {env:} in headers, the same'
+	observe $run 'header Authorization' "${got[4]}" 'D-11: and inside a longer value'
+	observe $run 'whose environment' "$whose" "D-11, #92: the list's, or the server's own"
+	observe $run 'probe-stdio in the list' "$(opencode_status $run probe-stdio)" "$2: the list's own word"
+	observe $run 'probe-http in the list' "$(opencode_status $run probe-http)" "$2: the list's own word"
+}
+
+# D-11: V2's shape in V2 through its background server, the way a person runs
+# OpenCode. Whether that server fills {env:} from the environment of the
+# client that asks, or from its own, is the question, and a server that
+# holds the variables cannot tell the two apart. So the first reading starts
+# the server apart, with `opencode service start` and none of the five
+# variables, as one started at login or from another shell would be, and
+# asks the list from the project with all five: the stand-ins record which
+# environment filled each reference. The second, <run>.inherited, has the
+# list start the server itself, which then holds the list's variables, and
+# every reference is expected to expand there.
+opencode_mcp_service() {
+	local run=opencode-mcp-service inherited=opencode-mcp-service.inherited
+	opencode_scenario $run "$stage/$run" v2
+	opencode_own_port $run "$stage/$run" || return 0
+	opencode_service $run start "$stage/$run" start
+	verdict $run 0 "$opencode_service_status" 'service start, apart' 'the server starts without the five variables'
+	# A list with no server to ask would start one from its own
+	# environment, and answer the question wrongly.
+	if [[ $opencode_service_status == 0 ]]; then
+		opencode_service_list $run "$stage/$run"
+	fi
+	opencode_service $run stop "$stage/$run" stop
+	# Still running, it would answer the second reading in its place.
+	verdict $run 0 "$opencode_service_status" 'service stop' 'the server started apart is gone before the next reading'
+	opencode_record $run "D-12: mcp.servers through $opencode_v2_version's background server, started apart"
+
+	opencode_scenario $inherited "$stage/$run-inherited" v2
+	opencode_service_list $inherited "$stage/$run-inherited"
+	opencode_service $inherited stop "$stage/$run-inherited" stop
+	opencode_expect $inherited "D-12: mcp.servers through $opencode_v2_version's background server, started by the list"
 }
 
 # D-12: V2's shape in 1.19.4, which normalizes it since 1.18.24.
