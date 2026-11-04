@@ -116,3 +116,20 @@ boon = { version = "0.6", default-features = false }
 # openapi-spec-validator-rs carries 3.1's own meta-schema, but builds
 # jsonschema and turns that same feature on.
 oas3 = { version = "0.22", default-features = false }
+
+# The TUI end to end (`tui_e2e_test`), Unix alone, as a pseudo-terminal is.
+[target.'cfg(unix)'.dev-dependencies]
+# The pseudo-terminal the screen runs in, its process the leader of a
+# session of its own with that terminal as its controlling one, as a shell
+# starts it: crossterm reads the window's size from `/dev/tty`, which would
+# otherwise be the developer's terminal, or none at all under CI. The
+# version crossterm, gix and tempfile build already, so it adds no crate to
+# the tree; Apache-2.0 WITH LLVM-exception, Apache-2.0 or MIT, which
+# GPL-3.0-only takes in.
+rustix = { version = "1", features = ["process", "pty", "termios"] }
+# The terminal the screen draws on, read back as rows of text: a parser of
+# what a VT100 terminal is sent, which keeps the grid the alternate screen
+# draws and the one it gives back on leaving it. MIT, and vte, the one other
+# crate it adds to the tree, Apache-2.0 or MIT: each a licence GPL-3.0-only
+# takes in. 0.16 rather than 0.15, which would build a second unicode-width.
+vt100 = "0.16"
