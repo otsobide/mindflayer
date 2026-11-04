@@ -66,6 +66,7 @@ export type CoreCode =
   | "transport_incomplete"
   | "input_repeated"
   | "input_unreferenced"
+  | "input_in_userinfo"
   | "browse_missing"
   | "browse_not_a_folder"
   | "browse_unlisted"

@@ -1109,6 +1109,29 @@
             "warning",
             "message"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_in_userinfo"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
         }
       ]
     }

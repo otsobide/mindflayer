@@ -201,6 +201,17 @@ impl McpMother {
         )
     }
 
+    /// The address of [`http`](Self::http), its supplied part written in
+    /// its userinfo, `https://{tenant}@example.com/mcp`, where an address
+    /// is kept with no credential: what `validate` says no agent is given.
+    pub fn in_userinfo(name: &str) -> String {
+        Self::http(name).replacen(
+            "https://{tenant}.example.com/mcp",
+            "https://{tenant}@example.com/mcp",
+            1,
+        )
+    }
+
     /// The program of [`stdio`](Self::stdio), saying it is written in
     /// `format`: a newer one than this build reads, or one never written.
     pub fn in_format(name: &str, format: &str) -> String {

@@ -657,6 +657,12 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
                 "warning": false,
             }),
         ),
+        (
+            ValidationIssue::InputInUserinfo {
+                name: String::from("key"),
+            },
+            serde_json::json!({"code": "input_in_userinfo", "name": "key", "warning": false}),
+        ),
     ];
     assert_eq!(
         issues.len(),

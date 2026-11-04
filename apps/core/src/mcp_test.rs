@@ -317,6 +317,46 @@ fn an_input_is_used_only_where_its_kind_says_it_may_be_written() {
 }
 
 #[test]
+fn an_input_written_in_an_addresss_userinfo_is_said_to_reach_no_agent_rather_than_go_unused() {
+    let definition = parsed(&McpMother::in_userinfo(&random::kebab()));
+
+    let Transport::Http(endpoint) = &definition.transport else {
+        panic!("{:?}", definition.transport);
+    };
+    // Kept without it, as every address is kept without its userinfo.
+    assert_eq!(endpoint.url, "https://example.com/mcp");
+    assert_eq!(endpoint.withheld, [InputName::from("tenant")]);
+    let issues = definition.issues();
+    assert_eq!(
+        issues,
+        [ValidationIssue::InputInUserinfo {
+            name: String::from("tenant"),
+        }]
+    );
+    let said = issues[0].to_string();
+    assert!(said.contains("written in the user and password"), "{said}");
+    assert!(!said.contains("used nowhere"), "{said}");
+
+    // Written after the host as well, it is used there.
+    let twice = McpMother::in_userinfo(&random::kebab()).replacen("/mcp\"", "/{tenant}\"", 1);
+    assert_eq!(parsed(&twice).issues(), []);
+    // And only a part of an address is: a header written there is written
+    // where its kind does not say, as it would be anywhere in the address.
+    let header = McpMother::in_userinfo(&random::kebab()).replacen(
+        "kind = \"url_var\"",
+        "kind = \"header\"",
+        1,
+    );
+    assert!(matches!(
+        &parsed(&header).issues()[..],
+        [ValidationIssue::InputUnreferenced {
+            kind: InputKind::Header,
+            ..
+        }]
+    ));
+}
+
+#[test]
 fn a_brace_naming_no_input_is_left_as_it_is_written() {
     let text = McpMother::stdio(&random::kebab()).replacen(
         "\"-y\",",

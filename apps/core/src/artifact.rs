@@ -922,6 +922,7 @@ pub enum ValidationIssue {
     TransportIncomplete { transport: String, field: String },
     InputRepeated { name: String },
     InputUnreferenced { name: String, kind: InputKind },
+    InputInUserinfo { name: String },
 }
 
 codes!(ValidationIssue {
@@ -945,6 +946,7 @@ codes!(ValidationIssue {
     Self::TransportIncomplete { .. } => "transport_incomplete",
     Self::InputRepeated { .. } => "input_repeated",
     Self::InputUnreferenced { .. } => "input_unreferenced",
+    Self::InputInUserinfo { .. } => "input_in_userinfo",
 });
 
 impl ValidationIssue {
@@ -1003,7 +1005,8 @@ impl ValidationIssue {
             | ValidationIssue::Empty
             | ValidationIssue::TransportIncomplete { .. }
             | ValidationIssue::InputRepeated { .. }
-            | ValidationIssue::InputUnreferenced { .. } => false,
+            | ValidationIssue::InputUnreferenced { .. }
+            | ValidationIssue::InputInUserinfo { .. } => false,
         }
     }
 }
@@ -1083,7 +1086,9 @@ impl ValidationIssue {
                 ("transport", Carried::Text(transport)),
                 ("field", Carried::Text(field)),
             ],
-            ValidationIssue::InputRepeated { name } => vec![("name", Carried::Text(name))],
+            ValidationIssue::InputRepeated { name } | ValidationIssue::InputInUserinfo { name } => {
+                vec![("name", Carried::Text(name))]
+            }
             ValidationIssue::InputUnreferenced { name, kind } => vec![
                 ("name", Carried::Text(name)),
                 ("kind", Carried::Text(kind.slug())),
@@ -1237,6 +1242,7 @@ impl ValidationIssue {
                 name: text(),
                 kind: InputKind::Env,
             },
+            ValidationIssue::InputInUserinfo { name: text() },
         ]
     }
 }
@@ -1316,6 +1322,13 @@ impl fmt::Display for ValidationIssue {
                 "input `{name}` is used nowhere: an input of kind `{}` is written `{{{name}}}` in {}",
                 kind.slug(),
                 kind.place()
+            ),
+            ValidationIssue::InputInUserinfo { name } => write!(
+                f,
+                "input `{name}` is written in the user and password of the transport's `url`, \
+                 which no address is kept with, so no agent would be given it: write `{{{name}}}` \
+                 after the host, or declare it of kind `header` and write it in a value of the \
+                 transport's `headers`"
             ),
         }
     }

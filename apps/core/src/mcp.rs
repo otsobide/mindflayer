@@ -139,6 +139,13 @@ pub struct Endpoint {
     pub url: Redacted,
     /// What every request to it carries.
     pub headers: BTreeMap<String, String>,
+    /// Each input written only in the part of the address
+    /// [`url`](Self::url) does not keep, its userinfo, by name: what was
+    /// taken out with any credential, kept as the names the file declares
+    /// and never as the text around them, so that `validate` says such an
+    /// input is written where no agent can be given it, rather than that it
+    /// is used nowhere ([`ValidationIssue::InputInUserinfo`]).
+    pub withheld: Vec<InputName>,
 }
 
 /// One value somebody supplies when an agent starts the server.
@@ -242,7 +249,9 @@ impl McpDefinition {
     /// Everything wrong with it as a definition, in the order it is worth
     /// fixing: a description with nothing in it, a transport that names
     /// nothing to start or reach, an input declared twice, and an input no
-    /// value uses where its kind says, each in the order written.
+    /// value uses where its kind says, each in the order written: one
+    /// written in the address's userinfo said as that, since it is written
+    /// where its kind says, only in a part no address is kept with.
     ///
     /// Not its name, which is the file's to say and the artifact's to judge
     /// ([`crate::artifact`]). Pure, as every check `validate` makes is.
@@ -277,22 +286,42 @@ impl McpDefinition {
             seen.push(&input.name);
         }
         for input in &self.inputs {
-            let unreferenced = ValidationIssue::InputUnreferenced {
-                name: input.name.to_string(),
-                kind: input.kind,
+            if self.references(input) {
+                continue;
+            }
+            let issue = if self.withholds(input) {
+                ValidationIssue::InputInUserinfo {
+                    name: input.name.to_string(),
+                }
+            } else {
+                ValidationIssue::InputUnreferenced {
+                    name: input.name.to_string(),
+                    kind: input.kind,
+                }
             };
-            if !self.references(input) && !issues.contains(&unreferenced) {
-                issues.push(unreferenced);
+            if !issues.contains(&issue) {
+                issues.push(issue);
             }
         }
         issues
+    }
+
+    /// Whether `input` is a part of an address written only in its
+    /// userinfo, which went with any credential when the address was read.
+    fn withholds(&self, input: &Input) -> bool {
+        match &self.transport {
+            Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                input.kind == InputKind::UrlVar && endpoint.withheld.contains(&input.name)
+            }
+            Transport::Stdio(_) => false,
+        }
     }
 
     /// Whether some value of the transport writes `input` where its kind
     /// says it may be. Matched on both, so a transport or a kind added has
     /// to say where one is written in the other.
     fn references(&self, input: &Input) -> bool {
-        let written = format!("{{{}}}", input.name);
+        let written = written(&input.name);
         let holds = |value: &str| value.contains(&written);
         match (&self.transport, input.kind) {
             (Transport::Stdio(stdio), InputKind::Env) => stdio.env.values().any(|v| holds(v)),
@@ -430,42 +459,65 @@ fn moment<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, 
     }
 }
 
+/// How an input named `name` is written where its value goes.
+fn written(name: &InputName) -> String {
+    format!("{{{name}}}")
+}
+
 impl From<Raw> for McpDefinition {
     fn from(raw: Raw) -> Self {
-        let endpoint = |url: String, headers| Endpoint {
-            url: Redacted::new(&url),
-            headers,
+        let inputs: Vec<Input> = raw
+            .inputs
+            .into_iter()
+            .map(|input| Input {
+                name: InputName::from(input.name),
+                kind: input.kind,
+                description: input.description,
+                required: input.required,
+                secret: input.secret,
+                env_var: input.env_var.map(VariableName::from),
+            })
+            .collect();
+        // Read off the address as written and what is kept of it, here,
+        // where both are at hand: once redacted, which inputs its userinfo
+        // held is not known.
+        let endpoint = |url: String, headers| {
+            let kept = Redacted::new(&url);
+            let withheld = inputs
+                .iter()
+                .map(|input| &input.name)
+                .filter(|name| {
+                    let written = written(name);
+                    url.contains(&written) && !kept.contains(&written)
+                })
+                .cloned()
+                .collect();
+            Endpoint {
+                url: kept,
+                headers,
+                withheld,
+            }
+        };
+        let transport = match raw.transport {
+            RawTransport::Stdio {
+                command,
+                args,
+                env,
+                cwd,
+            } => Transport::Stdio(Stdio {
+                command,
+                args,
+                env,
+                cwd,
+            }),
+            RawTransport::Http { url, headers } => Transport::Http(endpoint(url, headers)),
+            RawTransport::Sse { url, headers } => Transport::Sse(endpoint(url, headers)),
         };
         McpDefinition {
             name: ArtifactName::from(raw.name),
             description: raw.description,
-            transport: match raw.transport {
-                RawTransport::Stdio {
-                    command,
-                    args,
-                    env,
-                    cwd,
-                } => Transport::Stdio(Stdio {
-                    command,
-                    args,
-                    env,
-                    cwd,
-                }),
-                RawTransport::Http { url, headers } => Transport::Http(endpoint(url, headers)),
-                RawTransport::Sse { url, headers } => Transport::Sse(endpoint(url, headers)),
-            },
-            inputs: raw
-                .inputs
-                .into_iter()
-                .map(|input| Input {
-                    name: InputName::from(input.name),
-                    kind: input.kind,
-                    description: input.description,
-                    required: input.required,
-                    secret: input.secret,
-                    env_var: input.env_var.map(VariableName::from),
-                })
-                .collect(),
+            transport,
+            inputs,
             provenance: raw.provenance.map(|upstream| Upstream {
                 registry: upstream.registry.as_deref().map(Redacted::new),
                 upstream_name: upstream.upstream_name,

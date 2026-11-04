@@ -649,7 +649,12 @@ names an agent takes, and what a secret has to be, are #87's. A key the
 format does not define is read past, as a skill's front matter's is.
 
 An address is held as a `value::Redacted`, as every URL core keeps is, so a
-credential typed into its userinfo is not kept; an input's name and the
+credential typed into its userinfo is not kept. An input written there went
+with it, so `validate` says it is written where no agent is given it
+(`input_in_userinfo`), never that it is used nowhere while telling where it
+already is: the names of the inputs only its userinfo held are kept beside
+the address (`Endpoint::withheld`), read off the text as written before it
+is redacted, and none of the text around them. An input's name and the
 variable it is read from are `value::InputName` and `value::VariableName`,
 named apart and held to no rule yet. The extras are kept as the TOML they
 are, which has floats, so `Declared` and `Artifact` are `PartialEq` and no

@@ -186,6 +186,11 @@ fn a_definitions_named_shapes_break_the_rule_they_are_named_for() {
         .issues()
         .iter()
         .any(|issue| matches!(issue, ValidationIssue::InputUnreferenced { .. })));
+    let in_userinfo = McpDefinition::parse(&McpMother::in_userinfo(&name)).unwrap();
+    assert!(matches!(
+        &in_userinfo.issues()[..],
+        [ValidationIssue::InputInUserinfo { .. }]
+    ));
 }
 
 #[test]
