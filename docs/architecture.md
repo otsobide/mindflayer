@@ -353,13 +353,14 @@ writer doing, and gains every rule with no change to one.
 
 ## The kinds, and how a kind is described
 
-An artifact is a skill or a rule, and the difference is a **payload**, not a
-field:
+An artifact is a skill, a rule or an MCP server's definition, and the
+difference is a **payload**, not a field:
 
 ```rust
 pub enum Declared {
     Skill(SkillManifest),
     Rule(RuleManifest),
+    Mcp(McpDefinition),
 }
 ```
 
@@ -377,16 +378,22 @@ pub enum Layout {
     Directory { manifest: &'static str },   // skills
     /// One file per artifact, at any depth.
     Files { extension: &'static str },      // rules
+    /// One file per artifact, directly in the kind's folder.
+    Flat { extension: &'static str },       // MCP servers
 }
 ```
 
 Discovery matches on `Layout` and nothing else has to know the difference. The
-two shapes decide the nesting rule between them: a skill's directory belongs to
+shapes decide the nesting rule between them: a skill's directory belongs to
 the skill, assets and all, so walking into it would turn its own files into
 artifacts; skills are therefore flat. A rule is a loose file, so folders under
 `rules/` are free to group, and a rule's name is its **route** without the
 extension. `git/no-force-push` and `ci/no-force-push` are two rules; the stem
-alone would make them one name for two files.
+alone would make them one name for two files. An MCP server's name becomes a
+key in each agent's config file (D-10), which holds no folder, so its file
+sits directly in `mcp/` and its name is the stem: a definition further down
+would be listed under a name no install could key it by, or under its stem
+beside another of that stem, so a folder below is never walked.
 
 `Kind` is a closed enum. Every kind ships in this crate, so every `match` is
 exhaustive and the compiler is the checklist for adding the next one. A
@@ -599,6 +606,68 @@ so the block and those files never disagree on it.
   edit the copy, which leaves it edited, never updated again unless forced.
   The TUI's `✗` follows the same line.
 
+### What an MCP server's definition declares
+
+One file a server, `mcp/<name>.toml`, in TOML, the format the markers are
+written in, and in a format of its own, `format = 1` (`MCP_FORMAT`), since a
+definition is copied and loaded with no marker beside it to say what it is.
+It is read by `McpDefinition::parse`, in `apps/core/src/mcp.rs`, which reads
+`format` before anything else, so a definition in a newer one is refused as
+that (`mcp_format_too_new`) whatever else it holds, rather than as a shape
+this build does not know:
+
+| Key | | Read as |
+|---|---|---|
+| `format` | required | `1`; a newer one is refused, one never written too |
+| `name` | required | the server's name, held to its file's stem by `validate` (`name_file_mismatch`) and to the rule every name is |
+| `description` | required | what it is for, its first line what a listing shows |
+| `transport` | required | `type = "stdio"` with `command`, `args`, `env` and `cwd`; or `"http"` or `"sse"` with `url` and `headers` |
+| `inputs` | optional | each a `name`, a `kind` (`env`, `header`, `arg` or `url_var`), and optionally a `description`, `required`, `secret` and the `env_var` it is read from |
+| `provenance` | optional | `registry`, `upstream_name`, `version` and `fetched_at`, as a registry said them |
+| `extras` | optional | a table for each agent, by its name, passed through for its renderer |
+
+Neutral rather than one agent's shape, and a subset of the MCP registry's
+`server.json` rather than that file as it is (D-10): an agent's own shape
+would make every other agent's a translation of it, and `server.json` holds
+what no agent reads and none of what an input needs to say. An input is
+what somebody supplies when an agent starts the server, never a value the
+file holds (D-11): it is written between braces where its value goes,
+`{token}`, as the registry writes a variable, and its kind says where that
+may be (a value of a program's `env`, one of its `args`, a value of an
+address's `headers`, or its `url`). A brace naming no input is left as it is
+written, so a JSON argument means what it says. Each renderer turns a
+reference into its agent's own syntax (#90 to #92); D-11's words for what
+an agent cannot express, a secret argument or one inside a URL, are the
+kinds of input this names.
+
+Only the format is held, which is all `validate` asks of one yet: the file
+reads, the transport names what it needs to start or reach the
+server (`transport_incomplete`, a problem `validate` reports rather than a
+file refused, so the definition is still listed), and every input is used
+where its kind says (`input_unreferenced`), once (`input_repeated`). Which
+names an agent takes, and what a secret has to be, are #87's. A key the
+format does not define is read past, as a skill's front matter's is.
+
+An address is held as a `value::Redacted`, as every URL core keeps is, so a
+credential typed into its userinfo is not kept; an input's name and the
+variable it is read from are `value::InputName` and `value::VariableName`,
+named apart and held to no rule yet. The extras are kept as the TOML they
+are, which has floats, so `Declared` and `Artifact` are `PartialEq` and no
+longer `Eq`: holding them as text to keep `Eq` would hand a renderer a
+string to parse again.
+
+`show` prints a definition's description and then its file whole, since what
+it declares is the file; #88 lays the transport and the inputs out on their
+own. Writing one is refused for now: `add` takes no command or address to
+start or reach a server by, and a scaffold holding neither would fail
+`validate` from the moment it exists (`add_mcp_unscaffolded`, which says to
+write the file by hand); installing one waits for the renderers
+(`not_installable`), gathering one and adopting one too. `edit --contents`
+and `rename` hold a definition to every problem `validate` reports
+(`artifact::mcp_strict_issues`), its name to its file as a skill's is to its
+folder, and rename rewrites the `name` value through `toml_edit`, the comment
+on its line kept.
+
 ### Adding a third kind
 
 A variant on `Kind`, its folder and layout, a variant on `Declared`, a
@@ -610,6 +679,39 @@ what `lifecycle::replace_contents` holds contents to, the refusal in
 agent), which the compiler lists, since the matches are exhaustive. Reports need nothing:
 columns, labels and counts are all driven from `Kind::ALL` and from what the
 catalog actually found.
+
+MCP servers were the third (#86), and the first whose payload is no folder
+and no file an agent reads, so they needed what the first two did not:
+
+- **A layout of their own**, `Layout::Flat`, since a name that becomes a key
+  in a config file can be no route, and every match on the layout answers
+  for it (where an artifact's file is, where one of a name goes, what a
+  removal takes away, what a read of it for the panel is bounded by).
+- **No folder by default.** `Directories::default_for` answers `None` for a
+  kind with no folder unless a marker names one, so a `mind.toml`, which
+  names the folders of the kinds it knew, reads no `mcp/` at a project's
+  root, a version 1 one none inside `.mind`, and neither `mind init` nor
+  `mind migrate` names one ([where a project keeps its
+  artifacts](#where-a-project-keeps-its-artifacts)). A workspace keeps one
+  in its library whatever its marker says (D-05).
+- **Words of its own in a sentence**, `Kind::noun` and `Kind::plural`
+  (`MCP server`, `MCP servers`), since a message spelled `{kind}s` holds a
+  kind to having a slug a sentence can make a plural of, which an
+  abbreviation is not. The slug and the folder are both `mcp`, which `mind
+  list mcp` takes in either place.
+- **Saying what no release does yet**, by a predicate each a front end can
+  ask: `install::installs`, behind the refusal in `install::targets` that
+  every install, adoption and survey of a project meets, and
+  `create::scaffolds`, which the TUI's add form and the install screen step
+  through, so neither offers a choice only to refuse it. Each is a match on
+  the kind with no wildcard.
+- **Where an agent reads it**: nowhere in `Agent::reads` or the target
+  table, since each agent reads its servers as entries of its own config
+  file, the files `Agent::reads_files` names already ([what says an agent
+  works in a project](agents.md#what-says-an-agent-works-in-a-project),
+  whose table names `.mcp.json`, `.codex/config.toml` and `opencode.json`,
+  until #18 adds the MCP section with what each agent does with them). The
+  renderers that write there are #90 to #94's.
 
 ## The two levels
 
@@ -756,7 +858,19 @@ folder at the root, which for the default workspace is the home directory;
 that is also what lets a kind added later land in every workspace's library,
 whatever its marker says. `own` names those kinds in the holder it hands out,
 since a `MindProject` asked about a kind nobody named answers with a folder
-beside the code.
+beside the code, or, for a kind added later, none.
+
+MCP servers are that kind (#86): every workspace keeps its own in
+`library/mcp` in its folder, `.mindweaver/library/mcp`, or
+`.mindflayer/library/mcp` in one a Mindflayer build made, and never in an
+`mcp` at its root, however old its marker. `mindweaver init` writes no line
+for them: the marker's comment already says a kind it does not name is in
+the library, so the line would tell a reader nothing, and leaving it out
+keeps the marker a new workspace gets the one an older build wrote, which
+is also what the mother of a Mindflayer build's workspace has to make. One
+that names `mcp` keeps its servers there, as a marker naming any kind does.
+No version moved: an older build reading a marker that names `mcp` reads
+past a key it does not know, and one that names none says nothing to it.
 
 A workspace made before the library keeps the folders its marker names,
 `skills` and `rules` beside the projects as `mindweaver init` used to write them,
@@ -942,10 +1056,27 @@ had and list nothing without saying why. `DIRECTORIES_VERSION` is what draws
 that line.
 
 What a kind left out means is the marker's version's to say, and version 3
-says something else again. In a `mind.toml` it is the default beside the code;
-in a project's settings it is no folder at all, so a kind added later, MCP
-servers say, is never given a folder at the project's root that nobody asked
-for. `MindProject::directory_for` answers `None` for such a kind. A reader
+says something else again. In a `mind.toml` it is the default beside the code,
+for the kinds that have one; in a project's settings it is no folder at all,
+so a kind added later is never given a folder at the project's root that
+nobody asked for. MCP servers were the first (#86), and have no default even
+in a `mind.toml` (`Directories::default_for`, matched on the kind with no
+wildcard): a `mind.toml` names the folders of the kinds it knew, a version
+1 one kept those inside `.mind`, and a folder called `mcp` at a repository's
+root is as likely to be the code of a server as anywhere definitions go, so a
+project an older Mindweaver made reads none, at its root or in `.mind`, and
+says nothing of one. Nor does `mind init` name one in the `settings.toml` it
+writes, nor `mind migrate` in the one it moves a project to, for the same
+reason, so `mind init` makes no `mcp/` beside the code: a project that
+authors its own definitions names the folder in `[directories]` by hand, and
+adding one where it names none is refused with that said
+(`WorkspaceError::NoDirectory`, which says to `mind migrate` first for a
+project marked by anything but a `settings.toml`). Naming one by default was
+the other way, and would have needed no version (a build that reads settings
+reads past a key it does not know, and misreads nothing), but it would make
+every new project's `mcp/` a Mindweaver folder, server code and all. A
+`mind.toml` that names `mcp` by hand is read as naming it, as it is read for
+any kind: the rule is the default's, not the key's. `MindProject::directory_for` answers `None` for such a kind. A reader
 finds nothing there, an absence and not a failure, as in a folder nobody has
 made; what needs the folder (adding an artifact, renaming one) asks
 `required_directory`, which refuses with `NoDirectory`. Installing does not
@@ -1470,6 +1601,15 @@ An older marker is read the way it was written, never refused, and moved
 forward only when somebody asks: a workspace's own folders by `mindweaver migrate
 --library`, a project's `mind.toml` or `settings.json` by `mind migrate`
 ([moving a project to its settings](#moving-a-project-to-its-settings)).
+An MCP server's definition carries a format of its own, `format = 1`
+(`MCP_FORMAT`), since it is an artifact, copied and gathered with no marker
+beside it, and is refused from a newer format as a marker is ([what an MCP
+server's definition declares](#what-an-mcp-servers-definition-declares)).
+Adding the kind moved no marker's version: a new `weaver.toml` and a new
+`settings.toml` name no folder for it, so they read to an older build as
+they did, and one that names `mcp` by hand names a key an older build reads
+past.
+
 Four lines are drawn so far, all project-marker versions, since a
 workspace's number says nothing about how a project keeps its artifacts:
 `DIRECTORIES_VERSION`, before which every kind lived inside `.mind`;
@@ -9363,6 +9503,13 @@ which puts `~/skills` and `~/rules` in the home directory; and moving only the
 home workspace's library, which leaves two layouts to explain. Unblocks #52,
 #53 and #86.
 
+#86 carried out the part about a kind added later: MCP servers are kept in
+`library/mcp` in every workspace's folder, a marker naming no folder for
+them, as every marker written before them does, and a new one too ([the
+workspace's own artifacts](#the-workspaces-own-artifacts)). A marker naming
+`mcp` by hand is followed, as one naming any kind is, which "whatever its
+`weaver.toml` says" was not meant to undo.
+
 ### D-06: Projects keep authoring beside the code
 
 Amended by the owner. Projects keep authoring their own skills and rules beside
@@ -9489,6 +9636,13 @@ which overwrites the user's other servers; and delegating to the agents' CLIs,
 since `codex mcp add` writes only Codex's user config, never a project's, and
 re-serializes every entry there, though they may return for user scope (D-22).
 Unblocks #18, #86, #89, #93 and #94.
+
+#86 added the definitions: `Kind::Mcp`, one `<name>.toml` a server in
+`format = 1`, its inputs written between braces where their value goes, as
+the registry writes a variable ([what an MCP server's definition
+declares](#what-an-mcp-servers-definition-declares)), listed, shown,
+validated, renamed and removed by the lifecycle every kind goes through.
+Nothing installs one yet (`not_installable`).
 
 ### D-11: MCP secrets are environment references
 
@@ -9953,6 +10107,30 @@ it once as it closes.
   the read types that hold them were. Each joins `value` when a rule is
   found that it holds, as `ProjectId` did; one with no rule of its own, a
   name named apart, joins when a mix-up between two of them is found.
+- **An MCP server's name and inputs are held to the rule every name is,
+  and no further.** A server's name is held to the kebab-case rule skills
+  and rules are, which is stricter than what #87 brings
+  (`^[A-Za-z0-9_-]+$`, with each agent's reserved names), so a definition
+  named with a capital or an underscore is called invalid until #87 says
+  which names an agent takes; and an input's name and the variable it is
+  read from are held to none, so a `}` in one would make a placeholder no
+  value can write. Both are #87's to settle, with the secrets.
+- **What the panel draws of an MCP server.** The snapshot carries the kind
+  as it carries every kind, and no view changed for it, but three pages
+  draw it as they draw the others where it is not: an artifact's page puts
+  its definition, which is TOML, through the markdown renderer, as the body
+  a skill's front matter is cut from; the page adding one offers `mcp`
+  among the kinds, and says core's refusal (`add_mcp_unscaffolded`) once a
+  name is typed; and the projects table gains a column, which at the
+  README's width pushes its `stale` column out of view. Each wants a view
+  of its own, or a word from core (whether a kind's file is markdown,
+  which kinds `add` writes), with #96, rather than a special case here.
+- **No placeholder can be written as text.** An input is written `{name}`
+  where its value goes, and a brace naming no input is left as written, but
+  a value that has to hold the text `{token}` while an input is named
+  `token` cannot: format 1 has no escape, which a registry entry has not
+  needed yet. One would be a new format, since an older build would read
+  the escape as text.
 
 - **A known workspace that has gone is offered nothing.** The page of
   loads and the header's switcher list it, with why it does not open, and
