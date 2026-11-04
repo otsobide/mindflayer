@@ -1,19 +1,22 @@
-# Where the agents read skills and rules
+# Where the agents read skills, rules and MCP servers
 
 This is the reference for where Claude Code, Codex and OpenCode look for
 skills and rules, at project and user scope, and what each does with
-duplicates and ignored files. Mindflayer's agent adapters build on it: the
-target table (#28), installing into several folders (#34), the managed block
-in `AGENTS.md` (#42), Claude's rule files (#43), the predicate that decides
-how Claude reaches the block (#44) and the names a suggestion ranks a
-repository by (#58). [docs/architecture.md](architecture.md)
-says what Mindflayer does with these facts and why; this page says what the
-agents do.
+duplicates and ignored files, and for what each makes of a project's MCP
+servers. Mindflayer's agent adapters build on it: the target table (#28),
+installing into several folders (#34), the managed block in `AGENTS.md`
+(#42), Claude's rule files (#43), the predicate that decides how Claude
+reaches the block (#44), the names a suggestion ranks a repository by (#58),
+and the MCP renderers and installs to come (#87, #90 to #94).
+[docs/architecture.md](architecture.md) says what Mindflayer does with these
+facts and why; this page says what the agents do.
 
 **Last verified: 2026-10-26, on Claude Code 2.1.309.** Codex and OpenCode were
-not run, so every fact about them is docs-only, as of the same date.
+not run, so every fact about their skills and rules is docs-only, as of the
+same date. **The MCP checks were written on 2026-11-04 and have not run**:
+every result under [MCP servers](#mcp-servers) is pending the owner's run.
 
-Each fact carries one of two marks:
+Each fact carries one of three marks:
 
 - **verified**: seen on the real binary by `scripts/agent-probe/probe.sh`, in
   one of the two runs recorded under
@@ -22,6 +25,9 @@ Each fact carries one of two marks:
   silent, from its source code, and not run here. Each one Mindflayer relies
   on names a fallback: what Mindflayer does, or what still holds, if the
   binary turns out to disagree.
+- **pending**: a check `probe.sh` holds that has not run yet. Until it does,
+  the fact stands as its source says, docs-only, and its expected result is
+  what a run is held to.
 
 ## What the decisions rest on
 
@@ -102,9 +108,12 @@ login, so it is run by hand, never by CI or `make test`.
   (one check puts a user memory file there on purpose, and removes it), and
   that the only instruction files above the scenario are the ones it wrote.
 - **The real home.** Before and after the run it fingerprints `~/.agents`,
-  `~/.codex`, `~/.claude/skills`, `~/.claude/rules`, `~/.claude/CLAUDE.md`
-  and `~/.claude.json`, and fails if any changed. Not the whole `~/.claude`:
-  a Claude Code session running the script writes there itself.
+  `~/.codex`, `~/.claude/skills`, `~/.claude/rules`, `~/.claude/CLAUDE.md`,
+  `~/.claude.json`, `~/.config/opencode`, and OpenCode's two logins,
+  `~/.local/share/opencode/auth.json` and `mcp-auth.json`, and fails if any
+  changed. Not the whole `~/.claude`: a Claude Code session running the
+  script writes there itself, as an OpenCode session does in the rest of
+  `~/.local/share/opencode`.
 - **Tokens.** Every file under test carries a token of its own
   (`PROBE-AGENTS-MD-1`, ...), and each run asks the model once which tokens it
   holds and which skills it can invoke. A token in the answer means the file
@@ -129,13 +138,16 @@ PROBE_ONLY='claude-import claude-local' scripts/agent-probe/probe.sh
 
 It prints every command, answer and verdict, keeps them in
 `target/agent-probe-results/<time>/`, and exits non-zero when a result
-differs from what this page says. Each run is a paid call, so `PROBE_ONLY`
-names the runs to do when only some changed; a name that is no run is
-refused. Codex and OpenCode get checks from a `codex.sh` or `opencode.sh`
-beside it, defining `<agent>_prepare` (copy the login in), `<agent>_checks`
-and `<agent>_runs`; the harness already points `CODEX_HOME` and
-`OPENCODE_CONFIG_DIR` into the temp dir. Until those exist, `probe.sh codex`
-refuses.
+differs from what this page says. Each run of Claude's or Codex's is a paid
+call, so `PROBE_ONLY` names the runs to do when only some changed; a name
+that is no run is refused. Each agent's checks are in a file beside the
+script, `claude.sh`, `codex.sh` and `opencode.sh`, defining
+`<agent>_prepare` (copy the login in, name the binaries), `<agent>_checks`
+and `<agent>_runs`. `codex.sh` and `opencode.sh` hold only the MCP checks so
+far, so `probe.sh codex` and `probe.sh opencode` run those alone, and what
+Codex and OpenCode do with skills and rules stays docs-only. [MCP
+servers](#mcp-servers) says what those checks need besides, and the command
+that runs them.
 
 ## Claude Code
 
@@ -575,6 +587,446 @@ opencode.ai/v2/docs) ([releases](https://github.com/anomalyco/opencode/releases)
 | Whether `$XDG_CONFIG_HOME` moves `~/.config/opencode`. | docs-only | The [config](https://opencode.ai/docs/config/) docs name `~/.config/opencode` and are silent on `$XDG_CONFIG_HOME`; not run. Fallback: Mindflayer takes `~/.config/opencode` whatever `$XDG_CONFIG_HOME` says, so if OpenCode follows it, a check reads the wrong folder while it is set; `--opencode-config-dir` names the right one outright. An [open question](architecture.md#open-questions). |
 | How an empty `OPENCODE_CONFIG_DIR` is read. | docs-only | The [config](https://opencode.ai/docs/config/) docs are silent; not run. Fallback: Mindflayer reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--opencode-config-dir` names it outright. An [open question](architecture.md#open-questions). |
 
+## MCP servers
+
+**Pending the owner's run.** The probe's MCP checks (#18) were written on
+2026-11-04 and not run: each one is a paid call on the owner's account, with
+the owner's logins, so the owner runs them by hand. Until then every result
+below reads *pending*, and each fact stands as its source says. A run fills
+in the *Result* column of each table and [the record of the
+run](#the-mcp-runs), and moves a fact's mark to verified.
+
+[D-10](architecture.md#d-10-an-mcp-server-is-one-owned-entry-per-agent) puts
+each server in an agent's project config as one entry of Mindflayer's, and
+[D-11](architecture.md#d-11-mcp-secrets-are-environment-references) writes
+every secret as a reference to an environment variable, in the agent's own
+syntax. The checks ask the agents what those rest on: that each project
+config loads, and what each agent makes of a reference in each place a
+renderer would put one. Both decisions say what each result would change in
+#87 and #90 to #94.
+
+### Running them
+
+```bash
+PROBE_ONLY='claude-mcp claude-mcp-untyped claude-mcp-comment claude-mcp-comma
+  codex-mcp-trusted codex-mcp-untrusted codex-mcp-collision
+  opencode-mcp-v2 opencode-mcp-v1-shape opencode-mcp-service opencode-mcp-1-19' \
+  scripts/agent-probe/probe.sh claude codex opencode
+```
+
+That is seven paid calls at most. Claude's four are `claude -p` on haiku with
+a cap of 0.10 USD each, where #17's runs cost about 0.002 USD apiece.
+Codex's three are `codex exec` on `gpt-6-luna` at low effort, and the third
+makes none if Codex refuses its configuration before the session starts.
+OpenCode's four call no model. Without `PROBE_ONLY`, the same command also
+runs Claude's seven runs of #17 again, six of them paid.
+
+Beyond what #17 needs:
+
+- `python3` in `/usr/bin` or `/bin`, for the stand-in server. Each prepare
+  asks for it before anything is paid for.
+- Codex's native binary, on `PATH` or named by `PROBE_CODEX_BIN` (`mise which
+  codex` prints it), logged in with the login kept in
+  `$CODEX_HOME/auth.json` (by default `~/.codex/auth.json`), not the
+  keyring. Only that file is copied in. A ChatGPT login whose access token
+  has less than 15 minutes left, or that was last refreshed seven days ago
+  or more, is refused, as Claude's close to expiry is: a refresh inside the
+  run could rotate the refresh token the real session holds.
+  `PROBE_CODEX_MODEL` names another model if the account does not offer
+  `gpt-6-luna`.
+- OpenCode's V2 binary, on `PATH` or named by `PROBE_OPENCODE_BIN`. The
+  launcher script of an npm or mise install is followed to the binary its
+  `@opencode/cli` package ships; a version manager's shim is refused. No
+  OpenCode login is needed or copied.
+- `npm` on `PATH`, for 1.19.4: the script fetches `opencode-linux-x64@1.19.4`
+  (about 80 MB) with `npm pack` into `target/agent-probe-run`, with npm's
+  cache there too, and runs its `package/bin/opencode`, which is what `npx
+  opencode-ai@1.19.4` runs once its postinstall has copied it into place.
+  The baseline package is taken on a CPU without AVX2, and the musl one on
+  musl, as that postinstall does.
+
+### How they are run
+
+- **A stand-in server.** `scripts/agent-probe/mcp_server.py`, standard
+  library Python run as `python3 -I`, answers as much MCP as an agent needs
+  to load it: `initialize`, with the protocol version the client asked for,
+  `tools/list` with one tool, `ping`, and empty lists of prompts and
+  resources. Over stdio it reads one message a line. Over HTTP it binds
+  127.0.0.1 on a port the kernel picks and answers each POST as JSON, which
+  Streamable HTTP allows; a GET for an event stream is refused with 405, and
+  one under `/.well-known/` with 404, so no client takes the server for an
+  OAuth one. It writes down, one JSON object a line, the arguments and
+  environment it was started with, every method it was sent, and the path
+  and headers of each request. A value is kept whole only when it is the
+  probe's own, all of which say "probe", or empty; anything else, a variable
+  or a header the agent added, is kept as its length, so no credential
+  reaches the results.
+- **References with values of their own.** A run puts a reference in each
+  place it is about, naming one of these variables, which are set for the
+  agent's command alone:
+
+  | Variable | Value | Referred to from |
+  |---|---|---|
+  | `PROBE_MCP_ARG` | `probe-arg-value` | the stdio server's `--arg` argument |
+  | `PROBE_MCP_ENV_SOURCE` | `probe-env-value` | the stdio server's `PROBE_MCP_ENV` variable; in Codex also named in `env_vars` |
+  | `PROBE_MCP_URL_PART` | `probe-url-value` | the http server's URL, as `/probe-http/<reference>` |
+  | `PROBE_MCP_HEADER` | `probe-header-value` | the `X-Probe-Header` header |
+  | `PROBE_MCP_TOKEN` | `probe-token-value` | `Authorization: Bearer <reference>` |
+  | `PROBE_MCP_PYTHON` | the `python3` path | OpenCode only: the command's first word |
+
+  So the stand-in's record says, for each place, whether the agent expanded
+  the reference (the value), passed it on as written (the reference), or
+  dropped it (empty, or unset), and whether it started the server at all.
+- **What loaded.** *loaded* is a stand-in that saw `initialize` and then
+  `tools/list`, *initialized* one that saw only the first, *none* one that
+  saw neither or never started. Where an agent says what it loaded without a
+  model's help, that is kept and held too: Claude's init message, whose
+  `mcp_servers` gives each server a status; OpenCode's `opencode mcp list`,
+  which connects to each server and calls no model; and Codex's `codex mcp
+  list --json`, which lists the configuration, kept as a record only.
+- **Nothing from the model.** Claude and Codex are asked for `OK` alone, and
+  each run is held to calling no tool: Claude with `--tools ''
+  --max-turns 1`, Codex with the sandbox read-only.
+- **Guards.** Besides #17's, before each run: no MCP configuration at user
+  scope in the temp home (`~/.mcp.json`, OpenCode's user `opencode.json`,
+  `opencode.jsonc` or `config.json`, or a server at user or local scope in
+  Claude's `.claude.json`), and no MCP config file above a scenario but the
+  ones it wrote.
+- **Verdicts.** `ok` or `MISMATCH` against the expected result in the tables
+  below. A `record` line is a result the issue asks to find out rather than
+  confirm, with nothing expected of it, and is never a mismatch.
+- **What is kept.** Each run's config files as given (`<run>.given.mcp.json`,
+  `<run>.given.codex.config.toml`, `<run>.given.home.config.toml`,
+  `<run>.given.opencode.json`), the stand-ins' logs (`<run>.<server>.jsonl`,
+  `<run>.http.jsonl`) and what the agent printed, in
+  `target/agent-probe-results/<time>/`.
+
+Where a stdio entry's arguments read `<stdio>` below, they are, for a run
+named `<run>`:
+
+```
+-I /mnt/agent-probe-scripts/mcp_server.py stdio --name probe-stdio \
+  --log /mnt/agent-probe/results/<run>.probe-stdio.jsonl
+```
+
+with `--arg <reference>` after them where a table checks the argument. Each
+http entry's URL is `http://127.0.0.1:<port>/<server>/...`, the port the
+run's stand-in was given.
+
+### Claude Code's `.mcp.json`
+
+Claude reads a project's servers from `.mcp.json` at its root, a strict JSON
+file with a `mcpServers` map ([mcp](https://code.claude.com/docs/en/mcp)),
+and starts one only once it is approved. Each run approves its servers by
+name in the temp home's user settings, `enabledMcpjsonServers` in
+`$CLAUDE_CONFIG_DIR/settings.json`, beside the `InstructionsLoaded` hook. Not
+in the project's own `.claude/settings.local.json`, where the approval
+dialog writes it: Claude 2.1.318 counts an approval there only in a
+workspace trusted explicitly, which a `-p` run's never is, and its own
+message says to put it in `~/.claude/settings.json` instead (read from the
+binary, docs-only). The same settings set `disableClaudeAiConnectors`, so a
+logged-in Claude does not fetch and connect the account's claude.ai
+connectors beside the project's servers. #90 writes none of this
+(approval is out of its scope); a person approves the servers when Claude
+asks.
+
+#### `claude-mcp`: entries with a type, and a reference in each place
+
+A fresh repository with this `.mcp.json`, `probe-stdio` and `probe-http`
+approved and `probe-unapproved` not:
+
+```json
+{
+  "mcpServers": {
+    "probe-stdio": {
+      "type": "stdio",
+      "command": "/usr/bin/python3",
+      "args": ["<stdio>", "--arg", "${PROBE_MCP_ARG}"],
+      "env": { "PROBE_MCP_ENV": "${PROBE_MCP_ENV_SOURCE}" }
+    },
+    "probe-http": {
+      "type": "http",
+      "url": "http://127.0.0.1:<port>/probe-http/${PROBE_MCP_URL_PART}",
+      "headers": {
+        "X-Probe-Header": "${PROBE_MCP_HEADER}",
+        "Authorization": "Bearer ${PROBE_MCP_TOKEN}"
+      }
+    },
+    "probe-unapproved": {
+      "type": "stdio",
+      "command": "/usr/bin/python3",
+      "args": ["<stdio, named probe-unapproved>"],
+      "env": { "PROBE_MCP_ENV": "${PROBE_MCP_ENV_SOURCE}" }
+    }
+  }
+}
+```
+
+| Check | Expected | Result |
+|---|---|---|
+| Tools called, turns | none, 1 | pending |
+| `probe-stdio` in the init message | `connected` | pending |
+| `probe-stdio`'s stand-in | loaded | pending |
+| Its `--arg`: `${VAR}` in `args` | `probe-arg-value`, expanded | pending |
+| Its `PROBE_MCP_ENV`: `${VAR}` in `env` | `probe-env-value`, expanded | pending |
+| `probe-http` in the init message | `connected` | pending |
+| `probe-http`'s stand-in | loaded | pending |
+| The path: `${VAR}` in `url` | `/probe-http/probe-url-value` | pending |
+| `X-Probe-Header`: `${VAR}` in `headers` | `probe-header-value` | pending |
+| `Authorization`: a reference inside a longer value | `Bearer probe-token-value` | pending |
+| `probe-unapproved`'s stand-in | none: not started | pending |
+| `probe-unapproved` in the init message | recorded | pending |
+
+Expected from the [mcp](https://code.claude.com/docs/en/mcp) docs, which say
+`${VAR}` and `${VAR:-default}` expand in `command`, `args`, `env`, `url` and
+`headers`. The last row says what `-p` makes of an entry nobody approved:
+absent, or listed with a status of its own.
+
+#### `claude-mcp-untyped`: an http entry with no type
+
+The same `probe-stdio`, without `--arg`, beside
+`"probe-untyped": {"url": "http://127.0.0.1:<port>/probe-untyped/"}`, both
+approved. Recorded, not expected: #90 writes `type` always, and needs to
+know what one somebody else wrote without it does to the file.
+
+| Record | Result |
+|---|---|
+| `probe-untyped` in the init message: read as http, refused alone, or absent | pending |
+| `probe-untyped`'s stand-in: whether its URL was reached anyway | pending |
+| `probe-stdio` in the init message: whether the untyped entry costs the file its other servers | pending |
+| `probe-stdio`'s stand-in | pending |
+
+#### `claude-mcp-comment` and `claude-mcp-comma`: what strict JSON refuses
+
+The same `probe-stdio`, approved, in a file with a comment:
+
+```
+{
+  // A comment, which JSON does not allow and JSONC does.
+  "mcpServers": {
+    "probe-stdio": <the entry>
+  }
+}
+```
+
+and, in the other run, in a file with a trailing comma after it:
+
+```
+{
+  "mcpServers": {
+    "probe-stdio": <the entry>,
+  }
+}
+```
+
+| Record | `claude-mcp-comment` | `claude-mcp-comma` |
+|---|---|---|
+| `probe-stdio` in the init message: whether the file breaks whole | pending | pending |
+| `probe-stdio`'s stand-in | pending | pending |
+
+The debug log's lines about the probe's servers and `.mcp.json` are kept
+beside each run, with whatever Claude said of the file.
+
+### Codex's `.codex/config.toml`
+
+Codex reads `[mcp_servers.<name>]` from a project's `.codex/config.toml`
+only in a trusted project, merges it over `$CODEX_HOME/config.toml`, and has
+no interpolation: secrets go through keys that name a variable, `env_vars`
+for a stdio server's environment, `env_http_headers` for a header's whole
+value and `bearer_token_env_var` for `Authorization: Bearer`
+([config-reference](https://learn.chatgpt.com/docs/config-file/config-reference),
+docs-only; the 0.166 binary's strings hold every one of those keys). Each
+run writes the temp home's `config.toml` whole: `cli_auth_credentials_store
+= "file"`, so the copied `auth.json` is what Codex reads, and the project's
+trust entry, `[projects."<repo>"] trust_level = ...`. Every run's project
+holds:
+
+```toml
+[mcp_servers.probe-stdio]
+command = "/usr/bin/python3"
+args = ["<stdio>", "--arg", "${PROBE_MCP_ARG}"]
+env = { PROBE_MCP_ENV = "${PROBE_MCP_ENV_SOURCE}" }
+env_vars = ["PROBE_MCP_ENV_SOURCE"]
+
+[mcp_servers.probe-http]
+url = "http://127.0.0.1:<port>/probe-http/${PROBE_MCP_URL_PART}"
+env_http_headers = { "X-Probe-Header" = "PROBE_MCP_HEADER" }
+bearer_token_env_var = "PROBE_MCP_TOKEN"
+```
+
+Each run asks `codex mcp list --json` from the project and then, once:
+
+```
+codex exec --json --skip-git-repo-check --sandbox read-only \
+  --model gpt-6-luna -c 'model_reasoning_effort="low"' <prompt asking for OK>
+```
+
+`--skip-git-repo-check`, though each scenario is a repository, so that
+exec's own refusal of a folder it does not trust cannot stand in for what
+trust does to the servers.
+
+#### `codex-mcp-trusted`
+
+The project marked `trusted`.
+
+| Check | Expected | Result |
+|---|---|---|
+| The session reached the model | yes | pending |
+| Items besides messages | none | pending |
+| `probe-stdio`'s stand-in | loaded | pending |
+| Its `--arg`: `${VAR}` in `args` | `${PROBE_MCP_ARG}`, as written | pending |
+| Its `PROBE_MCP_ENV`: `${VAR}` in `env` | `${PROBE_MCP_ENV_SOURCE}`, as written | pending |
+| Its `PROBE_MCP_ENV_SOURCE`, named in `env_vars` | `probe-env-value` | pending |
+| Its `PROBE_MCP_HEADER`, named nowhere: whether Codex passes a server only what it names | recorded | pending |
+| `probe-http`'s stand-in | loaded | pending |
+| The path: `${VAR}` in `url` | `/probe-http/${PROBE_MCP_URL_PART}`, as written (sent percent-encoded) | pending |
+| `X-Probe-Header`, from `env_http_headers` | `probe-header-value` | pending |
+| `Authorization`, from `bearer_token_env_var` | `Bearer probe-token-value` | pending |
+| `codex mcp list --json` | recorded | pending |
+
+#### `codex-mcp-untrusted`
+
+The same project, first with no trust entry at all, for the list alone, then
+marked `untrusted`, for the list and the session.
+
+| Check | Expected | Result |
+|---|---|---|
+| The session reached the model | yes | pending |
+| Items besides messages | none | pending |
+| `probe-stdio`'s stand-in | none: not started | pending |
+| `probe-http`'s stand-in | none: not started | pending |
+| `codex mcp list --json`, untrusted | recorded | pending |
+| `codex mcp list --json`, no trust entry: what #91's warning is about | recorded | pending |
+
+#### `codex-mcp-collision`
+
+The project marked `trusted`, and the temp home's own `config.toml` naming
+the project's stdio server too, as an http one:
+
+```toml
+[mcp_servers.probe-stdio]
+url = "http://127.0.0.1:<port>/probe-stdio-user/"
+```
+
+Codex merges config layers key by key, so the two may make one entry with
+both a `command` and a `url`. Recorded, not expected: this is the result
+that decides whether #91 refuses a name a lower layer holds or only warns.
+
+| Record | Result |
+|---|---|
+| Outcome: `whole config refused` (the list and the session both fail before any server starts), `session refused`, `other servers lost`, `project layer wins`, `user layer wins`, `that name dropped` or `both started` | pending |
+| `codex mcp list --json` | pending |
+| The session's exit status, and whether it reached the model | pending |
+| `probe-stdio` as the project's stdio server | pending |
+| `probe-stdio` as the user's http server | pending |
+| `probe-http`, which collides with nothing: whether the collision costs the other servers | pending |
+
+The first three outcomes break more than the one name, so #91 refuses it, as
+it plans; the others leave the rest of the configuration working, so a
+warning would do.
+
+### OpenCode's `opencode.json`
+
+OpenCode reads `mcp` from the project's `opencode.json`, and fills
+`{env:NAME}` in the file's text before it parses it, an unset variable as
+empty ([config](https://opencode.ai/docs/config/), docs-only; 2.2.5's binary
+does it with one replace over the text). V2 writes servers under
+`mcp.servers.<name>`, V1 straight under `mcp.<name>` with `enabled`, and V1
+has read V2's shape since 1.18.24 (D-12). Each run gives the project one of
+these, V2's shape:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "probe-stdio": {
+        "type": "local",
+        "command": ["{env:PROBE_MCP_PYTHON}", "<stdio>", "--arg", "{env:PROBE_MCP_ARG}"],
+        "environment": { "PROBE_MCP_ENV": "{env:PROBE_MCP_ENV_SOURCE}" }
+      },
+      "probe-http": {
+        "type": "remote",
+        "url": "http://127.0.0.1:<port>/probe-http/{env:PROBE_MCP_URL_PART}",
+        "headers": {
+          "X-Probe-Header": "{env:PROBE_MCP_HEADER}",
+          "Authorization": "Bearer {env:PROBE_MCP_TOKEN}"
+        }
+      }
+    }
+  }
+}
+```
+
+or V1's, the same two entries straight under `mcp`, each with
+`"enabled": true`. Neither has `oauth`, `timeout` or anything else #92 does
+not write. Each run asks `opencode mcp list` from the project, with
+`OPENCODE_DISABLE_AUTOUPDATE=1` and `OPENCODE_DISABLE_MODELS_FETCH=1`:
+
+| Run | Binary | Shape | How |
+|---|---|---|---|
+| `opencode-mcp-v2` | V2 as installed | V2 | `--standalone`: a private server in the list's own process and environment |
+| `opencode-mcp-v1-shape` | V2 as installed | V1 | `--standalone` |
+| `opencode-mcp-service` | V2 as installed | V2 | through V2's background server, the way a person runs OpenCode: the list starts it, is asked again up to five times while it says `pending`, and stops it with `opencode service stop` after |
+| `opencode-mcp-1-19` | 1.19.4 | V2 | in process, with `--print-logs --log-level DEBUG` |
+
+The background server is the question in `opencode-mcp-service`: whether it
+fills `{env:}` from the environment of whoever started it, or from one of
+its own, which V2's `opencode service set env` suggests it keeps.
+
+| Check | Expected | `opencode-mcp-v2` | `opencode-mcp-v1-shape` | `opencode-mcp-service` | `opencode-mcp-1-19` |
+|---|---|---|---|---|---|
+| `probe-stdio`'s stand-in, so `{env:}` in the command's first word too | loaded | pending | pending | pending | pending |
+| Its `--arg`: `{env:}` in `command` | `probe-arg-value` | pending | pending | pending | pending |
+| Its `PROBE_MCP_ENV`: `{env:}` in `environment` | `probe-env-value` | pending | pending | pending | pending |
+| `probe-http`'s stand-in | loaded | pending | pending | pending | pending |
+| The path: `{env:}` in `url` | `/probe-http/probe-url-value` | pending | pending | pending | pending |
+| `X-Probe-Header`: `{env:}` in `headers` | `probe-header-value` | pending | pending | pending | pending |
+| `Authorization`: inside a longer value | `Bearer probe-token-value` | pending | pending | pending | pending |
+| Each server's word in the list | recorded | pending | pending | pending | pending |
+
+### Assumptions the run confirms
+
+Nothing here was run, and nothing was read from the web: what the checks
+assume beyond each agent's documentation was read from the installed
+packages, and a run that disagrees fails or records it.
+
+- Claude Code 2.1.318: approvals count from the user settings in a `-p`
+  run; the init message lists `.mcp.json` servers in `mcp_servers` with a
+  status, and waits for them to connect, or the status says `pending` and
+  the stand-in still has the last word; `--tools ''` turns every tool off.
+- Codex 0.166.0: `codex exec` takes `--json`, `--skip-git-repo-check`,
+  `--sandbox read-only`, `--model` and `-c`, as its help says; `codex mcp
+  list --json` exists ("Output the configured servers as JSON"); the
+  account offers `gpt-6-luna`, the smallest model the binary's own catalog
+  lists; a session starts its servers whether or not the model is reached;
+  `cli_auth_credentials_store = "file"` has it read the copied `auth.json`;
+  a ChatGPT login is refreshed past about eight days.
+- OpenCode 2.2.5 and 1.19.4: `opencode mcp list` connects to each server,
+  as 1.19.4's handler and 2.2.5's status values say; `--standalone` runs a
+  private server in 2.2.5; 1.19.4 turns `mcp.servers` into its own entries,
+  as its binary's conversion does.
+
+### The MCP runs
+
+Pending: the owner's run fills this in, as [the Claude Code
+runs](#the-claude-code-runs) are recorded above.
+
+- **When:** pending.
+- **Binaries:** pending. At the time of writing this machine had Claude Code
+  2.1.318, Codex 0.166.0 and OpenCode 2.2.5 installed through mise, and the
+  issue names OpenCode 2.1.x, which 2.2.5 has replaced here.
+- **Models:** pending (`haiku`, and `gpt-6-luna` at low effort, as
+  resolved).
+- **Host:** pending.
+- **Cost:** pending.
+- **Logins:** pending.
+- **Environment:** as #17's, plus `PROBE_CODEX_BIN`, `PROBE_CODEX_MODEL`,
+  `PROBE_OPENCODE_BIN` and `PROBE_OPENCODE_V1_BIN`; for each agent's command
+  the five `PROBE_MCP_*` values above, and for OpenCode's
+  `PROBE_MCP_PYTHON`, `OPENCODE_DISABLE_AUTOUPDATE=1` and
+  `OPENCODE_DISABLE_MODELS_FETCH=1`.
+- **The real home, before and after:** pending.
+
 ## What says an agent works in a project
 
 `flayer scan --suggest` ranks a git repository holding something an agent
@@ -598,8 +1050,9 @@ repository it finds, so neither hides one.
 
 ## Facts the roadmap cites
 
-Where every fact #28, #34 and #42 to #44 build on stands. A docs-only one
-carries its fallback in the tables above.
+Where every fact #28, #34, #42 to #44, #87 and #90 to #94 build on stands. A
+docs-only one carries its fallback in the tables above, and a pending one
+the check that will settle it, under [MCP servers](#mcp-servers).
 
 | Issue | Fact | Mark |
 |---|---|---|
@@ -634,3 +1087,12 @@ carries its fallback in the tables above.
 | #44 | An `@AGENTS.md` line of its own, outside a fence, is followed in any of Claude's files, `CLAUDE.local.md` included. | verified in `CLAUDE.md` outside the markers; docs-only for the fence and `CLAUDE.local.md` |
 | #44 | A `CLAUDE.local.md` alone stops `AGENTS.md` being read. | verified |
 | #44 | Native `AGENTS.md` reading needs Claude 2.1.277 or later. | docs-only |
+| #87, #90 | Claude expands `${VAR}` in `args`, `env`, `url` and `headers`, also inside a longer value. | pending (`claude-mcp`) |
+| #87, #91 | Codex passes `${VAR}` in `args`, `env` and `url` on as written, so it cannot express a secret argument or a secret inside a URL. | pending (`codex-mcp-trusted`) |
+| #90 | An approved `.mcp.json` entry with a `type` loads; what an http entry without one, a comment and a trailing comma do to the file. | pending (`claude-mcp`, and recorded by the three runs after it) |
+| #91 | A trusted project's `.codex/config.toml` loads, and an untrusted one's does not. | pending (`codex-mcp-trusted`, `codex-mcp-untrusted`) |
+| #91 | `env_vars`, `env_http_headers` and `bearer_token_env_var` fill a value from a variable. | pending (`codex-mcp-trusted`) |
+| #91 | A server of the same name in `$CODEX_HOME/config.toml`, with another transport, breaks the whole configuration or leaves one layer's standing. | pending, recorded (`codex-mcp-collision`) |
+| #92 | V2's `mcp.servers` loads in V2 and in 1.19.4, and V1's `mcp.<name>` loads in V2. | pending (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`) |
+| #92 | `{env:}` expands in the command, the environment, the URL and the headers, through V2's background server too. | pending (all four OpenCode runs) |
+| #93, #94 | Each agent loads its project's servers from the one file the target table will name: `.mcp.json`, `.codex/config.toml` (trusted), `opencode.json`. | pending (every MCP run) |
