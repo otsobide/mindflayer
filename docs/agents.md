@@ -1098,8 +1098,8 @@ runs](#the-claude-code-runs) are recorded above.
 - **When:** pending.
 - **Binaries:** pending. At the time of writing this machine had Claude Code
   2.1.318, Codex 0.166.0 and OpenCode 2.2.5 on `PATH`, installed through
-  mise, with the OpenCode 2.1.3 the issue and D-12 name beside it, which
-  the second pass runs.
+  mise, with the OpenCode 2.1.3 D-12 names, of the 2.1.x line the issue
+  names, beside it, which the second pass runs.
 - **Models:** pending (`haiku`, and `gpt-6-luna` at low effort, as
   resolved).
 - **Host:** pending.
