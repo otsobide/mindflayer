@@ -445,3 +445,84 @@ fn a_workspace_under_mindweaver_s_names_plans_nothing() {
     let unmade = WeaverWorkspace::unmade(dir.path().join("home")).unwrap();
     assert!(migrate::names_plan(&unmade).unwrap().is_empty());
 }
+
+/// A workspace a Mindflayer build made, linking `app`, whose `AGENTS.md` is
+/// a link to its Claude file at `claude`, into which it installed `team`: a
+/// block Claude reads as its own file (`Reach::Same`), with no import.
+#[cfg(unix)]
+fn linked_to(claude: &str) -> (TempDir, WeaverWorkspace, MindProject) {
+    let dir = TempDir::new().unwrap();
+    gix::init(dir.path()).unwrap();
+    let mut workspace = MindflayerMother::create(dir.path());
+    let root = dir.path().join("app");
+    let file = root.join(claude);
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, "# Team\n").unwrap();
+    std::os::unix::fs::symlink(claude, root.join("AGENTS.md")).unwrap();
+    let (project, _) = MindProject::init_settings(
+        &root,
+        &[Agent::Claude, Agent::Codex],
+        Share::Local,
+        &Directories::default(),
+    )
+    .unwrap();
+    workspace.link(&project).unwrap();
+    let rules = workspace.own().directory_for(Kind::Rule).unwrap();
+    fs::create_dir_all(&rules).unwrap();
+    fs::write(rules.join("team.md"), "Say what a change does first.\n").unwrap();
+    let ledger = workspace.ledger().unwrap();
+    let candidate =
+        install::offered(&workspace, &ledger, &project, Kind::Rule, "team", None).unwrap();
+    install::install(
+        &workspace,
+        &ledger,
+        &project,
+        &candidate,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+    drop(ledger);
+    MindflayerMother::installed_into(&workspace, &project);
+    (dir, workspace, project)
+}
+
+#[cfg(unix)]
+#[test]
+fn a_claude_md_that_is_the_agents_md_is_moved_once_as_the_agents_md() {
+    for claude in ["CLAUDE.md", ".claude/CLAUDE.md"] {
+        let (dir, mut workspace, project) = linked_to(claude);
+        let file = project.root().join(claude);
+        let before = fs::read_to_string(&file).unwrap();
+        assert!(before.contains("<!-- mindflayer:rule team -->"), "{before}");
+
+        let plan = migrate::names_plan(&workspace).unwrap();
+
+        assert!(plan.refusals.is_empty(), "{claude}: {:?}", plan.refusals);
+        assert_eq!(
+            plan.projects[0].blocks,
+            [project.root().join("AGENTS.md")],
+            "{claude}"
+        );
+
+        migrate::names(&mut workspace).unwrap();
+
+        let after = fs::read_to_string(&file).unwrap();
+        assert_eq!(
+            after,
+            before.replace("mindflayer:", "mindweaver:"),
+            "{claude}"
+        );
+        assert!(fs::symlink_metadata(project.root().join("AGENTS.md"))
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        let ledger = workspace.ledger().unwrap();
+        let standing = install::standings(&workspace, &ledger, &project, Kind::Rule)
+            .unwrap()
+            .into_iter()
+            .find(|(name, _)| name == "team")
+            .map(|(_, standing)| standing);
+        assert_eq!(standing, Some(Standing::Current), "{claude}");
+        drop(dir);
+    }
+}

@@ -659,9 +659,17 @@ fn project_names(
         })),
     }
     // Only a file in its place: the import is never written through a
-    // link, so none an older build wrote is behind one.
+    // link, so none an older build wrote is behind one. Nor one that is the
+    // project's `AGENTS.md`, which a link from it leads to, as Claude then
+    // reads the block itself there (`Reach::Same`): its markers are spelled
+    // the new way through the `AGENTS.md`, and read as a `CLAUDE.md` it is
+    // a block of rules, which no import ever is.
+    let agents_real = fs::canonicalize(root.join(agents_md::FILE)).ok();
     for claude in [root.join(CLAUDE_MD), root.join(".claude").join(CLAUDE_MD)] {
         if !fs::symlink_metadata(&claude).is_ok_and(|found| found.is_file()) {
+            continue;
+        }
+        if agents_real.is_some() && fs::canonicalize(&claude).ok() == agents_real {
             continue;
         }
         match fs::read(&claude).map(|bytes| ClaudeMd::parse(&bytes)) {

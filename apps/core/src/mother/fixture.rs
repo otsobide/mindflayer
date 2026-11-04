@@ -90,7 +90,13 @@ impl MindflayerMother {
                 fs::write(&agents, file.to_bytes()).expect("write the block back");
             }
         }
+        // A `CLAUDE.md` that is the `AGENTS.md`, through a link one way or
+        // the other, was moved back with it.
+        let agents = fs::canonicalize(&agents).ok();
         for claude in [root.join("CLAUDE.md"), root.join(".claude/CLAUDE.md")] {
+            if agents.is_some() && fs::canonicalize(&claude).ok() == agents {
+                continue;
+            }
             let Ok(bytes) = fs::read(&claude) else {
                 continue;
             };
