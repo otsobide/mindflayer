@@ -135,7 +135,7 @@ fn an_install_records_where_it_came_from_as_from_takes_it() {
             .unwrap()
             .unwrap()
     };
-    assert_eq!(recorded("deploy").origin, Some(shelf));
+    assert_eq!(recorded("deploy").origin.as_deref(), Some(shelf.as_str()));
     assert_eq!(
         recorded("notes").origin.as_deref(),
         Some(install::WORKSPACE_ORIGIN)
@@ -384,9 +384,11 @@ fn a_version_2_installation_reads_back_through_the_ledger() {
             .unwrap(),
         Some(InstallRecord {
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
             source_id: Some(1),
-            origin: Some(String::from("https://github.com/acme/skills#next")),
+            origin: Some(mindflayer_core::value::Origin::from(
+                "https://github.com/acme/skills#next"
+            )),
             content_hash: None,
             targets: vec![Target {
                 agent: None,

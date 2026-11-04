@@ -341,7 +341,7 @@ fn states(workspace: &FlayerWorkspace, entry: &str) -> Vec<(String, String)> {
         .unwrap()
         .artifacts
         .iter()
-        .map(|artifact| (artifact.name.clone(), artifact.state.slug().to_owned()))
+        .map(|artifact| (artifact.name.to_string(), artifact.state.slug().to_owned()))
         .collect()
 }
 

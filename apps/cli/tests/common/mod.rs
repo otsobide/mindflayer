@@ -7,6 +7,7 @@
 #![allow(dead_code, unused_imports)]
 
 pub mod contract;
+pub mod mother;
 pub mod panel;
 
 pub use clap::Parser;
@@ -232,6 +233,31 @@ pub fn mind(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
 /// Run `flayer ...`.
 pub fn flayer(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
     run_flayer_cli(&parsed_flayer(dir, args))
+}
+
+/// Run a line a front end built (`Task::commands`), its binary first, with
+/// `-C dir` and every option in [`PINNED`] right after the binary rather
+/// than appended as [`line`] appends them: after a `--`, which a line puts
+/// before positionals led by a dash, an option appended would be read as
+/// one more positional. The line names no directory of its own.
+pub fn typed(dir: &Path, words: &[String]) -> Result<Outcome, Failure> {
+    let (binary, rest) = words.split_first().expect("a line names its binary");
+    let mut line = vec![
+        binary.clone(),
+        String::from("-C"),
+        dir.to_string_lossy().into_owned(),
+    ];
+    line.extend(PINNED.iter().map(|option| format!("{option}=")));
+    line.extend(rest.iter().cloned());
+    match binary.as_str() {
+        "mind" => {
+            run(&Cli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}")))
+        }
+        "flayer" => run_flayer_cli(
+            &FlayerCli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}")),
+        ),
+        other => panic!("no binary called {other}"),
+    }
 }
 
 /// What every reading command's `--json` prints, read back field by field:

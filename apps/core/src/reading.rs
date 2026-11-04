@@ -21,6 +21,7 @@ use crate::artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
 use crate::catalog::DiscoveryFailure;
 use crate::kind::Kind;
 use crate::paths;
+use crate::value::ArtifactName;
 
 /// One artifact in full, as `show` shows it: what it is, where it is, what
 /// its front matter declares that `show` prints, and the body after it.
@@ -29,7 +30,7 @@ use crate::paths;
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Shown {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// The directory a skill is, or the file a rule is: its first copy's,
     /// the one `show` reads.
     #[serde(serialize_with = "paths::lossy")]
@@ -145,7 +146,7 @@ pub struct Validation {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Checked {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// The directory a skill is, or the file a rule is: its first copy's.
     #[serde(serialize_with = "paths::lossy")]
     pub path: PathBuf,

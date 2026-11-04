@@ -21,6 +21,7 @@ use mindflayer_core::install::{
 use mindflayer_core::ledger::{InstallRecord, Target};
 use mindflayer_core::lifecycle;
 use mindflayer_core::migrate;
+use mindflayer_core::value::ContentHash;
 use mindflayer_core::{
     hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, LifecycleError,
     MindProject, Missed, Reference, Share, State, Status,
@@ -114,7 +115,7 @@ fn a_project_a_mind_toml_marks_gets_a_copy_of_the_rule_filed_by_its_route() {
     assert_eq!(
         added,
         Installed::Added {
-            name: String::from("git/no-force-push"),
+            name: "git/no-force-push".into(),
             paths: vec![copy.clone()],
             unhashed: None,
         }
@@ -126,9 +127,9 @@ fn a_project_a_mind_toml_marks_gets_a_copy_of_the_rule_filed_by_its_route() {
         ledger.records("app", Kind::Rule).unwrap(),
         [InstallRecord {
             kind: Kind::Rule,
-            name: String::from("git/no-force-push"),
+            name: "git/no-force-push".into(),
             source_id: None,
-            origin: Some(String::from(WORKSPACE_ORIGIN)),
+            origin: Some(WORKSPACE_ORIGIN.into()),
             content_hash: Some(held.clone()),
             targets: vec![Target {
                 agent: None,
@@ -180,14 +181,14 @@ fn a_file_at_a_rules_place_nothing_recorded_is_somebodys_in_a_project_a_mind_tom
     assert_eq!(
         put(&workspace, &ledger, &project, "git/no-force-push"),
         Installed::Foreign {
-            name: String::from("git/no-force-push"),
+            name: "git/no-force-push".into(),
             path: copy.clone(),
         }
     );
     assert_eq!(
         take(&workspace, &ledger, &project, "git/no-force-push").unwrap(),
         Removed::Foreign {
-            name: String::from("git/no-force-push"),
+            name: "git/no-force-push".into(),
             path: copy.clone(),
         }
     );
@@ -599,12 +600,12 @@ impl Fixture {
 }
 
 /// The hash a section of `body` for `route` is recorded with.
-fn section_hash(route: &str, body: &str) -> String {
+fn section_hash(route: &str, body: &str) -> ContentHash {
     Section::new(route, body).unwrap().hash()
 }
 
 /// A target of the section of a rule, by its hash.
-fn in_block(hash: String) -> Target {
+fn in_block(hash: ContentHash) -> Target {
     Target {
         agent: None,
         path: String::from("AGENTS.md"),
@@ -624,9 +625,9 @@ fn for_claude(route: &str, source: &str) -> Target {
 fn record(route: &str, source: &str, targets: Vec<Target>) -> InstallRecord {
     InstallRecord {
         kind: Kind::Rule,
-        name: route.to_owned(),
+        name: route.to_owned().into(),
         source_id: None,
-        origin: Some(String::from(WORKSPACE_ORIGIN)),
+        origin: Some(WORKSPACE_ORIGIN.into()),
         content_hash: Some(hash::bytes(source.as_bytes())),
         targets,
     }
@@ -1093,7 +1094,7 @@ fn a_section_this_workspace_did_not_write_is_somebodys_and_refuses_the_render() 
     assert_eq!(
         refused.installed,
         Installed::Foreign {
-            name: String::from("review/tone"),
+            name: "review/tone".into(),
             path: fixture.agents_md(),
         }
     );
@@ -1119,14 +1120,14 @@ fn a_file_for_claude_nothing_recorded_is_somebodys_and_refuses_the_install() {
     assert_eq!(
         refused.installed,
         Installed::Foreign {
-            name: String::from("rust/errors"),
+            name: "rust/errors".into(),
             path: file.clone(),
         }
     );
     assert_eq!(
         fixture.uninstall("rust/errors"),
         Removed::Foreign {
-            name: String::from("rust/errors"),
+            name: "rust/errors".into(),
             path: file,
         }
     );
@@ -1205,7 +1206,7 @@ fn rules_no_longer_offered_can_each_be_taken_out_and_the_rest_stay_as_they_are()
     assert_eq!(
         fixture.uninstall("git/no-force-push"),
         Removed::Edited {
-            name: String::from("git/no-force-push"),
+            name: "git/no-force-push".into(),
             paths: vec![fixture.agents_md()],
         }
     );
@@ -1358,9 +1359,13 @@ fn rendering_a_project_a_mind_toml_marks_renders_nothing() {
 fn status_of(fixture: &Fixture, route: &str) -> Option<(State, Vec<Agent>, Option<String>)> {
     let (status, failures) = Status::of_project(&fixture.project, Some(&fixture.workspace));
     assert!(failures.is_empty(), "{failures:?}");
-    status.projects[0]
-        .find(Kind::Rule, route)
-        .map(|rule| (rule.state, rule.agents.clone(), rule.origin.clone()))
+    status.projects[0].find(Kind::Rule, route).map(|rule| {
+        (
+            rule.state,
+            rule.agents.clone(),
+            rule.origin.clone().map(String::from),
+        )
+    })
 }
 
 #[test]
@@ -1556,10 +1561,13 @@ fn a_name_typed_bare_is_of_the_one_kind_that_offers_it() {
     let also_rule = fixture.typed("deploy-notes").unwrap();
 
     assert_eq!(
-        (rule.kind(), rule.name()),
+        (rule.kind(), rule.name().as_str()),
         (Kind::Rule, "git/no-force-push")
     );
-    assert_eq!((skill.kind(), skill.name()), (Kind::Skill, "deploy"));
+    assert_eq!(
+        (skill.kind(), skill.name().as_str()),
+        (Kind::Skill, "deploy")
+    );
     assert_eq!(also_rule.kind(), Kind::Rule);
     let nothing = fixture.typed("nothing").unwrap_err();
     assert!(
@@ -1675,7 +1683,7 @@ fn a_bare_name_nothing_records_says_whose_is_there_of_either_kind() {
         (
             Kind::Rule,
             Removed::Foreign {
-                name: String::from("review/tone"),
+                name: "review/tone".into(),
                 path: fixture.agents_md(),
             }
         )
@@ -1685,7 +1693,7 @@ fn a_bare_name_nothing_records_says_whose_is_there_of_either_kind() {
         (
             Kind::Skill,
             Removed::Foreign {
-                name: String::from("notes"),
+                name: "notes".into(),
                 path: skill,
             }
         )
@@ -1695,7 +1703,7 @@ fn a_bare_name_nothing_records_says_whose_is_there_of_either_kind() {
         (
             Kind::Skill,
             Removed::Absent {
-                name: String::from("nothing"),
+                name: "nothing".into(),
             }
         )
     );
@@ -1832,7 +1840,9 @@ fn a_project_whose_settings_name_no_agent_receives_neither_kind() {
 
 /// What each of `said` says, without its code.
 fn messages(said: Vec<Said>) -> Vec<String> {
-    said.into_iter().map(|said| said.message).collect()
+    said.into_iter()
+        .map(|said| said.message.into_string())
+        .collect()
 }
 
 /// What status says each rule the fixture's project received misses.
@@ -1854,7 +1864,7 @@ fn status_says_which_agents_read_a_rule_it_received_nowhere() {
         missed_in(&fixture),
         [Missed {
             kind: Kind::Rule,
-            name: String::from("rust/errors"),
+            name: "rust/errors".into(),
             agents: vec![Agent::Codex, Agent::OpenCode],
         }]
     );
@@ -1888,7 +1898,7 @@ fn status_says_the_agents_a_block_withheld_from_a_tracked_agents_md_misses() {
         missed_in(&fixture),
         [Missed {
             kind: Kind::Rule,
-            name: String::from("git/no-force-push"),
+            name: "git/no-force-push".into(),
             agents: vec![Agent::Codex, Agent::OpenCode],
         }]
     );

@@ -328,7 +328,7 @@ fn a_project_whose_settings_install_skills_in_one_folder_gets_one_copy_there_alo
     assert_eq!(
         done.installed,
         Installed::Added {
-            name: String::from("deploy"),
+            name: "deploy".into(),
             paths: vec![skills.clone()],
             unhashed: None,
         }
@@ -405,7 +405,7 @@ fn installing_into_a_project_marked_by_its_settings_puts_one_copy_where_each_age
     assert_eq!(
         done.installed,
         Installed::Added {
-            name: String::from("deploy"),
+            name: "deploy".into(),
             paths: vec![agents.clone(), claude.clone()],
             unhashed: None,
         }
@@ -490,7 +490,7 @@ fn installing_into_every_agents_folder_again_changes_nothing_and_uninstalling_ta
     assert_eq!(
         removed,
         Removed::Removed {
-            name: String::from("deploy"),
+            name: "deploy".into(),
             paths: vec![agents.clone(), claude.clone()],
             still_excluded: None,
             rendered: None,
@@ -551,7 +551,7 @@ fn somebodys_skill_in_either_agents_folder_refuses_the_install_and_leaves_the_ot
         assert_eq!(
             outcome,
             Installed::Foreign {
-                name: String::from("deploy"),
+                name: "deploy".into(),
                 path: copies[held].clone(),
             }
         );
@@ -608,7 +608,7 @@ fn a_skill_somebody_writes_beside_an_installed_one_in_a_folder_it_was_not_instal
     assert_eq!(
         removed,
         Removed::Removed {
-            name: String::from("deploy"),
+            name: "deploy".into(),
             paths: vec![agents.clone()],
             still_excluded: None,
             rendered: None,
@@ -665,7 +665,7 @@ fn a_record_naming_a_copy_outside_the_project_is_refused_rather_than_removed() {
             "alpha",
             &mindflayer_core::ledger::InstallRecord {
                 kind: Kind::Skill,
-                name: String::from("deploy"),
+                name: "deploy".into(),
                 source_id: None,
                 origin: None,
                 content_hash: None,
@@ -1453,7 +1453,7 @@ fn the_workspace_offers_its_own_skills_first_and_installs_them_like_any_other() 
 
     let offered: Vec<(&str, String)> = candidates
         .iter()
-        .map(|candidate| (candidate.name(), candidate.origin()))
+        .map(|candidate| (candidate.name().as_str(), candidate.origin().into_string()))
         .collect();
     assert_eq!(offered[0], ("commit-style", String::from("workspace")));
     assert_eq!(offered.len(), 2);
@@ -1973,13 +1973,13 @@ fn a_standing_is_serialized_as_its_slug() {
 fn each_offer_serializes_its_place_what_it_holds_and_its_origin() {
     let workspace = install::Offer::Workspace {
         kind: Kind::Skill,
-        name: String::from("deploy"),
+        name: "deploy".into(),
         summary: Some(String::from("Ship it")),
         path: std::path::PathBuf::from("/work/.mindflayer/skills/deploy"),
     };
     let loaded = install::Offer::Loaded {
         kind: Kind::Rule,
-        name: String::from("git/no-force"),
+        name: "git/no-force".into(),
         summary: None,
         path: std::path::PathBuf::from("/team/.mindflayer/rules/git/no-force.md"),
         entry: String::from("../team"),
@@ -2012,18 +2012,20 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
     let candidate = install::Candidate {
         offer: install::Offer::Shelf(gather::Gathered {
             kind: Kind::Skill,
-            name: String::from("review"),
+            name: "review".into(),
             path: String::from(".mindflayer/skills/github.com-acme-skills/review"),
             summary: Some(String::from("Review a change")),
-            revision: Some(String::from("4f9c2a7")),
+            revision: Some("4f9c2a7".into()),
             gathered_at: 1_790_000_000,
             source: mindflayer_core::ledger::Source {
                 id: 1,
                 kind: mindflayer_core::SourceKind::Git,
-                url: String::from("https://me:s3cret@github.com/acme/skills.git"),
+                url: mindflayer_core::value::Redacted::new(
+                    "https://me:s3cret@github.com/acme/skills.git",
+                ),
                 reference: Some(String::from("main")),
                 subdirectory: String::from("skills"),
-                revision: Some(String::from("4f9c2a7")),
+                revision: Some("4f9c2a7".into()),
                 directory: String::from("github.com-acme-skills"),
             },
         }),

@@ -63,6 +63,9 @@ ts-rs = { version = "12", optional = true, features = ["no-serde-warnings"] }
 # crates it brings; serde_json beside it to write what a type says by hand.
 schemars = { version = "1.2", optional = true }
 serde_json = { version = "1", optional = true }
+# What a fixture mother holds its folder in (`mother::fixture`), only under
+# `mother`, as the dev-dependency below is for core's own tests.
+tempfile = { version = "3", optional = true }
 
 [features]
 # The TypeScript types of what core hands a front end: `make web/types`
@@ -72,8 +75,16 @@ ts = ["dep:ts-rs"]
 # api/schemas` builds with it to write them into docs/api/schemas, and
 # nothing else does.
 schema = ["dep:schemars", "dep:serde_json"]
+# The object mothers tests build the domain with (`mother`): core's own
+# compile them under `cfg(test)`, and its integration tests and the CLI's
+# through a dev-dependency that turns this on, so no binary holds them.
+mother = ["dep:tempfile"]
 
 [dev-dependencies]
+# Core itself, with its mothers, for the integration suites in `tests/`, which
+# see only what the crate makes public: a dependency on itself, which Cargo
+# builds once for every test target, so a plain build holds no mother.
+mindflayer-core = { path = ".", features = ["mother"] }
 # To pin what a report's types serialize to, name by name: what a front end
 # prints as JSON is a contract. The version the server already builds.
 serde_json = "1"

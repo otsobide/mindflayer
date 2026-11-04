@@ -54,6 +54,7 @@ use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
 use crate::paths;
 use crate::status::State;
+use crate::value::{ArtifactName, Origin};
 use crate::view::StateCount;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
@@ -102,10 +103,10 @@ pub struct ProjectPlan {
 #[derive(Debug)]
 pub struct Update {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// Where it came from, as `--from` takes it: none for a record from
     /// before origins were kept.
-    pub origin: Option<String>,
+    pub origin: Option<Origin>,
     pub standing: Standing,
     pub step: Step,
     /// What writing it came to, once applied: none until then, for one an
@@ -141,7 +142,7 @@ pub enum Step {
     /// Offered from each of these places, and recorded before origins were
     /// kept, with no copy left that tells which: left, for an install whose
     /// `--from` says which.
-    Unsure(Vec<String>),
+    Unsure(Vec<Origin>),
 }
 
 impl Step {
@@ -291,7 +292,7 @@ pub enum Left {
     )]
     Edited {
         kind: Kind,
-        name: String,
+        name: ArtifactName,
         project: String,
         at: Vec<String>,
     },
@@ -306,9 +307,9 @@ pub enum Left {
     )]
     Orphaned {
         kind: Kind,
-        name: String,
+        name: ArtifactName,
         project: String,
-        origin: Option<String>,
+        origin: Option<Origin>,
         edited: bool,
     },
     /// Offered from each of these places, and recorded before origins were
@@ -320,16 +321,16 @@ pub enum Left {
     )]
     Unsure {
         kind: Kind,
-        name: String,
+        name: ArtifactName,
         project: String,
-        origins: Vec<String>,
+        origins: Vec<Origin>,
     },
 }
 
 /// Where an orphaned installation is no longer offered, as its record names
 /// it: by its origin, or where it came from, for a record from before
 /// origins were kept.
-fn offered_by(origin: &Option<String>) -> String {
+fn offered_by(origin: &Option<Origin>) -> String {
     origin.as_deref().map_or_else(
         || String::from("where it came from"),
         |origin| format!("by {origin}"),
@@ -468,7 +469,7 @@ pub fn apply(
             if rendered {
                 renders = true;
                 if matches!(update.step, Step::WriteOver(_)) {
-                    forced.push(update.name.clone());
+                    forced.push(update.name.to_string());
                 }
                 continue;
             }
@@ -556,7 +557,7 @@ fn plan_with(
                     && update.standing == Standing::Edited
                     && !(*asked && matches!(update.step, Step::WriteOver(_)))
             })
-            .map(|(_, update)| update.name.clone())
+            .map(|(_, update)| update.name.to_string())
             .collect();
         let installations = updates
             .into_iter()
@@ -676,11 +677,10 @@ pub struct ProjectUpdates {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Pending {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// Where it came from, as `--from` takes it: none for a record from
     /// before origins were kept.
-    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
-    pub origin: Option<String>,
+    pub origin: Option<Origin>,
     /// How it stands, as `status` says it.
     pub state: State,
     /// What an update does with it.

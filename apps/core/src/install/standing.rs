@@ -27,6 +27,7 @@ use crate::copy;
 use crate::hash;
 use crate::kind::Kind;
 use crate::ledger::{InstallRecord, Target};
+use crate::value::{ContentHash, Origin};
 use crate::workspace::{FlayerWorkspace, MindProject};
 
 /// How one offer stands with respect to one project.
@@ -192,7 +193,7 @@ impl Surveyed {
     pub(crate) fn source(
         &self,
         workspace: &FlayerWorkspace,
-    ) -> Result<Option<&Offer>, Vec<String>> {
+    ) -> Result<Option<&Offer>, Vec<Origin>> {
         match &self.offered[..] {
             [] => Ok(None),
             [one] => Ok(Some(one)),
@@ -440,10 +441,10 @@ fn holds(workspace: &FlayerWorkspace, offer: &Offer, copy: &Path) -> bool {
 
 /// The hash of the section `offer`, a rule, renders as: none for one about
 /// some files only, which has no section, or one that cannot be read.
-fn section_of(workspace: &FlayerWorkspace, offer: &Offer) -> Option<String> {
+fn section_of(workspace: &FlayerWorkspace, offer: &Offer) -> Option<ContentHash> {
     let rule = Artifact::rule(
         offer.source(workspace),
-        offer.name().to_owned(),
+        offer.name().to_string(),
         workspace.root(),
     )
     .ok()?;

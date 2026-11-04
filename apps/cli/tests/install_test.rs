@@ -334,7 +334,7 @@ fn the_screen_opens_with_the_place_an_installation_came_from_ticked_though_its_c
         .rows
         .iter()
         .filter(|row| row.candidate.name() == "commit-style")
-        .map(|row| (row.candidate.origin(), row.checked))
+        .map(|row| (row.candidate.origin().into_string(), row.checked))
         .collect();
     assert_eq!(
         ticked,

@@ -44,6 +44,7 @@ use crate::ledger::{
 use crate::paths;
 use crate::settings::Share;
 use crate::url::redacted;
+use crate::value::{ArtifactName, ContentHash, Origin};
 use crate::workspace::{same_directory, FlayerWorkspace, Loaded, MindProject, WorkspaceError};
 
 mod plan;
@@ -169,7 +170,7 @@ pub enum Offer {
     /// projects it manages.
     Workspace {
         kind: Kind,
-        name: String,
+        name: ArtifactName,
         summary: Option<String>,
         /// The directory it is, wherever the workspace keeps it.
         path: PathBuf,
@@ -178,7 +179,7 @@ pub enum Offer {
     /// that workspace keeps it rather than from a copy.
     Loaded {
         kind: Kind,
-        name: String,
+        name: ArtifactName,
         summary: Option<String>,
         /// The directory it is, inside the loaded workspace.
         path: PathBuf,
@@ -206,7 +207,7 @@ impl Serialize for Offer {
             place: Place,
             #[serde(flatten)]
             held: T,
-            origin: String,
+            origin: Origin,
         }
         #[derive(Serialize)]
         struct Own<'a> {
@@ -227,7 +228,7 @@ impl Serialize for Offer {
             workspace: &'a str,
         }
 
-        let origin = redacted(&self.origin()).into_owned();
+        let origin = Origin::from(redacted(&self.origin()));
         match self {
             Offer::Shelf(gathered) => Placed {
                 place: Place::Shelf,
@@ -285,7 +286,7 @@ impl Offer {
         }
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &ArtifactName {
         match self {
             Offer::Shelf(gathered) => &gathered.name,
             Offer::Workspace { name, .. } | Offer::Loaded { name, .. } => name,
@@ -317,10 +318,10 @@ impl Offer {
     /// One string for every front end: what a listing prints is what
     /// `--from` accepts. A source's address carries no credential, because
     /// the ledger hands none back.
-    pub fn origin(&self) -> String {
+    pub fn origin(&self) -> Origin {
         match self {
             Offer::Shelf(gathered) => gathered.source.origin(),
-            Offer::Workspace { .. } => String::from(WORKSPACE_ORIGIN),
+            Offer::Workspace { .. } => Origin::from(WORKSPACE_ORIGIN),
             Offer::Loaded { entry, .. } => loaded_origin(entry),
         }
     }
@@ -362,8 +363,8 @@ pub const LOADED_PREFIX: &str = "load:";
 /// its marker spells it: written once, for an offer and for a listing of
 /// the loads alike ([`crate::view::LoadedWorkspace`]), so what a listing
 /// says `--from` takes is what an install from that load records.
-pub fn loaded_origin(entry: &str) -> String {
-    format!("{LOADED_PREFIX}{entry}")
+pub fn loaded_origin(entry: &str) -> Origin {
+    Origin::from(format!("{LOADED_PREFIX}{entry}"))
 }
 
 /// `from` as `--from` should match it: when it is a path, typed relative to
@@ -384,7 +385,10 @@ pub fn resolve_from(workspace: &FlayerWorkspace, base: &Path, from: &str) -> Str
         .into_iter()
         .find(|loaded| paths::normalize(&loaded.root) == path || same_place(&loaded.root, &path))
         .and_then(|loaded| paths::to_config_string(&loaded.entry))
-        .map_or_else(|| from.to_owned(), |entry| loaded_origin(&entry))
+        .map_or_else(
+            || from.to_owned(),
+            |entry| loaded_origin(&entry).into_string(),
+        )
 }
 
 /// Whether a declared name is one plain folder name, and so safe to join onto
@@ -577,7 +581,7 @@ pub struct Candidate {
 }
 
 impl Candidate {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &ArtifactName {
         self.offer.name()
     }
 
@@ -591,7 +595,7 @@ impl Candidate {
     }
 
     /// See [`Offer::origin`].
-    pub fn origin(&self) -> String {
+    pub fn origin(&self) -> Origin {
         self.offer.origin()
     }
 
@@ -679,7 +683,7 @@ fn from_loads(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Loads {
                     },
                     _ => LoadFailure::UnsafeName {
                         path,
-                        name: artifact.name().to_owned(),
+                        name: artifact.name().to_string(),
                     },
                 });
                 continue;
@@ -801,7 +805,7 @@ pub(crate) fn survey_among(
                     &recorded,
                     record.map(|record| (record, offers)),
                 );
-                said.push((offer.name().to_owned(), standing));
+                said.push((offer.name().to_string(), standing));
                 standing
             }
         };
@@ -832,7 +836,7 @@ pub fn standings(
 ) -> Result<Vec<(String, Standing)>, LedgerError> {
     Ok(surveyed(workspace, ledger, project, kind)?
         .into_iter()
-        .map(|surveyed| (surveyed.record.name, surveyed.standing))
+        .map(|surveyed| (surveyed.record.name.into_string(), surveyed.standing))
         .collect())
 }
 
@@ -912,7 +916,7 @@ pub(crate) fn orphaned(
     kind: Kind,
 ) -> Result<Vec<String>, LedgerError> {
     let loads = workspace.loads();
-    let away: Vec<String> = loads
+    let away: Vec<Origin> = loads
         .iter()
         .filter(|loaded| loaded.workspace.is_err())
         .map(load_origin)
@@ -948,7 +952,7 @@ pub(crate) fn orphaned(
                         .any(|path| path.starts_with(place) || place.starts_with(path))
                 })
         })
-        .map(|surveyed| surveyed.record.name)
+        .map(|surveyed| surveyed.record.name.into_string())
         .collect())
 }
 
@@ -1004,7 +1008,7 @@ fn places(workspace: &FlayerWorkspace, loads: &[Loaded], record: &InstallRecord)
 
 /// The origin a record names for what it installed from `loaded`, as
 /// [`Offer::origin`] spells it.
-fn load_origin(loaded: &Loaded) -> String {
+fn load_origin(loaded: &Loaded) -> Origin {
     let entry = paths::to_config_string(&loaded.entry)
         .unwrap_or_else(|| loaded.entry.display().to_string());
     loaded_origin(&entry)
@@ -1482,12 +1486,12 @@ pub(crate) fn install_held(
     if !from.is_dir() {
         return Err(match &candidate.offer {
             Offer::Loaded { entry, .. } => InstallError::Gone {
-                name,
+                name: name.into_string(),
                 path: from,
                 workspace: paths::normalize(&workspace.root().join(entry)),
             },
             _ => InstallError::Missing {
-                name,
+                name: name.into_string(),
                 path: from,
                 workspace: workspace.root().to_path_buf(),
             },
@@ -1531,7 +1535,7 @@ pub(crate) fn install_held(
     let refused = unfit(kind, &from, &name)?;
     if !refused.is_empty() {
         return Err(InstallError::Unfit {
-            name,
+            name: name.into_string(),
             issues: refused,
         });
     }
@@ -1809,8 +1813,8 @@ pub(crate) fn untracked(project: &MindProject, copies: &[PathBuf]) -> Vec<PathBu
 /// The one hash every copy holds ([`hash::tree`]), or why there is none:
 /// a copy that cannot be hashed, or, should one change while the others are
 /// read, copies that do not hold the same.
-pub(crate) fn one_hash(copies: &[PathBuf]) -> Result<String, String> {
-    let mut found: Option<(String, &Path)> = None;
+pub(crate) fn one_hash(copies: &[PathBuf]) -> Result<ContentHash, String> {
+    let mut found: Option<(ContentHash, &Path)> = None;
     for copy in copies {
         let hash = hash::tree(copy).map_err(|error| error.to_string())?;
         match &found {
@@ -1907,11 +1911,11 @@ pub fn uninstall_with(
     let Some(record) = ledger.installation(&entry, kind, name)? else {
         return Ok(match held_where(project, kind, name) {
             Some(path) => Removed::Foreign {
-                name: name.to_owned(),
+                name: ArtifactName::from(name),
                 path,
             },
             None => Removed::Absent {
-                name: name.to_owned(),
+                name: ArtifactName::from(name),
             },
         });
     };
@@ -1931,7 +1935,7 @@ pub fn uninstall_with(
         let edited = edited(workspace, ledger, project, kind, name)?;
         if !edited.is_empty() {
             return Ok(Removed::Edited {
-                name: name.to_owned(),
+                name: ArtifactName::from(name),
                 paths: edited,
             });
         }
@@ -1970,7 +1974,7 @@ pub fn uninstall_with(
         .and_then(|key| exclude::remove(project.root(), key, &entries(project, &paths)).err())
         .map(|error| error.to_string());
     Ok(Removed::Removed {
-        name: name.to_owned(),
+        name: ArtifactName::from(name),
         paths,
         still_excluded,
         rendered: None,
@@ -2316,26 +2320,29 @@ pub(crate) struct Disowned {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Installed {
     Added {
-        name: String,
+        name: ArtifactName,
         paths: Vec<PathBuf>,
         unhashed: Option<String>,
     },
     Updated {
-        name: String,
+        name: ArtifactName,
         paths: Vec<PathBuf>,
         unhashed: Option<String>,
     },
     Unchanged {
-        name: String,
+        name: ArtifactName,
         paths: Vec<PathBuf>,
         unhashed: Option<String>,
     },
     /// Something of that name is already in one of the targets, at `path`,
     /// and is not ours to replace, so nothing was written in any of them.
-    Foreign { name: String, path: PathBuf },
+    Foreign { name: ArtifactName, path: PathBuf },
     /// A copy Mindflayer installed was changed since, at each of `paths`,
     /// and the install was not forced, so nothing was written in any target.
-    Edited { name: String, paths: Vec<PathBuf> },
+    Edited {
+        name: ArtifactName,
+        paths: Vec<PathBuf>,
+    },
 }
 
 impl Installed {
@@ -2407,7 +2414,7 @@ impl From<Installed> for Installation {
 pub enum Removed {
     /// Every copy its installation recorded is gone, and so is the record.
     Removed {
-        name: String,
+        name: ArtifactName,
         paths: Vec<PathBuf>,
         /// Why the exclude block of a local project still names them, when it
         /// could not be edited: a line left there keeps whatever somebody
@@ -2420,13 +2427,16 @@ pub enum Removed {
         rendered: Option<Box<rules::Rendered>>,
     },
     /// Present, at `path`, but nobody here put it there.
-    Foreign { name: String, path: PathBuf },
+    Foreign { name: ArtifactName, path: PathBuf },
     /// Installed, but a copy was changed since, at each of `paths`, and the
     /// uninstall was not forced, so every copy is where it was, and so is
     /// the record.
-    Edited { name: String, paths: Vec<PathBuf> },
+    Edited {
+        name: ArtifactName,
+        paths: Vec<PathBuf>,
+    },
     /// Nothing of that name to remove.
-    Absent { name: String },
+    Absent { name: ArtifactName },
 }
 
 impl Removed {
@@ -2714,7 +2724,7 @@ pub enum InstallError {
     #[error("rule `{name}` was installed from {}, which no longer offers it, so the project's rules are not rendered: put it back there, or uninstall it", .origin.as_deref().unwrap_or("a place not recorded"))]
     NoLongerOffered {
         name: String,
-        origin: Option<String>,
+        origin: Option<Origin>,
     },
     #[error("{file}: its block holds rule `{route}`, which this workspace did not install there, so the project's rules are not rendered: uninstall it from the workspace that did, or take its section out by hand")]
     NotRecorded { file: PathBuf, route: String },
@@ -2755,7 +2765,7 @@ pub enum InstallError {
     #[error("nothing called `{name}` can be installed{}: gather it, load a workspace that has it with `flayer load`, or add it to the workspace with `flayer add`", from.as_deref().map(|from| format!(" from {from}")).unwrap_or_default())]
     NotOffered { name: String, from: Option<String> },
     #[error("`{name}` is offered by more than one place ({}), so say which with --from", .origins.join(", "))]
-    OfferedTwice { name: String, origins: Vec<String> },
+    OfferedTwice { name: String, origins: Vec<Origin> },
     #[error("`{name}` is offered as {}, so say which: {}", as_kinds(.kinds), qualified(.name, .kinds))]
     OfferedAsKinds { name: String, kinds: Vec<Kind> },
     #[error("`{name}` is installed as {}, so say which: {}", as_kinds(.kinds), qualified(.name, .kinds))]

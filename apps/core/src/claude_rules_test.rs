@@ -16,7 +16,7 @@ fn a_rules_file_is_filed_by_its_route_in_mindflayers_own_folder() {
 /// What [`plan`] decides, by name.
 fn decided(asked: Option<&str>, recorded: Option<&str>, found: Found) -> &'static str {
     let recorded = recorded.map(|bytes| hash::bytes(bytes.as_bytes()));
-    match plan(asked.map(str::as_bytes), recorded.as_deref(), found) {
+    match plan(asked.map(str::as_bytes), recorded.as_ref(), found) {
         Plan::Create(_) => "create",
         Plan::Replace(_) => "replace",
         Plan::Keep(_) => "keep",

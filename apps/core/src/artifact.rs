@@ -17,6 +17,7 @@ use crate::rule::{Lenient, RuleManifest};
 use crate::skill::{
     Compatibility, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN,
 };
+use crate::value::ArtifactName;
 
 /// What an artifact declared about itself.
 ///
@@ -59,7 +60,7 @@ impl Declared {
 /// one, and every copy is still [validated](Self::validate) where it is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Artifact {
-    name: String,
+    name: ArtifactName,
     path: PathBuf,
     project: PathBuf,
     declared: Declared,
@@ -266,7 +267,7 @@ impl Artifact {
         // first line of the description its author wrote.
         let summary = first_line(&manifest.description);
         Ok(Self {
-            name: manifest.name.clone(),
+            name: ArtifactName::from(&manifest.name),
             path: directory,
             project: project.into(),
             declared: Declared::Skill(manifest),
@@ -308,7 +309,7 @@ impl Artifact {
         // description: the body is what an agent reads once the front matter
         // is taken off, so its opening line is what the agent meets first.
         Self {
-            name,
+            name: ArtifactName::from(name),
             path,
             project: project.into(),
             declared: Declared::Rule(manifest),
@@ -329,7 +330,7 @@ impl Artifact {
     /// Declared, for a skill. For a rule, its route under the rules folder
     /// without the extension, so `git/no-force-push` is a name and the folders
     /// above it are grouping and nothing more.
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &ArtifactName {
         &self.name
     }
 

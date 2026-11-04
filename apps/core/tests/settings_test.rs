@@ -291,7 +291,7 @@ fn a_workspace_links_and_lists_a_project_marked_by_its_settings() {
     let names: Vec<(Kind, &str)> = catalog
         .artifacts()
         .iter()
-        .map(|artifact| (artifact.kind(), artifact.name()))
+        .map(|artifact| (artifact.kind(), artifact.name().as_str()))
         .collect();
     assert_eq!(names, vec![(Kind::Skill, "deploy")]);
     assert!(catalog.failures().is_empty());

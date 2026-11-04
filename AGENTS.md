@@ -148,7 +148,7 @@ under `apps/` with its own `Makefile`:
   (`settings`, the marker from v3 on), workspaces, which workspace a command
   uses (`resolve`), the shell code that activates one (`activate`), kinds, the
   agents and where each kind goes for them (`agent`), the catalog, gathering
-  (`gix`), the SQLite ledger, installing, keeping installs out of git
+  (through `port::Remote`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
   (`agents_md`) and into Claude's rules folder (`claude_rules`), whether
   Claude reads that block and the `@AGENTS.md` import in a project's
@@ -190,8 +190,21 @@ under `apps/` with its own `Makefile`:
   and `validate` say of each
   artifact (`reading`), and what core says of one a command is about to
   write, by the command's own checks and in `validate`'s words, for a
-  front end judging what is typed (`draft`). Its only I/O is files, and it never reads the
-  environment. Under its `ts` feature, `typescript` gives what it hands a
+  front end judging what is typed (`draft`). Every record, report and view
+  it builds is an aggregate of the value objects in `value` (a copy's
+  `ContentHash`, a `Redacted` URL or message, an `Origin`, an
+  `ArtifactName`, a `Revision`, a `ProjectId`), each of which, and each
+  record, a test builds through its object mother in `mother`, compiled only
+  for tests (`cfg(test)`, or the `mother` feature a dev-dependency turns
+  on). Its only I/O beyond files
+  goes through a port (`port`: a `Remote` a gather fetches through, a
+  `LedgerStore` the ledger keeps its records in, a `Clock` it stamps them
+  by), each implemented by an adapter in `adapter` (`adapter::gix::Gix`,
+  its credentials callback in `adapter/gix/credentials.rs`;
+  `adapter::sqlite::Sqlite`, every query and schema step, its tests in
+  `adapter/sqlite_test.rs`; and `SystemClock`). `ledger::Ledger` is the
+  facade every caller holds, reaching its store's methods through `Deref`.
+  It never reads the environment. Under its `ts` feature, `typescript` gives what it hands a
   front end TypeScript (the roots its export writes), under its `schema`
   feature `schema` gives it JSON Schema (the roots its export writes, each
   given or taken, `Schemas`, `Together`), and under either `described` says
@@ -393,6 +406,29 @@ These are easy to break from a single file without noticing.
   the order `flayer scan --suggest` ranks what it finds in (`scan::Order`),
   in which the minds screen, the link form and the panel's page of what
   could be linked show what is not linked, without sorting it.
+- **Values are value objects, and the world is reached through ports.**
+  A field that holds a hash, a URL or words quoting one, an origin, an
+  artifact's name or a revision holds the value in `value`, never a
+  `String`: one held to a rule (`ContentHash`, `ProjectId`, `Redacted`) is
+  made only the way its rule allows, so no `From<String>`, and one named
+  apart (`ArtifactName`, `Origin`, `Revision`) holds any text, since core
+  reads leniently. A new value joins `value` through its `text_value!`
+  macro, so it reads as its text and goes out as one, said in TypeScript
+  and JSON Schema as a `String` is, and no contract moves
+  (`make web/types/check`, `make api/schemas/check`); its store's adapter
+  says how it is kept (the ledger's `ToSql` and `FromSql`), never `value`.
+  Whatever core needs of the world beyond its files is a trait in `port`,
+  in core's own words, its library's errors and types turned into those at
+  the adapter: a gather fetches only through `Request::remote` (`Gix`
+  unless `through` hands another), the ledger keeps its records only in its
+  `LedgerStore` (SQLite unless `Ledger::new` hands another) and reads the
+  time only through its `Clock` (`with_clock`), and no module but
+  `adapter` names `gix` for a fetch or `rusqlite` at all: a store's error
+  reaches `LedgerError` boxed, so the port names no store's type. A new library outside core is an adapter of a port, injected
+  with the default built in, as D-14 has it for HTTP; a new front end is
+  one more driver of the command lines (`commands::run_line`), never a
+  path of its own into core (docs/architecture.md, "Values, ports and
+  adapters", D-25).
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
@@ -880,16 +916,20 @@ These are easy to break from a single file without noticing.
     reads the block as (`Reach::Same`).
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
-    URL it writes and reads, `GitError` to what it says, `git::scrub` to a
-    clone's config and reflogs. A gather refuses a URL that carries one. A
+    URL it writes and reads, `GitError` to what it says, the gix adapter's
+    scrub (`Remote::scrub`) to a clone's config and reflogs. A gather refuses a URL that carries one, and one typed as its branch or
+    folder, which the ledger would keep word for word. A
     command that writes to the ledger opens it with
     `FlayerWorkspace::ledger_to_write`, which scrubs what an older build
     stored first and hands back what it took out to be said; one that only
     reads opens it with `ledger_for_reading`, which scrubs nothing. The
     install screen is a read until it applies, and the lines it then runs
-    scrub as any `install` does. Anything new that keeps or prints a URL goes
-    through `url::redacted` too, a serialized one included
-    (`url::serialize_redacted`), whatever built the value.
+    scrub as any `install` does. Anything new that keeps or prints a URL
+    holds it as a value made without its credentials: a `value::Redacted`
+    (made only through `Redacted::new`, which redacts) for a URL or words
+    that may quote one, a `value::Origin` for where an install came from,
+    which writes itself out redacted whatever built it. Never a `String`
+    redacted where it is written.
 - **Writers take turns; readers never wait.** Core's writers hold the
   workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`,
@@ -923,7 +963,7 @@ These are easy to break from a single file without noticing.
   holder's pid, except a record drop's or carry's (`install::disown`,
   `install::carry`), which follows a change already made.
 - **A gather never prompts for a credential itself.** Every connection `gix`
-  lets a clone configure gets the callback in `gather/credentials.rs`, which
+  lets a clone configure gets the callback in `adapter/gix/credentials.rs`, which
   runs the git-config credential helpers with `gix`'s prompt and askpass
   turned off. A credential none of them has is `GitError::Credentials`, never
   a question on a terminal the TUI owns or a server lacks. Anything new that
@@ -952,9 +992,10 @@ These are easy to break from a single file without noticing.
   when asked, never on a read (`flayer migrate --library`, `mind migrate`).
   A key an older build reads past without misreading anything moves no
   version, as the default workspace's `known` did not.
-  - A ledger schema step is one more block in `Ledger::migrate`, which takes
+  - A ledger schema step is one more block in the SQLite store's migration
+    (`adapter::sqlite::Sqlite::migrate`), which takes
     the write lock, copies the file to `mindflayer.db.v<old>.bak`
-    (`Ledger::back_up`) and runs every step in one transaction. A step fills
+    (`Sqlite::back_up`) and runs every step in one transaction. A step fills
     in old rows in its own SQL, not through today's code, and adds a fixture
     of what the version before it wrote
     (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to migrate.
@@ -1246,6 +1287,36 @@ These are easy to break from a single file without noticing.
   helpers in `tests/common/mod.rs` (`use common::*;`). Unit tests sit in
   `src/<module>_test.rs`, wired in with
   `#[cfg(test)] #[path = "<module>_test.rs"] mod tests;`.
+- What a test needs is built by an object mother (`mindflayer_core::mother`,
+  `apps/core/src/mother/`), never by hand where a mother makes it: one per
+  value object (`ContentHashMother`, `RedactedMother`, `OriginMother`,
+  `ArtifactNameMother`, `RevisionMother`, `ProjectIdMother`), per record the
+  ledger keeps (`InstallRecordMother`, `TargetMother`, `SourceMother`,
+  `GatheredMother`, `MovedMother`, `EntryMother`), for a skill's and a
+  rule's text (`SkillMother`, `RuleMother`), a project's settings
+  (`SettingsMother`), the URLs a credential can be typed into (`UrlMother`,
+  each form beside what redacting leaves of it) and what lives on the disk
+  (`WorkspaceMother`, `ProjectMother`, `GitRepositoryMother`, `ShelfMother`).
+  Each is a unit struct with `random()`, `create(..)` and a named
+  constructor for each shape a test asks for by name (`not_hashes`,
+  `unwritable`, `every_credentialed`), made only the way its value's rule
+  allows; a mother of a record is made of the mothers of its values, so a
+  rule changes in one place. `tests/common`'s builders delegate to them. What
+  is random is drawn afresh each run (`mother::random`, from `std`'s hasher
+  keys, no dependency), so a rule is tried on cases no test spells: a test
+  drawing from a mother names the value in what it asserts, and loops over
+  many draws where a rule holds of every value. `src/mother_test.rs` holds
+  every mother to the rule it claims, through core's own judgement. Core's
+  unit tests reach them as `crate::mother` (`cfg(test)`); its integration
+  suites and the CLI's through a dev-dependency on core with its `mother`
+  feature, which no build of a binary turns on. The CLI's suites add mothers
+  of what only a command takes (`tests/common/mother.rs`: `ValueMother`,
+  `OlderBuildMother`); the server depends on no mindflayer crate, so its
+  suites keep all of theirs there (hosts, origins, tokens and headers). A new value object gets a mother and a section of
+  `tests/value_test.rs`, which holds every value to one set of laws
+  (`reads_as_its_text`) and to its rule both ways, and a new port a
+  contract suite every adapter of it runs (`tests/ledger_store_test.rs`,
+  `tests/remote_test.rs`).
 - No test reads the real home, the real agent homes or a workspace the
   developer's shell activated, which `HOME`, `MINDFLAYER_HOME`,
   `MINDFLAYER_WORKSPACE`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
@@ -1439,8 +1510,13 @@ These are easy to break from a single file without noticing.
   `feature/*`, `hotfix/*` or `release/*` (or `main`, for a back-merge). PRs
   into `main` come only from `dev`. PRs are merged with merge commits.
 - CI runs `fmt and clippy`, then `test (core)`, then `test (cli)`, `test
-  (server)`, `test (web)` and `types drift (web)`, and builds each app after
-  its tests pass. `test (web)` sets up Node, as only `e2e (web)` does
+  (server)`, `test (web)` and `types drift (web)`, one workflow
+  (`test-and-build`) whose tests are split by app alone, never by layer:
+  an app's unit tests, value objects and integration suites run in its
+  `test (<app>)`. It builds each app after its tests pass, in debug and then,
+  once that passes, its release, the optimized build (`make core/release`,
+  `make server/release`, `make cli/release`), in the same `build (<app>)`
+  job. `test (web)` sets up Node, as only `e2e (web)` does
   besides on Linux: it lints, type-checks, tests and builds the panel, and
   uploads the build.
   `build (cli)` waits for it, embeds that build in a release, then removes

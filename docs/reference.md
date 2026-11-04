@@ -827,6 +827,11 @@ $ flayer gather git https://me:ghp_t0ken@github.com/acme/private-skills
 error: https://github.com/acme/private-skills: a password, a token or, over http(s), a user name in the URL is refused, because gathering stores and shows the URL: gather it without one, and configure a git credential helper that has it
 ```
 
+So is such a URL typed where the branch (`--ref`) or the folder (`--path`)
+goes, which the workspace would otherwise keep as that branch or folder, word
+for word, and refused with the same words, the URL said without what it
+carried.
+
 The user ssh logs in as is not a credential, and is kept
 (`git@github.com:acme/skills`, `ssh://git@github.com/acme/skills`). Over https
 a user name on its own is refused too, because a token can stand in for one:

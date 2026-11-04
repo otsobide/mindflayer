@@ -79,17 +79,17 @@ fn a_refused_install_or_uninstall_says_why_by_its_code() {
 
     for installed in [
         Installed::Added {
-            name: name(),
+            name: name().into(),
             paths: vec![path()],
             unhashed: None,
         },
         Installed::Updated {
-            name: name(),
+            name: name().into(),
             paths: vec![path()],
             unhashed: None,
         },
         Installed::Unchanged {
-            name: name(),
+            name: name().into(),
             paths: vec![path()],
             unhashed: None,
         },
@@ -98,14 +98,14 @@ fn a_refused_install_or_uninstall_says_why_by_its_code() {
     }
     assert_eq!(
         done(Installed::Foreign {
-            name: name(),
+            name: name().into(),
             path: path(),
         }),
         Some("foreign")
     );
     assert_eq!(
         done(Installed::Edited {
-            name: name(),
+            name: name().into(),
             paths: vec![path()],
         }),
         Some("edited")
@@ -113,7 +113,7 @@ fn a_refused_install_or_uninstall_says_why_by_its_code() {
 
     assert_eq!(
         undone(Removed::Removed {
-            name: name(),
+            name: name().into(),
             paths: vec![path()],
             still_excluded: None,
             rendered: None,
@@ -122,20 +122,22 @@ fn a_refused_install_or_uninstall_says_why_by_its_code() {
     );
     assert_eq!(
         undone(Removed::Foreign {
-            name: name(),
+            name: name().into(),
             path: path(),
         }),
         Some("foreign")
     );
     assert_eq!(
         undone(Removed::Edited {
-            name: name(),
+            name: name().into(),
             paths: vec![path()],
         }),
         Some("edited")
     );
     assert_eq!(
-        undone(Removed::Absent { name: name() }),
+        undone(Removed::Absent {
+            name: name().into()
+        }),
         Some("not_installed")
     );
 }

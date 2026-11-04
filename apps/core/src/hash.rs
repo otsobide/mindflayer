@@ -8,6 +8,10 @@
 //! platform) would call an untouched copy edited. Two recipes, one for a
 //! folder ([`tree`]) and one for a file written whole ([`bytes`]), each for
 //! its own kind of target and never compared with the other.
+//!
+//! What either makes is a [`ContentHash`], the value it is, rather than the
+//! text it is written as: only these recipes, and a digest somebody hands
+//! over that [`ContentHash::parse`] reads, make one.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -15,6 +19,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
+
+use crate::value::ContentHash;
 
 /// The SHA-256 of everything under `root`, as 64 lowercase hex digits.
 ///
@@ -46,7 +52,7 @@ use sha2::{Digest, Sha256};
 /// `/dev/zero` never ends), and the text of a link is spelled differently on
 /// Windows. Mindflayer never writes one into a copy, since [`crate::copy::tree`]
 /// copies what a link points at, so one found there was put there afterwards.
-pub fn tree(root: &Path) -> Result<String, io::Error> {
+pub fn tree(root: &Path) -> Result<ContentHash, io::Error> {
     let mut entries = Vec::new();
     walk(root, &[], &mut entries)?;
     entries.sort_by(|a, b| a.path.cmp(&b.path));
@@ -83,7 +89,7 @@ pub fn tree(root: &Path) -> Result<String, io::Error> {
 /// part of its tree's hash; and handed the bytes rather than a path, so what
 /// is hashed is what was written or read, never a file that changed in
 /// between.
-pub fn bytes(contents: &[u8]) -> String {
+pub fn bytes(contents: &[u8]) -> ContentHash {
     hex(Sha256::new_with_prefix(contents))
 }
 
@@ -96,17 +102,17 @@ pub fn bytes(contents: &[u8]) -> String {
 /// `sha256sum` prints with the file's name after its digits, is told apart
 /// from the hash of something else, which no comparison could do.
 pub fn is_digest(text: &str) -> bool {
-    text.len() == 64 && text.bytes().all(|byte| byte.is_ascii_hexdigit())
+    ContentHash::parse(text).is_some()
 }
 
 /// What `hasher` has taken in, as 64 lowercase hex digits.
-fn hex(hasher: Sha256) -> String {
+fn hex(hasher: Sha256) -> ContentHash {
     let mut hex = String::with_capacity(64);
     for byte in hasher.finalize() {
         // Writing to a `String` cannot fail.
         let _ = write!(hex, "{byte:02x}");
     }
-    hex
+    ContentHash::computed(hex)
 }
 
 /// One folder or file found under the root.

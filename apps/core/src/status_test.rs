@@ -68,23 +68,23 @@ fn a_report_serializes_every_field_by_the_name_it_is_held_to() {
                 }],
                 missed: vec![Missed {
                     kind: Kind::Rule,
-                    name: String::from("rust/errors"),
+                    name: "rust/errors".into(),
                     agents: vec![Agent::OpenCode],
                 }],
                 artifacts: vec![
                     ArtifactStatus {
                         kind: Kind::Skill,
-                        name: String::from("deploy"),
+                        name: "deploy".into(),
                         state: State::Missing,
                         agents: vec![Agent::OpenCode],
-                        origin: Some(String::from("workspace")),
+                        origin: Some(Origin::from("workspace")),
                     },
                     ArtifactStatus {
                         kind: Kind::Rule,
-                        name: String::from("rust/errors"),
+                        name: "rust/errors".into(),
                         state: State::Current,
                         agents: vec![Agent::Claude],
-                        origin: Some(String::from("workspace")),
+                        origin: Some(Origin::from("workspace")),
                     },
                 ],
             },
@@ -135,9 +135,9 @@ fn where_an_artifact_is_held_is_every_copy_found_and_every_place_recorded() {
     };
     let record = InstallRecord {
         kind: Kind::Skill,
-        name: String::from("deploy"),
+        name: "deploy".into(),
         source_id: None,
-        origin: Some(String::from("workspace")),
+        origin: Some(Origin::from("workspace")),
         content_hash: None,
         targets: vec![
             target(".claude/skills/deploy"),

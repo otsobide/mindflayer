@@ -70,7 +70,7 @@ fn finds_every_kind_in_a_project() {
     let found: Vec<(Kind, &str)> = catalog
         .artifacts()
         .iter()
-        .map(|artifact| (artifact.kind(), artifact.name()))
+        .map(|artifact| (artifact.kind(), artifact.name().as_str()))
         .collect();
     assert_eq!(
         found,
@@ -101,7 +101,11 @@ fn artifacts_are_grouped_by_kind_then_named_in_order() {
 
     let catalog = Catalog::discover(std::slice::from_ref(&one));
 
-    let found: Vec<&str> = catalog.artifacts().iter().map(|a| a.name()).collect();
+    let found: Vec<&str> = catalog
+        .artifacts()
+        .iter()
+        .map(|a| a.name().as_str())
+        .collect();
     // Blocks of like things, alphabetical within each, rather than an
     // alphabetical shuffle of two different sorts of thing.
     assert_eq!(found, vec!["alpaca", "zebra", "ant", "yak"]);
@@ -119,7 +123,11 @@ fn a_nested_rule_is_named_by_its_route() {
 
     let catalog = Catalog::discover(std::slice::from_ref(&one));
 
-    let found: Vec<&str> = catalog.artifacts().iter().map(|a| a.name()).collect();
+    let found: Vec<&str> = catalog
+        .artifacts()
+        .iter()
+        .map(|a| a.name().as_str())
+        .collect();
     // The stem alone would make these one name for two files; the route keeps
     // folders as grouping and nothing else.
     assert_eq!(found, vec!["ci/no-force-push", "git/no-force-push"]);
@@ -266,7 +274,11 @@ fn only_markdown_files_are_rules_and_hidden_ones_are_not() {
 
     let catalog = Catalog::discover(std::slice::from_ref(&one));
 
-    let found: Vec<&str> = catalog.artifacts().iter().map(|a| a.name()).collect();
+    let found: Vec<&str> = catalog
+        .artifacts()
+        .iter()
+        .map(|a| a.name().as_str())
+        .collect();
     assert_eq!(found, vec!["real"]);
     assert!(catalog.failures().is_empty());
 }
@@ -524,7 +536,11 @@ fn the_shelf_is_read_source_by_source_and_found_as_it_is_now() {
 
     let catalog = Catalog::discover_gathered(&workspace, &Kind::ALL);
 
-    let names: Vec<&str> = catalog.artifacts().iter().map(|a| a.name()).collect();
+    let names: Vec<&str> = catalog
+        .artifacts()
+        .iter()
+        .map(|a| a.name().as_str())
+        .collect();
     assert_eq!(names, ["a--b", "deploy"]);
     assert_eq!(catalog.failures().len(), 1, "{:?}", catalog.failures());
     let doubled = &catalog.artifacts()[0];
@@ -789,7 +805,7 @@ fn a_project_is_read_only_in_the_folders_of_the_agents_it_names() {
     let found: Vec<(&str, Vec<Agent>)> = catalog
         .artifacts()
         .iter()
-        .map(|artifact| (artifact.name(), artifact.agents()))
+        .map(|artifact| (artifact.name().as_str(), artifact.agents()))
         .collect();
     assert_eq!(found, [("deploy", vec![Agent::Codex])]);
 }
@@ -802,7 +818,11 @@ fn a_project_a_mind_toml_marks_is_read_only_where_its_marker_says() {
 
     let catalog = Catalog::discover(std::slice::from_ref(&one));
 
-    let names: Vec<&str> = catalog.artifacts().iter().map(|a| a.name()).collect();
+    let names: Vec<&str> = catalog
+        .artifacts()
+        .iter()
+        .map(|a| a.name().as_str())
+        .collect();
     assert_eq!(names, ["deploy"]);
     assert_eq!(catalog.artifacts()[0].agents(), []);
     assert_eq!(
@@ -911,9 +931,9 @@ fn record(ledger: &Ledger, name: &str, paths: &[&str]) {
             "alpha",
             &InstallRecord {
                 kind: Kind::Skill,
-                name: name.to_owned(),
+                name: name.to_owned().into(),
                 source_id: None,
-                origin: Some(String::from("workspace")),
+                origin: Some("workspace".into()),
                 content_hash: None,
                 targets: paths
                     .iter()
@@ -944,7 +964,7 @@ fn a_skill_where_the_project_authors_for_an_agent_is_installed_or_authored_as_th
         .iter()
         .map(|artifact| {
             (
-                artifact.name(),
+                artifact.name().as_str(),
                 artifact.copies().len(),
                 artifact.provenance(),
             )
@@ -986,7 +1006,7 @@ fn a_copy_in_an_agents_folder_is_installed_only_at_a_path_the_ledger_records() {
     let found: Vec<(&str, Provenance)> = catalog
         .artifacts()
         .iter()
-        .map(|artifact| (artifact.name(), artifact.provenance()))
+        .map(|artifact| (artifact.name().as_str(), artifact.provenance()))
         .collect();
     assert_eq!(
         found,
@@ -1015,7 +1035,7 @@ fn a_project_the_workspace_does_not_link_has_no_record_in_its_ledger() {
             "beta",
             &InstallRecord {
                 kind: Kind::Skill,
-                name: String::from("deploy"),
+                name: "deploy".into(),
                 source_id: None,
                 origin: None,
                 content_hash: None,

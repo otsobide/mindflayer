@@ -5,6 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use mindflayer_core::ledger::{InstallRecord, Target};
+use mindflayer_core::value::ContentHash;
 use mindflayer_core::{
     hash, Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MarkerFile,
     MindProject, ProjectStatus, Share, State, Status, StatusFailure, Unreached, MIND_DIR,
@@ -70,7 +71,7 @@ fn offer(workspace: &FlayerWorkspace, name: &str) -> PathBuf {
 
 /// The hash of `name` as [`put`] writes it, which is what an install of it
 /// records: a copy that holds it reads as untouched.
-fn written(name: &str) -> String {
+fn written(name: &str) -> ContentHash {
     let dir = TempDir::new().unwrap();
     write_skill(&dir.path().join(name), name);
     hash::tree(&dir.path().join(name)).unwrap()
@@ -85,9 +86,9 @@ fn record(ledger: &Ledger, project: &str, name: &str, origin: &str, paths: &[&st
             project,
             &InstallRecord {
                 kind: Kind::Skill,
-                name: name.to_owned(),
+                name: name.into(),
                 source_id: None,
-                origin: Some(origin.to_owned()),
+                origin: Some(origin.into()),
                 content_hash: Some(written(name)),
                 targets: paths
                     .iter()
@@ -259,7 +260,7 @@ fn an_install_gone_under_a_name_somebody_keeps_is_that_names_one_entry_as_what_i
         status.projects[0].artifacts,
         [ArtifactStatus {
             kind: Kind::Skill,
-            name: String::from("deploy"),
+            name: "deploy".into(),
             state: State::Foreign,
             agents: vec![Agent::Claude, Agent::OpenCode],
             origin: None,
@@ -656,7 +657,7 @@ fn reading_a_project_hands_back_the_catalog_it_read_with_the_records_marked() {
     let names: Vec<&str> = catalog
         .artifacts()
         .iter()
-        .map(|artifact| artifact.name())
+        .map(|artifact| artifact.name().as_str())
         .collect();
     assert_eq!(names, ["deploy", "review"]);
     assert_eq!(

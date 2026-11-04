@@ -1,9 +1,12 @@
-//! Cloning a git repository into the workspace cache.
+//! The [`Remote`] a build fetches with: `gix`, cloning a git repository into
+//! the workspace cache.
 //!
 //! `gix` rather than shelling out to `git`: nothing here depends on a `git`
 //! being installed or on which one is first on the PATH, and core keeps doing
 //! its own I/O rather than supervising a process. A clone never prompts for a
-//! credential; [`super::credentials`] says why.
+//! credential; [`credentials`] says why. Everything `gix` says is turned into
+//! core's own words here, at the edge ([`GitError`], [`Cloned`]), so no `gix`
+//! type reaches the port or anything behind it.
 
 use std::borrow::Cow;
 use std::fmt::Display;
@@ -16,26 +19,39 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
 use std::time::Duration;
 
+use credentials::{Shortfall, Shortfalls};
 use gix::progress::{self as gix_progress, tree};
-use thiserror::Error;
 
-use super::credentials::{self, Shortfall, Shortfalls};
-use super::{Progress, Watch};
-use crate::code::codes;
+use crate::gather::{Progress, Watch};
+use crate::port::{Cloned, GitError, Remote};
 use crate::url::redacted;
+use crate::value::Revision;
 use crate::workspace::{replace_file, WorkspaceError};
 
 /// How often `gix`'s counts are read while it fetches: ten times a second,
 /// about as often as a person can read a number that changes.
 const POLL: Duration = Duration::from_millis(100);
 
-/// A clone that is on disk and ready to be read.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Clone {
-    /// The working tree.
-    pub root: PathBuf,
-    /// The commit that was checked out, when it could be resolved.
-    pub revision: Option<String>,
+mod credentials;
+
+/// `gix`, as the [`Remote`] a gather fetches through.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Gix;
+
+impl Remote for Gix {
+    fn fetch(
+        &self,
+        url: &str,
+        reference: Option<&str>,
+        into: &Path,
+        watch: &Watch,
+    ) -> Result<Cloned, GitError> {
+        clone(url, reference, into, watch)
+    }
+
+    fn scrub(&self, clone: &Path) -> Result<bool, GitError> {
+        scrub(clone)
+    }
 }
 
 /// Clone `url` into `into`, replacing whatever was there, telling `watch`
@@ -46,12 +62,12 @@ pub struct Clone {
 /// a fetch would, and it is one code path rather than three (clone, fetch,
 /// reconcile a checkout that someone may have edited). Gathering is not
 /// something anybody runs in a loop.
-pub fn clone(
+fn clone(
     url: &str,
     reference: Option<&str>,
     into: &Path,
     watch: &Watch,
-) -> Result<Clone, GitError> {
+) -> Result<Cloned, GitError> {
     // Before the clone already there is removed, which a cancel should not
     // cost.
     if watch.is_cancelled() {
@@ -102,7 +118,9 @@ pub fn clone(
         prepare = prepare
             .with_ref_name(Some(reference))
             .map_err(|error| GitError::Reference {
-                reference: reference.to_owned(),
+                // Redacted as every URL this error says is: a URL typed
+                // where a branch goes is still somebody's credential.
+                reference: redacted(reference).into_owned(),
                 detail: said(error),
             })?;
     }
@@ -150,14 +168,17 @@ pub fn clone(
     // whoever asks for one, rather than because every caller remembered.
     scrub(into)?;
 
-    Ok(Clone {
+    Ok(Cloned {
         root: repository
             .workdir()
             .map_or_else(|| into.to_path_buf(), Path::to_path_buf),
         // A repository with no commits has no HEAD to resolve, and that is not
         // a failure: it is an empty source, which the harvest then reports as
         // having nothing in it.
-        revision: repository.head_id().ok().map(|id| id.to_string()),
+        revision: repository
+            .head_id()
+            .ok()
+            .map(|id| Revision::from(id.to_string())),
     })
 }
 
@@ -240,7 +261,7 @@ fn reading(
 /// a gather can be looked at afterwards, and a scrub has no reason to take
 /// that away. What is missing is an absence, not a failure, and a symlink is
 /// not followed out of the clone.
-pub fn scrub(clone: &Path) -> Result<bool, GitError> {
+fn scrub(clone: &Path) -> Result<bool, GitError> {
     let git = clone.join(".git");
     let mut files = vec![git.join("config"), git.join("FETCH_HEAD")];
     files_under(&git.join("logs"), &mut files)?;
@@ -321,58 +342,6 @@ fn said(error: impl Display) -> String {
     redacted(&error.to_string()).into_owned()
 }
 
-/// Why a repository could not be cloned.
-///
-/// Every variant carries the failure as text rather than as the `gix` error it
-/// came from. Those types are large and would become part of this crate's
-/// public API, tying its version to gix's; what a caller does with them is
-/// print them. Every URL in that text, the one typed included, is
-/// [`redacted`]: this is what the gather log and the screen are given.
-#[derive(Debug, Error)]
-pub enum GitError {
-    #[error("{url}: not a URL git understands: {detail}")]
-    Url { url: String, detail: String },
-    #[error("`{reference}` is not a usable branch or tag name: {detail}")]
-    Reference { reference: String, detail: String },
-    #[error("{path}: the cache directory cannot be prepared: {source}")]
-    Cache {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("{url}: cannot be fetched: {detail}")]
-    Fetch { url: String, detail: String },
-    /// The server asked who is fetching, and nothing that may answer had a
-    /// credential it would take. `url` is shown without its credentials.
-    #[error(
-        "{url}: needs credentials, and gathering never prompts for them: \
-         configure a git credential helper, or use ssh-agent for an ssh URL"
-    )]
-    Credentials { url: String },
-    #[error("{url}: cloned, but its files could not be checked out: {detail}")]
-    Checkout { url: String, detail: String },
-    /// The [`Watch`] was cancelled before the clone was finished. What there
-    /// was of it is gone.
-    #[error("the clone was cancelled before it was finished")]
-    Cancelled,
-    /// A file in the clone that names the URL it was made from could not be
-    /// read, or rewritten without the credentials in it.
-    #[error(transparent)]
-    Scrub(#[from] WorkspaceError),
-}
-
-codes!(GitError {
-    Self::Url { .. } => "git_url_invalid",
-    Self::Reference { .. } => "git_reference_invalid",
-    Self::Cache { .. } => "git_cache_failed",
-    Self::Fetch { .. } => "git_fetch_failed",
-    Self::Credentials { .. } => "git_credentials_needed",
-    Self::Checkout { .. } => "git_checkout_failed",
-    Self::Cancelled => "git_clone_cancelled",
-} carried {
-    Self::Scrub(error) => error,
-});
-
 #[cfg(test)]
-#[path = "git_test.rs"]
+#[path = "gix_test.rs"]
 mod tests;

@@ -126,7 +126,7 @@ pub fn edited(
         Kind::Skill => Artifact::skill_holding(&target.path, project.root(), contents).ok(),
         Kind::Rule => Some(Artifact::rule_holding(
             &target.path,
-            target.name.clone(),
+            target.name.to_string(),
             project.root(),
             contents,
         )),

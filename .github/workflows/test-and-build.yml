@@ -323,7 +323,12 @@ jobs:
 
   # -------------------------------------------------------------------------
   # Builds: each app builds only after its own tests pass, and never while the
-  # platforms it ships to are unproven.
+  # platforms it ships to are unproven. Each builds in debug first, then its
+  # release, the optimized build that ships, as a step after it rather than a
+  # job of its own: a debug build that fails says so sooner and cheaper, and
+  # the check keeps the name the rulesets require. The tests are per app
+  # alone, not per layer: a unit, a value object and an integration suite of
+  # one app fail under that app's check, in one cargo run.
   #
   # The `if` is spelled out rather than the usual `always() && !failure()`
   # idiom, which is wrong twice over: a skipped dependency skips this job, so
@@ -359,6 +364,9 @@ jobs:
 
       - name: Build mindflayer-core
         run: make core/build
+
+      - name: Build mindflayer-core for release
+        run: make core/release
 
   # The binaries ship the panel, so they wait for its tests as well as their
   # own, and embed the panel `test (web)` built rather than one built again
@@ -533,3 +541,6 @@ jobs:
 
       - name: Build mindflayer-server
         run: make server/build
+
+      - name: Build mindflayer-server for release
+        run: make server/release

@@ -8,7 +8,7 @@ use crate::skill::{Compatibility, Metadata};
 /// than the loading.
 fn skill(name: &str, description: &str, directory: &str) -> Artifact {
     Artifact {
-        name: name.to_owned(),
+        name: name.to_owned().into(),
         path: PathBuf::from(directory),
         project: PathBuf::from("/work/repo"),
         declared: Declared::Skill(SkillManifest {
@@ -42,7 +42,7 @@ fn rule(name: &str, summary: Option<&str>) -> Artifact {
 /// `rule`, with front matter that says `manifest`.
 fn declaring(name: &str, summary: Option<&str>, manifest: RuleManifest) -> Artifact {
     Artifact {
-        name: name.to_owned(),
+        name: name.to_owned().into(),
         path: PathBuf::from("/work/repo/.mind/rules").join(format!("{name}.md")),
         project: PathBuf::from("/work/repo"),
         declared: Declared::Rule(manifest),

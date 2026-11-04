@@ -4,11 +4,10 @@
  * One line of the action log.
  *
  * What it serializes to is a contract, as a status report's is: each field
- * by its name, and the two that can quote a URL only through [`redacted`],
- * where they are written rather than trusted to [`Ledger::history`], which
- * hands back none with a credential in it: a row an older build wrote
- * before the scrub still holds one until a command that writes opens the
- * ledger.
+ * by its name, and the two that can quote a URL as a [`Redacted`], which
+ * holds none. A row an older build wrote before the scrub still holds one
+ * in the file until a command that writes opens the ledger, and is
+ * redacted as it is read ([`history`](LedgerStore::history)).
  */
 export type Entry = { 
 /**

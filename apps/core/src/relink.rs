@@ -478,3 +478,7 @@ codes!(RelinkError {
     Self::Exclude(error) => error,
     Self::Copied(duplicate) => duplicate,
 });
+
+#[cfg(test)]
+#[path = "relink_test.rs"]
+mod tests;

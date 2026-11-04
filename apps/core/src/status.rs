@@ -9,7 +9,7 @@
 //! ([`Ledger::records`]); it cannot see that one has gone since, nor a copy
 //! it never wrote.
 //!
-//! [`Ledger::records`]: crate::ledger::Ledger::records
+//! [`Ledger::records`]: crate::port::LedgerStore::records
 //!
 //! Core builds and orders the report, so every front end shows the same
 //! states in the same order: the CLI's table and its JSON, and the TUI's rows.
@@ -33,6 +33,7 @@ use crate::ledger::{InstallRecord, Target};
 use crate::paths;
 use crate::relink::{self, Duplicate};
 use crate::settings::ProjectId;
+use crate::value::{ArtifactName, Origin};
 use crate::workspace::{
     same_directory, FlayerWorkspace, MarkerFile, MindProject, MisplacedTarget, WorkspaceError,
 };
@@ -100,7 +101,7 @@ pub struct ProjectStatus {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Missed {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// The agents among the project's that read it nowhere, in report
     /// order. Never empty.
     pub agents: Vec<Agent>,
@@ -135,7 +136,7 @@ pub struct Unreached {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ArtifactStatus {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     pub state: State,
     /// Every agent among the project's that reads one of its copies, in
     /// report order ([`Artifact::agents`]): what it reaches, which for an
@@ -145,7 +146,7 @@ pub struct ArtifactStatus {
     /// `load:<entry>`, or a shelf source's address. None when the ledger
     /// records no copy of it, and for a record from before origins were kept
     /// of something that came from no source.
-    pub origin: Option<String>,
+    pub origin: Option<Origin>,
 }
 
 /// How an artifact stands in a project, as far as its copies, the ledger and
@@ -538,7 +539,7 @@ impl ProjectStatus {
         let (rules, installed): (Vec<InstallRecord>, Vec<InstallRecord>) = installed
             .into_iter()
             .partition(|record| record.kind == Kind::Rule && project.settings().is_some());
-        let received: Vec<String> = rules.iter().map(|record| record.name.clone()).collect();
+        let received: Vec<String> = rules.iter().map(|record| record.name.to_string()).collect();
         let rendered = rendered(root, &agents, rules, &standings);
         let (artifacts, placed): (Vec<ArtifactStatus>, Vec<Vec<String>>) =
             standing(root, catalog.artifacts(), installed, rendered, &standings)
@@ -748,7 +749,7 @@ fn rendered(
             let file = install::rules::claude_file(&record.name);
             let found = |target: &Target| {
                 if target.path == agents_md::FILE {
-                    block.contains(&record.name)
+                    block.iter().any(|route| route == record.name.as_str())
                 } else {
                     fs::symlink_metadata(root.join(&target.path)).is_ok()
                 }
@@ -794,7 +795,9 @@ fn missed(agents: &[Agent], artifacts: &[ArtifactStatus], received: &[String]) -
     artifacts
         .iter()
         .filter(|held| {
-            held.kind == Kind::Rule && held.state.whole() && received.contains(&held.name)
+            held.kind == Kind::Rule
+                && held.state.whole()
+                && received.iter().any(|route| *route == held.name)
         })
         .filter_map(|held| {
             let agents: Vec<Agent> = agents

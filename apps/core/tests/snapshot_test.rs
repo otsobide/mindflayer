@@ -132,9 +132,9 @@ fn fixture() -> Fixture {
             "api",
             &InstallRecord {
                 kind: Kind::Skill,
-                name: String::from("review"),
+                name: "review".into(),
                 source_id: None,
-                origin: Some(String::from("workspace")),
+                origin: Some("workspace".into()),
                 content_hash: Some(hash::tree(&library.join("review")).unwrap()),
                 targets: [".agents/skills/review", ".claude/skills/review"]
                     .into_iter()
