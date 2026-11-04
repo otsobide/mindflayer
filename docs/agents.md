@@ -86,11 +86,15 @@ login, so it is run by hand, never by CI or `make test`.
   the script exits, on an error or Ctrl-C too, the login copy included. Only a
   run killed outright (SIGKILL, a crash) cannot clean up: it leaves the temp
   dir, login copy and all, until the next run deletes it or `make clean`
-  removes `target/`. The only file taken from the real home is Claude's
-  `.credentials.json`; settings, skills, rules, `CLAUDE.md` and plugins stay
-  out, because they are exactly what must not take part. A login close to
-  expiry is refused, since a refresh inside the run could rotate the refresh
-  token the real session holds.
+  removes `target/`. The only files taken from the real home are the logins:
+  Claude's `.credentials.json`, and for a Codex run `$CODEX_HOME/auth.json`
+  (by default `~/.codex/auth.json`); OpenCode's runs call no model and get
+  none. Settings, skills, rules, `CLAUDE.md`, plugins and Codex's
+  `config.toml` stay out, because they are exactly what must not take part.
+  A login close to expiry is refused, since a refresh inside the run could
+  rotate the refresh token the real session holds. The OpenCode 1.19.4 that
+  the MCP checks run is fetched from the npm registry into the same temp
+  dir, never from the real home.
 - **A mount namespace.** The agent starts under bubblewrap, with the real
   home an empty tmpfs, the temp dir mounted at `/mnt/agent-probe`, `/tmp` a
   private tmpfs, the environment cleared and a PID namespace of its own, so
