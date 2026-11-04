@@ -35,7 +35,7 @@ Windows are tested only on request. It installs from source, with a recent
 stable Rust, and Node 24 with pnpm to build the panel:
 
 ```bash
-git clone https://github.com/otsobide/mindflayer
+git clone https://github.com/otsobide/mindflayer mindweaver
 cd mindweaver
 make install
 ```
