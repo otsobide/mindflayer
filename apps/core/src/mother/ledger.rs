@@ -196,3 +196,70 @@ impl EntryMother {
         }
     }
 }
+
+/// Makes the routes the ledger files a project's records by: from the
+/// workspace, `/` separated, or `.` for a project at its root (D-03).
+pub struct RouteMother;
+
+impl RouteMother {
+    /// A route a workspace may link a project at.
+    pub fn random() -> String {
+        match random::between(0, 4) {
+            0 => String::from("."),
+            1 => format!("{}/{}", random::kebab(), random::kebab()),
+            _ => random::kebab(),
+        }
+    }
+
+    /// `count` routes, no two alike, for a test of what one project's
+    /// records keep from another's.
+    pub fn distinct(count: usize) -> Vec<String> {
+        let mut routes: Vec<String> = Vec::with_capacity(count);
+        while routes.len() < count {
+            let route = Self::random();
+            if !routes.contains(&route) {
+                routes.push(route);
+            }
+        }
+        routes
+    }
+}
+
+impl InstallRecordMother {
+    /// Any record a store may be handed: a skill or a rule, under a name of
+    /// any script, from somewhere or from before origins were kept, with a
+    /// hash or without, and none or several copies, each for one agent or
+    /// for none and holding a hash of its own or not.
+    ///
+    /// Wider than [`random`](Self::random), which is a skill as an install
+    /// writes one today: a store keeps what it is handed, and a record an
+    /// older build wrote is one it is handed too.
+    pub fn any() -> InstallRecord {
+        let kind = random::pick(&Kind::ALL);
+        let name = match random::between(0, 2) {
+            0 => ArtifactNameMother::random(),
+            1 => ArtifactNameMother::route(),
+            _ => ArtifactName::from(format!("{}{}", random::kebab(), random::text(8))),
+        };
+        let targets = (0..random::between(0, 4))
+            .map(|copy| {
+                let agent = random::chance().then(|| random::pick(&Agent::ALL));
+                let folder = agent.map_or("agents", Agent::name);
+                let path = format!(".{folder}/{}/{name}-{copy}", kind.folder());
+                if random::chance() {
+                    TargetMother::holding(agent, &path, ContentHashMother::random())
+                } else {
+                    TargetMother::create(agent, &path)
+                }
+            })
+            .collect();
+        InstallRecord {
+            kind,
+            name,
+            source_id: None,
+            origin: random::chance().then(OriginMother::random),
+            content_hash: random::chance().then(ContentHashMother::random),
+            targets,
+        }
+    }
+}
