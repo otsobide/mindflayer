@@ -123,7 +123,7 @@ struct Fixture {
     other: PathBuf,
 }
 
-const NAME: &str = r#"it's a "flayer""#;
+const NAME: &str = r#"it's a "weaver""#;
 
 fn fixture() -> Fixture {
     let dir = TempDir::new().unwrap();
@@ -202,7 +202,7 @@ fn line(
 }
 
 /// The prompt while the fixture's workspace is active.
-const ACTIVE: &str = r#"(flayer:it's a "flayer") $ "#;
+const ACTIVE: &str = r#"(weaver:it's a "weaver") $ "#;
 
 #[test]
 fn bash_and_zsh_accept_the_code_as_printed() {
@@ -331,7 +331,7 @@ state after
         assert_eq!(
             printed,
             [
-                alone("swapped", "(flayer:other) $ ", Some(&fixture.other), true),
+                alone("swapped", "(weaver:other) $ ", Some(&fixture.other), true),
                 alone("after", "$ ", None, false),
             ]
             .concat(),
@@ -349,7 +349,7 @@ fn beside_a_virtualenv_activated_first_each_deactivate_undoes_only_its_own() {
     };
     let ws = Some(fixture.workspace.as_path());
     let active = Some(venv.as_path());
-    let both = r#"(flayer:it's a "flayer") (venv) $ "#;
+    let both = r#"(weaver:it's a "weaver") (venv) $ "#;
 
     for shell in shells() {
         let variables = [
@@ -414,7 +414,7 @@ fn beside_a_virtualenv_activated_second_each_deactivate_undoes_only_its_own() {
     };
     let ws = Some(fixture.workspace.as_path());
     let active = Some(venv.as_path());
-    let both = r#"(venv) (flayer:it's a "flayer") $ "#;
+    let both = r#"(venv) (weaver:it's a "weaver") $ "#;
 
     for shell in shells() {
         let variables = [
@@ -496,7 +496,7 @@ flayer-deactivate
     assert_eq!(
         printed,
         format!(
-            "drawn: (flayer:_(touch pwned) _touch pwned-too_) $ \nworkspace: {}\n",
+            "drawn: (weaver:_(touch pwned) _touch pwned-too_) $ \nworkspace: {}\n",
             workspace.display()
         )
     );

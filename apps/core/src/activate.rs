@@ -160,7 +160,7 @@ pub fn script(workspace: &FlayerWorkspace, shell: Shell) -> Result<String, Activ
 }
 
 /// What the prompt starts with while a workspace is active:
-/// `(flayer:<name>) `.
+/// `(weaver:<name>) `.
 ///
 /// The name is the marker's, which comes with whatever directory holds it, a
 /// cloned one included, and a prompt is expanded every time it is drawn:
@@ -181,7 +181,7 @@ pub fn prompt(name: &str) -> String {
             }
         })
         .collect();
-    format!("(flayer:{label}) ")
+    format!("(weaver:{label}) ")
 }
 
 /// The characters some shell's prompt acts on, as [`prompt`] says.
@@ -212,28 +212,28 @@ fn bourne(root: &str, prompt: &str) -> String {
     {deactivate}
 fi
 if [ -n "${{{variable}+set}}" ]; then
-    _FLAYER_OLD_WORKSPACE="${variable}"
+    _WEAVER_OLD_WORKSPACE="${variable}"
 else
-    unset _FLAYER_OLD_WORKSPACE
+    unset _WEAVER_OLD_WORKSPACE
 fi
 export {variable}={root}
-_FLAYER_PROMPT={prompt}
-PS1="$_FLAYER_PROMPT${{PS1-}}"
+_WEAVER_PROMPT={prompt}
+PS1="$_WEAVER_PROMPT${{PS1-}}"
 if [ -n "${{_OLD_VIRTUAL_PS1+set}}" ]; then
-    _OLD_VIRTUAL_PS1="$_FLAYER_PROMPT$_OLD_VIRTUAL_PS1"
+    _OLD_VIRTUAL_PS1="$_WEAVER_PROMPT$_OLD_VIRTUAL_PS1"
 fi
 {deactivate}() {{
-    if [ -n "${{_FLAYER_OLD_WORKSPACE+set}}" ]; then
-        export {variable}="$_FLAYER_OLD_WORKSPACE"
-        unset _FLAYER_OLD_WORKSPACE
+    if [ -n "${{_WEAVER_OLD_WORKSPACE+set}}" ]; then
+        export {variable}="$_WEAVER_OLD_WORKSPACE"
+        unset _WEAVER_OLD_WORKSPACE
     else
         unset {variable}
     fi
-    PS1="${{PS1/"$_FLAYER_PROMPT"/}}"
+    PS1="${{PS1/"$_WEAVER_PROMPT"/}}"
     if [ -n "${{_OLD_VIRTUAL_PS1+set}}" ]; then
-        _OLD_VIRTUAL_PS1="${{_OLD_VIRTUAL_PS1/"$_FLAYER_PROMPT"/}}"
+        _OLD_VIRTUAL_PS1="${{_OLD_VIRTUAL_PS1/"$_WEAVER_PROMPT"/}}"
     fi
-    unset _FLAYER_PROMPT
+    unset _WEAVER_PROMPT
     unset -f {deactivate}
 }}
 "#,
@@ -256,31 +256,31 @@ fn fish(root: &str, prompt: &str) -> String {
     {deactivate}
 end
 if set -q {variable}
-    set -g _flayer_old_workspace ${variable}
+    set -g _weaver_old_workspace ${variable}
 else
-    set -e _flayer_old_workspace
+    set -e _weaver_old_workspace
 end
 set -gx {variable} {root}
-set -g _flayer_prompt {prompt}
-if not functions -q _flayer_old_fish_prompt
-    functions -c fish_prompt _flayer_old_fish_prompt
+set -g _weaver_prompt {prompt}
+if not functions -q _weaver_old_fish_prompt
+    functions -c fish_prompt _weaver_old_fish_prompt
     function fish_prompt
         set -l last_status $status
-        if set -q _flayer_prompt
-            printf '%s' $_flayer_prompt
+        if set -q _weaver_prompt
+            printf '%s' $_weaver_prompt
         end
         echo "exit $last_status" | source
-        _flayer_old_fish_prompt
+        _weaver_old_fish_prompt
     end
 end
 function {deactivate}
-    if set -q _flayer_old_workspace
-        set -gx {variable} $_flayer_old_workspace
-        set -e _flayer_old_workspace
+    if set -q _weaver_old_workspace
+        set -gx {variable} $_weaver_old_workspace
+        set -e _weaver_old_workspace
     else
         set -e {variable}
     end
-    set -e _flayer_prompt
+    set -e _weaver_prompt
     functions -e {deactivate}
 end
 "#,
@@ -299,28 +299,28 @@ fn pwsh(root: &str, prompt: &str) -> String {
     {deactivate}
 }}
 if (Test-Path -Path Env:{variable}) {{
-    $global:_FlayerOldWorkspace = $Env:{variable}
+    $global:_WeaverOldWorkspace = $Env:{variable}
 }} else {{
-    Remove-Variable -Name _FlayerOldWorkspace -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name _WeaverOldWorkspace -Scope Global -ErrorAction SilentlyContinue
 }}
 $Env:{variable} = {root}
-$global:_FlayerPrompt = {prompt}
-if (-not (Get-Variable -Name _FlayerOldPrompt -Scope Global -ErrorAction SilentlyContinue)) {{
-    $global:_FlayerOldPrompt = $Function:prompt
+$global:_WeaverPrompt = {prompt}
+if (-not (Get-Variable -Name _WeaverOldPrompt -Scope Global -ErrorAction SilentlyContinue)) {{
+    $global:_WeaverOldPrompt = $Function:prompt
     function global:prompt {{
-        Write-Host -NoNewline $global:_FlayerPrompt
-        & $global:_FlayerOldPrompt
+        Write-Host -NoNewline $global:_WeaverPrompt
+        & $global:_WeaverOldPrompt
     }}
 }}
 function global:{deactivate} {{
-    $old = Get-Variable -Name _FlayerOldWorkspace -Scope Global -ErrorAction SilentlyContinue
+    $old = Get-Variable -Name _WeaverOldWorkspace -Scope Global -ErrorAction SilentlyContinue
     if ($old) {{
         $Env:{variable} = $old.Value
-        Remove-Variable -Name _FlayerOldWorkspace -Scope Global
+        Remove-Variable -Name _WeaverOldWorkspace -Scope Global
     }} else {{
         Remove-Item -Path Env:{variable} -ErrorAction SilentlyContinue
     }}
-    $global:_FlayerPrompt = ''
+    $global:_WeaverPrompt = ''
     Remove-Item -Path Function:{deactivate}
 }}
 "#,

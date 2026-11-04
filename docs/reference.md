@@ -149,16 +149,16 @@ $ cd ~/Projects/collapse
 $ flayer which
 Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
 $ eval "$(flayer activate ~/flayers/writing)"
-(flayer:writing) $ flayer which
+(weaver:writing) $ flayer which
 writing at /home/you/flayers/writing, activated by $MINDFLAYER_WORKSPACE
-(flayer:writing) $ source .venv/bin/activate
-(.venv) (flayer:writing) $ deactivate      # the virtualenv's; the flayer stays
-(flayer:writing) $ flayer-deactivate
+(weaver:writing) $ source .venv/bin/activate
+(.venv) (weaver:writing) $ deactivate      # the virtualenv's; the flayer stays
+(weaver:writing) $ flayer-deactivate
 $ flayer which
 Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
 ```
 
-Activating sets `$MINDFLAYER_WORKSPACE` and puts `(flayer:<name>)` in front
+Activating sets `$MINDFLAYER_WORKSPACE` and puts `(weaver:<name>)` in front
 of your prompt; `flayer-deactivate` puts both back as they were, a variable
 you had set yourself included. Activating another flayer swaps one for the
 other, and `flayer activate` on its own activates the one a command run there

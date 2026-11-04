@@ -7227,7 +7227,7 @@ moves where a command works and not what it was told.
 ### Activating a workspace
 
 `flayer activate [DIR]` prints shell code that sets `$MINDFLAYER_WORKSPACE`
-for the rest of the shell, puts `(flayer:<name>) ` in front of the prompt,
+for the rest of the shell, puts `(weaver:<name>) ` in front of the prompt,
 and defines `flayer-deactivate`, which puts both back; it is run as `eval
 "$(flayer activate DIR)"`. Printed for the shell to run rather than written
 to a file to be sourced: activation lasts as long as the shell, as a
