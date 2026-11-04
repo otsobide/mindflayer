@@ -9830,7 +9830,8 @@ colour mode and sidebar; and what an older build wrote that the tests read
 back as it was, the ledger dumps and the markers under
 `apps/core/tests/fixtures` and the version 2 `mind.toml` that only tests
 still write. A new marker's comments name the new product and commands,
-which changes no format. The agent probe is renamed on #18's branch, which
+and so do the examples' (`examples/.mindflayer/flayer.toml`, whose path
+alone is #229's), which changes no format. The agent probe is renamed on #18's branch, which
 was changing it at the same time (open questions). `make install` and `make dev/link`
 leave a `flayer` or an `mf` an older build put on the PATH where it is,
 the user's to remove ([the reference](reference.md#getting-started) says
