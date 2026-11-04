@@ -978,22 +978,42 @@ not write. Each run asks `opencode mcp list` from the project, with
 |---|---|---|---|
 | `opencode-mcp-v2` | V2 as installed | V2 | `--standalone`: a private server in the list's own process and environment |
 | `opencode-mcp-v1-shape` | V2 as installed | V1 | `--standalone` |
-| `opencode-mcp-service` | V2 as installed | V2 | through V2's background server, the way a person runs OpenCode: the list starts it, is asked again up to five times while it says `pending`, and stops it with `opencode service stop` after |
+| `opencode-mcp-service` | V2 as installed | V2 | through V2's background server, the way a person runs OpenCode, read twice: below |
 | `opencode-mcp-1-19` | 1.19.4 | V2 | in process, with `--print-logs --log-level DEBUG` |
 
 The background server is the question in `opencode-mcp-service`: whether it
-fills `{env:}` from the environment of whoever started it, or from one of
-its own, which V2's `opencode service set env` suggests it keeps. Before
-anything starts it, the run gives it a port of its own, one the kernel has
-just found free, with `opencode service set port`, which writes only the
-temp home's service settings (`~/.config/opencode/service.json` there).
-The namespace shares the host's network, and a V2 server otherwise takes
-its channel's fixed port, 49374, where the operator's own OpenCode keeps
-its server: the probe's could not start, or the operator's could not while
-the probe's ran. A `service set port` that fails is a mismatch, and the run
-stops there.
+fills `{env:}` from the environment of the client that asks, or from its
+own, which V2's `opencode service set env` suggests it keeps. 2.2.5's binary
+suggests the second: the server is spawned with the environment of
+whichever command starts it, and fills a config file's references from its
+own. A server the asking list starts itself holds every variable either
+way, so the run reads it twice, each reading in a project of its own:
 
-| Check | Expected | `opencode-mcp-v2` | `opencode-mcp-v1-shape` | `opencode-mcp-service` | `opencode-mcp-1-19` |
+- **Started apart** (`opencode-mcp-service`). `opencode service start`,
+  from an environment holding the two switches and `PROBE_MCP_PYTHON`
+  alone, as a server started at login or from another shell would be; then
+  the list, from the project with all five variables, asked again up to
+  five times, a few seconds apart, while it says `pending`; then `opencode
+  service stop`. What each reference became says whose environment filled
+  it: the values if the list's, empty if the server's own. A start that
+  fails skips the list, which would start a server from its own environment
+  in its place.
+- **Started by the list** (`opencode-mcp-service.inherited`). The list,
+  asked the same way, starts the server itself, which then holds the list's
+  variables, and the server is stopped after. Every reference is expected to
+  expand, as in a private server.
+
+Every `opencode service` command runs without the five variables. Before
+anything starts the server, the run gives it a port of its own, one the
+kernel has just found free, with `opencode service set port`, which writes
+only the temp home's service settings (`~/.config/opencode/service.json`
+there). The namespace shares the host's network, and a V2 server otherwise
+takes its channel's fixed port, 49374, where the operator's own OpenCode
+keeps its server: the probe's could not start, or the operator's could not
+while the probe's ran. A `service set port` that fails is a mismatch, and
+the run stops there.
+
+| Check | Expected | `opencode-mcp-v2` | `opencode-mcp-v1-shape` | `opencode-mcp-service.inherited` | `opencode-mcp-1-19` |
 |---|---|---|---|---|---|
 | `probe-stdio`'s stand-in, so `{env:}` in the command's first word too | loaded | pending | pending | pending | pending |
 | Its `--arg`: `{env:}` in `command` | `probe-arg-value` | pending | pending | pending | pending |
@@ -1003,6 +1023,24 @@ stops there.
 | `X-Probe-Header`: `{env:}` in `headers` | `probe-header-value` | pending | pending | pending | pending |
 | `Authorization`: inside a longer value | `Bearer probe-token-value` | pending | pending | pending | pending |
 | Each server's word in the list | recorded | pending | pending | pending | pending |
+
+The reading with the server started apart, `opencode-mcp-service`, records
+what it is asked to find out rather than expecting it:
+
+| Check | Expected | Result |
+|---|---|---|
+| `opencode service set port` | exit 0 | pending |
+| `opencode service start`, without the five variables | exit 0 | pending |
+| `opencode service stop`, before the second reading | exit 0 | pending |
+| `probe-stdio`'s stand-in, its first word from the server's own environment | loaded | pending |
+| Its `--arg`: `{env:}` in `command` | recorded: `probe-arg-value` from the list's environment, empty from the server's | pending |
+| Its `PROBE_MCP_ENV`: `{env:}` in `environment` | recorded: `probe-env-value`, or empty | pending |
+| `probe-http`'s stand-in | loaded | pending |
+| The path: `{env:}` in `url` | recorded: `/probe-http/probe-url-value`, or `/probe-http/` | pending |
+| `X-Probe-Header`: `{env:}` in `headers` | recorded: `probe-header-value`, or empty | pending |
+| `Authorization`: inside a longer value | recorded: `Bearer probe-token-value`, or `Bearer` with nothing after it, which the stand-in keeps as its length alone | pending |
+| Whose environment filled them | recorded: `the list's: 5 of 5 expanded`, `not the list's: 0 of 5 expanded` (the server's own when the five read empty), or `mixed` | pending |
+| Each server's word in the list | recorded | pending |
 
 ### Assumptions the run confirms
 
@@ -1026,7 +1064,13 @@ packages, and a run that disagrees fails or records it.
 - OpenCode 2.2.5 and 1.19.4: `opencode mcp list` connects to each server,
   as 1.19.4's handler and 2.2.5's status values say; `--standalone` runs a
   private server in 2.2.5; 1.19.4 turns `mcp.servers` into its own entries,
-  as its binary's conversion does.
+  as its binary's conversion does. In 2.2.5, `opencode service start`
+  returns once the background server answers, `opencode service stop`
+  returns once it is gone, and `opencode service set port` keeps the port
+  in the service settings under `$XDG_CONFIG_HOME/opencode`, which the
+  server reads when it starts; a list finds the server through the
+  registration under `$XDG_STATE_HOME/opencode`, both in the temp home, so
+  it never reaches the operator's.
 
 ### The MCP runs
 
@@ -1116,5 +1160,6 @@ the check that will settle it, under [MCP servers](#mcp-servers).
 | #91 | `env_vars`, `env_http_headers` and `bearer_token_env_var` fill a value from a variable. | pending (`codex-mcp-trusted`) |
 | #91 | A server of the same name in `$CODEX_HOME/config.toml`, with another transport, breaks the whole configuration or leaves one layer's standing. | pending, recorded (`codex-mcp-collision`) |
 | #92 | V2's `mcp.servers` loads in V2 and in 1.19.4, and V1's `mcp.<name>` loads in V2. | pending (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`) |
-| #92 | `{env:}` expands in the command, the environment, the URL and the headers, through V2's background server too. | pending (all four OpenCode runs) |
+| #92 | `{env:}` expands in the command, the environment, the URL and the headers, through V2's background server too when that server holds the variable. | pending (all four OpenCode runs) |
+| #92, #96 | Whose environment V2's background server fills `{env:}` from: the asking client's, or its own. | pending, recorded (`opencode-mcp-service`) |
 | #93, #94 | Each agent loads its project's servers from the one file the target table will name: `.mcp.json`, `.codex/config.toml` (trusted), `opencode.json`. | pending (every MCP run) |

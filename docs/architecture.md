@@ -9569,10 +9569,16 @@ What each would change, should it come out against what is expected:
   the headers, in both lines** (`opencode-mcp-v2`, `opencode-mcp-v1-shape`,
   `opencode-mcp-1-19`). A place where it does not is one #87 marks for
   OpenCode and #92 refuses.
-- **Through V2's background server too** (`opencode-mcp-service`). Were the
-  server to fill `{env:}` from an environment of its own rather than from
-  the one it was started from, a reference would hold in V2 only once its
-  variable reached that server (V2 has `opencode service set env`), and
+- **What V2's background server fills `{env:}` from**
+  (`opencode-mcp-service`, recorded). The server is started apart, without
+  the variables, as one started at login or from another shell would be,
+  and asked by a list that has them; a second reading, a server the list
+  starts itself (`opencode-mcp-service.inherited`), is expected to expand
+  every reference, as a private server does. Should the server started
+  apart fill `{env:}` from the asking list's environment, nothing changes.
+  Should it fill it from its own, which 2.2.5's binary suggests, a reference
+  holds in V2 only once its variable has reached that server, started from
+  a shell that has it or given it with `opencode service set env`, and
   "works without Mindflayer running" would need saying again for V2: #92
   would warn of it, and #96 would check the server's variables. That change
   is the owner's, here.
