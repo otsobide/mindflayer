@@ -147,11 +147,24 @@ bearer_token_env_var = "PROBE_MCP_TOKEN"
 EOF
 }
 
+# codex_forget_own: what Codex puts in the temp home of its own accord, its
+# bundled system skills, taken out after each Codex command. The 0.166 binary
+# carries them and writes them to $CODEX_HOME/skills/.system, with a marker,
+# when it starts; left there, they would have the next run's guard, or the
+# first OpenCode run's after Codex's, refuse the temp home's skills folder.
+# Only Codex's own names go, so anything else in that folder is still
+# refused.
+codex_forget_own() {
+	rm -rf -- "$CODEX_HOME/skills/.system" "$CODEX_HOME/skills/.codex-system-skills.marker"
+	rmdir -- "$CODEX_HOME/skills" 2>/dev/null || true
+}
+
 # codex_list <name> <dir>: what `codex mcp list --json` says from there.
 codex_list() {
 	local name=$1 dir=$2 status=0
 	(cd "$dir" && env "${mcp_env[@]}" timeout --kill-after=10 60 "$PROBE_CODEX_BIN" mcp list --json) \
 		</dev/null >"$results/$name.list.json" 2>"$results/$name.list.stderr" || status=$?
+	codex_forget_own
 	printf '%s\n' "$status" >"$results/$name.list.status"
 	say "  \$ codex mcp list --json: exit $status, lists $(codex_listed "$name")"
 	if [[ $status != 0 ]]; then
@@ -198,6 +211,7 @@ codex_exec() {
 	codex_status=0
 	(cd "$dir" && env "${mcp_env[@]}" timeout --kill-after=10 300 "$PROBE_CODEX_BIN" "${args[@]}") \
 		</dev/null >"$results/$name.jsonl" 2>"$results/$name.stderr" || codex_status=$?
+	codex_forget_own
 	grep -rh -- '"mcp_startup' "$CODEX_HOME/sessions" >"$results/$name.rollout-mcp.jsonl" 2>/dev/null || true
 	local events='fromjson? | select(type == "object")' reached answer usage
 	reached=$(jq -Rr "$events | select(.type == \"turn.completed\"
