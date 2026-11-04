@@ -205,6 +205,19 @@ impl ProjectMother {
         MindProject::init(root).expect("make a project").0
     }
 
+    /// The project `root` is, marked by the `mind.toml` a version 1 build
+    /// wrote, byte for byte, which kept every kind it knew inside `.mind`.
+    pub fn version_1(root: &Path) -> MindProject {
+        let mind = root.join(crate::workspace::MIND_DIR);
+        fs::create_dir_all(&mind).expect("make the project's .mind");
+        fs::write(
+            mind.join(crate::workspace::MIND_CONFIG),
+            include_str!("../../tests/fixtures/mind-v1.toml"),
+        )
+        .expect("write its marker");
+        MindProject::open(root).expect("open the project")
+    }
+
     /// An older project in `workspace`'s folder named `name`, linked to it.
     pub fn linked(workspace: &mut WeaverWorkspace, name: &str) -> MindProject {
         let project = Self::older(&workspace.root().join(name));

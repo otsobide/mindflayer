@@ -281,6 +281,13 @@ fn the_fixture_mothers_make_a_workspace_a_project_and_a_repository() {
     assert!(MindProject::is_marked(older.root()));
     assert!(older.settings().is_none());
 
+    let first = ProjectMother::version_1(&dir.path().join("first"));
+    assert_eq!(first.config().version(), 1);
+    assert_eq!(
+        first.directory_for(Kind::Skill),
+        Some(first.mind_dir().join("skills"))
+    );
+
     let authoring = ProjectMother::with_mcp(&dir.path().join("authoring"), &[], Share::Local);
     assert_eq!(
         authoring.directory_for(Kind::Mcp),
