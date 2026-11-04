@@ -545,3 +545,25 @@ fn renaming_the_block_moves_its_markers_and_keeps_every_group() {
     assert_eq!(text(&file), old.replace("mindflayer:", "mindweaver:"));
     assert_eq!(file.lines_of("app"), ["/.agents/skills/a/"]);
 }
+
+#[test]
+fn a_line_replaced_keeps_its_place_in_its_group_and_its_ending() {
+    let old = format!(
+        "{BEGIN}\r\n# project app\r\n/a/\r\n/b.md\r\n/c/\r\n# project web\r\n/b.md\r\n{END}\r\n"
+    );
+    let mut file = ExcludeFile::parse(old.as_bytes()).unwrap();
+
+    assert!(file.replace("app", "/b.md", "/moved/b.md").unwrap());
+    assert!(!file.replace("app", "/b.md", "/again.md").unwrap(), "gone");
+    assert!(
+        !file.replace("other", "/a/", "/z/").unwrap(),
+        "no such group"
+    );
+
+    assert_eq!(
+        text(&file),
+        old.replacen("/b.md", "/moved/b.md", 1),
+        "the other group's line of the same text is its own"
+    );
+    assert!(file.replace("app", "/a/", "# not a pattern").is_err());
+}

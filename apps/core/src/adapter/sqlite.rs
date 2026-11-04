@@ -537,6 +537,18 @@ impl LedgerStore for Sqlite {
             .map_err(|error| self.failed("recording an artifact", error))
     }
 
+    fn shelf_moved(&self, from: &str, to: &str) -> Result<usize, LedgerError> {
+        // Compared as a prefix of bytes, never with LIKE, whose `%` and `_`
+        // a folder's name may hold.
+        self.connection
+            .execute(
+                "UPDATE artifacts SET path = ?2 || substr(path, length(?1) + 1)
+                  WHERE substr(path, 1, length(?1)) = ?1",
+                rusqlite::params![from, to],
+            )
+            .map_err(|error| self.failed("moving what was gathered", error))
+    }
+
     fn gathered(&self) -> Result<Vec<Gathered>, LedgerError> {
         let mut statement = self
             .connection

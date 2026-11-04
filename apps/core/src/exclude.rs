@@ -934,6 +934,34 @@ impl ExcludeFile {
         true
     }
 
+    /// Put `to` in place of the line `from` in `key`'s group, where it
+    /// stands, and whether that changed anything: for a path an entry names
+    /// that moved, its group's order kept, as Claude's rule files a
+    /// Mindflayer build filed are moved to the new folder.
+    pub fn replace(&mut self, key: &str, from: &str, to: &str) -> Result<bool, ExcludeError> {
+        check(key, &[from.to_owned(), to.to_owned()])?;
+        let Some(block) = self.block.as_mut() else {
+            return Ok(false);
+        };
+        let Some(group) = block
+            .groups
+            .iter_mut()
+            .find(|group| group.key == key.as_bytes())
+        else {
+            return Ok(false);
+        };
+        let Some(line) = group
+            .lines
+            .iter_mut()
+            .find(|line| line.text == from.as_bytes())
+        else {
+            return Ok(false);
+        };
+        let end = line.end;
+        *line = Line::new(to, end);
+        Ok(true)
+    }
+
     /// Every line of `key`'s group but blank ones, as written: none when
     /// there is no such group. Bytes that are not UTF-8 are shown as
     /// replacement characters, being for a person to read.

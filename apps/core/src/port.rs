@@ -218,6 +218,14 @@ pub trait LedgerStore: Debug + Send {
     /// name, then source.
     fn gathered(&self) -> Result<Vec<Gathered>, LedgerError>;
 
+    /// Record that every artifact gathered at a path starting with `from`,
+    /// a route from the workspace's root, is at the same path starting with
+    /// `to` now, and how many were: for a shelf moved with the folder it is
+    /// in, as a workspace a Mindflayer build made is moved to Mindweaver's
+    /// names (`migrate --names`). One transaction, so a listing never finds
+    /// some of them moved; what it was gathered from, and when, stay.
+    fn shelf_moved(&self, from: &str, to: &str) -> Result<usize, LedgerError>;
+
     /// Every source anything was gathered from, or tried to be, ordered the
     /// way a listing reads them: by URL, then branch, then folder.
     ///
