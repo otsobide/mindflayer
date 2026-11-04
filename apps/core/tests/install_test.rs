@@ -1399,9 +1399,12 @@ fn what_an_earlier_version_left_beside_the_copy_is_cleared_and_said_by_the_next_
     let ledger = workspace.ledger().unwrap();
     install_named(&workspace, &ledger, &project, "deploy").unwrap();
     // As an install of a version that staged beside leaves it when stopped:
-    // a half-made copy next to the skill, and the one it was replacing.
+    // a half-made copy next to the skill, and the one it was replacing,
+    // under Mindweaver's names and under those of a Mindflayer build.
     let skills = project.directory_for(Kind::Skill).unwrap();
     let left = [
+        skills.join(".deploy.mindweaver-new"),
+        skills.join(".deploy.mindweaver-old"),
         skills.join(".deploy.mindflayer-new"),
         skills.join(".deploy.mindflayer-old"),
     ];
