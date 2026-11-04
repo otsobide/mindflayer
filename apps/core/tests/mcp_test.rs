@@ -401,8 +401,26 @@ fn add_is_refused_in_a_project_that_keeps_no_servers_before_anything_else() {
     let older = ProjectMother::older(&dir.path().join("older"));
     let settings = ProjectMother::create(&dir.path().join("settings"), &[], Share::Local);
 
-    for project in [older, settings] {
+    for (project, hint) in [
+        (
+            older,
+            "since its mind.toml names no folder for them; `mind migrate` moves it to a \
+             settings.toml, whose `[directories]` can name one",
+        ),
+        (
+            settings,
+            "since its settings.toml names no folder for them; its `[directories]` can name one",
+        ),
+    ] {
         let error = create(&project, Kind::Mcp, "github", "GitHub").unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "{}: keeps no MCP servers of its own, {hint}",
+                project.root().display()
+            )
+        );
 
         assert!(
             matches!(

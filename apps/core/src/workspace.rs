@@ -964,6 +964,7 @@ impl MindProject {
             .ok_or_else(|| WorkspaceError::NoDirectory {
                 path: self.root.clone(),
                 kind,
+                marker: self.marker_file(),
             })
     }
 
@@ -2549,8 +2550,21 @@ pub enum WorkspaceError {
          and is kept out of git unless the project is shared"
     )]
     InsideMind { path: PathBuf, kind: Kind },
-    #[error("{path}: keeps no {} of its own, since its marker names no folder for them", .kind.plural())]
-    NoDirectory { path: PathBuf, kind: Kind },
+    /// Saying how the project comes to keep one, by the file it is marked
+    /// by: only a `settings.toml` is changed, so a project marked by anything
+    /// older is sent to the migration first, as [`NoSettings`] sends it.
+    ///
+    /// [`NoSettings`]: WorkspaceError::NoSettings
+    #[error(
+        "{path}: keeps no {} of its own, since its {marker} names no folder for them; {}",
+        .kind.plural(),
+        named_by(*.marker)
+    )]
+    NoDirectory {
+        path: PathBuf,
+        kind: Kind,
+        marker: MarkerFile,
+    },
     /// A folder a change to a project's settings would send a kind's
     /// installs to that no install would use ([`Misplaced`]).
     #[error(
@@ -2637,6 +2651,19 @@ impl WorkspaceError {
             | WorkspaceError::OverlapsGathered { path, .. } => path,
             WorkspaceError::Lock(error) => error.path(),
         }
+    }
+}
+
+/// How a project marked by `marker` comes to keep a kind it names no folder
+/// for, said after [`WorkspaceError::NoDirectory`]: in its `[directories]`,
+/// once it is marked by a `settings.toml`, which `mind migrate` moves the
+/// older markers to.
+fn named_by(marker: MarkerFile) -> String {
+    match marker {
+        MarkerFile::MindToml | MarkerFile::SettingsJson => format!(
+            "`mind migrate` moves it to a {SETTINGS_FILE}, whose `[directories]` can name one"
+        ),
+        MarkerFile::SettingsToml => String::from("its `[directories]` can name one"),
     }
 }
 
