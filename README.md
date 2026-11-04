@@ -35,7 +35,7 @@ Windows are tested only on request. It installs from source, with a recent
 stable Rust, and Node 24 with pnpm to build the panel:
 
 ```bash
-git clone https://github.com/otsobide/mindflayer mindweaver
+git clone https://github.com/otsobide/mindweaver
 cd mindweaver
 make install
 ```
@@ -296,9 +296,9 @@ from an older Mindweaver.
 ## Roadmap
 
 What comes next is planned as
-[milestones](https://github.com/otsobide/mindflayer/milestones), each ending
+[milestones](https://github.com/otsobide/mindweaver/milestones), each ending
 with something usable on real repositories, and each issue in them is one pull
-request. [#15](https://github.com/otsobide/mindflayer/issues/15) tracks the
+request. [#15](https://github.com/otsobide/mindweaver/issues/15) tracks the
 whole plan, and the decisions it rests on are recorded in
 [docs/architecture.md](docs/architecture.md#decisions).
 

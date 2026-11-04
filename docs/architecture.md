@@ -9135,7 +9135,7 @@ one machine at a time.
 
 ## Decisions
 
-The roadmap in [#15](https://github.com/otsobide/mindflayer/issues/15) rests on
+The roadmap in [#15](https://github.com/otsobide/mindweaver/issues/15) rests on
 twenty-six decisions: twenty-two validated by the owner on 2026-10-26,
 [D-24](#d-24-the-local-server-is-a-versioned-http-api) on 2026-11-03 with the
 milestone it opens, [D-25](#d-25-core-is-values-and-ports), asked for by the
@@ -9816,7 +9816,9 @@ versioned](#formats-are-versioned)). The GitHub repository is renamed,
 otsobide/mindflayer to otsobide/mindweaver, once the code says Mindweaver:
 the owner's step, not an issue's. Rejected: one change for both, which
 would have moved every user's workspace in the same PR as every
-identifier; and `weaver` for the binary. Unblocks #228 and #229.
+identifier; and `weaver` for the binary. Unblocks #228 and #229. The
+repository was renamed on 2026-11-04, once #228 and #229 reached `main`
+(#232); GitHub sends the old address on to the new one.
 
 Carrying it out, #228 kept a few more names as they were, each for #229 to
 decide: the codes `path_in_mindflayer` and `x_mindflayer_required`, since a
