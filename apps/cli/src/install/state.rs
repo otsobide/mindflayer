@@ -348,14 +348,20 @@ impl Screen {
     }
 
     /// The kind `tab` shows next, or `shift+tab` (`back`), round again past
-    /// the last.
+    /// the last: among the kinds an install writes, as core says
+    /// ([`install::installs`]), since a column of a kind none of the
+    /// projects can take would be one more `tab` to say so every time.
     pub fn next_kind(&self, back: bool) -> Kind {
-        let count = Kind::ALL.len();
-        let at = Kind::ALL
+        let kinds: Vec<Kind> = Kind::ALL
+            .into_iter()
+            .filter(|&kind| install::installs(kind))
+            .collect();
+        let count = kinds.len();
+        let at = kinds
             .iter()
             .position(|&kind| kind == self.kind)
             .unwrap_or(0);
-        Kind::ALL[if back { at + count - 1 } else { at + 1 } % count]
+        kinds[if back { at + count - 1 } else { at + 1 } % count]
     }
 
     /// The project the cursor is on.

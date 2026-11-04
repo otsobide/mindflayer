@@ -1340,16 +1340,34 @@ pub fn kinds_named(reference: &Reference) -> Vec<Kind> {
 
 /// The kinds a copy could be filed as under `name` ([`is_installable_name`]),
 /// or every kind when none could, so that what is asked of them refuses the
-/// name, saying why.
+/// name, saying why: of the kinds an install writes ([`installs`]), since a
+/// name typed bare would otherwise be refused for a kind nobody offered it
+/// as, where nothing offers it at all.
 fn filed_as(name: &str) -> Vec<Kind> {
-    let kinds: Vec<Kind> = Kind::ALL
+    let installed: Vec<Kind> = Kind::ALL
         .into_iter()
+        .filter(|&kind| installs(kind))
+        .collect();
+    let kinds: Vec<Kind> = installed
+        .iter()
+        .copied()
         .filter(|&kind| is_installable_name(kind, name))
         .collect();
     if kinds.is_empty() {
-        Kind::ALL.to_vec()
+        installed
     } else {
         kinds
+    }
+}
+
+/// Whether an install writes `kind` into a project at all: a skill as a
+/// copy in a folder, and a rule as a section of a block or a file. What a
+/// name typed bare is asked of, and what a front end steps through to
+/// install. Matched on the kind, so a kind added says whether it is
+/// installed before it compiles.
+pub const fn installs(kind: Kind) -> bool {
+    match kind {
+        Kind::Skill | Kind::Rule => true,
     }
 }
 

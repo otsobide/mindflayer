@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 
+use mindweaver_core::create;
 use mindweaver_core::gather::{Progress, Watch};
 use mindweaver_core::scan;
 use mindweaver_core::{
@@ -1862,10 +1863,16 @@ fn unchanged(project: &str) -> String {
     )
 }
 
-/// The kind after this one, round and round.
+/// The kind after this one, round and round, among the kinds `add` writes,
+/// as core says ([`create::scaffolds`]): one it refuses would be a choice
+/// the form offers only to refuse.
 fn other_kind(kind: Kind) -> Kind {
-    let at = Kind::ALL.iter().position(|each| *each == kind).unwrap_or(0);
-    Kind::ALL[(at + 1) % Kind::ALL.len()]
+    let kinds: Vec<Kind> = Kind::ALL
+        .into_iter()
+        .filter(|&kind| create::scaffolds(kind))
+        .collect();
+    let at = kinds.iter().position(|each| *each == kind).unwrap_or(0);
+    kinds[(at + 1) % kinds.len()]
 }
 
 /// The next pick among `count` choices, where no pick at all is a choice too

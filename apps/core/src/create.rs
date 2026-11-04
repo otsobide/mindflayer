@@ -117,6 +117,17 @@ pub(crate) enum Scaffold {
     },
 }
 
+/// Whether `add` writes `kind` from a name and a description, scaffolded so
+/// it passes `validate` from the moment it exists: what a front end
+/// offering `add` by kind offers it for. Matched on the kind, so a kind
+/// added says whether it is scaffolded before it compiles, as [`plan`]
+/// does.
+pub const fn scaffolds(kind: Kind) -> bool {
+    match kind {
+        Kind::Skill | Kind::Rule => true,
+    }
+}
+
 /// Work out what adding `kind` `name`, described as `description`, from
 /// `template` when there is one, would write into `project`.
 pub(crate) fn plan(

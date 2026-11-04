@@ -6,6 +6,7 @@
 //! command it is about to run, as it is typed. The install screen, when it is
 //! open, draws itself. Nothing here decides anything; [`super::state`] does.
 
+use mindweaver_core::create;
 use mindweaver_core::{Agent, Kind, MarkerFile, Reason, Share, State};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -674,8 +675,10 @@ fn adding(app: &App, form: &AddForm, frame: &mut Frame, area: Rect) {
     let inner = popup(frame, area, &format!("Add to {project}"), 76, 10);
     let rows = lines(inner, 8);
 
+    // The kinds the form steps through, as core says `add` writes them.
     let kinds: Vec<(String, bool)> = Kind::ALL
         .iter()
+        .filter(|kind| create::scaffolds(**kind))
         .map(|kind| (kind.slug().to_owned(), *kind == form.kind))
         .collect();
     choices(frame, rows[0], "kind", &kinds, form.field == AddField::Kind);
