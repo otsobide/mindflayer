@@ -89,6 +89,11 @@ mindflayer-core = { path = "../core", features = ["mother"] }
 # nothing this one writes can, for the suites that check it is scrubbed. The
 # same version and features as core's, so it is one build of SQLite.
 rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+# To read a command line of the end-to-end suite (`e2e_test`) into words as a
+# shell would, quotes and all, so a test spells what a person types. The
+# version gix-command builds already, so it adds no crate to the tree; MIT
+# or Apache-2.0, which GPL-3.0-only takes in.
+shell-words = "1.1"
 tempfile = "3"
 # To wait, bounded, for what the panel's watcher tells (`live_test`): the
 # runtime and timers the server's own suites use, and the version it builds.

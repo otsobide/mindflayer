@@ -2790,6 +2790,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "shell-words",
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
