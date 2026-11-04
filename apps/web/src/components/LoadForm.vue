@@ -6,6 +6,14 @@ const runner = useRunner()
 const { busy } = runner
 
 /**
+ * The folder a workspace keeps itself in, which the form's description
+ * names. Still the product's old name: it moves with the other names
+ * written on the disk (#229), and is spelled here alone so that it moves
+ * in one place.
+ */
+const WEAVER_DIR = '.mindflayer'
+
+/**
  * The workspace to load, as typed. Whether a workspace is there, and
  * whether it is this one, which a load refuses, is the line's to say once
  * it runs: checked nowhere here, so the panel cannot let through a path the
@@ -45,7 +53,7 @@ async function load() {
   >
     <UFormField
       label="Load a workspace by its path"
-      description="The absolute path of a folder holding a .mindflayer: the line it runs is shown first."
+      :description="`The absolute path of a folder holding a ${WEAVER_DIR}: the line it runs is shown first.`"
       name="path"
       class="w-full sm:w-auto"
     >

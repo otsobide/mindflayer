@@ -1013,7 +1013,9 @@ These are easy to break from a single file without noticing.
   `activate::WORKSPACE_VARIABLE` and `DEACTIVATE`, the CLI's
   `homes::HOME_VARIABLE`, the server's `guard::PANEL_HEADER` and
   `auth::COOKIE_PREFIX`, and the panel's cookie prefix
-  (`src/preferences.ts`). Code that uses one, a message included, names it
+  (`src/preferences.ts`), its header (`src/api/http.ts`'s `HEADERS`) and
+  the folder its load form names (`LoadForm.vue`'s `WEAVER_DIR`). Code
+  that uses one, a message included, names it
   through its constant, never by its spelling; a doc comment, a doc and a
   test may spell it. The codes `path_in_mindflayer` and
   `x_mindflayer_required` stay as they are, as every code does.
