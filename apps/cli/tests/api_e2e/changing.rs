@@ -364,3 +364,87 @@ fn the_transcript_holds_each_run_in_order_and_no_preview_or_read() {
         ]
     );
 }
+
+#[test]
+fn what_nothing_offers_any_more_is_taken_out_of_every_project_in_one_task() {
+    let scenario = linking(&["api", "web"]);
+    scenario.given("~/Projects", "flayer install --all-projects review");
+    // Out of the library alone: it warns of what it left, which a given
+    // step may not.
+    scenario
+        .run("~/Projects", "flayer remove review --yes")
+        .exits(1);
+    let served = scenario.serve("~/Projects");
+
+    served
+        .post(
+            "/tasks",
+            json!({"type": "uninstall_orphaned", "holder": {"type": "workspace"}}),
+        )
+        .is(200)
+        .answers(json!({
+            "lines": ["flayer -W /home/you/Projects uninstall --all-projects --orphaned"],
+            "outcome": {
+                "ok": true,
+                "runs": [{
+                    "command": "flayer -W /home/you/Projects uninstall --all-projects --orphaned",
+                    "error": null,
+                    "ok": true,
+                    "stderr": [],
+                    "stdout": "removed review from api\nremoved review from web\n",
+                }],
+            },
+        }));
+    assert!(!scenario.exists("~/Projects/api/.claude/skills/review"));
+    assert!(!scenario.exists("~/Projects/web/.claude/skills/review"));
+}
+
+#[test]
+fn a_read_the_panel_runs_as_a_line_is_answered_with_what_the_command_printed() {
+    let scenario = linking(&["api"]);
+    let served = scenario.serve("~/Projects");
+
+    served
+        .post(
+            "/tasks",
+            json!({"type": "validate", "holder": {"type": "workspace"}}),
+        )
+        .is(200)
+        .answers_at(
+            "/outcome/runs/0",
+            json!({
+                "command": "flayer -W /home/you/Projects validate",
+                "error": null,
+                "ok": true,
+                "stderr": [],
+                "stdout": "review: ok\n\n1 skill checked, 0 invalid\n",
+            }),
+        );
+}
+
+#[test]
+fn the_tasks_that_only_read_are_the_lines_of_the_commands_that_list() {
+    let scenario = Scenario::projects(&["api"]);
+    let served = scenario.serve("~/Projects");
+
+    let lines: Vec<serde_json::Value> = ["shelf", "workspaces", "refresh"]
+        .iter()
+        .map(|kind| {
+            served
+                .post("/tasks/preview", json!({"type": kind}))
+                .is(200)
+                .json()["lines"]
+                .clone()
+        })
+        .collect();
+
+    assert_eq!(
+        lines,
+        [
+            json!(["flayer -W /home/you/Projects gather list"]),
+            json!(["flayer -W /home/you/Projects workspaces"]),
+            // Read everything again: no line, since nothing runs.
+            json!([]),
+        ]
+    );
+}

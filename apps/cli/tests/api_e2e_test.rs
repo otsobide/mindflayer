@@ -61,6 +61,9 @@ mod changing;
 #[path = "api_e2e/authoring.rs"]
 mod authoring;
 
+#[path = "api_e2e/managing.rs"]
+mod managing;
+
 #[path = "api_e2e/switching.rs"]
 mod switching;
 

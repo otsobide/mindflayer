@@ -238,3 +238,17 @@ fn a_gather_is_refused_since_only_a_terminal_shows_a_fetch_as_it_goes() {
              `flayer load <path>`\n",
         ));
 }
+
+#[test]
+fn the_install_screen_is_refused_since_it_draws_on_a_terminal() {
+    let scenario = guide_workspace();
+    let served = scenario.serve("~/Projects");
+
+    served
+        .post("/tasks/preview", json!({"type": "open_install"}))
+        .refused(
+            422,
+            "opens_screen",
+            "`flayer install` opens a screen of its own, which needs a terminal to draw on",
+        );
+}
