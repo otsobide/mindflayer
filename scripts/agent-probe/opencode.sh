@@ -66,7 +66,7 @@ opencode_native() {
 opencode_fetch_v1() {
 	command -v npm >/dev/null || die "needs npm on PATH to fetch OpenCode $opencode_v1 for opencode-mcp-1-19"
 	command -v tar >/dev/null || die "needs tar on PATH to unpack OpenCode $opencode_v1"
-	local arch pkg dir=$run/opencode-$opencode_v1
+	local arch pkg libc dir=$run/opencode-$opencode_v1
 	case $(uname -m) in
 	x86_64) arch=x64 ;;
 	aarch64 | arm64) arch=arm64 ;;
@@ -74,7 +74,12 @@ opencode_fetch_v1() {
 	esac
 	pkg=opencode-linux-$arch
 	if [[ $arch == x64 ]] && ! grep -qw avx2 /proc/cpuinfo; then pkg+=-baseline; fi
-	if ldd --version 2>&1 | grep -qi musl; then pkg+=-musl; fi
+	# What ldd says is read whole and looked at after: musl's says so on
+	# stderr and exits 1, which fails a pipeline into grep under pipefail
+	# whatever grep found. Alpine, which the postinstall takes for musl too,
+	# is told by its release file.
+	libc=$(ldd --version 2>&1) || true
+	if [[ -f /etc/alpine-release || ${libc,,} == *musl* ]]; then pkg+=-musl; fi
 	mkdir -p -- "$dir"
 	(cd "$dir" && npm pack "$pkg@$opencode_v1" --cache "$run/npm-cache" \
 		--update-notifier=false --loglevel=error >/dev/null) ||
