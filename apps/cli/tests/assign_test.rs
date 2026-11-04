@@ -1,4 +1,4 @@
-//! `flayer install` and `flayer uninstall` given several projects, by `-p`
+//! `mindweaver install` and `mindweaver uninstall` given several projects, by `-p`
 //! once for each or by `--all-projects` (#49): each project's lines in the
 //! order asked, one that refuses said of it while the rest go ahead, and a
 //! refusal every project shares said once.
@@ -6,20 +6,20 @@
 mod common;
 
 use common::*;
-use mindflayer_cli::Warning;
+use mindweaver_cli::Warning;
 
 /// A workspace with a skill of its own, `commit-style`, linking `alpha`,
 /// `beta` and `gamma`.
 fn workspace_with_three() -> TempDir {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     for name in ["alpha", "beta", "gamma"] {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
         new_project(&root);
-        flayer(dir.path(), &["link", name]).unwrap();
+        weaver(dir.path(), &["link", name]).unwrap();
     }
-    flayer(
+    weaver(
         dir.path(),
         &["add", "skill", "commit-style", "How commits are written"],
     )
@@ -28,7 +28,7 @@ fn workspace_with_three() -> TempDir {
 }
 
 /// Somebody's own `commit-style`, written into `project` where Codex and
-/// OpenCode read it, before Mindflayer put anything there.
+/// OpenCode read it, before Mindweaver put anything there.
 fn somebodys(project: &Path) -> PathBuf {
     let copy = project.join(".agents/skills/commit-style");
     fs::create_dir_all(&copy).unwrap();
@@ -45,7 +45,7 @@ fn installing_into_three_projects_leaves_somebodys_copy_alone_and_installs_into_
     let dir = workspace_with_three();
     let theirs = somebodys(&dir.path().join("beta"));
 
-    let outcome = flayer(
+    let outcome = weaver(
         dir.path(),
         &[
             "install",
@@ -71,7 +71,7 @@ installed commit-style into gamma, from workspace
         outcome.stderr,
         [
             "warning: beta already has a commit-style at .agents/skills/commit-style that \
-             Mindflayer did not put there, so it was left alone"
+             Mindweaver did not put there, so it was left alone"
         ]
     );
     assert!(!outcome.ok, "one of the three was left alone");
@@ -98,9 +98,9 @@ fn what_a_projects_rules_warn_of_is_said_of_that_project() {
     .unwrap();
     // Claude alone reads a rule about some files, so `alpha`, naming no
     // other, has nothing to be warned of.
-    flayer(dir.path(), &["agents", "-p", "alpha", "claude", "--yes"]).unwrap();
+    weaver(dir.path(), &["agents", "-p", "alpha", "claude", "--yes"]).unwrap();
 
-    let outcome = flayer(
+    let outcome = weaver(
         dir.path(),
         &["install", "style/comments", "-p", "alpha", "-p", "beta"],
     )
@@ -123,7 +123,7 @@ installed rule style/comments into beta, from workspace
     assert!(!outcome.ok);
 
     // One project alone is said as it always was.
-    let alone = flayer(dir.path(), &["install", "style/comments", "-p", "gamma"]).unwrap();
+    let alone = weaver(dir.path(), &["install", "style/comments", "-p", "gamma"]).unwrap();
 
     assert_eq!(
         alone.stderr,
@@ -137,14 +137,14 @@ installed rule style/comments into beta, from workspace
 #[test]
 fn what_a_projects_rules_warn_of_after_an_uninstall_is_said_of_that_project() {
     let dir = workspace_with_three();
-    flayer(
+    weaver(
         dir.path(),
         &["add", "rule", "git/commits", "Commit one step at a time"],
     )
     .unwrap();
-    flayer(dir.path(), &["add", "rule", "review/tone", "Review kindly"]).unwrap();
+    weaver(dir.path(), &["add", "rule", "review/tone", "Review kindly"]).unwrap();
     for rule in ["git/commits", "review/tone"] {
-        flayer(dir.path(), &["install", rule, "-p", "alpha", "-p", "beta"]).unwrap();
+        weaver(dir.path(), &["install", rule, "-p", "alpha", "-p", "beta"]).unwrap();
     }
     // Somebody's edit of another rule's section in `beta`, which every
     // render of its rules keeps and warns of.
@@ -157,7 +157,7 @@ fn what_a_projects_rules_warn_of_after_an_uninstall_is_said_of_that_project() {
     )
     .unwrap();
 
-    let outcome = flayer(
+    let outcome = weaver(
         dir.path(),
         &["uninstall", "git/commits", "-p", "alpha", "-p", "beta"],
     )
@@ -185,7 +185,7 @@ removed rule git/commits from beta
 fn all_projects_installs_into_every_project_the_workspace_links() {
     let dir = workspace_with_three();
 
-    let outcome = flayer(dir.path(), &["install", "commit-style", "--all-projects"]).unwrap();
+    let outcome = weaver(dir.path(), &["install", "commit-style", "--all-projects"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -196,7 +196,7 @@ installed commit-style into gamma, from workspace
 "
     );
     assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
-    let again = flayer(dir.path(), &["install", "commit-style", "--all-projects"]).unwrap();
+    let again = weaver(dir.path(), &["install", "commit-style", "--all-projects"]).unwrap();
     assert_eq!(
         again.stdout,
         "\
@@ -211,7 +211,7 @@ commit-style in gamma was already current
 fn a_project_named_twice_is_installed_into_once() {
     let dir = workspace_with_three();
 
-    let outcome = flayer(
+    let outcome = weaver(
         dir.path(),
         &["install", "commit-style", "-p", "alpha", "-p", "./alpha"],
     )
@@ -234,7 +234,7 @@ fn a_project_that_cannot_take_skills_says_why_and_the_rest_go_ahead() {
     assert!(written.contains(agents), "{written}");
     fs::write(&settings, written.replace(agents, "agents = []")).unwrap();
 
-    let outcome = flayer(dir.path(), &["install", "commit-style", "--all-projects"]).unwrap();
+    let outcome = weaver(dir.path(), &["install", "commit-style", "--all-projects"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -257,7 +257,7 @@ installed commit-style into gamma, from workspace
 fn a_name_no_project_is_offered_is_refused_once() {
     let dir = workspace_with_three();
 
-    let failure = flayer(dir.path(), &["install", "nope", "--all-projects"]).unwrap_err();
+    let failure = weaver(dir.path(), &["install", "nope", "--all-projects"]).unwrap_err();
 
     assert!(
         matches!(&*failure.error, CliError::Install(error) if error.to_string().starts_with("nothing called `nope`")),
@@ -271,7 +271,7 @@ fn a_name_no_project_is_offered_is_refused_once() {
 fn a_project_the_workspace_does_not_link_refuses_the_install_before_any_is_made() {
     let dir = workspace_with_three();
 
-    let failure = flayer(
+    let failure = weaver(
         dir.path(),
         &["install", "commit-style", "-p", "alpha", "-p", "nowhere"],
     )
@@ -292,12 +292,12 @@ fn all_projects_and_a_project_are_not_asked_together() {
     let dir = workspace_with_three();
     for command in ["install", "uninstall"] {
         let line = line(
-            "flayer",
+            "mindweaver",
             &[command, "commit-style", "-p", "alpha", "--all-projects"],
             dir.path(),
         );
 
-        let refused = FlayerCli::try_parse_from(&line).unwrap_err();
+        let refused = WeaverCli::try_parse_from(&line).unwrap_err();
 
         assert!(refused.to_string().contains("--all-projects"), "{refused}");
     }
@@ -306,10 +306,10 @@ fn all_projects_and_a_project_are_not_asked_together() {
 #[test]
 fn every_project_with_none_linked_installs_nothing_and_says_so() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
-    let installed = flayer(dir.path(), &["install", "anything", "--all-projects"]).unwrap();
-    let removed = flayer(dir.path(), &["uninstall", "anything", "--all-projects"]).unwrap();
+    let installed = weaver(dir.path(), &["install", "anything", "--all-projects"]).unwrap();
+    let removed = weaver(dir.path(), &["uninstall", "anything", "--all-projects"]).unwrap();
 
     assert_eq!(
         installed.stdout,
@@ -325,7 +325,7 @@ fn every_project_of_a_default_workspace_nothing_has_made_is_none_and_makes_nothi
     let here = TempDir::new().unwrap();
 
     for (command, done) in [("install", "installed"), ("uninstall", "removed")] {
-        let outcome = flayer_at_home(
+        let outcome = weaver_at_home(
             here.path(),
             home.path(),
             &[command, "anything", "--all-projects"],
@@ -346,19 +346,19 @@ fn every_project_of_a_default_workspace_nothing_has_made_is_none_and_makes_nothi
         );
         assert!(outcome.ok);
     }
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
 fn uninstalling_from_several_takes_it_out_where_it_is_and_passes_over_where_it_is_not() {
     let dir = workspace_with_three();
-    flayer(
+    weaver(
         dir.path(),
         &["install", "commit-style", "-p", "alpha", "-p", "gamma"],
     )
     .unwrap();
 
-    let outcome = flayer(dir.path(), &["uninstall", "commit-style", "--all-projects"]).unwrap();
+    let outcome = weaver(dir.path(), &["uninstall", "commit-style", "--all-projects"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -378,10 +378,10 @@ removed commit-style from gamma
 #[test]
 fn uninstalling_from_several_leaves_somebodys_copy_alone_and_says_so() {
     let dir = workspace_with_three();
-    flayer(dir.path(), &["install", "commit-style", "-p", "alpha"]).unwrap();
+    weaver(dir.path(), &["install", "commit-style", "-p", "alpha"]).unwrap();
     let theirs = somebodys(&dir.path().join("beta"));
 
-    let outcome = flayer(
+    let outcome = weaver(
         dir.path(),
         &["uninstall", "commit-style", "-p", "alpha", "-p", "beta"],
     )
@@ -392,7 +392,7 @@ fn uninstalling_from_several_leaves_somebodys_copy_alone_and_says_so() {
         outcome.stderr,
         [
             "warning: commit-style at .agents/skills/commit-style in beta was not installed by \
-             Mindflayer, so it was left alone"
+             Mindweaver, so it was left alone"
         ]
     );
     assert!(!outcome.ok);
@@ -404,24 +404,24 @@ fn uninstalling_from_several_leaves_somebodys_copy_alone_and_says_so() {
 #[test]
 fn a_refusal_over_somebodys_copy_carries_the_code_foreign() {
     let dir = workspace_with_three();
-    flayer(dir.path(), &["install", "commit-style", "-p", "alpha"]).unwrap();
+    weaver(dir.path(), &["install", "commit-style", "-p", "alpha"]).unwrap();
     somebodys(&dir.path().join("beta"));
 
-    let installed = flayer(dir.path(), &["install", "commit-style", "-p", "beta"]).unwrap();
-    let among = flayer(
+    let installed = weaver(dir.path(), &["install", "commit-style", "-p", "beta"]).unwrap();
+    let among = weaver(
         dir.path(),
         &["install", "commit-style", "-p", "alpha", "-p", "beta"],
     )
     .unwrap();
-    let removed = flayer(dir.path(), &["uninstall", "commit-style", "-p", "beta"]).unwrap();
+    let removed = weaver(dir.path(), &["uninstall", "commit-style", "-p", "beta"]).unwrap();
 
     for refused in [&installed, &among, &removed] {
         let foreign: Vec<&Warning> = refused
             .stderr
             .iter()
             .filter(|line| {
-                line.text.contains("Mindflayer did not put there")
-                    || line.text.contains("was not installed by Mindflayer")
+                line.text.contains("Mindweaver did not put there")
+                    || line.text.contains("was not installed by Mindweaver")
             })
             .collect();
         assert_eq!(foreign.len(), 1, "{refused:?}");
@@ -434,7 +434,7 @@ fn a_refusal_over_somebodys_copy_carries_the_code_foreign() {
 fn uninstalling_what_no_project_asked_has_is_refused() {
     let dir = workspace_with_three();
 
-    let failure = flayer(
+    let failure = weaver(
         dir.path(),
         &["uninstall", "commit-style", "-p", "alpha", "-p", "beta"],
     )
@@ -450,7 +450,7 @@ fn uninstalling_what_no_project_asked_has_is_refused() {
 fn uninstalling_needs_projects_to_take_it_out_of() {
     let dir = workspace_with_three();
 
-    let failure = flayer(dir.path(), &["uninstall", "commit-style"]).unwrap_err();
+    let failure = weaver(dir.path(), &["uninstall", "commit-style"]).unwrap_err();
 
     assert!(
         matches!(*failure.error, CliError::UninstallWhere),

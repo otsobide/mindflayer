@@ -1,6 +1,6 @@
 //! Which workspace a command uses: the one `-W` names, then the one
 //! `$MINDFLAYER_WORKSPACE` activates, then the one above, then the default;
-//! and `flayer which`, which says which one and why.
+//! and `mindweaver which`, which says which one and why.
 //!
 //! What the environment says can only be set for a binary of its own, so
 //! those tests spawn one (`common::spawn`); the rest run in process.
@@ -12,7 +12,7 @@ use common::*;
 /// Under one directory, none above another: `outer`, a workspace with a
 /// skill of its own and `alpha` linked under it; `hub`, a workspace with a
 /// skill of its own; and `collapse`, a project under neither, made as an
-/// older Mindflayer made it, so a copy installed there is in the folder it
+/// older Mindweaver made it, so a copy installed there is in the folder it
 /// authors in, where a change from the project reaches it.
 struct Fixture {
     _dir: TempDir,
@@ -31,13 +31,13 @@ fn fixture() -> Fixture {
     for root in [&outer, &alpha, &hub, &collapse] {
         fs::create_dir_all(root).unwrap();
     }
-    flayer(&outer, &["init"]).unwrap();
-    flayer(&hub, &["init"]).unwrap();
+    weaver(&outer, &["init"]).unwrap();
+    weaver(&hub, &["init"]).unwrap();
     mind(&alpha, &["init"]).unwrap();
     older_project(&collapse);
-    flayer(&outer, &["link", "alpha"]).unwrap();
-    flayer(&outer, &["add", "skill", "outer-skill", "The outer one's"]).unwrap();
-    flayer(&hub, &["add", "skill", "hub-skill", "The hub's"]).unwrap();
+    weaver(&outer, &["link", "alpha"]).unwrap();
+    weaver(&outer, &["add", "skill", "outer-skill", "The outer one's"]).unwrap();
+    weaver(&hub, &["add", "skill", "hub-skill", "The hub's"]).unwrap();
     Fixture {
         _dir: dir,
         outer,
@@ -56,7 +56,7 @@ fn a_named_workspace_wins_over_the_one_above() {
     let fixture = fixture();
     let hub = spelled(&fixture.hub);
 
-    let outcome = flayer(&fixture.alpha, &["list", "-W", &hub]).unwrap();
+    let outcome = weaver(&fixture.alpha, &["list", "-W", &hub]).unwrap();
 
     assert!(outcome.stdout.contains("hub-skill"), "{}", outcome.stdout);
     assert!(
@@ -78,11 +78,11 @@ fn a_project_links_into_the_workspace_named_for_it() {
 }
 
 #[test]
-fn a_workspace_is_named_by_its_mindflayer_folder_as_well() {
+fn a_workspace_is_named_by_its_mindweaver_folder_as_well() {
     let fixture = fixture();
-    let folder = spelled(&fixture.hub.join(FLAYER_DIR));
+    let folder = spelled(&fixture.hub.join(WEAVER_DIR));
 
-    let outcome = flayer(&fixture.alpha, &["list", &format!("-W{folder}")]).unwrap();
+    let outcome = weaver(&fixture.alpha, &["list", &format!("-W{folder}")]).unwrap();
 
     assert!(outcome.stdout.contains("hub-skill"), "{}", outcome.stdout);
 }
@@ -94,7 +94,7 @@ fn naming_a_directory_that_is_no_workspace_is_refused_and_makes_nothing() {
     fs::create_dir(&plain).unwrap();
     let before = registry(&fixture.outer);
 
-    let failure = flayer(
+    let failure = weaver(
         &fixture.alpha,
         &["add", "skill", "x", "An x", "-W", &spelled(&plain)],
     )
@@ -109,11 +109,11 @@ fn naming_a_directory_that_is_no_workspace_is_refused_and_makes_nothing() {
     assert_eq!(
         failure.error.to_string(),
         format!(
-            "-W names a workspace that cannot be used: {}: not a flayer workspace (no .mindflayer/flayer.toml)",
+            "-W names a workspace that cannot be used: {}: not a weaver workspace (no .mindflayer/flayer.toml)",
             plain.display()
         )
     );
-    assert!(!plain.join(FLAYER_DIR).exists());
+    assert!(!plain.join(WEAVER_DIR).exists());
     assert_eq!(registry(&fixture.outer), before);
     assert!(!own_directory_for(&fixture.outer, Kind::Skill)
         .join("x")
@@ -130,7 +130,7 @@ fn an_activated_workspace_wins_over_the_one_above() {
     let hub = spelled(&fixture.hub);
 
     let listed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["list"],
         &[("MINDFLAYER_WORKSPACE", &hub)],
@@ -142,11 +142,11 @@ fn an_activated_workspace_wins_over_the_one_above() {
 }
 
 #[test]
-fn an_empty_mindflayer_workspace_counts_as_unset() {
+fn an_empty_workspace_variable_counts_as_unset() {
     let fixture = fixture();
 
     let listed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["list"],
         &[("MINDFLAYER_WORKSPACE", "")],
@@ -162,7 +162,7 @@ fn a_workspace_named_empty_keeps_the_activated_one_out() {
     let hub = spelled(&fixture.hub);
 
     let listed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["list", "-W", ""],
         &[("MINDFLAYER_WORKSPACE", &hub)],
@@ -180,7 +180,7 @@ fn a_named_workspace_wins_over_the_activated_one() {
     let listed = spawn(
         "mind",
         &fixture.collapse,
-        &["flayer", "list", "-W", &outer],
+        &["weaver", "list", "-W", &outer],
         &[("MINDFLAYER_WORKSPACE", &hub)],
     );
 
@@ -194,7 +194,7 @@ fn activating_a_directory_that_is_no_workspace_is_refused() {
     let gone = fixture.outer.join("gone");
 
     let listed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["list"],
         &[("MINDFLAYER_WORKSPACE", &spelled(&gone))],
@@ -216,11 +216,11 @@ fn installing_from_an_activated_workspace_not_above_records_and_disowns() {
     // `hub` is beside `collapse`, so only the activation leads to it: walking
     // up from the project never does.
     let fixture = fixture();
-    flayer(&fixture.hub, &["link", "../collapse"]).unwrap();
+    weaver(&fixture.hub, &["link", "../collapse"]).unwrap();
     let hub = spelled(&fixture.hub);
     let activated = [("MINDFLAYER_WORKSPACE", hub.as_str())];
     let recorded = || {
-        FlayerWorkspace::open(&fixture.hub)
+        WeaverWorkspace::open(&fixture.hub)
             .unwrap()
             .ledger()
             .unwrap()
@@ -251,7 +251,9 @@ fn installing_from_an_activated_workspace_not_above_records_and_disowns() {
 
     assert!(removed.ok, "{}", removed.stderr);
     assert!(
-        removed.stdout.contains("`flayer install` can put it back"),
+        removed
+            .stdout
+            .contains("`mindweaver install` can put it back"),
         "{}",
         removed.stdout
     );
@@ -286,14 +288,14 @@ fn a_change_to_a_project_is_refused_when_the_named_workspace_will_not_open() {
 }
 
 // ---------------------------------------------------------------------------
-// flayer which: the workspace a command would use, and why
+// mindweaver which: the workspace a command would use, and why
 // ---------------------------------------------------------------------------
 
 #[test]
 fn which_says_a_workspace_named_with_w_is_used_because_it_was_named() {
     let fixture = fixture();
 
-    let outcome = flayer(&fixture.alpha, &["which", "-W", &spelled(&fixture.hub)]).unwrap();
+    let outcome = weaver(&fixture.alpha, &["which", "-W", &spelled(&fixture.hub)]).unwrap();
 
     assert_eq!(
         outcome,
@@ -310,7 +312,7 @@ fn which_says_an_activated_workspace_is_used_because_it_was_activated() {
     let fixture = fixture();
 
     let printed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["which"],
         &[("MINDFLAYER_WORKSPACE", &spelled(&fixture.hub))],
@@ -331,7 +333,7 @@ fn which_says_an_activated_workspace_is_used_because_it_was_activated() {
 fn which_says_a_workspace_above_is_used_because_it_was_found_walking_up() {
     let fixture = fixture();
 
-    let outcome = flayer(&fixture.alpha, &["which"]).unwrap();
+    let outcome = weaver(&fixture.alpha, &["which"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -347,9 +349,9 @@ fn which_says_a_workspace_above_is_used_because_it_was_found_walking_up() {
 fn which_says_the_default_workspace_is_used_because_there_is_no_other() {
     let fixture = fixture();
     let home = TempDir::new().unwrap();
-    flayer(home.path(), &["init"]).unwrap();
+    weaver(home.path(), &["init"]).unwrap();
 
-    let outcome = flayer_at_home(&fixture.collapse, home.path(), &["which"]).unwrap();
+    let outcome = weaver_at_home(&fixture.collapse, home.path(), &["which"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -367,7 +369,7 @@ fn which_says_the_default_workspace_is_not_made_yet_and_leaves_it_so() {
     let fixture = fixture();
     let home = TempDir::new().unwrap();
 
-    let outcome = flayer_at_home(&fixture.collapse, home.path(), &["which"]).unwrap();
+    let outcome = weaver_at_home(&fixture.collapse, home.path(), &["which"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -385,14 +387,14 @@ fn which_says_the_default_workspace_is_not_made_yet_and_leaves_it_so() {
         outcome.stderr
     );
     assert!(outcome.ok);
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
 fn which_with_no_workspace_anywhere_says_so() {
     let fixture = fixture();
 
-    let failure = flayer(&fixture.collapse, &["which"]).unwrap_err();
+    let failure = weaver(&fixture.collapse, &["which"]).unwrap_err();
 
     assert!(
         matches!(*failure.error, CliError::NotInWorkspace(_)),
@@ -407,7 +409,7 @@ fn which_says_why_an_activated_workspace_cannot_be_used() {
     let gone = fixture.outer.join("gone");
 
     let printed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["which"],
         &[("MINDFLAYER_WORKSPACE", &spelled(&gone))],
@@ -418,7 +420,7 @@ fn which_says_why_an_activated_workspace_cannot_be_used() {
     assert_eq!(
         printed.stderr,
         format!(
-            "error: $MINDFLAYER_WORKSPACE names a workspace that cannot be used: {}: not a flayer workspace (no .mindflayer/flayer.toml)\n",
+            "error: $MINDFLAYER_WORKSPACE names a workspace that cannot be used: {}: not a weaver workspace (no .mindflayer/flayer.toml)\n",
             gone.display()
         )
     );

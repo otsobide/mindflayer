@@ -236,7 +236,7 @@ fn edit_refuses_contents_whose_front_matter_does_not_read_and_writes_nothing() {
 fn edit_refuses_contents_made_from_what_the_file_no_longer_holds() {
     let dir = TempDir::new().unwrap();
     let manifest = drafted(dir.path(), SHIP);
-    let read = mindflayer_core::hash::bytes(&fs::read(&manifest).unwrap());
+    let read = mindweaver_core::hash::bytes(&fs::read(&manifest).unwrap());
     // Somebody else's change, after the contents were made from the file.
     let mut theirs = fs::read_to_string(&manifest).unwrap();
     theirs.push_str("Theirs.\n");
@@ -266,7 +266,7 @@ fn edit_refuses_contents_made_from_what_the_file_no_longer_holds() {
     );
     assert_eq!(fs::read_to_string(&manifest).unwrap(), theirs);
 
-    let now = mindflayer_core::hash::bytes(theirs.as_bytes());
+    let now = mindweaver_core::hash::bytes(theirs.as_bytes());
     let outcome = mind(
         dir.path(),
         &[
@@ -328,11 +328,11 @@ fn edit_takes_contents_or_an_editor_and_a_hash_only_with_contents() {
             clap::error::ErrorKind::MissingRequiredArgument,
         ),
     ] {
-        for binary in ["mind", "flayer"] {
+        for binary in ["mind", "weaver"] {
             let words = line(binary, args, dir.path());
             let parsed = match binary {
                 "mind" => Cli::try_parse_from(&words).map(drop),
-                _ => FlayerCli::try_parse_from(&words).map(drop),
+                _ => WeaverCli::try_parse_from(&words).map(drop),
             };
             assert_eq!(parsed.unwrap_err().kind(), kind, "{words:?}");
         }
@@ -358,15 +358,15 @@ fn edit_takes_the_contents_from_standard_input_given_as_a_dash() {
 }
 
 #[test]
-fn flayer_edit_replaces_the_contents_of_one_of_the_workspaces_own_or_a_projects() {
+fn weaver_edit_replaces_the_contents_of_one_of_the_workspaces_own_or_a_projects() {
     let dir = workspace_with_two();
-    flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
     fs::write(dir.path().join("draft.md"), SHIP).unwrap();
     let alpha = skill_file("alpha", "A skill, rewritten");
     fs::write(dir.path().join("alpha.md"), &alpha).unwrap();
 
-    let own = flayer(dir.path(), &["edit", "deploy", "--contents", "draft.md"]).unwrap();
-    let projects = flayer(
+    let own = weaver(dir.path(), &["edit", "deploy", "--contents", "draft.md"]).unwrap();
+    let projects = weaver(
         dir.path(),
         &["edit", "-p", "alpha", "alpha", "--contents", "alpha.md"],
     )
@@ -431,7 +431,9 @@ fn a_removed_install_leaves_no_record_for_what_is_written_there_next() {
 
     let outcome = mind(&project, &["remove", "deploy", "--yes"]).unwrap();
     assert!(
-        outcome.stdout.contains("`flayer install` can put it back"),
+        outcome
+            .stdout
+            .contains("`mindweaver install` can put it back"),
         "{}",
         outcome.stdout
     );
@@ -456,8 +458,8 @@ fn an_installed_skill_that_is_renamed_stays_installed_under_its_new_name() {
 
     assert!(
         outcome.stdout.ends_with(
-            "  it was installed by `flayer install`, and stays so under its new name; renamed, \
-             it is left alone by `flayer install` and `flayer uninstall` unless they are forced\n"
+            "  it was installed by `mindweaver install`, and stays so under its new name; renamed, \
+             it is left alone by `mindweaver install` and `mindweaver uninstall` unless they are forced\n"
         ),
         "{}",
         outcome.stdout
@@ -475,11 +477,11 @@ fn an_installed_skill_that_is_renamed_stays_installed_under_its_new_name() {
 #[test]
 fn an_installed_rule_that_is_renamed_still_holds_what_was_installed_and_says_so() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let project = dir.path().join("collapse");
     fs::create_dir(&project).unwrap();
     older_project(&project);
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
     let own = dir.path().join(".mindflayer/library/rules/git");
     fs::create_dir_all(&own).unwrap();
     fs::write(own.join("no-force-push.md"), "Never force-push.\n").unwrap();
@@ -490,8 +492,8 @@ fn an_installed_rule_that_is_renamed_still_holds_what_was_installed_and_says_so(
     // A rule's rename moves its file as it is, so nothing in it is an edit.
     assert!(
         outcome.stdout.ends_with(
-            "  it was installed by `flayer install`, and stays so under its new name; renamed, \
-             it still holds what was installed, and `flayer uninstall` takes it out\n"
+            "  it was installed by `mindweaver install`, and stays so under its new name; renamed, \
+             it still holds what was installed, and `mindweaver uninstall` takes it out\n"
         ),
         "{}",
         outcome.stdout
@@ -522,7 +524,9 @@ fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() 
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(
-        outcome.stdout.contains("`flayer install` can put it back"),
+        outcome
+            .stdout
+            .contains("`mindweaver install` can put it back"),
         "{}",
         outcome.stdout
     );
@@ -530,7 +534,7 @@ fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() 
         outcome.stderr,
         [
             "note: https://example.com/acme/skills: the user name, password or token an older \
-             Mindflayer stored in this URL is taken out; gathering it again needs a git \
+             Mindweaver stored in this URL is taken out; gathering it again needs a git \
              credential helper that has it"
         ]
     );
@@ -586,8 +590,8 @@ fn an_installed_skill_that_is_edited_stays_installed_and_reads_as_edited() {
 
     assert!(
         outcome.stdout.ends_with(
-            "  it was installed by `flayer install`, and stays so; edited, it is left alone by \
-             `flayer install` and `flayer uninstall` unless they are forced\n"
+            "  it was installed by `mindweaver install`, and stays so; edited, it is left alone by \
+             `mindweaver install` and `mindweaver uninstall` unless they are forced\n"
         ),
         "{}",
         outcome.stdout
@@ -651,8 +655,8 @@ fn an_installed_skill_whose_contents_are_replaced_stays_installed_and_reads_as_e
 
     assert_eq!(
         outcome.stdout,
-        "edited skill deploy: ok\n  it was installed by `flayer install`, and stays so; edited, \
-         it is left alone by `flayer install` and `flayer uninstall` unless they are forced\n"
+        "edited skill deploy: ok\n  it was installed by `mindweaver install`, and stays so; edited, \
+         it is left alone by `mindweaver install` and `mindweaver uninstall` unless they are forced\n"
     );
     let screen = screen_for(&workspace, &ledger);
     assert_eq!(
@@ -671,28 +675,28 @@ fn linked_from_beside(make: fn(&Path)) -> (TempDir, PathBuf, PathBuf) {
     for root in [&hub, &project] {
         fs::create_dir(root).unwrap();
     }
-    flayer(&hub, &["init"]).unwrap();
+    weaver(&hub, &["init"]).unwrap();
     make(&project);
-    flayer(&hub, &["link", "../collapse"]).unwrap();
+    weaver(&hub, &["link", "../collapse"]).unwrap();
     (dir, hub, project)
 }
 
 /// `linked_from_beside`, with the workspace's own `deploy` installed into
-/// the project, one an older Mindflayer made, so the copy is in the folder
+/// the project, one an older Mindweaver made, so the copy is in the folder
 /// it authors in, where a change from the workspace reaches it.
 fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
     let (dir, hub, project) = linked_from_beside(older_project);
-    flayer(&hub, &["add", "skill", "deploy", "Ship it"]).unwrap();
-    flayer(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
+    weaver(&hub, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
     (dir, hub, project)
 }
 
 #[cfg(unix)]
 #[test]
-fn a_workspace_beside_a_project_keeps_its_record_when_flayer_edits_the_copy() {
+fn a_workspace_beside_a_project_keeps_its_record_when_weaver_edits_the_copy() {
     let (_dir, hub, project) = installed_from_beside();
 
-    let outcome = flayer(
+    let outcome = weaver(
         &hub,
         &[
             "edit",
@@ -708,7 +712,7 @@ fn a_workspace_beside_a_project_keeps_its_record_when_flayer_edits_the_copy() {
     // Walking up from the project never reaches the workspace; the one the
     // command runs in is the one asked.
     assert!(outcome.stdout.contains("stays so"), "{}", outcome.stdout);
-    let left = flayer(&hub, &["uninstall", "-p", "collapse", "deploy"]).unwrap();
+    let left = weaver(&hub, &["uninstall", "-p", "collapse", "deploy"]).unwrap();
     assert_eq!(
         left.stderr,
         vec![
@@ -726,11 +730,11 @@ fn mind_keeps_the_record_of_the_workspace_in_your_home_when_that_manages_the_pro
     let elsewhere = TempDir::new().unwrap();
     let project = elsewhere.path().join("collapse");
     fs::create_dir(&project).unwrap();
-    // Made as an older Mindflayer made it, so the copy installed is in the
+    // Made as an older Mindweaver made it, so the copy installed is in the
     // folder it authors in, where `mind edit` reaches it.
     older_project(&project);
-    flayer_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
-    flayer_at_home(
+    weaver_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
+    weaver_at_home(
         elsewhere.path(),
         home.path(),
         &["add", "skill", "deploy", "Ship it"],
@@ -758,7 +762,7 @@ fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();
 
-    flayer(
+    weaver(
         &hub,
         &[
             "add",
@@ -779,7 +783,7 @@ fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
         "{manifest}"
     );
     assert_eq!(
-        flayer(&hub, &["templates", "-p", "collapse"])
+        weaver(&hub, &["templates", "-p", "collapse"])
             .unwrap()
             .stdout,
         "full     skill  built in\n\
@@ -793,7 +797,7 @@ fn mind_add_from_a_template_refuses_when_the_workspace_that_lends_it_cannot_be_r
     let template = dir.path().join(".mindflayer/templates/full/SKILL.md");
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nThe team's full.\n").unwrap();
-    let marker = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let marker = dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG);
     let newer: String = fs::read_to_string(&marker)
         .unwrap()
         .lines()
@@ -830,11 +834,11 @@ fn put(root: &Path, route: &str, contents: &str) {
 #[test]
 fn a_skill_only_in_an_agents_folder_is_not_changed_from_a_project() {
     let dir = TempDir::new().unwrap();
-    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    let directories = mindweaver_core::Directories::default().with(Kind::Skill, "skills");
     MindProject::init_settings(
         dir.path(),
-        &mindflayer_core::Agent::ALL,
-        mindflayer_core::Share::Shared,
+        &mindweaver_core::Agent::ALL,
+        mindweaver_core::Share::Shared,
         &directories,
     )
     .unwrap();
@@ -861,11 +865,11 @@ fn a_skill_only_in_an_agents_folder_is_not_changed_from_a_project() {
 #[test]
 fn a_name_the_project_authors_and_its_agents_read_is_one_row_whose_change_reaches_only_its_own() {
     let dir = TempDir::new().unwrap();
-    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    let directories = mindweaver_core::Directories::default().with(Kind::Skill, "skills");
     MindProject::init_settings(
         dir.path(),
-        &mindflayer_core::Agent::ALL,
-        mindflayer_core::Share::Shared,
+        &mindweaver_core::Agent::ALL,
+        mindweaver_core::Share::Shared,
         &directories,
     )
     .unwrap();

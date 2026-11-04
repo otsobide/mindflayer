@@ -328,8 +328,8 @@ async fn the_servers_own_routes_are_served_as_their_table_says() {
     for own in Own::ALL {
         let path = format!("{API}{}", own.path());
         let (other, allowed) = match own.method() {
-            mindflayer_server::Method::Get => (Method::POST, "GET,HEAD"),
-            mindflayer_server::Method::Post => (Method::GET, "POST"),
+            mindweaver_server::Method::Get => (Method::POST, "GET,HEAD"),
+            mindweaver_server::Method::Post => (Method::GET, "POST"),
         };
         let body = (other == Method::POST).then(|| json!({ "name": "a" }));
         let reply = send(&server, other.clone(), &path, token, body).await;

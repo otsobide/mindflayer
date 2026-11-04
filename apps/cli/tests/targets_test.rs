@@ -11,13 +11,13 @@ use common::*;
 /// where they read.
 fn installed() -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     new_project(&root);
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
-    flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
-    flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
     (dir, root)
 }
 
@@ -27,7 +27,7 @@ fn settings(root: &Path) -> String {
 
 /// What the workspace at `dir` records of `deploy` in `collapse`, by path.
 fn recorded(dir: &Path) -> Vec<String> {
-    FlayerWorkspace::open(dir)
+    WeaverWorkspace::open(dir)
         .unwrap()
         .ledger()
         .unwrap()
@@ -107,13 +107,13 @@ fn setting_targets_says_what_it_would_move_then_moves_every_copy_there() {
 #[test]
 fn an_install_into_a_project_installing_skills_in_one_folder_writes_only_there() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     new_project(&root);
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
     mind(&root, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
-    flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
 
     let done = mind(&root, &["install", "deploy"]).unwrap();
 
@@ -144,7 +144,7 @@ fn resetting_moves_the_copies_back_and_leaves_somebodys_where_it_is_said() {
          copied deploy to .agents/skills/deploy, for codex and opencode, kept out of git\n\
          copied deploy to .claude/skills/deploy, for claude, kept out of git\n\
          removed deploy from .skills/deploy\n\
-         left .skills/notes where it is: Mindflayer did not install it\n"
+         left .skills/notes where it is: Mindweaver did not install it\n"
     );
     assert!(done.stderr.is_empty(), "{:?}", done.stderr);
     assert!(done.ok);
@@ -173,7 +173,7 @@ fn somebodys_skill_at_a_new_target_is_left_and_warned_about() {
     let dry = mind(&root, &["targets", "set", "skills", ".skills"]).unwrap();
     assert!(
         dry.stdout.contains(
-            "would leave .skills/deploy as it is: Mindflayer did not put it there, so deploy \
+            "would leave .skills/deploy as it is: Mindweaver did not put it there, so deploy \
              would not be copied there\n"
         ),
         "{}",
@@ -185,7 +185,7 @@ fn somebodys_skill_at_a_new_target_is_left_and_warned_about() {
     // Said by the code an install refused over somebody's copy is said by.
     assert!(done.stderr.iter().any(|line| {
         *line
-            == "warning: collapse already has a deploy at .skills/deploy that Mindflayer did not \
+            == "warning: collapse already has a deploy at .skills/deploy that Mindweaver did not \
                 put there, so it was left alone, and deploy was not copied there"
             && line.code == Some("foreign")
     }));
@@ -244,7 +244,7 @@ fn status_warns_that_no_agent_reads_the_targets_once_they_are_set() {
     mind(&root, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
 
     let here = mind(&root, &["status"]).unwrap();
-    let across = flayer(dir.path(), &["status"]).unwrap();
+    let across = weaver(dir.path(), &["status"]).unwrap();
 
     assert_eq!(here.stdout, "deploy  current  -  workspace\n");
     for outcome in [&here, &across] {
@@ -286,7 +286,7 @@ fn an_agent_pointed_at_the_target_by_a_link_reads_it() {
 
 #[cfg(unix)]
 #[test]
-fn resetting_with_the_links_still_there_keeps_the_copy_mindflayers() {
+fn resetting_with_the_links_still_there_keeps_the_copy_mindweavers() {
     let (dir, root) = installed();
     mind(&root, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
     link_the_agents_to_skills(&root);
@@ -308,16 +308,16 @@ fn resetting_with_the_links_still_there_keeps_the_copy_mindflayers() {
     let source = own_directory_for(dir.path(), Kind::Skill).join("deploy/SKILL.md");
     let edited = fs::read_to_string(&source).unwrap() + "\nOne more step.\n";
     fs::write(&source, edited).unwrap();
-    let again = flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    let again = weaver(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
     assert_eq!(again.stdout, "updated deploy in collapse, from workspace\n");
     assert!(again.ok, "{:?}", again.stderr);
 }
 
 #[test]
-fn flayer_targets_changes_a_project_the_workspace_manages_and_needs_one_named() {
+fn weaver_targets_changes_a_project_the_workspace_manages_and_needs_one_named() {
     let (dir, root) = installed();
 
-    let done = flayer(
+    let done = weaver(
         dir.path(),
         &[
             "targets", "-p", "collapse", "set", "skills", ".skills", "-y",
@@ -330,14 +330,14 @@ fn flayer_targets_changes_a_project_the_workspace_manages_and_needs_one_named() 
     assert!(root.join(".skills/deploy").is_dir());
 
     // `-p` on the other side of `reset` names it all the same.
-    let reset = flayer(
+    let reset = weaver(
         dir.path(),
         &["targets", "reset", "skills", "--project", "collapse", "-y"],
     )
     .unwrap();
     assert!(reset.stdout.contains("removed deploy from .skills/deploy"));
 
-    let failure = flayer(dir.path(), &["targets", "reset", "skills"]).unwrap_err();
+    let failure = weaver(dir.path(), &["targets", "reset", "skills"]).unwrap_err();
     assert!(
         matches!(*failure.error, CliError::TargetsWhere),
         "{}",

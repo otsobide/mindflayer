@@ -33,25 +33,25 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'webkit', use: { ...devices['Desktop Safari'] } }
   ],
-  // `flayer ui` as a person starts it, on a port the system picks, so a run
+  // `mindweaver ui` as a person starts it, on a port the system picks, so a run
   // never meets another on a fixed one. The link it prints first is the only
   // way to know which, so it is read with a regex, whose named groups
   // Playwright puts in the environment every worker starts with, upper
-  // case: MINDFLAYER_E2E_URL and MINDFLAYER_E2E_TOKEN (e2e/panel.ts). The
+  // case: MINDWEAVER_E2E_URL and MINDWEAVER_E2E_TOKEN (e2e/panel.ts). The
   // link is never printed: the token stays out of the log, as the server
   // keeps it out of its own.
   webServer: {
-    name: 'flayer ui',
+    name: 'mindweaver ui',
     // `exec`, so the shell Playwright starts it through gives its place to
     // the server, and the Ctrl-C below reaches the server alone.
-    command: `exec ${[binary(at.bin, 'flayer'), ...ui(at)].map(quoted).join(' ')}`,
+    command: `exec ${[binary(at.bin, 'mindweaver'), ...ui(at)].map(quoted).join(' ')}`,
     // From the fixture, so not even the process's own folder is in the
     // repository, which sits under the developer's home.
     cwd: at.workspace,
     // Over this process's environment, which the driver cleared of every
     // variable leading to a real workspace or agent home.
     env: { HOME: at.home, USERPROFILE: at.home },
-    wait: { stdout: /^(?<mindflayer_e2e_url>http:\/\/127\.0\.0\.1:\d+)\/\?token=(?<mindflayer_e2e_token>[0-9a-f]+)$/m },
+    wait: { stdout: /^(?<mindweaver_e2e_url>http:\/\/127\.0\.0\.1:\d+)\/\?token=(?<mindweaver_e2e_token>[0-9a-f]+)$/m },
     stdout: 'ignore',
     stderr: 'pipe',
     timeout: 60_000,

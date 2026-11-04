@@ -230,7 +230,7 @@ fn the_same_pattern_in_two_groups_is_each_groups_own() {
 
 #[test]
 fn lines_in_the_block_before_any_group_keep_it() {
-    // Mindflayer never writes them, so they are somebody's.
+    // Mindweaver never writes them, so they are somebody's.
     let before = "# mindflayer:begin\n/kept/\n# project a\n/a/\n# mindflayer:end\n";
     let mut file = ExcludeFile::parse(before.as_bytes()).unwrap();
     file.remove("a", &patterns(&["/a/"])).unwrap();

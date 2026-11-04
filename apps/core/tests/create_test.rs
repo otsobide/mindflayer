@@ -3,10 +3,10 @@
 use std::fs;
 use std::path::Path;
 
-use mindflayer_core::template::{self, Origin};
-use mindflayer_core::{
-    create, create_from, Catalog, CreateError, Declared, Directories, FlayerWorkspace, Kind,
-    MindProject, TemplateError,
+use mindweaver_core::template::{self, Origin};
+use mindweaver_core::{
+    create, create_from, Catalog, CreateError, Declared, Directories, Kind, MindProject,
+    TemplateError, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -440,7 +440,7 @@ fn a_rule_template_that_opens_with_a_horizontal_rule_is_all_body() {
 #[test]
 fn the_closest_template_of_a_name_wins() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -509,7 +509,7 @@ fn a_workspace_that_manages_a_project_from_beside_it_offers_its_templates() {
     let dir = TempDir::new().unwrap();
     let hub = dir.path().join("hub");
     fs::create_dir(&hub).unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(&hub).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(&hub).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();

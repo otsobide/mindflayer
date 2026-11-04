@@ -8,13 +8,13 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::copy;
-use mindflayer_core::install::{self, Edits, Installed, Standing};
-use mindflayer_core::status::State;
-use mindflayer_core::update::{self, Applied, Does, Plan, Step, Updates};
-use mindflayer_core::{
-    claude_rules, create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger,
-    MindProject, Reference, Share,
+use mindweaver_core::copy;
+use mindweaver_core::install::{self, Edits, Installed, Standing};
+use mindweaver_core::status::State;
+use mindweaver_core::update::{self, Applied, Does, Plan, Step, Updates};
+use mindweaver_core::{
+    claude_rules, create, Agent, AgentHomes, Directories, Kind, Ledger, MindProject, Reference,
+    Share, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -22,7 +22,7 @@ use tempfile::TempDir;
 /// settings naming every agent.
 struct Given {
     dir: TempDir,
-    workspace: FlayerWorkspace,
+    workspace: WeaverWorkspace,
     projects: Vec<MindProject>,
     ledger: Ledger,
 }
@@ -35,7 +35,7 @@ fn given() -> Given {
 fn given_with(names: &[&str], share: Share) -> Given {
     let dir = TempDir::new().unwrap();
     gix::init(dir.path()).unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let mut projects = Vec::new();
     for name in names {
         let root = dir.path().join(name);
@@ -380,9 +380,9 @@ fn a_record_from_before_origins_is_put_back_from_the_place_its_copy_tells_or_lef
     // A workspace it loads offers one by the same name, unlike its own.
     let team = given.dir.path().join("team");
     fs::create_dir(&team).unwrap();
-    let (team, _) = FlayerWorkspace::init(&team).unwrap();
+    let (team, _) = WeaverWorkspace::init(&team).unwrap();
     create(&team.own(), Kind::Skill, "deploy", "From the team").unwrap();
-    let mut workspace = FlayerWorkspace::open(given.dir.path()).unwrap();
+    let mut workspace = WeaverWorkspace::open(given.dir.path()).unwrap();
     workspace.load(&team).unwrap();
     let given = Given { workspace, ..given };
     // As a ledger from before origins and hashes were kept holds it.
@@ -500,7 +500,7 @@ fn a_local_project_a_git_clean_took_is_marked_again_and_its_copies_put_back_out_
 #[test]
 fn a_workspace_that_never_installed_anything_has_nothing_to_update_and_gets_no_ledger() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("app");
     fs::create_dir(&root).unwrap();
     let (project, _) =
@@ -741,7 +741,7 @@ fn a_rules_section_and_its_file_for_claude_gone_are_put_back() {
 #[test]
 fn a_rule_copied_into_a_project_a_mind_toml_marks_is_updated_as_its_copy() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let (project, _) = MindProject::init(dir.path().join("app")).unwrap();
     workspace.link(&project).unwrap();
     let ledger = workspace.ledger().unwrap();

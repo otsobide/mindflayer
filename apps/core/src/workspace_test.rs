@@ -17,18 +17,18 @@ fn templates_round_trip_through_the_parser() {
     assert_eq!(mind.directories.get(Kind::Skill), Some(Path::new("skills")));
     assert_eq!(mind.directories.get(Kind::Rule), Some(Path::new("rules")));
 
-    let flayer: FlayerConfig =
-        toml::from_str(&flayer_template("projects", &Directories::default())).unwrap();
-    assert_eq!(flayer.version, FLAYER_FORMAT_VERSION);
-    assert_eq!(flayer.name, "projects");
-    assert!(flayer.projects.is_empty());
+    let weaver: WeaverConfig =
+        toml::from_str(&weaver_template("projects", &Directories::default())).unwrap();
+    assert_eq!(weaver.version, WEAVER_FORMAT_VERSION);
+    assert_eq!(weaver.name, "projects");
+    assert!(weaver.projects.is_empty());
     // A workspace's own default is its library, not a project's.
     assert_eq!(
-        flayer.directories.get(Kind::Skill),
+        weaver.directories.get(Kind::Skill),
         Some(Path::new(".mindflayer/library/skills"))
     );
     assert_eq!(
-        flayer.directories.get(Kind::Rule),
+        weaver.directories.get(Kind::Rule),
         Some(Path::new(".mindflayer/library/rules"))
     );
 }
@@ -49,12 +49,12 @@ fn a_name_holding_control_characters_still_round_trips() {
     let mind: MindConfig =
         toml::from_str(&mind_template(awkward, &Directories::default())).unwrap();
     assert_eq!(mind.name, awkward);
-    let flayer: FlayerConfig =
-        toml::from_str(&flayer_template(awkward, &Directories::default())).unwrap();
-    assert_eq!(flayer.name, awkward);
+    let weaver: WeaverConfig =
+        toml::from_str(&weaver_template(awkward, &Directories::default())).unwrap();
+    assert_eq!(weaver.name, awkward);
 }
 
-/// What `flayer init PATH` reaches with a typed argument: a directory whose
+/// What `mindweaver init PATH` reaches with a typed argument: a directory whose
 /// name holds a control character is made a workspace that opens again.
 /// Unix only, as Windows takes no control character in a file name.
 #[cfg(unix)]
@@ -62,9 +62,9 @@ fn a_name_holding_control_characters_still_round_trips() {
 fn a_workspace_whose_folder_name_holds_a_control_character_opens_again() {
     let dir = tempfile::TempDir::new().unwrap();
     let root = dir.path().join("cr\r esc\u{1b}");
-    FlayerWorkspace::init(&root).unwrap();
+    WeaverWorkspace::init(&root).unwrap();
     assert_eq!(
-        FlayerWorkspace::open(&root).unwrap().name(),
+        WeaverWorkspace::open(&root).unwrap().name(),
         "cr\r esc\u{1b}"
     );
 }
@@ -112,21 +112,21 @@ fn settings_project(root: &Path, directories: Directories) -> PathBuf {
 }
 
 /// A directory that is both a mind project, marked by settings at the newest
-/// version a project's marker has, and a flayer workspace, so each marker
+/// version a project's marker has, and a weaver workspace, so each marker
 /// can be made newer while the other is read beside it.
 fn both_markers() -> (tempfile::TempDir, PathBuf, PathBuf) {
     let dir = tempfile::TempDir::new().unwrap();
     let mind = settings_project(dir.path(), Directories::default());
-    FlayerWorkspace::init(dir.path()).unwrap();
-    let flayer = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
-    (dir, mind, flayer)
+    WeaverWorkspace::init(dir.path()).unwrap();
+    let weaver = dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG);
+    (dir, mind, weaver)
 }
 
 #[test]
 fn a_refusal_names_the_marker_that_is_newer() {
-    let (dir, mind, flayer) = both_markers();
+    let (dir, mind, weaver) = both_markers();
     with_version(&mind, MIND_FORMAT_VERSION + 1);
-    with_version(&flayer, FLAYER_FORMAT_VERSION + 1);
+    with_version(&weaver, WEAVER_FORMAT_VERSION + 1);
 
     let project = MindProject::open(dir.path()).unwrap_err();
     assert!(
@@ -141,7 +141,7 @@ fn a_refusal_names_the_marker_that_is_newer() {
     );
     assert!(project.to_string().contains("project marker"), "{project}");
 
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap_err();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap_err();
     assert!(
         matches!(
             workspace,
@@ -164,9 +164,9 @@ fn a_refusal_names_the_marker_that_is_newer() {
 
 #[test]
 fn a_newer_project_marker_is_refused_while_a_current_workspace_marker_is_read() {
-    let (dir, mind, flayer) = both_markers();
+    let (dir, mind, weaver) = both_markers();
     with_version(&mind, MIND_FORMAT_VERSION + 1);
-    with_version(&flayer, FLAYER_FORMAT_VERSION);
+    with_version(&weaver, WEAVER_FORMAT_VERSION);
 
     let error = MindProject::open(dir.path()).unwrap_err();
     assert!(
@@ -177,22 +177,22 @@ fn a_newer_project_marker_is_refused_while_a_current_workspace_marker_is_read() 
         ),
         "{error}"
     );
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
-    assert_eq!(workspace.config().version, FLAYER_FORMAT_VERSION);
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
+    assert_eq!(workspace.config().version, WEAVER_FORMAT_VERSION);
 }
 
 #[test]
 fn a_newer_workspace_marker_is_refused_while_a_current_project_marker_is_read() {
-    let (dir, mind, flayer) = both_markers();
+    let (dir, mind, weaver) = both_markers();
     with_version(&mind, MIND_FORMAT_VERSION);
-    with_version(&flayer, FLAYER_FORMAT_VERSION + 1);
+    with_version(&weaver, WEAVER_FORMAT_VERSION + 1);
 
-    let error = FlayerWorkspace::open(dir.path()).unwrap_err();
+    let error = WeaverWorkspace::open(dir.path()).unwrap_err();
     assert!(
         matches!(
             error,
             WorkspaceError::Version { marker: Marker::Workspace, found, .. }
-                if found == FLAYER_FORMAT_VERSION + 1
+                if found == WEAVER_FORMAT_VERSION + 1
         ),
         "{error}"
     );
@@ -561,10 +561,10 @@ fn a_member_serializes_its_entry_and_the_project_it_opens() {
 /// workspace's name, or why there is none.
 #[test]
 fn a_loaded_workspace_serializes_its_entry_and_its_name() {
-    let team = FlayerWorkspace {
+    let team = WeaverWorkspace {
         root: PathBuf::from("/team"),
-        config: FlayerConfig {
-            version: FLAYER_FORMAT_VERSION,
+        config: WeaverConfig {
+            version: WEAVER_FORMAT_VERSION,
             name: String::from("team"),
             projects: Vec::new(),
             loaded: Vec::new(),
@@ -629,16 +629,16 @@ fn a_share_mode_is_read_back_from_its_name_and_no_other_spelling() {
 /// holds in: its library, its shelf and its cache; and the route a line run
 /// from the root names it by leads there.
 #[test]
-fn a_workspaces_scratch_folder_is_its_own_inside_mindflayer() {
+fn a_workspaces_scratch_folder_is_its_own_inside_mindweaver() {
     let dir = tempfile::TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
 
     let scratch = workspace.scratch_dir();
 
-    assert_eq!(scratch, dir.path().join(FLAYER_DIR).join(SCRATCH_DIR));
-    assert_eq!(FlayerWorkspace::scratch_route(), ".mindflayer/tmp");
+    assert_eq!(scratch, dir.path().join(WEAVER_DIR).join(SCRATCH_DIR));
+    assert_eq!(WeaverWorkspace::scratch_route(), ".mindflayer/tmp");
     assert_eq!(
-        workspace.root().join(FlayerWorkspace::scratch_route()),
+        workspace.root().join(WeaverWorkspace::scratch_route()),
         scratch
     );
     let own = workspace.own();

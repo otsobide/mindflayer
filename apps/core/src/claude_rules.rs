@@ -23,13 +23,13 @@
 //! `paths` from it and strips the rest before the rule reaches the model
 //! (docs/agents.md, docs-only), and a file that is the rule byte for byte
 //! is one somebody can open and recognise. Below `mindflayer`, a folder of
-//! Mindflayer's own beside whatever somebody keeps in `.claude/rules`, a
+//! Mindweaver's own beside whatever somebody keeps in `.claude/rules`, a
 //! file is filed by the rule's route, folders and all, as in the library,
 //! so two rules never share one.
 //!
-//! Which files are Mindflayer's is told by what the caller hands back of an
+//! Which files are Mindweaver's is told by what the caller hands back of an
 //! earlier render ([`Recorded`]): each file's route, and the hash of what it
-//! held ([`hash::bytes`]). A file is Mindflayer's while it holds exactly
+//! held ([`hash::bytes`]). A file is Mindweaver's while it holds exactly
 //! that, and anything else at a rule's place is somebody's, written over
 //! and taken away by nothing. Keeping the record is the caller's
 //! ([`crate::install::rules`], in the ledger), as is deciding which rules a
@@ -57,7 +57,7 @@ use crate::exclude::{self, ExcludeError, Excluded};
 use crate::hash;
 use crate::install;
 use crate::value::ContentHash;
-use crate::workspace::{replace_bytes_unresolved, FlayerWorkspace, MindProject};
+use crate::workspace::{replace_bytes_unresolved, MindProject, WeaverWorkspace};
 
 /// The folders, from a project's root, the files go in.
 const FOLDER: [&str; 3] = [".claude", "rules", "mindflayer"];
@@ -69,7 +69,7 @@ const EXTENSION: &str = ".md";
 /// Where the files go, relative to a project's root:
 /// `.claude/rules/mindflayer`.
 ///
-/// A folder of Mindflayer's own rather than `.claude/rules` itself, where
+/// A folder of Mindweaver's own rather than `.claude/rules` itself, where
 /// somebody may keep rules by hand: a route can never name one of theirs,
 /// and the folder goes once the last file in it does.
 pub fn folder() -> PathBuf {
@@ -100,12 +100,12 @@ pub enum Mode {
     Fallback,
 }
 
-/// A rule file an earlier render left Mindflayer's: its route, and the hash
+/// A rule file an earlier render left Mindweaver's: its route, and the hash
 /// of what it held ([`hash::bytes`]).
 ///
 /// What the caller keeps ([`crate::install::rules`]), from
 /// [`Rendered::recorded`], and hands back to the next render, which takes a
-/// file as Mindflayer's only while it holds what was recorded.
+/// file as Mindweaver's only while it holds what was recorded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Recorded {
     pub route: String,
@@ -122,7 +122,7 @@ pub struct Rendered {
     pub warnings: Vec<Warning>,
     /// What keeping the files out of git did, for a local project (D-02):
     /// `None` for a shared one, one a `mind.toml` marks, and a render that
-    /// leaves no file of Mindflayer's. [`Excluded::warning`] says when
+    /// leaves no file of Mindweaver's. [`Excluded::warning`] says when
     /// nothing keeps them out, outside a git work tree.
     pub excluded: Option<Excluded>,
     /// Why the exclude block still names a file the render took away, or
@@ -133,7 +133,7 @@ pub struct Rendered {
 
 impl Rendered {
     /// What the caller keeps and hands back to the next render: every file
-    /// left Mindflayer's, with what it holds.
+    /// left Mindweaver's, with what it holds.
     pub fn recorded(&self) -> Vec<Recorded> {
         self.files
             .iter()
@@ -155,8 +155,8 @@ pub struct RuleFile {
     /// Where the file is, or would be.
     pub path: PathBuf,
     pub written: Written,
-    /// The hash of what the file holds while it is Mindflayer's, for the
-    /// caller to record; none once the render leaves nothing of Mindflayer's
+    /// The hash of what the file holds while it is Mindweaver's, for the
+    /// caller to record; none once the render leaves nothing of Mindweaver's
     /// there.
     pub hash: Option<ContentHash>,
 }
@@ -199,12 +199,12 @@ pub enum Warning {
     ClaudeOnly { route: String, missed: Vec<Agent> },
     /// Somebody's file is where the rule's would go.
     #[error(
-        "{path}: not a file Mindflayer wrote, so rule `{route}` is not written there and \
+        "{path}: not a file Mindweaver wrote, so rule `{route}` is not written there and \
          does not reach Claude Code"
     )]
     Foreign { route: String, path: PathBuf },
-    /// A file Mindflayer wrote has been changed since.
-    #[error("{path}: changed since Mindflayer wrote rule `{route}` there, so it is left as it is")]
+    /// A file Mindweaver wrote has been changed since.
+    #[error("{path}: changed since Mindweaver wrote rule `{route}` there, so it is left as it is")]
     Edited { route: String, path: PathBuf },
     /// The file could not be looked at, written or taken away.
     #[error("{path}: rule `{route}`: {error}")]
@@ -227,7 +227,7 @@ codes!(Warning {
 /// recorded whose rule is no longer asked for.
 ///
 /// `recorded` is what the caller kept of earlier renders
-/// ([`Rendered::recorded`]), and decides what is Mindflayer's: a file that
+/// ([`Rendered::recorded`]), and decides what is Mindweaver's: a file that
 /// holds what was recorded for its route is replaced when its rule has
 /// changed, and taken away when its rule is no longer asked for, with every
 /// folder that leaves empty up to and including `mindflayer`. Anything else
@@ -240,7 +240,7 @@ codes!(Warning {
 /// nothing.
 ///
 /// A local project's exclude entries are written first, one for each file
-/// left Mindflayer's, so none shows in `git status`, not even for a moment;
+/// left Mindweaver's, so none shows in `git status`, not even for a moment;
 /// a block that cannot be edited refuses the render with nothing written,
 /// rather than leave rules one machine has in every teammate's way. The
 /// entries of files taken away, gone or not made after all are taken out
@@ -267,7 +267,7 @@ codes!(Warning {
 /// Takes no lock: the caller holds the workspace's, as one calling
 /// [`crate::agents_md::render`] does, and the lock is not re-entrant.
 pub fn render<'a>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     rules: impl IntoIterator<Item = &'a Artifact>,
     mode: Mode,
@@ -442,7 +442,7 @@ pub fn render<'a>(
         }
     }
     // Out of the exclude block last, so no file shows in `git status` on its
-    // way out: each that was Mindflayer's and is not any more, a file that
+    // way out: each that was Mindweaver's and is not any more, a file that
     // failed to land included, since a line naming an empty place would keep
     // whatever somebody writes there later out of git without a word. Never
     // somebody's file's, which no entry of this project's was written for.
@@ -577,12 +577,12 @@ fn inside(real: &Path, file: &Path) -> Result<(), ClaudeRulesError> {
 enum Plan {
     /// Nothing is there: write the rule.
     Create(Vec<u8>),
-    /// Mindflayer's file is there, holding what was recorded: write the rule
+    /// Mindweaver's file is there, holding what was recorded: write the rule
     /// as it is now over it.
     Replace(Vec<u8>),
     /// The rule as it is now is there already.
     Keep(Vec<u8>),
-    /// Mindflayer's file is there, and its rule no longer asked for.
+    /// Mindweaver's file is there, and its rule no longer asked for.
     Remove,
     /// The file recorded is not there, and its rule no longer asked for.
     Gone,
@@ -595,7 +595,7 @@ enum Plan {
 }
 
 impl Plan {
-    /// Whether the file is Mindflayer's once the plan is carried out, and so
+    /// Whether the file is Mindweaver's once the plan is carried out, and so
     /// kept out of git in a local project: one it writes or finds current,
     /// and one recorded that it leaves where it is.
     fn keeps(&self, recorded: bool) -> bool {
@@ -624,7 +624,7 @@ fn plan(asked: Option<&[u8]>, recorded: Option<&ContentHash>, found: Found) -> P
         (Some(rule), Found::Absent) => Plan::Create(rule.to_vec()),
         // Holding the rule byte for byte makes a recorded file current, even
         // one somebody edited back into it, but never makes an unrecorded
-        // one Mindflayer's: it would then be taken away with its rule.
+        // one Mindweaver's: it would then be taken away with its rule.
         (Some(rule), Found::File(held)) if recorded.is_some() && held == rule => Plan::Keep(held),
         (Some(rule), Found::File(held)) if ours(&held) => Plan::Replace(rule.to_vec()),
         (None, Found::File(held)) if ours(&held) => Plan::Remove,
@@ -639,12 +639,12 @@ enum Found {
     Absent,
     /// A file, not a link to one, and what it holds.
     File(Vec<u8>),
-    /// A link, a folder, or anything else Mindflayer never writes there.
+    /// A link, a folder, or anything else Mindweaver never writes there.
     Other,
     Unreadable(io::Error),
 }
 
-/// What is at `path`, a link looked at rather than followed: Mindflayer
+/// What is at `path`, a link looked at rather than followed: Mindweaver
 /// writes none, so one there is somebody's, and what it points at too.
 fn look(path: &Path) -> Found {
     match fs::symlink_metadata(path) {
@@ -686,7 +686,7 @@ pub(crate) fn create(path: &Path, contents: &[u8]) -> io::Result<()> {
 ///
 /// Not past it: `.claude/rules` and `.claude` may be somebody's even when
 /// empty, and Claude makes `.claude` itself, so nothing tells whether
-/// Mindflayer made them. Below it, a folder only groups routes, and an empty
+/// Mindweaver made them. Below it, a folder only groups routes, and an empty
 /// one groups nothing.
 ///
 /// A folder not there is taken as pruned already, so the climb goes on: a
@@ -747,7 +747,7 @@ pub enum ClaudeRulesError {
     },
     #[error(
         "{file} is inside {home}, which {reader} reads for every project, so no rules are \
-         written into it: Mindflayer gives rules to one project at a time"
+         written into it: Mindweaver gives rules to one project at a time"
     )]
     UserScope {
         file: PathBuf,

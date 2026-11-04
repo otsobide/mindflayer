@@ -48,8 +48,8 @@ describe('the sources', () => {
     const { page } = await render('/sources', snapshot)
 
     expect(texts(page.get('[data-testid="empty"]'), 'code')).toEqual([
-      `$ flayer init ${snapshot.workspace.path}`,
-      `$ flayer -W ${snapshot.workspace.path} gather git <URL>`
+      `$ mindweaver init ${snapshot.workspace.path}`,
+      `$ mindweaver -W ${snapshot.workspace.path} gather git <URL>`
     ])
   })
 

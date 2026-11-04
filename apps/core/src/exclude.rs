@@ -1,10 +1,10 @@
 //! Keeping paths out of git without touching the team's `.gitignore`.
 //!
-//! A project in local mode keeps what Mindflayer installs into it out of git
+//! A project in local mode keeps what Mindweaver installs into it out of git
 //! (D-02), and the file that can say so without being committed is
 //! `$GIT_COMMON_DIR/info/exclude`: git reads it like a `.gitignore` but never
 //! tracks it, and every linked worktree of the repository reads the same one.
-//! Mindflayer writes there only between `# mindflayer:begin` and
+//! Mindweaver writes there only between `# mindflayer:begin` and
 //! `# mindflayer:end`, one group per project:
 //!
 //! ```text
@@ -24,7 +24,7 @@
 //! Not `.gitignore`, which is the team's: it is committed, so a line there
 //! puts copies one machine has into every teammate's diff. Not
 //! `core.excludesFile` either, which is the user's and spans every
-//! repository they have. Mindflayer edits neither, ever.
+//! repository they have. Mindweaver edits neither, ever.
 
 use std::fs;
 use std::io;
@@ -37,7 +37,7 @@ use crate::lines::{self, Line};
 use crate::paths;
 use crate::workspace::replace_bytes;
 
-/// The line that opens Mindflayer's block.
+/// The line that opens Mindweaver's block.
 pub const BEGIN: &str = "# mindflayer:begin";
 /// The line that closes it.
 pub const END: &str = "# mindflayer:end";
@@ -95,7 +95,7 @@ pub fn listed(project: &Path, key: &str) -> Result<Option<Listing>, ExcludeError
 /// project at `from` into the group headed `to_key`, naming the same paths
 /// in the project at `to`: for a project whose id changed
 /// (`mind init --new-id`), which keeps its place and takes a new key, and
-/// for one that moved (`flayer relink`), which keeps its key and takes a new
+/// for one that moved (`mindweaver relink`), which keeps its key and takes a new
 /// place, in the same work tree or another.
 ///
 /// A line is the project's when it names a path below the project's own
@@ -318,7 +318,7 @@ pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
 /// `mind.toml` project's was, stays in the index once a `.gitignore` asks
 /// for it to be left out, until somebody runs `git rm --cached` on it. Read
 /// from the index with gix, the repository opened as [`locate`] opens it,
-/// and never written: Mindflayer runs no git command, and taking a team's
+/// and never written: Mindweaver runs no git command, and taking a team's
 /// files out of the index is not its to do.
 pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
     in_index(project, folder, |index, path| {
@@ -335,7 +335,7 @@ pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
 /// `project`: whether the index of the work tree holding the project names
 /// it. Never, outside a git work tree.
 ///
-/// For a team file Mindflayer would edit to reach an agent, which a local
+/// For a team file Mindweaver would edit to reach an agent, which a local
 /// project leaves alone while git tracks it, unless its settings say
 /// `edit_tracked` (D-02), as a project's `CLAUDE.md`. Read from the index
 /// as [`tracks`] reads it, so a file added and not yet committed is tracked,
@@ -512,7 +512,7 @@ fn read(path: &Path) -> Result<ExcludeFile, ExcludeError> {
 /// One path to keep out of git, relative to the project it is in.
 ///
 /// Which paths those are is the caller's to decide (an installed skill's
-/// folders, an `AGENTS.md` Mindflayer created); this only says how a path is
+/// folders, an `AGENTS.md` Mindweaver created); this only says how a path is
 /// written down.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Entry {
@@ -620,7 +620,7 @@ fn escape(segment: &str) -> String {
     escaped
 }
 
-/// An exclude file's text, split around Mindflayer's block.
+/// An exclude file's text, split around Mindweaver's block.
 ///
 /// Kept as lines with their own endings ([`crate::lines`]) rather than as
 /// one string to search and splice: what is outside the block is re-emitted
@@ -638,7 +638,7 @@ pub struct ExcludeFile {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Block {
     begin: Line,
-    /// Lines between the begin marker and the first group. Mindflayer never
+    /// Lines between the begin marker and the first group. Mindweaver never
     /// writes any, so they are somebody's, and they are kept.
     loose: Vec<Line>,
     groups: Vec<Group>,
@@ -657,7 +657,7 @@ impl ExcludeFile {
     ///
     /// A block that is not exactly one well-formed block is refused rather
     /// than repaired: guessing where a missing end marker belongs could
-    /// swallow somebody's patterns into Mindflayer's block, and the next edit
+    /// swallow somebody's patterns into Mindweaver's block, and the next edit
     /// would rewrite them.
     pub fn parse(bytes: &[u8]) -> Result<Self, Malformed> {
         let lines = lines::split(bytes);
@@ -949,15 +949,15 @@ fn check(key: &str, patterns: &[String]) -> Result<(), ExcludeError> {
     Ok(())
 }
 
-/// Why the block in an exclude file is not one Mindflayer can edit. Lines are
+/// Why the block in an exclude file is not one Mindweaver can edit. Lines are
 /// counted from 1.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Malformed {
-    #[error("line {line}: `# mindflayer:begin` is never closed by `# mindflayer:end`")]
+    #[error("line {line}: `{BEGIN}` is never closed by `{END}`")]
     Unclosed { line: usize },
-    #[error("line {line}: `# mindflayer:end` closes no `# mindflayer:begin`")]
+    #[error("line {line}: `{END}` closes no `{BEGIN}`")]
     Unopened { line: usize },
-    #[error("line {line}: a second `# mindflayer:begin`, where there can be one block")]
+    #[error("line {line}: a second `{BEGIN}`, where there can be one block")]
     Reopened { line: usize },
     #[error("line {line}: a second group for `{key}` in the block")]
     Regrouped { line: usize, key: String },

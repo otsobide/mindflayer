@@ -1,9 +1,9 @@
-# 🧠 Mindflayer
+# 🧠 Mindweaver
 
-**Your coding agents read skills and rules. Mindflayer keeps them in order.**
+**Your coding agents read skills and rules. Mindweaver keeps them in order.**
 
 Claude Code, Codex and OpenCode each look for skills and rules in folders of
-their own, project by project. Mindflayer keeps one library of them for all
+their own, project by project. Mindweaver keeps one library of them for all
 your projects, puts each where the agents working in a project read it, tells
 you which copies have fallen behind, and never touches anything it did not
 write. Think of it as git for what your agents know.
@@ -13,9 +13,9 @@ write. Think of it as git for what your agents know.
   <img alt="A project's page in the control panel: its skills and rules, how each stands, which agents read it, where it came from and where its copies are" src="docs/images/project.png">
 </picture>
 
-It comes as two commands, `mind` for the project you are in and `flayer` for
+It comes as two commands, `mind` for the project you are in and `mindweaver` for
 the folder your projects sit in, with a TUI, and a control panel in your
-browser, `flayer ui`, which this page tours.
+browser, `mindweaver ui`, which this page tours.
 
 ## How it fits together
 
@@ -26,21 +26,21 @@ browser, `flayer ui`, which this page tours.
   of skills gathered from git repositories.
 - **Installing** copies a skill or a rule from either into a project, into
   each folder its agents read, and remembers what it wrote: that is what lets
-  Mindflayer update it or take it out later, and leave everything else alone.
+  Mindweaver update it or take it out later, and leave everything else alone.
 
 ## Install
 
-Mindflayer is young, and development targets **Linux** for now: macOS and
+Mindweaver is young, and development targets **Linux** for now: macOS and
 Windows are tested only on request. It installs from source, with a recent
 stable Rust, and Node 24 with pnpm to build the panel:
 
 ```bash
-git clone https://github.com/otsobide/mindflayer
-cd mindflayer
+git clone https://github.com/otsobide/mindflayer mindweaver
+cd mindweaver
 make install
 ```
 
-That puts `mind` and `flayer` in `~/.cargo/bin`, with the panel built into
+That puts `mind` and `mindweaver` in `~/.cargo/bin`, with the panel built into
 them. Without Node, `cargo install --path apps/cli --locked` installs the
 same commands and the TUI, and the panel then only says it was not built.
 
@@ -48,8 +48,8 @@ same commands and the TUI, and the panel then only says it was not built.
 
 ```bash
 cd ~/Projects      # the folder your repositories are in
-flayer init        # make it a workspace
-flayer ui          # serve the control panel and open it in your browser
+mindweaver init    # make it a workspace
+mindweaver ui      # serve the control panel and open it in your browser
 ```
 
 The panel is served by the binary itself, on 127.0.0.1 only, through a link
@@ -96,7 +96,7 @@ and where its copies are, and the page warns of what some agent never reads.
 Below, toggles change the project's agents and how it shares, and carry what
 is installed to where the agents now read. A skill somebody keeps by hand in
 an agent's folder, which reads as `foreign`, can be adopted into the library
-from its row, after which Mindflayer manages it like anything it installed.
+from its row, after which Mindweaver manages it like anything it installed.
 
 ### The library
 
@@ -113,8 +113,8 @@ it is installed.
 
 **Edit** opens its `SKILL.md`, or a rule's file, in an editor in the page.
 As you type, core judges the text by the rules a save is held to and says
-what `flayer validate` would say of it, in the same words. Saving runs
-`flayer edit --contents` with the text, shown first like every change, and
+what `mindweaver validate` would say of it, in the same words. Saving runs
+`mindweaver edit --contents` with the text, shown first like every change, and
 only over what the file held when you opened it: a change made to it
 meanwhile, from an editor or a terminal, is never written over, and the
 save says so. A copy installed from it then reads as outdated, for Updates
@@ -123,10 +123,10 @@ to bring along.
 ![Editing a skill in the browser: its SKILL.md with a line just typed into the front matter, and validate's warning about it beside the editor](docs/images/editor.png)
 
 **New skill** and **New rule** add one, from nothing or from a template,
-judged as you type by what `flayer add` would refuse, and the page of each
+judged as you type by what `mindweaver add` would refuse, and the page of each
 renames it.
 
-![Adding a skill from the built-in full template: its name and description typed, and core saying flayer add would write it](docs/images/new.png)
+![Adding a skill from the built-in full template: its name and description typed, and core saying mindweaver add would write it](docs/images/new.png)
 
 Removing one starts with what removing it everywhere would do: the copy
 that goes from each project, and one changed by hand, which stays. Only
@@ -144,7 +144,7 @@ beside the library's, read from where that workspace keeps them, so the
 next install takes whatever it holds then. **Loads** lists each workspace
 loaded, with what it offers and a link to assign those, and every workspace
 this machine knows: the default one in your home remembers each that
-`flayer init` makes. **Load** one of those, or name any other by its path;
+`mindweaver init` makes. **Load** one of those, or name any other by its path;
 **Unload** one, which asks first and leaves what was installed from it
 where it is.
 
@@ -177,7 +177,7 @@ it loads and the shelf, against every project. A box is ticked where the
 project holds that one, and says how it stands there. Tick and untick
 boxes, by offer or turned round by project, filtered by kind, origin, agent
 or name, from the mouse or the arrow keys: below, the plan says what they
-amount to, the `flayer install` and `flayer uninstall` lines it will run,
+amount to, the `mindweaver install` and `mindweaver uninstall` lines it will run,
 and what it holds back and why, such as a copy somebody wrote or changed by
 hand, or one name asked of a project from two places. **Apply** runs the
 lines, shown first.
@@ -238,7 +238,7 @@ shows the command lines it will run, exactly as you could type them in the
 workspace's folder, each naming the workspace with `-W`, and runs nothing
 until you press Run.
 
-![The preview of linking the two repositories: a mind init, then a flayer link](docs/images/preview.png)
+![The preview of linking the two repositories: a mind init, then a mindweaver link](docs/images/preview.png)
 
 A line that takes something away is a question, saying in the command's own
 words what it takes, with Cancel ready for an Enter pressed out of habit.
@@ -256,7 +256,7 @@ so they show the panel as it is.
 ## An API for scripts
 
 What the panel asks of the server is an HTTP API, there for your scripts
-too: `flayer ui --no-open --token-file <file>` serves it without a
+too: `mindweaver ui --no-open --token-file <file>` serves it without a
 browser, and writes where it is and its token to the file. [The API's
 guide](docs/api.md) walks through it with curl.
 
@@ -266,27 +266,27 @@ Everything the panel does is a command, and so is everything it does not do
 yet, such as gathering:
 
 ```bash
-cd ~/Projects/blog && mind init      # make a repository a project
-cd ~/Projects && flayer link blog    # and link it to the workspace
-flayer gather git https://github.com/acme/skills   # put a repository's skills on the shelf
-flayer install -p blog commit-style  # install one into a project
-flayer status                        # what every project holds, and how it stands
-flayer update --all --yes            # bring every project up to date
-flayer                               # the TUI: all of it from the keyboard
+cd ~/Projects/blog && mind init          # make a repository a project
+cd ~/Projects && mindweaver link blog    # and link it to the workspace
+mindweaver gather git https://github.com/acme/skills   # put a repository's skills on the shelf
+mindweaver install -p blog commit-style  # install one into a project
+mindweaver status                        # what every project holds, and how it stands
+mindweaver update --all --yes            # bring every project up to date
+mindweaver                               # the TUI: all of it from the keyboard
 ```
 
 To try it with nothing gathered, this repository's `examples/` is a
-workspace of two skills and two rules: `flayer load <your clone>/examples`
+workspace of two skills and two rules: `mindweaver load <your clone>/examples`
 offers them to yours.
 
 [The reference](docs/reference.md) has every command with what it prints,
-the formats Mindflayer reads and writes, `--json`, the TUI, and upgrading
-from an older Mindflayer.
+the formats Mindweaver reads and writes, `--json`, the TUI, and upgrading
+from an older Mindweaver.
 
 ## Learn more
 
 - [The reference](docs/reference.md): every command, with what it prints.
-- [Developing Mindflayer](docs/development.md): building it, testing it, and
+- [Developing Mindweaver](docs/development.md): building it, testing it, and
   working on the panel.
 - [Architecture](docs/architecture.md): why each part is the way it is, and
   the decisions behind it.

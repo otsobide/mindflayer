@@ -1,4 +1,4 @@
-//! Activation as shells run it: `eval "$(flayer activate …)"` in bash, and
+//! Activation as shells run it: `eval "$(mindweaver activate …)"` in bash, and
 //! in zsh where it is installed, on its own and beside an active Python
 //! virtualenv, activated in either order and deactivated in either order.
 //!
@@ -22,7 +22,7 @@ use std::process::Command;
 use common::*;
 
 /// What every script starts with: a prompt to change, `state` to say what
-/// activating has changed so far, and `activate_flayer` to do it the way
+/// activating has changed so far, and `activate_weaver` to do it the way
 /// the reference says to.
 const PRELUDE: &str = r#"PS1='$ '
 defined() {
@@ -33,8 +33,8 @@ state() {
         "$1" "${PS1-}" "${MINDFLAYER_WORKSPACE-unset}" "${VIRTUAL_ENV-unset}" \
         "${PATH%%:*}" "$(defined deactivate)" "$(defined flayer-deactivate)"
 }
-activate_flayer() {
-    eval "$("$FLAYER" activate --shell "$SHELL_NAME" "$@")"
+activate_weaver() {
+    eval "$("$MINDWEAVER" activate --shell "$SHELL_NAME" "$@")"
 }
 "#;
 
@@ -100,7 +100,7 @@ fn run(shell: &Installed, dir: &Path, script: &str, variables: &[(&str, &Path)])
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("HOME", home.path())
-        .env("FLAYER", env!("CARGO_BIN_EXE_flayer"))
+        .env("MINDWEAVER", env!("CARGO_BIN_EXE_mindweaver"))
         .env("SHELL_NAME", shell.name)
         .envs(
             variables
@@ -123,14 +123,14 @@ struct Fixture {
     other: PathBuf,
 }
 
-const NAME: &str = r#"it's a "flayer""#;
+const NAME: &str = r#"it's a "weaver""#;
 
 fn fixture() -> Fixture {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init", NAME]).unwrap();
-    flayer(dir.path(), &["init", "other"]).unwrap();
+    weaver(dir.path(), &["init", NAME]).unwrap();
+    weaver(dir.path(), &["init", "other"]).unwrap();
     let workspace = dir.path().join(NAME);
-    flayer(
+    weaver(
         &workspace,
         &[
             "add",
@@ -174,19 +174,20 @@ fn virtualenv(dir: &Path) -> Option<PathBuf> {
 }
 
 /// One line of `state`, for a shell with no virtualenv.
-fn alone(label: &str, prompt: &str, workspace: Option<&Path>, flayer_deactivate: bool) -> String {
-    line(label, prompt, workspace, None, flayer_deactivate)
+fn alone(label: &str, prompt: &str, workspace: Option<&Path>, ours: bool) -> String {
+    line(label, prompt, workspace, None, ours)
 }
 
 /// One line of `state`: the prompt, the workspace and the virtualenv active,
 /// if any, where the PATH starts, and which deactivate is defined; a
-/// virtualenv's is exactly while it is active.
+/// virtualenv's is exactly while it is active, and ours (`ours`) while a
+/// workspace is.
 fn line(
     label: &str,
     prompt: &str,
     workspace: Option<&Path>,
     venv: Option<&Path>,
-    flayer_deactivate: bool,
+    ours: bool,
 ) -> String {
     let yes = |defined: bool| if defined { "yes" } else { "no" };
     let shown =
@@ -197,18 +198,18 @@ fn line(
         shown(venv),
         venv.map_or(String::from("/usr/bin"), |venv| venv.join("bin").display().to_string()),
         yes(venv.is_some()),
-        yes(flayer_deactivate),
+        yes(ours),
     )
 }
 
 /// The prompt while the fixture's workspace is active.
-const ACTIVE: &str = r#"(flayer:it's a "flayer") $ "#;
+const ACTIVE: &str = r#"(weaver:it's a "weaver") $ "#;
 
 #[test]
 fn bash_and_zsh_accept_the_code_as_printed() {
     let fixture = fixture();
     for shell in shells() {
-        let code = flayer(
+        let code = weaver(
             fixture.dir.path(),
             &["activate", NAME, "--shell", shell.name],
         )
@@ -240,9 +241,9 @@ fn bash_and_zsh_accept_the_code_as_printed() {
 }
 
 #[test]
-fn activating_sets_the_variable_and_the_prompt_and_flayer_deactivate_restores_both() {
+fn activating_sets_the_variable_and_the_prompt_and_deactivating_restores_both() {
     let fixture = fixture();
-    let listed = flayer(
+    let listed = weaver(
         fixture.dir.path(),
         &["list", "-W", &fixture.workspace.to_string_lossy()],
     )
@@ -254,9 +255,9 @@ fn activating_sets_the_variable_and_the_prompt_and_flayer_deactivate_restores_bo
             &shell,
             fixture.dir.path(),
             r#"state before
-activate_flayer "$WORKSPACE"
+activate_weaver "$WORKSPACE"
 state active
-"$FLAYER" list
+"$MINDWEAVER" list
 flayer-deactivate
 state after
 "#,
@@ -288,7 +289,7 @@ fn a_workspace_variable_set_before_activating_is_put_back_and_still_exported() {
             &shell,
             fixture.dir.path(),
             r#"export MINDFLAYER_WORKSPACE=/somewhere/else
-activate_flayer "$WORKSPACE"
+activate_weaver "$WORKSPACE"
 state active
 flayer-deactivate
 state after
@@ -319,8 +320,8 @@ fn activating_another_workspace_takes_the_first_one_out_before_putting_it_in() {
         let printed = run(
             &shell,
             fixture.dir.path(),
-            r#"activate_flayer "$WORKSPACE"
-activate_flayer "$OTHER"
+            r#"activate_weaver "$WORKSPACE"
+activate_weaver "$OTHER"
 state swapped
 flayer-deactivate
 state after
@@ -331,7 +332,7 @@ state after
         assert_eq!(
             printed,
             [
-                alone("swapped", "(flayer:other) $ ", Some(&fixture.other), true),
+                alone("swapped", "(weaver:other) $ ", Some(&fixture.other), true),
                 alone("after", "$ ", None, false),
             ]
             .concat(),
@@ -349,7 +350,7 @@ fn beside_a_virtualenv_activated_first_each_deactivate_undoes_only_its_own() {
     };
     let ws = Some(fixture.workspace.as_path());
     let active = Some(venv.as_path());
-    let both = r#"(flayer:it's a "flayer") (venv) $ "#;
+    let both = r#"(weaver:it's a "weaver") (venv) $ "#;
 
     for shell in shells() {
         let variables = [
@@ -360,7 +361,7 @@ fn beside_a_virtualenv_activated_first_each_deactivate_undoes_only_its_own() {
             &shell,
             fixture.dir.path(),
             r#". "$VENV/bin/activate"
-activate_flayer "$WORKSPACE"
+activate_weaver "$WORKSPACE"
 state both
 flayer-deactivate
 state flayer-deactivated
@@ -373,7 +374,7 @@ state both-deactivated
             &shell,
             fixture.dir.path(),
             r#". "$VENV/bin/activate"
-activate_flayer "$WORKSPACE"
+activate_weaver "$WORKSPACE"
 deactivate
 state virtualenv-deactivated
 flayer-deactivate
@@ -414,7 +415,7 @@ fn beside_a_virtualenv_activated_second_each_deactivate_undoes_only_its_own() {
     };
     let ws = Some(fixture.workspace.as_path());
     let active = Some(venv.as_path());
-    let both = r#"(venv) (flayer:it's a "flayer") $ "#;
+    let both = r#"(venv) (weaver:it's a "weaver") $ "#;
 
     for shell in shells() {
         let variables = [
@@ -424,7 +425,7 @@ fn beside_a_virtualenv_activated_second_each_deactivate_undoes_only_its_own() {
         let ours_first = run(
             &shell,
             fixture.dir.path(),
-            r#"activate_flayer "$WORKSPACE"
+            r#"activate_weaver "$WORKSPACE"
 . "$VENV/bin/activate"
 state both
 flayer-deactivate
@@ -437,7 +438,7 @@ state both-deactivated
         let theirs_first = run(
             &shell,
             fixture.dir.path(),
-            r#"activate_flayer "$WORKSPACE"
+            r#"activate_weaver "$WORKSPACE"
 . "$VENV/bin/activate"
 deactivate
 state virtualenv-deactivated
@@ -475,7 +476,7 @@ state both-deactivated
 fn code_in_a_workspaces_path_or_name_is_never_run() {
     let dir = TempDir::new().unwrap();
     let name = "$(touch pwned) `touch pwned-too`";
-    flayer(dir.path(), &["init", name]).unwrap();
+    weaver(dir.path(), &["init", name]).unwrap();
     let workspace = dir.path().join(name);
     let Some(bash) = shells().into_iter().find(|shell| shell.name == "bash") else {
         return;
@@ -485,7 +486,7 @@ fn code_in_a_workspaces_path_or_name_is_never_run() {
     let printed = run(
         &bash,
         dir.path(),
-        r#"activate_flayer "$WORKSPACE"
+        r#"activate_weaver "$WORKSPACE"
 printf 'drawn: %s\n' "${PS1@P}"
 printf 'workspace: %s\n' "$MINDFLAYER_WORKSPACE"
 flayer-deactivate
@@ -496,7 +497,7 @@ flayer-deactivate
     assert_eq!(
         printed,
         format!(
-            "drawn: (flayer:_(touch pwned) _touch pwned-too_) $ \nworkspace: {}\n",
+            "drawn: (weaver:_(touch pwned) _touch pwned-too_) $ \nworkspace: {}\n",
             workspace.display()
         )
     );

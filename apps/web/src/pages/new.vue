@@ -70,7 +70,7 @@ const runner = useRunner()
 const { busy } = runner
 
 /**
- * Add it, `flayer add`, as the server previews it, then open it. Sent
+ * Add it, `mindweaver add`, as the server previews it, then open it. Sent
  * whatever core said of it, which the line then says again, in its words,
  * when it refuses.
  */
@@ -141,7 +141,7 @@ async function add() {
           class="text-muted"
           data-testid="no-kind"
         >
-          This build of Mindflayer knows no kind called <code class="font-mono">{{ asked }}</code>.
+          This build of Mindweaver knows no kind called <code class="font-mono">{{ asked }}</code>.
         </p>
 
         <div
@@ -155,7 +155,7 @@ async function add() {
             @submit.prevent="add"
           >
             <p class="text-sm text-muted">
-              One of the workspace's own, to install into projects: written by <code class="font-mono text-xs">flayer add</code>,
+              One of the workspace's own, to install into projects: written by <code class="font-mono text-xs">mindweaver add</code>,
               which shows the line before it runs and judges it as you type.
             </p>
 
@@ -219,7 +219,7 @@ async function add() {
             :judged="settled ? judged.data.value : undefined"
             :pending="judging"
             :error="judged.error.value"
-            writer="flayer add"
+            writer="mindweaver add"
           />
         </div>
       </SnapshotGate>

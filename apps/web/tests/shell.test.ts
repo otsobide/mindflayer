@@ -35,7 +35,7 @@ const LAUNCH = 'http://127.0.0.1:41001/'
 const NEXT_LAUNCH = 'http://127.0.0.1:41002/'
 
 /**
- * Open the page at another address, as the next `flayer ui` would. A browser
+ * Open the page at another address, as the next `mindweaver ui` would. A browser
  * keeps localStorage per origin, so a new port opens on an empty one; happy-dom
  * keeps one for every address, so it is emptied here.
  */
@@ -106,7 +106,7 @@ describe('the shell', () => {
     const page = await render('/')
 
     const sidebar = page.get('[data-testid="sidebar"]')
-    expect(sidebar.text()).toContain('Mindflayer')
+    expect(sidebar.text()).toContain('Mindweaver')
     expect(sidebar.findAll('nav a').map(link => link.text())).toEqual(['Overview', 'Projects', 'Discover', 'Assign', 'Updates', 'Library', 'Loads', 'Shelf', 'Sources'])
     expect(sidebar.get('nav a[aria-current="page"]').text()).toBe('Overview')
     expect(sidebar.get('[data-testid="address"]').text()).toBe(window.location.host)
@@ -130,7 +130,7 @@ describe('the shell', () => {
     await flushPromises()
 
     expect(useShell().sidebarCollapsed).toBe(true)
-    expect(page.get('[data-testid="sidebar"]').text()).not.toContain('Mindflayer')
+    expect(page.get('[data-testid="sidebar"]').text()).not.toContain('Mindweaver')
     expect(page.get('[data-testid="address"]').text()).toBe('')
   })
 
@@ -153,7 +153,7 @@ describe('the shell', () => {
     const next = await render('/')
 
     expect(useShell().sidebarCollapsed).toBe(true)
-    expect(next.get('[data-testid="sidebar"]').text()).not.toContain('Mindflayer')
+    expect(next.get('[data-testid="sidebar"]').text()).not.toContain('Mindweaver')
   })
 
   it('adds no style element, which the CSP would refuse', async () => {

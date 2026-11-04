@@ -9,22 +9,22 @@ mod common;
 use std::fs;
 use std::path::PathBuf;
 
-use mindflayer_core::agents_md::{self, Section};
-use mindflayer_core::claude_md::{self, Fallback, Reach};
-use mindflayer_core::claude_rules::{self, Warning as FileWarning};
-use mindflayer_core::code::Said;
-use mindflayer_core::install::rules::{self, Warning, Withheld};
-use mindflayer_core::install::{
+use mindweaver_core::agents_md::{self, Section};
+use mindweaver_core::claude_md::{self, Fallback, Reach};
+use mindweaver_core::claude_rules::{self, Warning as FileWarning};
+use mindweaver_core::code::Said;
+use mindweaver_core::install::rules::{self, Warning, Withheld};
+use mindweaver_core::install::{
     self, Candidate, Edits, InstallError, Installation, Installed, Removed, Standing,
     WORKSPACE_ORIGIN,
 };
-use mindflayer_core::ledger::{InstallRecord, Target};
-use mindflayer_core::lifecycle;
-use mindflayer_core::migrate;
-use mindflayer_core::value::ContentHash;
-use mindflayer_core::{
-    hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, LifecycleError,
-    MindProject, Missed, Reference, Share, State, Status,
+use mindweaver_core::ledger::{InstallRecord, Target};
+use mindweaver_core::lifecycle;
+use mindweaver_core::migrate;
+use mindweaver_core::value::ContentHash;
+use mindweaver_core::{
+    hash, Agent, AgentHomes, Directories, Kind, Ledger, LifecycleError, MindProject, Missed,
+    Reference, Share, State, Status, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -34,7 +34,7 @@ const NO_FORCE_PUSH: &str = "Never force-push a branch somebody else may have pu
 const TONE: &str = "---\ndescription: How a review reads\n---\n\nSay what a change does before what is wrong with it.\n";
 
 /// The own rule of `workspace` at `route`, holding `source`.
-fn own_rule(workspace: &FlayerWorkspace, route: &str, source: &str) -> PathBuf {
+fn own_rule(workspace: &WeaverWorkspace, route: &str, source: &str) -> PathBuf {
     let file = workspace
         .own()
         .directory_for(Kind::Rule)
@@ -47,9 +47,9 @@ fn own_rule(workspace: &FlayerWorkspace, route: &str, source: &str) -> PathBuf {
 
 /// A workspace linking a project a `mind.toml` marks, which keeps its rules
 /// in `rules`.
-fn older() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn older() -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let (project, _) = MindProject::init(dir.path().join("app")).unwrap();
     workspace.link(&project).unwrap();
     let ledger = workspace.ledger().unwrap();
@@ -63,7 +63,7 @@ fn copy_of(project: &MindProject, route: &str) -> PathBuf {
 }
 
 fn try_put(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     route: &str,
@@ -80,7 +80,7 @@ fn try_put(
 }
 
 fn put(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     route: &str,
@@ -89,7 +89,7 @@ fn put(
 }
 
 fn take(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     route: &str,
@@ -201,7 +201,7 @@ fn a_file_at_a_rules_place_nothing_recorded_is_somebodys_in_a_project_a_mind_tom
 /// project as it is then, the untouched copy, and the changed one.
 fn moved_to_settings() -> (
     TempDir,
-    FlayerWorkspace,
+    WeaverWorkspace,
     MindProject,
     Ledger,
     PathBuf,
@@ -356,7 +356,7 @@ fn an_uninstall_before_any_render_leaves_a_rules_copy_changed_before_settings() 
 #[test]
 fn a_rule_from_a_loaded_workspace_records_where_it_came_from() {
     let (dir, mut workspace, project, ledger) = older();
-    let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
+    let (team, _) = WeaverWorkspace::init(dir.path().join("team")).unwrap();
     own_rule(&team, "review/tone", TONE);
     workspace.load(&team).unwrap();
 
@@ -378,7 +378,7 @@ fn a_rule_from_a_loaded_workspace_records_where_it_came_from() {
 fn two_places_offering_one_route_are_told_apart_with_from() {
     let (dir, mut workspace, project, ledger) = older();
     own_rule(&workspace, "review/tone", TONE);
-    let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
+    let (team, _) = WeaverWorkspace::init(dir.path().join("team")).unwrap();
     own_rule(&team, "review/tone", "Be kind.\n");
     workspace.load(&team).unwrap();
 
@@ -453,7 +453,7 @@ fn a_route_that_is_no_name_is_neither_installed_nor_removed() {
     assert!(!install::is_installable_name(Kind::Rule, "Git Notes"));
 }
 
-/// What a team's `AGENTS.md` might hold before Mindflayer writes in it.
+/// What a team's `AGENTS.md` might hold before Mindweaver writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
 
 /// A rule about Rust files only.
@@ -465,7 +465,7 @@ const SCOPED: &str =
 /// install.
 struct Fixture {
     dir: TempDir,
-    workspace: FlayerWorkspace,
+    workspace: WeaverWorkspace,
     project: MindProject,
     ledger: Ledger,
 }
@@ -473,7 +473,7 @@ struct Fixture {
 fn fixture(share: Share, agents: &[Agent]) -> Fixture {
     let dir = TempDir::new().unwrap();
     gix::init(dir.path()).unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("app");
     fs::create_dir_all(&root).unwrap();
     let (project, _) =
@@ -762,7 +762,7 @@ fn an_agents_md_the_user_wrote_stays_once_the_last_rule_is_taken_out() {
 }
 
 #[test]
-fn an_agents_md_mindflayer_made_goes_with_the_last_rule_and_is_kept_out_of_git_meanwhile() {
+fn an_agents_md_mindweaver_made_goes_with_the_last_rule_and_is_kept_out_of_git_meanwhile() {
     let fixture = fixture(Share::Local, &Agent::ALL);
     fixture.rule("git/no-force-push", NO_FORCE_PUSH);
 
@@ -783,7 +783,7 @@ fn an_agents_md_mindflayer_made_goes_with_the_last_rule_and_is_kept_out_of_git_m
 }
 
 #[test]
-fn an_agents_md_mindflayer_made_and_somebody_wrote_in_stays_and_is_theirs() {
+fn an_agents_md_mindweaver_made_and_somebody_wrote_in_stays_and_is_theirs() {
     let fixture = fixture(Share::Local, &Agent::ALL);
     fixture.rule("git/no-force-push", NO_FORCE_PUSH);
     fixture.install("git/no-force-push");
@@ -894,7 +894,7 @@ fn a_tracked_agents_md_in_a_local_project_with_edit_tracked_takes_the_block() {
     let rendered = done.rendered.unwrap();
     assert_eq!(rendered.block.unwrap().written, agents_md::Written::Changed);
     assert!(rendered.warnings.is_empty(), "{:?}", rendered.warnings);
-    // The team's file, which git tracks: never Mindflayer's, never kept out.
+    // The team's file, which git tracks: never Mindweaver's, never kept out.
     assert!(!fixture.ledger.created("app", "AGENTS.md").unwrap());
     assert_eq!(rendered.excluded, None);
     assert!(!fixture.ignored("AGENTS.md"));
@@ -1715,7 +1715,7 @@ fn a_render_says_what_each_renderer_found_once_in_one_list() {
     // In no git work tree: what a local project keeps out of git is kept out
     // of nothing, which the block and Claude's files each find.
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("app");
     fs::create_dir_all(&root).unwrap();
     let (project, _) =
@@ -1787,8 +1787,8 @@ fn the_offer_of_a_rule_a_project_holds_is_the_one_its_record_came_from() {
     let fixture = fixture(Share::Shared, &Agent::ALL);
     fixture.rule("review/tone", TONE);
     let (mut workspace, team) = (
-        FlayerWorkspace::open(fixture.workspace.root()).unwrap(),
-        FlayerWorkspace::init(fixture.dir.path().join("team"))
+        WeaverWorkspace::open(fixture.workspace.root()).unwrap(),
+        WeaverWorkspace::init(fixture.dir.path().join("team"))
             .unwrap()
             .0,
     );

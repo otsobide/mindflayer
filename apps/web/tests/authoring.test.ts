@@ -68,7 +68,7 @@ function shown(): (string | null)[] {
   return [...document.body.querySelectorAll('[data-testid="command"]')].map(each => each.textContent)
 }
 
-/** The lines `flayer validate` said of `review` in the library, each issue's words alone. */
+/** The lines `mindweaver validate` said of `review` in the library, each issue's words alone. */
 function saidOfReview(): { warning: boolean, message: string }[] {
   const lines = validated.said.split('\n')
   const start = lines.findIndex(line => line.startsWith('skill:review (workspace)'))
@@ -100,10 +100,10 @@ describe('the editor', () => {
     expect(shadow.querySelector('[role="textbox"]')!.getAttribute('aria-label')).toBe('The text of review\'s SKILL.md')
     expect(page.get('[data-testid="save"]').attributes('disabled')).toBeDefined()
     expect(page.find('[data-testid="unsaved"]').exists()).toBe(false)
-    expect(page.get('[data-testid="verdict"]').text()).toContain('flayer edit would write it.')
+    expect(page.get('[data-testid="verdict"]').text()).toContain('mindweaver edit would write it.')
   })
 
-  it('says what validate would say of the text typed, word for word as flayer validate says it once written', async () => {
+  it('says what validate would say of the text typed, word for word as mindweaver validate says it once written', async () => {
     const { page } = await render(EDITOR, commanding(fixture('workspace'), [], [...answers(), ...drafts()]).transport)
 
     await type(editor(page).view, validated.text)
@@ -124,7 +124,7 @@ describe('the editor', () => {
     await type(editor(page).view, review().text!.replace('description: Read a change before it lands', 'description: ""'))
 
     const refused = page.get('[data-testid="refused"]')
-    expect(refused.text()).toContain('flayer edit would refuse it')
+    expect(refused.text()).toContain('mindweaver edit would refuse it')
     expect(refused.text()).toContain(unfit.refused!.code)
     expect(page.get('[data-testid="refused-message"]').text()).toBe(unfit.refused!.message)
     expect(page.get('[data-testid="verdict"]').findAll('[data-testid="issue"]').map(each => each.text())).toEqual(['invalid: `description` is empty'])
@@ -245,7 +245,7 @@ async function fill(page: VueWrapper, testid: string, value: string) {
 }
 
 describe('adding one of the library\'s own', () => {
-  it('judges the name and the description as they are typed, in the words flayer add refuses with', async () => {
+  it('judges the name and the description as they are typed, in the words mindweaver add refuses with', async () => {
     const { page } = await render(NEW, commanding(fixture('workspace'), [], [...answers(), ...drafts()]).transport)
 
     await fill(page, 'description', 'Publish the docs')
@@ -254,7 +254,7 @@ describe('adding one of the library\'s own', () => {
     await flushPromises()
 
     const unfit = judged({ type: 'add', name: 'Deploy Docs' })
-    expect(page.get('[data-testid="refused"]').text()).toContain('flayer add would refuse it')
+    expect(page.get('[data-testid="refused"]').text()).toContain('mindweaver add would refuse it')
     expect(page.get('[data-testid="refused-message"]').text()).toBe(unfit.refused!.message)
 
     await fill(page, 'name', 'review')
@@ -268,7 +268,7 @@ describe('adding one of the library\'s own', () => {
     await new Promise(resolve => setTimeout(resolve, 300))
     await flushPromises()
     expect(page.find('[data-testid="refused"]').exists()).toBe(false)
-    expect(page.get('[data-testid="verdict"]').text()).toContain('flayer add would write it.')
+    expect(page.get('[data-testid="verdict"]').text()).toContain('mindweaver add would write it.')
   })
 
   it('offers the kind\'s templates, and adds from the one chosen as the line the server previews, then opens what it added', async () => {

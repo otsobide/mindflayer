@@ -148,7 +148,7 @@ macro_rules! codes {
 
             /// Every code this type gives of its own, leaving out those
             /// it takes from an error it carries, or echoes: what
-            /// `mindflayer_core::code::ALL` gathers for core's.
+            /// `mindweaver_core::code::ALL` gathers for core's.
             pub const CODES: &'static [&'static str] = &[$($code),*];
 
             $(
@@ -171,7 +171,7 @@ macro_rules! codes {
             }
 
             /// The one code this type gives: what
-            /// `mindflayer_core::code::ALL` gathers for core's.
+            /// `mindweaver_core::code::ALL` gathers for core's.
             pub const CODES: &'static [&'static str] = &[$code];
         }
     };

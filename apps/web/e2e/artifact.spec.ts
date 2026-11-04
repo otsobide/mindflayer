@@ -2,17 +2,17 @@ import { LIBRARY } from './fixture.ts'
 import { expect, listing, test } from './panel.ts'
 
 /*
- * The page of each of the library's own against what `flayer list --json`
+ * The page of each of the library's own against what `mindweaver list --json`
  * prints of it: what it is and where it is kept, what validate says, and
  * each project holding a copy, with how that copy stands there, as the
  * project's own listing says.
  */
 for (const [kind, name] of LIBRARY) {
-  test(`the page of the ${kind} ${name} shows what flayer list --json lists of it`, async ({ page, panel }) => {
+  test(`the page of the ${kind} ${name} shows what mindweaver list --json lists of it`, async ({ page, panel }) => {
     const { library, projects } = listing()
     const held = library!.artifacts.find(each => each.kind === kind && each.name === name)
     if (!held) {
-      throw new Error(`flayer list --json lists no ${kind} ${name} in the library`)
+      throw new Error(`mindweaver list --json lists no ${kind} ${name} in the library`)
     }
     await panel.open(`/artifact?${new URLSearchParams({ kind, name })}`)
 

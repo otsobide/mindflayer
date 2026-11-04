@@ -38,7 +38,7 @@ fn target() -> Target {
     }
 }
 
-/// Somebody's own of the name is none of Mindflayer's, and removing the
+/// Somebody's own of the name is none of Mindweaver's, and removing the
 /// library copy leaves nothing of it orphaned; every copy installed from
 /// it, edited or not, is.
 #[test]

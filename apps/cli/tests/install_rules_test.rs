@@ -1,4 +1,4 @@
-//! Installing rules from the command line: `mind install` and `flayer
+//! Installing rules from the command line: `mind install` and `mindweaver
 //! install -p` take a rule's route, bare or after `rule:`, and `uninstall`
 //! takes it back out, in a project that keeps what is installed to itself
 //! and in one that shares it with the team.
@@ -7,14 +7,14 @@ mod common;
 
 use common::*;
 
-/// What `flayer add rule` writes for the workspace's own `git/commits`.
+/// What `mindweaver add rule` writes for the workspace's own `git/commits`.
 const COMMITS: &str = "# Commit one coherent step at a time\n";
 
 /// The block a project marked by its settings is given for it alone.
 const BLOCK: &str = "<!-- mindflayer:begin -->\n<!-- mindflayer:rule git/commits -->\n\
                      # Commit one coherent step at a time\n<!-- mindflayer:end -->\n";
 
-/// What a team's `AGENTS.md` might hold before Mindflayer writes in it.
+/// What a team's `AGENTS.md` might hold before Mindweaver writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
 
 /// A rule about Rust files only.
@@ -25,15 +25,15 @@ const SCOPED: &str = "---\npaths:\n  - \"**/*.rs\"\n---\n\n# Comments say why, n
 /// of its own.
 fn workspace(init: &[&str]) -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let alpha = dir.path().join("alpha");
     fs::create_dir(&alpha).unwrap();
     gix::init(&alpha).unwrap();
     let mut args = vec!["init"];
     args.extend(init);
     mind(&alpha, &args).unwrap();
-    flayer(dir.path(), &["link", "alpha"]).unwrap();
-    flayer(
+    weaver(dir.path(), &["link", "alpha"]).unwrap();
+    weaver(
         dir.path(),
         &[
             "add",
@@ -62,7 +62,7 @@ fn quiet(outcome: &Outcome) {
 fn a_shared_project_is_given_a_rule_in_its_agents_md_for_the_team_and_it_comes_back_out() {
     let (dir, alpha) = workspace(&["--shared"]);
 
-    let installed = flayer(dir.path(), &["install", "-p", "alpha", "rule:git/commits"]).unwrap();
+    let installed = weaver(dir.path(), &["install", "-p", "alpha", "rule:git/commits"]).unwrap();
 
     assert_eq!(
         installed.stdout,
@@ -114,17 +114,17 @@ fn a_local_project_keeps_the_agents_md_a_rule_makes_out_of_git() {
 #[test]
 fn a_tracked_agents_md_in_a_local_project_is_left_alone_and_the_agents_it_misses_are_said() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let alpha = dir.path().join("alpha");
     fs::create_dir(&alpha).unwrap();
     gix::init(&alpha).unwrap();
     fs::write(alpha.join("AGENTS.md"), TEAM).unwrap();
     indexed(&alpha);
     mind(&alpha, &["init"]).unwrap();
-    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    weaver(dir.path(), &["link", "alpha"]).unwrap();
     own_rule(dir.path(), "git/commits", COMMITS);
 
-    let installed = flayer(dir.path(), &["install", "-p", "alpha", "git/commits"]).unwrap();
+    let installed = weaver(dir.path(), &["install", "-p", "alpha", "git/commits"]).unwrap();
 
     assert_eq!(
         installed.stdout,
@@ -152,7 +152,7 @@ fn a_tracked_agents_md_in_a_local_project_is_left_alone_and_the_agents_it_misses
     );
 
     // With the last rule gone no agent misses any, so nothing is said.
-    let removed = flayer(dir.path(), &["uninstall", "-p", "alpha", "git/commits"]).unwrap();
+    let removed = weaver(dir.path(), &["uninstall", "-p", "alpha", "git/commits"]).unwrap();
 
     assert_eq!(removed.stdout, "removed rule git/commits from alpha\n");
     quiet(&removed);
@@ -165,7 +165,7 @@ fn a_rule_about_some_files_reaches_claude_alone_and_says_so() {
     let (dir, alpha) = workspace(&["--shared"]);
     own_rule(dir.path(), "style/comments", SCOPED);
 
-    let installed = flayer(dir.path(), &["install", "-p", "alpha", "style/comments"]).unwrap();
+    let installed = weaver(dir.path(), &["install", "-p", "alpha", "style/comments"]).unwrap();
 
     assert_eq!(
         installed.stdout,
@@ -187,8 +187,8 @@ fn a_rule_about_some_files_reaches_claude_alone_and_says_so() {
 
     // Said of the rule it is about: another going in or out after it says
     // nothing of it, which `status` says whenever asked.
-    let other = flayer(dir.path(), &["install", "-p", "alpha", "git/commits"]).unwrap();
-    let out = flayer(dir.path(), &["uninstall", "-p", "alpha", "git/commits"]).unwrap();
+    let other = weaver(dir.path(), &["install", "-p", "alpha", "git/commits"]).unwrap();
+    let out = weaver(dir.path(), &["uninstall", "-p", "alpha", "git/commits"]).unwrap();
 
     quiet(&other);
     quiet(&out);
@@ -197,12 +197,12 @@ fn a_rule_about_some_files_reaches_claude_alone_and_says_so() {
 #[test]
 fn one_name_a_skill_and_a_rule_share_is_installed_and_taken_out_by_its_kind() {
     let (dir, alpha) = workspace(&[]);
-    flayer(
+    weaver(
         dir.path(),
         &["add", "skill", "deploy", "Ship it to staging"],
     )
     .unwrap();
-    flayer(
+    weaver(
         dir.path(),
         &["add", "rule", "deploy", "Ship on a Friday never"],
     )
@@ -276,7 +276,7 @@ fn a_section_somebody_else_wrote_is_neither_written_over_nor_taken_out() {
     assert_eq!(
         installed.stderr,
         [
-            "warning: alpha already has a rule review/tone at AGENTS.md that Mindflayer did not \
+            "warning: alpha already has a rule review/tone at AGENTS.md that Mindweaver did not \
           put there, so it was left alone"
         ]
     );
@@ -285,7 +285,7 @@ fn a_section_somebody_else_wrote_is_neither_written_over_nor_taken_out() {
     assert_eq!(
         removed.stderr,
         [
-            "warning: rule review/tone at AGENTS.md in alpha was not installed by Mindflayer, so \
+            "warning: rule review/tone at AGENTS.md in alpha was not installed by Mindweaver, so \
           it was left alone"
         ]
     );
@@ -299,9 +299,9 @@ fn a_project_a_mind_toml_marks_is_given_a_copy_of_the_rule_filed_by_its_route() 
     let beta = dir.path().join("beta");
     fs::create_dir(&beta).unwrap();
     older_project(&beta);
-    flayer(dir.path(), &["link", "beta"]).unwrap();
+    weaver(dir.path(), &["link", "beta"]).unwrap();
 
-    let installed = flayer(dir.path(), &["install", "-p", "beta", "rule:git/commits"]).unwrap();
+    let installed = weaver(dir.path(), &["install", "-p", "beta", "rule:git/commits"]).unwrap();
 
     assert_eq!(
         installed.stdout,
@@ -310,7 +310,7 @@ fn a_project_a_mind_toml_marks_is_given_a_copy_of_the_rule_filed_by_its_route() 
     let copy = directory_for(&beta, Kind::Rule).join("git/commits.md");
     assert_eq!(fs::read_to_string(&copy).unwrap(), COMMITS);
 
-    let removed = flayer(dir.path(), &["uninstall", "-p", "beta", "git/commits"]).unwrap();
+    let removed = weaver(dir.path(), &["uninstall", "-p", "beta", "git/commits"]).unwrap();
 
     assert_eq!(removed.stdout, "removed rule git/commits from beta\n");
     assert!(!copy.exists());
@@ -339,13 +339,13 @@ fn a_route_two_places_offer_is_installed_from_the_one_from_names() {
     let (dir, alpha) = workspace(&[]);
     let team = dir.path().join("team");
     fs::create_dir(&team).unwrap();
-    flayer(&team, &["init"]).unwrap();
-    flayer(
+    weaver(&team, &["init"]).unwrap();
+    weaver(
         &team,
         &["add", "rule", "git/commits", "Commit as the team does"],
     )
     .unwrap();
-    flayer(dir.path(), &["load", "team"]).unwrap();
+    weaver(dir.path(), &["load", "team"]).unwrap();
 
     let twice = mind(&alpha, &["install", "git/commits"]).unwrap_err();
     let theirs = mind(&alpha, &["install", "rule:git/commits", "--from", "team"]).unwrap();

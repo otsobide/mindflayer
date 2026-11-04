@@ -4,7 +4,7 @@
 //! wrote: once for a skill's installation, since every copy is staged from
 //! one tree, and once a copy for a rule's, whose section in `AGENTS.md` and
 //! file for Claude hold different bytes. A copy that still holds that hash
-//! is untouched, and Mindflayer may write over it or take it out; one that
+//! is untouched, and Mindweaver may write over it or take it out; one that
 //! holds anything else was edited, somebody's work from then on, refused to
 //! every install and uninstall but one that is forced. Neither is told by
 //! the copy alone, nor by the offer alone: an edited copy can match what is
@@ -28,7 +28,7 @@ use crate::hash;
 use crate::kind::Kind;
 use crate::ledger::{InstallRecord, Target};
 use crate::value::{ContentHash, Origin};
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::workspace::{MindProject, WeaverWorkspace};
 
 /// How one offer stands with respect to one project.
 ///
@@ -57,7 +57,7 @@ pub enum Standing {
     Missing,
     /// The place it came from no longer offers it.
     Orphaned,
-    /// The project holds something by that name that Mindflayer did not put
+    /// The project holds something by that name that Mindweaver did not put
     /// there. It is somebody's work, so it is left alone in both directions.
     Foreign,
 }
@@ -83,12 +83,12 @@ impl Standing {
     /// which has gone. Its box opens empty, for marking it to put every copy
     /// back, which a `git clean -dX` in a local project makes the common way
     /// back; held, it could only be marked to be taken out. One with a copy
-    /// left is taken out with `flayer uninstall`.
+    /// left is taken out with `mindweaver uninstall`.
     pub fn present(self) -> bool {
         !matches!(self, Standing::Absent | Standing::Missing)
     }
 
-    /// Whether Mindflayer may write over it or remove it without being
+    /// Whether Mindweaver may write over it or remove it without being
     /// forced: never over somebody's, nor over a copy somebody edited.
     pub fn ours(self) -> bool {
         self.refused().is_none()
@@ -192,7 +192,7 @@ impl Surveyed {
     /// name is not something to guess, as an install with no `--from` says.
     pub(crate) fn source(
         &self,
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
     ) -> Result<Option<&Offer>, Vec<Origin>> {
         match &self.offered[..] {
             [] => Ok(None),
@@ -220,9 +220,9 @@ impl Surveyed {
 ///
 /// A route the record holds that is no folder of the project named after
 /// the skill is never looked at ([`recorded_copy`]), and counts as missing:
-/// nothing of Mindflayer's can be found there.
+/// nothing of Mindweaver's can be found there.
 pub(crate) fn skill_copies(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     record: &InstallRecord,
     offered: &[&Offer],
@@ -258,7 +258,7 @@ pub(crate) fn skill_copies(
 /// How the installation `record`, a skill's in `project`, stands, given
 /// `offered`, where what it installed is offered now.
 pub(crate) fn of_skill(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     record: &InstallRecord,
     offered: &[&Offer],
@@ -271,7 +271,7 @@ pub(crate) fn of_skill(
 /// ([`skill_copies`]), given `offered`, where what it installed is offered
 /// now.
 pub(crate) fn skill_standing(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     looked: &[Looked],
     offered: &[&Offer],
 ) -> Standing {
@@ -297,7 +297,7 @@ pub(crate) fn skill_standing(
 /// an edit there is nothing a change refuses or writes over, so telling it
 /// as edited would refuse a change that `--force` would not make either.
 pub(crate) fn rule_copies(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     record: &InstallRecord,
     block: Option<&AgentsMd>,
@@ -371,7 +371,7 @@ pub(crate) fn rule_copies(
 /// installation's hash names: every copy is rendered from those bytes, the
 /// section without its front matter and the file whole.
 pub(crate) fn of_rule(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     record: &InstallRecord,
     block: Option<&AgentsMd>,
@@ -385,7 +385,7 @@ pub(crate) fn of_rule(
 /// `looked` at ([`rule_copies`]), given `offered`, where what it installed
 /// is offered now: [`of_rule`], for a caller that keeps the copies too.
 pub(crate) fn rule_standing(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     record: &InstallRecord,
     looked: &[Looked],
     offered: &[&Offer],
@@ -435,13 +435,13 @@ fn missing(project: &MindProject, target: &Target) -> Looked {
 
 /// Whether the skill at `copy` holds what an install of `offer` would write
 /// there: its names and bytes, but for what an install leaves out.
-fn holds(workspace: &FlayerWorkspace, offer: &Offer, copy: &Path) -> bool {
+fn holds(workspace: &WeaverWorkspace, offer: &Offer, copy: &Path) -> bool {
     copy::same_leaving(&offer.source(workspace), copy, &left_out_names()).unwrap_or(false)
 }
 
 /// The hash of the section `offer`, a rule, renders as: none for one about
 /// some files only, which has no section, or one that cannot be read.
-fn section_of(workspace: &FlayerWorkspace, offer: &Offer) -> Option<ContentHash> {
+fn section_of(workspace: &WeaverWorkspace, offer: &Offer) -> Option<ContentHash> {
     let rule = Artifact::rule(
         offer.source(workspace),
         offer.name().to_string(),

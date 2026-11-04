@@ -56,7 +56,7 @@ use crate::lifecycle::{self, LifecycleError};
 use crate::paths;
 use crate::rule::RuleManifest;
 use crate::value::{ArtifactName, ContentHash};
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::workspace::{MindProject, WeaverWorkspace};
 
 /// The most a file may hold, in bytes, to have its text read: a mebibyte.
 ///
@@ -266,13 +266,13 @@ codes!(ContentsError {
 impl Contents {
     /// `file` of the artifact `reference` names among `workspace`'s own: the
     /// library a snapshot lists, of the kinds it keeps apart from a project
-    /// at its root ([`FlayerWorkspace::own_kinds`]).
+    /// at its root ([`WeaverWorkspace::own_kinds`]).
     ///
     /// Held to the folder the workspace keeps the artifact's kind in, not to
     /// its root as an install from it is: the default workspace's root is a
     /// home, where every secret its user keeps would count as inside it.
     pub fn of_library(
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         reference: &str,
         file: &str,
     ) -> Result<Contents, ContentsError> {
@@ -305,7 +305,7 @@ impl Files {
     /// What the artifact `reference` names among `workspace`'s own holds,
     /// held as [`Contents::of_library`] holds a file of it.
     pub fn of_library(
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         reference: &str,
     ) -> Result<Files, ContentsError> {
         list(
@@ -354,7 +354,7 @@ fn locate(
     let reference = Reference::parse(reference);
     let (kind, name, at) = artifact(holder, kinds, &reference)?;
     // A `Kept` read never falls back to the root in fact: every kind has a
-    // folder in the workspace's own (`FlayerWorkspace::own`), and the
+    // folder in the workspace's own (`WeaverWorkspace::own`), and the
     // artifact was found in its kind's.
     let bound = match within {
         Within::Root => None,

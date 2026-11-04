@@ -13,16 +13,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use mindflayer_core::adapter::gix::Gix;
-use mindflayer_core::gather::{self, GatherError, Progress, Request, Watch};
-use mindflayer_core::ledger::{Action, Outcome};
-use mindflayer_core::mother::{
+use mindweaver_core::adapter::gix::Gix;
+use mindweaver_core::gather::{self, GatherError, Progress, Request, Watch};
+use mindweaver_core::ledger::{Action, Outcome};
+use mindweaver_core::mother::{
     random, GitRepositoryMother, RevisionMother, SkillMother, UrlMother, WorkspaceMother,
 };
-use mindflayer_core::port::{Cloned, GitError, Remote};
-use mindflayer_core::url::redacted;
-use mindflayer_core::value::Revision;
-use mindflayer_core::{FlayerWorkspace, Kind, SourceKind};
+use mindweaver_core::port::{Cloned, GitError, Remote};
+use mindweaver_core::url::redacted;
+use mindweaver_core::value::Revision;
+use mindweaver_core::{Kind, SourceKind, WeaverWorkspace};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -623,7 +623,7 @@ fn a_fresh_clone_has_nothing_to_scrub_and_neither_has_a_folder_never_cloned<U: U
 // ---------------------------------------------------------------------------
 
 /// A workspace to gather into, with its ledger.
-fn gathering() -> (TempDir, FlayerWorkspace, mindflayer_core::Ledger) {
+fn gathering() -> (TempDir, WeaverWorkspace, mindweaver_core::Ledger) {
     let (dir, workspace) = WorkspaceMother::empty();
     let ledger = workspace.ledger().expect("open the ledger");
     (dir, workspace, ledger)
@@ -871,7 +871,7 @@ fn a_remote_that_says_it_was_cancelled_leaves_no_source_behind() {
                 SourceKind::Git,
                 &url,
                 None,
-                mindflayer_core::DEFAULT_SUBDIRECTORY
+                mindweaver_core::DEFAULT_SUBDIRECTORY
             )
             .unwrap(),
         None,

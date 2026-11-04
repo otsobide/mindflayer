@@ -13,7 +13,7 @@
 //! A choice that does not open as a workspace is an error, and never a
 //! reason to carry on down the list: carrying on would act on a workspace
 //! nobody chose, and say nothing about it. Nor is a chosen workspace ever
-//! made for the occasion; that is `flayer init`'s to do.
+//! made for the occasion; that is `mindweaver init`'s to do.
 //!
 //! The front end reads the environment and hands over what it says, as it
 //! hands over home: core never reads it, which is what lets a test pin every
@@ -28,8 +28,8 @@ use thiserror::Error;
 use crate::code::codes;
 use crate::paths;
 use crate::workspace::{
-    absolute, same_directory, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
-    FLAYER_DIR,
+    absolute, same_directory, MindProject, WeaverWorkspace, WorkspaceError, WEAVER_CONFIG,
+    WEAVER_DIR,
 };
 
 /// What a command means to do with the workspace it is given, which decides
@@ -38,7 +38,7 @@ use crate::workspace::{
 pub enum Intent {
     /// Only look. The default workspace is the one made in home or, until
     /// something makes it, the one that would be
-    /// ([`FlayerWorkspace::unmade`]): reading is no reason to write a marker
+    /// ([`WeaverWorkspace::unmade`]): reading is no reason to write a marker
     /// into somebody's home.
     Read,
     /// Change it. The default workspace is made in home the first time one
@@ -55,7 +55,7 @@ pub enum Intent {
 /// from below it as well as fallen back to, and only the last is what the
 /// TUI means by "no workspace here or above". Whether a workspace *is* the
 /// one in home is a question about the workspace rather than the rule, which
-/// [`FlayerWorkspace::is_default`] answers from paths: `load` and `unload`
+/// [`WeaverWorkspace::is_default`] answers from paths: `load` and `unload`
 /// ask that, so they call it the default one however it was reached.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
@@ -137,7 +137,7 @@ pub struct Inputs<'a> {
 /// A workspace, and the rule that chose it.
 #[derive(Debug, Clone)]
 pub struct Resolved {
-    pub workspace: FlayerWorkspace,
+    pub workspace: WeaverWorkspace,
     pub reason: Reason,
 }
 
@@ -212,11 +212,11 @@ pub fn resolve_except(
     let start = absolute(inputs.start)?;
     let skipped = |root: &Path| except.iter().any(|path| same_directory(root, path));
     let above = start.ancestors().find(|candidate| {
-        candidate.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() && !skipped(candidate)
+        candidate.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file() && !skipped(candidate)
     });
     if let Some(root) = above {
         return Ok(Some(Resolved {
-            workspace: FlayerWorkspace::open(root)?,
+            workspace: WeaverWorkspace::open(root)?,
             reason: Reason::Above,
         }));
     }
@@ -234,11 +234,11 @@ pub fn resolve_except(
         };
     }
     let workspace = match inputs.intent {
-        Intent::Write => FlayerWorkspace::init(home)?.0,
-        Intent::Read if home.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() => {
-            FlayerWorkspace::open(home)?
+        Intent::Write => WeaverWorkspace::init(home)?.0,
+        Intent::Read if home.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file() => {
+            WeaverWorkspace::open(home)?
         }
-        Intent::Read => FlayerWorkspace::unmade(home)?,
+        Intent::Read => WeaverWorkspace::unmade(home)?,
     };
     Ok(Some(Resolved {
         workspace,
@@ -256,7 +256,7 @@ pub fn resolve_except(
 pub fn managing(
     inputs: &Inputs<'_>,
     project: &MindProject,
-) -> Result<Option<FlayerWorkspace>, ResolveError> {
+) -> Result<Option<WeaverWorkspace>, ResolveError> {
     let inputs = Inputs {
         start: project.root(),
         ..*inputs
@@ -293,7 +293,7 @@ pub fn consulted(
     Ok(resolve(&inputs)?.filter(|resolved| resolved.workspace.is_made()))
 }
 
-impl FlayerWorkspace {
+impl WeaverWorkspace {
     /// What a command at the workspace's level changes: its own artifacts,
     /// or the one project it names ([`pick`](Self::pick)).
     pub fn holder(&self, project: Option<&str>) -> Result<MindProject, ResolveError> {
@@ -408,7 +408,7 @@ fn chosen<'a>(inputs: &Inputs<'a>) -> Option<(Reason, &'a Path)> {
 
 /// Open a workspace somebody named, by its root or by its `.mindflayer`:
 /// what `-W` and the activation name, and what a command taking a workspace
-/// as its own argument names, as `flayer activate DIR` does, so that every
+/// as its own argument names, as `mindweaver activate DIR` does, so that every
 /// way of naming one takes the same spellings.
 ///
 /// The folder is taken as well as the root because it is what a person
@@ -416,14 +416,14 @@ fn chosen<'a>(inputs: &Inputs<'a>) -> Option<(Reason, &'a Path)> {
 /// makes the directory a workspace. A root that holds a marker of its own is
 /// a root, even when it happens to be called `.mindflayer` itself. Never
 /// made for the occasion, for the reason a chosen workspace never is.
-pub fn named(path: &Path) -> Result<FlayerWorkspace, WorkspaceError> {
+pub fn named(path: &Path) -> Result<WeaverWorkspace, WorkspaceError> {
     let path = absolute(path)?;
-    let holds_marker = path.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file();
+    let holds_marker = path.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file();
     let root = match path.parent() {
-        Some(parent) if !holds_marker && path.file_name() == Some(FLAYER_DIR.as_ref()) => parent,
+        Some(parent) if !holds_marker && path.file_name() == Some(WEAVER_DIR.as_ref()) => parent,
         _ => &path,
     };
-    FlayerWorkspace::open(root)
+    WeaverWorkspace::open(root)
 }
 
 #[cfg(test)]

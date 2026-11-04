@@ -6,14 +6,14 @@ mod common;
 use std::fs;
 use std::path::PathBuf;
 
-use mindflayer_core::agents_md::{
+use mindweaver_core::agents_md::{
     self, AgentsMdError, Malformed, Rendered, Warning, Written, BEGIN, CODEX_BUDGET, CODEX_NEAR,
     END,
 };
-use mindflayer_core::{AgentHomes, Artifact, FlayerWorkspace, MindProject};
+use mindweaver_core::{AgentHomes, Artifact, MindProject, WeaverWorkspace};
 use tempfile::TempDir;
 
-/// What a team's `AGENTS.md` holds before Mindflayer writes in it.
+/// What a team's `AGENTS.md` holds before Mindweaver writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
 
 /// No agent's own folder, as a front end hands over when a test pins them.
@@ -28,7 +28,7 @@ const NO_HOMES: AgentHomes = AgentHomes {
 /// render from, in a git work tree whose root is the workspace's.
 struct Fixture {
     dir: TempDir,
-    workspace: FlayerWorkspace,
+    workspace: WeaverWorkspace,
     project: MindProject,
     library: PathBuf,
 }
@@ -42,7 +42,7 @@ fn fixture() -> Fixture {
 /// The same, in no git work tree.
 fn outside_git() -> Fixture {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, &dir.path().join("app"));
     Fixture {
         library: dir.path().join("library"),
@@ -53,7 +53,7 @@ fn outside_git() -> Fixture {
 }
 
 /// A project made at `root` and linked by `workspace`.
-fn linked(workspace: &mut FlayerWorkspace, root: &std::path::Path) -> MindProject {
+fn linked(workspace: &mut WeaverWorkspace, root: &std::path::Path) -> MindProject {
     fs::create_dir_all(root).unwrap();
     let (project, _) = MindProject::init(root).unwrap();
     workspace.link(&project).unwrap();
@@ -214,7 +214,7 @@ fn a_crlf_file_keeps_crlf_through_a_render_a_second_one_and_a_removal() {
 }
 
 #[test]
-fn removing_the_last_rule_takes_away_a_file_mindflayer_made() {
+fn removing_the_last_rule_takes_away_a_file_mindweaver_made() {
     let fixture = fixture();
     let rule = fixture.rule("a", "Rule a.\n");
     assert!(fixture.render(&[&rule], false).unwrap().created());
@@ -226,7 +226,7 @@ fn removing_the_last_rule_takes_away_a_file_mindflayer_made() {
 }
 
 #[test]
-fn a_file_mindflayer_made_stays_once_somebody_wrote_in_it() {
+fn a_file_mindweaver_made_stays_once_somebody_wrote_in_it() {
     let fixture = fixture();
     let rule = fixture.rule("a", "Rule a.\n");
     fixture.render(&[&rule], false).unwrap();
@@ -240,7 +240,7 @@ fn a_file_mindflayer_made_stays_once_somebody_wrote_in_it() {
 }
 
 #[test]
-fn a_file_mindflayer_did_not_make_stays_when_the_block_was_all_it_held() {
+fn a_file_mindweaver_did_not_make_stays_when_the_block_was_all_it_held() {
     let fixture = fixture();
     let rule = fixture.rule("a", "Rule a.\n");
     fixture.render(&[&rule], false).unwrap();
@@ -252,7 +252,7 @@ fn a_file_mindflayer_did_not_make_stays_when_the_block_was_all_it_held() {
 
 #[cfg(unix)]
 #[test]
-fn a_link_in_place_of_a_file_mindflayer_made_is_emptied_not_taken_away() {
+fn a_link_in_place_of_a_file_mindweaver_made_is_emptied_not_taken_away() {
     let fixture = fixture();
     let target = fixture.project.root().join("NOTES.md");
     fs::write(&target, "").unwrap();
@@ -425,7 +425,7 @@ fn the_workspaces_own_folder_is_refused() {
 #[test]
 fn a_project_the_workspace_links_at_its_root_is_given_its_rules() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, dir.path());
     let library = TempDir::new().unwrap();
     let file = library.path().join("a.md");
@@ -440,7 +440,7 @@ fn a_project_the_workspace_links_at_its_root_is_given_its_rules() {
 #[test]
 fn a_project_unlinked_from_the_workspaces_root_is_refused_a_block_and_can_drop_its_own() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, dir.path());
     let library = TempDir::new().unwrap();
     let file = library.path().join("a.md");

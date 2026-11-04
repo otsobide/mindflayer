@@ -9,13 +9,13 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::agents_md;
-use mindflayer_core::claude_md::{
+use mindweaver_core::agents_md;
+use mindweaver_core::claude_md::{
     self, ClaudeMd, ClaudeMdError, Fallback, Reach, Warning, Written,
 };
-use mindflayer_core::claude_rules::Mode;
-use mindflayer_core::{
-    Agent, AgentHomes, Artifact, Directories, FlayerWorkspace, MindProject, Share,
+use mindweaver_core::claude_rules::Mode;
+use mindweaver_core::{
+    Agent, AgentHomes, Artifact, Directories, MindProject, Share, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -172,7 +172,7 @@ fn a_folder_that_is_not_there_cannot_be_told() {
     assert!(error.to_string().contains("gone"), "{error}");
 }
 
-/// What a team's `CLAUDE.md` holds before Mindflayer writes in it.
+/// What a team's `CLAUDE.md` holds before Mindweaver writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
 
 /// A project at `app` in a git work tree, its settings sharing as `share`
@@ -514,7 +514,7 @@ fn a_claude_md_that_imports_agents_md_itself_is_never_given_a_second_import() {
 }
 
 #[test]
-fn mindflayers_import_beside_one_somebody_wrote_is_taken_out() {
+fn mindweavers_import_beside_one_somebody_wrote_is_taken_out() {
     let fixture = fixture(Share::Shared);
     // What an earlier render made of the team's file, and their own import
     // in the other file.
@@ -681,7 +681,7 @@ fn import_for(name: &str) -> &'static str {
     }
 }
 
-/// What the file at `name` holds before Mindflayer writes in it: the team's
+/// What the file at `name` holds before Mindweaver writes in it: the team's
 /// text and its name, so no two are alike, in CRLF for one of them.
 fn original(name: &str) -> String {
     let text = format!("{TEAM}\nThis is {name}.\n");
@@ -779,7 +779,7 @@ fn a_dot_claude_md_imports_the_agents_md_in_the_folder_above_it() {
 /// and a library of rules to render from.
 struct Rules {
     _dir: TempDir,
-    workspace: FlayerWorkspace,
+    workspace: WeaverWorkspace,
     project: MindProject,
     library: PathBuf,
 }
@@ -788,7 +788,7 @@ impl Rules {
     fn new() -> Self {
         let dir = clean();
         gix::init(dir.path()).unwrap();
-        let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+        let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
         let root = folder(dir.path(), "app");
         let (project, _) =
             MindProject::init_settings(&root, &Agent::ALL, Share::Local, &Directories::default())

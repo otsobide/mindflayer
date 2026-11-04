@@ -131,7 +131,7 @@ describe('the explorer, from the Link form', () => {
       .map(each => each.querySelector('[data-testid="folder-open"]')!.textContent!.trim())
     expect(linked).toEqual(root.folders.filter(folder => folder.linked).map(folder => folder.name))
     expect(linked).toEqual(['api', 'docs', 'legacy', 'web'])
-    expect(all('[data-testid="folder-here"] [data-testid="folder-is"]')).toEqual(['flayer workspace'])
+    expect(all('[data-testid="folder-here"] [data-testid="folder-is"]')).toEqual(['weaver workspace'])
     expect(all('[data-testid="crumb"]')).toEqual(['/', 'home', 'you'])
     expect(all('[data-testid="crumb-here"]')).toEqual(['Projects'])
     expect((find('[data-testid="folder-path"] input, input[data-testid="folder-path"]') as HTMLInputElement).value).toBe(ROOT)
@@ -153,7 +153,7 @@ describe('the explorer, from the Link form', () => {
     up.click()
     await flushPromises()
     await vi.waitFor(() => expect(all('[data-testid="crumb-here"]')).toEqual(['you']))
-    expect(all('[data-testid="folder"] [data-testid="folder-is"]')).toEqual(['flayer workspace'])
+    expect(all('[data-testid="folder"] [data-testid="folder-is"]')).toEqual(['weaver workspace'])
 
     expect(listings(queries)).toEqual([listing(null), listing(`${ROOT}/archive`), listing('/home/you')])
   })

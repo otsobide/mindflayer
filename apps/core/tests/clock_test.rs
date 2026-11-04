@@ -12,11 +12,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use mindflayer_core::adapter::SystemClock;
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::ledger::{Action, Outcome};
-use mindflayer_core::mother::{random, GitRepositoryMother, WorkspaceMother};
-use mindflayer_core::Clock;
+use mindweaver_core::adapter::SystemClock;
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::ledger::{Action, Outcome};
+use mindweaver_core::mother::{random, GitRepositoryMother, WorkspaceMother};
+use mindweaver_core::Clock;
 
 /// 2024-01-01T00:00:00Z: no clock this build runs by can be earlier, since
 /// it was written after.
@@ -141,7 +141,7 @@ fn a_stopped_clock_says_one_moment_and_a_ticking_one_a_new_one_each_time() {
 #[test]
 fn a_ledger_stamps_its_log_by_the_clock_it_is_handed_and_no_other() {
     for (which, clock) in clocks() {
-        let ledger = mindflayer_core::Ledger::in_memory()
+        let ledger = mindweaver_core::Ledger::in_memory()
             .unwrap()
             .with_clock(Arc::clone(&clock));
         let before = clock.now();

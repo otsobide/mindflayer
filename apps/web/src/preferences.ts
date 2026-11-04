@@ -1,6 +1,11 @@
 import { setSSRHandler, type StorageLike } from '@vueuse/core'
 
-/** Every cookie a choice is kept in is named with this, apart from other programs' on 127.0.0.1. */
+/**
+ * Every cookie a choice is kept in is named with this, apart from other
+ * programs' on 127.0.0.1. Still the product's old name: a browser keeps the
+ * choices made by it, and a new one would forget them, so it moves with the
+ * other names written outside the code (#229).
+ */
 const PREFIX = 'mindflayer-'
 
 /** A year, counted again each time the choice is made. */
@@ -14,7 +19,7 @@ function name(key: string): string {
  * What this browser chose, kept in cookies: the colour mode, and the
  * sidebar's size and whether it is collapsed.
  *
- * Not localStorage, which is kept per origin: each `flayer ui` takes a port
+ * Not localStorage, which is kept per origin: each `mindweaver ui` takes a port
  * of its own, so every launch would open on an empty one and forget what the
  * last was told. A cookie is kept per host, whatever the port (the reason the
  * server names its own `mf_<port>`), so a choice made under one launch is

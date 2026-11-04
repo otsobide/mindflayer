@@ -30,7 +30,7 @@ projects: Array<ProjectUpdates>,
  */
 states: Array<StateCount>, 
 /**
- * Whether updating every project writes something: what `flayer update
+ * Whether updating every project writes something: what `mindweaver update
  * --all --yes` would, rather than leave and say.
  */
 writes: boolean, 

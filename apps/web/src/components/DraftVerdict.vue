@@ -10,7 +10,7 @@ const props = defineProps<{
   pending: boolean
   /** Why it could not be asked, when it could not. */
   error?: Error | null
-  /** What writes it, as the refusal is said of it: `flayer add`, saving. */
+  /** What writes it, as the refusal is said of it: `mindweaver add`, saving. */
   writer: string
 }>()
 

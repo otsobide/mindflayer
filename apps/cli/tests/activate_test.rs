@@ -1,4 +1,4 @@
-//! `flayer activate`: the shell code that activates a workspace, printed for
+//! `mindweaver activate`: the shell code that activates a workspace, printed for
 //! `eval`, and nothing at all when there is nothing to activate.
 //!
 //! The code itself is core's, asserted whole for each shell there; what is
@@ -8,12 +8,12 @@
 mod common;
 
 use common::*;
-use mindflayer_core::activate::{self, Shell};
-use mindflayer_core::ActivateError;
+use mindweaver_core::activate::{self, Shell};
+use mindweaver_core::ActivateError;
 
 /// What core writes to activate the workspace at `root` in `shell`.
 fn script(root: &Path, shell: Shell) -> String {
-    activate::script(&FlayerWorkspace::open(root).unwrap(), shell).unwrap()
+    activate::script(&WeaverWorkspace::open(root).unwrap(), shell).unwrap()
 }
 
 /// Every path under `dir`, in order: what a command that writes nothing
@@ -36,18 +36,18 @@ fn tree(dir: &Path) -> Vec<PathBuf> {
 
 /// A directory holding `writing`, a workspace, and `plain`, a directory
 /// that is not one.
-fn flayers() -> TempDir {
+fn weavers() -> TempDir {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init", "writing"]).unwrap();
+    weaver(dir.path(), &["init", "writing"]).unwrap();
     fs::create_dir(dir.path().join("plain")).unwrap();
     dir
 }
 
 #[test]
 fn activate_prints_the_code_for_the_workspace_it_is_given() {
-    let dir = flayers();
+    let dir = weavers();
 
-    let outcome = flayer(dir.path(), &["activate", "writing", "--shell", "bash"]).unwrap();
+    let outcome = weaver(dir.path(), &["activate", "writing", "--shell", "bash"]).unwrap();
 
     assert_eq!(
         outcome,
@@ -60,11 +60,11 @@ fn activate_prints_the_code_for_the_workspace_it_is_given() {
 }
 
 #[test]
-fn a_workspace_is_activated_by_its_mindflayer_folder_too() {
-    let dir = flayers();
-    let folder = format!("writing/{FLAYER_DIR}");
+fn a_workspace_is_activated_by_its_mindweaver_folder_too() {
+    let dir = weavers();
+    let folder = format!("writing/{WEAVER_DIR}");
 
-    let outcome = flayer(dir.path(), &["activate", &folder, "--shell", "zsh"]).unwrap();
+    let outcome = weaver(dir.path(), &["activate", &folder, "--shell", "zsh"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -76,7 +76,7 @@ fn a_workspace_is_activated_by_its_mindflayer_folder_too() {
 fn activate_on_its_own_activates_the_workspace_a_command_here_would_use() {
     let dir = workspace_with_two();
 
-    let outcome = flayer(&dir.path().join("alpha"), &["activate", "--shell", "fish"]).unwrap();
+    let outcome = weaver(&dir.path().join("alpha"), &["activate", "--shell", "fish"]).unwrap();
 
     assert_eq!(outcome.stdout, script(dir.path(), Shell::Fish));
 }
@@ -84,10 +84,10 @@ fn activate_on_its_own_activates_the_workspace_a_command_here_would_use() {
 #[test]
 fn activate_on_its_own_takes_the_workspace_w_names() {
     let dir = workspace_with_two();
-    let other = flayers();
+    let other = weavers();
     let writing = other.path().join("writing");
 
-    let outcome = flayer(
+    let outcome = weaver(
         &dir.path().join("alpha"),
         &[
             "activate",
@@ -104,15 +104,15 @@ fn activate_on_its_own_takes_the_workspace_w_names() {
 
 #[test]
 fn activating_a_directory_that_is_no_workspace_is_refused_and_writes_nothing() {
-    let dir = flayers();
+    let dir = weavers();
     let before = tree(dir.path());
 
-    let failure = flayer(dir.path(), &["activate", "plain", "--shell", "bash"]).unwrap_err();
+    let failure = weaver(dir.path(), &["activate", "plain", "--shell", "bash"]).unwrap_err();
 
     assert_eq!(
         failure.error.to_string(),
         format!(
-            "{}: not a flayer workspace (no .mindflayer/flayer.toml)",
+            "{}: not a weaver workspace (no .mindflayer/flayer.toml)",
             dir.path().join("plain").display()
         )
     );
@@ -124,7 +124,7 @@ fn activating_the_default_workspace_before_it_is_made_makes_nothing() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
 
-    let failure = flayer_at_home(
+    let failure = weaver_at_home(
         elsewhere.path(),
         home.path(),
         &["activate", "--shell", "bash"],
@@ -143,13 +143,13 @@ fn activating_the_default_workspace_before_it_is_made_makes_nothing() {
 }
 
 #[test]
-fn activate_is_mind_flayer_activate_too() {
-    let dir = flayers();
+fn activate_is_mind_weaver_activate_too() {
+    let dir = weavers();
     let args = ["activate", "writing", "--shell", "bash"];
 
-    let nested = mind(dir.path(), &[&["flayer"][..], &args].concat()).unwrap();
+    let nested = mind(dir.path(), &[&["weaver"][..], &args].concat()).unwrap();
 
-    assert_eq!(nested, flayer(dir.path(), &args).unwrap());
+    assert_eq!(nested, weaver(dir.path(), &args).unwrap());
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ fn activate_is_mind_flayer_activate_too() {
 
 #[test]
 fn the_shell_is_guessed_from_shell() {
-    let dir = flayers();
+    let dir = weavers();
     let writing = dir.path().join("writing");
 
     for (program, shell) in [
@@ -168,7 +168,7 @@ fn the_shell_is_guessed_from_shell() {
         ("/usr/bin/pwsh", Shell::Pwsh),
     ] {
         let printed = spawn(
-            "flayer",
+            "mindweaver",
             dir.path(),
             &["activate", "writing"],
             &[("SHELL", program)],
@@ -181,10 +181,10 @@ fn the_shell_is_guessed_from_shell() {
 
 #[test]
 fn the_shell_named_wins_over_the_one_shell_names() {
-    let dir = flayers();
+    let dir = weavers();
 
     let printed = spawn(
-        "flayer",
+        "mindweaver",
         dir.path(),
         &["activate", "writing", "--shell", "fish"],
         &[("SHELL", "/bin/bash")],
@@ -199,14 +199,14 @@ fn the_shell_named_wins_over_the_one_shell_names() {
 
 #[test]
 fn with_no_shell_to_guess_activate_prints_no_code() {
-    let dir = flayers();
+    let dir = weavers();
 
     for (program, said) in [
         ("", "error: $SHELL is not set; say which shell to write for with --shell (bash, zsh, fish or pwsh)\n"),
         ("/bin/tcsh", "error: cannot tell which shell `/bin/tcsh` is; say which to write for with --shell (bash, zsh, fish or pwsh)\n"),
     ] {
         let printed = spawn(
-            "flayer",
+            "mindweaver",
             dir.path(),
             &["activate", "writing"],
             &[("SHELL", program)],
@@ -220,10 +220,10 @@ fn with_no_shell_to_guess_activate_prints_no_code() {
 
 #[test]
 fn a_failed_activation_gives_eval_nothing_to_run() {
-    let dir = flayers();
+    let dir = weavers();
 
     let printed = spawn(
-        "flayer",
+        "mindweaver",
         dir.path(),
         &["activate", "plain", "--shell", "bash"],
         &[],
@@ -232,7 +232,7 @@ fn a_failed_activation_gives_eval_nothing_to_run() {
     assert!(!printed.ok);
     assert_eq!(printed.stdout, "");
     assert!(
-        printed.stderr.starts_with("error: ") && printed.stderr.contains("not a flayer workspace"),
+        printed.stderr.starts_with("error: ") && printed.stderr.contains("not a weaver workspace"),
         "{}",
         printed.stderr
     );

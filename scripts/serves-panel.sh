@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Whether a release `flayer` serves the panel from the binary itself, with no
+# Whether a release `mindweaver` serves the panel from the binary itself, with no
 # apps/web/dist on disk to read it from (#71):
 #
-#   scripts/serves-panel.sh target/x86_64-unknown-linux-gnu/release/flayer
+#   scripts/serves-panel.sh target/x86_64-unknown-linux-gnu/release/mindweaver
 #
 # CI's `build (cli)` runs it, through `make cli/release/check`, on the release
 # it built with the panel `test (web)` built. A release embeds each of the
@@ -11,7 +11,7 @@
 # pass for one that embeds it. It refuses to run while the folder is there
 # rather than delete what somebody built.
 #
-# `flayer ui` is started as apps/cli/tests/ui_test.rs starts it: from a folder
+# `mindweaver ui` is started as apps/cli/tests/ui_test.rs starts it: from a folder
 # of its own, with a home of its own, nothing named or activated, every agent
 # home empty and no browser opened, so it reads nothing of the machine's. Its
 # link is the first line it prints. `/` has to answer with the panel's page,
@@ -24,7 +24,7 @@
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
-	echo "usage: $0 <flayer binary>" >&2
+	echo "usage: $0 <mindweaver binary>" >&2
 	exit 2
 fi
 if [ ! -f "$1" ] || [ ! -x "$1" ]; then
@@ -53,7 +53,7 @@ trap cleanup EXIT
 fail() {
 	echo "error: $*" >&2
 	if [ -s "$scratch/stderr" ]; then
-		echo "flayer ui said on stderr:" >&2
+		echo "mindweaver ui said on stderr:" >&2
 		sed 's/^/  /' "$scratch/stderr" >&2
 	fi
 	exit 1
@@ -75,13 +75,13 @@ for _ in $(seq 300); do
 	if IFS= read -r link <"$scratch/stdout"; then
 		break
 	fi
-	kill -0 "$pid" 2>/dev/null || fail "flayer ui stopped before it printed a link"
+	kill -0 "$pid" 2>/dev/null || fail "mindweaver ui stopped before it printed a link"
 	sleep 0.1
 done
 case $link in
 http://127.0.0.1:*/\?token=*) ;;
-'') fail "flayer ui printed no link within 30 s" ;;
-*) fail "the first line flayer ui printed is not a link: $link" ;;
+'') fail "mindweaver ui printed no link within 30 s" ;;
+*) fail "the first line mindweaver ui printed is not a link: $link" ;;
 esac
 address=${link#http://}
 address=${address%%/*}
@@ -111,10 +111,10 @@ for _ in $(seq 300); do
 	kill -0 "$pid" 2>/dev/null || break
 	sleep 0.1
 done
-kill -0 "$pid" 2>/dev/null && fail "flayer ui still runs 30 s after Ctrl-C"
+kill -0 "$pid" 2>/dev/null && fail "mindweaver ui still runs 30 s after Ctrl-C"
 exited=0
 wait "$pid" || exited=$?
 pid=
-[ "$exited" = 0 ] || fail "flayer ui exited with $exited after Ctrl-C"
+[ "$exited" = 0 ] || fail "mindweaver ui exited with $exited after Ctrl-C"
 
 echo "ok: $binary serves the panel from the binary: / and ${#assets[@]} files under /assets/"

@@ -7,7 +7,7 @@ use clap::{ArgMatches, CommandFactory, Parser};
 
 use super::*;
 use crate::tui::minds::{Minds, Row, Standing};
-use crate::{Cli, FlayerCli};
+use crate::{Cli, WeaverCli};
 
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
@@ -334,8 +334,8 @@ fn a_directory_made_a_project_is_linked_with_the_rest_in_the_order_given() {
         [
             owned(&["mind", "-C", "gamma", "init"]),
             owned(&["mind", "-C", "delta", "init"]),
-            owned(&["flayer", "link", "beta", "gamma", "delta"]),
-            owned(&["flayer", "unlink", "alpha"]),
+            owned(&["mindweaver", "link", "beta", "gamma", "delta"]),
+            owned(&["mindweaver", "unlink", "alpha"]),
         ]
     );
 }
@@ -538,12 +538,12 @@ fn a_migration_is_a_dry_run_until_it_is_told_and_only_then_a_write() {
 
     assert_eq!(
         migrate(false).commands(),
-        [owned(&["flayer", "migrate", "-p", "legacy"])]
+        [owned(&["mindweaver", "migrate", "-p", "legacy"])]
     );
     assert!(!migrate(false).writes());
     assert_eq!(
         migrate(true).commands(),
-        [owned(&["flayer", "migrate", "-p", "legacy", "--yes"])]
+        [owned(&["mindweaver", "migrate", "-p", "legacy", "--yes"])]
     );
     assert!(migrate(true).writes());
     assert_eq!(migrate(true).cautions(), Vec::new());
@@ -565,13 +565,13 @@ fn a_removal_is_a_dry_run_until_it_is_told_and_only_then_asked_about() {
 
     assert_eq!(
         remove(true, false).commands(),
-        [line("flayer remove --everywhere skill:lint")]
+        [line("mindweaver remove --everywhere skill:lint")]
     );
     assert!(!remove(true, false).writes());
     assert_eq!(remove(true, false).cautions(), Vec::new());
     assert_eq!(
         remove(true, true).commands(),
-        [line("flayer remove --everywhere --yes skill:lint")]
+        [line("mindweaver remove --everywhere --yes skill:lint")]
     );
     assert!(remove(true, true).writes());
     assert_eq!(
@@ -580,7 +580,7 @@ fn a_removal_is_a_dry_run_until_it_is_told_and_only_then_asked_about() {
     );
     assert_eq!(
         remove(false, false).commands(),
-        [line("flayer remove skill:lint")]
+        [line("mindweaver remove skill:lint")]
     );
 }
 
@@ -594,7 +594,7 @@ fn what_nothing_offers_is_taken_out_of_every_project_or_of_one() {
     for (task, said) in [
         (
             orphans(Holder::Workspace),
-            "flayer uninstall --all-projects --orphaned",
+            "mindweaver uninstall --all-projects --orphaned",
         ),
         (
             orphans(Holder::Project(String::from("/work/alpha"))),
@@ -629,12 +629,12 @@ fn an_uninstall_is_the_line_the_cli_takes_and_forced_only_when_asked() {
     for (task, said, cautions) in [
         (
             uninstall(&["/work/alpha"], false),
-            "flayer uninstall -p /work/alpha skill:-lint",
+            "mindweaver uninstall -p /work/alpha skill:-lint",
             vec![(0, Caution::Uninstalls)],
         ),
         (
             uninstall(&["/work/alpha", "-odd"], true),
-            "flayer uninstall -p /work/alpha -p ./-odd --force skill:-lint",
+            "mindweaver uninstall -p /work/alpha -p ./-odd --force skill:-lint",
             vec![(0, Caution::Uninstalls), (0, Caution::Forces)],
         ),
     ] {
@@ -660,7 +660,7 @@ fn an_update_is_the_line_the_cli_takes_and_forced_only_when_asked() {
     for (task, said, cautions) in [
         (
             update(Holder::Workspace, None, false),
-            "flayer update --all --yes",
+            "mindweaver update --all --yes",
             Vec::new(),
         ),
         (
@@ -680,7 +680,7 @@ fn an_update_is_the_line_the_cli_takes_and_forced_only_when_asked() {
         ),
         (
             update(Holder::Workspace, Some("-odd"), true),
-            "flayer update --all --yes --force -- -odd",
+            "mindweaver update --all --yes --force -- -odd",
             vec![(0, Caution::Forces)],
         ),
     ] {
@@ -837,7 +837,7 @@ const FLAGS: [&str; 24] = [
     "--=",
     "-x y",
     "-;",
-    "-\nflayer init",
+    "-\nmindweaver init",
     "--\n--yes",
     "-'quoted'",
 ];
@@ -882,14 +882,14 @@ fn hostile() -> Vec<String> {
 /// costs, and the property below parses some tens of thousands.
 struct Parsers {
     mind: clap::Command,
-    flayer: clap::Command,
+    weaver: clap::Command,
 }
 
 impl Parsers {
     fn new() -> Self {
         Parsers {
             mind: Cli::command(),
-            flayer: FlayerCli::command(),
+            weaver: WeaverCli::command(),
         }
     }
 
@@ -898,7 +898,7 @@ impl Parsers {
     fn read(&mut self, line: &[String]) -> Read {
         let command = match line[0].as_str() {
             "mind" => &mut self.mind,
-            "flayer" => &mut self.flayer,
+            "mindweaver" => &mut self.weaver,
             other => panic!("{line:?} runs `{other}`"),
         };
         let matches = command
@@ -917,7 +917,7 @@ type Read = Vec<(String, Vec<Given>)>;
 struct Given {
     id: String,
     /// The short flag that gives it, when it is an option that has one: by
-    /// the flag rather than the id, since `flayer link` takes its
+    /// the flag rather than the id, since `mindweaver link` takes its
     /// directories as `projects` too, behind no flag and no `./`.
     short: Option<char>,
     values: Vec<String>,
@@ -1023,7 +1023,7 @@ fn holding(read: &Read, value: &str) -> Read {
 }
 
 #[test]
-fn every_variant_s_lines_parse_with_cli_or_flayer_cli() {
+fn every_variant_s_lines_parse_with_cli_or_weaver_cli() {
     // Not the empty value: the parser refuses an empty path for what it is,
     // which is where one is to be refused.
     for value in VALUES.into_iter().filter(|value| !value.is_empty()) {
@@ -1031,7 +1031,7 @@ fn every_variant_s_lines_parse_with_cli_or_flayer_cli() {
             for line in task.commands() {
                 let error = match line[0].as_str() {
                     "mind" => Cli::try_parse_from(&line).err(),
-                    "flayer" => FlayerCli::try_parse_from(&line).err(),
+                    "mindweaver" => WeaverCli::try_parse_from(&line).err(),
                     other => panic!("{task:?} runs `{other}`"),
                 };
                 assert!(error.is_none(), "{line:?} does not parse: {error:?}");
@@ -1104,10 +1104,10 @@ fn a_line_named_for_a_workspace_names_it_once_and_is_otherwise_read_as_it_was() 
                     );
                     cli.workspace
                 }
-                "flayer" => {
+                "mindweaver" => {
                     let (cli, plain) = (
-                        FlayerCli::try_parse_from(&named).unwrap(),
-                        FlayerCli::try_parse_from(&line).unwrap(),
+                        WeaverCli::try_parse_from(&named).unwrap(),
+                        WeaverCli::try_parse_from(&line).unwrap(),
                     );
                     assert_eq!(cli.directory, plain.directory, "{named:?}");
                     assert_eq!(
@@ -1140,10 +1140,10 @@ fn a_project_s_line_naming_the_workspace_on_screen_is_named_for_the_one_given_in
 
 #[test]
 fn a_root_starting_with_a_dash_is_named_as_the_value_of_w() {
-    let named = naming(&line("flayer link beta"), "-W");
+    let named = naming(&line("mindweaver link beta"), "-W");
 
-    assert_eq!(named, line("flayer -W=-W link beta"));
-    let cli = FlayerCli::try_parse_from(&named).unwrap();
+    assert_eq!(named, line("mindweaver -W=-W link beta"));
+    let cli = WeaverCli::try_parse_from(&named).unwrap();
     assert_eq!(cli.workspace.as_deref(), Some("-W"));
 }
 
@@ -1204,34 +1204,34 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_sh
         ("mind", Refusal::Screen),
         ("mind tui", Refusal::Screen),
         ("mind -C alpha tui", Refusal::Screen),
-        ("mind flayer", Refusal::Screen),
-        ("mind flayer tui", Refusal::Screen),
-        ("flayer", Refusal::Screen),
-        ("flayer --home= tui", Refusal::Screen),
-        ("flayer minds", Refusal::Screen),
-        ("flayer minds work", Refusal::Screen),
-        ("flayer install", Refusal::Screen),
-        ("flayer install --from workspace", Refusal::Screen),
-        ("mind flayer install", Refusal::Screen),
+        ("mind weaver", Refusal::Screen),
+        ("mind weaver tui", Refusal::Screen),
+        ("mindweaver", Refusal::Screen),
+        ("mindweaver --home= tui", Refusal::Screen),
+        ("mindweaver minds", Refusal::Screen),
+        ("mindweaver minds work", Refusal::Screen),
+        ("mindweaver install", Refusal::Screen),
+        ("mindweaver install --from workspace", Refusal::Screen),
+        ("mind weaver install", Refusal::Screen),
         ("mind edit deploy", Refusal::Editor),
         ("mind edit --editor true deploy", Refusal::Editor),
-        ("flayer edit -p alpha deploy", Refusal::Editor),
-        ("mind flayer edit deploy", Refusal::Editor),
+        ("mindweaver edit -p alpha deploy", Refusal::Editor),
+        ("mind weaver edit deploy", Refusal::Editor),
         ("mind edit --contents - deploy", Refusal::Input),
         (
-            "flayer edit -p alpha --contents - --if-unchanged 0a deploy",
+            "mindweaver edit -p alpha --contents - --if-unchanged 0a deploy",
             Refusal::Input,
         ),
-        ("flayer activate", Refusal::Shell),
-        ("mind flayer activate --shell fish work", Refusal::Shell),
+        ("mindweaver activate", Refusal::Shell),
+        ("mind weaver activate --shell fish work", Refusal::Shell),
         (
-            "flayer gather git https://example.com/skills.git",
+            "mindweaver gather git https://example.com/skills.git",
             Refusal::Unwatched,
         ),
         ("mind show deploy", Refusal::Unheld),
         ("mind -C alpha show --json rule:style", Refusal::Unheld),
-        ("flayer show -p alpha deploy", Refusal::Unheld),
-        ("mind flayer show deploy", Refusal::Unheld),
+        ("mindweaver show -p alpha deploy", Refusal::Unheld),
+        ("mind weaver show deploy", Refusal::Unheld),
     ] {
         assert_eq!(refused(&line(said)), Some(refusal), "{said}");
     }
@@ -1243,12 +1243,12 @@ fn a_front_end_with_no_terminal_refuses_what_draws_edits_activates_gathers_or_sh
 #[test]
 fn a_front_end_that_runs_lines_refuses_the_panel() {
     for said in [
-        "flayer ui",
-        "flayer ui --no-open --port 0",
-        "flayer ui --no-open --token-file api.json",
+        "mindweaver ui",
+        "mindweaver ui --no-open --port 0",
+        "mindweaver ui --no-open --token-file api.json",
         "mind ui",
         "mind -C alpha ui --dev",
-        "mind flayer ui",
+        "mind weaver ui",
     ] {
         assert_eq!(refused(&line(said)), Some(Refusal::Panel), "{said}");
     }
@@ -1259,11 +1259,11 @@ fn a_front_end_that_runs_lines_refuses_the_panel() {
 #[cfg(not(feature = "ui"))]
 #[test]
 fn without_the_ui_feature_there_is_no_ui_command() {
-    for said in ["flayer ui", "mind ui", "mind flayer ui"] {
+    for said in ["mindweaver ui", "mind ui", "mind weaver ui"] {
         let words = line(said);
         let parsed = match words[0].as_str() {
             "mind" => Cli::try_parse_from(&words).map(drop),
-            _ => FlayerCli::try_parse_from(&words).map(drop),
+            _ => WeaverCli::try_parse_from(&words).map(drop),
         };
         let error = parsed.expect_err(said);
         assert_eq!(
@@ -1277,23 +1277,23 @@ fn without_the_ui_feature_there_is_no_ui_command() {
 #[test]
 fn a_front_end_with_no_terminal_runs_everything_else() {
     for said in [
-        "flayer gather list",
-        "flayer install -p alpha deploy",
-        "flayer install --all-projects deploy",
+        "mindweaver gather list",
+        "mindweaver install -p alpha deploy",
+        "mindweaver install --all-projects deploy",
         // Half an install, which opens no screen: the command refuses it
         // with a reason of its own.
-        "flayer install -p alpha",
-        "flayer install --all-projects",
+        "mindweaver install -p alpha",
+        "mindweaver install --all-projects",
         "mind install deploy",
-        "mind flayer link alpha",
-        "flayer which",
+        "mind weaver link alpha",
+        "mindweaver which",
         "mind status --json",
         // An edit that takes its contents from a file, held to core's
         // rules as any edit's are, opens nothing.
         "mind edit --contents draft.md deploy",
         // Not a line either parser takes, which running it says, in the
         // parser's words.
-        "flayer frobnicate",
+        "mindweaver frobnicate",
         "ls",
     ] {
         assert_eq!(refused(&line(said)), None, "{said}");
@@ -1328,18 +1328,21 @@ fn edit_runs_without_a_terminal_only_when_its_contents_are_a_files() {
         "mind edit --contents draft.md deploy",
         "mind -C alpha edit --contents=/tmp/draft.md --if-unchanged 0a rule:style",
         "mind edit deploy --contents ./-",
-        "flayer edit --contents draft.md deploy",
-        "flayer edit -p alpha --contents draft.md --if-unchanged 0a deploy",
-        "mind flayer edit --contents draft.md deploy",
+        "mindweaver edit --contents draft.md deploy",
+        "mindweaver edit -p alpha --contents draft.md --if-unchanged 0a deploy",
+        "mind weaver edit --contents draft.md deploy",
     ] {
         assert_eq!(refused(&line(said)), None, "{said}");
     }
     for (said, refusal) in [
         ("mind edit deploy", Refusal::Editor),
-        ("flayer edit --editor true deploy", Refusal::Editor),
+        ("mindweaver edit --editor true deploy", Refusal::Editor),
         ("mind edit --contents - deploy", Refusal::Input),
-        ("mind flayer edit --contents=- deploy", Refusal::Input),
-        ("flayer edit -p alpha deploy --contents -", Refusal::Input),
+        ("mind weaver edit --contents=- deploy", Refusal::Input),
+        (
+            "mindweaver edit -p alpha deploy --contents -",
+            Refusal::Input,
+        ),
     ] {
         assert_eq!(refused(&line(said)), Some(refusal), "{said}");
     }
@@ -1362,7 +1365,7 @@ fn a_refused_task_names_the_line_it_is_refused_for() {
 
     assert_eq!(
         batch.refused_line(),
-        Some((line("flayer install"), Refusal::Screen))
+        Some((line("mindweaver install"), Refusal::Screen))
     );
     assert_eq!(Task::Shelf.refused_line(), None);
 }
@@ -1395,37 +1398,37 @@ fn a_line_that_takes_something_away_is_asked_about_for_what_it_takes() {
     for (said, expected) in [
         ("mind remove --yes deploy", vec![Removes]),
         ("mind -C alpha remove -y rule:style", vec![Removes]),
-        ("flayer remove --yes skill:deploy", vec![Removes]),
-        ("flayer remove -p alpha --yes deploy", vec![Removes]),
-        ("mind flayer remove --yes deploy", vec![Removes]),
+        ("mindweaver remove --yes skill:deploy", vec![Removes]),
+        ("mindweaver remove -p alpha --yes deploy", vec![Removes]),
+        ("mind weaver remove --yes deploy", vec![Removes]),
         (
-            "flayer remove --everywhere --yes skill:deploy",
+            "mindweaver remove --everywhere --yes skill:deploy",
             vec![Removes, Uninstalls],
         ),
         ("mind uninstall deploy", vec![Uninstalls]),
         ("mind uninstall --orphaned", vec![Uninstalls]),
         ("mind uninstall --force deploy", vec![Uninstalls, Forces]),
         (
-            "flayer uninstall -p alpha -p beta skill:deploy",
+            "mindweaver uninstall -p alpha -p beta skill:deploy",
             vec![Uninstalls],
         ),
         (
-            "flayer uninstall --all-projects --orphaned",
+            "mindweaver uninstall --all-projects --orphaned",
             vec![Uninstalls],
         ),
         (
-            "flayer uninstall -p alpha --force deploy",
+            "mindweaver uninstall -p alpha --force deploy",
             vec![Uninstalls, Forces],
         ),
         ("mind install --force deploy", vec![Forces]),
-        ("flayer install -p alpha --force deploy", vec![Forces]),
+        ("mindweaver install -p alpha --force deploy", vec![Forces]),
         ("mind update --yes --force", vec![Forces]),
-        ("flayer update --all --yes --force deploy", vec![Forces]),
+        ("mindweaver update --all --yes --force deploy", vec![Forces]),
         ("mind unlink", vec![Unlinks]),
-        ("flayer unlink alpha beta", vec![Unlinks]),
-        ("mind flayer unlink alpha", vec![Unlinks]),
+        ("mindweaver unlink alpha beta", vec![Unlinks]),
+        ("mind weaver unlink alpha", vec![Unlinks]),
         ("mind unload ../team", vec![Unloads]),
-        ("flayer unload team", vec![Unloads]),
+        ("mindweaver unload team", vec![Unloads]),
     ] {
         assert_eq!(cautions(&line(said)), expected, "{said}");
     }
@@ -1438,26 +1441,26 @@ fn a_line_that_takes_something_away_is_asked_about_for_what_it_takes() {
 fn a_line_that_takes_nothing_away_is_asked_about_for_nothing() {
     for said in [
         "mind remove deploy",
-        "flayer remove --everywhere skill:deploy",
+        "mindweaver remove --everywhere skill:deploy",
         "mind update --force",
-        "flayer update --all --force",
+        "mindweaver update --all --force",
         "mind update --yes",
-        "flayer install -p alpha deploy",
-        "flayer link alpha",
+        "mindweaver install -p alpha deploy",
+        "mindweaver link alpha",
         "mind add skill deploy Ship",
         "mind rename deploy ship",
-        "flayer relink alpha beta",
-        "flayer load ../team",
-        "flayer adopt -p alpha --yes legacy",
-        "flayer agents -p alpha --yes claude",
+        "mindweaver relink alpha beta",
+        "mindweaver load ../team",
+        "mindweaver adopt -p alpha --yes legacy",
+        "mindweaver agents -p alpha --yes claude",
         "mind share --yes local",
         "mind targets set --yes skills .skills",
-        "flayer migrate --library --yes",
-        "flayer validate",
-        "flayer init",
+        "mindweaver migrate --library --yes",
+        "mindweaver validate",
+        "mindweaver init",
         // A line no parser takes would not run, and takes nothing.
-        "flayer unlink",
-        "flayer frobnicate",
+        "mindweaver unlink",
+        "mindweaver frobnicate",
         "ls",
     ] {
         assert_eq!(cautions(&line(said)), Vec::new(), "{said}");
@@ -1488,7 +1491,7 @@ fn a_task_is_asked_about_for_each_of_its_lines_that_takes_something_away() {
             Task::Update { force: true, .. } => vec![(0, Caution::Forces)],
             Task::Unlink { .. } => vec![(0, Caution::Unlinks)],
             Task::Unload { .. } | Task::UnloadHere { .. } => vec![(0, Caution::Unloads)],
-            // `mind -C <path> init`, `flayer link` and `flayer unlink`.
+            // `mind -C <path> init`, `mindweaver link` and `mindweaver unlink`.
             Task::Minds { .. } | Task::Marks { .. } => vec![(2, Caution::Unlinks)],
             // Its installs first, then its uninstalls, as `every` builds it.
             Task::ApplyInstall { .. } => vec![(1, Caution::Uninstalls)],
@@ -1541,12 +1544,12 @@ fn a_change_core_plans_is_the_install_or_uninstall_task_that_runs_it() {
     assert_eq!(
         Task::from(install).commands(),
         [line(
-            "flayer install -p alpha -p ./beta --from load:../team rule:git/commits"
+            "mindweaver install -p alpha -p ./beta --from load:../team rule:git/commits"
         )]
     );
     assert_eq!(
         Task::from(uninstall).commands(),
-        [line("flayer uninstall -p alpha skill:deploy")]
+        [line("mindweaver uninstall -p alpha skill:deploy")]
     );
 }
 
@@ -1556,7 +1559,7 @@ fn a_change_core_plans_is_the_install_or_uninstall_task_that_runs_it() {
 #[test]
 fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_was_read_with() {
     let text = "---\nname: deploy\ndescription: Ship it\n---\n";
-    let hash = mindflayer_core::hash::bytes(b"before");
+    let hash = mindweaver_core::hash::bytes(b"before");
     let route = scratch_route(text);
     let save = |holder| Task::Save {
         holder,
@@ -1576,18 +1579,21 @@ fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_
         &hash,
         "skill:deploy",
     ];
-    assert_eq!(own.commands(), [[&["flayer", "edit"][..], &edit].concat()]);
+    assert_eq!(
+        own.commands(),
+        [[&["mindweaver", "edit"][..], &edit].concat()]
+    );
     assert_eq!(
         alpha.commands(),
-        [[&["flayer", "edit", "-p", "alpha"][..], &edit].concat()]
+        [[&["mindweaver", "edit", "-p", "alpha"][..], &edit].concat()]
     );
-    let named = &mindflayer_core::hash::bytes(text.as_bytes())[..16];
+    let named = &mindweaver_core::hash::bytes(text.as_bytes())[..16];
     assert_eq!(scratch_name(text), format!("edit-{named}.md"));
     assert_eq!(
         route,
         format!(
             "{}/{}",
-            FlayerWorkspace::scratch_route(),
+            WeaverWorkspace::scratch_route(),
             scratch_name(text)
         )
     );
@@ -1613,7 +1619,7 @@ fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_
 /// unsaid); and none holds `://`, which with an `@` after it is a URL's
 /// credential, taken out of a line where it is shown.
 fn drawn(count: usize) -> Vec<String> {
-    use mindflayer_core::mother::random;
+    use mindweaver_core::mother::random;
 
     const LEADS: [&str; 10] = [
         "", "", "", "-", "--", "-p", "--yes", "--from=", "-C ", "--=",
@@ -1702,7 +1708,7 @@ fn carrying(url: &str) -> Vec<Task> {
 /// that line, for every way a credential is typed and words quoting one.
 #[test]
 fn a_line_carrying_a_credential_runs_it_as_typed_and_is_shown_without_it() {
-    use mindflayer_core::mother::UrlMother;
+    use mindweaver_core::mother::UrlMother;
 
     for url in UrlMother::every_credentialed() {
         for url in [UrlMother::quoted(&url), url] {

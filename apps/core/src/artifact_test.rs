@@ -519,7 +519,7 @@ fn an_artifact_is_installed_only_when_every_copy_is_recorded() {
 
     let both = copied("/p/a", placed(false, true), other(false, true));
     assert_eq!(both.provenance(), Provenance::Installed);
-    // A copy nothing records is somebody's, so the whole is not Mindflayer's.
+    // A copy nothing records is somebody's, so the whole is not Mindweaver's.
     let one = copied("/p/a", placed(false, true), other(false, false));
     assert_eq!(one.provenance(), Provenance::Foreign);
     assert_eq!(one.copies()[0].provenance(), Provenance::Installed);

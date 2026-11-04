@@ -17,7 +17,7 @@
 //! marker now says. A workspace that loads this one names its root, not its
 //! folders, and reads them through its marker as well.
 //!
-//! A project an older Mindflayer made is the other thing to bring up to
+//! A project an older Mindweaver made is the other thing to bring up to
 //! date: [`project_plan`] and [`project`] move it from its `mind.toml` to a
 //! `settings.toml`, and what is installed into it to where its agents read,
 //! or from its `settings.json` to a `settings.toml` saying the same.
@@ -38,8 +38,8 @@ use crate::kind::Kind;
 use crate::ledger::LedgerError;
 use crate::paths;
 use crate::workspace::{
-    misplaced_own, Directories, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
-    MIND_CONFIG,
+    misplaced_own, Directories, MindProject, WeaverWorkspace, WorkspaceError, MIND_CONFIG,
+    WEAVER_CONFIG,
 };
 
 pub use project::{
@@ -101,7 +101,7 @@ pub struct Left {
     /// The root of the project holding it.
     pub project: PathBuf,
     /// Whether the workspace counts it among its own as things stand, listing
-    /// it and offering it to install ([`FlayerWorkspace::own_kinds`]), and so
+    /// it and offering it to install ([`WeaverWorkspace::own_kinds`]), and so
     /// stops once the marker's line points at the library. It does for one a
     /// project at its root shares with it when it does not manage that
     /// project, which the migration leaves to the project all the same: an
@@ -121,7 +121,7 @@ pub enum Refusal {
     /// The folder a kind is kept in, or one above it inside the workspace, is
     /// a link: what is in it lives wherever that leads, a dotfiles repository
     /// say, and a rename would take it out of there.
-    #[error("{folder}: a link to {target}, so moving the workspace's {kind}s would take them out of wherever it leads; move them yourself, or point flayer.toml at the library")]
+    #[error("{folder}: a link to {target}, so moving the workspace's {kind}s would take them out of wherever it leads; move them yourself, or point {WEAVER_CONFIG} at the library")]
     Linked {
         kind: Kind,
         folder: PathBuf,
@@ -133,7 +133,7 @@ pub enum Refusal {
         folder: PathBuf,
         with: PathBuf,
     },
-    /// A folder the marker names that `flayer init` would have refused:
+    /// A folder the marker names that `mindweaver init` would have refused:
     /// outside the workspace, or on the shelf or the cache.
     #[error("{0}, so what is in it is not the workspace's to move")]
     Misplaced(WorkspaceError),
@@ -282,18 +282,18 @@ impl MigrateError {
 /// when both say `skills`. That is left where it is, and the marker's line is
 /// still pointed at the library, where the workspace's own of that kind then
 /// starts empty. One at the root that the workspace does not manage is a
-/// holder here, though [`FlayerWorkspace::own_kinds`] counts what it shares
+/// holder here, though [`WeaverWorkspace::own_kinds`] counts what it shares
 /// as the workspace's own: what a project holds is what its agents read, and
 /// they do not ask whether the workspace was told about the project. What
 /// the workspace counted is marked ([`Left::counted`]), since it stops being
 /// listed and offered.
 ///
 /// A folder the marker names outside the workspace, or on the shelf or the
-/// cache, is refused rather than emptied: `flayer init` refuses to name one,
+/// cache, is refused rather than emptied: `mindweaver init` refuses to name one,
 /// but `open` reads a marker edited by hand to, and what is there is somebody
 /// else's, or gathering's. So is one reached through a link, which keeps
 /// what is in it somewhere else, on purpose.
-pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
+pub fn library_plan(workspace: &WeaverWorkspace) -> Plan {
     let mut plan = Plan {
         backup: backup_path(workspace),
         ..Plan::default()
@@ -412,10 +412,10 @@ pub fn library_plan(workspace: &FlayerWorkspace) -> Plan {
 /// folders a move emptied are removed, the kind's own included, so a home
 /// workspace leaves no empty `~/skills` behind; anything else in them stays.
 ///
-/// An [`unmade`](FlayerWorkspace::unmade) workspace keeps its own in the
+/// An [`unmade`](WeaverWorkspace::unmade) workspace keeps its own in the
 /// library it would be made with, so there is nothing to move and nothing
 /// is made.
-pub fn library(workspace: &mut FlayerWorkspace) -> Result<Migrated, MigrateError> {
+pub fn library(workspace: &mut WeaverWorkspace) -> Result<Migrated, MigrateError> {
     if !workspace.is_made() {
         return Ok(Migrated {
             plan: library_plan(workspace),
@@ -423,7 +423,7 @@ pub fn library(workspace: &mut FlayerWorkspace) -> Result<Migrated, MigrateError
         });
     }
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
-    let mut current = FlayerWorkspace::open(workspace.root())?;
+    let mut current = WeaverWorkspace::open(workspace.root())?;
     let plan = library_plan(&current);
     if !plan.refusals.is_empty() {
         return Err(MigrateError::Refused(plan.refusals));
@@ -475,10 +475,10 @@ pub fn library(workspace: &mut FlayerWorkspace) -> Result<Migrated, MigrateError
 /// its name. Put back in place of the rewritten marker, it names the old
 /// folders again, though what was moved stays in the library until it is
 /// moved back.
-pub fn backup_path(workspace: &FlayerWorkspace) -> PathBuf {
+pub fn backup_path(workspace: &WeaverWorkspace) -> PathBuf {
     workspace
-        .flayer_dir()
-        .join(format!("{FLAYER_CONFIG}.v{}", workspace.config().version))
+        .weaver_dir()
+        .join(format!("{WEAVER_CONFIG}.v{}", workspace.config().version))
 }
 
 /// Every project whose artifacts can sit among the workspace's own, and the
@@ -490,7 +490,7 @@ pub fn backup_path(workspace: &FlayerWorkspace) -> PathBuf {
 /// that read them there. An entry that leads to no project holds nothing;
 /// one that leads to a project whose marker cannot be read could hold
 /// anything.
-fn holders(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<(PathBuf, WorkspaceError)>) {
+fn holders(workspace: &WeaverWorkspace) -> (Vec<MindProject>, Vec<(PathBuf, WorkspaceError)>) {
     let root = workspace.root();
     let mut opened: Vec<(PathBuf, Result<MindProject, WorkspaceError>)> = workspace
         .members()

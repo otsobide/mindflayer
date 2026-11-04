@@ -5,10 +5,10 @@
 //! and a skill's summary included, and the body handed back is the prompt an
 //! agent reads, so a change to where it cuts moves what every agent is told.
 
-use mindflayer_core::frontmatter::{split, FrontMatterError};
-use mindflayer_core::mother::random;
-use mindflayer_core::mother::SkillMother;
-use mindflayer_core::skill::SkillManifest;
+use mindweaver_core::frontmatter::{split, FrontMatterError};
+use mindweaver_core::mother::random;
+use mindweaver_core::mother::SkillMother;
+use mindweaver_core::skill::SkillManifest;
 
 const DRAWS: usize = 300;
 

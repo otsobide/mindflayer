@@ -3,7 +3,7 @@
 //! The root `AGENTS.md` is the one file of a project that Claude Code, Codex
 //! and OpenCode all read, and Codex has no way to include another (D-03, on
 //! the facts in docs/agents.md). So a rule reaches a project's agents as a
-//! section of a block Mindflayer owns in that file, between two markers, in a
+//! section of a block Mindweaver owns in that file, between two markers, in a
 //! file that is otherwise somebody else's:
 //!
 //! ```text
@@ -20,7 +20,7 @@
 //! text: Claude strips a block-level comment before the file reaches the
 //! model and keeps what lies between two of them (verified on 2.1.309), and
 //! to Codex and OpenCode, which read the file as it is, a comment is a line
-//! that says nothing. A heading of Mindflayer's own was the alternative, and
+//! that says nothing. A heading of Mindweaver's own was the alternative, and
 //! every agent would read it as one more instruction.
 //!
 //! Everything outside the block is somebody else's and comes back byte for
@@ -51,9 +51,9 @@ use crate::install;
 use crate::lines::{self, Line};
 use crate::paths;
 use crate::value::ContentHash;
-use crate::workspace::{replace_bytes, same_directory, FlayerWorkspace, MindProject};
+use crate::workspace::{replace_bytes, same_directory, MindProject, WeaverWorkspace};
 
-/// The line that opens Mindflayer's block.
+/// The line that opens Mindweaver's block.
 pub const BEGIN: &str = "<!-- mindflayer:begin -->";
 /// The line that closes it.
 pub const END: &str = "<!-- mindflayer:end -->";
@@ -81,7 +81,7 @@ pub const CODEX_NEAR: u64 = CODEX_BUDGET / 8 * 7;
 /// is none of them is one written wrong, and refused.
 const MARK: &[u8] = b"mindflayer:";
 
-/// An `AGENTS.md`'s text, split around Mindflayer's block.
+/// An `AGENTS.md`'s text, split around Mindweaver's block.
 ///
 /// Kept as lines with their own endings ([`crate::lines`]), as git's exclude
 /// file is, so what is outside the block is written back exactly as read, and
@@ -106,7 +106,7 @@ struct Block {
     /// nothing tells it from one written by hand, so that dropping the block
     /// gives back the file as it was before the block was added. One somebody
     /// put there goes with the block too: the price of that round trip,
-    /// which leaving it would break for every file Mindflayer added to.
+    /// which leaving it would break for every file Mindweaver added to.
     spacer: Option<Line>,
     begin: Line,
     /// Every line between the markers, as read or as rendered.
@@ -232,7 +232,7 @@ impl Section {
 /// caller keeps that ([`crate::install::rules`], in the ledger) and hands
 /// it back as `created` on a later render, so that when no rule is left
 /// the file goes too, unless somebody has written something in it since.
-/// Mindflayer takes away only a file it made.
+/// Mindweaver takes away only a file it made.
 /// A file that is there is replaced whole through a temporary and a rename
 /// ([`replace_bytes`]), every byte outside the block as it was, and one that
 /// already holds what was asked is not written at all, modification time
@@ -255,14 +255,14 @@ impl Section {
 ///
 /// What the file then holds is checked against what Codex reads of it, and
 /// anything that keeps the rules from Codex is said ([`Warning`]): only
-/// while there is a block, since without one nothing of Mindflayer's is
+/// while there is a block, since without one nothing of Mindweaver's is
 /// there to miss.
 ///
 /// Takes no lock: the caller holds the workspace's, as one calling
 /// [`crate::config_entry::ConfigFile`] does, and the lock is not
 /// re-entrant.
 pub fn render<'a>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     rules: impl IntoIterator<Item = &'a Artifact>,
     created: bool,
@@ -278,7 +278,7 @@ pub fn render<'a>(
 /// other rule. In the order of their routes with the rest, which is the
 /// order a listing gives the rules ([`report_order`]).
 pub(crate) fn render_keeping<'a>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     rules: impl IntoIterator<Item = &'a Artifact>,
     kept: Vec<Section>,
@@ -383,7 +383,7 @@ pub enum Written {
     Created,
     /// It was replaced whole, through a temporary and a rename.
     Changed,
-    /// It was taken away: Mindflayer made it, and the block was all that was
+    /// It was taken away: Mindweaver made it, and the block was all that was
     /// left in it.
     Removed,
     /// It already held what was asked, or was not there and was asked to
@@ -525,8 +525,8 @@ fn codex_warnings(project: &Path) -> Vec<Warning> {
 /// package linked below it, beside the package's own. So a folder above a
 /// project the workspace links is refused, a stale entry's included, since
 /// its project may only have moved for a moment. So is the workspace's own
-/// root, unless a project it links is there: `flayer init` and the
-/// workspace's own artifacts put nothing in it ([`FlayerWorkspace::own`] is
+/// root, unless a project it links is there: `mindweaver init` and the
+/// workspace's own artifacts put nothing in it ([`WeaverWorkspace::own`] is
 /// a holder at that root, not a project), while a project at the root is a
 /// project like any other, and its `AGENTS.md` its own (D-03).
 ///
@@ -540,7 +540,7 @@ fn codex_warnings(project: &Path) -> Vec<Warning> {
 /// Every renderer of a project's rules asks this of the file it would
 /// write, so none of them leaves rules where the others refuse to.
 pub(crate) fn misplaced(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     homes: &AgentHomes,
     folder: &Path,
     file: &Path,
@@ -768,13 +768,13 @@ impl AgentsMd {
         Section::new(route, &body.join("\n")).ok()
     }
 
-    /// Whether the file holds Mindflayer's block.
+    /// Whether the file holds Mindweaver's block.
     pub fn has_block(&self) -> bool {
         self.block.is_some()
     }
 
     /// Whether nothing but blank lines is left outside the block: what a
-    /// file Mindflayer made holds once somebody has written nothing in it.
+    /// file Mindweaver made holds once somebody has written nothing in it.
     pub fn is_blank_outside(&self) -> bool {
         self.before.iter().chain(&self.after).all(Line::is_blank)
     }
@@ -782,7 +782,7 @@ impl AgentsMd {
     /// Make the block hold `sections`, in that order and nothing else, and
     /// whether that changed anything.
     ///
-    /// Everything between the markers is Mindflayer's, so it is replaced
+    /// Everything between the markers is Mindweaver's, so it is replaced
     /// whole, a line somebody wrote there included; telling an edited section
     /// from the one rendered is for the ledger's record of what was written
     /// ([`Section::hash`], D-04). A file with no block gains one after what
@@ -879,7 +879,7 @@ impl AgentsMd {
     }
 }
 
-/// Where Mindflayer's block lies among a file's lines, as [`locate`] finds
+/// Where Mindweaver's block lies among a file's lines, as [`locate`] finds
 /// it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Span {
@@ -892,10 +892,10 @@ pub(crate) struct Span {
     pub(crate) rules: Vec<(usize, String)>,
 }
 
-/// Where Mindflayer's block is among `lines`: `None` when they hold no
+/// Where Mindweaver's block is among `lines`: `None` when they hold no
 /// marker, refused unless they hold exactly one well-formed block.
 ///
-/// One search for every markdown file Mindflayer keeps a block in, this
+/// One search for every markdown file Mindweaver keeps a block in, this
 /// file and the `CLAUDE.md` that imports it ([`crate::claude_md`]), so a
 /// marker reads the same in each and one written wrong is refused alike.
 pub(crate) fn locate(lines: &[Line]) -> Result<Option<Span>, Malformed> {
@@ -978,7 +978,7 @@ enum Marker<'a> {
 
 /// What `text`, one line without its ending, is to the block.
 ///
-/// A marker is the line exactly as Mindflayer writes it, trailing whitespace
+/// A marker is the line exactly as Mindweaver writes it, trailing whitespace
 /// forgiven as an editor may add some. Anything else that opens as a comment
 /// naming a mark is a marker written wrong, and refused rather than read as
 /// text: read as text, a hand-indented begin marker would leave the next
@@ -1013,7 +1013,7 @@ fn marker(text: &[u8]) -> Marker<'_> {
     }
 }
 
-/// Why the block in an `AGENTS.md` is not one Mindflayer can replace. Lines
+/// Why the block in an `AGENTS.md` is not one Mindweaver can replace. Lines
 /// are counted from 1.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Malformed {
@@ -1028,14 +1028,14 @@ pub enum Malformed {
     #[error("line {line}: a second section for the rule `{route}` in the block")]
     Repeated { line: usize, route: String },
     #[error(
-        "line {line}: written like one of Mindflayer's markers but none of them, \
-         which are each a line of their own, as Mindflayer writes them"
+        "line {line}: written like one of Mindweaver's markers but none of them, \
+         which are each a line of their own, as Mindweaver writes them"
     )]
     Miswritten { line: usize },
     /// A rule's marker in a file whose block holds no rules: the import in
     /// a `CLAUDE.md` ([`crate::claude_md`]).
     #[error(
-        "line {line}: a rule's marker, where Mindflayer's block holds only its import of AGENTS.md"
+        "line {line}: a rule's marker, where Mindweaver's block holds only its import of AGENTS.md"
     )]
     Ruled { line: usize },
 }
@@ -1056,7 +1056,7 @@ pub enum AgentsMdError {
     #[error("rule `{route}` cannot be named in AGENTS.md: {problem}")]
     Route { route: String, problem: String },
     #[error(
-        "rule `{route}` holds a line that would be read back as one of Mindflayer's markers, \
+        "rule `{route}` holds a line that would be read back as one of Mindweaver's markers, \
          so it is not written into AGENTS.md: {line}"
     )]
     Marked { route: String, line: String },
@@ -1080,7 +1080,7 @@ pub enum AgentsMdError {
     },
     #[error(
         "{file} is inside {home}, which {reader} reads for every project, so no rules are \
-         written into it: Mindflayer gives rules to one project at a time"
+         written into it: Mindweaver gives rules to one project at a time"
     )]
     UserScope {
         file: PathBuf,

@@ -39,7 +39,7 @@ use thiserror::Error;
 use crate::code::{codes, Said};
 use crate::paths;
 use crate::policy;
-use crate::workspace::{FlayerWorkspace, MindProject, FLAYER_CONFIG, FLAYER_DIR};
+use crate::workspace::{MindProject, WeaverWorkspace, WEAVER_CONFIG, WEAVER_DIR};
 
 /// The most subfolders one listing holds: a thousand.
 ///
@@ -108,7 +108,7 @@ pub struct Folder {
     /// What it is.
     pub is: Is,
     /// Whether the workspace links it, by the path an entry leads to, as
-    /// `flayer link` would tell.
+    /// `mindweaver link` would tell.
     pub linked: bool,
     /// Whether it is a link to a folder rather than a folder: listed and
     /// opened as one all the same.
@@ -119,7 +119,7 @@ pub struct Folder {
 /// it in words.
 ///
 /// What a link and a scan look for: a mind project by any of its markers
-/// ([`MindProject::is_marked`]), which is linked as it is; a flayer
+/// ([`MindProject::is_marked`]), which is linked as it is; a weaver
 /// workspace, which is loaded rather than linked; a git repository, which
 /// `mind init` makes a project; and any other folder, which is still
 /// chosen, for the command it goes to to say what it needs. A project at a
@@ -156,7 +156,7 @@ impl Is {
     fn of(folder: &Path) -> Is {
         if MindProject::is_marked(folder) {
             Is::Project
-        } else if folder.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() {
+        } else if folder.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file() {
             Is::Workspace
         } else if folder.join(".git").exists() {
             // `exists`, not `is_dir`: a worktree or a submodule has a `.git`
@@ -179,7 +179,7 @@ impl Serialize for Is {
 #[cfg(any(feature = "ts", feature = "schema"))]
 crate::described::words! {
     /// What a folder is, the strongest of what it holds: a mind project, a
-    /// flayer workspace, a git repository, or any other folder.
+    /// weaver workspace, a git repository, or any other folder.
     Is as "FolderIs", by slug { Project, Workspace, Repository, Folder }
 }
 
@@ -269,7 +269,7 @@ impl Folders {
     /// are: here each subfolder is held to it again, and one it refuses is
     /// left out, neither listed nor counted.
     pub fn read(
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         folder: &Path,
         hidden: bool,
         home: Option<&Path>,

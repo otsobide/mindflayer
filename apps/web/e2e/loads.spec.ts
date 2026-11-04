@@ -41,7 +41,7 @@ test('a workspace this machine knows, loaded from the panel, offers its skill on
   await expect(page.getByTestId('no-loaded')).toBeVisible()
   const known = page.getByTestId('known-workspace').filter({ has: page.getByTestId('path').getByText(team, { exact: true }) })
   await known.getByRole('button', { name: 'Load team' }).click()
-  const load = `$ flayer -W ${own.at.workspace} load ${team}`
+  const load = `$ mindweaver -W ${own.at.workspace} load ${team}`
   await expect(dialog.getByTestId('command')).toHaveText([load])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
@@ -53,7 +53,7 @@ test('a workspace this machine knows, loaded from the panel, offers its skill on
   await expect(loaded.getByTestId('offer')).toHaveText([`skill:${LOADED.name} ${LOADED.description}`])
   await expect(known.getByText(`loaded as ${LOADED.entry}`)).toBeVisible()
   await expect(known.getByRole('button', { name: 'Load team' })).toHaveCount(0)
-  succeed(twin, 'flayer', twin.workspace, ['load', team])
+  succeed(twin, 'mindweaver', twin.workspace, ['load', team])
   expect(marker(own.at)).toBe(marker(twin))
 
   await loaded.getByTestId('assign').click()
@@ -62,7 +62,7 @@ test('a workspace this machine knows, loaded from the panel, offers its skill on
 
   await page.getByRole('link', { name: 'Loads' }).click()
   await page.getByRole('button', { name: 'Unload team' }).click()
-  const unload = `$ flayer -W ${own.at.workspace} unload ${LOADED.entry}`
+  const unload = `$ mindweaver -W ${own.at.workspace} unload ${LOADED.entry}`
   await expect(dialog.getByTestId('command')).toHaveText([unload])
   await expect(dialog.getByTestId('caution')).not.toHaveCount(0)
   await dialog.getByTestId('run').click()
@@ -70,7 +70,7 @@ test('a workspace this machine knows, loaded from the panel, offers its skill on
 
   await expect(page.getByTestId('no-loaded')).toBeVisible()
   await expect(known.getByRole('button', { name: 'Load team' })).toBeVisible()
-  succeed(twin, 'flayer', twin.workspace, ['unload', LOADED.entry])
+  succeed(twin, 'mindweaver', twin.workspace, ['unload', LOADED.entry])
   expect(marker(own.at)).toBe(marker(twin))
 
   await page.getByRole('link', { name: 'Assign' }).click()

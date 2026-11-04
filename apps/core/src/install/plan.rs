@@ -15,7 +15,7 @@
 //!   changes go kind by kind, each where the first box asking it is.
 //! - **What cannot be planned** ([`Conflict`], [`Locked`]): two offers of one
 //!   name asked of one project, which has one folder of that name, and a
-//!   change to a copy that is not Mindflayer's to change, held back by the
+//!   change to a copy that is not Mindweaver's to change, held back by the
 //!   code the command would refuse it with ([`Standing::refused`]).
 //!
 //! What it plans is what the command lines run, never more: each change is
@@ -37,13 +37,13 @@ use crate::ledger::{Ledger, LedgerError};
 use crate::policy::{self, PolicyError};
 use crate::url::redacted;
 use crate::value::{ArtifactName, Origin, Redacted};
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::workspace::{MindProject, WeaverWorkspace};
 
 /// What `selection` amounts to in `workspace` as the disk stands now: each
 /// box read as it stands ([`Asked`]), then planned ([`Plan::of`]).
 ///
 /// A read, as a snapshot is: no lock, and the ledger only as
-/// [`FlayerWorkspace::ledger_for_reading`] opens it, so nothing is made,
+/// [`WeaverWorkspace::ledger_for_reading`] opens it, so nothing is made,
 /// scrubbed or written, and a default workspace nobody has made stays
 /// unmade. What it plans is still only a plan: the lines a front end runs
 /// for it go through the commands, which refuse whatever the disk says by
@@ -81,7 +81,7 @@ use crate::workspace::{FlayerWorkspace, MindProject};
 /// from is asked away by the origin the snapshot says it came from. A box
 /// asked away from a place nothing of its name came from asks for what is
 /// so, and is not planned.
-pub fn plan(workspace: &FlayerWorkspace, selection: &[Cell]) -> Result<Plan, PlanError> {
+pub fn plan(workspace: &WeaverWorkspace, selection: &[Cell]) -> Result<Plan, PlanError> {
     let ledger = workspace.ledger_for_reading().map_err(InstallError::from)?;
     let mut read = Read::default();
     let mut read_off = Vec::with_capacity(selection.len());
@@ -205,7 +205,7 @@ impl Read {
     /// nothing is held; or why the disk cannot be asked about it.
     fn ask(
         &mut self,
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         ledger: &Ledger,
         cell: &Cell,
     ) -> Result<Result<Option<Asked>, Said>, PlanError> {
@@ -268,7 +268,7 @@ impl Read {
     /// The project `entry` names, opened once, or why it does not open.
     fn project(
         &mut self,
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         entry: &str,
     ) -> Result<&Result<MindProject, Said>, PlanError> {
         let at = match self.projects.iter().position(|(seen, _)| seen == entry) {
@@ -287,7 +287,7 @@ impl Read {
     /// What `project`, which `entry` names, is offered of `kind`, read once.
     fn seen(
         &mut self,
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         ledger: &Ledger,
         project: &MindProject,
         entry: &str,
@@ -348,7 +348,7 @@ fn said_of(error: &InstallError) -> Said {
 /// told by before origins were kept, ticked the first offer of the name for
 /// either.
 pub fn holding(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidates: &[Candidate],
@@ -461,7 +461,7 @@ pub struct Plan {
     pub changes: Vec<Change>,
     /// Boxes that cannot all be as asked, and so are not planned at all.
     pub conflicts: Vec<Conflict>,
-    /// Boxes whose change is not Mindflayer's to make, or cannot be asked of
+    /// Boxes whose change is not Mindweaver's to make, or cannot be asked of
     /// the project at all.
     pub locked: Vec<Locked>,
 }
@@ -477,7 +477,7 @@ pub struct Plan {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Change {
-    /// `flayer install -p <project>... --from <from> <kind:name>`: always
+    /// `mindweaver install -p <project>... --from <from> <kind:name>`: always
     /// from where the box is, though a name offered from one place needs
     /// none, so the line installs what was ticked or nothing when run again
     /// after a second place starts to offer the name.
@@ -487,7 +487,7 @@ pub enum Change {
         name: ArtifactName,
         from: Origin,
     },
-    /// `flayer uninstall -p <project>... <kind:name>`: the name, whichever
+    /// `mindweaver uninstall -p <project>... <kind:name>`: the name, whichever
     /// offer its copy came from, as the command takes it.
     Uninstall {
         projects: Vec<String>,
@@ -567,8 +567,8 @@ impl Plan {
     ///   screen holds the box.
     ///
     /// Each offer's install is one change, with every project asking it, in
-    /// the order asked, and each name's uninstall another, as `flayer
-    /// install` and `flayer uninstall` take a `-p` a project: either way
+    /// the order asked, and each name's uninstall another, as `mindweaver
+    /// install` and `mindweaver uninstall` take a `-p` a project: either way
     /// round a matrix is marked, one artifact's boxes are one line. Kind by
     /// kind, in [`Kind::ALL`]'s order, each where the first box asking it
     /// is: an install at the box asked for, an uninstall at the first box
@@ -795,7 +795,7 @@ fn held_back(refused: Refused, name: &str, project: &str) -> Said {
     // Matched on the refusal, so another has to say how it is said here.
     let message = match refused {
         Refused::Foreign => format!(
-            "`{name}` is in {project}, and Mindflayer did not put it there, so it is left alone"
+            "`{name}` is in {project}, and Mindweaver did not put it there, so it is left alone"
         ),
         Refused::Edited => format!(
             "`{name}` in {project} was changed since it was installed, so it is left alone unless a change to it is forced"

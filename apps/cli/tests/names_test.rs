@@ -8,11 +8,11 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::*;
-use mindflayer_core::mother::{ArtifactNameMother, SkillMother};
+use mindweaver_core::mother::{ArtifactNameMother, SkillMother};
 use serde_json::Value;
 
 /// Where an artifact is added: a project's own, through `mind`, or the
-/// workspace's library, through `flayer`.
+/// workspace's library, through `mindweaver`.
 #[derive(Debug, Clone, Copy)]
 enum Level {
     Project,
@@ -33,7 +33,7 @@ impl Place {
         match level {
             Level::Project => new_project(dir.path()),
             Level::Workspace => {
-                flayer(dir.path(), &["init"]).unwrap();
+                weaver(dir.path(), &["init"]).unwrap();
             }
         }
         Place { dir, level }
@@ -62,7 +62,7 @@ impl Place {
     fn run(&self, args: &[&str]) -> Result<Outcome, Failure> {
         match self.level {
             Level::Project => mind(self.root(), args),
-            Level::Workspace => flayer(self.root(), args),
+            Level::Workspace => weaver(self.root(), args),
         }
     }
 
@@ -312,7 +312,7 @@ fn says_why(failure: &Failure, code: &str, why: &str, what: &str) {
     let said = failure.error.to_string();
     let limit = format!(
         "characters, over the {} character limit",
-        mindflayer_core::skill::MAX_NAME_SEGMENT_LEN
+        mindweaver_core::skill::MAX_NAME_SEGMENT_LEN
     );
     let expected = match why {
         "empty" => "the name is empty",

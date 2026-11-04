@@ -1,5 +1,5 @@
 //! Rendering a project's rules into Claude's rules folder: a file a rule,
-//! kept as written, Mindflayer's own told by what was recorded, and what is
+//! kept as written, Mindweaver's own told by what was recorded, and what is
 //! refused.
 
 mod common;
@@ -7,12 +7,12 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::agents_md;
-use mindflayer_core::claude_rules::{
+use mindweaver_core::agents_md;
+use mindweaver_core::claude_rules::{
     self, ClaudeRulesError, Mode, Recorded, Rendered, Warning, Written,
 };
-use mindflayer_core::{
-    hash, Agent, AgentHomes, Artifact, Directories, FlayerWorkspace, MindProject, Share,
+use mindweaver_core::{
+    hash, Agent, AgentHomes, Artifact, Directories, MindProject, Share, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -27,7 +27,7 @@ const UNSCOPED: &str = "Never force-push a branch somebody else may have pulled.
 /// root is the workspace's.
 struct Fixture {
     dir: TempDir,
-    workspace: FlayerWorkspace,
+    workspace: WeaverWorkspace,
     project: MindProject,
     library: PathBuf,
 }
@@ -43,7 +43,7 @@ fn fixture_with(share: Share, in_git: bool) -> Fixture {
     if in_git {
         gix::init(dir.path()).unwrap();
     }
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("app");
     fs::create_dir_all(&root).unwrap();
     let (project, _) =
@@ -242,7 +242,7 @@ fn removing_the_last_rule_removes_the_file_and_the_empty_folder() {
     assert_eq!(written(&removed), [("git/no-force-push", Written::Removed)]);
     assert_eq!(removed.recorded(), []);
     assert!(!fixture.folder().exists());
-    // Not past Mindflayer's own folder, which may be somebody's.
+    // Not past Mindweaver's own folder, which may be somebody's.
     assert!(fixture.project.root().join(".claude/rules").is_dir());
 }
 
@@ -356,7 +356,7 @@ fn a_file_somebody_put_where_a_rule_goes_is_left_and_said() {
     );
     assert_eq!(fs::read_to_string(fixture.file("a")).unwrap(), "Theirs.\n");
 
-    // Even one holding the rule byte for byte is not taken for Mindflayer's,
+    // Even one holding the rule byte for byte is not taken for Mindweaver's,
     // or it would go with the rule.
     fs::write(fixture.file("a"), "Rule a.\n").unwrap();
     let same = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap();
@@ -380,7 +380,7 @@ fn a_file_changed_since_it_was_written_is_neither_written_over_nor_taken_away() 
 
     for rendered in [&changed, &removed] {
         assert_eq!(written(rendered), [("a", Written::Edited)]);
-        // Kept as recorded, so it is still the edited copy of Mindflayer's.
+        // Kept as recorded, so it is still the edited copy of Mindweaver's.
         assert_eq!(rendered.recorded(), first.recorded());
         assert_eq!(
             rendered.warnings,
@@ -431,7 +431,7 @@ fn a_recorded_file_somebody_deleted_is_written_again_or_forgotten() {
 }
 
 #[test]
-fn the_last_rules_folder_somebody_deleted_takes_mindflayers_folder_with_it() {
+fn the_last_rules_folder_somebody_deleted_takes_mindweavers_folder_with_it() {
     let fixture = fixture();
     let rule = fixture.rule("deep/b", "Rule b.\n");
     let first = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap();
@@ -627,7 +627,7 @@ fn a_local_project_keeps_its_rule_files_out_of_git_and_takes_them_back_in() {
 
     assert_eq!(
         first.excluded,
-        Some(mindflayer_core::Excluded::Written { file: file.clone() })
+        Some(mindweaver_core::Excluded::Written { file: file.clone() })
     );
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
@@ -645,7 +645,7 @@ fn a_local_project_keeps_its_rule_files_out_of_git_and_takes_them_back_in() {
         .unwrap();
     assert_eq!(
         again.excluded,
-        Some(mindflayer_core::Excluded::Unchanged { file: file.clone() })
+        Some(mindweaver_core::Excluded::Unchanged { file: file.clone() })
     );
 
     let removed = fixture
@@ -683,7 +683,7 @@ fn a_local_project_outside_git_is_told_nothing_keeps_its_files_out() {
 
     let excluded = rendered.excluded.unwrap();
     assert!(
-        matches!(excluded, mindflayer_core::Excluded::Outside { .. }),
+        matches!(excluded, mindweaver_core::Excluded::Outside { .. }),
         "{excluded:?}"
     );
     assert!(excluded

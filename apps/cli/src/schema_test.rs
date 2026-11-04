@@ -5,9 +5,9 @@
 use std::fs;
 use std::path::Path;
 
-use mindflayer_core::known::Switchable;
-use mindflayer_core::schema::{self as core, Schemas, Together};
-use mindflayer_server::Backend;
+use mindweaver_core::known::Switchable;
+use mindweaver_core::schema::{self as core, Schemas, Together};
+use mindweaver_server::Backend;
 
 use super::*;
 use crate::backend::PanelBackend;
@@ -169,7 +169,7 @@ fn no_answer_of_any_crate_refuses_a_field_it_does_not_name() {
 #[test]
 fn every_code_a_front_end_is_handed_holds_to_its_schema_and_nothing_else_does() {
     let schema = given::<Code>();
-    let every = mindflayer_core::code::ALL
+    let every = mindweaver_core::code::ALL
         .iter()
         .chain(CODES)
         .flat_map(|(_, codes)| codes.iter())
@@ -191,7 +191,7 @@ fn every_code_a_front_end_is_handed_holds_to_its_schema_and_nothing_else_does() 
 fn every_code_the_cli_gives_of_its_own_holds_to_its_schema_and_no_other_does() {
     let schema = given::<CliCode>();
     let own = CODES.iter().flat_map(|(_, codes)| codes.iter());
-    let others = mindflayer_core::code::ALL
+    let others = mindweaver_core::code::ALL
         .iter()
         .flat_map(|(_, codes)| codes.iter())
         .chain(Condition::CODES);
@@ -241,7 +241,7 @@ fn every_root_the_panel_s_types_export_has_a_schema_of_its_name() {
     }
 
     let mut exported = Exported(BTreeSet::new());
-    mindflayer_core::typescript::roots(&mut exported);
+    mindweaver_core::typescript::roots(&mut exported);
     crate::typescript::roots(&mut exported);
     let schemas = every_root();
     let described: BTreeSet<String> = schemas.names().map(str::to_owned).collect();
@@ -433,7 +433,7 @@ impl Fixtures {
                 let at = format!("{name}/refused");
                 self.refused(&at, &fixture["refused"], "to", "Switch");
             }
-            // What `flayer validate` prints, as text, which the editor's
+            // What `mindweaver validate` prints, as text, which the editor's
             // verdict is held to word for word: no answer of the API's.
             "validated" => {}
             other => panic!(

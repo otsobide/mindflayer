@@ -15,7 +15,7 @@ path: string,
 is: FolderIs, 
 /**
  * Whether the workspace links it, by the path an entry leads to, as
- * `flayer link` would tell.
+ * `mindweaver link` would tell.
  */
 linked: boolean, 
 /**

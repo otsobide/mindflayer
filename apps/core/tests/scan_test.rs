@@ -4,10 +4,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::scan::{Order, Reason, Request, DEFAULT_DEPTH, MAX_LISTED};
-use mindflayer_core::{
-    scan, Agent, Directories, FlayerWorkspace, Found, MindProject, ScanFailure, Share,
-    FLAYER_CONFIG, FLAYER_DIR, MIND_DIR, SETTINGS_FILE,
+use mindweaver_core::scan::{Order, Reason, Request, DEFAULT_DEPTH, MAX_LISTED};
+use mindweaver_core::{
+    scan, Agent, Directories, Found, MindProject, ScanFailure, Share, WeaverWorkspace, MIND_DIR,
+    SETTINGS_FILE, WEAVER_CONFIG, WEAVER_DIR,
 };
 use tempfile::TempDir;
 
@@ -25,7 +25,7 @@ fn paths(found: &[Found]) -> Vec<&Path> {
 }
 
 /// What a scan of `roots` to `depth` finds.
-fn under(workspace: &FlayerWorkspace, roots: &[&Path], depth: usize) -> mindflayer_core::Scan {
+fn under(workspace: &WeaverWorkspace, roots: &[&Path], depth: usize) -> mindweaver_core::Scan {
     scan(
         workspace,
         &Request {
@@ -38,14 +38,14 @@ fn under(workspace: &FlayerWorkspace, roots: &[&Path], depth: usize) -> mindflay
 
 /// A workspace in `ws` beside the folders a test scans, so that what they
 /// hold is found only by naming them.
-fn workspace_beside(dir: &TempDir) -> FlayerWorkspace {
-    FlayerWorkspace::init(dir.path().join("ws")).unwrap().0
+fn workspace_beside(dir: &TempDir) -> WeaverWorkspace {
+    WeaverWorkspace::init(dir.path().join("ws")).unwrap().0
 }
 
 #[test]
 fn a_scan_finds_projects_and_repositories_and_says_which_are_linked() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     for name in ["alpha", "beta"] {
         fs::create_dir(dir.path().join(name)).unwrap();
         MindProject::init(dir.path().join(name)).unwrap();
@@ -69,7 +69,7 @@ fn a_scan_finds_projects_and_repositories_and_says_which_are_linked() {
 #[test]
 fn linked_is_decided_by_where_an_entry_points() {
     let dir = TempDir::new().unwrap();
-    FlayerWorkspace::init(dir.path()).unwrap();
+    WeaverWorkspace::init(dir.path()).unwrap();
     fs::create_dir(dir.path().join("beta")).unwrap();
     MindProject::init(dir.path().join("beta")).unwrap();
     fs::write(
@@ -77,7 +77,7 @@ fn linked_is_decided_by_where_an_entry_points() {
         "version = 2\nname = \"w\"\nprojects = [\"./beta\"]\n",
     )
     .unwrap();
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
 
     let scan = scan(&workspace, &Request::default());
 
@@ -87,7 +87,7 @@ fn linked_is_decided_by_where_an_entry_points() {
 #[test]
 fn a_repository_is_not_looked_inside() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     git_repository(&dir.path().join("mono"));
     git_repository(&dir.path().join("mono/vendor/lib"));
 
@@ -100,7 +100,7 @@ fn a_repository_is_not_looked_inside() {
 #[test]
 fn hidden_folders_and_build_output_are_not_entered() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     git_repository(&dir.path().join(".cache/repo"));
     git_repository(&dir.path().join("node_modules/package"));
     git_repository(&dir.path().join("kept"));
@@ -114,7 +114,7 @@ fn hidden_folders_and_build_output_are_not_entered() {
 #[test]
 fn repositories_are_found_a_few_levels_down_and_no_further() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     git_repository(&dir.path().join("github.com/acme/skills"));
     git_repository(&dir.path().join("a/b/c/too-deep"));
     assert_eq!(
@@ -131,7 +131,7 @@ fn repositories_are_found_a_few_levels_down_and_no_further() {
 #[test]
 fn the_workspace_root_is_a_candidate_too() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     MindProject::init(dir.path()).unwrap();
     git_repository(&dir.path().join("beside"));
 
@@ -147,7 +147,7 @@ fn the_workspace_root_is_a_candidate_too() {
 fn a_workspace_whose_root_is_not_there_yet_holds_nothing() {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("nobody-made-this");
-    let workspace = FlayerWorkspace::unmade(&home).unwrap();
+    let workspace = WeaverWorkspace::unmade(&home).unwrap();
 
     let scan = scan(&workspace, &Request::default());
 
@@ -331,7 +331,7 @@ fn a_scan_links_nothing() {
     fs::create_dir_all(root.join("alpha")).unwrap();
     MindProject::init(root.join("alpha")).unwrap();
     git_repository(&root.join("beta"));
-    let marker = dir.path().join("ws").join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let marker = dir.path().join("ws").join(WEAVER_DIR).join(WEAVER_CONFIG);
     let before = fs::read_to_string(&marker).unwrap();
 
     let scan = under(&workspace, &[&root], DEFAULT_DEPTH);
@@ -339,7 +339,7 @@ fn a_scan_links_nothing() {
     assert_eq!(scan.found.len(), 2);
     assert!(scan.found.iter().all(|found| !found.linked));
     assert_eq!(fs::read_to_string(&marker).unwrap(), before);
-    assert!(FlayerWorkspace::open(dir.path().join("ws"))
+    assert!(WeaverWorkspace::open(dir.path().join("ws"))
         .unwrap()
         .config()
         .projects
@@ -349,7 +349,7 @@ fn a_scan_links_nothing() {
 #[test]
 fn a_route_is_spelled_from_where_the_scan_is_asked_to_spell_it() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     git_repository(&dir.path().join("work/acme/api"));
     fs::create_dir(dir.path().join("other")).unwrap();
 
@@ -389,7 +389,7 @@ fn a_repository_outside_the_workspace_is_spelled_by_its_path() {
 #[test]
 fn a_project_marked_by_its_settings_is_found_with_its_id() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     fs::create_dir(dir.path().join("alpha")).unwrap();
     let (alpha, _) = MindProject::init_asked(
         dir.path().join("alpha"),
@@ -426,7 +426,7 @@ fn a_project_marked_by_its_settings_is_found_with_its_id() {
 #[test]
 fn a_project_whose_settings_will_not_open_is_found_without_an_id_and_said() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let settings = dir.path().join("alpha").join(MIND_DIR).join(SETTINGS_FILE);
     fs::create_dir_all(settings.parent().unwrap()).unwrap();
     fs::write(&settings, "{ not toml\n").unwrap();
@@ -466,7 +466,7 @@ fn reasons(found: &[Found]) -> Vec<(&str, Reason, Vec<&str>)> {
 #[test]
 fn each_one_found_says_why_it_is_worth_linking() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     fs::create_dir(dir.path().join("current")).unwrap();
     MindProject::init_asked(
         dir.path().join("current"),
@@ -508,7 +508,7 @@ fn each_one_found_says_why_it_is_worth_linking() {
 #[test]
 fn every_name_an_agent_reads_at_the_root_is_an_agent_file() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     // A repository for each agent, named for it so they are found in report
     // order, holding every name that agent reads at the root.
     for agent in Agent::ALL {
@@ -536,7 +536,7 @@ fn every_name_an_agent_reads_at_the_root_is_an_agent_file() {
 #[test]
 fn only_what_sits_at_a_repositorys_root_counts_as_an_agent_file() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let repository = dir.path().join("repo");
     git_repository(&repository);
     fs::create_dir_all(repository.join("docs/.claude")).unwrap();
@@ -552,7 +552,7 @@ fn only_what_sits_at_a_repositorys_root_counts_as_an_agent_file() {
 #[test]
 fn agent_files_alone_do_not_make_a_folder_a_candidate() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let notes = dir.path().join("notes");
     fs::create_dir_all(notes.join(".claude")).unwrap();
     fs::write(notes.join("CLAUDE.md"), "").unwrap();
@@ -567,7 +567,7 @@ fn agent_files_alone_do_not_make_a_folder_a_candidate() {
 #[test]
 fn a_mind_project_lists_the_agent_files_it_holds_beside_its_reason() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let alpha = dir.path().join("alpha");
     fs::create_dir(&alpha).unwrap();
     MindProject::init_asked(&alpha, &Agent::ALL, Share::Local, &Directories::default()).unwrap();
@@ -586,7 +586,7 @@ fn a_mind_project_lists_the_agent_files_it_holds_beside_its_reason() {
 #[test]
 fn an_agent_file_that_is_a_link_counts_without_being_followed() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let repository = dir.path().join("repo");
     git_repository(&repository);
     // Pointing nowhere: what it is called is what counts.
@@ -603,7 +603,7 @@ fn an_agent_file_that_is_a_link_counts_without_being_followed() {
 
 /// What a suggestion under `roots` finds, or under the workspace root when
 /// there are none.
-fn suggested(workspace: &FlayerWorkspace, roots: &[&Path]) -> mindflayer_core::Scan {
+fn suggested(workspace: &WeaverWorkspace, roots: &[&Path]) -> mindweaver_core::Scan {
     scan(
         workspace,
         &Request {
@@ -620,9 +620,9 @@ fn suggested(workspace: &FlayerWorkspace, roots: &[&Path]) -> mindflayer_core::S
 /// `mind.toml`, `xylo`, a repository holding a `CLAUDE.md`, `cat`, one
 /// holding `.agents`, and `dog`, a repository and nothing more. Named so
 /// that no rank is their order by name.
-fn one_of_each() -> (TempDir, FlayerWorkspace) {
+fn one_of_each() -> (TempDir, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     for name in ["zeta", "yak"] {
         fs::create_dir(dir.path().join(name)).unwrap();
         MindProject::init_asked(
@@ -718,7 +718,7 @@ fn a_suggestion_ranks_across_every_root_it_is_given() {
 #[test]
 fn a_suggestion_links_nothing_and_writes_nothing() {
     let (dir, workspace) = one_of_each();
-    let marker = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let marker = dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG);
     let before = fs::read_to_string(&marker).unwrap();
     let held = |name: &str| fs::read_dir(dir.path().join(name)).unwrap().count();
     let counts: Vec<usize> = ["yak", "bee", "xylo", "dog"].map(held).to_vec();
@@ -728,7 +728,7 @@ fn a_suggestion_links_nothing_and_writes_nothing() {
     assert!(scan.found.iter().any(|found| !found.linked));
     assert_eq!(fs::read_to_string(&marker).unwrap(), before);
     assert_eq!(
-        FlayerWorkspace::open(dir.path())
+        WeaverWorkspace::open(dir.path())
             .unwrap()
             .config()
             .projects
@@ -748,7 +748,7 @@ fn a_suggestion_does_not_make_the_workspace_it_reads() {
     let home = dir.path().join("home");
     let work = dir.path().join("work");
     git_repository(&work.join("alpha"));
-    let workspace = FlayerWorkspace::unmade(&home).unwrap();
+    let workspace = WeaverWorkspace::unmade(&home).unwrap();
 
     let scan = suggested(&workspace, &[&work]);
 

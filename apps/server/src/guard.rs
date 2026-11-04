@@ -7,7 +7,7 @@
 //! behind that page, which the browser sends the cookie to as well, and which
 //! can then bring the token as Bearer; docs/architecture.md leaves that open.
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use axum::extract::{Request, State};
 use axum::http::header::{
@@ -186,6 +186,18 @@ pub(crate) async fn same_origin(
 ///
 /// A refusal is its condition and what to say, for the caller to answer in
 /// the API's JSON.
+/// The header of the panel's own that a change by cookie carries, as `1`:
+/// one no form and no plain link can add ([`from_the_panel`]). Spelled here
+/// alone, what the refusal says taken from it, since the panel sends it by
+/// this name and a later one changes in one place. Looked up whatever its
+/// case, as every header name is.
+pub(crate) const PANEL_HEADER: &str = "X-Mindflayer";
+
+/// What a change by cookie without [`PANEL_HEADER`] is told.
+static PANEL_HEADER_MISSING: LazyLock<String> = LazyLock::new(|| {
+    format!("a change sent with the cookie must carry {PANEL_HEADER}: 1, as the panel's do")
+});
+
 pub(crate) fn from_the_panel(
     method: &Method,
     headers: &HeaderMap,
@@ -210,10 +222,10 @@ pub(crate) fn from_the_panel(
     // preflight, which no CORS here ever answers, so the request never
     // leaves. Fetch Metadata already says where the request came from, and
     // these say it again by other means, in case a browser gets one wrong.
-    if single(headers, "x-mindflayer") != Some("1") {
+    if single(headers, PANEL_HEADER) != Some("1") {
         return Err((
-            Condition::XMindflayerRequired,
-            "a change sent with the cookie must carry X-Mindflayer: 1, as the panel's do",
+            Condition::PanelHeaderRequired,
+            PANEL_HEADER_MISSING.as_str(),
         ));
     }
     if !single(headers, CONTENT_TYPE).is_some_and(is_json) {

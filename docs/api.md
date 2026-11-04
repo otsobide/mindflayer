@@ -1,15 +1,15 @@
 # The HTTP API
 
-`flayer ui` serves the control panel, and under `/api/v1` an HTTP API for
+`mindweaver ui` serves the control panel, and under `/api/v1` an HTTP API for
 scripts and tools on this machine. The panel is its first client, and asks
 the server nothing a script cannot: what a project holds, what an install
-would do, and every change Mindflayer makes, previewed and then run as the
+would do, and every change Mindweaver makes, previewed and then run as the
 command line it is.
 
 This guide walks through it with `curl` on a small workspace. Every answer
 it shows is what the server answers: a test
 (`apps/cli/tests/api_guide_test.rs`) builds the same workspace with the
-commands shown, starts `flayer ui` as shown, sends every request below and
+commands shown, starts `mindweaver ui` as shown, sends every request below and
 fails when an answer here is not the one the server gives. [The
 reference](reference.md#control-panel) has the API beside the panel, and
 [its description](#its-description) every route, parameter, field and code.
@@ -35,13 +35,13 @@ repository, `web`, made a project and not linked yet:
 
 ```console
 $ cd /home/you/Projects
-$ flayer init
-initialized flayer workspace `Projects` in /home/you/Projects/.mindflayer
+$ mindweaver init
+initialized weaver workspace `Projects` in /home/you/Projects/.mindflayer
 $ git init --quiet api && mind -C api init
 initialized mind project `api` in /home/you/Projects/api/.mind
-$ flayer link api
+$ mindweaver link api
 linked api as api
-$ flayer add skill review 'Read a change before it lands'
+$ mindweaver add skill review 'Read a change before it lands'
 created skill review at /home/you/Projects/.mindflayer/library/skills/review/SKILL.md
 $ git init --quiet web && mind -C web init
 initialized mind project `web` in /home/you/Projects/web/.mind
@@ -52,7 +52,7 @@ machine's: the server's port, here `40185`, is the one the system picked,
 the token is made new at every launch, the paths are your own, and each
 project's id is the one `mind init` gave it at random. They are of a home
 with no default workspace yet: where yours has one (`~/.mindflayer`),
-`flayer init` also says the default remembered the new workspace, and
+`mindweaver init` also says the default remembered the new workspace, and
 `/workspaces` and the snapshot's `known` list the default beside it, the
 new one with `"remembered": true`. The rest is the same for the same
 workspace.
@@ -67,7 +67,7 @@ curl prints each answer on one line.
 writes where it is served and its token to a file:
 
 ```console
-$ flayer ui --no-open --token-file /home/you/.local/state/mindflayer.json
+$ mindweaver ui --no-open --token-file /home/you/.local/state/mindweaver.json
 http://127.0.0.1:40185/?token=bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513
 note: serving the workspace at /home/you/Projects on 127.0.0.1:40185 until Ctrl-C
 ```
@@ -83,14 +83,14 @@ another terminal, or a script that did not start the server, read where
 it is, and the token, from the file:
 
 ```console
-$ cat /home/you/.local/state/mindflayer.json
+$ cat /home/you/.local/state/mindweaver.json
 {
   "version": 1,
   "api": "http://127.0.0.1:40185/api/v1",
   "token": "bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513"
 }
-$ api=$(jq -r .api /home/you/.local/state/mindflayer.json)
-$ token=$(jq -r .token /home/you/.local/state/mindflayer.json)
+$ api=$(jq -r .api /home/you/.local/state/mindweaver.json)
+$ token=$(jq -r .token /home/you/.local/state/mindweaver.json)
 ```
 
 `version` is how the file is laid out, `api` where every route is served,
@@ -103,7 +103,7 @@ up when the server stops without one, as it does when the file is refused:
 
 ```sh
 log=$(mktemp)
-flayer ui --no-open --token-file /home/you/.local/state/mindflayer.json > "$log" &
+mindweaver ui --no-open --token-file /home/you/.local/state/mindweaver.json > "$log" &
 pid=$!
 while [ ! -s "$log" ] && kill -0 "$pid" 2>/dev/null; do sleep 0.1; done
 [ -s "$log" ] || exit 1
@@ -286,7 +286,7 @@ was read, which a save names so it never writes over a change made since.
 
 ### Finding projects
 
-`GET /scan?root=<path>&depth=<n>` is what `flayer scan --suggest` finds
+`GET /scan?root=<path>&depth=<n>` is what `mindweaver scan --suggest` finds
 under each `root`, an absolute path, given once for each folder to look
 under, or the workspace's folder without one; what is not linked comes
 first, the most worth linking first:
@@ -365,7 +365,7 @@ A path the API takes is absolute and normalized, and never inside a
 
 ### Updates and workspaces
 
-`GET /updates` is what `flayer update --all` would do, with nothing run,
+`GET /updates` is what `mindweaver update --all` would do, with nothing run,
 and `GET /workspaces` every workspace the server may switch to:
 
 ```console
@@ -476,7 +476,7 @@ $ curl -s -H "Authorization: Bearer $token" -H 'Content-Type: application/json' 
     "$api/tasks/preview" | jq .
 {
   "lines": [
-    "flayer -W /home/you/Projects link /home/you/Projects/web"
+    "mindweaver -W /home/you/Projects link /home/you/Projects/web"
   ],
   "confirm": []
 }
@@ -485,13 +485,13 @@ $ curl -s -H "Authorization: Bearer $token" -H 'Content-Type: application/json' 
     "$api/tasks" | jq .
 {
   "lines": [
-    "flayer -W /home/you/Projects link /home/you/Projects/web"
+    "mindweaver -W /home/you/Projects link /home/you/Projects/web"
   ],
   "outcome": {
     "ok": true,
     "runs": [
       {
-        "command": "flayer -W /home/you/Projects link /home/you/Projects/web",
+        "command": "mindweaver -W /home/you/Projects link /home/you/Projects/web",
         "error": null,
         "ok": true,
         "stderr": [],
@@ -522,7 +522,7 @@ $ curl -s -H "Authorization: Bearer $token" -H 'Content-Type: application/json' 
     "$api/tasks/preview" | jq .
 {
   "lines": [
-    "flayer -W /home/you/Projects install -p /home/you/Projects/web skill:review"
+    "mindweaver -W /home/you/Projects install -p /home/you/Projects/web skill:review"
   ],
   "confirm": []
 }
@@ -531,13 +531,13 @@ $ curl -s -H "Authorization: Bearer $token" -H 'Content-Type: application/json' 
     "$api/tasks" | jq .
 {
   "lines": [
-    "flayer -W /home/you/Projects install -p /home/you/Projects/web skill:review"
+    "mindweaver -W /home/you/Projects install -p /home/you/Projects/web skill:review"
   ],
   "outcome": {
     "ok": true,
     "runs": [
       {
-        "command": "flayer -W /home/you/Projects install -p /home/you/Projects/web skill:review",
+        "command": "mindweaver -W /home/you/Projects install -p /home/you/Projects/web skill:review",
         "error": null,
         "ok": true,
         "stderr": [],
@@ -587,10 +587,10 @@ script or from the panel, oldest first, each as its run answered:
 ```console
 $ curl -s -H "Authorization: Bearer $token" "$api/transcript" | jq '.[].lines'
 [
-  "flayer -W /home/you/Projects link /home/you/Projects/web"
+  "mindweaver -W /home/you/Projects link /home/you/Projects/web"
 ]
 [
-  "flayer -W /home/you/Projects install -p /home/you/Projects/web skill:review"
+  "mindweaver -W /home/you/Projects install -p /home/you/Projects/web skill:review"
 ]
 ```
 
@@ -658,10 +658,10 @@ What the server finds itself has a code of its own:
 | 413 | `body_too_large` | a body larger than the server reads |
 | 415 | `json_required` | a body not sent as `application/json` |
 | 422 | `invalid_body` | JSON that is not what the route reads |
-| 500 | `backend_failed` | Mindflayer failed while it answered |
+| 500 | `backend_failed` | Mindweaver failed while it answered |
 | 500 | `writer_stopped` | the thread that runs tasks has stopped |
 
-Everything else is Mindflayer's own refusal, by the code of the rule it
+Everything else is Mindweaver's own refusal, by the code of the rule it
 breaks, from the list a command's `--json` takes its codes from: a 404 for
 a read naming what is not there
 (`not_registered` for an entry, `not_found` for an artifact,
@@ -748,9 +748,9 @@ something, with what each said, so the session can be run again from a
 shell:
 
 ```
-$ flayer -W /home/you/Projects link /home/you/Projects/web
+$ mindweaver -W /home/you/Projects link /home/you/Projects/web
 linked web as web
-$ flayer -W /home/you/Projects install -p /home/you/Projects/web skill:review
+$ mindweaver -W /home/you/Projects install -p /home/you/Projects/web skill:review
 installed review into web, from workspace
 ```
 

@@ -93,7 +93,7 @@
           "$ref": "#/$defs/FolderIs"
         },
         "linked": {
-          "description": "Whether the workspace links it, by the path an entry leads to, as\n`flayer link` would tell.",
+          "description": "Whether the workspace links it, by the path an entry leads to, as\n`mindweaver link` would tell.",
           "type": "boolean"
         },
         "name": {
@@ -117,7 +117,7 @@
       ]
     },
     "FolderIs": {
-      "description": "What a folder is, the strongest of what it holds: a mind project, a\nflayer workspace, a git repository, or any other folder.",
+      "description": "What a folder is, the strongest of what it holds: a mind project, a\nweaver workspace, a git repository, or any other folder.",
       "type": "string",
       "enum": [
         "project",

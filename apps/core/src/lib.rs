@@ -1,9 +1,9 @@
-//! The engine every Mindflayer front end is built on.
+//! The engine every Mindweaver front end is built on.
 //!
-//! Mindflayer works at two levels. A **mind project** carries a `.mind`, the
+//! Mindweaver works at two levels. A **mind project** carries a `.mind`, the
 //! way a repository carries a `.git`, and holds skills and rules in the
 //! directories its marker names (`skills/` and `rules/` by default). A
-//! **flayer workspace** carries a `.mindflayer` that references the mind
+//! **weaver workspace** carries a `.mindflayer` that references the mind
 //! projects it manages, so their artifacts can be handled together. Both live
 //! in [`workspace`].
 //!
@@ -96,9 +96,9 @@ pub use skill::{
 pub use status::{ArtifactStatus, Missed, ProjectStatus, State, Status, StatusFailure, Unreached};
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
-    Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, MarkerFile, Member,
-    MindConfig, MindProject, Misplaced, MisplacedTarget, ProjectConfig, ProjectWarning,
-    Registration, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR,
-    LIBRARY_DIR, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION, SETTINGS_VERSION,
-    TARGETS_VERSION,
+    Directories, Initialization, Loaded, Marker, MarkerFile, Member, MindConfig, MindProject,
+    Misplaced, MisplacedTarget, ProjectConfig, ProjectWarning, Registration, WeaverConfig,
+    WeaverWorkspace, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, LIBRARY_DIR, MIND_CONFIG,
+    MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION, SETTINGS_VERSION, TARGETS_VERSION, WEAVER_CONFIG,
+    WEAVER_DIR,
 };

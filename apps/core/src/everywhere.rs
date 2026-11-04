@@ -1,5 +1,5 @@
 //! Removing one of the workspace's own artifacts from the workspace and from
-//! every project it links that has it: `flayer remove --everywhere` (#50).
+//! every project it links that has it: `mindweaver remove --everywhere` (#50).
 //!
 //! Removing the library copy alone leaves every copy installed from it
 //! behind, with a record that nothing offers any more: orphaned, as `status`
@@ -12,12 +12,12 @@
 //! which the library copy is.
 //!
 //! D-04 says which copies go. One nobody has changed since it was installed
-//! is Mindflayer's to take out, whether it is current, outdated, missing a
+//! is Mindweaver's to take out, whether it is current, outdated, missing a
 //! copy or orphaned already. One changed since is somebody's work: left,
 //! every copy of it, as an uninstall leaves it unforced, and orphaned from
 //! then on, for `uninstall --orphaned --force` to take out once somebody has
 //! looked. Somebody's own of that name, which nothing records, is never
-//! Mindflayer's to take out, and is said so it is not mistaken for a copy.
+//! Mindweaver's to take out, and is said so it is not mistaken for a copy.
 //!
 //! Only the projects the workspace links: a project linked by another
 //! workspace, or by none, keeps what was installed there, as the ledger
@@ -25,7 +25,7 @@
 //!
 //! [`plan`] says what removing it everywhere would do, writing nothing, the
 //! ledger read without being made, and [`apply`] does it. Each project's
-//! uninstall takes the workspace's lock for itself, as `flayer uninstall
+//! uninstall takes the workspace's lock for itself, as `mindweaver uninstall
 //! --all-projects` takes it ([`crate::assign`]): nothing ties one project's
 //! copies to another's, and the uninstall looks again under the lock at what
 //! the plan saw, so a copy edited between the two is still left.
@@ -41,7 +41,7 @@ use crate::gather::Scrub;
 use crate::install::{self, Edits, Found, InstallError, Offer, Removed, Standing};
 use crate::ledger::{Ledger, LedgerError};
 use crate::lifecycle::{self, LifecycleError, Target};
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// What removing one of the workspace's own everywhere would do: [`plan`],
 /// or what [`apply`] did.
@@ -90,7 +90,7 @@ pub struct ProjectCopy {
 /// What removing an artifact everywhere does with one project's copy.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
-    /// Mindflayer's, and unchanged since it was installed: current,
+    /// Mindweaver's, and unchanged since it was installed: current,
     /// outdated, missing a copy, whose others go and whose record goes with
     /// them, or orphaned already. Uninstalled, every copy the ledger records.
     Uninstall,
@@ -99,7 +99,7 @@ pub enum Step {
     /// orphaned once the library copy is gone.
     Leave(Vec<PathBuf>),
     /// Somebody's own of that name, at this path, which nothing records, so
-    /// nothing of Mindflayer's: left, and said.
+    /// nothing of Mindweaver's: left, and said.
     Somebodys(PathBuf),
 }
 
@@ -141,7 +141,7 @@ codes!(EverywhereError {} carried {
 ///
 /// The artifact is found among the workspace's own as `remove` finds it
 /// ([`lifecycle::find_to_change`]), and refused as it would be there.
-pub fn plan(workspace: &FlayerWorkspace, reference: &Reference) -> Result<Plan, EverywhereError> {
+pub fn plan(workspace: &WeaverWorkspace, reference: &Reference) -> Result<Plan, EverywhereError> {
     let target = lifecycle::find_to_change(Some(workspace), &workspace.own(), reference)?;
     let ledger = workspace.ledger_for_reading()?;
     plan_with(workspace, &ledger, target)
@@ -166,7 +166,7 @@ pub fn plan(workspace: &FlayerWorkspace, reference: &Reference) -> Result<Plan, 
 /// `homes` are the agents' own folders, which the front end decides, as for
 /// an uninstall.
 pub fn apply(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     reference: &Reference,
     homes: &AgentHomes,
 ) -> Result<Applied, EverywhereError> {
@@ -201,7 +201,7 @@ pub fn apply(
 
 /// [`plan`], for `target`, against `ledger`.
 fn plan_with(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     target: Target,
 ) -> Result<Plan, EverywhereError> {

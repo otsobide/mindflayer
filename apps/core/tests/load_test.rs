@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 
 mod common;
 
-use mindflayer_core::install::{self, InstallError, Installed, Offer, Standing};
-use mindflayer_core::ledger::Ledger;
-use mindflayer_core::AgentHomes;
-use mindflayer_core::{
-    resolve_except, FlayerWorkspace, Inputs, Intent, Kind, MindProject, Registration, ResolveError,
-    WorkspaceError, FLAYER_CONFIG, FLAYER_DIR,
+use mindweaver_core::install::{self, InstallError, Installed, Offer, Standing};
+use mindweaver_core::ledger::Ledger;
+use mindweaver_core::AgentHomes;
+use mindweaver_core::{
+    resolve_except, Inputs, Intent, Kind, MindProject, Registration, ResolveError, WeaverWorkspace,
+    WorkspaceError, WEAVER_CONFIG, WEAVER_DIR,
 };
 use tempfile::TempDir;
 
@@ -19,14 +19,14 @@ use tempfile::TempDir;
 /// `target/collapse`, and `team`, a workspace with skills of its own.
 fn target_and_team(
     team_skills: &[&str],
-) -> (TempDir, FlayerWorkspace, MindProject, FlayerWorkspace) {
+) -> (TempDir, WeaverWorkspace, MindProject, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
-    let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
+    let (mut target, _) = WeaverWorkspace::init(dir.path().join("target")).unwrap();
     let (project, _) = MindProject::init(dir.path().join("target/collapse")).unwrap();
     target.link(&project).unwrap();
-    let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
+    let (team, _) = WeaverWorkspace::init(dir.path().join("team")).unwrap();
     for name in team_skills {
-        mindflayer_core::create(
+        mindweaver_core::create(
             &team.own(),
             Kind::Skill,
             name,
@@ -37,8 +37,8 @@ fn target_and_team(
     (dir, target, project, team)
 }
 
-fn marker(workspace: &FlayerWorkspace) -> String {
-    fs::read_to_string(workspace.root().join(FLAYER_DIR).join(FLAYER_CONFIG)).unwrap()
+fn marker(workspace: &WeaverWorkspace) -> String {
+    fs::read_to_string(workspace.root().join(WEAVER_DIR).join(WEAVER_CONFIG)).unwrap()
 }
 
 fn installed_at(project: &MindProject, name: &str) -> PathBuf {
@@ -59,7 +59,7 @@ fn load_records_the_workspace_as_a_route_and_keeps_the_comments() {
     assert_eq!(registration, Registration::Added);
     let text = marker(&target);
     assert!(text.contains("loaded = [\"../team\"]"), "{text}");
-    assert!(text.contains("# Mindflayer workspace."), "comments kept");
+    assert!(text.contains("# Mindweaver workspace."), "comments kept");
     assert!(target.is_loaded(team.root()));
 }
 
@@ -79,7 +79,7 @@ fn loading_twice_changes_nothing_and_says_so() {
 #[test]
 fn a_workspace_cannot_load_itself() {
     let (_dir, mut target, _, _) = target_and_team(&[]);
-    let same = FlayerWorkspace::open(target.root()).unwrap();
+    let same = WeaverWorkspace::open(target.root()).unwrap();
 
     let error = target.load(&same).unwrap_err();
 
@@ -92,7 +92,7 @@ fn a_workspace_cannot_load_itself() {
 #[test]
 fn loading_several_loads_none_when_one_is_the_workspace_itself() {
     let (_dir, mut target, _, team) = target_and_team(&[]);
-    let same = FlayerWorkspace::open(target.root()).unwrap();
+    let same = WeaverWorkspace::open(target.root()).unwrap();
     let before = marker(&target);
 
     let error = target.load_all(&[team, same]).unwrap_err();
@@ -107,10 +107,10 @@ fn loading_several_loads_none_when_one_is_the_workspace_itself() {
 #[test]
 fn a_marker_from_before_loading_existed_gains_the_key_when_it_is_first_used() {
     let (_dir, target, _, team) = target_and_team(&[]);
-    let path = target.root().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let path = target.root().join(WEAVER_DIR).join(WEAVER_CONFIG);
     let old = marker(&target).replace("loaded = []\n", "");
     fs::write(&path, &old).unwrap();
-    let mut target = FlayerWorkspace::open(target.root()).unwrap();
+    let mut target = WeaverWorkspace::open(target.root()).unwrap();
     assert!(
         target.loads().is_empty(),
         "an old marker reads as loading nothing"
@@ -162,7 +162,7 @@ fn into(
     except: &[PathBuf],
     home: Option<&Path>,
     intent: Intent,
-) -> Result<Option<FlayerWorkspace>, ResolveError> {
+) -> Result<Option<WeaverWorkspace>, ResolveError> {
     let inputs = Inputs {
         flag: None,
         activated: None,
@@ -176,8 +176,8 @@ fn into(
 #[test]
 fn from_inside_the_workspace_being_loaded_the_walk_carries_on_above_it() {
     let dir = TempDir::new().unwrap();
-    FlayerWorkspace::init(dir.path()).unwrap();
-    let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
+    WeaverWorkspace::init(dir.path()).unwrap();
+    let (team, _) = WeaverWorkspace::init(dir.path().join("team")).unwrap();
     let inside = team.root().join("skills");
     fs::create_dir_all(&inside).unwrap();
 
@@ -195,7 +195,7 @@ fn from_inside_the_workspace_being_loaded_the_walk_carries_on_above_it() {
 fn with_nothing_else_above_the_load_goes_into_the_default_workspace() {
     let home = TempDir::new().unwrap();
     let dir = TempDir::new().unwrap();
-    let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
+    let (team, _) = WeaverWorkspace::init(dir.path().join("team")).unwrap();
 
     let found = into(
         team.root(),
@@ -212,7 +212,7 @@ fn with_nothing_else_above_the_load_goes_into_the_default_workspace() {
 #[test]
 fn the_default_workspace_is_not_offered_as_somewhere_to_load_itself() {
     let home = TempDir::new().unwrap();
-    FlayerWorkspace::init(home.path()).unwrap();
+    WeaverWorkspace::init(home.path()).unwrap();
 
     let error = into(
         home.path(),
@@ -238,7 +238,7 @@ fn the_default_workspace_is_not_offered_as_somewhere_to_load_itself() {
 #[test]
 fn a_loaded_workspaces_own_skills_are_offered_after_the_workspaces_own() {
     let (_dir, mut target, project, team) = target_and_team(&["deploy"]);
-    mindflayer_core::create(&target.own(), Kind::Skill, "commit-style", "Ours").unwrap();
+    mindweaver_core::create(&target.own(), Kind::Skill, "commit-style", "Ours").unwrap();
     target.load(&team).unwrap();
     let ledger = Ledger::in_memory().unwrap();
 
@@ -339,13 +339,13 @@ fn from_names_a_loaded_workspace_by_its_origin_or_its_name() {
 #[test]
 fn a_loaded_workspace_under_the_target_reads_as_a_path_not_as_the_workspaces_own() {
     let dir = TempDir::new().unwrap();
-    let (mut target, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut target, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let (project, _) = MindProject::init(dir.path().join("collapse")).unwrap();
     target.link(&project).unwrap();
     // A workspace in a folder called `workspace`: its entry is the word the
     // workspace's own go by.
-    let (inner, _) = FlayerWorkspace::init(dir.path().join("workspace")).unwrap();
-    mindflayer_core::create(&inner.own(), Kind::Skill, "deploy", "Theirs").unwrap();
+    let (inner, _) = WeaverWorkspace::init(dir.path().join("workspace")).unwrap();
+    mindweaver_core::create(&inner.own(), Kind::Skill, "deploy", "Theirs").unwrap();
     target.load(&inner).unwrap();
     let ledger = Ledger::in_memory().unwrap();
 
@@ -359,12 +359,12 @@ fn a_loaded_workspace_under_the_target_reads_as_a_path_not_as_the_workspaces_own
 #[test]
 fn a_loaded_workspace_is_not_followed_into_what_it_loads() {
     let (dir, mut target, project, mut team) = target_and_team(&[]);
-    let (further, _) = FlayerWorkspace::init(dir.path().join("further")).unwrap();
-    mindflayer_core::create(&further.own(), Kind::Skill, "deploy", "Far").unwrap();
+    let (further, _) = WeaverWorkspace::init(dir.path().join("further")).unwrap();
+    mindweaver_core::create(&further.own(), Kind::Skill, "deploy", "Far").unwrap();
     team.load(&further).unwrap();
     target.load(&team).unwrap();
     // And the other way round too, which would loop if loads were followed.
-    let mut further = FlayerWorkspace::open(further.root()).unwrap();
+    let mut further = WeaverWorkspace::open(further.root()).unwrap();
     further.load(&target).unwrap();
     let ledger = Ledger::in_memory().unwrap();
 
@@ -398,8 +398,8 @@ fn a_loaded_skill_whose_folder_went_away_says_to_unload_it() {
     .unwrap_err();
 
     assert!(matches!(error, InstallError::Gone { .. }), "{error}");
-    // By its root, which `flayer unload` reads the same from anywhere.
-    let hint = format!("flayer unload {}", team.root().display());
+    // By its root, which `mindweaver unload` reads the same from anywhere.
+    let hint = format!("mindweaver unload {}", team.root().display());
     assert!(error.to_string().contains(&hint), "{error}");
 }
 
@@ -409,12 +409,12 @@ fn a_loaded_workspace_that_is_the_project_itself_is_never_copied_onto_itself() {
     // keeping both in one folder: loading it into a workspace that also links
     // that project offers each skill into the very folder it is in.
     let dir = TempDir::new().unwrap();
-    let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
+    let (mut target, _) = WeaverWorkspace::init(dir.path().join("target")).unwrap();
     let repo = dir.path().join("repo");
-    let (mut shared, _) = FlayerWorkspace::init_with(&repo, &common::beside()).unwrap();
+    let (mut shared, _) = WeaverWorkspace::init_with(&repo, &common::beside()).unwrap();
     let (project, _) = MindProject::init(&repo).unwrap();
     shared.link(&project).unwrap();
-    mindflayer_core::create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+    mindweaver_core::create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
     target.link(&project).unwrap();
     target.load(&shared).unwrap();
     let ledger = Ledger::in_memory().unwrap();
@@ -458,7 +458,7 @@ fn a_loaded_workspace_that_is_the_project_itself_is_never_copied_onto_itself() {
 // ---------------------------------------------------------------------------
 
 /// Write a skill by hand into a workspace's own skills, declaring `name`.
-fn write_declaring(workspace: &FlayerWorkspace, folder: &str, name: &str) {
+fn write_declaring(workspace: &WeaverWorkspace, folder: &str, name: &str) {
     let dir = workspace
         .own()
         .directory_for(Kind::Skill)
@@ -551,13 +551,13 @@ fn install_and_uninstall_refuse_a_name_that_is_not_one_folder_whatever_offers_it
 #[test]
 fn a_loaded_workspace_inside_the_folder_it_would_install_into_is_not_deleted() {
     let dir = TempDir::new().unwrap();
-    let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
+    let (mut target, _) = WeaverWorkspace::init(dir.path().join("target")).unwrap();
     let (project, _) = MindProject::init(dir.path().join("target/app")).unwrap();
     target.link(&project).unwrap();
     // A workspace sitting where the project would put `deploy`.
     let nested = project.directory_for(Kind::Skill).unwrap().join("deploy");
-    let (inner, _) = FlayerWorkspace::init(&nested).unwrap();
-    mindflayer_core::create(&inner.own(), Kind::Skill, "deploy", "Nested").unwrap();
+    let (inner, _) = WeaverWorkspace::init(&nested).unwrap();
+    mindweaver_core::create(&inner.own(), Kind::Skill, "deploy", "Nested").unwrap();
     target.load(&inner).unwrap();
     let ledger = Ledger::in_memory().unwrap();
     let mut candidate =
@@ -661,10 +661,10 @@ fn a_link_out_of_the_loaded_workspace_is_refused_not_copied() {
 #[test]
 fn two_spellings_of_one_loaded_workspace_offer_its_skills_once() {
     let (_dir, target, project, _team) = target_and_team(&["deploy"]);
-    let path = target.root().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let path = target.root().join(WEAVER_DIR).join(WEAVER_CONFIG);
     let text = marker(&target).replace("loaded = []", "loaded = [\"../team\", \"./../team\"]");
     fs::write(&path, text).unwrap();
-    let target = FlayerWorkspace::open(target.root()).unwrap();
+    let target = WeaverWorkspace::open(target.root()).unwrap();
     let ledger = Ledger::in_memory().unwrap();
 
     let candidates = install::survey(&target, &ledger, &project, Kind::Skill).unwrap();
@@ -717,18 +717,18 @@ fn something_gathered_and_loaded_from_one_directory_has_two_origins() {
         "skills/deploy/SKILL.md",
         &common::skill("deploy", "Ship it"),
     )]);
-    FlayerWorkspace::init_with(repo.path(), &common::beside()).unwrap();
+    WeaverWorkspace::init_with(repo.path(), &common::beside()).unwrap();
     let (_dir, mut target, project, _) = target_and_team(&[]);
     let ledger = target.ledger().unwrap();
     let url = common::url(&repo);
-    mindflayer_core::gather::gather(
+    mindweaver_core::gather::gather(
         &target,
         &ledger,
-        &mindflayer_core::gather::Request::git(url.clone()),
+        &mindweaver_core::gather::Request::git(url.clone()),
     )
     .unwrap();
     target
-        .load(&FlayerWorkspace::open(repo.path()).unwrap())
+        .load(&WeaverWorkspace::open(repo.path()).unwrap())
         .unwrap();
 
     let candidates = install::survey(&target, &ledger, &project, Kind::Skill).unwrap();
@@ -789,7 +789,7 @@ fn looking_for_somewhere_to_unload_from_never_makes_the_default() {
         .unwrap();
 
     assert!(!found.is_made());
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -798,14 +798,14 @@ fn what_a_loaded_workspace_keeps_in_a_projects_folder_is_never_overwritten_or_re
     // a workspace of its own keeping its skills in that same folder, which the
     // target loads: a record from before the load says the folder is ours.
     let dir = TempDir::new().unwrap();
-    let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
-    mindflayer_core::create(&target.own(), Kind::Skill, "x", "Ours").unwrap();
+    let (mut target, _) = WeaverWorkspace::init(dir.path().join("target")).unwrap();
+    mindweaver_core::create(&target.own(), Kind::Skill, "x", "Ours").unwrap();
     let (project, _) = MindProject::init(dir.path().join("lib")).unwrap();
     target.link(&project).unwrap();
     let ledger = Ledger::in_memory().unwrap();
     let ours = install::offered(&target, &ledger, &project, Kind::Skill, "x", None).unwrap();
     install::install(&target, &ledger, &project, &ours, &AgentHomes::default()).unwrap();
-    let (lib, _) = FlayerWorkspace::init_with(project.root(), &common::beside()).unwrap();
+    let (lib, _) = WeaverWorkspace::init_with(project.root(), &common::beside()).unwrap();
     let own = installed_at(&project, "x").join("SKILL.md");
     let edited = fs::read_to_string(&own).unwrap() + "\nlib's own edit\n";
     fs::write(&own, &edited).unwrap();
@@ -954,7 +954,7 @@ fn a_link_inside_the_skill_itself_is_followed_wherever_the_skills_folder_lives()
     .unwrap();
     fs::write(shared.join("v2.md"), "v2").unwrap();
     std::os::unix::fs::symlink("v2.md", shared.join("latest.md")).unwrap();
-    let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
+    let (mut target, _) = WeaverWorkspace::init(dir.path().join("target")).unwrap();
     let own = target.own().directory_for(Kind::Skill).unwrap();
     fs::create_dir_all(own.parent().unwrap()).unwrap();
     std::os::unix::fs::symlink(dir.path().join("shared/skills"), own).unwrap();
@@ -1014,10 +1014,10 @@ fn nothing_is_installed_into_the_folder_a_loaded_workspace_keeps_its_own_in() {
     // an install there would become the loaded workspace's own at once, and
     // could never be updated or removed again, so none is made.
     let dir = TempDir::new().unwrap();
-    let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
-    mindflayer_core::create(&target.own(), Kind::Skill, "lint", "Ours").unwrap();
+    let (mut target, _) = WeaverWorkspace::init(dir.path().join("target")).unwrap();
+    mindweaver_core::create(&target.own(), Kind::Skill, "lint", "Ours").unwrap();
     let (project, _) = MindProject::init(dir.path().join("target/team")).unwrap();
-    let (team, _) = FlayerWorkspace::init_with(project.root(), &common::beside()).unwrap();
+    let (team, _) = WeaverWorkspace::init_with(project.root(), &common::beside()).unwrap();
     target.link(&project).unwrap();
     target.load(&team).unwrap();
     let ledger = Ledger::in_memory().unwrap();
@@ -1034,14 +1034,14 @@ fn nothing_is_installed_into_the_folder_a_loaded_workspace_keeps_its_own_in() {
     .unwrap_err();
 
     assert!(matches!(error, InstallError::KeptByALoad { .. }), "{error}");
-    assert!(error.to_string().contains("flayer unload"), "{error}");
+    assert!(error.to_string().contains("mindweaver unload"), "{error}");
     assert!(!installed_at(&project, "lint").exists());
 }
 
 #[test]
 fn the_word_workspace_and_a_loaded_origin_are_never_taken_for_paths() {
     let (dir, mut target, _, _) = target_and_team(&[]);
-    let (inner, _) = FlayerWorkspace::init(target.root().join("workspace")).unwrap();
+    let (inner, _) = WeaverWorkspace::init(target.root().join("workspace")).unwrap();
     target.load(&inner).unwrap();
 
     assert_eq!(

@@ -129,15 +129,15 @@ fn each_event_is_tagged_by_its_type_in_snake_case() {
         ),
         (
             Event::CommandStarted {
-                lines: vec![String::from("flayer link beta")],
+                lines: vec![String::from("mindweaver link beta")],
             },
-            json!({"type": "command_started", "lines": ["flayer link beta"]}),
+            json!({"type": "command_started", "lines": ["mindweaver link beta"]}),
         ),
         (
             Event::CommandFinished {
-                lines: vec![String::from("flayer link beta")],
+                lines: vec![String::from("mindweaver link beta")],
             },
-            json!({"type": "command_finished", "lines": ["flayer link beta"]}),
+            json!({"type": "command_finished", "lines": ["mindweaver link beta"]}),
         ),
         (
             Event::Resync { switches: 2 },

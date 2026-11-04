@@ -1,4 +1,4 @@
-//! `flayer adopt`: a skill somebody keeps in a project's agents' folders
+//! `mindweaver adopt`: a skill somebody keeps in a project's agents' folders
 //! brought into the workspace's library, its copies recorded as installed
 //! from there and left byte for byte as they were, and what is refused.
 
@@ -49,14 +49,14 @@ fn files(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
 fn adopt_without_yes_says_what_it_would_do_and_writes_nothing() {
     let dir = with_notes();
 
-    let outcome = flayer(dir.path(), &["adopt", "-p", "alpha", "notes"]).unwrap();
+    let outcome = weaver(dir.path(), &["adopt", "-p", "alpha", "notes"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
         format!(
             "would copy notes from alpha into the library, at {}\n\
              would record notes in alpha as installed from workspace, at .claude/skills/notes\n\
-             would record .agents/skills/notes missing, for `flayer update -p alpha` to put there\n\
+             would record .agents/skills/notes missing, for `mindweaver update -p alpha` to put there\n\
              would keep .claude/skills/notes out of git\n\
              nothing adopted: add --yes to go ahead\n",
             library(dir.path()).display()
@@ -65,8 +65,8 @@ fn adopt_without_yes_says_what_it_would_do_and_writes_nothing() {
     assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
     assert!(outcome.ok);
     assert!(!library(dir.path()).exists());
-    assert!(!dir.path().join(FLAYER_DIR).join("mindflayer.db").exists());
-    let status = flayer(dir.path(), &["status", "-p", "alpha"]).unwrap();
+    assert!(!dir.path().join(WEAVER_DIR).join("mindflayer.db").exists());
+    let status = weaver(dir.path(), &["status", "-p", "alpha"]).unwrap();
     assert!(
         status.stdout.contains("notes  foreign"),
         "{}",
@@ -80,14 +80,14 @@ fn adopt_copies_into_the_library_records_the_copies_and_leaves_the_project_as_it
     let alpha = dir.path().join("alpha");
     let before = files(&alpha);
 
-    let outcome = flayer(dir.path(), &["adopt", "-p", "alpha", "notes", "--yes"]).unwrap();
+    let outcome = weaver(dir.path(), &["adopt", "-p", "alpha", "notes", "--yes"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
         format!(
             "copied notes from alpha into the library, at {}\n\
              recorded notes in alpha as installed from workspace, at .claude/skills/notes\n\
-             recorded .agents/skills/notes missing: `flayer update -p alpha` puts it there\n\
+             recorded .agents/skills/notes missing: `mindweaver update -p alpha` puts it there\n\
              kept .claude/skills/notes out of git\n",
             library(dir.path()).display()
         )
@@ -99,7 +99,7 @@ fn adopt_copies_into_the_library_records_the_copies_and_leaves_the_project_as_it
         fs::read(alpha.join(".claude/skills/notes/SKILL.md")).unwrap()
     );
     assert!(untracked(&alpha).iter().all(|path| !path.contains("notes")));
-    let status = flayer(dir.path(), &["status", "-p", "alpha"]).unwrap();
+    let status = weaver(dir.path(), &["status", "-p", "alpha"]).unwrap();
     assert!(
         status
             .stdout
@@ -112,14 +112,14 @@ fn adopt_copies_into_the_library_records_the_copies_and_leaves_the_project_as_it
 #[test]
 fn an_update_treats_an_adopted_copy_as_managed() {
     let dir = with_notes();
-    flayer(dir.path(), &["adopt", "-p", "alpha", "notes", "--yes"]).unwrap();
+    weaver(dir.path(), &["adopt", "-p", "alpha", "notes", "--yes"]).unwrap();
 
-    let put_back = flayer(dir.path(), &["update", "-p", "alpha", "--yes"]).unwrap();
+    let put_back = weaver(dir.path(), &["update", "-p", "alpha", "--yes"]).unwrap();
     assert_eq!(
         put_back.stdout,
         "put back notes in alpha at .agents/skills/notes, from workspace\n"
     );
-    let status = flayer(dir.path(), &["status", "-p", "alpha"]).unwrap();
+    let status = weaver(dir.path(), &["status", "-p", "alpha"]).unwrap();
     assert!(
         status
             .stdout
@@ -129,7 +129,7 @@ fn an_update_treats_an_adopted_copy_as_managed() {
     );
 
     write_notes(&library(dir.path()), "Keep better notes");
-    let updated = flayer(dir.path(), &["update", "-p", "alpha", "--yes"]).unwrap();
+    let updated = weaver(dir.path(), &["update", "-p", "alpha", "--yes"]).unwrap();
     assert_eq!(updated.stdout, "updated notes in alpha, from workspace\n");
     for copy in copies(&dir.path().join("alpha"), "notes") {
         assert_eq!(
@@ -142,13 +142,13 @@ fn an_update_treats_an_adopted_copy_as_managed() {
 #[test]
 fn adopting_a_name_the_library_holds_is_refused_with_both_paths() {
     let dir = with_notes();
-    flayer(
+    weaver(
         dir.path(),
         &["add", "skill", "notes", "The library's notes"],
     )
     .unwrap();
 
-    let failure = flayer(dir.path(), &["adopt", "-p", "alpha", "notes", "--yes"]).unwrap_err();
+    let failure = weaver(dir.path(), &["adopt", "-p", "alpha", "notes", "--yes"]).unwrap_err();
 
     let said = failure.error.to_string();
     assert!(
@@ -164,7 +164,7 @@ fn adopting_a_name_the_library_holds_is_refused_with_both_paths() {
         ),
         "{said}"
     );
-    let status = flayer(dir.path(), &["status", "-p", "alpha"]).unwrap();
+    let status = weaver(dir.path(), &["status", "-p", "alpha"]).unwrap();
     assert!(
         status.stdout.contains("notes  foreign"),
         "{}",
@@ -176,7 +176,7 @@ fn adopting_a_name_the_library_holds_is_refused_with_both_paths() {
 fn a_rule_is_not_adopted() {
     let dir = with_notes();
 
-    let failure = flayer(dir.path(), &["adopt", "-p", "alpha", "rule:git/commits"]).unwrap_err();
+    let failure = weaver(dir.path(), &["adopt", "-p", "alpha", "rule:git/commits"]).unwrap_err();
 
     assert_eq!(
         failure.error.to_string(),
@@ -196,7 +196,7 @@ fn what_gh_skill_says_of_where_it_came_from_is_shown() {
     )
     .unwrap();
 
-    let outcome = flayer(dir.path(), &["adopt", "-p", "alpha", "notes"]).unwrap();
+    let outcome = weaver(dir.path(), &["adopt", "-p", "alpha", "notes"]).unwrap();
 
     assert!(
         outcome.stdout.contains(
@@ -221,7 +221,7 @@ fn what_gh_skill_says_cannot_rewrite_the_line_it_is_shown_on() {
     )
     .unwrap();
 
-    let outcome = flayer(dir.path(), &["adopt", "-p", "alpha", "notes"]).unwrap();
+    let outcome = weaver(dir.path(), &["adopt", "-p", "alpha", "notes"]).unwrap();
 
     assert!(
         outcome.stdout.contains(
@@ -244,7 +244,7 @@ fn a_copy_git_tracks_in_a_local_project_is_left_in_git_and_said() {
     let alpha = dir.path().join("alpha");
     indexed(&alpha);
 
-    let outcome = flayer(dir.path(), &["adopt", "-p", "alpha", "notes", "--yes"]).unwrap();
+    let outcome = weaver(dir.path(), &["adopt", "-p", "alpha", "notes", "--yes"]).unwrap();
 
     assert!(!outcome.stdout.contains("out of git"), "{}", outcome.stdout);
     assert_eq!(
@@ -260,19 +260,19 @@ fn a_copy_git_tracks_in_a_local_project_is_left_in_git_and_said() {
 #[test]
 fn a_local_project_no_git_work_tree_holds_is_told_nothing_keeps_its_copies_out() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let gamma = dir.path().join("gamma");
     fs::create_dir(&gamma).unwrap();
     mind(&gamma, &["init"]).unwrap();
-    flayer(dir.path(), &["link", "gamma"]).unwrap();
+    weaver(dir.path(), &["link", "gamma"]).unwrap();
     write_notes(&gamma.join(".claude/skills/notes"), "Keep notes");
     let note = format!(
         "note: {}: not in a git work tree, so nothing keeps what is installed there out of git",
         gamma.display()
     );
 
-    let planned = flayer(dir.path(), &["adopt", "-p", "gamma", "notes"]).unwrap();
-    let done = flayer(dir.path(), &["adopt", "-p", "gamma", "notes", "--yes"]).unwrap();
+    let planned = weaver(dir.path(), &["adopt", "-p", "gamma", "notes"]).unwrap();
+    let done = weaver(dir.path(), &["adopt", "-p", "gamma", "notes", "--yes"]).unwrap();
 
     for outcome in [&planned, &done] {
         assert!(!outcome.stdout.contains("out of git"), "{}", outcome.stdout);
@@ -285,11 +285,11 @@ fn a_local_project_no_git_work_tree_holds_is_told_nothing_keeps_its_copies_out()
 fn adopt_names_the_project_it_takes_from() {
     let dir = with_notes();
 
-    let error = FlayerCli::try_parse_from(["flayer", "adopt", "notes"]).unwrap_err();
+    let error = WeaverCli::try_parse_from(["mindweaver", "adopt", "notes"]).unwrap_err();
 
     assert_eq!(
         error.kind(),
         clap::error::ErrorKind::MissingRequiredArgument
     );
-    assert!(flayer(dir.path(), &["adopt", "-p", "gamma", "notes"]).is_err());
+    assert!(weaver(dir.path(), &["adopt", "-p", "gamma", "notes"]).is_err());
 }

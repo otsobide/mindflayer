@@ -7,11 +7,11 @@ import type { MindsChange } from "./MindsChange";
  */
 export type Suggestion = { 
 /**
- * What `flayer scan --json` prints of it.
+ * What `mindweaver scan --json` prints of it.
  */
 found: Found, 
 /**
- * Why it is worth linking, in the words `flayer scan --suggest` and the
+ * Why it is worth linking, in the words `mindweaver scan --suggest` and the
  * minds screen say it in ([`worth_linking`]); none for one linked.
  */
 why: string | null, 
@@ -25,7 +25,7 @@ offers: MindsChange | null,
 /**
  * The entry it moved from, as the marker spells it, which a relink
  * names: matched by core's `scan::moved_from`, as the minds screen
- * matches it, since the scan spells `moved` as `flayer link` would
+ * matches it, since the scan spells `moved` as `mindweaver link` would
  * take it. None when it did not move.
  */
 moved_from: string | null, };

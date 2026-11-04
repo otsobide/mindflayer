@@ -12,17 +12,17 @@ use crate::workspace::MindProject;
 
 /// A workspace linking `alpha` under it and `beside` next to it, and loading
 /// `library`, a workspace next to it too.
-fn fixture() -> (TempDir, FlayerWorkspace) {
+fn fixture() -> (TempDir, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
     let root = dir.path().join("work");
-    let (mut workspace, _) = FlayerWorkspace::init(&root).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(&root).unwrap();
     for project in [root.join("alpha"), dir.path().join("beside")] {
         let (project, _) = MindProject::init(project).unwrap();
         workspace.link(&project).unwrap();
     }
-    let (library, _) = FlayerWorkspace::init(dir.path().join("library")).unwrap();
+    let (library, _) = WeaverWorkspace::init(dir.path().join("library")).unwrap();
     workspace.load(&library).unwrap();
-    let workspace = FlayerWorkspace::open(&root).unwrap();
+    let workspace = WeaverWorkspace::open(&root).unwrap();
     (dir, workspace)
 }
 
@@ -84,15 +84,15 @@ fn a_path_not_spelled_as_its_folder_is_refused() {
 }
 
 #[test]
-fn a_path_inside_a_mindflayer_is_refused() {
+fn a_path_inside_a_mindweaver_is_refused() {
     let (dir, workspace) = fixture();
-    let flayer = workspace.flayer_dir();
+    let weaver = workspace.weaver_dir();
 
     for given in [
-        flayer.to_str().unwrap().to_owned(),
-        spelled_under(&flayer, &["shelf", "github.com"]),
+        weaver.to_str().unwrap().to_owned(),
+        spelled_under(&weaver, &["shelf", "github.com"]),
         // One that does not exist yet is judged on its spelling.
-        spelled_under(dir.path(), &["elsewhere", FLAYER_DIR, "skills"]),
+        spelled_under(dir.path(), &["elsewhere", WEAVER_DIR, "skills"]),
     ] {
         assert_eq!(code(path(&given)), "path_in_mindflayer", "{given:?}");
     }
@@ -100,10 +100,10 @@ fn a_path_inside_a_mindflayer_is_refused() {
 
 #[cfg(unix)]
 #[test]
-fn a_path_that_leads_into_a_mindflayer_through_a_link_is_refused() {
+fn a_path_that_leads_into_a_mindweaver_through_a_link_is_refused() {
     let (dir, workspace) = fixture();
     let link = dir.path().join("innocent");
-    std::os::unix::fs::symlink(workspace.flayer_dir(), &link).unwrap();
+    std::os::unix::fs::symlink(workspace.weaver_dir(), &link).unwrap();
 
     assert_eq!(code(path(link.to_str().unwrap())), "path_in_mindflayer");
 }
@@ -112,10 +112,10 @@ fn a_path_that_leads_into_a_mindflayer_through_a_link_is_refused() {
 /// through the link, inside the workspace's own.
 #[cfg(unix)]
 #[test]
-fn a_new_folder_under_a_link_into_a_mindflayer_is_refused() {
+fn a_new_folder_under_a_link_into_a_mindweaver_is_refused() {
     let (dir, workspace) = fixture();
     let link = dir.path().join("innocent");
-    std::os::unix::fs::symlink(workspace.flayer_dir(), &link).unwrap();
+    std::os::unix::fs::symlink(workspace.weaver_dir(), &link).unwrap();
 
     for parts in [&["new"][..], &["new", "deeper"]] {
         let given = spelled_under(&link, parts);
@@ -215,7 +215,7 @@ fn a_resolved_path_that_is_not_utf8_cannot_be_spelled() {
 #[test]
 fn nothing_named_here_touches_the_disk_but_to_read() {
     let (dir, workspace) = fixture();
-    let before = fs::read_to_string(workspace.flayer_dir().join(crate::FLAYER_CONFIG)).unwrap();
+    let before = fs::read_to_string(workspace.weaver_dir().join(crate::WEAVER_CONFIG)).unwrap();
 
     let _ = path(&spelled_under(dir.path(), &["new"]));
     let _ = linked(&workspace, "alpha");
@@ -223,14 +223,14 @@ fn nothing_named_here_touches_the_disk_but_to_read() {
 
     assert!(!dir.path().join("new").exists());
     assert_eq!(
-        fs::read_to_string(workspace.flayer_dir().join(crate::FLAYER_CONFIG)).unwrap(),
+        fs::read_to_string(workspace.weaver_dir().join(crate::WEAVER_CONFIG)).unwrap(),
         before
     );
 }
 
 /// What a front end launched on `launched` may switch to, the default in
 /// `home` knowing `remembered`, while it is on `in_use`.
-fn listed(home: &Path, launched: &FlayerWorkspace, in_use: &FlayerWorkspace) -> Vec<Switchable> {
+fn listed(home: &Path, launched: &WeaverWorkspace, in_use: &WeaverWorkspace) -> Vec<Switchable> {
     let launch = known::Launch {
         root: launched.root(),
         reason: Reason::Above,
@@ -240,13 +240,13 @@ fn listed(home: &Path, launched: &FlayerWorkspace, in_use: &FlayerWorkspace) -> 
 
 /// A default workspace in `home` remembering `writing` beside it, and
 /// `elsewhere`, a workspace nothing remembers, the one launched on.
-fn machine() -> (TempDir, PathBuf, FlayerWorkspace, FlayerWorkspace) {
+fn machine() -> (TempDir, PathBuf, WeaverWorkspace, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
-    FlayerWorkspace::init(&home).unwrap();
-    let (writing, _) = FlayerWorkspace::init(dir.path().join("writing")).unwrap();
+    WeaverWorkspace::init(&home).unwrap();
+    let (writing, _) = WeaverWorkspace::init(dir.path().join("writing")).unwrap();
     known::remember(Some(&home), &writing).unwrap();
-    let (elsewhere, _) = FlayerWorkspace::init(dir.path().join("elsewhere")).unwrap();
+    let (elsewhere, _) = WeaverWorkspace::init(dir.path().join("elsewhere")).unwrap();
     (dir, home, writing, elsewhere)
 }
 
@@ -269,7 +269,7 @@ fn a_listed_workspace_is_switched_to_by_its_path_as_listed_with_its_reason() {
 #[test]
 fn a_path_no_list_holds_is_refused_whatever_it_leads_to() {
     let (dir, home, writing, elsewhere) = machine();
-    let (unknown, _) = FlayerWorkspace::init(dir.path().join("unknown")).unwrap();
+    let (unknown, _) = WeaverWorkspace::init(dir.path().join("unknown")).unwrap();
     let rows = listed(&home, &elsewhere, &elsewhere);
     let writing = writing.root().to_str().unwrap();
     let other = [
@@ -298,12 +298,12 @@ fn a_path_no_list_holds_is_refused_whatever_it_leads_to() {
 fn a_listed_workspace_that_does_not_open_is_refused_and_never_made() {
     let (_dir, home, writing, elsewhere) = machine();
     let rows = listed(&home, &elsewhere, &elsewhere);
-    fs::remove_dir_all(writing.root().join(FLAYER_DIR)).unwrap();
+    fs::remove_dir_all(writing.root().join(WEAVER_DIR)).unwrap();
 
     let refused = switched(&rows, writing.root().to_str().unwrap());
 
     assert_eq!(code(refused), "not_a_workspace");
-    assert!(!writing.root().join(FLAYER_DIR).exists(), "it was made");
+    assert!(!writing.root().join(WEAVER_DIR).exists(), "it was made");
 }
 
 #[test]

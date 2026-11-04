@@ -18,24 +18,24 @@ use crate::ledger::Ledger;
 use crate::mother::artifact::SkillMother;
 use crate::mother::random;
 use crate::settings::Share;
-use crate::workspace::{Directories, FlayerWorkspace, MindProject};
+use crate::workspace::{Directories, MindProject, WeaverWorkspace};
 
-/// Makes flayer workspaces.
+/// Makes weaver workspaces.
 pub struct WorkspaceMother;
 
 impl WorkspaceMother {
     /// A workspace with nothing linked, loaded or gathered, keeping its own
     /// in its library.
-    pub fn empty() -> (TempDir, FlayerWorkspace) {
+    pub fn empty() -> (TempDir, WeaverWorkspace) {
         let dir = TempDir::new().expect("make a temporary folder");
-        let (workspace, _) = FlayerWorkspace::init(dir.path()).expect("make a workspace");
+        let (workspace, _) = WeaverWorkspace::init(dir.path()).expect("make a workspace");
         (dir, workspace)
     }
 
     /// A workspace in `root`, made if it is not yet one.
-    pub fn create(root: &Path) -> FlayerWorkspace {
+    pub fn create(root: &Path) -> WeaverWorkspace {
         fs::create_dir_all(root).expect("make the workspace's folder");
-        FlayerWorkspace::init(root).expect("make a workspace").0
+        WeaverWorkspace::init(root).expect("make a workspace").0
     }
 }
 
@@ -68,7 +68,7 @@ impl ProjectMother {
     }
 
     /// An older project in `workspace`'s folder named `name`, linked to it.
-    pub fn linked(workspace: &mut FlayerWorkspace, name: &str) -> MindProject {
+    pub fn linked(workspace: &mut WeaverWorkspace, name: &str) -> MindProject {
         let project = Self::older(&workspace.root().join(name));
         workspace.link(&project).expect("link the project");
         project
@@ -219,7 +219,7 @@ impl ShelfMother {
     /// A workspace that gathered a skill for each of `names` from one
     /// repository, and its ledger. The repository is gone once the gather
     /// took what it holds, as a clone keeps it on the shelf.
-    pub fn gathered(names: &[&str]) -> (TempDir, FlayerWorkspace, Ledger) {
+    pub fn gathered(names: &[&str]) -> (TempDir, WeaverWorkspace, Ledger) {
         let (dir, workspace) = WorkspaceMother::empty();
         let source = GitRepositoryMother::with_skills(names);
         let ledger = workspace.ledger().expect("open the ledger");

@@ -8,7 +8,7 @@
  * and two repositories nobody linked yet.
  *
  * The only files written by hand are the repositories' contents, as a
- * person's own work would be, and the bodies `flayer edit` copies in through
+ * person's own work would be, and the bodies `mindweaver edit` copies in through
  * `--editor`, the way an editor would save them. Everything else is a
  * command's.
  */
@@ -181,24 +181,24 @@ const SECRETS = `# Keep secrets out of the repository
  * - `design-system`, a mind project, and `playground`, a repository, sit in
  *   the workspace unlinked, for Discover to find;
  * - the home is the default workspace, made first, so it remembers each
- *   workspace `flayer init` makes after it: `at.workspace`, and `platform`
+ *   workspace `mindweaver init` makes after it: `at.workspace`, and `platform`
  *   beside it, a workspace of the platform team's own skills, which nothing
  *   loads yet, for the tour to load.
  */
 export function build(at: Places): void {
   const drafts = join(at.scratch, 'drafts')
 
-  // The default workspace, before any other, which each `flayer init`
+  // The default workspace, before any other, which each `mindweaver init`
   // after it remembers in; then the platform team's workspace, beside the
-  // demo's, with skills of its own, made by `flayer add`.
-  succeed(at, 'flayer', at.scratch, ['init', at.home], 'none')
+  // demo's, with skills of its own, made by `mindweaver add`.
+  succeed(at, 'mindweaver', at.scratch, ['init', at.home], 'none')
   const platform: Places = { ...at, workspace: join(at.scratch, LOADED) }
-  succeed(at, 'flayer', at.scratch, ['init', platform.workspace], 'none')
+  succeed(at, 'mindweaver', at.scratch, ['init', platform.workspace], 'none')
   for (const [name, description] of [
     ['incident-response', 'Runs an incident from the first page to the write-up'],
     ['on-call-handoff', 'Hands the pager over with nothing left unsaid']
   ] as const) {
-    succeed(platform, 'flayer', platform.workspace, ['add', 'skill', name, description])
+    succeed(platform, 'mindweaver', platform.workspace, ['add', 'skill', name, description])
   }
 
   // The team's skills, in a repository of their own: two of the examples,
@@ -212,10 +212,10 @@ export function build(at: Places): void {
   git(at, team, ['add', 'skills'])
   git(at, team, ['commit', '--quiet', '-m', 'Add the team\'s skills'])
 
-  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
-  succeed(at, 'flayer', at.workspace, ['gather', 'git', team])
+  succeed(at, 'mindweaver', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'mindweaver', at.workspace, ['gather', 'git', team])
 
-  // The library's own: each made by `flayer add`, then written as an
+  // The library's own: each made by `mindweaver add`, then written as an
   // editor would save it.
   const own: [kind: 'skill' | 'rule', name: string, description: string, body: string][] = [
     ['skill', 'api-conventions', 'How our HTTP APIs are shaped', API_CONVENTIONS],
@@ -225,10 +225,10 @@ export function build(at: Places): void {
     ['rule', 'style/comments', 'Comments say why, not what', readFileSync(join(EXAMPLES, 'rules/style/comments.md'), 'utf8')]
   ]
   for (const [kind, name, description, body] of own) {
-    succeed(at, 'flayer', at.workspace, ['add', kind, name, description])
+    succeed(at, 'mindweaver', at.workspace, ['add', kind, name, description])
     const draft = join(drafts, `${name}.md`)
     write(draft, body)
-    succeed(at, 'flayer', at.workspace, ['edit', `${kind}:${name}`, '--editor', `cp ${draft}`])
+    succeed(at, 'mindweaver', at.workspace, ['edit', `${kind}:${name}`, '--editor', `cp ${draft}`])
   }
 
   // The projects, each a repository made a project and linked, with what
@@ -245,16 +245,16 @@ export function build(at: Places): void {
     const folder = join(at.workspace, name)
     repository(at, folder)
     succeed(at, 'mind', folder, ['init', ...options])
-    succeed(at, 'flayer', at.workspace, ['link', name])
+    succeed(at, 'mindweaver', at.workspace, ['link', name])
     for (const install of installs) {
       if (install !== 'rule:style/comments') {
-        succeed(at, 'flayer', at.workspace, ['install', '-p', name, install])
+        succeed(at, 'mindweaver', at.workspace, ['install', '-p', name, install])
         continue
       }
       // A rule stating `paths` reaches Claude alone, which the install says
       // in a warning, and exits 1 for: installed all the same, and what the
       // project's page warns of too.
-      const ran = run(at, 'flayer', at.workspace, ['install', '-p', name, install])
+      const ran = run(at, 'mindweaver', at.workspace, ['install', '-p', name, install])
       if (!ran.stdout.startsWith('installed ') || !/^warning: rule `style\/comments` states `paths`/.test(ran.stderr)) {
         throw new Error(`\`${ran.line}\` exited ${ran.status}:\n${ran.stdout}${ran.stderr}`)
       }
@@ -271,9 +271,9 @@ export function build(at: Places): void {
   // the deploy checklist grew a step, which leaves their installs behind.
   write(join(team, 'skills/release-notes/SKILL.md'), RELEASE_NOTES_SINCE)
   git(at, team, ['commit', '--quiet', '--all', '-m', 'Thank first-time contributors'], '2026-10-02T09:00:00Z')
-  succeed(at, 'flayer', at.workspace, ['gather', 'git', team])
+  succeed(at, 'mindweaver', at.workspace, ['gather', 'git', team])
   write(join(drafts, 'deploy-checklist.md'), DEPLOY_CHECKLIST_SINCE)
-  succeed(at, 'flayer', at.workspace, ['edit', 'skill:deploy-checklist', '--editor', `cp ${join(drafts, 'deploy-checklist.md')}`])
+  succeed(at, 'mindweaver', at.workspace, ['edit', 'skill:deploy-checklist', '--editor', `cp ${join(drafts, 'deploy-checklist.md')}`])
 
   // Two repositories nobody linked yet.
   const design = join(at.workspace, 'design-system')

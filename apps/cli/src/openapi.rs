@@ -4,7 +4,7 @@
 //!
 //! Put together here, where both tables and every type are known: the
 //! server writes what is HTTP of each route of its own table and of the
-//! backend's ([`mindflayer_server::schema::paths`]), and asks this module
+//! backend's ([`mindweaver_server::schema::paths`]), and asks this module
 //! for the schema of each type a route names ([`Describe`]), each found by
 //! the name the route gives it among the roots core, the CLI and the
 //! server list, as a file of `docs/api/schemas` is. Walking the very
@@ -25,11 +25,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use mindflayer_core::code::CoreCode;
-use mindflayer_core::known::Switchable;
-use mindflayer_core::schema::{self as core, given_settings, taken_settings, Visitor};
-use mindflayer_server::schema::{self as server, Called, Carried, Describe, Way};
-use mindflayer_server::{Backend, Grounds, Method, Sent, API};
+use mindweaver_core::code::CoreCode;
+use mindweaver_core::known::Switchable;
+use mindweaver_core::schema::{self as core, given_settings, taken_settings, Visitor};
+use mindweaver_server::schema::{self as server, Called, Carried, Describe, Way};
+use mindweaver_server::{Backend, Grounds, Method, Sent, API};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde_json::{json, Map, Value};
 
@@ -61,12 +61,12 @@ pub fn document() -> Value {
     let (schemas, names) = described.components();
     let version = API.rsplit_once("/v").map_or(API, |(_, version)| version);
     let about = format!(
-        "The HTTP API `flayer ui` serves, for scripts and tools on this machine as much as \
+        "The HTTP API `mindweaver ui` serves, for scripts and tools on this machine as much as \
          for the web panel, its first client. A read is a GET naming what it reads in its \
          parameters, and a read that takes a structure a POST that changes nothing; every \
          change is a task, the command lines it is, previewed and then run, so the API does \
          nothing the command line cannot. A script that did not start the panel finds where \
-         the API is and its token in the file `flayer ui --token-file` writes. A route, a \
+         the API is and its token in the file `mindweaver ui --token-file` writes. A route, a \
          parameter or a field once served is a contract: dropping or renaming one, or \
          changing what it holds, moves the API to `/api/v2`, and adding one does not, so an \
          answer's schema leaves room for a field it does not name. Written from the Rust \
@@ -76,7 +76,7 @@ pub fn document() -> Value {
     let document = json!({
         "openapi": OPENAPI,
         "info": {
-            "title": "Mindflayer",
+            "title": "Mindweaver",
             "version": version,
             "description": about,
             "license": {"name": "GPL-3.0-only", "identifier": "GPL-3.0-only"},
@@ -84,7 +84,7 @@ pub fn document() -> Value {
         "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
         "servers": [{
             "url": API,
-            "description": "Where `flayer ui` serves it, beside this document: \
+            "description": "Where `mindweaver ui` serves it, beside this document: \
                             `http://127.0.0.1:<port>/api/v1`, at the port its link names.",
         }],
         "security": server::security(),

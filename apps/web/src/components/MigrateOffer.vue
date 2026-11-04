@@ -25,7 +25,7 @@ watch(() => props.entry, () => {
 })
 
 /**
- * The dry run, `flayer migrate -p` without `--yes`: a task like any other,
+ * The dry run, `mindweaver migrate -p` without `--yes`: a task like any other,
  * shown before it runs, which writes nothing and says what would move.
  */
 async function look() {
@@ -55,7 +55,7 @@ async function migrate() {
       id="migrate-heading"
       class="text-sm font-medium text-highlighted"
     >
-      Marked by .mind/{{ marker }}, which an older Mindflayer wrote
+      Marked by .mind/{{ marker }}, which an older Mindweaver wrote
     </h2>
     <p class="text-sm text-muted">
       Its agents and share mode are changed by nothing until <code class="font-mono text-xs">mind migrate</code> moves it to a settings.toml, carrying what was installed into it to where its agents read.

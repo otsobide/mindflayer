@@ -8,12 +8,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use mindflayer_core::resolve::{Reason, Resolved};
-use mindflayer_core::view::Snapshot;
-use mindflayer_core::watch::{self, Scope, Watched};
-use mindflayer_core::{
-    claude_rules, Agent, Catalog, Directories, FlayerWorkspace, Kind, MindProject, Share,
-    FLAYER_DIR, LEDGER_FILE,
+use mindweaver_core::resolve::{Reason, Resolved};
+use mindweaver_core::view::Snapshot;
+use mindweaver_core::watch::{self, Scope, Watched};
+use mindweaver_core::{
+    claude_rules, Agent, Catalog, Directories, Kind, MindProject, Share, WeaverWorkspace,
+    LEDGER_FILE, WEAVER_DIR,
 };
 use tempfile::TempDir;
 
@@ -30,14 +30,14 @@ use common::skill;
 /// - it loads `team`, which offers `notes`.
 struct Fixture {
     dir: TempDir,
-    hub: FlayerWorkspace,
+    hub: WeaverWorkspace,
     api: PathBuf,
 }
 
 impl Fixture {
     fn new() -> Fixture {
         let dir = TempDir::new().unwrap();
-        let (mut hub, _) = FlayerWorkspace::init(dir.path().join("hub")).unwrap();
+        let (mut hub, _) = WeaverWorkspace::init(dir.path().join("hub")).unwrap();
         let library = hub.own().directory_for(Kind::Skill).unwrap();
         common::write_files(
             &library,
@@ -48,7 +48,7 @@ impl Fixture {
         );
 
         common::write_files(
-            &hub.flayer_dir().join("templates"),
+            &hub.weaver_dir().join("templates"),
             &[
                 ("release/SKILL.md", &skill("release", "Cut one")),
                 ("release/assets/notes.md", "Notes.\n"),
@@ -89,12 +89,12 @@ impl Fixture {
         hub.link(&gone).unwrap();
         fs::remove_dir_all(gone.root()).unwrap();
 
-        let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
+        let (team, _) = WeaverWorkspace::init(dir.path().join("team")).unwrap();
         let notes = team.own().directory_for(Kind::Skill).unwrap();
         common::write_files(&notes, &[("notes/SKILL.md", &skill("notes", "Take them"))]);
         hub.load(&team).unwrap();
 
-        let hub = FlayerWorkspace::open(hub.root()).unwrap();
+        let hub = WeaverWorkspace::open(hub.root()).unwrap();
         let api = api.root().to_path_buf();
         Fixture { dir, hub, api }
     }
@@ -103,8 +103,8 @@ impl Fixture {
         self.dir.path().join("home")
     }
 
-    fn team(&self) -> FlayerWorkspace {
-        FlayerWorkspace::open(self.dir.path().join("team")).unwrap()
+    fn team(&self) -> WeaverWorkspace {
+        WeaverWorkspace::open(self.dir.path().join("team")).unwrap()
     }
 
     fn watched(&self) -> Vec<Watched> {
@@ -131,22 +131,22 @@ fn the_workspace_is_watched_by_its_marker_its_ledger_its_library_its_shelf_and_i
 
     let workspace = Scope::Workspace;
     for expected in [
-        of(&workspace, hub.join(FLAYER_DIR).join("flayer.toml")),
-        of(&workspace, hub.join(FLAYER_DIR).join(LEDGER_FILE)),
+        of(&workspace, hub.join(WEAVER_DIR).join("flayer.toml")),
+        of(&workspace, hub.join(WEAVER_DIR).join(LEDGER_FILE)),
         of(&workspace, fixture.hub.gathered_dir(Kind::Skill)),
         of(&workspace, library.clone()),
         of(&workspace, library.join("review")),
-        of(&workspace, hub.join(FLAYER_DIR).join("templates")),
+        of(&workspace, hub.join(WEAVER_DIR).join("templates")),
         of(
             &workspace,
-            hub.join(FLAYER_DIR).join("templates").join("release"),
+            hub.join(WEAVER_DIR).join("templates").join("release"),
         ),
-        of(&workspace, team.root().join(FLAYER_DIR).join("flayer.toml")),
+        of(&workspace, team.root().join(WEAVER_DIR).join("flayer.toml")),
         of(&workspace, offered.join("notes")),
         // Not made: the default workspace's marker, for when it is.
         of(
             &workspace,
-            fixture.home().join(FLAYER_DIR).join("flayer.toml"),
+            fixture.home().join(WEAVER_DIR).join("flayer.toml"),
         ),
     ] {
         assert!(watched.contains(&expected), "{expected:?} in {watched:#?}");
@@ -204,7 +204,7 @@ fn no_path_named_covers_a_whole_tree() {
     for whole in [
         fixture.dir.path().to_path_buf(),
         hub.clone(),
-        hub.join(FLAYER_DIR),
+        hub.join(WEAVER_DIR),
         fixture.hub.cache_dir(),
         api.clone(),
         api.join(".mind"),
@@ -212,7 +212,7 @@ fn no_path_named_covers_a_whole_tree() {
         api.join("src"),
         api.join("skills").join("deploy").join("scripts"),
         library.join("review").join("scripts"),
-        hub.join(FLAYER_DIR)
+        hub.join(WEAVER_DIR)
             .join("templates")
             .join("release")
             .join("assets"),
@@ -243,7 +243,7 @@ fn no_path_named_covers_a_whole_tree() {
     for kind in Kind::ALL {
         roots.push((fixture.hub.gathered_dir(kind), None));
     }
-    roots.push((hub.join(FLAYER_DIR).join("templates"), Some(Kind::Skill)));
+    roots.push((hub.join(WEAVER_DIR).join("templates"), Some(Kind::Skill)));
     roots.push((api.join(".mind").join("templates"), Some(Kind::Skill)));
     roots.push((hub.join(".mind").join("templates"), Some(Kind::Skill)));
     for path in paths.iter().filter(|path| path.is_dir()) {
@@ -313,13 +313,13 @@ fn reading_a_snapshot_changes_nothing_watched() {
     let before = seen(&watched);
 
     let resolved = Resolved {
-        workspace: FlayerWorkspace::open(fixture.hub.root()).unwrap(),
+        workspace: WeaverWorkspace::open(fixture.hub.root()).unwrap(),
         reason: Reason::Explicit,
     };
     Snapshot::of(&resolved, Some(&fixture.home()));
 
     assert_eq!(seen(&watched), before);
-    let ledger = fixture.hub.root().join(FLAYER_DIR).join(LEDGER_FILE);
+    let ledger = fixture.hub.root().join(WEAVER_DIR).join(LEDGER_FILE);
     let beside = ledger.parent().unwrap();
     assert!(watched.iter().any(|each| each.path == ledger));
     assert!(!watched.iter().any(|each| each.path == beside));
@@ -333,12 +333,12 @@ fn reading_a_snapshot_changes_nothing_watched() {
 #[test]
 fn a_project_linked_since_is_watched_once_the_list_is_asked_again() {
     let fixture = Fixture::new();
-    let mut hub = FlayerWorkspace::open(fixture.hub.root()).unwrap();
+    let mut hub = WeaverWorkspace::open(fixture.hub.root()).unwrap();
     let before = watch::watched(&hub, None);
     let (web, _) = MindProject::init(fixture.dir.path().join("web")).unwrap();
     hub.link(&web).unwrap();
 
-    let after = watch::watched(&FlayerWorkspace::open(hub.root()).unwrap(), None);
+    let after = watch::watched(&WeaverWorkspace::open(hub.root()).unwrap(), None);
 
     let scope = Scope::Project(String::from("../web"));
     assert!(!before.iter().any(|each| each.scope == scope));

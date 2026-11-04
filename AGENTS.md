@@ -2,16 +2,16 @@
 
 Guidance for coding agents working in this repository.
 
-Mindflayer manages the skills and rules coding agents read, the way git manages
+Mindweaver manages the skills and rules coding agents read, the way git manages
 code. A **mind project** (`.mind/settings.toml`) holds artifacts beside its
-code; a **flayer workspace** (`.mindflayer/flayer.toml`) links mind projects,
+code; a **weaver workspace** (`.mindflayer/flayer.toml`) links mind projects,
 holds artifacts of its own, gathers skills from git onto a shelf and installs
 them into projects. `README.md` is the first page a newcomer reads: short,
-friendly and centred on the control panel (`flayer ui`), with screenshots
+friendly and centred on the control panel (`mindweaver ui`), with screenshots
 `make docs/screenshots` takes and no command's output. `docs/reference.md`
 is the user-facing reference: every command with its literal output, the
 formats, `--json`, the TUI, the panel in full and upgrading.
-`docs/api.md` is the guide to the HTTP API `flayer ui` serves, every
+`docs/api.md` is the guide to the HTTP API `mindweaver ui` serves, every
 example a `curl` line and its literal answer, which a test replays.
 `docs/development.md` is how to build, test and work on the panel.
 `docs/architecture.md` records why each mechanism is the way it is: read the
@@ -33,17 +33,17 @@ lists everything.
 make test                 # every suite, the panel's first: needs Node 24 and pnpm
 make fmt/check            # CI runs this first
 make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets, with the ts feature too
-make run ARGS="flayer list"
+make run ARGS="weaver list"
 make core/test            # one app: make <app>/<target>
 ```
 
 One suite, one module or one test:
 
 ```bash
-cargo test -p mindflayer-cli --test tui_test                 # apps/cli/tests/tui_test.rs
-cargo test -p mindflayer-core --test install_test <substring>
-cargo test -p mindflayer-core --lib workspace                # src/workspace_test.rs
-cargo test -p mindflayer-server --test commands_test         # apps/server/tests/commands_test.rs
+cargo test -p mindweaver-cli --test tui_test                 # apps/cli/tests/tui_test.rs
+cargo test -p mindweaver-core --test install_test <substring>
+cargo test -p mindweaver-core --lib workspace                # src/workspace_test.rs
+cargo test -p mindweaver-server --test commands_test         # apps/server/tests/commands_test.rs
 ```
 
 The panel (`apps/web`) needs Node 24 and pnpm at the version `package.json`
@@ -69,7 +69,7 @@ pnpm --dir apps/web exec vitest run tests/shell.test.ts      # one suite
 make web/e2e/browsers     # Chromium and WebKit for the browser suite, into apps/web/node_modules
 make web/e2e              # build the panel and the debug binaries, then drive them in both browsers
 make web/e2e BROWSERS=chromium ARGS='-g overview'            # where Playwright's WebKit cannot run, as on Arch
-make web/e2e/run E2E_BIN=<dir>                               # the suite alone, on the flayer and mind in <dir>
+make web/e2e/run E2E_BIN=<dir>                               # the suite alone, on the mindweaver and mind in <dir>
 make docs/screenshots     # build the panel and the binaries, then take the README's screenshots (Chromium)
 ```
 
@@ -121,9 +121,9 @@ web/e2e` writes `apps/web/dist`, as `make web/build` does.
 
 `make docs/screenshots` takes the README's images into `docs/images` with the
 same harness: `apps/web/e2e/screenshots.ts` builds the demo workspace
-(`e2e/demo.ts`) in `mindflayer-demo` under the system's temporary folder, a
+(`e2e/demo.ts`) in `mindweaver-demo` under the system's temporary folder, a
 fixed place so the paths the images show stay put, serves it with
-`flayer ui`, and takes each page of the tour in Playwright's Chromium (`make
+`mindweaver ui`, and takes each page of the tour in Playwright's Chromium (`make
 web/e2e/browsers BROWSERS=chromium`). It fails on a page showing a path
 under a home other than the reference's `/home/you`, the account's name as a
 folder or the launch token, on an image over 300 KB, and unless its home is
@@ -144,7 +144,7 @@ asked.
 Three crates in one Cargo workspace, and the panel they serve, each an app
 under `apps/` with its own `Makefile`:
 
-- `apps/core` (`mindflayer-core`): the engine. Projects, a project's settings
+- `apps/core` (`mindweaver-core`): the engine. Projects, a project's settings
   (`settings`, the marker from v3 on), workspaces, which workspace a command
   uses (`resolve`), the shell code that activates one (`activate`), kinds, the
   agents and where each kind goes for them (`agent`), the catalog, gathering
@@ -210,8 +210,8 @@ under `apps/` with its own `Makefile`:
   given or taken, `Schemas`, `Together`), and under either `described` says
   what a type serde writes by hand says of itself (`words!`, which writes
   both, and the fields written through a function of their own).
-- `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
-  `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
+- `apps/cli` (`mindweaver-cli`): the binaries `mind` (`src/main.rs`) and
+  `mindweaver` (`src/bin/mindweaver.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
   dispatches them and asks core what a command acts on, and each family of
   commands has a file under `src/commands/`: `project` (init, link, unlink,
@@ -219,7 +219,7 @@ under `apps/` with its own `Makefile`:
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `status`, `settings` (agents,
   share, targets), `gather`, `install`, `update` and `migrate` (each at both
-  levels), `adopt` (flayer adopt) and `ui` (the panel, at both levels).
+  levels), `adopt` (mindweaver adopt) and `ui` (the panel, at both levels).
   `src/render.rs` holds `Outcome`,
   `Failure` and `Warning` (a stderr line, with its code beside it), the
   table helpers and the envelope every `--json` prints (`json`, and
@@ -251,8 +251,8 @@ under `apps/` with its own `Makefile`:
   each type a route names found among the roots (`openapi::document`,
   `Described`, the server's `schema::Describe`). `src/tui/` and
   `src/install/` are the two screens.
-- `apps/server` (`mindflayer-server`): the local server behind the web
-  panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
+- `apps/server` (`mindweaver-server`): the local server behind the web
+  panel, a library `mindweaver ui` runs. `src/backend.rs` is the `Backend`
   trait and the `Refusal` it answers with (with its `Grounds`),
   `src/code.rs` the conditions the server turns a request away for itself,
   each with its code and its status (`Condition`), `src/route.rs` the
@@ -275,7 +275,7 @@ under `apps/` with its own `Makefile`:
   API's OpenAPI document, what is HTTP of each route of both tables
   (`paths`), each type a route names asked of the front end (`Describe`,
   `Carried`, `Way`).
-- `apps/web` (`mindflayer-web`): the web panel, in Vue and Nuxt UI on Vite,
+- `apps/web` (`mindweaver-web`): the web panel, in Vue and Nuxt UI on Vite,
   with pnpm. `src/main.ts` mounts what `src/panel.ts` installs (router,
   Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
   too. `src/api/transport.ts` is the `Transport` interface and `useTransport`,
@@ -353,12 +353,12 @@ under `apps/` with its own `Makefile`:
   `environment.ts` what every process it starts runs in, `fixture.ts` the
   workspaces it builds with the commands, `panel.ts` what the specs share,
   and the specs; `playwright.config.ts`, beside `vite.config.ts`, starts
-  `flayer ui` over the shared workspace. Beside the suite, through the same
+  `mindweaver ui` over the shared workspace. Beside the suite, through the same
   `environment.ts`, `demo.ts` builds the README's demo workspace and
   `screenshots.ts` takes the images of it (`make docs/screenshots`).
 
-Beside them, `examples/` is content and not an app: a flayer workspace whose
-own two skills and two rules anyone can `flayer load` to try Mindflayer
+Beside them, `examples/` is content and not an app: a weaver workspace whose
+own two skills and two rules anyone can `mindweaver load` to try Mindweaver
 without gathering. `apps/cli/tests/examples_test.rs` holds every example to
 `validate` with no warning and finds the "Try it with the examples" output
 of the reference, `docs/reference.md`, in what the commands print, so
@@ -367,7 +367,7 @@ changing an example's summary line means changing the reference too.
 Outside `apps/`, `scripts/agent-probe/` holds the agent probe: `probe.sh`
 isolates a run and checks the real home is left alone, and `<agent>.sh` holds
 one agent's checks (only `claude.sh` so far). `scripts/serves-panel.sh` is
-what `make cli/release/check` runs: it starts a release's `flayer ui` with a
+what `make cli/release/check` runs: it starts a release's `mindweaver ui` with a
 home of its own and every agent home empty, and asks it for the panel.
 `docs/api/schemas` holds the API's JSON Schemas, a file a root, which the
 crates' `schema` tests write (`make api/schemas`) and nothing edits by
@@ -403,7 +403,7 @@ These are easy to break from a single file without noticing.
   `.claude/skills` and is sent nothing there. Which folders a project is read
   from is core's too (`Catalog::folders`), and so are the names at a
   project's root that show an agent works there (`Agent::reads_at_root`) and
-  the order `flayer scan --suggest` ranks what it finds in (`scan::Order`),
+  the order `mindweaver scan --suggest` ranks what it finds in (`scan::Order`),
   in which the minds screen, the link form and the panel's page of what
   could be linked show what is not linked, without sorting it.
 - **Values are value objects, and the world is reached through ports.**
@@ -429,17 +429,17 @@ These are easy to break from a single file without noticing.
   one more driver of the command lines (`commands::run_line`), never a
   path of its own into core (docs/architecture.md, "Values, ports and
   adapters", D-25).
-- **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
-  both reach the same function. `mind add` and `flayer add` (with or without
+- **Two binaries, one parser.** `mindweaver <cmd>` is `mind weaver <cmd>`, and
+  both reach the same function. `mind add` and `mindweaver add` (with or without
   `-p`) are one implementation given a different holder
-  (`FlayerWorkspace::own` makes the workspace look like a `MindProject`).
+  (`WeaverWorkspace::own` makes the workspace look like a `MindProject`).
 - **The TUI and the panel only run commands.** A key produces a `Task`
   (`src/task.rs`, shared by every front end that runs commands),
   and `Task::commands` turns it into argument lines that a `Runner` hands to
   `execute`, which runs each through `commands::run_line`: it parses them
-  with `Cli`/`FlayerCli` and runs them through `run_with`/`run_flayer_with`
+  with `Cli`/`WeaverCli` and runs them through `run_with`/`run_weaver_with`
   with the screen's `Lookup` and a `gather::Watch`, what the binaries'
-  `run_watched`/`run_flayer_cli_watched` call once they have read the
+  `run_watched`/`run_weaver_cli_watched` call once they have read the
   environment. A test's stand-in `Runner` is handed the same words. The
   panel is the second front end built this way: the browser sends a task as
   JSON, the backend holds it to the path policy (`admit::Admission`), shows
@@ -460,8 +460,8 @@ These are easy to break from a single file without noticing.
   box's plan applied with `batchOf`), through the same runner. A gather's lines run on a
   thread of their own (`Task::runs_apart`), still through the same parsers:
   the thread changes where they run, not what they are. The install screen applies the same way, in the TUI or
-  opened by `flayer install` (`install::apply`): its marks are the
-  `flayer install` and `flayer uninstall` lines they amount to
+  opened by `mindweaver install` (`install::apply`): its marks are the
+  `mindweaver install` and `mindweaver uninstall` lines they amount to
   (`Screen::task`), as core plans them (`install::Plan::of`), each change
   the task that runs it (`Task::from`), each run whatever came of the others
   (`Task::chained`), so its transcript runs again. A batch a screen builds
@@ -476,7 +476,7 @@ These are easy to break from a single file without noticing.
   screen names it by its route. What a front end with
   no terminal does not run is one list, `task::Refusal`, read off the
   parsed command by a match with no wildcard (`Refusal::of_mind`,
-  `of_flayer`), so a new command says whether it is refused before it
+  `of_weaver`), so a new command says whether it is refused before it
   compiles; a task is refused for its lines (`Task::refusal`). `edit` is
   refused in an editor and with `--contents -`, standard input, and run
   with `--contents FILE` (`Refusal::of_edit`); the one task that builds
@@ -489,7 +489,7 @@ These are easy to break from a single file without noticing.
   `ui`, which would hold it until a Ctrl-C the screen keeps for itself, and
   standard input, which is the screen's own keys. What a line takes away, which a front end with
   no terminal asks somebody to confirm before it runs it, is one list too,
-  `task::Caution`, read the same way (`Caution::of_mind`, `of_flayer`,
+  `task::Caution`, read the same way (`Caution::of_mind`, `of_weaver`,
   `task::cautions`), and the panel's backend says it of the lines it
   plans with each preview (`backend::Confirm`), never a list in
   TypeScript. Each front end hands back, when it closes, every
@@ -587,7 +587,7 @@ These are easy to break from a single file without noticing.
   `edited`. A new error type joins
   `code::ALL`; `code_test.rs` holds no two codes alike and finds a type
   that derives `Error` and never joined. The server, which can use no
-  mindflayer crate, gives its own conditions codes the same way with a
+  mindweaver crate, gives its own conditions codes the same way with a
   `codes!` of its own (`apps/server/src/code.rs`, `Condition`, its status
   beside each code), and the CLI's `error_test.rs` holds them unique
   beside core's and the CLI's, which only the CLI can see together; every
@@ -622,8 +622,8 @@ These are easy to break from a single file without noticing.
     --new-id`).
   - Creation uses `create_new` or `create_dir`.
   - `rename` rewrites only the `name:` line (`frontmatter::with_key`).
-  - `remove` (`flayer remove --everywhere` too), `migrate` at either level,
-    `agents`, `share`, `targets`, `update` and `flayer adopt` are dry runs
+  - `remove` (`mindweaver remove --everywhere` too), `migrate` at either level,
+    `agents`, `share`, `targets`, `update` and `mindweaver adopt` are dry runs
     without `--yes`.
     A migration of the library moves nothing a project holds, refuses as a
     whole, and keeps the marker it rewrites as `flayer.toml.v<version>`
@@ -632,7 +632,7 @@ These are easy to break from a single file without noticing.
     `settings.json` it replaces as `.mind/tmp/<name>.v<version>`, never runs
     git (it says `git rm -r --cached .mind` instead), and puts back every
     step it took when a later one fails.
-  - A file somebody else owns is edited only inside Mindflayer's marked
+  - A file somebody else owns is edited only inside Mindweaver's marked
     blocks or, in an agent's config file, which can carry no marks, one entry
     at a time (next bullet). Every byte outside them is kept, and a malformed
     block is refused, not repaired. The blocks:
@@ -650,7 +650,7 @@ These are easy to break from a single file without noticing.
     relinked project's lines, and a copy's given a new id, are carried to its
     new place or key (`exclude::carry`), never left as a stale group. A team's
     `.gitignore` and `core.excludesFile` are never edited; the `.gitignore`s
-    Mindflayer writes are `.mind/tmp`'s and a local project's `.mind`'s own
+    Mindweaver writes are `.mind/tmp`'s and a local project's `.mind`'s own
     (`MIND_IGNORE`), each inside a folder it owns, made with `create_new`,
     and the second is removed, when the project turns shared, only while it
     still holds `MIND_IGNORE`. And `<!-- mindflayer:begin -->` and
@@ -664,7 +664,7 @@ These are easy to break from a single file without noticing.
     made with `create_new`, and only then said to be created; one that is
     there goes through `replace_bytes`, written through a link only to a
     file inside the project; and the file is taken away only when
-    Mindflayer made it, as the ledger notes (`created_files`), and nothing
+    Mindweaver made it, as the ledger notes (`created_files`), and nothing
     else is left in it. No block
     is left in a workspace's root, unless a project it links is there, nor
     in a folder above a project it links, whose agents would read it too,
@@ -675,7 +675,7 @@ These are easy to break from a single file without noticing.
     render is handed what the ledger records of them
     (`claude_rules::Recorded`: each file's route and its `hash::bytes`),
     each file it may make recorded before it is made (`install::rules`), and
-    a file is Mindflayer's only while it holds exactly that: only such a
+    a file is Mindweaver's only while it holds exactly that: only such a
     file is replaced or taken away. A file nothing
     recorded, even one holding the rule, or one changed since, is left
     exactly as it is and said, and so is a link at a rule's place. A new
@@ -719,13 +719,13 @@ These are easy to break from a single file without noticing.
     was written: anything else there is somebody's, left as it is and said.
     It holds the token, which goes nowhere else new: not to stderr, not to
     a `Debug`, and the link and the transcript stay as they were.
-  - `flayer init` refuses a directory for the workspace's own that overlaps
+  - `mindweaver init` refuses a directory for the workspace's own that overlaps
     the shelf or the cache, which are reserved for gathering
-    (`gathered_overlap`). `flayer init` and the workspace's own artifacts
+    (`gathered_overlap`). `mindweaver init` and the workspace's own artifacts
     never put an `AGENTS.md`, a `CLAUDE.md` or a kind's folder in the
     workspace's directory; they live in `.mindflayer`. An install into a
     project at the workspace's root is that project's (D-03).
-- **Mindflayer only manages what it installed.** The ledger's record of an
+- **Mindweaver only manages what it installed.** The ledger's record of an
   install (one installation, a target for each copy it wrote, its origin and
   the `hash::tree` of what it wrote, that hash's one definition) is what
   allows overwriting and deleting. An install writes a copy in every target
@@ -786,7 +786,7 @@ These are easy to break from a single file without noticing.
   copy and somebody's are left as an uninstall leaves them.
   `install::disown` and `install::carry` are private to core, so no front end
   drops or moves a record on its own. The one way a copy nobody installed
-  becomes recorded is `flayer adopt` (`adopt::apply`), asked for by name: it
+  becomes recorded is `mindweaver adopt` (`adopt::apply`), asked for by name: it
   copies the skill into the library and records the project's copies, every
   target an install uses, under the `hash::tree` they hold, so they read as
   current (a target with no copy as missing, for an update to fill), never
@@ -811,7 +811,7 @@ These are easy to break from a single file without noticing.
   `lifecycle::find_to_change`, which refuses such a rule as received rather
   than as nothing.
 - **Strict when writing, lenient when reading.** A skill's front matter is
-  the Agent Skills format. `mind add`, `rename`, `install`, `flayer adopt`
+  the Agent Skills format. `mind add`, `rename`, `install`, `mindweaver adopt`
   and `edit --contents` (`lifecycle::replace_contents`, which also refuses
   a name other than the skill's folder, pointing at `rename`) refuse a name
   or description that breaks its rules, all through
@@ -819,7 +819,7 @@ These are easy to break from a single file without noticing.
   (what `ValidationIssue::is_strict` picks out), so change the rules there and
   nowhere else; gathering
   takes such a skill with a `warning:` per problem, and `validate` reports
-  everything (`flayer validate` without `-p` reads the shelf too) but calls
+  everything (`mindweaver validate` without `-p` reads the shelf too) but calls
   an artifact invalid only for what is not `ValidationIssue::is_warning`. Keys the format does not define pass through
   untouched. A rule's front matter is optional (`rule::RuleManifest`): read
   only when its fences hold a YAML mapping, and whatever it leaves unread is a
@@ -835,7 +835,7 @@ These are easy to break from a single file without noticing.
     or `-p`, or after a `--` among positionals; a test feeds every variant
     values that start with a dash. A save's text reaches no line at all:
     the line names the workspace's scratch file for it, in `.mindflayer`
-    (`FlayerWorkspace::scratch_dir`, and `scratch_route` for the line, both
+    (`WeaverWorkspace::scratch_dir`, and `scratch_route` for the line, both
     core's), which the backend writes with
     `create_new`, in a folder made with `create_dir` and refused when it is
     a link, taking a file there under the name only when it holds the text
@@ -920,7 +920,7 @@ These are easy to break from a single file without noticing.
     scrub (`Remote::scrub`) to a clone's config and reflogs. A gather refuses a URL that carries one, and one typed as its branch or
     folder, which the ledger would keep word for word. A
     command that writes to the ledger opens it with
-    `FlayerWorkspace::ledger_to_write`, which scrubs what an older build
+    `WeaverWorkspace::ledger_to_write`, which scrubs what an older build
     stored first and hands back what it took out to be said; one that only
     reads opens it with `ledger_for_reading`, which scrubs nothing. The
     install screen is a read until it applies, and the lines it then runs
@@ -931,10 +931,10 @@ These are easy to break from a single file without noticing.
     which writes itself out redacted whatever built it. Never a `String`
     redacted where it is written.
 - **Writers take turns; readers never wait.** Core's writers hold the
-  workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
+  workspace's `.mindflayer/lock` (`WeaverWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`,
   `install::rules::render`, `gather::gather`,
-  `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
+  `gather::scrub`, which `WeaverWorkspace::ledger_to_write` runs, when it has
   clones to rewrite, `migrate::library`, from its plan to its rewrite of
   the marker, `migrate::project`, for a move from a `mind.toml`, from before
   it reads the project again until its ledger is written (a move from a
@@ -958,7 +958,7 @@ These are easy to break from a single file without noticing.
   Opening the ledger takes no lock: a schema migration keeps itself apart
   in its own transaction. The lock is not re-entrant: a writer never calls
   another while it holds it, and a front end never takes it. Reads
-  (`FlayerWorkspace::open`, `ledger_for_reading`) never take it. A wait is
+  (`WeaverWorkspace::open`, `ledger_for_reading`) never take it. A wait is
   bounded (`lock::WAIT`), ending in a `LockError::Busy` that names the
   holder's pid, except a record drop's or carry's (`install::disown`,
   `install::carry`), which follows a change already made.
@@ -972,7 +972,7 @@ These are easy to break from a single file without noticing.
   retry after a remote branch named `HEAD`, a connection the callback cannot
   reach.
 - **Formats are versioned.** Each marker carries its own `version`
-  (`MIND_FORMAT_VERSION` for a project's, `FLAYER_FORMAT_VERSION` for
+  (`MIND_FORMAT_VERSION` for a project's, `WEAVER_FORMAT_VERSION` for
   `flayer.toml`, so bumping one never makes older builds refuse the other)
   and the ledger uses SQLite's `user_version`. A project's marker is
   `mind.toml` up to `MIND_TOML_VERSION`, which only `MindProject::init` still
@@ -989,7 +989,7 @@ These are easy to break from a single file without noticing.
   settings file does not name has no folder (`directory_for` is `None`).
   Anything from a newer version is refused. A format change must keep
   reading old files the way they were written, and move one forward only
-  when asked, never on a read (`flayer migrate --library`, `mind migrate`).
+  when asked, never on a read (`mindweaver migrate --library`, `mind migrate`).
   A key an older build reads past without misreading anything moves no
   version, as the default workspace's `known` did not.
   - A ledger schema step is one more block in the SQLite store's migration
@@ -1001,7 +1001,24 @@ These are easy to break from a single file without noticing.
     (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to migrate.
     What no SQL can know is handed to the step rather than read by it:
     schema 5 is told each linked project's id (`Ledger::open_knowing`, from
-    `FlayerWorkspace::known`).
+    `WeaverWorkspace::known`).
+- **What is written outside the code keeps the old name, in one constant
+  each.** Mindweaver was Mindflayer (D-26, in `docs/architecture.md`), and
+  what a build writes on the disk or sends on the wire is still spelled the
+  old way until #229 moves it, reading the old: `WEAVER_DIR` (`.mindflayer`),
+  `WEAVER_CONFIG` (`flayer.toml`), `LEDGER_FILE` (`mindflayer.db`, its
+  backups beside it), the blocks' markers (`agents_md::BEGIN`, `END`,
+  `RULE`, `exclude::BEGIN`, `END`), Claude's rules folder
+  (`claude_rules`), the staging suffix (`copy`), `MIND_IGNORE`,
+  `activate::WORKSPACE_VARIABLE` and `DEACTIVATE`, the CLI's
+  `homes::HOME_VARIABLE`, the server's `guard::PANEL_HEADER` and
+  `auth::COOKIE_PREFIX`, and the panel's cookie prefix
+  (`src/preferences.ts`), its header (`src/api/http.ts`'s `HEADERS`) and
+  the folder its load form names (`LoadForm.vue`'s `WEAVER_DIR`). Code
+  that uses one, a message included, names it
+  through its constant, never by its spelling; a doc comment, a doc and a
+  test may spell it. The codes `path_in_mindflayer` and
+  `x_mindflayer_required` stay as they are, as every code does.
 - **A project is found again by its id, never by a guess.** The ledger
   keeps the id it last saw at each route (`projects`), learned from the
   projects themselves every time it is opened to write (`Ledger::knew`),
@@ -1028,7 +1045,7 @@ These are easy to break from a single file without noticing.
   chose it (`Reason`). A named or activated path that is not
   a workspace is an error, never a fallback, and is never made. A project's
   workspace (`resolve::managing`, `resolve::consulted`) and which project
-  `-p` names (`FlayerWorkspace::pick`, `holder`) are core's too: no front end
+  `-p` names (`WeaverWorkspace::pick`, `holder`) are core's too: no front end
   walks up, or picks a holder, itself.
 - **A change is handed its workspace.** The lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename`, `remove`) and template lookup
@@ -1064,7 +1081,7 @@ These are easy to break from a single file without noticing.
   again from the environment.
 - **The server holds no rules.** `apps/server` carries JSON between the
   browser and a `Backend`, whose `Query`, `Task`, `Outcome` and `Switch`
-  are associated types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it
+  are associated types, and depends on no mindweaver crate (`tests/crate_test.rs` checks it
   with `cargo metadata`); a front end depends on it, as the CLI does
   (`backend.rs`), never the other way. A check, path rule or naming rule
   written there is one the panel could disagree with the CLI about: it
@@ -1113,7 +1130,7 @@ These are easy to break from a single file without noticing.
   `mf_<port>`, or as Bearer), and takes a change by cookie only with
   `Sec-Fetch-Site: same-origin`, `X-Mindflayer: 1` and `application/json`.
   The one widening is the panel's dev server's origin, exactly, when a front
-  end names it (`Server::dev_server`, `flayer ui --dev`). The API's
+  end names it (`Server::dev_server`, `mindweaver ui --dev`). The API's
   description is the front end's, handed over as text
   (`Backend::document`) and served at `GET /api/v1/openapi.json` as it is,
   behind the token like every route.
@@ -1176,7 +1193,7 @@ These are easy to break from a single file without noticing.
   (`Query::Workspaces`: `switchable` and `reason`, `known::switchable`),
   the path a switch names being the one that list spells. So is which projects
   hold a copy of one of the library's own (`library.holders`, by `install::from_the_library`, the
-  rule `flayer remove --everywhere` follows), never told by comparing a
+  rule `mindweaver remove --everywhere` follows), never told by comparing a
   copy's origin, which an install from before origins were kept lacks. Every
   page passes axe (`tests/a11y.test.ts`), works from the keyboard, and never
   says a state by colour alone.
@@ -1262,10 +1279,10 @@ These are easy to break from a single file without noticing.
   time, and on an icon the bundle lacks; and `e2e/csp.spec.ts` loads every
   page in Chromium and WebKit under the server's real header, where any
   violation fails the test it happens in.
-- **Activating prints, and writes nothing.** `flayer activate` prints core's
+- **Activating prints, and writes nothing.** `mindweaver activate` prints core's
   code (`activate::script`), and nothing on stdout when it fails, so `eval`
   runs nothing. Nor does it remember the workspace in the default one's
-  `known`, though #56 asked it to: `flayer init` does (`known::remember`),
+  `known`, though #56 asked it to: `mindweaver init` does (`known::remember`),
   only once the default is made, and never makes it (architecture.md, "The
   workspaces this machine knows", and its open questions). Its shell comes
   from `--shell`, then `$SHELL`, read by the front end. The code undoes only
@@ -1287,7 +1304,7 @@ These are easy to break from a single file without noticing.
   helpers in `tests/common/mod.rs` (`use common::*;`). Unit tests sit in
   `src/<module>_test.rs`, wired in with
   `#[cfg(test)] #[path = "<module>_test.rs"] mod tests;`.
-- What a test needs is built by an object mother (`mindflayer_core::mother`,
+- What a test needs is built by an object mother (`mindweaver_core::mother`,
   `apps/core/src/mother/`), never by hand where a mother makes it: one per
   value object (`ContentHashMother`, `RedactedMother`, `OriginMother`,
   `ArtifactNameMother`, `RevisionMother`, `ProjectIdMother`), per record the
@@ -1311,7 +1328,7 @@ These are easy to break from a single file without noticing.
   suites and the CLI's through a dev-dependency on core with its `mother`
   feature, which no build of a binary turns on. The CLI's suites add mothers
   of what only a command takes (`tests/common/mother.rs`: `ValueMother`,
-  `OlderBuildMother`); the server depends on no mindflayer crate, so its
+  `OlderBuildMother`); the server depends on no mindweaver crate, so its
   suites keep all of theirs there (hosts, origins, tokens and headers). A new value object gets a mother and a section of
   `tests/value_test.rs`, which holds every value to one set of laws
   (`reads_as_its_text`) and to its rule both ways, and a new port a
@@ -1321,7 +1338,7 @@ These are easy to break from a single file without noticing.
   developer's shell activated, which `HOME`, `MINDFLAYER_HOME`,
   `MINDFLAYER_WORKSPACE`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
   `OPENCODE_CONFIG_DIR` lead to. In-process tests pin options: CLI tests call
-  `common::mind` / `common::flayer`, which parse through the real parsers and
+  `common::mind` / `common::weaver`, which parse through the real parsers and
   append `-C <dir>`, `--home=`, `--workspace=` and the four agent-home
   options empty (`common::PINNED`), so no command they run can reach or
   create the real home workspace, use an activated one or read a real agent
@@ -1337,7 +1354,7 @@ These are easy to break from a single file without noticing.
   `mind init` (`common::new_project`), so a local install keeps its copies out
   of git rather than saying on stderr that nothing does, and where an install
   puts its copies is asked of core (`common::copies`). A test about what a
-  project an older Mindflayer made does, a copy installed in the folder it
+  project an older Mindweaver made does, a copy installed in the folder it
   authors in, makes one with `common::older_project`, and one about a
   project a `settings.json` marks with `common::json_project`, which writes
   the file as a version 3 `mind init` did. What git would list is
@@ -1417,7 +1434,7 @@ These are easy to break from a single file without noticing.
   and each change its page offers, previewed and run each on the
   workspace as built (`updated.json`), and, of the first workspace, what
   judging drafts of the library's own is answered with (`drafts.json`),
-  what `flayer validate` says once one is written, which the editor's
+  what `mindweaver validate` says once one is written, which the editor's
   verdict is held to word for word (`validated.json`), and each change
   authoring sends, previewed and run each on the workspace as built
   (`authored.json`). `tests/panel.ts` reads them and
@@ -1436,12 +1453,12 @@ These are easy to break from a single file without noticing.
   reads every installed package's licence: a new one outside its list of
   GPL-3.0-compatible licences fails it.
 - The browser suite is `apps/web/e2e/<area>.spec.ts`, in Playwright, on
-  the real `flayer ui`: the debug build, or the binaries `E2E_BIN` names,
+  the real `mindweaver ui`: the debug build, or the binaries `E2E_BIN` names,
   as CI names the release. It serves a workspace `e2e/fixture.ts` builds
   with the real commands, each made to exit 0 with no warning, and
   nothing written by hand but the folders `mind init` runs in and, beside
   the workspace, the drafts an `--editor` copies in (`fixture.draft`), as
-  an editor saves one, for `flayer edit` and `mind edit` to change an
+  an editor saves one, for `mindweaver edit` and `mind edit` to change an
   artifact with, or `--contents` names; a state only a hand edit, a removed folder or a git
   source makes is left to the views' suites and their fixtures. A test
   that changes something builds a workspace of its own (`own`), served
@@ -1450,12 +1467,12 @@ These are easy to break from a single file without noticing.
   it was made as the driver holds the run's. Every process it starts goes through
   `e2e/environment.ts` (`run`, `pinned`, `environment`), and the config
   starts the server the same way, from the fixture's folder. A spec reads
-  the server from `served`, what the CLI says from `listing()`, `flayer
+  the server from `served`, what the CLI says from `listing()`, `mindweaver
   list --json` in its envelope, and opens a page with `panel.open`, through
   the launch link, as a person does. Every test fails on a CSP violation or
   an uncaught error on its page (`watch`), and `csp.spec.ts` holds the watch
   to seeing one. No spec changes the shared workspace: a test that changes
-  something takes a workspace and a `flayer ui` of its own (`own`, built by
+  something takes a workspace and a `mindweaver ui` of its own (`own`, built by
   `changeable`, or what the spec's `building` names, `assignable` for the
   matrix's, `updatable` for updating and removing or `authorable` for
   editing, adding and renaming in the library, beside a copy of it
@@ -1486,7 +1503,7 @@ These are easy to break from a single file without noticing.
   `tui::settle` or `tui::wait`; to make one slow, stand a `Runner` in for the
   real command lines (`App::runner`).
 - Fixtures use `tempfile::TempDir`. Test names are sentences
-  (`init_flayer_is_the_same_as_init`).
+  (`init_weaver_is_the_same_as_init`).
 - `apps/cli/tests/docs_test.rs` holds `README.md` and every page under
   `docs/` to their relative links, in Rust so it runs without Node or the
   network: each file a link names is there, each anchor is a heading's as
@@ -1545,7 +1562,7 @@ These are easy to break from a single file without noticing.
   "Open questions". A change to what the API answers, a route added among
   them, updates `docs/api.md` too, whose answers `api_guide_test` holds to
   the server's. Literal output belongs in the reference, never in the
-  README, which says what Mindflayer is and tours the panel in a few
+  README, which says what Mindweaver is and tours the panel in a few
   screens. A change to what the panel shows, a page, a view or its look,
   runs `make docs/screenshots`, and its PR carries the images it wrote; a
   change to what the README says of the panel goes with it.

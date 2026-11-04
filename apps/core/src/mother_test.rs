@@ -17,7 +17,7 @@ use crate::rule::RuleManifest;
 use crate::settings::Settings;
 use crate::skill::SkillManifest;
 use crate::url::{carries_credentials, redacted};
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::workspace::{MindProject, WeaverWorkspace};
 
 const DRAWS: usize = 100;
 
@@ -201,7 +201,7 @@ fn an_entry_mother_holds_no_credential() {
 #[test]
 fn the_fixture_mothers_make_a_workspace_a_project_and_a_repository() {
     let (dir, workspace) = WorkspaceMother::empty();
-    assert!(FlayerWorkspace::open(dir.path()).is_ok());
+    assert!(WeaverWorkspace::open(dir.path()).is_ok());
 
     let project = ProjectMother::random(dir.path());
     assert!(MindProject::is_marked(project.root()));

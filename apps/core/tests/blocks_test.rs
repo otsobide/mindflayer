@@ -1,4 +1,4 @@
-//! The blocks Mindflayer keeps in files somebody else owns, git's
+//! The blocks Mindweaver keeps in files somebody else owns, git's
 //! `info/exclude` ([`ExcludeFile`]) and a project's `AGENTS.md`
 //! ([`AgentsMd`]), held as properties over files nobody wrote by hand.
 //!
@@ -9,10 +9,10 @@
 //! each module name the cases; these draw the files, so a change to how lines
 //! are split, joined or spaced that breaks a file no test spelled fails here.
 
-use mindflayer_core::agents_md::{AgentsMd, Section};
-use mindflayer_core::mother::random;
-use mindflayer_core::mother::ArtifactNameMother;
-use mindflayer_core::ExcludeFile;
+use mindweaver_core::agents_md::{AgentsMd, Section};
+use mindweaver_core::mother::random;
+use mindweaver_core::mother::ArtifactNameMother;
+use mindweaver_core::ExcludeFile;
 
 const DRAWS: usize = 300;
 

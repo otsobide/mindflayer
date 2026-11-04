@@ -1,4 +1,4 @@
-//! `flayer load` and `unload`: another workspace's own skills offered to this
+//! `mindweaver load` and `unload`: another workspace's own skills offered to this
 //! one's projects, read live from where it is, at both levels, and from the
 //! TUI.
 
@@ -14,11 +14,11 @@ fn target_and_team() -> (TempDir, PathBuf, PathBuf) {
     let team = dir.path().join("team");
     fs::create_dir_all(target.join("collapse")).unwrap();
     fs::create_dir_all(&team).unwrap();
-    flayer(&target, &["init"]).unwrap();
+    weaver(&target, &["init"]).unwrap();
     new_project(&target.join("collapse"));
-    flayer(&target, &["link", "collapse"]).unwrap();
-    flayer(&team, &["init"]).unwrap();
-    flayer(&team, &["add", "skill", "deploy", "Ship the service"]).unwrap();
+    weaver(&target, &["link", "collapse"]).unwrap();
+    weaver(&team, &["init"]).unwrap();
+    weaver(&team, &["add", "skill", "deploy", "Ship the service"]).unwrap();
     (dir, target, team)
 }
 
@@ -30,7 +30,7 @@ fn target_and_team() -> (TempDir, PathBuf, PathBuf) {
 fn load_says_what_it_loaded_what_it_offers_and_where_it_went() {
     let (_dir, target, _team) = target_and_team();
 
-    let outcome = flayer(&target, &["load", "../team"]).unwrap();
+    let outcome = weaver(&target, &["load", "../team"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -45,12 +45,12 @@ fn load_says_what_it_loaded_what_it_offers_and_where_it_went() {
 #[test]
 fn load_from_inside_the_workspace_being_loaded_goes_into_the_one_above() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let team = dir.path().join("team");
     fs::create_dir(&team).unwrap();
-    flayer(&team, &["init"]).unwrap();
+    weaver(&team, &["init"]).unwrap();
 
-    let outcome = flayer(&team, &["load", "."]).unwrap();
+    let outcome = weaver(&team, &["load", "."]).unwrap();
 
     assert!(outcome
         .stdout
@@ -64,7 +64,7 @@ fn with_nothing_above_the_source_load_goes_into_the_default_workspace() {
     let home = TempDir::new().unwrap();
     let (_dir, _target, team) = target_and_team();
 
-    let outcome = flayer_at_home(&team, home.path(), &["load", "."]).unwrap();
+    let outcome = weaver_at_home(&team, home.path(), &["load", "."]).unwrap();
 
     assert!(
         outcome.stdout.ends_with(", the default one\n"),
@@ -72,7 +72,7 @@ fn with_nothing_above_the_source_load_goes_into_the_default_workspace() {
         outcome.stdout
     );
     // The one entry, pointing at team from the home workspace.
-    let home_workspace = mindflayer_core::FlayerWorkspace::open(home.path()).unwrap();
+    let home_workspace = mindweaver_core::WeaverWorkspace::open(home.path()).unwrap();
     let loads = home_workspace.loads();
     assert_eq!(loads.len(), 1);
     assert_eq!(
@@ -88,11 +88,11 @@ fn the_workspace_in_home_is_the_default_one_however_it_was_reached() {
     // it, as it is on every run from below home after the one that makes
     // it, which finds it walking up.
     let home = TempDir::new().unwrap();
-    flayer(home.path(), &["init"]).unwrap();
+    weaver(home.path(), &["init"]).unwrap();
     let (dir, _target, _team) = target_and_team();
     let named = home.path().to_string_lossy().into_owned();
 
-    let outcome = flayer_at_home(dir.path(), home.path(), &["-W", &named, "load", "team"]).unwrap();
+    let outcome = weaver_at_home(dir.path(), home.path(), &["-W", &named, "load", "team"]).unwrap();
 
     assert!(
         outcome.stdout.ends_with(&format!(
@@ -108,7 +108,7 @@ fn the_workspace_in_home_is_the_default_one_however_it_was_reached() {
 fn with_no_default_either_there_is_nowhere_to_load_into() {
     let (_dir, _target, team) = target_and_team();
 
-    let error = flayer(&team, &["load", "."]).unwrap_err();
+    let error = weaver(&team, &["load", "."]).unwrap_err();
 
     assert!(
         matches!(*error.error, CliError::NowhereToLoad { .. }),
@@ -122,10 +122,10 @@ fn load_loads_none_when_one_path_is_not_a_workspace() {
     let (dir, target, _team) = target_and_team();
     fs::create_dir(dir.path().join("plain")).unwrap();
 
-    let error = flayer(&target, &["load", "../team", "../plain"]).unwrap_err();
+    let error = weaver(&target, &["load", "../team", "../plain"]).unwrap_err();
 
     assert!(
-        error.error.to_string().contains("not a flayer workspace"),
+        error.error.to_string().contains("not a weaver workspace"),
         "{}",
         error.error
     );
@@ -142,7 +142,7 @@ fn load_loads_none_when_the_named_workspace_is_among_them() {
     let (dir, target, _team) = target_and_team();
     let named = target.to_string_lossy().into_owned();
 
-    let error = flayer(dir.path(), &["-W", &named, "load", "team", "target"]).unwrap_err();
+    let error = weaver(dir.path(), &["-W", &named, "load", "team", "target"]).unwrap_err();
 
     assert!(
         error.error.to_string().contains("cannot load itself"),
@@ -158,9 +158,9 @@ fn load_loads_none_when_the_named_workspace_is_among_them() {
 #[test]
 fn loading_twice_says_so() {
     let (_dir, target, _team) = target_and_team();
-    flayer(&target, &["load", "../team"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
 
-    let outcome = flayer(&target, &["load", "../team"]).unwrap();
+    let outcome = weaver(&target, &["load", "../team"]).unwrap();
 
     assert!(outcome
         .stdout
@@ -170,9 +170,9 @@ fn loading_twice_says_so() {
 #[test]
 fn unload_forgets_it_and_refuses_what_was_never_loaded() {
     let (dir, target, _team) = target_and_team();
-    flayer(&target, &["load", "../team"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
 
-    let error = flayer(&target, &["unload", "../team", "../nowhere"]).unwrap_err();
+    let error = weaver(&target, &["unload", "../team", "../nowhere"]).unwrap_err();
     assert!(
         error.error.to_string().contains("not loaded"),
         "{}",
@@ -180,7 +180,7 @@ fn unload_forgets_it_and_refuses_what_was_never_loaded() {
     );
     assert!(registry(&target).contains("\"../team\""), "all or nothing");
 
-    let outcome = flayer(&target, &["unload", "../team"]).unwrap();
+    let outcome = weaver(&target, &["unload", "../team"]).unwrap();
     assert_eq!(
         outcome.stdout,
         format!(
@@ -195,12 +195,12 @@ fn unload_forgets_it_and_refuses_what_was_never_loaded() {
 #[test]
 fn a_loaded_skill_is_on_the_shelf_listing_and_installs_like_any_other() {
     let (_dir, target, team) = target_and_team();
-    flayer(&target, &["load", "../team"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
 
-    let shelf = flayer(&target, &["gather", "list"]).unwrap();
+    let shelf = weaver(&target, &["gather", "list"]).unwrap();
     assert_eq!(shelf.stdout, "deploy  load:../team  Ship the service\n");
 
-    let outcome = flayer(&target, &["install", "-p", "collapse", "deploy"]).unwrap();
+    let outcome = weaver(&target, &["install", "-p", "collapse", "deploy"]).unwrap();
     assert_eq!(
         outcome.stdout,
         "installed deploy into collapse, from load:../team\n"
@@ -213,7 +213,7 @@ fn a_loaded_skill_is_on_the_shelf_listing_and_installs_like_any_other() {
     let source = own_directory_for(&team, Kind::Skill).join("deploy/SKILL.md");
     let edited = fs::read_to_string(&source).unwrap() + "\nOne more step.\n";
     fs::write(&source, edited).unwrap();
-    let again = flayer(
+    let again = weaver(
         &target,
         &["install", "-p", "collapse", "deploy", "--from", "team"],
     )
@@ -227,10 +227,10 @@ fn a_loaded_skill_is_on_the_shelf_listing_and_installs_like_any_other() {
 #[test]
 fn a_loaded_workspace_that_has_gone_is_a_warning_on_the_shelf_listing() {
     let (_dir, target, team) = target_and_team();
-    flayer(&target, &["load", "../team"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
     fs::remove_dir_all(&team).unwrap();
 
-    let shelf = flayer(&target, &["gather", "list"]).unwrap();
+    let shelf = weaver(&target, &["gather", "list"]).unwrap();
 
     assert!(!shelf.ok);
     assert!(
@@ -244,7 +244,7 @@ fn a_loaded_workspace_that_has_gone_is_a_warning_on_the_shelf_listing() {
         shelf.stderr
     );
     // And it is still the one worth unloading.
-    assert!(flayer(&target, &["unload", "../team"])
+    assert!(weaver(&target, &["unload", "../team"])
         .unwrap()
         .stdout
         .starts_with("unloaded ../team\n"));
@@ -254,10 +254,10 @@ fn a_loaded_workspace_that_has_gone_is_a_warning_on_the_shelf_listing() {
 fn an_empty_shelf_mentions_load_too() {
     let (_dir, target, _team) = target_and_team();
 
-    let shelf = flayer(&target, &["gather", "list"]).unwrap();
+    let shelf = weaver(&target, &["gather", "list"]).unwrap();
 
     assert!(
-        shelf.stdout.contains("flayer load <path>"),
+        shelf.stdout.contains("mindweaver load <path>"),
         "{}",
         shelf.stdout
     );
@@ -284,7 +284,7 @@ fn mind_load_goes_into_the_workspace_above_the_project() {
 fn load_is_reachable_the_long_way_round_too() {
     let (_dir, target, _team) = target_and_team();
 
-    let nested = mind(&target, &["flayer", "load", "../team"]).unwrap();
+    let nested = mind(&target, &["weaver", "load", "../team"]).unwrap();
 
     assert!(nested.stdout.starts_with("loaded team as ../team"));
 }
@@ -301,7 +301,7 @@ fn capital_l_loads_a_workspace_from_the_tui() {
     press_key(&mut app, KeyCode::Char('L'));
     assert!(matches!(app.mode, Mode::Loading(_)), "{:?}", app.mode);
     type_text(&mut app, "../team");
-    assert!(tui_drawn(&app).contains("flayer load ../team"));
+    assert!(tui_drawn(&app).contains("mindweaver load ../team"));
     let task = press_and_run(&mut app, KeyCode::Enter);
 
     assert_eq!(
@@ -315,13 +315,13 @@ fn capital_l_loads_a_workspace_from_the_tui() {
     assert!(tui_drawn(&app).contains("1 loaded"));
     assert!(app
         .transcript()
-        .contains("$ flayer load ../team\nloaded team as ../team"));
+        .contains("$ mindweaver load ../team\nloaded team as ../team"));
 }
 
 #[test]
 fn the_load_form_lists_what_is_loaded_and_unloads_one_once_asked() {
     let (_dir, target, _team) = target_and_team();
-    flayer(&target, &["load", "../team"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
     let mut app = tui_in(&target);
 
     press_key(&mut app, KeyCode::Char('L'));
@@ -360,7 +360,7 @@ fn a_path_that_is_not_a_workspace_keeps_the_load_form_open_with_why() {
     assert!(
         form.error
             .as_deref()
-            .is_some_and(|error| error.contains("not a flayer workspace")),
+            .is_some_and(|error| error.contains("not a weaver workspace")),
         "{:?}",
         form.error
     );
@@ -369,7 +369,7 @@ fn a_path_that_is_not_a_workspace_keeps_the_load_form_open_with_why() {
 #[test]
 fn the_shelf_and_the_install_screen_offer_a_loaded_skill() {
     let (_dir, target, _team) = target_and_team();
-    flayer(&target, &["load", "../team"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
     let mut app = tui_in(&target);
 
     press_and_run(&mut app, KeyCode::Char('s'));
@@ -397,7 +397,7 @@ fn on_a_project_on_its_own_capital_l_is_mind_load() {
     fs::create_dir_all(&project).unwrap();
     fs::create_dir_all(&team).unwrap();
     mind(&project, &["init"]).unwrap();
-    flayer(&team, &["init"]).unwrap();
+    weaver(&team, &["init"]).unwrap();
     let mut app = App::opened_on(
         Scope::Project,
         project.clone(),
@@ -431,11 +431,11 @@ fn on_a_project_on_its_own_capital_l_is_mind_load() {
 fn load_on_its_own_lists_what_is_loaded() {
     let (dir, target, _team) = target_and_team();
     fs::create_dir(dir.path().join("gone")).unwrap();
-    flayer(&dir.path().join("gone"), &["init"]).unwrap();
-    flayer(&target, &["load", "../team", "../gone"]).unwrap();
+    weaver(&dir.path().join("gone"), &["init"]).unwrap();
+    weaver(&target, &["load", "../team", "../gone"]).unwrap();
     fs::remove_dir_all(dir.path().join("gone")).unwrap();
 
-    let listed = flayer(&target, &["load"]).unwrap();
+    let listed = weaver(&target, &["load"]).unwrap();
 
     assert!(
         listed
@@ -452,7 +452,7 @@ fn load_on_its_own_lists_what_is_loaded() {
 fn nothing_loaded_says_how_to_load() {
     let (_dir, target, _team) = target_and_team();
 
-    let listed = flayer(&target, &["load"]).unwrap();
+    let listed = weaver(&target, &["load"]).unwrap();
 
     assert!(
         listed.stdout.starts_with("nothing loaded\n"),
@@ -467,26 +467,26 @@ fn a_failed_load_or_any_unload_never_makes_the_default_workspace() {
     let dir = TempDir::new().unwrap();
     fs::create_dir(dir.path().join("plain")).unwrap();
 
-    flayer_at_home(dir.path(), home.path(), &["load", "plain"]).unwrap_err();
-    flayer_at_home(dir.path(), home.path(), &["unload", "plain"]).unwrap_err();
+    weaver_at_home(dir.path(), home.path(), &["load", "plain"]).unwrap_err();
+    weaver_at_home(dir.path(), home.path(), &["unload", "plain"]).unwrap_err();
 
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
 fn install_says_a_loaded_workspace_has_gone_rather_than_only_that_nothing_is_offered() {
     let (_dir, target, team) = target_and_team();
-    flayer(&target, &["load", "../team"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
     fs::remove_dir_all(&team).unwrap();
 
-    let error = flayer(&target, &["install", "-p", "collapse", "deploy"]).unwrap_err();
+    let error = weaver(&target, &["install", "-p", "collapse", "deploy"]).unwrap_err();
 
     assert!(error.error.to_string().contains("nothing called `deploy`"));
     assert!(
         error
             .warnings
             .iter()
-            .any(|warning| warning.text.contains("not a flayer workspace")),
+            .any(|warning| warning.text.contains("not a weaver workspace")),
         "{:?}",
         error.warnings
     );
@@ -499,8 +499,8 @@ fn a_broken_skill_in_a_loaded_workspace_is_a_warning() {
     fs::create_dir_all(&broken).unwrap();
     fs::write(broken.join("SKILL.md"), "no front matter").unwrap();
 
-    let loaded = flayer(&target, &["load", "../team"]).unwrap();
-    let shelf = flayer(&target, &["gather", "list"]).unwrap();
+    let loaded = weaver(&target, &["load", "../team"]).unwrap();
+    let shelf = weaver(&target, &["gather", "list"]).unwrap();
 
     assert!(!loaded.ok, "{:?}", loaded.stderr);
     assert!(!shelf.ok);
@@ -516,7 +516,7 @@ fn from_takes_the_path_given_to_load_typed_from_the_project() {
     let (_dir, target, _team) = target_and_team();
     let collapse = target.join("collapse");
     // Two places offer `deploy`, so --from is needed.
-    flayer(&target, &["add", "skill", "deploy", "Ours"]).unwrap();
+    weaver(&target, &["add", "skill", "deploy", "Ours"]).unwrap();
     mind(&collapse, &["load", "../../team"]).unwrap();
 
     let installed = mind(&collapse, &["install", "deploy", "--from", "../../team"]).unwrap();
@@ -549,7 +549,7 @@ fn the_tui_will_not_load_the_workspace_on_screen_into_somewhere_else() {
         .error
         .as_deref()
         .is_some_and(|error| error.contains("cannot load itself")));
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -561,8 +561,8 @@ fn a_project_on_its_own_sees_and_unloads_what_the_workspace_above_loads() {
     fs::create_dir_all(&project).unwrap();
     fs::create_dir_all(&team).unwrap();
     mind(&project, &["init"]).unwrap();
-    flayer(&team, &["init"]).unwrap();
-    flayer_at_home(&project, home.path(), &["load", "../team"]).unwrap();
+    weaver(&team, &["init"]).unwrap();
+    weaver_at_home(&project, home.path(), &["load", "../team"]).unwrap();
     let mut app = App::opened_on(
         Scope::Project,
         project.clone(),
@@ -585,16 +585,16 @@ fn a_project_on_its_own_sees_and_unloads_what_the_workspace_above_loads() {
 
 #[test]
 fn switching_to_a_loaded_copy_of_an_installed_skill_replaces_it() {
-    use mindflayer_cli::install::{self as install_screen, state::Pending};
+    use mindweaver_cli::install::{self as install_screen, state::Pending};
     let (_dir, target, _team) = target_and_team();
-    flayer(&target, &["add", "skill", "deploy", "Ours"]).unwrap();
-    flayer(&target, &["load", "../team"]).unwrap();
-    flayer(
+    weaver(&target, &["add", "skill", "deploy", "Ours"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
+    weaver(
         &target,
         &["install", "-p", "collapse", "deploy", "--from", "workspace"],
     )
     .unwrap();
-    let workspace = mindflayer_core::FlayerWorkspace::open(&target).unwrap();
+    let workspace = mindweaver_core::WeaverWorkspace::open(&target).unwrap();
     let ledger = workspace.ledger().unwrap();
     let mut screen = screen_for(&workspace, &ledger);
 
@@ -617,7 +617,7 @@ fn switching_to_a_loaded_copy_of_an_installed_skill_replaces_it() {
 
     assert_eq!(
         outcome.stdout,
-        "$ flayer install -p collapse --from load:../team skill:deploy\n\
+        "$ mindweaver install -p collapse --from load:../team skill:deploy\n\
          updated deploy in collapse, from load:../team\n"
     );
     for copy in copies(&target.join("collapse"), "deploy") {
@@ -628,11 +628,11 @@ fn switching_to_a_loaded_copy_of_an_installed_skill_replaces_it() {
 
 #[test]
 fn a_loaded_skill_that_vanished_does_not_stop_the_rest_of_the_install_screen() {
-    use mindflayer_cli::install as install_screen;
+    use mindweaver_cli::install as install_screen;
     let (_dir, target, team) = target_and_team();
-    flayer(&team, &["add", "skill", "review", "Review it"]).unwrap();
-    flayer(&target, &["load", "../team"]).unwrap();
-    let workspace = mindflayer_core::FlayerWorkspace::open(&target).unwrap();
+    weaver(&team, &["add", "skill", "review", "Review it"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
+    let workspace = mindweaver_core::WeaverWorkspace::open(&target).unwrap();
     let ledger = workspace.ledger().unwrap();
     let mut screen = screen_for(&workspace, &ledger);
     press(
@@ -651,10 +651,10 @@ fn a_loaded_skill_that_vanished_does_not_stop_the_rest_of_the_install_screen() {
     assert!(!outcome.ok);
     assert_eq!(
         outcome.stdout,
-        "$ flayer install -p collapse --from load:../team skill:deploy\n\
+        "$ mindweaver install -p collapse --from load:../team skill:deploy\n\
          error: nothing called `deploy` can be installed from load:../team: gather it, load a \
-         workspace that has it with `flayer load`, or add it to the workspace with `flayer add`\n\
-         $ flayer install -p collapse --from load:../team skill:review\n\
+         workspace that has it with `mindweaver load`, or add it to the workspace with `mindweaver add`\n\
+         $ mindweaver install -p collapse --from load:../team skill:review\n\
          installed review into collapse, from load:../team\n"
     );
 }
@@ -662,23 +662,23 @@ fn a_loaded_skill_that_vanished_does_not_stop_the_rest_of_the_install_screen() {
 /// `target_and_team` with a skill of the target's own, `review`, loading
 /// `team`, which has gone since: what the screen and its lines say of a
 /// loaded workspace that cannot be opened.
-fn loading_what_has_gone() -> (TempDir, PathBuf, FlayerWorkspace) {
+fn loading_what_has_gone() -> (TempDir, PathBuf, WeaverWorkspace) {
     let (dir, target, team) = target_and_team();
-    flayer(&target, &["add", "skill", "review", "Review it"]).unwrap();
-    flayer(&target, &["load", "../team"]).unwrap();
+    weaver(&target, &["add", "skill", "review", "Review it"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
     fs::remove_dir_all(&team).unwrap();
-    let workspace = FlayerWorkspace::open(&target).unwrap();
+    let workspace = WeaverWorkspace::open(&target).unwrap();
     (dir, target, workspace)
 }
 
 /// How many times `outcome` says anything of a workspace that is not one,
 /// stdout and stderr together.
 fn said_gone(outcome: &Outcome) -> usize {
-    outcome.stdout.matches("not a flayer workspace").count()
+    outcome.stdout.matches("not a weaver workspace").count()
         + outcome
             .stderr
             .iter()
-            .filter(|line| line.text.contains("not a flayer workspace"))
+            .filter(|line| line.text.contains("not a weaver workspace"))
             .count()
 }
 
@@ -697,10 +697,10 @@ fn a_loaded_workspace_that_has_gone_is_said_once_by_the_install_line_and_not_aga
         Vec::new(),
     );
 
-    // Under the line that said it, as `flayer install -p` says it typed.
+    // Under the line that said it, as `mindweaver install -p` says it typed.
     assert!(
         outcome.stdout.starts_with(
-            "$ flayer install -p collapse --from workspace skill:review\n\
+            "$ mindweaver install -p collapse --from workspace skill:review\n\
              installed review into collapse, from workspace\n\
              warning: "
         ),
@@ -715,7 +715,7 @@ fn a_loaded_workspace_that_has_gone_is_said_once_by_the_install_line_and_not_aga
 #[test]
 fn a_loaded_workspace_that_has_gone_is_the_screens_to_say_when_no_line_installs() {
     let (_dir, target, workspace) = loading_what_has_gone();
-    flayer(
+    weaver(
         &target,
         &["install", "-p", "collapse", "review", "--from", "workspace"],
     )
@@ -743,7 +743,7 @@ fn a_loaded_workspace_that_has_gone_is_the_screens_to_say_when_no_line_installs(
     assert_eq!(quit.stdout, "nothing applied\n");
     assert_eq!(
         removed.stdout,
-        "$ flayer uninstall -p collapse skill:review\nremoved review from collapse\n"
+        "$ mindweaver uninstall -p collapse skill:review\nremoved review from collapse\n"
     );
     for outcome in [quit, removed] {
         assert_eq!(said_gone(&outcome), 1, "{outcome:?}");
@@ -758,9 +758,9 @@ fn a_loaded_workspace_that_has_gone_is_the_screens_to_say_when_no_line_installs(
 #[test]
 fn ticking_the_installed_copy_off_and_on_again_changes_nothing() {
     let (_dir, target, _team) = target_and_team();
-    flayer(&target, &["add", "skill", "deploy", "Ours"]).unwrap();
-    flayer(&target, &["load", "../team"]).unwrap();
-    flayer(
+    weaver(&target, &["add", "skill", "deploy", "Ours"]).unwrap();
+    weaver(&target, &["load", "../team"]).unwrap();
+    weaver(
         &target,
         &[
             "install",
@@ -772,7 +772,7 @@ fn ticking_the_installed_copy_off_and_on_again_changes_nothing() {
         ],
     )
     .unwrap();
-    let workspace = mindflayer_core::FlayerWorkspace::open(&target).unwrap();
+    let workspace = mindweaver_core::WeaverWorkspace::open(&target).unwrap();
     let ledger = workspace.ledger().unwrap();
 
     for keys in [
@@ -794,7 +794,7 @@ fn ticking_the_installed_copy_off_and_on_again_changes_nothing() {
 fn a_shelf_source_and_a_loaded_workspace_at_one_path_are_each_picked_by_their_own_origin() {
     let repo = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Gathered"))]);
     // Keeping its own where a gather looks, so one folder is both.
-    flayer(repo.path(), &["init", "--skills", "skills"]).unwrap();
+    weaver(repo.path(), &["init", "--skills", "skills"]).unwrap();
     fs::write(
         repo.path().join("skills/deploy/SKILL.md"),
         skill_file("deploy", "Loaded"),
@@ -802,8 +802,8 @@ fn a_shelf_source_and_a_loaded_workspace_at_one_path_are_each_picked_by_their_ow
     .unwrap();
     let (_dir, target, _team) = target_and_team();
     let url = repo.path().to_string_lossy().into_owned();
-    flayer(&target, &["gather", "git", &url]).unwrap();
-    flayer(&target, &["load", &url]).unwrap();
+    weaver(&target, &["gather", "git", &url]).unwrap();
+    weaver(&target, &["load", &url]).unwrap();
     let skills: Vec<PathBuf> = copies(&target.join("collapse"), "deploy")
         .into_iter()
         .map(|copy| copy.join("SKILL.md"))
@@ -814,7 +814,7 @@ fn a_shelf_source_and_a_loaded_workspace_at_one_path_are_each_picked_by_their_ow
             .all(|skill| fs::read_to_string(skill).unwrap().contains(text))
     };
 
-    let shelf = flayer(
+    let shelf = weaver(
         &target,
         &["install", "-p", "collapse", "deploy", "--from", &url],
     )
@@ -826,7 +826,7 @@ fn a_shelf_source_and_a_loaded_workspace_at_one_path_are_each_picked_by_their_ow
     );
     assert!(all_hold("Gathered"));
 
-    let loaded = flayer(
+    let loaded = weaver(
         &target,
         &[
             "install",
@@ -848,7 +848,7 @@ fn unlink_of_two_spellings_of_one_project_is_one_unlink() {
     let dir = workspace_with_two();
     std::os::unix::fs::symlink(dir.path().join("alpha"), dir.path().join("alias")).unwrap();
 
-    let outcome = flayer(dir.path(), &["unlink", "alpha", "alias"]).unwrap();
+    let outcome = weaver(dir.path(), &["unlink", "alpha", "alias"]).unwrap();
 
     assert_eq!(outcome.stdout, "unlinked alpha\n");
     assert!(!registry(dir.path()).contains("\"alpha\""));
@@ -863,9 +863,9 @@ fn a_shelf_skill_with_a_name_that_is_not_one_folder_is_a_warning_not_a_row() {
     ]);
     let (_dir, target, _team) = target_and_team();
     let url = repo.path().to_string_lossy().into_owned();
-    flayer(&target, &["gather", "git", &url]).unwrap();
+    weaver(&target, &["gather", "git", &url]).unwrap();
 
-    let shelf = flayer(&target, &["gather", "list"]).unwrap();
+    let shelf = weaver(&target, &["gather", "list"]).unwrap();
 
     assert!(!shelf.stdout.contains("../skills"), "{}", shelf.stdout);
     assert!(shelf.stdout.contains("good"));
@@ -879,12 +879,12 @@ fn a_shelf_skill_with_a_name_that_is_not_one_folder_is_a_warning_not_a_row() {
 fn two_spellings_of_one_loaded_workspace_are_listed_as_the_same() {
     let (_dir, target, _team) = target_and_team();
     fs::write(
-        target.join(FLAYER_DIR).join(FLAYER_CONFIG),
+        target.join(WEAVER_DIR).join(WEAVER_CONFIG),
         registry(&target).replace("loaded = []", "loaded = [\"../team\", \"./../team\"]"),
     )
     .unwrap();
 
-    let listed = flayer(&target, &["load"]).unwrap();
+    let listed = weaver(&target, &["load"]).unwrap();
 
     assert!(
         listed
@@ -905,11 +905,11 @@ fn nowhere_to_load_reads_as_a_sentence() {
     // Outside every workspace, with no default either.
     let dir = TempDir::new().unwrap();
 
-    let unload = flayer(dir.path(), &["unload", "nowhere"])
+    let unload = weaver(dir.path(), &["unload", "nowhere"])
         .unwrap_err()
         .error
         .to_string();
-    let list = flayer(dir.path(), &["load"]).unwrap_err().error.to_string();
+    let list = weaver(dir.path(), &["load"]).unwrap_err().error.to_string();
 
     assert!(
         unload.contains("but the ones named at or above"),

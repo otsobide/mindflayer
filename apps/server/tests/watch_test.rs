@@ -10,7 +10,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use common::*;
-use mindflayer_server::DEBOUNCE;
+use mindweaver_server::DEBOUNCE;
 use tempfile::TempDir;
 
 fn watched(path: &Path, scope: &str) -> Watched {

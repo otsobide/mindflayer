@@ -223,7 +223,7 @@ fn a_change_without_the_panels_own_header_is_refused() {
     for value in [None, Some("0"), Some("true"), Some("")] {
         let headers = panel(&[("x-mindflayer", value)]);
         let (condition, message) = from_the_panel(&Method::POST, &headers).unwrap_err();
-        assert_eq!(condition, Condition::XMindflayerRequired, "{value:?}");
+        assert_eq!(condition, Condition::PanelHeaderRequired, "{value:?}");
         assert!(message.contains("X-Mindflayer: 1"), "{message}");
     }
 }

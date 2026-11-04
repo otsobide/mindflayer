@@ -9,7 +9,7 @@ import { useSnapshot } from '@/api/snapshot'
 import { TransportError } from '@/api/transport'
 import { every, first, useQueryChange } from '@/address'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer } from '@/components/CommandHint.vue'
+import CommandHint, { weaver } from '@/components/CommandHint.vue'
 import FolderPicker from '@/components/FolderPicker.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 
@@ -52,7 +52,7 @@ const roots = ref('')
 const depth = ref<number | null | undefined>(null)
 
 // What the address asked, or the workspace's own folder while it asks
-// nothing, as `flayer scan` with no folder looks there: a starting point
+// nothing, as `mindweaver scan` with no folder looks there: a starting point
 // to change, never scanned until asked.
 watch([asked, () => snapshot.value?.workspace.path], ([now, path]) => {
   if (now) {
@@ -97,7 +97,7 @@ function scan() {
   }
 }
 
-// Grouped, never sorted: the scan's order is `flayer scan --suggest`'s,
+// Grouped, never sorted: the scan's order is `mindweaver scan --suggest`'s,
 // core's, what is most worth linking first.
 const moved = computed(() => scanned.value?.found.filter(suggestion => suggestion.moved_from !== null) ?? [])
 const offered = computed(() => scanned.value?.found.filter(suggestion => suggestion.offers !== null) ?? [])
@@ -187,7 +187,7 @@ const refusal = computed(() => {
         >
           <p class="text-sm text-muted">
             Look for mind projects, and git repositories that could be one, under the folders you name, as
-            <code class="font-mono text-xs">flayer scan --suggest</code> does: what is most worth linking first. A folder is only read.
+            <code class="font-mono text-xs">mindweaver scan --suggest</code> does: what is most worth linking first. A folder is only read.
           </p>
           <div class="flex flex-wrap items-end gap-3">
             <UFormField
@@ -464,7 +464,7 @@ const refusal = computed(() => {
               An entry here points where no project is any more, and the workspace never learned its id, so nothing found can be told to be it, moved. If you know where it went:
             </p>
             <CommandHint
-              :commands="scanned.untraced.map(entry => ({ line: flayer(workspace.workspace, `relink ${entry} <PATH>`), does: 'follow it to where it moved' }))"
+              :commands="scanned.untraced.map(entry => ({ line: weaver(workspace.workspace, `relink ${entry} <PATH>`), does: 'follow it to where it moved' }))"
             />
           </div>
 

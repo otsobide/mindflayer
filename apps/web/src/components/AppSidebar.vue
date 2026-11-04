@@ -58,7 +58,7 @@ const links = computed<NavigationMenuItem[]>(() => VIEWS.map(({ label, icon, to,
 const { macOS } = useKbd()
 const paletteKeys = computed(() => (macOS.value ? 'Meta+K Control+K' : 'Control+K'))
 
-// Which server this panel came from. Each `flayer ui` takes a port of its
+// Which server this panel came from. Each `mindweaver ui` takes a port of its
 // own, so two open panels can belong to two different launches.
 const address = window.location.host
 </script>

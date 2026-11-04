@@ -422,7 +422,7 @@ fn set_first_line_prefix(table: &mut Table, prefix: RawString) {
 /// A comment's text that `text` does not hold, to find a line by.
 fn mark(text: &str) -> String {
     loop {
-        let mark = format!("mindflayer-removed-{}", crate::copy::unique_name());
+        let mark = format!("mindweaver-removed-{}", crate::copy::unique_name());
         if !text.contains(&mark) {
             return mark;
         }

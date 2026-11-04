@@ -2,7 +2,7 @@
 //!
 //! `gix`'s own answer runs the credential helpers git config names and, when
 //! none of them has a credential, asks a person: the askpass program, then the
-//! terminal. Mindflayer keeps the first half and refuses the second. The TUI
+//! terminal. Mindweaver keeps the first half and refuses the second. The TUI
 //! owns the terminal while a gather runs, so a prompt there is a screen that
 //! stops answering, and a server has no terminal at all. A credential nobody
 //! has is an error instead, which a person can act on afterwards.

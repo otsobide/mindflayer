@@ -318,7 +318,7 @@ fn a_directory_linked_already_is_named_by_the_entry_as_the_marker_spells_it() {
 
     assert_eq!(
         error.to_string(),
-        "/w/apps/new: the workspace links it already, as apps/new; `flayer unlink` that entry first"
+        "/w/apps/new: the workspace links it already, as apps/new; `mindweaver unlink` that entry first"
     );
 }
 
@@ -354,7 +354,7 @@ fn a_project_last_seen_elsewhere_says_the_relink_that_follows_it() {
         error.to_string(),
         format!(
             "/p/new: holds project {id}, which the workspace last saw at apps/old; \
-             `flayer relink apps/old /p/new` follows it from there"
+             `mindweaver relink apps/old /p/new` follows it from there"
         )
     );
 }

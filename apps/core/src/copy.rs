@@ -206,7 +206,7 @@ fn moved(from: &Path, to: &Path) -> Result<(), io::Error> {
 /// Beside is where an agent looks. OpenCode's first line globs hidden folders
 /// in a skills folder too, so a half-made `.deploy.mindflayer-new` next to
 /// `deploy` is a skill it may load, and one an interrupted run leaves there it
-/// loads every time after. Built in a scratch folder Mindflayer owns, a copy is out of
+/// loads every time after. Built in a scratch folder Mindweaver owns, a copy is out of
 /// every agent's sight until a rename puts it in place whole, and what an
 /// interrupted run leaves is out of sight too.
 ///
@@ -271,7 +271,7 @@ impl PlaceError {
 /// committed: `*`, as a Python venv ignores itself, inside the folder it is
 /// about rather than in a team's `.gitignore`.
 const IGNORE: &str = "\
-# Mindflayer builds what it installs here, then moves it into place.
+# Mindweaver builds what it installs here, then moves it into place.
 # Nothing in this folder is meant to be committed.
 *
 ";
@@ -677,6 +677,11 @@ pub(crate) fn random() -> u64 {
     hasher.finish()
 }
 
+/// What a hidden sibling of a copy is named by, between the copy's name and
+/// what it is (`new` or `old`): spelled here alone, since the next install
+/// clears what an interrupted one left by this very name.
+const BESIDE: &str = ".mindflayer-";
+
 /// A hidden sibling of `to`: where [`replace`] stages, and where installs
 /// staged before [`Stage`].
 fn beside(to: &Path, what: &str) -> PathBuf {
@@ -684,7 +689,7 @@ fn beside(to: &Path, what: &str) -> PathBuf {
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    to.with_file_name(format!(".{name}.mindflayer-{what}"))
+    to.with_file_name(format!(".{name}{BESIDE}{what}"))
 }
 
 /// What replacing a directory turned out to be.

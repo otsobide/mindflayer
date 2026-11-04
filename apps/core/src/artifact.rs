@@ -136,7 +136,7 @@ impl ArtifactCopy {
     }
 
     /// Whether the ledger the copies were checked against records
-    /// Mindflayer putting it there; never, when they were checked against
+    /// Mindweaver putting it there; never, when they were checked against
     /// none.
     pub fn is_installed(&self) -> bool {
         self.placement.installed
@@ -171,7 +171,7 @@ impl Serialize for ArtifactCopy {
 /// Who put a copy where it is, as far as its folder and the ledger say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Provenance {
-    /// The ledger records Mindflayer putting it there.
+    /// The ledger records Mindweaver putting it there.
     Installed,
     /// In a folder its holder keeps artifacts in, and recorded by nothing:
     /// the holder's own work. A workspace's own artifacts and what it
@@ -180,7 +180,7 @@ pub enum Provenance {
     Authored,
     /// In an agent's folder, outside any its holder authors in, and recorded
     /// by nothing: somebody's, put there some other way, and never
-    /// Mindflayer's to change.
+    /// Mindweaver's to change.
     Foreign,
 }
 
@@ -442,7 +442,7 @@ impl Artifact {
         self.differ |= differs || other.differ;
     }
 
-    /// Mark as installed each copy `recorded` says Mindflayer put where it
+    /// Mark as installed each copy `recorded` says Mindweaver put where it
     /// is, and every other as not.
     pub(crate) fn record(&mut self, recorded: impl Fn(&Path) -> bool) {
         self.placement.installed = recorded(&self.path);
@@ -633,7 +633,7 @@ fn skill_issues(manifest: &SkillManifest, folder: Option<&str>) -> Vec<Validatio
 /// What a rule's front matter left unread, each only worth a warning: what is
 /// not read is still in the file, and the rule still says what it says.
 ///
-/// And each refused when Mindflayer writes a rule from a template, which is
+/// And each refused when Mindweaver writes a rule from a template, which is
 /// the time to find out that its front matter would not be read.
 pub(crate) fn rule_issues(manifest: &RuleManifest) -> Vec<ValidationIssue> {
     let mut issues = Vec::new();
@@ -655,7 +655,7 @@ pub(crate) fn rule_issues(manifest: &RuleManifest) -> Vec<ValidationIssue> {
 /// `manifest` breaks once it is filed in a folder called `folder`.
 ///
 /// Asked of the skill as it is about to be written, rather than as it sits:
-/// the folder it is filed in is the one Mindflayer is about to name, which is
+/// the folder it is filed in is the one Mindweaver is about to name, which is
 /// not always the one it was read from.
 pub(crate) fn strict_issues(manifest: &SkillManifest, folder: &str) -> Vec<ValidationIssue> {
     skill_issues(manifest, Some(folder))
@@ -664,7 +664,7 @@ pub(crate) fn strict_issues(manifest: &SkillManifest, folder: &str) -> Vec<Valid
         .collect()
 }
 
-/// Whatever a rule reading `source` breaks that Mindflayer will not write:
+/// Whatever a rule reading `source` breaks that Mindweaver will not write:
 /// having nothing to say, which `validate` calls invalid, and whatever its
 /// front matter leaves unread ([`rule_issues`]), which a template is refused
 /// for.
@@ -823,7 +823,7 @@ codes!(ValidationIssue {
 });
 
 impl ValidationIssue {
-    /// Whether this breaks one of the strict rules: the ones Mindflayer will
+    /// Whether this breaks one of the strict rules: the ones Mindweaver will
     /// not break when it writes a skill into a project (creating, renaming
     /// or installing one) rather than only report.
     ///
@@ -852,7 +852,7 @@ impl ValidationIssue {
     /// `compatibility` and `metadata`, the same ones `is_strict` lets through:
     /// were they invalid, a skill installed with nested metadata would fail
     /// its project's `validate` from then on, and the only way to clear it
-    /// would be to edit the copy, which stops Mindflayer from updating it.
+    /// would be to edit the copy, which stops Mindweaver from updating it.
     /// And whatever a rule's front matter leaves unread, since a rule needs
     /// none to be read: front matter that does not parse is content, and a key
     /// written in another shape is ignored. Matched in full rather than with

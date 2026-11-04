@@ -25,7 +25,7 @@ fn the_walk_goes_from_the_start_up_and_stops_below_the_root() {
     assert_eq!(searched(Path::new("/")).count(), 0);
 }
 
-/// What a team's `CLAUDE.md` might hold before Mindflayer writes in it.
+/// What a team's `CLAUDE.md` might hold before Mindweaver writes in it.
 const TEAM: &str = "\
 # Working here
 
@@ -229,7 +229,7 @@ fn an_import_in_an_html_comment_is_not_one() {
     assert!(!follows("<!-- one -->\n<!-- two\n@AGENTS.md\n-->\n"));
     assert!(!follows("<!--\n--> <!--\n@AGENTS.md\n-->\n"));
     assert!(follows("<!--\nnotes\n-->\n@AGENTS.md\n"));
-    // Mindflayer's markers are comments of one line each.
+    // Mindweaver's markers are comments of one line each.
     assert!(follows(
         "<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n"
     ));

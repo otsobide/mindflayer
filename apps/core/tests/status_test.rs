@@ -4,19 +4,18 @@
 use std::fs;
 use std::path::PathBuf;
 
-use mindflayer_core::ledger::{InstallRecord, Target};
-use mindflayer_core::value::ContentHash;
-use mindflayer_core::{
-    hash, Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MarkerFile,
-    MindProject, ProjectStatus, Share, State, Status, StatusFailure, Unreached, MIND_DIR,
-    SETTINGS_JSON_FILE,
+use mindweaver_core::ledger::{InstallRecord, Target};
+use mindweaver_core::value::ContentHash;
+use mindweaver_core::{
+    hash, Agent, ArtifactStatus, Directories, Kind, Ledger, MarkerFile, MindProject, ProjectStatus,
+    Share, State, Status, StatusFailure, Unreached, WeaverWorkspace, MIND_DIR, SETTINGS_JSON_FILE,
 };
 use tempfile::TempDir;
 
 /// A workspace in a temporary folder.
-fn workspace() -> (TempDir, FlayerWorkspace) {
+fn workspace() -> (TempDir, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     (dir, workspace)
 }
 
@@ -24,7 +23,7 @@ fn workspace() -> (TempDir, FlayerWorkspace) {
 /// authoring skills in `skills` and rules in `rules`, and linked.
 fn marked(
     dir: &TempDir,
-    workspace: &mut FlayerWorkspace,
+    workspace: &mut WeaverWorkspace,
     name: &str,
     agents: &[Agent],
 ) -> MindProject {
@@ -59,7 +58,7 @@ fn write_skill(dir: &std::path::Path, name: &str) {
 
 /// Offer `name` among the workspace's own, holding what [`put`] writes: the
 /// place a record from `workspace` came from, offering what its copies hold.
-fn offer(workspace: &FlayerWorkspace, name: &str) -> PathBuf {
+fn offer(workspace: &WeaverWorkspace, name: &str) -> PathBuf {
     let dir = workspace
         .own()
         .directory_for(Kind::Skill)
@@ -395,7 +394,7 @@ fn a_stale_entry_is_reported_as_stale_and_the_rest_still_are() {
     let old = marked(&dir, &mut workspace, "old-api", &Agent::ALL);
     put(&alpha, "skills", "review");
     fs::remove_dir_all(old.root()).unwrap();
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
 
     let (status, failures) = Status::of_workspace(&workspace);
 
@@ -437,7 +436,7 @@ fn each_project_says_the_file_its_marker_is_read_from() {
     workspace.link(&MindProject::open(&gamma).unwrap()).unwrap();
     let old = marked(&dir, &mut workspace, "old-api", &Agent::ALL);
     fs::remove_dir_all(old.root()).unwrap();
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
 
     let (status, _) = Status::of_workspace(&workspace);
 
@@ -465,7 +464,7 @@ fn two_entries_for_one_project_report_it_once() {
     let marker = dir.path().join(".mindflayer/flayer.toml");
     let text = fs::read_to_string(&marker).unwrap();
     fs::write(&marker, text.replace("\"alpha\"", "\"alpha\", \"./alpha\"")).unwrap();
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
     assert_eq!(workspace.config().projects.len(), 2);
 
     let (status, _) = Status::of_workspace(&workspace);
@@ -674,7 +673,7 @@ fn reading_a_project_hands_back_the_catalog_it_read_with_the_records_marked() {
 fn installing_in(project: &mut MindProject, folders: &[&str]) {
     project
         .change_settings(|settings| {
-            settings.targets = mindflayer_core::Targets::default()
+            settings.targets = mindweaver_core::Targets::default()
                 .with(Kind::Skill, folders.iter().map(PathBuf::from).collect());
         })
         .unwrap();

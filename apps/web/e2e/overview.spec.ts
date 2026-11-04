@@ -2,12 +2,12 @@ import type { Held } from '../src/api/generated/Held'
 import { expect, listing, test } from './panel.ts'
 
 /*
- * The overview's cards against `flayer list --json`, counted here from the
+ * The overview's cards against `mindweaver list --json`, counted here from the
  * rows the listing prints rather than read from a count beside them: the
  * panel's come from the snapshot's summary, so the two meet only if core
  * counts what it lists.
  */
-test('the overview counts what flayer list --json lists', async ({ page, panel }) => {
+test('the overview counts what mindweaver list --json lists', async ({ page, panel }) => {
   const { library, projects } = listing()
   await panel.open('/')
 

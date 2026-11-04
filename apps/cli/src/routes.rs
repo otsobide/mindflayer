@@ -15,8 +15,8 @@
 //! and adding one does not. So a test pins each of them by name
 //! (`routes_test`), as one pins a report's JSON.
 
-use mindflayer_core::install::Cell;
-use mindflayer_server::{Arguments, Method, Parameter, Route, Shape};
+use mindweaver_core::install::Cell;
+use mindweaver_server::{Arguments, Method, Parameter, Route, Shape};
 use serde::Deserialize;
 
 use crate::backend::{Draft, Query};
@@ -126,7 +126,7 @@ pub fn table() -> Vec<Route<Query>> {
         ),
         get(
             "/scan",
-            "What could be linked under the folders named, as `flayer scan --suggest` finds \
+            "What could be linked under the folders named, as `mindweaver scan --suggest` finds \
              and ranks it",
             vec![
                 Parameter::optional(
@@ -171,7 +171,7 @@ pub fn table() -> Vec<Route<Query>> {
         ),
         get(
             "/updates",
-            "What updating every project the workspace links would do, as `flayer update \
+            "What updating every project the workspace links would do, as `mindweaver update \
              --all` says it without `--yes`",
             Vec::new(),
             "Updates",

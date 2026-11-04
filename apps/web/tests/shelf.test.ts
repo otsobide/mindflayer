@@ -48,7 +48,7 @@ describe('the shelf', () => {
     const { page } = await render('/shelf', snapshot)
 
     expect(texts(page, '[data-testid="commands"] code')).toEqual([
-      `$ flayer -W ${snapshot.workspace.path} install -p <PROJECT> <KIND>:<NAME> --from <ORIGIN>`
+      `$ mindweaver -W ${snapshot.workspace.path} install -p <PROJECT> <KIND>:<NAME> --from <ORIGIN>`
     ])
   })
 
@@ -84,8 +84,8 @@ describe('the shelf', () => {
     const { page } = await render('/shelf', snapshot)
 
     expect(texts(page.get('[data-testid="empty"]'), 'code')).toEqual([
-      `$ flayer init ${snapshot.workspace.path}`,
-      `$ flayer -W ${snapshot.workspace.path} gather git <URL>`
+      `$ mindweaver init ${snapshot.workspace.path}`,
+      `$ mindweaver -W ${snapshot.workspace.path} gather git <URL>`
     ])
   })
 

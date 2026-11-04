@@ -1,4 +1,4 @@
-//! `flayer migrate` and `mind migrate`: bringing what an older Mindflayer
+//! `mindweaver migrate` and `mind migrate`: bringing what an older Mindweaver
 //! made into the layout a new one has. `--library` moves a workspace's own
 //! into its library; `mind migrate`, `-p` and `--all-projects` move a
 //! project from its `mind.toml` or its `settings.json` to a
@@ -7,8 +7,8 @@
 
 use std::fmt::Write as _;
 
-use mindflayer_core::migrate::{self, MigrateError, Plan, ProjectPlan, Stranded};
-use mindflayer_core::{Agent, AgentHomes, FlayerWorkspace, MarkerFile, MindProject, Share};
+use mindweaver_core::migrate::{self, MigrateError, Plan, ProjectPlan, Stranded};
+use mindweaver_core::{Agent, AgentHomes, MarkerFile, MindProject, Share, WeaverWorkspace};
 
 use super::all_or_nothing;
 use super::consulted;
@@ -17,7 +17,7 @@ use super::install::{cleared, shown};
 use super::settings::{agents, moved, not_copied, outside_note};
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
-/// `flayer migrate --library`: what moving the workspace's own into its
+/// `mindweaver migrate --library`: what moving the workspace's own into its
 /// library would do, or, with `yes`, doing it.
 ///
 /// The dry run is a report, and exits as one, where `remove`'s is a
@@ -25,7 +25,7 @@ use crate::{CliError, Failure, Lookup, Outcome, Warning};
 /// not one deletion that was asked for and did not happen. Refused, both say
 /// every reason at once, as a command given several things does, since each
 /// has to be put right before it can go ahead.
-pub(crate) fn migrate_library(workspace: &FlayerWorkspace, yes: bool) -> Result<Outcome, Failure> {
+pub(crate) fn migrate_library(workspace: &WeaverWorkspace, yes: bool) -> Result<Outcome, Failure> {
     if !yes {
         let mut plan = migrate::library_plan(workspace);
         refused(std::mem::take(&mut plan.refusals))?;
@@ -82,7 +82,7 @@ fn refused(refusals: Vec<migrate::Refusal>) -> Result<(), Failure> {
 
 /// A line for each artifact moved, each one a project keeps, and the
 /// marker's rewrite: as what will happen in a dry run, and as what did.
-fn report(workspace: &FlayerWorkspace, plan: &Plan, done: bool) -> String {
+fn report(workspace: &WeaverWorkspace, plan: &Plan, done: bool) -> String {
     let (moving, leaving, uncounted) = if done {
         ("moved", "left", "no longer counts")
     } else {
@@ -223,10 +223,10 @@ pub(crate) fn migrate_here(
     }
 }
 
-/// `flayer migrate -p`: one project the workspace links moved to a
+/// `mindweaver migrate -p`: one project the workspace links moved to a
 /// `settings.toml`, carrying what its ledger records along.
 pub(crate) fn migrate_one(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     asked: &Asked,
     homes: &AgentHomes,
@@ -237,7 +237,7 @@ pub(crate) fn migrate_one(
     }
 }
 
-/// `flayer migrate --all-projects`: every project the workspace links that
+/// `mindweaver migrate --all-projects`: every project the workspace links that
 /// a `mind.toml` or a `settings.json` marks, moved to a `settings.toml` one
 /// at a time.
 ///
@@ -248,7 +248,7 @@ pub(crate) fn migrate_one(
 /// nothing written. Those their `settings.toml` marks already are not
 /// listed, there being nothing to say of them.
 pub(crate) fn migrate_all(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     asked: &Asked,
     homes: &AgentHomes,
 ) -> Result<Outcome, Failure> {
@@ -323,7 +323,7 @@ enum Stopped {
 
 impl Stopped {
     /// As a command given one project fails: every refusal at once, the
-    /// first as the error, as `flayer migrate --library` says them.
+    /// first as the error, as `mindweaver migrate --library` says them.
     fn failure(self) -> Failure {
         match self {
             // Never without a reason, so the second is not reached.
@@ -361,12 +361,12 @@ impl Stopped {
 /// One project's move, planned without `yes` and made with it, laid out;
 /// `None` when its `settings.toml` marks it already.
 ///
-/// The dry run is a report, as `flayer migrate --library`'s is: a line for
+/// The dry run is a report, as `mindweaver migrate --library`'s is: a line for
 /// each thing that would change, to read before saying yes. Made, a copy
 /// left out of a folder an agent the project names reads is a warning, as
 /// it is for `mind agents`.
 fn laid_out(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     asked: &Asked,
     homes: &AgentHomes,
@@ -463,7 +463,7 @@ fn project_report(project: &MindProject, plan: &ProjectPlan, done: bool) -> Stri
     for path in &plan.foreign {
         let _ = writeln!(
             text,
-            "{} {} where it is: Mindflayer did not install it",
+            "{} {} where it is: Mindweaver did not install it",
             would("left", "would leave"),
             shown(project, path)
         );
@@ -482,7 +482,7 @@ fn project_report(project: &MindProject, plan: &ProjectPlan, done: bool) -> Stri
 /// What a project's move says on stderr beside its lines: that nothing
 /// keeps a local project's copies out of git outside a work tree, and how
 /// to stop git tracking a `.mind` that a local project's `.gitignore` keeps
-/// none of out, which no ignore rule does and Mindflayer runs no git to do.
+/// none of out, which no ignore rule does and Mindweaver runs no git to do.
 fn beside(project: &MindProject, plan: &ProjectPlan) -> Vec<Warning> {
     let mut said: Vec<Warning> = outside_note(project, plan.outside).into_iter().collect();
     if plan.tracked {

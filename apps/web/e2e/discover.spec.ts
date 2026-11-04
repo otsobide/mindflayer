@@ -29,7 +29,7 @@ test('a suggestion the scan finds is linked from the panel and appears in the pr
   await page.getByRole('checkbox', { name: 'notes' }).click()
   await page.getByTestId('link-marked').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} link ${notes}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ mindweaver -W ${own.at.workspace} link ${notes}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
   await expect(dialog).toBeHidden()
@@ -41,7 +41,7 @@ test('a suggestion the scan finds is linked from the panel and appears in the pr
   await page.getByRole('link', { name: 'Projects' }).click()
   await expect(page.getByTestId('row').getByTestId('name')).toHaveText(['drafts', 'notes'])
 
-  succeed(own.twin, 'flayer', own.twin.workspace, ['link', join(own.twin.workspace, 'notes')])
+  succeed(own.twin, 'mindweaver', own.twin.workspace, ['link', join(own.twin.workspace, 'notes')])
   const [panel, cli] = [marker(own.at.workspace), marker(own.twin.workspace)]
   expect(panel.equals(cli), `the panel left:\n${panel.toString('utf8')}\nthe CLI left:\n${cli.toString('utf8')}`).toBe(true)
 })

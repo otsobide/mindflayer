@@ -7,7 +7,7 @@ import type { Snapshot } from '@/api/generated/Snapshot'
 import type { Tally } from '@/api/generated/Tally'
 import AgentBadges from '@/components/AgentBadges.vue'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
+import CommandHint, { weaver, making } from '@/components/CommandHint.vue'
 import HealthBadge from '@/components/HealthBadge.vue'
 import LinkForm from '@/components/LinkForm.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
@@ -175,8 +175,8 @@ function clear() {
             :commands="[
               ...making(snapshot.workspace),
               { line: 'mind init', does: 'in a repository: make it a project' },
-              { line: flayer(snapshot.workspace, 'link <PATH>'), does: 'link that project here' },
-              { line: flayer(snapshot.workspace, 'scan --suggest'), does: 'the repositories most worth linking' }
+              { line: weaver(snapshot.workspace, 'link <PATH>'), does: 'link that project here' },
+              { line: weaver(snapshot.workspace, 'scan --suggest'), does: 'the repositories most worth linking' }
             ]"
           />
         </div>

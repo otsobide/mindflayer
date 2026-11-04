@@ -2,7 +2,7 @@
 
 use super::*;
 
-/// What a team's `AGENTS.md` might hold before Mindflayer writes in it.
+/// What a team's `AGENTS.md` might hold before Mindweaver writes in it.
 const TEAM: &str = "\
 # Working here
 
@@ -263,7 +263,7 @@ fn markers_forgive_trailing_whitespace_and_are_kept_as_written() {
 
 #[test]
 fn prose_that_names_a_marker_is_text() {
-    let before = format!("Mindflayer writes `{BEGIN}` above its rules.\n> {END}\n");
+    let before = format!("Mindweaver writes `{BEGIN}` above its rules.\n> {END}\n");
     let file = AgentsMd::parse(before.as_bytes()).unwrap();
     assert!(!file.has_block());
 }

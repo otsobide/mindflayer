@@ -441,7 +441,7 @@ impl schemars::JsonSchema for ProjectId {
     fn schema_id() -> Cow<'static, str> {
         // Where it was first declared, which is only ever compared with
         // itself: kept as it was, rather than moved with the type.
-        "mindflayer_core::settings::ProjectId".into()
+        "mindweaver_core::settings::ProjectId".into()
     }
 
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {

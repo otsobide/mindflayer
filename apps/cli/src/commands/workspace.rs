@@ -7,8 +7,8 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::{
-    paths, resolve, resolve_except, FlayerWorkspace, Intent, Kind, Registration, WorkspaceError,
+use mindweaver_core::{
+    paths, resolve, resolve_except, Intent, Kind, Registration, WeaverWorkspace, WorkspaceError,
 };
 
 use super::{all_or_nothing, reading, targets};
@@ -17,7 +17,7 @@ use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// `load`, at either level: the paths are typed from `directory`, and the
 /// workspace they go into is resolved from `start` (the directory itself
-/// for `flayer`, the project for `mind`). With no paths it lists what that
+/// for `mindweaver`, the project for `mind`). With no paths it lists what that
 /// workspace loads, as the other reads do: of the default one before it is
 /// made too, which loads nothing, rather than making it to say so.
 pub(crate) fn load_command(
@@ -43,7 +43,7 @@ pub(crate) fn load_command(
     let mut opened = Vec::new();
     let mut refused = Vec::new();
     for source in &sources {
-        match FlayerWorkspace::open(source) {
+        match WeaverWorkspace::open(source) {
             Ok(source) => opened.push(source),
             Err(error) => refused.push(CliError::from(error)),
         }
@@ -88,7 +88,7 @@ pub(crate) fn unload_command(
     let sources = targets(directory, workspaces)?;
     let mut workspace = resolve_except(&lookup.inputs(start, Intent::Read), &sources)?
         .map(|resolved| resolved.workspace)
-        .filter(FlayerWorkspace::is_made)
+        .filter(WeaverWorkspace::is_made)
         .ok_or_else(|| CliError::NowhereToLoad {
             from: start.to_path_buf(),
             verb: "unload from",
@@ -118,7 +118,7 @@ pub(crate) fn unload_command(
 /// The line naming the workspace a load or an unload changed, because that is
 /// not always the one you are standing in, and never when you are standing in
 /// the one being loaded.
-fn acted_on(preposition: &str, workspace: &FlayerWorkspace, home: Option<&Path>) -> String {
+fn acted_on(preposition: &str, workspace: &WeaverWorkspace, home: Option<&Path>) -> String {
     let default = if workspace.is_default(home) {
         ", the default one"
     } else {
@@ -130,13 +130,13 @@ fn acted_on(preposition: &str, workspace: &FlayerWorkspace, home: Option<&Path>)
     )
 }
 
-/// `flayer load` on its own: each loaded workspace, what it offers or why it
+/// `mindweaver load` on its own: each loaded workspace, what it offers or why it
 /// cannot be read, and which workspace loads them.
-fn loaded_listing(workspace: &FlayerWorkspace, home: Option<&Path>) -> Outcome {
+fn loaded_listing(workspace: &WeaverWorkspace, home: Option<&Path>) -> Outcome {
     let loads = workspace.loads();
     if loads.is_empty() {
         return Outcome::plain(format!(
-            "nothing loaded\n  offer another workspace's own with `flayer load <path>`\n{}",
+            "nothing loaded\n  offer another workspace's own with `mindweaver load <path>`\n{}",
             acted_on("in", workspace, home)
         ));
     }
@@ -190,7 +190,7 @@ pub(crate) fn same_directory(a: &Path, b: &Path) -> bool {
 
 /// What `load` says it did, with what the loaded workspace has to install.
 fn loaded(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     name: &str,
     entry: &Path,
     registration: Registration,
@@ -207,9 +207,9 @@ fn loaded(
 
 /// "2 skills to install", or that there is nothing yet, counted from what
 /// the install machinery itself offers through that entry, so the number is
-/// what `flayer install` will show.
-fn offering(workspace: &FlayerWorkspace, entry: &str) -> String {
-    use mindflayer_core::install::{offered_by_loads, Offer};
+/// what `mindweaver install` will show.
+fn offering(workspace: &WeaverWorkspace, entry: &str) -> String {
+    use mindweaver_core::install::{offered_by_loads, Offer};
     let offers = offered_by_loads(workspace).offers;
     let counts: Vec<String> = Kind::ALL
         .into_iter()
@@ -232,8 +232,8 @@ fn offering(workspace: &FlayerWorkspace, entry: &str) -> String {
 }
 
 /// What the workspaces `workspace` loads could not offer, as `warning:` lines.
-pub(crate) fn load_warnings(workspace: &FlayerWorkspace) -> Vec<Warning> {
-    mindflayer_core::install::offered_by_loads(workspace)
+pub(crate) fn load_warnings(workspace: &WeaverWorkspace) -> Vec<Warning> {
+    mindweaver_core::install::offered_by_loads(workspace)
         .failures
         .iter()
         .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))

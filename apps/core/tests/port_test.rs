@@ -10,12 +10,12 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use common::{skill, workspace};
-use mindflayer_core::gather::{self, GatherError, Request, Watch};
-use mindflayer_core::ledger::{Action, Ledger, Outcome};
-use mindflayer_core::port::{Clock, Cloned, GitError, Remote};
-use mindflayer_core::settings::ProjectId;
-use mindflayer_core::value::Revision;
-use mindflayer_core::Kind;
+use mindweaver_core::gather::{self, GatherError, Request, Watch};
+use mindweaver_core::ledger::{Action, Ledger, Outcome};
+use mindweaver_core::port::{Clock, Cloned, GitError, Remote};
+use mindweaver_core::settings::ProjectId;
+use mindweaver_core::value::Revision;
+use mindweaver_core::Kind;
 
 /// A remote that fetches by writing the files it was made with, and notes
 /// what it was asked for.
