@@ -2374,6 +2374,15 @@ fn with_the_default_workspace_not_made_the_tui_opens_on_it_empty() {
     assert!(drawn.contains("nothing on the shelf"), "{drawn}");
     assert!(drawn.contains("Projects (0)"), "{drawn}");
     assert!(drawn.contains("nothing here yet"), "{drawn}");
+    // Where each kind goes, a kind named as a sentence names more than one.
+    assert!(
+        drawn.contains("skills go in .mindweaver/library/skills/"),
+        "{drawn}"
+    );
+    assert!(
+        drawn.contains("MCP servers go in .mindweaver/library/mcp/"),
+        "{drawn}"
+    );
     assert!(app
         .message
         .as_ref()

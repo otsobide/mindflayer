@@ -20,11 +20,13 @@ use mindweaver_core::hash;
 use mindweaver_core::install::{is_folder_name, is_installable_name};
 use mindweaver_core::mother::random;
 use mindweaver_core::mother::{
-    ArtifactNameMother, ContentHashMother, OriginMother, ProjectIdMother, RedactedMother,
-    RevisionMother, SourceMother, UrlMother,
+    ArtifactNameMother, ContentHashMother, InputNameMother, OriginMother, ProjectIdMother,
+    RedactedMother, RevisionMother, SourceMother, UrlMother, VariableNameMother,
 };
 use mindweaver_core::url::carries_credentials;
-use mindweaver_core::value::{ArtifactName, ContentHash, Origin, ProjectId, Redacted, Revision};
+use mindweaver_core::value::{
+    ArtifactName, ContentHash, InputName, Origin, ProjectId, Redacted, Revision, VariableName,
+};
 use mindweaver_core::Kind;
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -718,6 +720,59 @@ fn a_revision_is_read_from_a_string_and_from_nothing_else() {
     for refused in [json!(null), json!(40), json!(["abc"])] {
         assert!(
             serde_json::from_value::<Revision>(refused.clone()).is_err(),
+            "{refused}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// InputName and VariableName: any text, each a type of its own.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn an_input_name_holds_any_text_since_a_definition_may_call_an_input_anything() {
+    for _ in 0..DRAWS {
+        let text = random::text(40);
+
+        reads_as_its_text(&InputName::from(text.as_str()), &text);
+        assert_eq!(InputNameMother::create(&text), text.as_str());
+    }
+    let drawn = InputNameMother::random();
+    reads_as_its_text(&drawn, &drawn.clone().into_string());
+}
+
+#[test]
+fn a_variable_name_holds_any_text_since_which_names_a_secret_takes_is_not_its_rule() {
+    for _ in 0..DRAWS {
+        let text = random::text(40);
+
+        reads_as_its_text(&VariableName::from(text.as_str()), &text);
+        assert_eq!(VariableNameMother::create(&text), text.as_str());
+    }
+    let drawn = VariableNameMother::random();
+    reads_as_its_text(&drawn, &drawn.clone().into_string());
+}
+
+#[test]
+fn input_and_variable_names_written_and_read_again_are_the_same_names() {
+    for _ in 0..DRAWS {
+        let input = InputName::from(random::text(40));
+        let variable = VariableName::from(random::text(40));
+
+        assert_eq!(written(&input), json!(input.as_str()));
+        assert_eq!(written(&variable), json!(variable.as_str()));
+        let input_again: InputName = serde_json::from_value(written(&input)).unwrap();
+        let variable_again: VariableName = serde_json::from_value(written(&variable)).unwrap();
+        assert_eq!(input_again, input);
+        assert_eq!(variable_again, variable);
+    }
+    for refused in [json!(null), json!(7), json!(["token"])] {
+        assert!(
+            serde_json::from_value::<InputName>(refused.clone()).is_err(),
+            "{refused}"
+        );
+        assert!(
+            serde_json::from_value::<VariableName>(refused.clone()).is_err(),
             "{refused}"
         );
     }

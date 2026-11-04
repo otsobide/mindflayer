@@ -122,7 +122,7 @@ fn a_rule_is_not_adopted() {
 
     let refused = plan(&workspace, &project, "rule:git/commits").unwrap_err();
 
-    assert!(matches!(&refused, AdoptError::Rule { name } if name == "git/commits"));
+    assert!(matches!(&refused, AdoptError::NotASkill { name, .. } if name == "git/commits"));
     assert!(refused.to_string().contains("only a skill"), "{refused}");
 }
 

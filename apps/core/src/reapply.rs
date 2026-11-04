@@ -389,7 +389,7 @@ pub enum ReapplyError {
     /// Installing a kind in no folder at all would take every copy of it out
     /// of the project, an uninstall's to do; sending it back to the folders
     /// its agents read is a reset.
-    #[error("{project} would install its {kind}s in no folder; name one, or reset them to go where its agents read")]
+    #[error("{project} would install its {kinds} in no folder; name one, or reset them to go where its agents read", kinds = .kind.plural())]
     NoFolder { project: String, kind: Kind },
 }
 

@@ -14,7 +14,15 @@
   ],
   "boxes": [
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "api",
       "held": [
         {
@@ -41,7 +49,15 @@
       ]
     },
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "web",
       "held": [
         {
@@ -61,7 +77,15 @@
       ]
     },
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "docs",
       "held": [
         {
@@ -88,6 +112,13 @@
             "code": "no_target",
             "message": "bare names no agent in its settings that rules are installed for, so none can be installed into it"
           }
+        },
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
         }
       ],
       "entry": "bare",
@@ -104,6 +135,13 @@
         },
         {
           "kind": "rule",
+          "why": {
+            "code": "not_a_project",
+            "message": "/home/you/Assign/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        },
+        {
+          "kind": "mcp",
           "why": {
             "code": "not_a_project",
             "message": "/home/you/Assign/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
@@ -160,7 +198,8 @@
   ],
   "kinds": [
     "skill",
-    "rule"
+    "rule",
+    "mcp"
   ],
   "known": [
     {
@@ -274,6 +313,10 @@
       {
         "kind": "rule",
         "path": ".mindweaver/library/rules"
+      },
+      {
+        "kind": "mcp",
+        "path": ".mindweaver/library/mcp"
       }
     ],
     "failures": [],
@@ -440,6 +483,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -567,6 +614,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -669,6 +720,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -751,6 +806,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -822,6 +881,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -926,6 +989,10 @@
         {
           "count": 0,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [
@@ -969,6 +1036,10 @@
         {
           "count": 1,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [
@@ -1013,6 +1084,10 @@
         {
           "count": 0,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [

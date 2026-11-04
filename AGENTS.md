@@ -148,7 +148,11 @@ under `apps/` with its own `Makefile`:
 
 - `apps/core` (`mindweaver-core`): the engine. Projects, a project's settings
   (`settings`, the marker from v3 on), workspaces, which workspace a command
-  uses (`resolve`), the shell code that activates one (`activate`), kinds, the
+  uses (`resolve`), the shell code that activates one (`activate`), kinds
+  (`kind`: skills, rules and MCP servers, and the `Layout` each is kept in,
+  a folder, a file at any depth or a file directly in its folder), what an
+  MCP server's definition declares, one TOML file a server in a format of
+  its own (`mcp`), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
   (through `port::Remote`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
@@ -416,8 +420,9 @@ These are easy to break from a single file without noticing.
   artifact's name or a revision holds the value in `value`, never a
   `String`: one held to a rule (`ContentHash`, `ProjectId`, `Redacted`) is
   made only the way its rule allows, so no `From<String>`, and one named
-  apart (`ArtifactName`, `Origin`, `Revision`) holds any text, since core
-  reads leniently. A new value joins `value` through its `text_value!`
+  apart (`ArtifactName`, `Origin`, `Revision`, and an MCP server's
+  `InputName` and `VariableName`) holds any text, since core reads
+  leniently. A new value joins `value` through its `text_value!`
   macro, so it reads as its text and goes out as one, said in TypeScript
   and JSON Schema as a `String` is, and no contract moves
   (`make web/types/check`, `make api/schemas/check`); its store's adapter
@@ -762,7 +767,11 @@ These are easy to break from a single file without noticing.
   rules in one render that keeps an orphaned rule as it is
   (`install::rules::update_held`); it leaves an `Edited` one, every copy of
   it, unless forced, and says an `Orphaned` one without failing. An
-  uninstall removes the copies its record names and nothing else. No copy
+  uninstall removes the copies its record names and nothing else. No
+  install writes an MCP server yet (`install::installs`, refused as
+  `not_installable` wherever a project is asked where one goes, which every
+  project's boxes in the snapshot say), nor does an adoption, a gather or
+  `add`. No copy
   holds a skill's top-level `.claude-plugin`
   (`install::LeftOut`), and none lands inside an agent's own folder
   (`InstallError::UserScope`). A v3 project is listed from its agents' folders
@@ -837,7 +846,14 @@ These are easy to break from a single file without noticing.
   warning, never a reason to hide the rule. `mind add --template` refuses that
   same list (`artifact::rule_issues`) for the rule it is about to write, and
   `edit --contents` refuses it, and a rule with nothing to say, for the one
-  it is given (`artifact::rule_text_issues`), before a byte is written.
+  it is given (`artifact::rule_text_issues`), before a byte is written. An
+  MCP server's definition (`mcp::McpDefinition`) is read from its `format`
+  first, one from a newer format refused as that (`mcp_format_too_new`), and
+  a file that does not read is a failure beside the rest; one that reads is
+  listed whatever is wrong with it, and `validate` says what (a transport
+  naming nothing to start or reach, an input no value uses, a name that is
+  not its file's), which `edit --contents` and `rename` refuse to leave
+  behind (`artifact::mcp_strict_issues`).
 - **Loaded and gathered content is untrusted.**
   - So is a task's every value, which a browser will fill in: it reaches
     its command as that value, never as an option or a command. The task
@@ -994,7 +1010,14 @@ These are easy to break from a single file without noticing.
   read past, read as written and changed by nothing but `mind migrate`; and
   `settings.toml` at `SETTINGS_TOML_VERSION` whatever it sets, which `mind
   init` writes (`MindProject::init_asked`, which fills in each folder it was
-  not told about). Each version is written in one file
+  not told about that has a default). A kind added since markers said where
+  each kind lives has no default (`Directories::default_for`, `None` for MCP
+  servers): no `mind.toml` reads a folder for it, `mind init` and `mind
+  migrate` name none, and a workspace keeps it in its library unless its
+  marker names a folder for it, which none `mindweaver init` writes does, so
+  no marker's version moved. An
+  MCP server's definition carries a format of its own (`MCP_FORMAT`), refused
+  from a newer one as a marker is. Each version is written in one file
   (`MarkerFile::of_version`), and one found in another is refused. Any of the
   three makes a directory a project (`MindProject::is_marked`), and the
   newest wins when more than one is there. See `DIRECTORIES_VERSION` for how
@@ -1322,13 +1345,22 @@ These are easy to break from a single file without noticing.
   running a Mindflayer build's `flayer-deactivate` first where a shell has
   it, and setting nothing of the old activation's; a workspace's name
   reaches a prompt only through `activate::prompt`.
-- **`Kind` and `Agent` are closed enums.** To add a kind, follow "Adding a
+- **`Kind` and `Agent` are closed enums.** `Kind` is `Skill`, `Rule` and
+  `Mcp`, each kept in a `Layout` (`Directory`, `Files`, or `Flat` for a
+  file directly in its folder, whose name becomes a config key and so is
+  never a route). To add a kind, follow "Adding a
   third kind" in the architecture doc, and to add an agent, "Adding an agent",
   which starts in `docs/agents.md`. Either way the compiler's exhaustive
   matches are the checklist: the target table's `standard`, and `read` behind
   `Agent::reads`, match every kind and agent with no wildcard, so neither
   compiles until it says where it goes and where it reads; `at_root`, behind
-  `Agent::reads_at_root`, matches every agent the same way.
+  `Agent::reads_at_root`, matches every agent the same way. So do the
+  matches that say what a kind is not yet given: a default folder beside
+  the code (`Directories::default_for`), an install (`install::installs`,
+  behind the refusal in `install::targets`), a scaffold
+  (`create::scaffolds`), and the words a sentence names it by
+  (`Kind::noun`, `Kind::plural`), which every message and count asks rather
+  than spelling `{kind}s`.
   "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
   agent home's field, option and place in `common::PINNED` and `CLEARED`.
 
@@ -1344,10 +1376,15 @@ These are easy to break from a single file without noticing.
   `ArtifactNameMother`, `RevisionMother`, `ProjectIdMother`), per record the
   ledger keeps (`InstallRecordMother`, `TargetMother`, `SourceMother`,
   `GatheredMother`, `MovedMother`, `EntryMother`), for a skill's and a
-  rule's text (`SkillMother`, `RuleMother`), a project's settings
+  rule's text (`SkillMother`, `RuleMother`), an MCP server's definition,
+  one for each transport (`McpMother`, and `InputNameMother` and
+  `VariableNameMother` for its values), a project's settings
   (`SettingsMother`), the URLs a credential can be typed into (`UrlMother`,
   each form beside what redacting leaves of it) and what lives on the disk
-  (`WorkspaceMother`, `ProjectMother`, `GitRepositoryMother`, `ShelfMother`),
+  (`WorkspaceMother`, `ProjectMother`, among it a project a version 1 or 2
+  build made, `version_1` and `older`, one a `settings.json` marks as a
+  version 3 build wrote it, `json`, and one that names a folder for MCP
+  servers, `with_mcp`, `GitRepositoryMother`, `ShelfMother`),
   and what a Mindflayer build left under its names (`MindflayerMother`:
   a workspace in a `.mindflayer`, and a project's blocks, exclude lines and
   rule files for Claude as that build wrote them, records included).
@@ -1394,8 +1431,9 @@ These are easy to break from a single file without noticing.
   puts its copies is asked of core (`common::copies`). A test about what a
   project an older Mindweaver made does, a copy installed in the folder it
   authors in, makes one with `common::older_project`, and one about a
-  project a `settings.json` marks with `common::json_project`, which writes
-  the file as a version 3 `mind init` did. What git would list is
+  project a `settings.json` marks with `common::json_project`, which has
+  `ProjectMother::json` write the file as a version 3 `mind init` did. What
+  git would list is
   asked of gix too (`common::untracked`), and a core fixture has git track
   its files by writing the index with gix (`common::indexed`). A core test
   about which `CLAUDE.md` Claude finds first holds its temporary folder to

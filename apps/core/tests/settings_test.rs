@@ -318,7 +318,8 @@ fn adding_a_kind_the_settings_name_no_folder_for_is_refused_before_anything_is_m
     assert_eq!(
         error.to_string(),
         format!(
-            "{}: keeps no rules of its own, since its marker names no folder for them",
+            "{}: keeps no rules of its own, since its settings.toml names no folder for them; \
+             its `[directories]` can name one",
             dir.path().display()
         )
     );

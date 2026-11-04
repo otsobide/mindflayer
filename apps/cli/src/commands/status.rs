@@ -199,7 +199,7 @@ pub(crate) fn unseen(project: &str, missed: &Missed) -> String {
 /// by a change of its settings, of the project as the change would leave it
 /// (`would`) or has left it.
 pub(crate) fn unread(project: &str, unreached: &Unreached, would: bool) -> String {
-    let kind = unreached.kind;
+    let kinds = unreached.kind.plural();
     let targets: Vec<String> = unreached
         .targets
         .iter()
@@ -215,7 +215,7 @@ pub(crate) fn unread(project: &str, unreached: &Unreached, would: bool) -> Strin
             "none of them would see"
         };
         format!(
-            "{readers} would read none of the folders {project} would install {kind}s in \
+            "{readers} would read none of the folders {project} would install {kinds} in \
              ({targets}), so {tail} what is installed there until pointed at one"
         )
     } else {
@@ -225,7 +225,7 @@ pub(crate) fn unread(project: &str, unreached: &Unreached, would: bool) -> Strin
             ("read", "none of them sees")
         };
         format!(
-            "{readers} {reads} none of the folders {project} installs {kind}s in ({targets}), \
+            "{readers} {reads} none of the folders {project} installs {kinds} in ({targets}), \
              so {tail} what is installed there until pointed at one"
         )
     }

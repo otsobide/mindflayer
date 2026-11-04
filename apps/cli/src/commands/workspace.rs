@@ -12,7 +12,7 @@ use mindweaver_core::{
 };
 
 use super::{all_or_nothing, reading, targets};
-use crate::render::{as_stored, plural, printable, table};
+use crate::render::{as_stored, counted_kind, printable, table};
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// `load`, at either level: the paths are typed from `directory`, and the
@@ -221,7 +221,7 @@ fn offering(workspace: &WeaverWorkspace, entry: &str) -> String {
                         && matches!(offer, Offer::Loaded { entry: from, .. } if from == entry)
                 })
                 .count();
-            (count > 0).then(|| plural(count, kind.slug()))
+            (count > 0).then(|| counted_kind(count, kind))
         })
         .collect();
     if counts.is_empty() {

@@ -392,14 +392,31 @@ impl Directories {
             .collect()
     }
 
-    /// What a project uses when it says nothing: a folder per kind beside the
-    /// code, named after the kind.
+    /// What a project uses when it says nothing: a folder beside the code,
+    /// named after the kind, for each kind that has one.
     ///
     /// Beside the code rather than inside `.mind`, because these are files the
     /// agents themselves read, and an agent looking for skills does not know
     /// what a `.mind` is.
-    pub fn default_for(kind: Kind) -> PathBuf {
-        PathBuf::from(kind.folder())
+    ///
+    /// `None` for a kind kept nowhere unless a marker names its folder.
+    /// Matched on the kind, so a kind added later has to say whether it has
+    /// one: given one, every project a `mind.toml` marks, which says where
+    /// the kinds it knew live and nothing of the rest, would start reading
+    /// a folder of that name at its root that nobody put there for it, and
+    /// every `mind init` and `mind migrate` would name it in the settings
+    /// they write.
+    pub fn default_for(kind: Kind) -> Option<PathBuf> {
+        match kind {
+            Kind::Skill | Kind::Rule => Some(PathBuf::from(kind.folder())),
+            // Added once a marker could say where each kind lives, and a
+            // folder called `mcp` at a repository's root is as likely to be
+            // the code of a server as anything Mindweaver should read. A
+            // project that authors definitions names the folder; the
+            // workspace's own are in its library unless its marker names
+            // one (D-05).
+            Kind::Mcp => None,
+        }
     }
 
     /// What a new workspace uses when it says nothing: a folder per kind in
@@ -424,14 +441,16 @@ impl Directories {
     }
 
     /// Every kind's directory spelled out, which is what `init` writes so the
-    /// answer is in the file rather than in this function.
+    /// answer is in the file rather than in this function: each kind this
+    /// names, and each it leaves out that has a default
+    /// ([`default_for`](Self::default_for)).
     pub fn resolved(&self) -> Vec<(Kind, PathBuf)> {
         self.resolved_with(Directories::default_for)
     }
 
     /// Every kind named: one this leaves out at a project's default beside
-    /// the code ([`default_for`](Self::default_for)), and any key this build
-    /// does not recognise carried along.
+    /// the code ([`default_for`](Self::default_for)), when it has one, and
+    /// any key this build does not recognise carried along.
     ///
     /// What a new project's settings are given to author in
     /// ([`MindProject::init_asked`]). In settings a kind left out has no
@@ -444,26 +463,30 @@ impl Directories {
     }
 
     /// The same, with `default` answering for a kind nothing names: a
-    /// project's default or a workspace's.
-    fn resolved_with(&self, default: impl Fn(Kind) -> PathBuf) -> Vec<(Kind, PathBuf)> {
+    /// project's default or a workspace's. A kind neither names is left out.
+    fn resolved_with(&self, default: impl Fn(Kind) -> Option<PathBuf>) -> Vec<(Kind, PathBuf)> {
         Kind::ALL
             .into_iter()
-            .map(|kind| {
+            .filter_map(|kind| {
                 let directory = self
                     .get(kind)
-                    .map_or_else(|| default(kind), Path::to_path_buf);
-                (kind, directory)
+                    .map(Path::to_path_buf)
+                    .or_else(|| default(kind))?;
+                Some((kind, directory))
             })
             .collect()
     }
 
-    /// Every kind named, `default` answering for the ones that were not, and
-    /// any key this build does not recognise carried along.
-    fn filled(mut self, default: impl Fn(Kind) -> PathBuf) -> Self {
+    /// Every kind named, `default` answering for the ones that were not
+    /// where it has an answer, and any key this build does not recognise
+    /// carried along.
+    fn filled(mut self, default: impl Fn(Kind) -> Option<PathBuf>) -> Self {
         for kind in Kind::ALL {
-            self.0
-                .entry(kind.folder().to_owned())
-                .or_insert_with(|| default(kind));
+            if self.get(kind).is_none() {
+                if let Some(directory) = default(kind) {
+                    self.0.insert(kind.folder().to_owned(), directory);
+                }
+            }
         }
         self
     }
@@ -527,8 +550,9 @@ codes!(ProjectWarning {
 /// everything else the settings say ([`MindProject::misplaced_targets`]).
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error(
-    "{settings}: {folder} is no folder to install {kind}s in, because {because}, \
+    "{settings}: {folder} is no folder to install {kinds} in, because {because}, \
      so nothing is installed there",
+    kinds = .kind.plural(),
     because = .why.because(*.kind)
 )]
 pub struct MisplacedTarget {
@@ -580,7 +604,10 @@ impl Misplaced {
                 "it is inside {GIT_DIR}, which holds a repository's own files and no agent reads"
             ),
             Misplaced::NotInstalled => {
-                format!("{kind}s are not installed into a project as folders yet")
+                format!(
+                    "{} are not installed into a project as folders yet",
+                    kind.plural()
+                )
             }
         }
     }
@@ -902,8 +929,9 @@ impl MindProject {
     /// meant by that. A project's settings ([`SETTINGS_VERSION`]) mean no
     /// folder at all. A `mind.toml` means the default beside the code, except
     /// one written before [`DIRECTORIES_VERSION`], which described a layout
-    /// where every kind lived inside `.mind`. Each is read the way it was
-    /// written.
+    /// where every kind lived inside `.mind`; and either means no folder for
+    /// a kind with no default ([`Directories::default_for`]), which it was
+    /// not written knowing. Each is read the way it was written.
     ///
     /// An `Option` rather than a folder always, so that a project can say it
     /// authors no artifacts of a kind: a reader then finds none there, which
@@ -917,10 +945,14 @@ impl MindProject {
         }
         match &self.config {
             ProjectConfig::Settings(_) => None,
+            // Every kind it knew, which is every kind with a default: one
+            // added since is kept nowhere it does not name.
             ProjectConfig::Toml(config) if config.version < DIRECTORIES_VERSION => {
-                Some(self.mind_dir().join(kind.folder()))
+                Directories::default_for(kind).map(|_| self.mind_dir().join(kind.folder()))
             }
-            ProjectConfig::Toml(_) => Some(self.root.join(Directories::default_for(kind))),
+            ProjectConfig::Toml(_) => {
+                Directories::default_for(kind).map(|directory| self.root.join(directory))
+            }
         }
     }
 
@@ -933,6 +965,7 @@ impl MindProject {
             .ok_or_else(|| WorkspaceError::NoDirectory {
                 path: self.root.clone(),
                 kind,
+                marker: self.marker_file(),
             })
     }
 
@@ -1284,7 +1317,7 @@ impl WeaverWorkspace {
         let config_path = dir.join(names.workspace_config());
 
         for (kind, directory) in
-            directories.resolved_with(|kind| Directories::library_under(names, kind))
+            directories.resolved_with(|kind| Some(Directories::library_under(names, kind)))
         {
             if let Some(error) = misplaced_own(kind, &directory) {
                 return Err(error);
@@ -2195,7 +2228,7 @@ impl WeaverWorkspace {
                     .config
                     .directories
                     .clone()
-                    .filled(|kind| Directories::library_under(self.names, kind)),
+                    .filled(|kind| Some(Directories::library_under(self.names, kind))),
             }),
         }
     }
@@ -2510,20 +2543,35 @@ pub enum WorkspaceError {
     NotKnown { path: PathBuf, workspace: PathBuf },
     #[error("{path}: not valid UTF-8, so it cannot be written into a marker")]
     NonUtf8Path { path: PathBuf },
-    #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
+    #[error("{path}: cannot hold a project's {kinds}, because it is not inside the project", kinds = .kind.plural())]
     OutsideProject { path: PathBuf, kind: Kind },
     #[error(
-        "{path}: cannot hold a project's {kind}s, \
+        "{path}: cannot hold a project's {kinds}, \
          because it is inside {MIND_DIR}, which holds Mindweaver's own files \
-         and is kept out of git unless the project is shared"
+         and is kept out of git unless the project is shared",
+        kinds = .kind.plural()
     )]
     InsideMind { path: PathBuf, kind: Kind },
-    #[error("{path}: keeps no {kind}s of its own, since its marker names no folder for them")]
-    NoDirectory { path: PathBuf, kind: Kind },
+    /// Saying how the project comes to keep one, by the file it is marked
+    /// by: only a `settings.toml` is changed, so a project marked by anything
+    /// older is sent to the migration first, as [`NoSettings`] sends it.
+    ///
+    /// [`NoSettings`]: WorkspaceError::NoSettings
+    #[error(
+        "{path}: keeps no {} of its own, since its {marker} names no folder for them; {}",
+        .kind.plural(),
+        named_by(*.marker)
+    )]
+    NoDirectory {
+        path: PathBuf,
+        kind: Kind,
+        marker: MarkerFile,
+    },
     /// A folder a change to a project's settings would send a kind's
     /// installs to that no install would use ([`Misplaced`]).
     #[error(
-        "{path}: cannot be where a project's {kind}s are installed, because {because}",
+        "{path}: cannot be where a project's {kinds} are installed, because {because}",
+        kinds = .kind.plural(),
         because = .why.because(*.kind)
     )]
     Target {
@@ -2540,11 +2588,12 @@ pub enum WorkspaceError {
          `mind migrate` moves it to one"
     )]
     NoSettings { path: PathBuf, marker: MarkerFile },
-    #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
+    #[error("{path}: cannot hold the workspace's {kinds}, because it is not inside the workspace", kinds = .kind.plural())]
     OutsideWorkspace { path: PathBuf, kind: Kind },
     #[error(
-        "{path}: cannot hold the workspace's {kind}s, \
-         because it overlaps {gathered}, which is reserved for gathering"
+        "{path}: cannot hold the workspace's {kinds}, \
+         because it overlaps {gathered}, which is reserved for gathering",
+        kinds = .kind.plural()
     )]
     OverlapsGathered {
         path: PathBuf,
@@ -2606,6 +2655,19 @@ impl WorkspaceError {
             | WorkspaceError::OverlapsGathered { path, .. } => path,
             WorkspaceError::Lock(error) => error.path(),
         }
+    }
+}
+
+/// How a project marked by `marker` comes to keep a kind it names no folder
+/// for, said after [`WorkspaceError::NoDirectory`]: in its `[directories]`,
+/// once it is marked by a `settings.toml`, which `mind migrate` moves the
+/// older markers to.
+fn named_by(marker: MarkerFile) -> String {
+    match marker {
+        MarkerFile::MindToml | MarkerFile::SettingsJson => format!(
+            "`mind migrate` moves it to a {SETTINGS_FILE}, whose `[directories]` can name one"
+        ),
+        MarkerFile::SettingsToml => String::from("its `[directories]` can name one"),
     }
 }
 
@@ -2926,7 +2988,16 @@ fn weaver_template(name: &str, directories: &Directories, names: Names) -> Strin
          [directories]\n\
          {}",
         toml_string(name),
-        directory_lines(directories.resolved_with(|kind| Directories::library_under(names, kind))),
+        // Spelled out for the kinds every marker has named since markers
+        // said where a kind lives, the ones with a project's default too:
+        // one added since (MCP) is kept in the library whatever a marker
+        // says (D-05), as the comment above tells, so a line for it would
+        // tell a reader nothing, and make the marker a new workspace gets
+        // differ from the one an older build wrote for no reader of either.
+        // One `directories` names is written all the same.
+        directory_lines(directories.resolved_with(|kind| {
+            Directories::default_for(kind).map(|_| Directories::library_under(names, kind))
+        })),
     )
 }
 

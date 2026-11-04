@@ -136,7 +136,7 @@ fn every_word_type_says_in_typescript_the_words_serde_writes() {
 fn a_word_type_is_declared_as_the_union_of_its_words() {
     assert_eq!(
         Kind::decl(&Config::new()),
-        r#"type Kind = "skill" | "rule";"#
+        r#"type Kind = "skill" | "rule" | "mcp";"#
     );
     assert_eq!(
         Agent::decl(&Config::new()),

@@ -16,7 +16,7 @@ use mindweaver_core::view::Listing;
 use mindweaver_core::{Artifact, Catalog, Kind, MindProject, Reference, WeaverWorkspace};
 
 use super::consulted;
-use crate::render::{as_json, plural, printable, table, verdict};
+use crate::render::{as_json, counted_kind, plural, printable, table, verdict};
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// Which level a command reports at.
@@ -536,6 +536,12 @@ pub(crate) fn show(
                     let _ = writeln!(text, "{}", parts.join("\n"));
                 }
             }
+            // What it says of itself is its description; the transport and
+            // the inputs are the file below it, which is its body.
+            Kind::Mcp => {
+                let _ = writeln!(text, "{}", shown.description.as_deref().unwrap_or(""));
+                let _ = writeln!(text);
+            }
         }
         // Blank lines trimmed at both ends, not indentation: the body usually
         // opens with a blank line after the fence, and the line above is
@@ -624,14 +630,7 @@ fn counted(artifacts: &[&Artifact]) -> String {
                 .iter()
                 .filter(|artifact| artifact.kind() == kind)
                 .count();
-            (count > 0).then(|| {
-                let noun = if count == 1 {
-                    kind.slug()
-                } else {
-                    kind.folder()
-                };
-                format!("{count} {noun}")
-            })
+            (count > 0).then(|| counted_kind(count, kind))
         })
         .collect();
     match parts.split_last() {

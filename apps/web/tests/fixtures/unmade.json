@@ -23,7 +23,8 @@
   "history": [],
   "kinds": [
     "skill",
-    "rule"
+    "rule",
+    "mcp"
   ],
   "known": [],
   "library": {
@@ -36,6 +37,10 @@
       {
         "kind": "rule",
         "path": ".mindweaver/library/rules"
+      },
+      {
+        "kind": "mcp",
+        "path": ".mindweaver/library/mcp"
       }
     ],
     "failures": [],
@@ -73,6 +78,10 @@
         {
           "count": 0,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [
@@ -116,6 +125,10 @@
         {
           "count": 0,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [
@@ -160,6 +173,10 @@
         {
           "count": 0,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [

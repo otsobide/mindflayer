@@ -570,6 +570,16 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
             }),
         ),
         (
+            ValidationIssue::NameFileMismatch {
+                name: String::from("github"),
+                file: String::from("gh.toml"),
+            },
+            serde_json::json!({
+                "code": "name_file_mismatch", "name": "github", "file": "gh.toml",
+                "warning": false,
+            }),
+        ),
+        (
             ValidationIssue::DescriptionEmpty,
             serde_json::json!({"code": "description_empty", "warning": false}),
         ),
@@ -620,6 +630,38 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
         (
             ValidationIssue::DescriptionNotAString,
             serde_json::json!({"code": "description_not_a_string", "warning": true}),
+        ),
+        (
+            ValidationIssue::TransportIncomplete {
+                transport: String::from("stdio"),
+                field: String::from("command"),
+            },
+            serde_json::json!({
+                "code": "transport_incomplete", "transport": "stdio", "field": "command",
+                "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::InputRepeated {
+                name: String::from("token"),
+            },
+            serde_json::json!({"code": "input_repeated", "name": "token", "warning": false}),
+        ),
+        (
+            ValidationIssue::InputUnreferenced {
+                name: String::from("tenant"),
+                kind: crate::mcp::InputKind::UrlVar,
+            },
+            serde_json::json!({
+                "code": "input_unreferenced", "name": "tenant", "kind": "url_var",
+                "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::InputInUserinfo {
+                name: String::from("key"),
+            },
+            serde_json::json!({"code": "input_in_userinfo", "name": "key", "warning": false}),
         ),
     ];
     assert_eq!(

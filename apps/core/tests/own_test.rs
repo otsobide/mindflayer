@@ -251,13 +251,14 @@ fn a_folder_the_project_at_the_root_uses_is_the_projects_not_the_workspaces() {
     let (_dir, both, _project) = workspace_at_a_project(&common::beside());
     assert_eq!(
         both.own_kinds(),
-        vec![],
-        "both kinds live where the project keeps them"
+        vec![Kind::Mcp],
+        "skills and rules live where the project keeps them, and MCP servers, which a \
+         mind.toml keeps none of, in the library"
     );
 
     let (_dir, apart, _project) =
         workspace_at_a_project(&common::beside().with(Kind::Skill, "shared/skills"));
-    assert_eq!(apart.own_kinds(), vec![Kind::Skill]);
+    assert_eq!(apart.own_kinds(), vec![Kind::Skill, Kind::Mcp]);
 }
 
 #[test]

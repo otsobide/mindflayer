@@ -190,6 +190,10 @@ fn read(kind: Kind, agent: Agent) -> Vec<PathBuf> {
         // rules is said to be read, and no listing takes those files for a
         // rule somebody keeps there.
         (Kind::Rule, Agent::Claude | Agent::Codex | Agent::OpenCode) => Vec::new(),
+        // An MCP server reaches an agent as an entry in its own config file
+        // (D-10), one of the files `files` names, never as a folder of
+        // definitions: no agent reads one.
+        (Kind::Mcp, Agent::Claude | Agent::Codex | Agent::OpenCode) => Vec::new(),
     }
 }
 
@@ -286,8 +290,8 @@ impl fmt::Display for UnknownAgent {
 /// with none is a kind that reaches that agent some other way, or not at
 /// all, which is every rule: D-03 puts rules in a block of `AGENTS.md`, one
 /// file every agent shares rather than a folder a copy goes in, rendered
-/// outside the table ([`crate::install::rules`]), as M6's MCP servers will
-/// be entries in each agent's own file.
+/// outside the table ([`crate::install::rules`]), and every MCP server, which
+/// will be an entry in each agent's own file (D-10).
 ///
 /// Pure: no entry is looked for on disk, and every location is relative to
 /// a project's root.
@@ -382,6 +386,9 @@ fn standard(kind: Kind, agent: Agent) -> Option<PathBuf> {
         (Kind::Skill, Agent::Claude) => Some(Path::new(".claude").join("skills")),
         (Kind::Skill, Agent::Codex | Agent::OpenCode) => Some(Path::new(".agents").join("skills")),
         (Kind::Rule, Agent::Claude | Agent::Codex | Agent::OpenCode) => None,
+        // An entry in each agent's own config file, rendered outside the
+        // table as a rule's section is (D-10), which no release writes yet.
+        (Kind::Mcp, Agent::Claude | Agent::Codex | Agent::OpenCode) => None,
     }
 }
 

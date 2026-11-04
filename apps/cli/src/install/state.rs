@@ -348,14 +348,20 @@ impl Screen {
     }
 
     /// The kind `tab` shows next, or `shift+tab` (`back`), round again past
-    /// the last.
+    /// the last: among the kinds an install writes, as core says
+    /// ([`install::installs`]), since a column of a kind none of the
+    /// projects can take would be one more `tab` to say so every time.
     pub fn next_kind(&self, back: bool) -> Kind {
-        let count = Kind::ALL.len();
-        let at = Kind::ALL
+        let kinds: Vec<Kind> = Kind::ALL
+            .into_iter()
+            .filter(|&kind| install::installs(kind))
+            .collect();
+        let count = kinds.len();
+        let at = kinds
             .iter()
             .position(|&kind| kind == self.kind)
             .unwrap_or(0);
-        Kind::ALL[if back { at + count - 1 } else { at + 1 } % count]
+        kinds[if back { at + count - 1 } else { at + 1 } % count]
     }
 
     /// The project the cursor is on.
@@ -623,8 +629,8 @@ impl Screen {
     pub fn none_offered(&self) -> String {
         if self.none_can_take() {
             return format!(
-                "no project here can take {}s; v turns the screen back, where each says why",
-                self.kind
+                "no project here can take {}; v turns the screen back, where each says why",
+                self.kind.plural()
             );
         }
         nothing(self.kind).to_owned()
@@ -651,6 +657,7 @@ pub fn nothing(kind: Kind) -> &'static str {
             "nothing on the shelf to install, and nothing loaded or of the workspace's own"
         }
         Kind::Rule => "no rules to install: none of the workspace's own, and none loaded",
+        Kind::Mcp => "no MCP servers to install: none of the workspace's own, and none loaded",
     }
 }
 

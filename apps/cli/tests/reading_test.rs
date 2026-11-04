@@ -297,22 +297,43 @@ fn each_binary_describes_itself_rather_than_the_crate() {
     assert_ne!(mind.lines().next().unwrap(), weaver.lines().next().unwrap());
 }
 
+#[test]
+fn list_says_in_its_help_every_kind_it_takes() {
+    let mind = Cli::try_parse_from(["mind", "list", "--help"])
+        .unwrap_err()
+        .to_string();
+    let weaver = WeaverCli::try_parse_from(["mindweaver", "list", "--help"])
+        .unwrap_err()
+        .to_string();
+
+    for help in [mind, weaver] {
+        for kind in Kind::ALL {
+            assert!(help.contains(&format!("`{}`", kind.folder())), "{help}");
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // More than one kind
 // ---------------------------------------------------------------------------
 
 #[test]
-fn init_makes_a_folder_for_every_kind() {
+fn init_makes_a_folder_for_skills_and_rules_and_none_for_mcp_servers() {
     let dir = TempDir::new().unwrap();
 
     mind(dir.path(), &["init"]).unwrap();
 
-    for kind in Kind::ALL {
+    for kind in [Kind::Skill, Kind::Rule] {
         assert!(
             dir.path().join(kind.folder()).is_dir(),
             "no folder for {kind}"
         );
     }
+    // An `mcp` at a repository's root is as likely to be a server's code,
+    // so a project keeps definitions only where its settings say.
+    assert!(!dir.path().join(Kind::Mcp.folder()).exists());
+    let settings = fs::read_to_string(dir.path().join(".mind/settings.toml")).unwrap();
+    assert!(!settings.contains("mcp"), "{settings}");
 }
 
 #[test]

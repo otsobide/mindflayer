@@ -4,7 +4,9 @@
 use crate::hash;
 use crate::mother::random;
 use crate::mother::url::UrlMother;
-use crate::value::{ArtifactName, ContentHash, Origin, ProjectId, Redacted, Revision};
+use crate::value::{
+    ArtifactName, ContentHash, InputName, Origin, ProjectId, Redacted, Revision, VariableName,
+};
 
 /// Makes [`ContentHash`]es, through the recipe or the parser, the only ways
 /// one is made.
@@ -241,5 +243,37 @@ impl RevisionMother {
     /// Exactly `text`.
     pub fn create(text: &str) -> Revision {
         Revision::from(text)
+    }
+}
+
+/// Makes [`InputName`]s, as a definition calls what somebody supplies.
+pub struct InputNameMother;
+
+impl InputNameMother {
+    /// Words joined by underscores, as an input is usually named.
+    pub fn random() -> InputName {
+        InputName::from(format!("{}_{}", random::word(), random::word()))
+    }
+
+    /// Exactly `text`, whatever it holds: a definition on the disk is read
+    /// whatever it calls an input.
+    pub fn create(text: &str) -> InputName {
+        InputName::from(text)
+    }
+}
+
+/// Makes [`VariableName`]s, as a shell names an environment variable.
+pub struct VariableNameMother;
+
+impl VariableNameMother {
+    /// Capitals joined by underscores, as a variable holding a secret is
+    /// usually named.
+    pub fn random() -> VariableName {
+        VariableName::from(format!("{}_{}", random::word(), random::word()).to_ascii_uppercase())
+    }
+
+    /// Exactly `text`.
+    pub fn create(text: &str) -> VariableName {
+        VariableName::from(text)
     }
 }

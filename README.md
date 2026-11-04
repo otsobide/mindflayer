@@ -22,8 +22,9 @@ browser, `mindweaver ui`, which this page tours.
 - A **project** is a repository with a small `.mind` folder, kept out of git
   unless your team shares it, naming the agents that work there.
 - A **workspace** is the folder your projects sit in. Its `.mindweaver` links
-  them, keeps a **library** of skills and rules of its own, and a **shelf**
-  of skills gathered from git repositories.
+  them, keeps a **library** of skills and rules of its own, and the
+  definitions of the MCP servers its projects use, and a **shelf** of skills
+  gathered from git repositories.
 - **Installing** copies a skill or a rule from either into a project, into
   each folder its agents read, and remembers what it wrote: that is what lets
   Mindweaver update it or take it out later, and leave everything else alone.
@@ -62,12 +63,12 @@ do.
 
 ### Overview
 
-What the workspace holds at a glance: the projects it links, the skills and
-rules in them and in its library, the installs that have fallen behind or
-been changed by hand, what is on the shelf, and anything that could not be
-read.
+What the workspace holds at a glance: the projects it links, the skills,
+rules and MCP servers in them and in its library, the installs that have
+fallen behind or been changed by hand, what is on the shelf, and anything
+that could not be read.
 
-![The overview: cards counting projects, skills, rules, outdated and edited installs, and the shelf](docs/images/overview.png)
+![The overview: cards counting projects, skills, rules, MCP servers, outdated and edited installs, and the shelf](docs/images/overview.png)
 
 ### Projects
 
@@ -100,8 +101,11 @@ from its row, after which Mindweaver manages it like anything it installed.
 
 ### The library
 
-The workspace's own skills and rules, each with the projects holding a copy
-and how every copy stands.
+The workspace's own skills, rules and MCP servers, each with the projects
+holding a copy and how every copy stands. An MCP server is a definition you
+write into the library by hand for now, which Mindweaver lists and checks
+but does not install into a project yet ([what one looks
+like](docs/reference.md#what-an-mcp-server-looks-like)).
 
 ![The library's skills, each with the projects that hold a copy and its state there](docs/images/library.png)
 

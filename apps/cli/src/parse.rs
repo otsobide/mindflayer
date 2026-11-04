@@ -200,7 +200,7 @@ pub enum Command {
     /// List this project's artifacts.
     #[command(alias = "ls")]
     List {
-        /// Only this kind: `skills` or `rules` [default: every kind].
+        /// Only this kind: `skills`, `rules` or `mcp` [default: every kind].
         kind: Option<Kind>,
 
         /// Print it as JSON, in the envelope every reading command's --json
@@ -601,7 +601,7 @@ pub enum WeaverCommand {
     /// List the workspace's own artifacts and every managed project's.
     #[command(alias = "ls")]
     List {
-        /// Only this kind: `skills` or `rules` [default: every kind].
+        /// Only this kind: `skills`, `rules` or `mcp` [default: every kind].
         kind: Option<Kind>,
 
         /// Only this project.

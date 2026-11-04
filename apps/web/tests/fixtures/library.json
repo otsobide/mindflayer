@@ -272,5 +272,51 @@
       "reference": "rule:style/comments",
       "type": "contents"
     }
+  },
+  {
+    "answer": {
+      "entries": [
+        {
+          "folder": false,
+          "path": "github.toml",
+          "refused": null,
+          "size": 508
+        }
+      ],
+      "kind": "mcp",
+      "manifest": "github.toml",
+      "name": "github",
+      "truncated": false
+    },
+    "query": {
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "mcp:github",
+      "type": "files"
+    }
+  },
+  {
+    "answer": {
+      "file": "github.toml",
+      "hash": "64f21997563753d6dab1e9357205151b5ff8ae900eb4e9d4dd5f1854f847a6b5",
+      "kind": "mcp",
+      "manifest": {
+        "body": "format = 1\nname = \"github\"\ndescription = \"GitHub's issues, pull requests and code\"\n\n[transport]\ntype = \"stdio\"\ncommand = \"npx\"\nargs = [\"-y\", \"@example/server\", \"--workspace\", \"{workspace}\"]\nenv = { API_KEY = \"{api_key}\", LOG_LEVEL = \"info\" }\ncwd = \".\"\n\n[[inputs]]\nname = \"api_key\"\nkind = \"env\"\ndescription = \"The key the server signs in with\"\nrequired = true\nsecret = true\nenv_var = \"EXAMPLE_API_KEY\"\n\n[[inputs]]\nname = \"workspace\"\nkind = \"arg\"\nenv_var = \"EXAMPLE_WORKSPACE\"\n\n[extras.claude]\ntimeout = 30000\n",
+        "front_matter": null
+      },
+      "name": "github",
+      "size": 508,
+      "text": "format = 1\nname = \"github\"\ndescription = \"GitHub's issues, pull requests and code\"\n\n[transport]\ntype = \"stdio\"\ncommand = \"npx\"\nargs = [\"-y\", \"@example/server\", \"--workspace\", \"{workspace}\"]\nenv = { API_KEY = \"{api_key}\", LOG_LEVEL = \"info\" }\ncwd = \".\"\n\n[[inputs]]\nname = \"api_key\"\nkind = \"env\"\ndescription = \"The key the server signs in with\"\nrequired = true\nsecret = true\nenv_var = \"EXAMPLE_API_KEY\"\n\n[[inputs]]\nname = \"workspace\"\nkind = \"arg\"\nenv_var = \"EXAMPLE_WORKSPACE\"\n\n[extras.claude]\ntimeout = 30000\n",
+      "withheld": null
+    },
+    "query": {
+      "file": "github.toml",
+      "holder": {
+        "type": "workspace"
+      },
+      "reference": "mcp:github",
+      "type": "contents"
+    }
   }
 ]
