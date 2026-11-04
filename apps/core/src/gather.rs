@@ -792,3 +792,7 @@ codes!(GatherError {
 /// Re-exported here because the shelf and its record are one feature: a caller
 /// that gathers is the caller that lists.
 pub use ledger::Gathered;
+
+#[cfg(test)]
+#[path = "gather_test.rs"]
+mod tests;

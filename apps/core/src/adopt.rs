@@ -630,3 +630,7 @@ fn held_to_an_install(path: &Path, name: &str) -> Result<SkillManifest, AdoptErr
     }
     Ok(manifest.clone())
 }
+
+#[cfg(test)]
+#[path = "adopt_test.rs"]
+mod tests;

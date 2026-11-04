@@ -499,3 +499,7 @@ pub trait LedgerStore: Debug + Send {
     /// The most recent actions, newest first.
     fn history(&self, limit: usize) -> Result<Vec<Entry>, LedgerError>;
 }
+
+#[cfg(test)]
+#[path = "port_test.rs"]
+mod tests;

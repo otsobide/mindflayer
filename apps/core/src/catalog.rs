@@ -901,3 +901,7 @@ fn is_hidden(path: &Path) -> bool {
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.starts_with('.'))
 }
+
+#[cfg(test)]
+#[path = "catalog_test.rs"]
+mod tests;

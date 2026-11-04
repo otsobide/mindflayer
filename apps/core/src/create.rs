@@ -596,3 +596,7 @@ codes!(CreateError {
     Self::Artifact(error) => error,
     Self::Workspace(error) => error,
 });
+
+#[cfg(test)]
+#[path = "create_test.rs"]
+mod tests;

@@ -365,3 +365,7 @@ pub fn forget(home: &Path, root: &Path) -> Result<Vec<PathBuf>, WorkspaceError> 
         }),
     }
 }
+
+#[cfg(test)]
+#[path = "known_test.rs"]
+mod tests;

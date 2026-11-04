@@ -69,3 +69,7 @@ pub(crate) fn ending(lines: &[Line]) -> &'static [u8] {
         .find(|end| !end.is_empty())
         .unwrap_or(LF)
 }
+
+#[cfg(test)]
+#[path = "lines_test.rs"]
+mod tests;

@@ -499,3 +499,7 @@ impl LedgerError {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "ledger_test.rs"]
+mod tests;

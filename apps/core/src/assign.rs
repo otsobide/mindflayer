@@ -263,3 +263,7 @@ fn each(projects: &[MindProject]) -> Vec<&MindProject> {
     }
     once
 }
+
+#[cfg(test)]
+#[path = "assign_test.rs"]
+mod tests;

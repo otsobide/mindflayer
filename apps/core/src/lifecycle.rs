@@ -1181,3 +1181,7 @@ codes!(LifecycleError {
     Self::Workspace(error) => error,
     Self::Artifact(error) => error,
 });
+
+#[cfg(test)]
+#[path = "lifecycle_test.rs"]
+mod tests;

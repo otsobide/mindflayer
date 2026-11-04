@@ -31,3 +31,7 @@ impl Clock for SystemClock {
             .map_or(0, |elapsed| elapsed.as_secs() as i64)
     }
 }
+
+#[cfg(test)]
+#[path = "adapter_test.rs"]
+mod tests;
