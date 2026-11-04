@@ -23,6 +23,7 @@ use crate::kind::Kind;
 use crate::ledger::Ledger;
 use crate::mother::artifact::SkillMother;
 use crate::mother::random;
+use crate::mother::value::ProjectIdMother;
 use crate::names::Names;
 use crate::settings::Share;
 use crate::workspace::{Directories, MindProject, WeaverWorkspace};
@@ -215,6 +216,53 @@ impl ProjectMother {
             include_str!("../../tests/fixtures/mind-v1.toml"),
         )
         .expect("write its marker");
+        MindProject::open(root).expect("open the project")
+    }
+
+    /// The project `root` is, marked by the `settings.json` a version 3
+    /// `mind init` wrote, laid out as it laid one out: every agent,
+    /// local, with the `.gitignore` that kept `.mind` out of git, and the
+    /// folders `directories` names, each made. Written here rather than
+    /// through core, which writes a `settings.toml` and never a
+    /// `settings.json`, so such a project stays what that build made
+    /// whatever `mind init` writes now. A version 3 build named `skills`
+    /// and `rules`; `directories` naming a kind it did not know (`mcp`) is
+    /// a key somebody wrote into the file by hand.
+    pub fn json(root: &Path, directories: &Directories) -> MindProject {
+        let mind = root.join(crate::workspace::MIND_DIR);
+        fs::create_dir_all(&mind).expect("make the project's .mind");
+        fs::write(
+            mind.join(".gitignore"),
+            crate::workspace::FLAYER_MIND_IGNORE,
+        )
+        .expect("write its .gitignore");
+        let name = root
+            .file_name()
+            .and_then(|name| name.to_str())
+            .expect("a project's folder named in UTF-8");
+        // Each a JSON string as the build wrote it: a folder's name and a
+        // route of them hold nothing a JSON string escapes otherwise than
+        // Rust's `Debug` does.
+        let named: Vec<String> = directories
+            .entries()
+            .into_iter()
+            .map(|(key, folder)| format!("    {key:?}: {:?}", folder.to_str().expect("UTF-8")))
+            .collect();
+        fs::write(
+            mind.join(crate::settings::SETTINGS_JSON_FILE),
+            format!(
+                "{{\n  \"version\": {},\n  \"id\": \"{}\",\n  \"name\": {name:?},\n  \
+                 \"agents\": [\"claude\", \"codex\", \"opencode\"],\n  \"share\": \"local\",\n  \
+                 \"edit_tracked\": false,\n  \"directories\": {{\n{}\n  }}\n}}\n",
+                crate::workspace::SETTINGS_VERSION,
+                ProjectIdMother::random(),
+                named.join(",\n")
+            ),
+        )
+        .expect("write its settings.json");
+        for (_, folder) in directories.entries() {
+            fs::create_dir_all(root.join(folder)).expect("make a folder it names");
+        }
         MindProject::open(root).expect("open the project")
     }
 

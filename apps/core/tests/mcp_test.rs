@@ -9,16 +9,16 @@
 //! server's code is nobody's definitions.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use mindweaver_core::lifecycle;
 use mindweaver_core::mother::{
-    McpMother, MindflayerMother, ProjectMother, SkillMother, WorkspaceMother,
+    McpMother, MindflayerMother, ProjectMother, SettingsMother, SkillMother, WorkspaceMother,
 };
 use mindweaver_core::reading::Shown;
 use mindweaver_core::{
     create, Catalog, CreateError, Declared, Directories, DiscoveryFailure, Kind, LifecycleError,
-    MindProject, Reference, Share, ValidationIssue, WeaverWorkspace, WorkspaceError,
+    MarkerFile, MindProject, Reference, Share, ValidationIssue, WeaverWorkspace, WorkspaceError,
 };
 use tempfile::TempDir;
 
@@ -206,6 +206,34 @@ fn a_project_marked_by_its_settings_reads_servers_only_where_they_name_a_folder(
     assert_eq!(
         naming.directory_for(Kind::Mcp),
         Some(naming.root().join("mcp"))
+    );
+    assert_eq!(servers(&naming), (vec![String::from("github")], vec![]));
+}
+
+#[test]
+fn a_project_a_settings_json_marks_reads_servers_only_where_its_directories_name_a_folder() {
+    let dir = TempDir::new().unwrap();
+    let authoring = SettingsMother::authoring();
+    let silent = ProjectMother::json(&dir.path().join("silent"), &authoring);
+    let naming = ProjectMother::json(
+        &dir.path().join("naming"),
+        &authoring.with(Kind::Mcp, "defs"),
+    );
+
+    unrelated_mcp_folder(silent.root());
+    assert_eq!(silent.directory_for(Kind::Mcp), None);
+    assert_eq!(Catalog::folders(&silent, Kind::Mcp), Vec::<PathBuf>::new());
+    assert_eq!(servers(&silent), (vec![], vec![]));
+
+    unrelated_mcp_folder(naming.root());
+    write(
+        naming.root(),
+        &[("defs/github.toml", &McpMother::stdio("github"))],
+    );
+    assert_eq!(naming.marker_file(), MarkerFile::SettingsJson);
+    assert_eq!(
+        naming.directory_for(Kind::Mcp),
+        Some(naming.root().join("defs"))
     );
     assert_eq!(servers(&naming), (vec![String::from("github")], vec![]));
 }

@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use std::fs;
 
 use super::*;
+use crate::agent::Agent;
 use crate::artifact::{name_issues, strict_issues, ValidationIssue};
 use crate::frontmatter;
 use crate::kind::Kind;
@@ -298,6 +299,23 @@ fn the_fixture_mothers_make_a_workspace_a_project_and_a_repository() {
         authoring.directory_for(Kind::Mcp),
         Some(authoring.root().join("mcp"))
     );
+
+    let json = ProjectMother::json(&dir.path().join("json"), &SettingsMother::authoring());
+    assert_eq!(
+        json.marker_file(),
+        crate::workspace::MarkerFile::SettingsJson
+    );
+    assert!(json.warnings().is_empty(), "{:?}", json.warnings());
+    let settings = json.settings().unwrap();
+    assert_eq!(settings.version, crate::workspace::SETTINGS_VERSION);
+    assert_eq!(settings.agents, Agent::ALL);
+    assert_eq!(settings.share, Share::Local);
+    assert_eq!(
+        json.directory_for(Kind::Skill),
+        Some(json.root().join("skills"))
+    );
+    assert!(json.root().join("rules").is_dir());
+    assert_eq!(json.directory_for(Kind::Mcp), None);
 
     let mut workspace = workspace;
     let linked = ProjectMother::linked(&mut workspace, "linked");

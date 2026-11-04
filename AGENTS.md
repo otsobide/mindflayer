@@ -1382,7 +1382,8 @@ These are easy to break from a single file without noticing.
   (`SettingsMother`), the URLs a credential can be typed into (`UrlMother`,
   each form beside what redacting leaves of it) and what lives on the disk
   (`WorkspaceMother`, `ProjectMother`, among it a project a version 1 or 2
-  build made, `version_1` and `older`, and one that names a folder for MCP
+  build made, `version_1` and `older`, one a `settings.json` marks as a
+  version 3 build wrote it, `json`, and one that names a folder for MCP
   servers, `with_mcp`, `GitRepositoryMother`, `ShelfMother`),
   and what a Mindflayer build left under its names (`MindflayerMother`:
   a workspace in a `.mindflayer`, and a project's blocks, exclude lines and
@@ -1430,8 +1431,9 @@ These are easy to break from a single file without noticing.
   puts its copies is asked of core (`common::copies`). A test about what a
   project an older Mindweaver made does, a copy installed in the folder it
   authors in, makes one with `common::older_project`, and one about a
-  project a `settings.json` marks with `common::json_project`, which writes
-  the file as a version 3 `mind init` did. What git would list is
+  project a `settings.json` marks with `common::json_project`, which has
+  `ProjectMother::json` write the file as a version 3 `mind init` did. What
+  git would list is
   asked of gix too (`common::untracked`), and a core fixture has git track
   its files by writing the index with gix (`common::indexed`). A core test
   about which `CLAUDE.md` Claude finds first holds its temporary folder to
