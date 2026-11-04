@@ -2,7 +2,7 @@
 
 Mindweaver manages what your coding agents read, the way git manages code: a
 project carries a `.mind` directory beside its **skills** and **rules**, and
-a workspace above it carries a `.mindflayer` that orchestrates several such
+a workspace above it carries a `.mindweaver` that orchestrates several such
 projects at once.
 
 One shared Rust engine (`mindweaver-core`) behind every front end: the CLI
@@ -43,7 +43,7 @@ says why each part is the way it is.
 | | Marker | Holds | Think of it as |
 |---|---|---|---|
 | **Mind project** | `.mind/settings.toml` | the agents that work in it, and its artifacts, in the directories the marker names | a repository's `.git` |
-| **Weaver workspace** | `.mindflayer/flayer.toml` | references to mind projects, and artifacts of its own it shares with them | the directory your repos sit in |
+| **Weaver workspace** | `.mindweaver/weaver.toml` | references to mind projects, and artifacts of its own it shares with them | the directory your repos sit in |
 
 A mind project's `.mind` belongs to the checkout it is in: a short settings
 file that keeps itself out of git, the way a Python virtualenv does. What the
@@ -62,9 +62,11 @@ from inside a project.
 ### The workspace in your home
 
 A workspace is found the way `.git` is, by walking up from where you are. When
-nothing up there has a `.mindflayer`, `mindweaver` uses **the one in your home**,
-`~/.mindflayer`, so projects scattered anywhere can still be managed together
-without choosing a directory first. `mindweaver init` somewhere else makes a
+nothing up there has a `.mindweaver`, `mindweaver` uses **the one in your home**,
+`~/.mindweaver`, so projects scattered anywhere can still be managed together
+without choosing a directory first. One a Mindflayer build made, a
+`.mindflayer`, is found the same way until it is moved
+([from Mindflayer](#from-mindflayer)). `mindweaver init` somewhere else makes a
 workspace there, and from inside it that one wins. The TUI says when it is
 showing the default one, and `mindweaver which` says which workspace a command
 would use, and why.
@@ -78,22 +80,22 @@ empty workspace would, and says where the workspace will be:
 $ mindweaver list
 you manages no projects yet
   link one with `mindweaver link <path>`
-hint: no workspace here or above, and the default one is not made yet; the first command that writes to it, such as `mindweaver link <path>`, makes it in /home/you/.mindflayer
+hint: no workspace here or above, and the default one is not made yet; the first command that writes to it, such as `mindweaver link <path>`, makes it in /home/you/.mindweaver
 ```
 
-Made, it puts nothing in your home but `.mindflayer`. Its own skills and rules
+Made, it puts nothing in your home but `.mindweaver`. Its own skills and rules
 go in its library inside it, where no agent looks, rather than in a `~/skills`
 and `~/rules` above every project you have:
 
 ```
 $ mindweaver add skill commit-style "How every repo here writes commits"
-created skill commit-style at /home/you/.mindflayer/library/skills/commit-style/SKILL.md
+created skill commit-style at /home/you/.mindweaver/library/skills/commit-style/SKILL.md
 ```
 
 One an older Mindweaver made keeps them in `~/skills` and `~/rules` until you
 [move them into its library](#upgrading).
 
-`--home DIR`, or `$MINDFLAYER_HOME`, puts the default somewhere other than your
+`--home DIR`, or `$MINDWEAVER_HOME`, puts the default somewhere other than your
 home; set to empty (`--home ""`) there is no default, and a command outside
 every workspace says so instead.
 
@@ -101,7 +103,7 @@ every workspace says so instead.
 
 Walking up is what happens when nothing says otherwise. `-W DIR`
 (`--workspace`) names the workspace a command uses, by its directory or its
-`.mindflayer`, from wherever you are; `$MINDFLAYER_WORKSPACE`, which `mindweaver
+`.mindweaver`, from wherever you are; `$MINDWEAVER_WORKSPACE`, which `mindweaver
 activate` sets ([several weavers](#several-weavers)), does the same for every
 command run in a shell, the way an activated Python virtualenv does.
 Either one wins over a workspace above you, so you can keep several weavers
@@ -112,7 +114,7 @@ $ cd ~/Projects/collapse                   # under the ~/Projects workspace
 $ mindweaver -W ~/weavers/writing list     # a workspace beside it instead
 prose-style  How every essay here is written
 
-$ export MINDFLAYER_WORKSPACE=~/weavers/writing
+$ export MINDWEAVER_WORKSPACE=~/weavers/writing
 $ mindweaver list                          # the same, for every command
 prose-style  How every essay here is written
 $ mind link                                # this project, into that one
@@ -127,10 +129,10 @@ never passed over for the one above and never made into one:
 
 ```
 $ mindweaver -W ~/notes list
-error: -W names a workspace that cannot be used: /home/you/notes: not a weaver workspace (no .mindflayer/flayer.toml)
+error: -W names a workspace that cannot be used: /home/you/notes: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)
 ```
 
-`-W ""` names none and leaves `$MINDFLAYER_WORKSPACE` out too, and an empty
+`-W ""` names none and leaves `$MINDWEAVER_WORKSPACE` out too, and an empty
 variable counts as unset. `--home` still says only where the default lives.
 
 ### Several weavers
@@ -143,29 +145,29 @@ shell code that activates it, for `eval` to run:
 
 ```
 $ mindweaver init ~/weavers/writing
-initialized weaver workspace `writing` in /home/you/weavers/writing/.mindflayer
+initialized weaver workspace `writing` in /home/you/weavers/writing/.mindweaver
   remembered as weavers/writing by the default workspace
 $ cd ~/Projects/collapse
 $ mindweaver which
 Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
 $ eval "$(mindweaver activate ~/weavers/writing)"
 (weaver:writing) $ mindweaver which
-writing at /home/you/weavers/writing, activated by $MINDFLAYER_WORKSPACE
+writing at /home/you/weavers/writing, activated by $MINDWEAVER_WORKSPACE
 (weaver:writing) $ source .venv/bin/activate
 (.venv) (weaver:writing) $ deactivate      # the virtualenv's; the weaver stays
-(weaver:writing) $ flayer-deactivate
+(weaver:writing) $ mindweaver-deactivate
 $ mindweaver which
 Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
 ```
 
-Activating sets `$MINDFLAYER_WORKSPACE` and puts `(weaver:<name>)` in front
-of your prompt; `flayer-deactivate` puts both back as they were, a variable
+Activating sets `$MINDWEAVER_WORKSPACE` and puts `(weaver:<name>)` in front
+of your prompt; `mindweaver-deactivate` puts both back as they were, a variable
 you had set yourself included. Activating another weaver swaps one for the
 other, and `mindweaver activate` on its own activates the one a command run there
 would use. `mindweaver which` says which workspace that is and why: named by
 `-W`, activated, found walking up, or the default one.
 
-It is `flayer-deactivate` and never `deactivate`, so it gets along with a
+It is `mindweaver-deactivate` and never `deactivate`, so it gets along with a
 virtualenv activated before it or after it: in bash and zsh, each one's
 deactivate takes out only what its own activate put in, whichever runs first.
 In the prompt, the name shows each of `` \ $ ` % ! `` as `_`, since a prompt
@@ -189,7 +191,7 @@ code, so `eval` runs nothing and the shell is left as it was:
 
 ```
 $ eval "$(mindweaver activate ~/notes)"
-error: /home/you/notes: not a weaver workspace (no .mindflayer/flayer.toml)
+error: /home/you/notes: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)
 ```
 
 ### The weavers this machine knows
@@ -209,7 +211,7 @@ $ mindweaver workspaces
 
   `mindweaver init <path>` remembers the one in use, and changes nothing else in it
 $ mindweaver init ~/Projects
-weaver workspace `Projects` already initialized in /home/you/Projects/.mindflayer
+weaver workspace `Projects` already initialized in /home/you/Projects/.mindweaver
   remembered as Projects by the default workspace
 ```
 
@@ -227,7 +229,7 @@ $ mindweaver workspaces forget ~/weavers/writing
 forgot weavers/writing
 ```
 
-The list is a `known` array in `~/.mindflayer/flayer.toml`, which you can read
+The list is a `known` array in `~/.mindweaver/weaver.toml`, which you can read
 and edit by hand, and which an older Mindweaver reads past and keeps. Listing
 never makes the workspace in your home; until something does, it knows no
 weaver, and with `--home ""` there is none to know them. `--json` prints the
@@ -258,7 +260,7 @@ tracks in a local project), Claude gets the rule as a rule file of its own
 instead, so it reads each rule once. Mindweaver never creates a `CLAUDE.md`.
 A rule that states `paths` is about those files only, and only Claude Code
 honours that: it goes to Claude alone, as
-`.claude/rules/mindflayer/<name>.md`, which Claude loads once it reads a file
+`.claude/rules/mindweaver/<name>.md`, which Claude loads once it reads a file
 the patterns match, and never into `AGENTS.md`, where every agent would read
 it for every file. Codex and OpenCode read no `.claude/rules`, so a
 path-scoped rule does not reach them, and Mindweaver says so for each one it
@@ -305,7 +307,9 @@ yours: `cargo uninstall mindflayer-cli` removes the copies an older `make
 install` put there, its `mind` with them, and has to come first, since
 cargo will not write a `mind` over one another package installed; `rm
 ~/.cargo/bin/flayer ~/.cargo/bin/mf` removes the links an older `make
-dev/link` made.
+dev/link` made. What such a build wrote in your workspaces and projects
+keeps working, and `mindweaver migrate --names` moves it to the new names
+when you ask ([from Mindflayer](#from-mindflayer)).
 
 Then make a repository a mind project, and give the folder it sits in a
 workspace to manage it, and others like it, from:
@@ -321,7 +325,7 @@ $ git status --short
 
 $ cd ~/Projects
 $ mindweaver init
-initialized weaver workspace `Projects` in /home/you/Projects/.mindflayer
+initialized weaver workspace `Projects` in /home/you/Projects/.mindweaver
 $ mindweaver link collapse
 linked collapse as collapse
 $ mindweaver list
@@ -441,6 +445,9 @@ mind migrate [--agents AGENTS] [--local|--shared] [--yes]
                            # move a project an older Mindweaver made to a
                            # settings.toml, and its installs where its
                            # agents read
+mind migrate --names [--yes]
+                           # mindweaver migrate --names, on the workspace
+                           # this project's commands use
 
 mindweaver                 # the TUI: everything below, a key each
 mindweaver ui [--port PORT] [--no-open] [--dev] [--token-file PATH]
@@ -448,7 +455,7 @@ mindweaver ui [--port PORT] [--no-open] [--dev] [--token-file PATH]
                            # mind ui is the same; with --no-open and
                            # --token-file, its API for scripts alone
 mindweaver init [PATH] [--skills DIR] [--rules DIR]
-                           # create a .mindflayer here, or in PATH
+                           # create a .mindweaver here, or in PATH
 mindweaver activate [DIR] [--shell SHELL]
                            # the code that activates a workspace: eval "$(...)"
 mindweaver which           # the workspace a command here would use, and why
@@ -507,6 +514,10 @@ mindweaver agents|share|targets -p PROJECT ...
 mindweaver migrate --library [--yes]
                            # move its own skills and rules into its library;
                            # without --yes, say what would move
+mindweaver migrate --names [--yes]
+                           # move a workspace a Mindflayer build made, and
+                           # what it wrote in its projects, to Mindweaver's
+                           # names; without --yes, say what would move
 mindweaver migrate -p PROJECT|--all-projects [--agents AGENTS] [--local] [--yes]
                            # mind migrate, for one of its projects or every one
 
@@ -514,7 +525,7 @@ mind weaver <cmd>          # the long way round; `mindweaver <cmd>` is the short
 mind ls / mindweaver ls    # alias for list; `mindweaver gather ls` for gather list
 mind -C <dir> ...          # work in <dir> instead of the current directory
 mind -W <dir> ...          # the workspace to use, from anywhere; "" for none
-                           # named; $MINDFLAYER_WORKSPACE otherwise
+                           # named; $MINDWEAVER_WORKSPACE otherwise
 mind --home <dir> ...      # where the default workspace lives; "" for none
 mind --claude-config-dir|--codex-home|--opencode-config-dir|--agents-dir <dir> ...
                            # where each agent's own folder is; "" for none
@@ -740,7 +751,7 @@ The repository's `skills` folder is what gets harvested; `--path agents` takes
 another one, and `--ref v2` takes a branch or a tag instead of the default. A
 repository that is a weaver workspace made by `mindweaver init` keeps its own in
 [its library](#the-workspaces-own-skills-and-rules), so it is gathered with
-`--path .mindflayer/library/skills`, or [loaded](#loading-another-workspace)
+`--path .mindweaver/library/skills`, or [loaded](#loading-another-workspace)
 from a clone instead.
 
 With stderr on a terminal it says what it is doing while it does it
@@ -767,7 +778,7 @@ https://github.com/acme/skills at 9f8e7d6
 ```
 
 Two repositories may both offer `commit-style`, and both are kept: each source
-gets its own folder under `.mindflayer/skills/`, and the workspace's database
+gets its own folder under `.mindweaver/skills/`, and the workspace's database
 records which came from where.
 
 ```
@@ -777,7 +788,7 @@ https://github.com/other/rules at 4d5e6f7
   added  pdf--forms    Fill in PDF forms
 
 2 skills: 2 added, 0 updated, 0 unchanged
-warning: /home/you/Projects/.mindflayer/skills/github.com-other-rules/pdf--forms/SKILL.md: `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
+warning: /home/you/Projects/.mindweaver/skills/github.com-other-rules/pdf--forms/SKILL.md: `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
 
 $ mindweaver gather list
 commit-style  https://github.com/acme/skills  How this repo writes commit messages
@@ -856,7 +867,7 @@ let the credential helper supply it.
 A workspace an older Mindweaver gathered into with a token in a URL is cleaned
 up by the next command that writes to it: a gather, an install or an
 uninstall, or an `add`, `edit`, `rename` or `remove` in a project it manages.
-The token is taken out of `mindflayer.db` and out of the clone in
+The token is taken out of `mindweaver.db` and out of the clone in
 `cache/`, and the command says so once, on stderr, without failing because of
 it:
 
@@ -874,19 +885,19 @@ the token and leaves the file as it is.
 ### What a workspace keeps
 
 ```
-.mindflayer/
-  flayer.toml     the projects it manages, the workspaces it loads, and where
+.mindweaver/
+  weaver.toml     the projects it manages, the workspaces it loads, and where
                   its own skills and rules are
-  flayer.toml.v2  flayer.toml as it was before `mindweaver migrate --library`
+  weaver.toml.v2  weaver.toml as it was before `mindweaver migrate --library`
                   rewrote it, if it did
   library/skills/<name>/SKILL.md
   library/rules/<name>.md
-                  its own, unless flayer.toml says otherwise
-  mindflayer.db   what was gathered and from where, what was installed where,
+                  its own, unless weaver.toml says otherwise
+  mindweaver.db   what was gathered and from where, what was installed where,
                   and every action taken; a URL goes in without credentials,
                   and one an older Mindweaver stored is taken out by the next
                   command that writes
-  mindflayer.db.v2.bak
+  mindweaver.db.v2.bak
                   the database as it was before this version of Mindweaver
                   updated it, if it did
   lock            held by a command while it changes the workspace
@@ -895,18 +906,18 @@ the token and leaves the file as it is.
   templates/      templates for every project it manages, if you add any
 ```
 
-`mindflayer.db` is SQLite, and it is the one thing Mindweaver writes that is
+`mindweaver.db` is SQLite, and it is the one thing Mindweaver writes that is
 not meant to be read by hand: it answers questions a file cannot, like which
 of two identically named skills came from which repository, at which revision.
 The first gather, install or uninstall makes it; a command that only reads
 never does.
 When a new version of Mindweaver changes how the database is laid out, the
 first command to open it updates it, after copying it aside as
-`mindflayer.db.v<old version>.bak`. The copy is never removed for you, and it
+`mindweaver.db.v<old version>.bak`. The copy is never removed for you, and it
 is the way back: an older Mindweaver refuses the updated database, and reads
 the copy put back in its place. It is the database as it was, so a token an
 older Mindweaver stored in a URL stays in the copy after the next command that
-writes takes it out of `mindflayer.db`.
+writes takes it out of `mindweaver.db`.
 Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 
 ```sql
@@ -922,7 +933,7 @@ waited for:
 
 ```
 $ mindweaver link tanukeys
-error: /home/you/Projects/.mindflayer/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
+error: /home/you/Projects/.mindweaver/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
 ```
 
 Reading never waits for `lock`. Listing, showing and the TUI's screens read
@@ -1174,7 +1185,7 @@ above it, or else [the one in your home](#the-workspace-in-your-home). The last
 line always says which.
 
 What it records is where the workspace is, in the `loaded` list of your
-`flayer.toml`, and its skills and rules are **read from there every time**:
+`weaver.toml`, and its skills and rules are **read from there every time**:
 edit one in `skills-equipo` and the next `mw update -p api`, or `mw install`
 of it, [updates the copy](#keeping-projects-up-to-date) in `api`, with
 nothing to load again. `mindweaver gather list` and the install
@@ -1428,7 +1439,7 @@ skill  commit-style  current  claude,codex,opencode  load:../src/mindweaver/exam
 rule   git/commits   current  claude,codex,opencode  load:../src/mindweaver/examples
 ```
 
-The entry is rewritten where it stands in `flayer.toml`, comments and all,
+The entry is rewritten where it stands in `weaver.toml`, comments and all,
 and every record moves with it, so what was installed is current again rather
 than somebody's. In a local project, what keeps those copies out of git goes
 along: lines of `info/exclude` naming the old place are written for the new
@@ -1558,13 +1569,13 @@ $ cd ~/Projects
 $ mindweaver status -p collapse
 notes  foreign  claude,opencode
 $ mindweaver adopt -p collapse notes
-would copy notes from collapse into the library, at /home/you/Projects/.mindflayer/library/skills/notes
+would copy notes from collapse into the library, at /home/you/Projects/.mindweaver/library/skills/notes
 would record notes in collapse as installed from workspace, at .claude/skills/notes
 would record .agents/skills/notes missing, for `mindweaver update -p collapse` to put there
 nothing adopted: add --yes to go ahead
 note: git tracks .claude/skills/notes, so it stays in git though collapse is local: what an update writes there shows in `git status`
 $ mindweaver adopt -p collapse notes --yes
-copied notes from collapse into the library, at /home/you/Projects/.mindflayer/library/skills/notes
+copied notes from collapse into the library, at /home/you/Projects/.mindweaver/library/skills/notes
 recorded notes in collapse as installed from workspace, at .claude/skills/notes
 recorded .agents/skills/notes missing: `mindweaver update -p collapse` puts it there
 note: git tracks .claude/skills/notes, so it stays in git though collapse is local: what an update writes there shows in `git status`
@@ -1620,23 +1631,23 @@ collapse   skill  deploy             Ship the service to staging
 workspace  rule   git/no-force-push  Never force-push a shared branch
 ```
 
-They live in the workspace's library, `.mindflayer/library/skills` and
-`.mindflayer/library/rules`, inside `.mindflayer` where no agent looks: they
+They live in the workspace's library, `.mindweaver/library/skills` and
+`.mindweaver/library/rules`, inside `.mindweaver` where no agent looks: they
 reach an agent by being installed into its project, never by sitting in a
-directory above it. `mindweaver init` writes both into `flayer.toml`:
+directory above it. `mindweaver init` writes both into `weaver.toml`:
 
 ```toml
 [directories]
-skills = ".mindflayer/library/skills"
-rules = ".mindflayer/library/rules"
+skills = ".mindweaver/library/skills"
+rules = ".mindweaver/library/rules"
 ```
 
 `mindweaver init --skills DIR --rules DIR` says otherwise, as `mind init` does for
 a project. Any folder inside the workspace will do except the shelf and the
 cache, which are reserved for gathering, a folder inside them, or one holding
-them, so `--skills .mindflayer/skills` and `--rules .mindflayer` are refused. A
+them, so `--skills .mindweaver/skills` and `--rules .mindweaver` are refused. A
 workspace made before the library keeps them in `skills/` and `rules/` beside
-its projects, because that is what its `flayer.toml` says, until `mindweaver
+its projects, because that is what its `weaver.toml` says, until `mindweaver
 migrate --library` [moves them](#upgrading). Either way nothing is made until
 the first one is added.
 
@@ -1658,7 +1669,7 @@ it is done:
 ```
 $ mindweaver remove commit-style
 warning: commit-style is installed in collapse and tanukeys, which removing it alone would leave orphaned there; --everywhere takes it out of them too
-error: nothing removed: this deletes /home/you/Projects/.mindflayer/library/skills/commit-style and the 1 file in it; add --yes to go ahead
+error: nothing removed: this deletes /home/you/Projects/.mindweaver/library/skills/commit-style and the 1 file in it; add --yes to go ahead
 ```
 
 `--everywhere` takes it out of every project the workspace links first, as
@@ -1670,12 +1681,12 @@ Here a copy in `tanukeys` was changed since it was installed:
 $ mindweaver remove commit-style --everywhere
 would remove commit-style from collapse, where it is current
 would leave commit-style in tanukeys, where it is edited, at .agents/skills/commit-style
-would remove skill commit-style from /home/you/Projects/.mindflayer/library/skills/commit-style and the 1 file in it
+would remove skill commit-style from /home/you/Projects/.mindweaver/library/skills/commit-style and the 1 file in it
 nothing removed: add --yes to go ahead
 $ mindweaver remove commit-style --everywhere --yes
 removed commit-style from collapse
 left commit-style in tanukeys, where it is edited, at .agents/skills/commit-style
-removed skill commit-style from /home/you/Projects/.mindflayer/library/skills/commit-style
+removed skill commit-style from /home/you/Projects/.mindweaver/library/skills/commit-style
 note: nothing offers commit-style in tanukeys any more; `mindweaver uninstall -p tanukeys commit-style --force` takes it out
 ```
 
@@ -1695,7 +1706,7 @@ edited one stays until `--force`:
 
 ```
 $ mindweaver remove commit-style --yes
-removed skill commit-style from /home/you/Projects/.mindflayer/library/skills/commit-style
+removed skill commit-style from /home/you/Projects/.mindweaver/library/skills/commit-style
 warning: commit-style is still installed in collapse and tanukeys, orphaned now that nothing offers it; `mindweaver uninstall --orphaned --all-projects` takes out what nothing offers
 $ mindweaver uninstall --orphaned --all-projects
 removed commit-style from collapse
@@ -1930,7 +1941,7 @@ folder elsewhere, which opens like any other; and says the same of the
 folder open. Open a folder by its name, go back up by the trail above
 the list, to your home or to the workspace's folder by their buttons, or
 type a path and press Enter. Hidden folders are listed only once you
-switch them on, which says how many there are; a `.mindflayer`, and a
+switch them on, which says how many there are; a `.mindweaver`, and a
 link into one, are never listed, since nothing in one may be linked or
 scanned. A path the panel may not name is refused with its code, as a
 typed folder to link is, and the explorer stays where it was. **Choose**
@@ -2033,12 +2044,12 @@ write is held to), and what `validate` would say of it once written, word
 for word as `mindweaver validate` then prints it. **Save** runs, shown first:
 
 ```
-$ mindweaver -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review
+$ mindweaver -W /home/you/Projects edit --contents .mindweaver/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review
 edited skill review: ok
 ```
 
 The browser sends the text, never a path: the file the line names is the
-text, put in the workspace's `.mindflayer/tmp` for the line to read, named
+text, put in the workspace's `.mindweaver/tmp` for the line to read, named
 by the first digits of its SHA-256, and taken away once the line has run,
 whatever came of it. `--if-unchanged` is the SHA-256 of what the file held
 when the editor read it, so a change made to it since, in an editor or from
@@ -2098,7 +2109,7 @@ task shown in any tab is let go once the panel switched, since its lines
 name the workspace before, in a tab hidden then as soon as it is shown
 again, and so are the boxes marked on **Assign**; the
 switch waits for whatever is running to finish first. Launched with `-W`,
-the panel does not read `$MINDFLAYER_WORKSPACE`, as no command does once
+the panel does not read `$MINDWEAVER_WORKSPACE`, as no command does once
 `-W` is given, so an activated workspace is listed then only if this
 machine knows it.
 
@@ -2366,7 +2377,7 @@ Its status says which kind of thing went wrong, and the code which one:
 | 403 | `unknown_host` | the server named otherwise than as `127.0.0.1`, `localhost` or `[::1]` on its port |
 | 403 | `foreign_origin` | sent from a page of another origin |
 | 403 | `same_origin_required` | a change sent with the panel's cookie from anywhere but its page |
-| 403 | `x_mindflayer_required` | a change sent with the panel's cookie without `X-Mindflayer: 1` |
+| 403 | `x_mindflayer_required` | a change sent with the panel's cookie without `X-Mindweaver: 1` |
 | 404 | `unknown_route` | a path no route names, `/api` without its version among them |
 | 404 | Mindweaver's | a read naming what is not there: `not_registered` for an entry, `not_found` for an artifact, `contents_missing` for a file, `browse_missing` for a folder |
 | 405 | `method_not_allowed` | a method the route does not take (with `Allow`) |
@@ -2458,7 +2469,7 @@ skills = "skills"
 rules = "rules"
 ```
 
-It is TOML, as the workspace's `flayer.toml` is, and its comments say what
+It is TOML, as the workspace's `weaver.toml` is, and its comments say what
 each key does. `agents` are the agents that work in the project, and so
 where what is installed into it goes (`--agents` names them,
 comma-separated); `share` says whether that is kept to this checkout or left
@@ -2533,11 +2544,11 @@ commit:
 $ mindweaver install -p collapse commit-style
 installed commit-style into collapse, from workspace
 $ tail -5 collapse/.git/info/exclude
-# mindflayer:begin
+# mindweaver:begin
 # project 4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5
 /.agents/skills/commit-style/
 /.claude/skills/commit-style/
-# mindflayer:end
+# mindweaver:end
 ```
 
 Outside a git repository a local install says nothing keeps its copies out
@@ -2553,7 +2564,7 @@ block in a local project, and goes with the last rule; one that was there is
 yours, and keeps everything outside the block. A local project writes into
 one git tracks only with `edit_tracked` (`mind share local --edit-tracked`):
 without it, Claude gets each rule from a file of its own in
-`.claude/rules/mindflayer`, and the install warns that Codex and OpenCode read
+`.claude/rules/mindweaver`, and the install warns that Codex and OpenCode read
 none of them. A project an older Mindweaver made is given a copy of the rule
 in the folder its `mind.toml` names, filed by its route.
 
@@ -2827,7 +2838,7 @@ mind add skill deploy "Ship the service" --template full
 `full` ships with Mindweaver: a manifest with sections to fill in, and the
 `scripts/` and `references/` folders the skill format sets aside. Your own go in
 `.mind/templates/` for one project, or in the workspace's
-`.mindflayer/templates/` for every project it manages: a folder holding a
+`.mindweaver/templates/` for every project it manages: a folder holding a
 `SKILL.md` for a skill, a markdown file for a rule. `mind templates` lists what
 is available and where each comes from; of two with one name, the closer wins.
 `mindweaver add -p` finds the workspace's wherever the project sits; `mind add`
@@ -2936,20 +2947,108 @@ copying it aside ([what a workspace keeps](#what-a-workspace-keeps)).
 Mindweaver was called Mindflayer, and its second command `flayer`: what
 was `flayer <cmd>` is `mindweaver <cmd>`, what was `mind flayer <cmd>` is
 `mind weaver <cmd>`, and a flayer workspace is a weaver workspace. A script
-that runs `flayer` needs the new name; nothing a workspace or a project
-holds does. Its `.mindflayer`, its `flayer.toml` and its database, a
-project's blocks and Claude's rules folder, `$MINDFLAYER_WORKSPACE`,
-`$MINDFLAYER_HOME` and `flayer-deactivate` keep their names for now, and
-are read as they were written. The binaries an older build installed are
-yours to remove: [getting started](#getting-started) says how.
+that runs `flayer` needs the new name. The binaries an older build
+installed are yours to remove: [getting started](#getting-started) says
+how.
+
+What a Mindflayer build wrote on the disk keeps working as it was written.
+A workspace it made is a `.mindflayer` holding `flayer.toml` and
+`mindflayer.db`: it is found walking up and, while no `~/.mindweaver` is
+there, as the default in your home, `~/.mindflayer`, and it is written
+under those names, so nothing makes a `.mindweaver` beside it. The block it
+wrote in a project's `AGENTS.md` and the import in its `CLAUDE.md`
+(`<!-- mindflayer:begin -->`), and the block in git's exclude file
+(`# mindflayer:begin`), are read and rendered again under their own
+markers, and a rule file it gave Claude in `.claude/rules/mindflayer` stays
+there; only a block, or a rule file, made from now on is Mindweaver's. A
+shell its `activate` set up keeps its workspace: `$MINDFLAYER_WORKSPACE`
+and `$MINDFLAYER_HOME` are taken while `$MINDWEAVER_WORKSPACE` and
+`$MINDWEAVER_HOME` are not set at all, each said in a note, and
+`mindweaver activate` runs the old `flayer-deactivate` before it activates
+anything. Every command run on such a workspace ends with a hint:
+
+```
+$ mindweaver status
+review       current  claude,codex,opencode  workspace
+rust-errors  current  claude                 workspace
+warning: codex and opencode do not read rule `rust-errors` in app
+hint: the workspace at /home/you/Projects was made by a Mindflayer build, and is kept under its names; `mindweaver migrate --names` moves it, and what it wrote in its projects, to Mindweaver's
+```
+
+`mindweaver migrate --names` moves it, with what it wrote in the projects
+it links. On its own it changes nothing and says what `--yes` would do:
+
+```
+$ mindweaver migrate --names
+would move /home/you/Projects/.mindflayer to /home/you/Projects/.mindweaver
+would rename /home/you/Projects/.mindflayer/flayer.toml to /home/you/Projects/.mindweaver/weaver.toml
+would rename /home/you/Projects/.mindflayer/mindflayer.db to /home/you/Projects/.mindweaver/mindweaver.db
+would point skills in the marker at .mindweaver/library/skills
+would point rules in the marker at .mindweaver/library/rules
+would spell the markers of the block in /home/you/Projects/app/AGENTS.md as Mindweaver's
+would move /home/you/Projects/app/.claude/rules/mindflayer/rust-errors.md to /home/you/Projects/app/.claude/rules/mindweaver/rust-errors.md
+would spell the markers of the block in /home/you/Projects/app/.git/info/exclude as Mindweaver's
+nothing moved: add --yes to go ahead
+
+$ mindweaver migrate --names --yes
+moved /home/you/Projects/.mindflayer to /home/you/Projects/.mindweaver
+renamed /home/you/Projects/.mindflayer/flayer.toml to /home/you/Projects/.mindweaver/weaver.toml
+renamed /home/you/Projects/.mindflayer/mindflayer.db to /home/you/Projects/.mindweaver/mindweaver.db
+pointed skills in the marker at .mindweaver/library/skills
+pointed rules in the marker at .mindweaver/library/rules
+spelled the markers of the block in /home/you/Projects/app/AGENTS.md as Mindweaver's
+moved /home/you/Projects/app/.claude/rules/mindflayer/rust-errors.md to /home/you/Projects/app/.claude/rules/mindweaver/rust-errors.md
+spelled the markers of the block in /home/you/Projects/app/.git/info/exclude as Mindweaver's
+```
+
+The folder is renamed `.mindweaver`, and in it `flayer.toml` to
+`weaver.toml`, `mindflayer.db` to `mindweaver.db` and each copy kept of
+either beside them (a `flayer.toml.v2`, a `mindflayer.db.v4.bak`) to the
+new name with the same version; each folder the marker names inside
+`.mindflayer` is pointed at the same place in `.mindweaver`, every other
+byte of it kept, and what the database records of the shelf moves with it.
+The database is renamed, never migrated. In each project, the markers of
+its blocks are spelled `mindweaver:`, every other byte kept, and each rule
+file the database records in `.claude/rules/mindflayer` moves to
+`.claude/rules/mindweaver`, its record and its line in the exclude file
+with it; one you changed since is left where it is, its record naming it
+there, and the line says so. What was installed stays current, and a
+second run has nothing to do:
+
+```
+$ mindweaver migrate --names --yes
+nothing to move: the workspace is under Mindweaver's names already
+```
+
+`mind migrate --names`, in a project, moves the workspace its commands use
+the same way. The default workspace in your home is moved by the same
+line, run where it is the one in use.
+
+Nothing moves while anything is in the way, and every reason is said at
+once: a `.mindweaver` already there, something where a renamed file or a
+carried rule file would go, a block that cannot be read, a project whose
+marker cannot, or a database another process has open, a `mindweaver ui`
+or a TUI, which would go on writing to the old name: close it, and run the
+line again. A move that fails partway puts back every step it took. Git is
+never run: where git tracks the rules folder a move empties, the line says
+the `git rm --cached` and the `git add` that take the move into the index,
+and a tracked `AGENTS.md` shows the markers' change as yours to commit.
+
+The panel keeps the colour mode and the sidebar its browser chose under
+Mindflayer: it reads them once, and keeps them under the new name. The
+header its page sends and the cookie its token travels in are
+`X-Mindweaver` and `mw_<port>` now; each launch sets the cookie anew, so
+nothing of the old is read.
 
 ### A workspace made before the library
 
 `mindweaver init` used to keep a workspace's own skills and rules in `skills/` and
 `rules/` beside its projects: `~/skills` and `~/rules`, for the workspace in
 your home. Such a workspace still works, because its `flayer.toml` names those
-folders, and keeps them there until you move them into its library. On its own
-the command changes nothing and says what `--yes` would do:
+folders, and keeps them there until you move them into its library. A
+Mindflayer build made it, so it is a `.mindflayer` still, and its library is
+there until [`--names`](#from-mindflayer) moves the whole. On its own the
+command changes nothing and says what `--yes` would do:
 
 ```
 $ mindweaver migrate --library

@@ -53,8 +53,9 @@ surface, with what they share in `tests/common/`, and a module's unit tests in
 `src/<module>_test.rs` beside it. No test touches your home, or a workspace
 your shell has activated: the CLI suites run every command with `--home ""`
 and `--workspace ""`, and the few that run the binaries clear
-`$MINDFLAYER_HOME` and `$MINDFLAYER_WORKSPACE` and give them a home of their
-own. Nor do they touch your agents' folders, which no command reads yet, and
+`$MINDWEAVER_HOME` and `$MINDWEAVER_WORKSPACE`, and the `$MINDFLAYER_HOME`
+and `$MINDFLAYER_WORKSPACE` they still read in their place, and give them a
+home of their own. Nor do they touch your agents' folders, which no command reads yet, and
 the commands they run themselves give every agent-home option empty. The server's suites never leave 127.0.0.1, and run
 against a fake front end rather than the CLI. The CLI's `ui` suite starts
 `mindweaver ui` on 127.0.0.1 with `--no-open`, so no test opens a browser.
@@ -201,15 +202,15 @@ running `mindweaver` and `mind`, serves it with `mindweaver ui`, and drives the
 panel in Chromium and WebKit with Playwright. The overview, each project's
 page and each artifact's page have to show what `mindweaver list --json`
 prints, a project linked or unlinked from the panel has to leave
-`flayer.toml` byte for byte as `mindweaver link` or `mindweaver unlink` leaves a copy
+`weaver.toml` byte for byte as `mindweaver link` or `mindweaver unlink` leaves a copy
 of the workspace, an unlink has to ask first and run nothing when told no, a
 request from another origin has to be refused, and no page may log a
 violation of the server's content security policy. A test that changes
 something does it to a workspace and a `mindweaver ui` of its own, so no other
 test sees the change. Nothing it runs can
 reach your workspaces or your agents' folders: Playwright runs without
-`$MINDFLAYER_WORKSPACE`, `$MINDFLAYER_HOME`, `$CLAUDE_CONFIG_DIR`,
-`$CODEX_HOME` and `$OPENCODE_CONFIG_DIR`, the server and every command get
+`$MINDWEAVER_WORKSPACE`, `$MINDWEAVER_HOME`, their Mindflayer names,
+`$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` and `$OPENCODE_CONFIG_DIR`, the server and every command get
 an empty temporary folder as `HOME`, and every command names its workspace
 and gives every agent-home option empty. The suite fails if that home is not
 empty once the server has stopped. A test that loads another workspace gets

@@ -21,7 +21,7 @@ browser, `mindweaver ui`, which this page tours.
 
 - A **project** is a repository with a small `.mind` folder, kept out of git
   unless your team shares it, naming the agents that work there.
-- A **workspace** is the folder your projects sit in. Its `.mindflayer` links
+- A **workspace** is the folder your projects sit in. Its `.mindweaver` links
   them, keeps a **library** of skills and rules of its own, and a **shelf**
   of skills gathered from git repositories.
 - **Installing** copies a skill or a rule from either into a project, into
