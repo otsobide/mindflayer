@@ -550,8 +550,9 @@ codes!(ProjectWarning {
 /// everything else the settings say ([`MindProject::misplaced_targets`]).
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error(
-    "{settings}: {folder} is no folder to install {kind}s in, because {because}, \
+    "{settings}: {folder} is no folder to install {kinds} in, because {because}, \
      so nothing is installed there",
+    kinds = .kind.plural(),
     because = .why.because(*.kind)
 )]
 pub struct MisplacedTarget {
@@ -2542,12 +2543,13 @@ pub enum WorkspaceError {
     NotKnown { path: PathBuf, workspace: PathBuf },
     #[error("{path}: not valid UTF-8, so it cannot be written into a marker")]
     NonUtf8Path { path: PathBuf },
-    #[error("{path}: cannot hold a project's {kind}s, because it is not inside the project")]
+    #[error("{path}: cannot hold a project's {kinds}, because it is not inside the project", kinds = .kind.plural())]
     OutsideProject { path: PathBuf, kind: Kind },
     #[error(
-        "{path}: cannot hold a project's {kind}s, \
+        "{path}: cannot hold a project's {kinds}, \
          because it is inside {MIND_DIR}, which holds Mindweaver's own files \
-         and is kept out of git unless the project is shared"
+         and is kept out of git unless the project is shared",
+        kinds = .kind.plural()
     )]
     InsideMind { path: PathBuf, kind: Kind },
     /// Saying how the project comes to keep one, by the file it is marked
@@ -2568,7 +2570,8 @@ pub enum WorkspaceError {
     /// A folder a change to a project's settings would send a kind's
     /// installs to that no install would use ([`Misplaced`]).
     #[error(
-        "{path}: cannot be where a project's {kind}s are installed, because {because}",
+        "{path}: cannot be where a project's {kinds} are installed, because {because}",
+        kinds = .kind.plural(),
         because = .why.because(*.kind)
     )]
     Target {
@@ -2585,11 +2588,12 @@ pub enum WorkspaceError {
          `mind migrate` moves it to one"
     )]
     NoSettings { path: PathBuf, marker: MarkerFile },
-    #[error("{path}: cannot hold the workspace's {kind}s, because it is not inside the workspace")]
+    #[error("{path}: cannot hold the workspace's {kinds}, because it is not inside the workspace", kinds = .kind.plural())]
     OutsideWorkspace { path: PathBuf, kind: Kind },
     #[error(
-        "{path}: cannot hold the workspace's {kind}s, \
-         because it overlaps {gathered}, which is reserved for gathering"
+        "{path}: cannot hold the workspace's {kinds}, \
+         because it overlaps {gathered}, which is reserved for gathering",
+        kinds = .kind.plural()
     )]
     OverlapsGathered {
         path: PathBuf,

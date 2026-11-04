@@ -534,3 +534,77 @@ fn contents_given_whole_are_held_to_the_format_and_to_the_files_name() {
         http
     );
 }
+
+// ---------------------------------------------------------------------------
+// What a message calls them
+// ---------------------------------------------------------------------------
+
+/// A message about more than one of a kind asks the kind for its plural,
+/// which an abbreviation has no `s` to make: each one that names the kind
+/// so, built for MCP servers, says `MCP servers` and never `mcps`.
+#[test]
+fn every_message_naming_more_than_one_server_calls_them_mcp_servers() {
+    use mindweaver_core::install::InstallError;
+    use mindweaver_core::migrate::Refusal;
+    use mindweaver_core::{Misplaced, MisplacedTarget, ReapplyError};
+
+    let path = || std::path::PathBuf::from(".x");
+    let project = || String::from("app");
+    let kind = Kind::Mcp;
+    let messages: Vec<String> = vec![
+        MisplacedTarget {
+            settings: path(),
+            kind,
+            folder: path(),
+            why: Misplaced::NotInstalled,
+        }
+        .to_string(),
+        WorkspaceError::OutsideProject { path: path(), kind }.to_string(),
+        WorkspaceError::InsideMind { path: path(), kind }.to_string(),
+        WorkspaceError::Target {
+            path: path(),
+            kind,
+            why: Misplaced::NotInstalled,
+        }
+        .to_string(),
+        WorkspaceError::OutsideWorkspace { path: path(), kind }.to_string(),
+        WorkspaceError::OverlapsGathered {
+            path: path(),
+            kind,
+            gathered: path(),
+        }
+        .to_string(),
+        Refusal::Linked {
+            kind,
+            folder: path(),
+            target: path(),
+        }
+        .to_string(),
+        Refusal::Tangled {
+            kind,
+            folder: path(),
+            with: path(),
+        }
+        .to_string(),
+        ReapplyError::NoFolder {
+            project: project(),
+            kind,
+        }
+        .to_string(),
+        InstallError::NoTarget {
+            project: project(),
+            kind,
+        }
+        .to_string(),
+        InstallError::NoUsableTarget {
+            project: project(),
+            kind,
+        }
+        .to_string(),
+    ];
+
+    for message in messages {
+        assert!(message.contains("MCP servers"), "{message}");
+        assert!(!message.contains("mcps"), "{message}");
+    }
+}

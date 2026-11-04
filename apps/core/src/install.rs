@@ -2819,9 +2819,9 @@ pub enum InstallError {
     OfferedAsKinds { name: String, kinds: Vec<Kind> },
     #[error("`{name}` is installed as {}, so say which: {}", as_kinds(.kinds), qualified(.name, .kinds))]
     InstalledAsKinds { name: String, kinds: Vec<Kind> },
-    #[error("{project} names no agent in its settings that {kind}s are installed for, so none can be installed into it")]
+    #[error("{project} names no agent in its settings that {kinds} are installed for, so none can be installed into it", kinds = .kind.plural())]
     NoTarget { project: String, kind: Kind },
-    #[error("none of the folders {project}'s settings name for its {kind}s is one an install may use, so none can be installed into it")]
+    #[error("none of the folders {project}'s settings name for its {kinds} is one an install may use, so none can be installed into it", kinds = .kind.plural())]
     NoUsableTarget { project: String, kind: Kind },
     #[error("{name}: the ledger records a copy at {route}, which is not a folder of the project named after it, so nothing was removed")]
     Recorded { name: String, route: String },
