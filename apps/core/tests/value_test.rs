@@ -80,7 +80,7 @@ where
         text,
         &format!("{context}: borrowed"),
     );
-    same(&value.to_string(), text, &format!("{context}: displayed"));
+    same(&format!("{value}"), text, &format!("{context}: displayed"));
     same(
         &format!("{value:?}"),
         &format!("{text:?}"),
@@ -89,11 +89,12 @@ where
 
     assert!(*value == *text, "{context}: == str");
     assert!(*value == text, "{context}: == &str");
-    assert!(*value == text.to_owned(), "{context}: == String");
+    let owned = text.to_owned();
+    assert!(*value == owned, "{context}: == String");
     assert!(*value == Cow::Borrowed(text), "{context}: == Cow");
     assert!(*text == *value, "{context}: str ==");
     assert!(text == *value, "{context}: &str ==");
-    assert!(text.to_owned() == *value, "{context}: String ==");
+    assert!(owned == *value, "{context}: String ==");
 
     let copy = value.clone();
     assert_eq!(copy, *value, "{context}: a clone");
