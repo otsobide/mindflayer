@@ -3,7 +3,7 @@
 mod common;
 
 use common::*;
-use mindflayer_core::scan::{DEFAULT_DEPTH, MAX_LISTED};
+use mindweaver_core::scan::{DEFAULT_DEPTH, MAX_LISTED};
 use serde::Deserialize;
 
 // ---------------------------------------------------------------------------
@@ -361,7 +361,7 @@ fn flayer_scan_looks_three_levels_down_unless_told() {
 
     assert!(matches!(
         parsed.command,
-        Some(mindflayer_cli::FlayerCommand::Scan {
+        Some(mindweaver_cli::FlayerCommand::Scan {
             ref roots,
             depth: DEFAULT_DEPTH,
             suggest: false,
@@ -522,7 +522,7 @@ fn flayer_scan_takes_suggest() {
 
     assert!(matches!(
         parsed.command,
-        Some(mindflayer_cli::FlayerCommand::Scan {
+        Some(mindweaver_cli::FlayerCommand::Scan {
             ref roots,
             suggest: true,
             ..

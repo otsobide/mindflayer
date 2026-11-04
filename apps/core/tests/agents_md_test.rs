@@ -6,11 +6,11 @@ mod common;
 use std::fs;
 use std::path::PathBuf;
 
-use mindflayer_core::agents_md::{
+use mindweaver_core::agents_md::{
     self, AgentsMdError, Malformed, Rendered, Warning, Written, BEGIN, CODEX_BUDGET, CODEX_NEAR,
     END,
 };
-use mindflayer_core::{AgentHomes, Artifact, FlayerWorkspace, MindProject};
+use mindweaver_core::{AgentHomes, Artifact, FlayerWorkspace, MindProject};
 use tempfile::TempDir;
 
 /// What a team's `AGENTS.md` holds before Mindflayer writes in it.

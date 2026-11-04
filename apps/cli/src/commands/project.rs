@@ -8,9 +8,9 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::relink;
-use mindflayer_core::scan::{Order, Reason, MAX_LISTED};
-use mindflayer_core::{
+use mindweaver_core::relink;
+use mindweaver_core::scan::{Order, Reason, MAX_LISTED};
+use mindweaver_core::{
     known, scan, Agent, Directories, FlayerWorkspace, Initialization, Kind, MindProject,
     Registration, Scan, Share, WorkspaceError,
 };

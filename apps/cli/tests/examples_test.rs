@@ -265,7 +265,7 @@ fn the_reference_walks_through_the_examples_as_the_commands_print_them() {
     // The entry is read back rather than worked out, since where no route
     // from the workspace reaches the clone, another drive say, it is absolute.
     let workspace = FlayerWorkspace::open(&projects).unwrap();
-    let entry = mindflayer_core::paths::to_config_string(&workspace.config().loaded[0]).unwrap();
+    let entry = mindweaver_core::paths::to_config_string(&workspace.config().loaded[0]).unwrap();
     let root = projects.display().to_string();
     let as_written = |stdout: &str| {
         stdout

@@ -9,11 +9,11 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use mindflayer_core::code::Said;
-use mindflayer_core::reading::{Shown, Validation};
-use mindflayer_core::value::Redacted;
-use mindflayer_core::view::Listing;
-use mindflayer_core::{Artifact, Catalog, FlayerWorkspace, Kind, MindProject, Reference};
+use mindweaver_core::code::Said;
+use mindweaver_core::reading::{Shown, Validation};
+use mindweaver_core::value::Redacted;
+use mindweaver_core::view::Listing;
+use mindweaver_core::{Artifact, Catalog, FlayerWorkspace, Kind, MindProject, Reference};
 
 use super::consulted;
 use crate::render::{as_json, plural, printable, table, verdict};

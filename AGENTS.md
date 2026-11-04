@@ -40,10 +40,10 @@ make core/test            # one app: make <app>/<target>
 One suite, one module or one test:
 
 ```bash
-cargo test -p mindflayer-cli --test tui_test                 # apps/cli/tests/tui_test.rs
-cargo test -p mindflayer-core --test install_test <substring>
-cargo test -p mindflayer-core --lib workspace                # src/workspace_test.rs
-cargo test -p mindflayer-server --test commands_test         # apps/server/tests/commands_test.rs
+cargo test -p mindweaver-cli --test tui_test                 # apps/cli/tests/tui_test.rs
+cargo test -p mindweaver-core --test install_test <substring>
+cargo test -p mindweaver-core --lib workspace                # src/workspace_test.rs
+cargo test -p mindweaver-server --test commands_test         # apps/server/tests/commands_test.rs
 ```
 
 The panel (`apps/web`) needs Node 24 and pnpm at the version `package.json`
@@ -144,7 +144,7 @@ asked.
 Three crates in one Cargo workspace, and the panel they serve, each an app
 under `apps/` with its own `Makefile`:
 
-- `apps/core` (`mindflayer-core`): the engine. Projects, a project's settings
+- `apps/core` (`mindweaver-core`): the engine. Projects, a project's settings
   (`settings`, the marker from v3 on), workspaces, which workspace a command
   uses (`resolve`), the shell code that activates one (`activate`), kinds, the
   agents and where each kind goes for them (`agent`), the catalog, gathering
@@ -210,7 +210,7 @@ under `apps/` with its own `Makefile`:
   given or taken, `Schemas`, `Together`), and under either `described` says
   what a type serde writes by hand says of itself (`words!`, which writes
   both, and the fields written through a function of their own).
-- `apps/cli` (`mindflayer-cli`): the binaries `mind` (`src/main.rs`) and
+- `apps/cli` (`mindweaver-cli`): the binaries `mind` (`src/main.rs`) and
   `flayer` (`src/bin/flayer.rs`), and the TUI. `src/lib.rs` only re-exports
   the public API. The parsers are in `src/parse.rs`. `src/commands.rs`
   dispatches them and asks core what a command acts on, and each family of
@@ -251,7 +251,7 @@ under `apps/` with its own `Makefile`:
   each type a route names found among the roots (`openapi::document`,
   `Described`, the server's `schema::Describe`). `src/tui/` and
   `src/install/` are the two screens.
-- `apps/server` (`mindflayer-server`): the local server behind the web
+- `apps/server` (`mindweaver-server`): the local server behind the web
   panel, a library `flayer ui` runs. `src/backend.rs` is the `Backend`
   trait and the `Refusal` it answers with (with its `Grounds`),
   `src/code.rs` the conditions the server turns a request away for itself,
@@ -587,7 +587,7 @@ These are easy to break from a single file without noticing.
   `edited`. A new error type joins
   `code::ALL`; `code_test.rs` holds no two codes alike and finds a type
   that derives `Error` and never joined. The server, which can use no
-  mindflayer crate, gives its own conditions codes the same way with a
+  mindweaver crate, gives its own conditions codes the same way with a
   `codes!` of its own (`apps/server/src/code.rs`, `Condition`, its status
   beside each code), and the CLI's `error_test.rs` holds them unique
   beside core's and the CLI's, which only the CLI can see together; every
@@ -1064,7 +1064,7 @@ These are easy to break from a single file without noticing.
   again from the environment.
 - **The server holds no rules.** `apps/server` carries JSON between the
   browser and a `Backend`, whose `Query`, `Task`, `Outcome` and `Switch`
-  are associated types, and depends on no mindflayer crate (`tests/crate_test.rs` checks it
+  are associated types, and depends on no mindweaver crate (`tests/crate_test.rs` checks it
   with `cargo metadata`); a front end depends on it, as the CLI does
   (`backend.rs`), never the other way. A check, path rule or naming rule
   written there is one the panel could disagree with the CLI about: it
@@ -1287,7 +1287,7 @@ These are easy to break from a single file without noticing.
   helpers in `tests/common/mod.rs` (`use common::*;`). Unit tests sit in
   `src/<module>_test.rs`, wired in with
   `#[cfg(test)] #[path = "<module>_test.rs"] mod tests;`.
-- What a test needs is built by an object mother (`mindflayer_core::mother`,
+- What a test needs is built by an object mother (`mindweaver_core::mother`,
   `apps/core/src/mother/`), never by hand where a mother makes it: one per
   value object (`ContentHashMother`, `RedactedMother`, `OriginMother`,
   `ArtifactNameMother`, `RevisionMother`, `ProjectIdMother`), per record the
@@ -1311,7 +1311,7 @@ These are easy to break from a single file without noticing.
   suites and the CLI's through a dev-dependency on core with its `mother`
   feature, which no build of a binary turns on. The CLI's suites add mothers
   of what only a command takes (`tests/common/mother.rs`: `ValueMother`,
-  `OlderBuildMother`); the server depends on no mindflayer crate, so its
+  `OlderBuildMother`); the server depends on no mindweaver crate, so its
   suites keep all of theirs there (hosts, origins, tokens and headers). A new value object gets a mother and a section of
   `tests/value_test.rs`, which holds every value to one set of laws
   (`reads_as_its_text`) and to its rule both ways, and a new port a

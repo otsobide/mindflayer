@@ -1556,7 +1556,7 @@ fn a_change_core_plans_is_the_install_or_uninstall_task_that_runs_it() {
 #[test]
 fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_was_read_with() {
     let text = "---\nname: deploy\ndescription: Ship it\n---\n";
-    let hash = mindflayer_core::hash::bytes(b"before");
+    let hash = mindweaver_core::hash::bytes(b"before");
     let route = scratch_route(text);
     let save = |holder| Task::Save {
         holder,
@@ -1581,7 +1581,7 @@ fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_
         alpha.commands(),
         [[&["flayer", "edit", "-p", "alpha"][..], &edit].concat()]
     );
-    let named = &mindflayer_core::hash::bytes(text.as_bytes())[..16];
+    let named = &mindweaver_core::hash::bytes(text.as_bytes())[..16];
     assert_eq!(scratch_name(text), format!("edit-{named}.md"));
     assert_eq!(
         route,
@@ -1613,7 +1613,7 @@ fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_
 /// unsaid); and none holds `://`, which with an `@` after it is a URL's
 /// credential, taken out of a line where it is shown.
 fn drawn(count: usize) -> Vec<String> {
-    use mindflayer_core::mother::random;
+    use mindweaver_core::mother::random;
 
     const LEADS: [&str; 10] = [
         "", "", "", "-", "--", "-p", "--yes", "--from=", "-C ", "--=",
@@ -1702,7 +1702,7 @@ fn carrying(url: &str) -> Vec<Task> {
 /// that line, for every way a credential is typed and words quoting one.
 #[test]
 fn a_line_carrying_a_credential_runs_it_as_typed_and_is_shown_without_it() {
-    use mindflayer_core::mother::UrlMother;
+    use mindweaver_core::mother::UrlMother;
 
     for url in UrlMother::every_credentialed() {
         for url in [UrlMother::quoted(&url), url] {

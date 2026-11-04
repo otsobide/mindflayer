@@ -4,9 +4,9 @@
 use std::fs;
 use std::path::Path;
 
-use mindflayer_core::lifecycle;
-use mindflayer_core::template;
-use mindflayer_core::{
+use mindweaver_core::lifecycle;
+use mindweaver_core::template;
+use mindweaver_core::{
     create, Catalog, Directories, FlayerWorkspace, Kind, MindProject, Reference, WorkspaceError,
 };
 use tempfile::TempDir;

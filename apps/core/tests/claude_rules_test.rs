@@ -7,11 +7,11 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::agents_md;
-use mindflayer_core::claude_rules::{
+use mindweaver_core::agents_md;
+use mindweaver_core::claude_rules::{
     self, ClaudeRulesError, Mode, Recorded, Rendered, Warning, Written,
 };
-use mindflayer_core::{
+use mindweaver_core::{
     hash, Agent, AgentHomes, Artifact, Directories, FlayerWorkspace, MindProject, Share,
 };
 use tempfile::TempDir;
@@ -627,7 +627,7 @@ fn a_local_project_keeps_its_rule_files_out_of_git_and_takes_them_back_in() {
 
     assert_eq!(
         first.excluded,
-        Some(mindflayer_core::Excluded::Written { file: file.clone() })
+        Some(mindweaver_core::Excluded::Written { file: file.clone() })
     );
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
@@ -645,7 +645,7 @@ fn a_local_project_keeps_its_rule_files_out_of_git_and_takes_them_back_in() {
         .unwrap();
     assert_eq!(
         again.excluded,
-        Some(mindflayer_core::Excluded::Unchanged { file: file.clone() })
+        Some(mindweaver_core::Excluded::Unchanged { file: file.clone() })
     );
 
     let removed = fixture
@@ -683,7 +683,7 @@ fn a_local_project_outside_git_is_told_nothing_keeps_its_files_out() {
 
     let excluded = rendered.excluded.unwrap();
     assert!(
-        matches!(excluded, mindflayer_core::Excluded::Outside { .. }),
+        matches!(excluded, mindweaver_core::Excluded::Outside { .. }),
         "{excluded:?}"
     );
     assert!(excluded

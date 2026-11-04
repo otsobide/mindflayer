@@ -8,11 +8,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use common::{skill, workspace};
-use mindflayer_core::install;
-use mindflayer_core::ledger::{InstallRecord, Target};
-use mindflayer_core::migrate::{self, Refusal};
-use mindflayer_core::reapply::Why;
-use mindflayer_core::{
+use mindweaver_core::install;
+use mindweaver_core::ledger::{InstallRecord, Target};
+use mindweaver_core::migrate::{self, Refusal};
+use mindweaver_core::reapply::Why;
+use mindweaver_core::{
     Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MarkerFile, MindProject, Settings,
     Share, DIRECTORIES_VERSION, MIND_CONFIG, MIND_DIR, SETTINGS_FILE, SETTINGS_JSON_FILE,
     SETTINGS_TOML_VERSION, TARGETS_VERSION,
@@ -506,7 +506,7 @@ fn migrating_moves_the_installs_where_the_agents_read_and_leaves_what_the_projec
         .unwrap();
     assert_eq!(
         review.content_hash,
-        Some(mindflayer_core::hash::tree(&claudes(&project, "review")).unwrap())
+        Some(mindweaver_core::hash::tree(&claudes(&project, "review")).unwrap())
     );
     // Nothing of the stage it moved them through is left.
     let scratch: Vec<String> = fs::read_dir(mind.join("tmp"))
@@ -682,7 +682,7 @@ fn a_local_migration_keeps_mind_and_the_copies_out_of_git() {
     assert_eq!(reopened.settings().unwrap().share, Share::Local);
     assert_eq!(
         fs::read_to_string(project.root().join(MIND_DIR).join(".gitignore")).unwrap(),
-        mindflayer_core::MIND_IGNORE
+        mindweaver_core::MIND_IGNORE
     );
     assert_eq!(excluded(&reopened), ["/.claude/skills/deploy/"]);
     assert_eq!(

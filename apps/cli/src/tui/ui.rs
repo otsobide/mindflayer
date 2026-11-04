@@ -6,7 +6,7 @@
 //! command it is about to run, as it is typed. The install screen, when it is
 //! open, draws itself. Nothing here decides anything; [`super::state`] does.
 
-use mindflayer_core::{Agent, Kind, MarkerFile, Reason, Share, State};
+use mindweaver_core::{Agent, Kind, MarkerFile, Reason, Share, State};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};

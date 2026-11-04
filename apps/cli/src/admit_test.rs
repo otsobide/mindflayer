@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::Path;
 
-use mindflayer_core::{Agent, Kind, MindProject, Share};
+use mindweaver_core::{Agent, Kind, MindProject, Share};
 use tempfile::TempDir;
 
 use super::*;
@@ -489,7 +489,7 @@ fn nothing_is_admitted_against_a_workspace_that_links_nothing() {
         )),
         "not_registered"
     );
-    assert!(!dir.path().join(mindflayer_core::FLAYER_DIR).exists());
+    assert!(!dir.path().join(mindweaver_core::FLAYER_DIR).exists());
 }
 
 #[test]

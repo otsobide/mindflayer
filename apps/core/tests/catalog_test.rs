@@ -3,8 +3,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::ledger::{InstallRecord, Target};
-use mindflayer_core::{
+use mindweaver_core::ledger::{InstallRecord, Target};
+use mindweaver_core::{
     Agent, ArtifactCopy, Catalog, Declared, Directories, DiscoveryFailure, FlayerWorkspace, Kind,
     Ledger, MindProject, Provenance, Reference, RuleManifest, Share, ValidationIssue,
 };
@@ -520,7 +520,7 @@ fn find_spans_the_projects_a_workspace_manages() {
 #[test]
 fn the_shelf_is_read_source_by_source_and_found_as_it_is_now() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = mindflayer_core::FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = mindweaver_core::FlayerWorkspace::init(dir.path()).unwrap();
     let shelf = workspace.gathered_dir(Kind::Skill);
     for (source, folder, contents) in [
         ("acme-skills", "deploy", skill_file("deploy")),
@@ -556,7 +556,7 @@ fn the_shelf_is_read_source_by_source_and_found_as_it_is_now() {
 #[test]
 fn a_workspace_that_never_gathered_has_an_empty_shelf_and_no_failure() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = mindflayer_core::FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = mindweaver_core::FlayerWorkspace::init(dir.path()).unwrap();
 
     let catalog = Catalog::discover_gathered(&workspace, &Kind::ALL);
 

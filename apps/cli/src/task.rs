@@ -27,9 +27,9 @@
 //! command of exactly these words ([`shell`]).
 
 use clap::Parser as _;
-use mindflayer_core::install::Change;
-use mindflayer_core::url::redacted;
-use mindflayer_core::{
+use mindweaver_core::install::Change;
+use mindweaver_core::url::redacted;
+use mindweaver_core::{
     codes, hash, Agent, FlayerWorkspace, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER,
 };
 use serde::{Deserialize, Serialize};
@@ -305,7 +305,7 @@ pub enum Task {
     /// would keep it a name, was the alternative, and it would change the
     /// line the TUI has always run and shown for such a project.
     ///
-    /// [`FlayerWorkspace::naming`]: mindflayer_core::FlayerWorkspace::naming
+    /// [`FlayerWorkspace::naming`]: mindweaver_core::FlayerWorkspace::naming
     Install {
         projects: Vec<String>,
         kind: Kind,
@@ -370,7 +370,7 @@ pub enum Task {
 }
 
 /// The task that runs one change core planned for a batch of boxes
-/// ([`Plan`](mindflayer_core::install::Plan)): `flayer install` of the
+/// ([`Plan`](mindweaver_core::install::Plan)): `flayer install` of the
 /// offer from where it is, or `flayer uninstall` of the name, from each
 /// project the change names, spelled as the boxes named them.
 ///

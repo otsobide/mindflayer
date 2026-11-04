@@ -8,8 +8,8 @@
 mod common;
 
 use common::*;
-use mindflayer_core::activate::{self, Shell};
-use mindflayer_core::ActivateError;
+use mindweaver_core::activate::{self, Shell};
+use mindweaver_core::ActivateError;
 
 /// What core writes to activate the workspace at `root` in `shell`.
 fn script(root: &Path, shell: Shell) -> String {

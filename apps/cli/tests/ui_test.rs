@@ -15,9 +15,9 @@ use std::time::Duration;
 use common::contract;
 use common::panel::*;
 use common::*;
-use mindflayer_cli::backend::PanelBackend;
-use mindflayer_cli::{Command, FlayerCommand, UiOptions};
-use mindflayer_server::Backend;
+use mindweaver_cli::backend::PanelBackend;
+use mindweaver_cli::{Command, FlayerCommand, UiOptions};
+use mindweaver_server::Backend;
 use serde::Deserialize;
 use serde_json::{json, Value};
 

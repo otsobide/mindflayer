@@ -1,24 +1,24 @@
 .DEFAULT_GOAL := build
 .PHONY: build release test fmt lint clean
 
-build: ## Build mindflayer-core
-	cargo build -p mindflayer-core
+build: ## Build mindweaver-core
+	cargo build -p mindweaver-core
 
 # The optimized build, which CI's `build (core)` runs once the debug build
 # has passed, so a crate that compiles only in debug fails before a release
 # is cut from it. `--locked`, as the CLI's release is: a lockfile the build
 # would change fails rather than is rewritten.
-release: ## Release (optimized) build of mindflayer-core
-	cargo build -p mindflayer-core --release --locked
+release: ## Release (optimized) build of mindweaver-core
+	cargo build -p mindweaver-core --release --locked
 
-test: ## Run mindflayer-core tests
-	cargo test -p mindflayer-core
+test: ## Run mindweaver-core tests
+	cargo test -p mindweaver-core
 
-fmt: ## Format mindflayer-core
-	cargo fmt -p mindflayer-core
+fmt: ## Format mindweaver-core
+	cargo fmt -p mindweaver-core
 
-lint: ## Clippy mindflayer-core
-	cargo clippy -p mindflayer-core --all-targets
+lint: ## Clippy mindweaver-core
+	cargo clippy -p mindweaver-core --all-targets
 
-clean: ## Remove mindflayer-core build artifacts
-	cargo clean -p mindflayer-core
+clean: ## Remove mindweaver-core build artifacts
+	cargo clean -p mindweaver-core

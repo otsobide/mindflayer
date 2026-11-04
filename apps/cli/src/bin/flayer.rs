@@ -7,7 +7,7 @@
 use std::process::ExitCode;
 
 use clap::Parser;
-use mindflayer_cli::{run_flayer_cli_watched, FlayerCli, ProgressLine};
+use mindweaver_cli::{run_flayer_cli_watched, FlayerCli, ProgressLine};
 
 fn main() -> ExitCode {
     let cli = FlayerCli::parse();

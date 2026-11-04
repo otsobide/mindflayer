@@ -72,7 +72,7 @@ fn with_nothing_above_the_source_load_goes_into_the_default_workspace() {
         outcome.stdout
     );
     // The one entry, pointing at team from the home workspace.
-    let home_workspace = mindflayer_core::FlayerWorkspace::open(home.path()).unwrap();
+    let home_workspace = mindweaver_core::FlayerWorkspace::open(home.path()).unwrap();
     let loads = home_workspace.loads();
     assert_eq!(loads.len(), 1);
     assert_eq!(
@@ -585,7 +585,7 @@ fn a_project_on_its_own_sees_and_unloads_what_the_workspace_above_loads() {
 
 #[test]
 fn switching_to_a_loaded_copy_of_an_installed_skill_replaces_it() {
-    use mindflayer_cli::install::{self as install_screen, state::Pending};
+    use mindweaver_cli::install::{self as install_screen, state::Pending};
     let (_dir, target, _team) = target_and_team();
     flayer(&target, &["add", "skill", "deploy", "Ours"]).unwrap();
     flayer(&target, &["load", "../team"]).unwrap();
@@ -594,7 +594,7 @@ fn switching_to_a_loaded_copy_of_an_installed_skill_replaces_it() {
         &["install", "-p", "collapse", "deploy", "--from", "workspace"],
     )
     .unwrap();
-    let workspace = mindflayer_core::FlayerWorkspace::open(&target).unwrap();
+    let workspace = mindweaver_core::FlayerWorkspace::open(&target).unwrap();
     let ledger = workspace.ledger().unwrap();
     let mut screen = screen_for(&workspace, &ledger);
 
@@ -628,11 +628,11 @@ fn switching_to_a_loaded_copy_of_an_installed_skill_replaces_it() {
 
 #[test]
 fn a_loaded_skill_that_vanished_does_not_stop_the_rest_of_the_install_screen() {
-    use mindflayer_cli::install as install_screen;
+    use mindweaver_cli::install as install_screen;
     let (_dir, target, team) = target_and_team();
     flayer(&team, &["add", "skill", "review", "Review it"]).unwrap();
     flayer(&target, &["load", "../team"]).unwrap();
-    let workspace = mindflayer_core::FlayerWorkspace::open(&target).unwrap();
+    let workspace = mindweaver_core::FlayerWorkspace::open(&target).unwrap();
     let ledger = workspace.ledger().unwrap();
     let mut screen = screen_for(&workspace, &ledger);
     press(
@@ -772,7 +772,7 @@ fn ticking_the_installed_copy_off_and_on_again_changes_nothing() {
         ],
     )
     .unwrap();
-    let workspace = mindflayer_core::FlayerWorkspace::open(&target).unwrap();
+    let workspace = mindweaver_core::FlayerWorkspace::open(&target).unwrap();
     let ledger = workspace.ledger().unwrap();
 
     for keys in [

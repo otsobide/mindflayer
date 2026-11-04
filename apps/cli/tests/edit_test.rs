@@ -5,8 +5,8 @@
 mod common;
 
 use common::*;
-use mindflayer_core::hash;
-use mindflayer_core::mother::{
+use mindweaver_core::hash;
+use mindweaver_core::mother::{
     random, ArtifactNameMother, ContentHashMother, RuleMother, SkillMother,
 };
 

@@ -947,7 +947,7 @@ fn gathered_twice(workspace: &FlayerWorkspace) -> rusqlite::Connection {
 /// Put the cursor on the row offering `name` from the source gathered into
 /// `directory`, and mark it.
 fn mark_from(screen: &mut Screen, name: &str, directory: &str) {
-    use mindflayer_core::install::Offer;
+    use mindweaver_core::install::Offer;
 
     let target = &mut screen.targets[0];
     target.cursor = target

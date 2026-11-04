@@ -1,5 +1,5 @@
 [package]
-name = "mindflayer-cli"
+name = "mindweaver-cli"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
@@ -26,7 +26,7 @@ path = "src/bin/flayer.rs"
 # The command surface is a library so integration tests (and, later, other
 # front ends) can drive the real parser instead of shelling out to the binary.
 [lib]
-name = "mindflayer_cli"
+name = "mindweaver_cli"
 path = "src/lib.rs"
 
 [features]
@@ -35,25 +35,25 @@ default = ["ui"]
 # to serve it on and a browser to open it in. On by default, so the one
 # binary somebody installs has it (D-17); without it, `--no-default-features`
 # builds the commands and the TUI and nothing that serves HTTP.
-ui = ["dep:mindflayer-server", "dep:tokio", "dep:webbrowser"]
+ui = ["dep:mindweaver-server", "dep:tokio", "dep:webbrowser"]
 # The TypeScript types of what the panel sends the CLI's backend and is
 # answered with, and core's beside them (#70): `make web/types` builds with
 # it to write them into the panel, and nothing else does. With `ui`, whose
 # backend the panel's queries and outcomes are.
-ts = ["ui", "dep:ts-rs", "mindflayer-core/ts"]
+ts = ["ui", "dep:ts-rs", "mindweaver-core/ts"]
 # The JSON Schema of what the CLI's backend is sent and answers with, the
 # token file `ui --token-file` writes, core's and the server's own beside
 # them (#217): `make api/schemas` builds with it to write them into
 # docs/api/schemas, and nothing else does. With `ui`, whose backend and
 # server they describe.
-schema = ["ui", "dep:schemars", "mindflayer-core/schema", "mindflayer-server/schema"]
+schema = ["ui", "dep:schemars", "mindweaver-core/schema", "mindweaver-server/schema"]
 
 [dependencies]
-mindflayer-core = { path = "../core" }
+mindweaver-core = { path = "../core" }
 # The local server behind the web panel, whose `Backend` the CLI implements
 # (`backend`): the front end depends on the transport, never the other way
 # (D-17).
-mindflayer-server = { path = "../server", optional = true }
+mindweaver-server = { path = "../server", optional = true }
 # What `ui` serves the panel on: a runtime of one thread, since every query
 # and run goes off it anyway, and Ctrl-C to stop it. The version the server
 # builds.
@@ -82,9 +82,9 @@ schemars = { version = "1.2", optional = true }
 # `dirwalk`, to ask in process what git would list as untracked in a project
 # `mind init` made. It builds nothing new: core's gix already has it.
 gix = { version = "0.87", default-features = false, features = ["dirwalk"] }
-# Core with its object mothers (`mindflayer_core::mother`), which the suites
+# Core with its object mothers (`mindweaver_core::mother`), which the suites
 # build what a command acts on with, as core's own do.
-mindflayer-core = { path = "../core", features = ["mother"] }
+mindweaver-core = { path = "../core", features = ["mother"] }
 # To leave in a workspace's database what an older Mindflayer would have, which
 # nothing this one writes can, for the suites that check it is scrubbed. The
 # same version and features as core's, so it is one build of SQLite.

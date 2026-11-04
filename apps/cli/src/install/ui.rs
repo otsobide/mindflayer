@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
-use mindflayer_core::Kind;
+use mindweaver_core::Kind;
 
 use super::state::{nothing, Focus, Pending, Row, Screen, Target};
 use crate::commands::install::named;

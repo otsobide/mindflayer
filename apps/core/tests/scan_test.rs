@@ -4,8 +4,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::scan::{Order, Reason, Request, DEFAULT_DEPTH, MAX_LISTED};
-use mindflayer_core::{
+use mindweaver_core::scan::{Order, Reason, Request, DEFAULT_DEPTH, MAX_LISTED};
+use mindweaver_core::{
     scan, Agent, Directories, FlayerWorkspace, Found, MindProject, ScanFailure, Share,
     FLAYER_CONFIG, FLAYER_DIR, MIND_DIR, SETTINGS_FILE,
 };
@@ -25,7 +25,7 @@ fn paths(found: &[Found]) -> Vec<&Path> {
 }
 
 /// What a scan of `roots` to `depth` finds.
-fn under(workspace: &FlayerWorkspace, roots: &[&Path], depth: usize) -> mindflayer_core::Scan {
+fn under(workspace: &FlayerWorkspace, roots: &[&Path], depth: usize) -> mindweaver_core::Scan {
     scan(
         workspace,
         &Request {
@@ -603,7 +603,7 @@ fn an_agent_file_that_is_a_link_counts_without_being_followed() {
 
 /// What a suggestion under `roots` finds, or under the workspace root when
 /// there are none.
-fn suggested(workspace: &FlayerWorkspace, roots: &[&Path]) -> mindflayer_core::Scan {
+fn suggested(workspace: &FlayerWorkspace, roots: &[&Path]) -> mindweaver_core::Scan {
     scan(
         workspace,
         &Request {

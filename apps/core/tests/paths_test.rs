@@ -9,8 +9,8 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use mindflayer_core::mother::random;
-use mindflayer_core::paths::{normalize, relative_to, to_config_string};
+use mindweaver_core::mother::random;
+use mindweaver_core::paths::{normalize, relative_to, to_config_string};
 
 const DRAWS: usize = 500;
 

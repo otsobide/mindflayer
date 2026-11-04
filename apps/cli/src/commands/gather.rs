@@ -4,10 +4,10 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindflayer_core::gather::{self, Report, Request, Scrub, Watch};
-use mindflayer_core::install::{offered_by_loads, Offer};
-use mindflayer_core::url::redacted;
-use mindflayer_core::{FlayerWorkspace, Kind};
+use mindweaver_core::gather::{self, Report, Request, Scrub, Watch};
+use mindweaver_core::install::{offered_by_loads, Offer};
+use mindweaver_core::url::redacted;
+use mindweaver_core::{FlayerWorkspace, Kind};
 
 use super::{reading_workspace, workspace_here};
 use crate::render::{indent, json_or_text, plural, printable, table};
@@ -74,7 +74,7 @@ fn shelf(workspace: &FlayerWorkspace, found: &mut Option<Vec<Offer>>) -> Result<
     for gathered in ledger.gathered().map_err(CliError::from)? {
         // Listed only if it could be installed: a name that is not one folder
         // name never can be, wherever it came from.
-        if mindflayer_core::install::is_folder_name(&gathered.name) {
+        if mindweaver_core::install::is_folder_name(&gathered.name) {
             offers.push(Offer::Shelf(gathered));
         } else {
             stderr.push(
@@ -123,7 +123,7 @@ impl Scrubbed {
 }
 
 /// What the scrub that opening the ledger to write runs took out
-/// ([`mindflayer_core::FlayerWorkspace::ledger_to_write`]), said the way a
+/// ([`mindweaver_core::FlayerWorkspace::ledger_to_write`]), said the way a
 /// person can act on: every source it scrubbed now needs its credential from
 /// a git credential helper.
 pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {

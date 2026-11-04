@@ -6,7 +6,7 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::exclude::{self, Entry, ExcludeError, Excluded};
+use mindweaver_core::exclude::{self, Entry, ExcludeError, Excluded};
 use tempfile::TempDir;
 
 /// An empty repository, with the `info/exclude` `git init` writes.

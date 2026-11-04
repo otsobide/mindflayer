@@ -7,12 +7,12 @@ mod common;
 use std::path::{Path, PathBuf};
 
 use common::{repository, skill, url};
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::hash;
-use mindflayer_core::install::{self, Installed, Offer};
-use mindflayer_core::ledger::{backup_path, InstallRecord, Target, SCHEMA_VERSION};
-use mindflayer_core::AgentHomes;
-use mindflayer_core::{FlayerWorkspace, Kind, Ledger, MindProject, ProjectId, LEDGER_FILE};
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::hash;
+use mindweaver_core::install::{self, Installed, Offer};
+use mindweaver_core::ledger::{backup_path, InstallRecord, Target, SCHEMA_VERSION};
+use mindweaver_core::AgentHomes;
+use mindweaver_core::{FlayerWorkspace, Kind, Ledger, MindProject, ProjectId, LEDGER_FILE};
 use rusqlite::types::Value;
 use rusqlite::Connection;
 use tempfile::TempDir;
@@ -25,9 +25,9 @@ fn three_places() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
     let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
     let (project, _) = MindProject::init(dir.path().join("target/collapse")).unwrap();
     target.link(&project).unwrap();
-    mindflayer_core::create(&target.own(), Kind::Skill, "notes", "How we take notes").unwrap();
+    mindweaver_core::create(&target.own(), Kind::Skill, "notes", "How we take notes").unwrap();
     let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
-    mindflayer_core::create(&team.own(), Kind::Skill, "lint", "How we lint").unwrap();
+    mindweaver_core::create(&team.own(), Kind::Skill, "lint", "How we lint").unwrap();
     target.load(&team).unwrap();
 
     let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
@@ -386,7 +386,7 @@ fn a_version_2_installation_reads_back_through_the_ledger() {
             kind: Kind::Skill,
             name: "deploy".into(),
             source_id: Some(1),
-            origin: Some(mindflayer_core::value::Origin::from(
+            origin: Some(mindweaver_core::value::Origin::from(
                 "https://github.com/acme/skills#next"
             )),
             content_hash: None,
@@ -607,9 +607,9 @@ fn linking(names: &[&str]) -> (TempDir, FlayerWorkspace, Vec<MindProject>) {
     for name in names {
         let (project, _) = MindProject::init_settings(
             dir.path().join(name),
-            &mindflayer_core::Agent::ALL,
-            mindflayer_core::Share::Shared,
-            &mindflayer_core::Directories::default(),
+            &mindweaver_core::Agent::ALL,
+            mindweaver_core::Share::Shared,
+            &mindweaver_core::Directories::default(),
         )
         .unwrap();
         workspace.link(&project).unwrap();
@@ -667,9 +667,9 @@ fn opening_the_ledger_to_write_follows_a_project_linked_since_and_one_given_a_ne
     drop(workspace.ledger().unwrap());
     let (later, _) = MindProject::init_settings(
         dir.path().join("later"),
-        &mindflayer_core::Agent::ALL,
-        mindflayer_core::Share::Shared,
-        &mindflayer_core::Directories::default(),
+        &mindweaver_core::Agent::ALL,
+        mindweaver_core::Share::Shared,
+        &mindweaver_core::Directories::default(),
     )
     .unwrap();
     workspace.link(&later).unwrap();
@@ -702,7 +702,7 @@ fn a_stale_entry_keeps_its_id_and_a_copy_linked_beside_its_project_gives_none() 
     std::fs::create_dir_all(copy.join(".mind")).unwrap();
     std::fs::copy(
         projects[1].marker_path(),
-        copy.join(".mind").join(mindflayer_core::SETTINGS_FILE),
+        copy.join(".mind").join(mindweaver_core::SETTINGS_FILE),
     )
     .unwrap();
     workspace.link(&MindProject::open(&copy).unwrap()).unwrap();

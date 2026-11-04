@@ -9,12 +9,12 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::agents_md;
-use mindflayer_core::claude_md::{
+use mindweaver_core::agents_md;
+use mindweaver_core::claude_md::{
     self, ClaudeMd, ClaudeMdError, Fallback, Reach, Warning, Written,
 };
-use mindflayer_core::claude_rules::Mode;
-use mindflayer_core::{
+use mindweaver_core::claude_rules::Mode;
+use mindweaver_core::{
     Agent, AgentHomes, Artifact, Directories, FlayerWorkspace, MindProject, Share,
 };
 use tempfile::TempDir;

@@ -6,9 +6,9 @@
 
 use std::path::Path;
 
-use mindflayer_core::assign::{self, Offered};
-use mindflayer_core::install::rules::Rendered;
-use mindflayer_core::{AgentHomes, FlayerWorkspace, Kind, MindProject, Reference};
+use mindweaver_core::assign::{self, Offered};
+use mindweaver_core::install::rules::Rendered;
+use mindweaver_core::{AgentHomes, FlayerWorkspace, Kind, MindProject, Reference};
 
 use crate::commands::gather::{scrubbed, Scrubbed};
 use crate::commands::update::listed as words_listed;
@@ -18,7 +18,7 @@ use crate::{CliError, Failure, Outcome, Warning};
 /// Put what `typed` names into each of `projects`, from wherever it is
 /// offered: a skill or a rule, by its name alone or qualified
 /// (`rule:git/commits`), as core finds it for each
-/// ([`offered_typed`](mindflayer_core::install::offered_typed)), through
+/// ([`offered_typed`](mindweaver_core::install::offered_typed)), through
 /// core's batch ([`assign::install`]).
 ///
 /// `from` may be a path to a loaded workspace typed from `directory`, as it was
@@ -31,7 +31,7 @@ use crate::{CliError, Failure, Outcome, Warning};
 /// name could be, as core says ([`kinds_named`]), when it is refused before
 /// it is known which.
 ///
-/// [`kinds_named`]: mindflayer_core::install::kinds_named
+/// [`kinds_named`]: mindweaver_core::install::kinds_named
 ///
 /// One project is said as it always was, a refusal as the command's error.
 /// Several are said as [`together`] says them, each one's lines in the
@@ -62,7 +62,7 @@ pub(crate) fn install_named(
         edits(force),
     )
     .map_err(|error| {
-        let kinds = mindflayer_core::install::kinds_named(&reference);
+        let kinds = mindweaver_core::install::kinds_named(&reference);
         let mut warnings = loads.clone();
         for project in projects {
             warnings.extend(misplaced(project, &kinds));
@@ -112,8 +112,8 @@ fn install_said(
     loads: &[Warning],
     among: bool,
 ) -> Result<Outcome, Failure> {
-    use mindflayer_core::install::{self as installing, Installed};
-    use mindflayer_core::Excluded;
+    use mindweaver_core::install::{self as installing, Installed};
+    use mindweaver_core::Excluded;
 
     let Offered {
         candidate,
@@ -391,7 +391,7 @@ pub(crate) fn cleared(project: &MindProject, swept: &[std::path::PathBuf]) -> Ve
 }
 
 /// What to say after a skill's name of what installing it left out.
-pub(crate) fn left_out(left: &mindflayer_core::install::LeftOut) -> String {
+pub(crate) fn left_out(left: &mindweaver_core::install::LeftOut) -> String {
     let name = left.path.file_name().map_or_else(
         || left.path.display().to_string(),
         |name| name.to_string_lossy().into_owned(),
@@ -411,8 +411,8 @@ pub(crate) fn still(name: &str, project: &str, reason: &str) -> Warning {
 
 /// Whether core may write over, or take out, a copy edited since it was
 /// installed: only when `--force` says so.
-pub(crate) fn edits(force: bool) -> mindflayer_core::install::Edits {
-    use mindflayer_core::install::Edits;
+pub(crate) fn edits(force: bool) -> mindweaver_core::install::Edits {
+    use mindweaver_core::install::Edits;
 
     if force {
         Edits::Forced
@@ -433,7 +433,7 @@ pub(crate) fn listed(project: &MindProject, paths: &[std::path::PathBuf]) -> Str
 /// A path in `project` as somebody standing in it would spell it, or as it
 /// is when it is not in there.
 pub(crate) fn shown(project: &MindProject, path: &Path) -> String {
-    use mindflayer_core::paths;
+    use mindweaver_core::paths;
 
     paths::relative_to(path, project.root())
         .as_deref()
@@ -459,7 +459,7 @@ pub(crate) fn uninstall_named(
     homes: &AgentHomes,
     force: bool,
 ) -> Result<Outcome, Failure> {
-    use mindflayer_core::install::Removed;
+    use mindweaver_core::install::Removed;
 
     let reference = Reference::parse(typed);
     let assigned = assign::uninstall(workspace, projects, &reference, homes, edits(force))
@@ -514,12 +514,12 @@ pub(crate) fn uninstall_orphans(
     homes: &AgentHomes,
     force: bool,
 ) -> Result<Outcome, Failure> {
-    use mindflayer_core::install::Removed;
+    use mindweaver_core::install::Removed;
 
     let assigned = assign::uninstall_orphaned(workspace, projects, homes, edits(force))
         .map_err(CliError::from)?;
     let said = scrubbed(&assigned.scrub);
-    let mut unoffered: Vec<Warning> = mindflayer_core::install::own_failures(workspace, &Kind::ALL)
+    let mut unoffered: Vec<Warning> = mindweaver_core::install::own_failures(workspace, &Kind::ALL)
         .iter()
         .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
         .collect();
@@ -568,7 +568,7 @@ fn uninstall_said(
     done: assign::Uninstall,
     among: bool,
 ) -> Result<Outcome, Failure> {
-    use mindflayer_core::install::Removed;
+    use mindweaver_core::install::Removed;
 
     let from = project.name();
     let (kind, taken) = done.map_err(CliError::from)?;

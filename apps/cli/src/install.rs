@@ -13,10 +13,10 @@ pub mod ui;
 use std::io;
 use std::time::Duration;
 
-use mindflayer_core::gather::Watch;
-use mindflayer_core::install;
-use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
+use mindweaver_core::gather::Watch;
+use mindweaver_core::install;
+use mindweaver_core::ledger::Ledger;
+use mindweaver_core::{FlayerWorkspace, Kind, MindProject};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 

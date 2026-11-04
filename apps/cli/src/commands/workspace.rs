@@ -7,7 +7,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::{
+use mindweaver_core::{
     paths, resolve, resolve_except, FlayerWorkspace, Intent, Kind, Registration, WorkspaceError,
 };
 
@@ -209,7 +209,7 @@ fn loaded(
 /// the install machinery itself offers through that entry, so the number is
 /// what `flayer install` will show.
 fn offering(workspace: &FlayerWorkspace, entry: &str) -> String {
-    use mindflayer_core::install::{offered_by_loads, Offer};
+    use mindweaver_core::install::{offered_by_loads, Offer};
     let offers = offered_by_loads(workspace).offers;
     let counts: Vec<String> = Kind::ALL
         .into_iter()
@@ -233,7 +233,7 @@ fn offering(workspace: &FlayerWorkspace, entry: &str) -> String {
 
 /// What the workspaces `workspace` loads could not offer, as `warning:` lines.
 pub(crate) fn load_warnings(workspace: &FlayerWorkspace) -> Vec<Warning> {
-    mindflayer_core::install::offered_by_loads(workspace)
+    mindweaver_core::install::offered_by_loads(workspace)
         .failures
         .iter()
         .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))

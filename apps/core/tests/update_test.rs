@@ -8,11 +8,11 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::copy;
-use mindflayer_core::install::{self, Edits, Installed, Standing};
-use mindflayer_core::status::State;
-use mindflayer_core::update::{self, Applied, Does, Plan, Step, Updates};
-use mindflayer_core::{
+use mindweaver_core::copy;
+use mindweaver_core::install::{self, Edits, Installed, Standing};
+use mindweaver_core::status::State;
+use mindweaver_core::update::{self, Applied, Does, Plan, Step, Updates};
+use mindweaver_core::{
     claude_rules, create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger,
     MindProject, Reference, Share,
 };

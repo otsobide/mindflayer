@@ -2776,14 +2776,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "mindflayer-cli"
+name = "mindweaver-cli"
 version = "0.1.0"
 dependencies = [
  "boon",
  "clap",
  "gix",
- "mindflayer-core",
- "mindflayer-server",
+ "mindweaver-core",
+ "mindweaver-server",
  "oas3",
  "ratatui",
  "rusqlite",
@@ -2798,13 +2798,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "mindflayer-core"
+name = "mindweaver-core"
 version = "0.1.0"
 dependencies = [
  "boon",
  "gix",
  "jsonc-parser",
- "mindflayer-core",
+ "mindweaver-core",
  "rusqlite",
  "schemars",
  "serde",
@@ -2819,7 +2819,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mindflayer-server"
+name = "mindweaver-server"
 version = "0.1.0"
 dependencies = [
  "axum",

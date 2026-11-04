@@ -2,7 +2,7 @@
 //! browser to (#67).
 //!
 //! The server is transport, generic over a [`Backend`] and depending on no
-//! mindflayer crate (D-17); this is the CLI's, with its own [`Query`], the
+//! mindweaver crate (D-17); this is the CLI's, with its own [`Query`], the
 //! [`Task`] the TUI runs, and an [`Outcome`] of its own. It is a front end
 //! as the TUI is, and works as the TUI does (D-18): a read is a query core
 //! answers, the snapshot or a file's contents, and a change is a task turned
@@ -69,25 +69,25 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
-use mindflayer_core::browse::{BrowseError, Folders};
-use mindflayer_core::code::Said;
-use mindflayer_core::contents::{Contents, ContentsError, Files};
-use mindflayer_core::draft;
-use mindflayer_core::gather::Watch;
-use mindflayer_core::install::{self, Cell, Conflict, Locked};
-use mindflayer_core::known::{self, Launch};
-use mindflayer_core::policy::PolicyError;
-use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
-use mindflayer_core::scan::{self, Order, DEFAULT_DEPTH};
-use mindflayer_core::update::Updates;
-use mindflayer_core::value::Redacted;
-use mindflayer_core::view::Snapshot;
-use mindflayer_core::{paths, policy, watch};
-use mindflayer_core::{
+use mindweaver_core::browse::{BrowseError, Folders};
+use mindweaver_core::code::Said;
+use mindweaver_core::contents::{Contents, ContentsError, Files};
+use mindweaver_core::draft;
+use mindweaver_core::gather::Watch;
+use mindweaver_core::install::{self, Cell, Conflict, Locked};
+use mindweaver_core::known::{self, Launch};
+use mindweaver_core::policy::PolicyError;
+use mindweaver_core::resolve::{resolve, Intent, Reason, Resolved};
+use mindweaver_core::scan::{self, Order, DEFAULT_DEPTH};
+use mindweaver_core::update::Updates;
+use mindweaver_core::value::Redacted;
+use mindweaver_core::view::Snapshot;
+use mindweaver_core::{paths, policy, watch};
+use mindweaver_core::{
     FlayerWorkspace, Found, Kind, LifecycleError, MindProject, Reference, Scan, WorkspaceError,
     FLAYER_CONFIG, FLAYER_DIR,
 };
-use mindflayer_server::{Backend, Grounds, Preview, Refusal, Route, Watched};
+use mindweaver_server::{Backend, Grounds, Preview, Refusal, Route, Watched};
 use serde::{Deserialize, Serialize};
 
 use crate::admit::Admission;

@@ -5,7 +5,7 @@ project carries a `.mind` directory beside its **skills** and **rules**, and
 a workspace above it carries a `.mindflayer` that orchestrates several such
 projects at once.
 
-One shared Rust engine (`mindflayer-core`) behind every front end: the CLI
+One shared Rust engine (`mindweaver-core`) behind every front end: the CLI
 (`mind` for a project, `flayer` for a workspace), the TUI it opens, and a
 [control panel](#control-panel) in your browser, served by the same binary.
 The layout leaves room for a desktop app later without moving the engine.
@@ -2402,7 +2402,7 @@ task above all: as it is sent, it is named with `Sent` after it
 item of a stream holds.
 
 The panel is built into the binaries by a cargo feature, `ui`, which is on by
-default. `cargo build -p mindflayer-cli --no-default-features` leaves it out,
+default. `cargo build -p mindweaver-cli --no-default-features` leaves it out,
 and with it the server and what only the panel needs (axum, the embedded
 files, the browser opener); `ui` is then no command.
 

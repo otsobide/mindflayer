@@ -14,8 +14,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use common::*;
-use mindflayer_cli::backend::{PanelBackend, Query};
-use mindflayer_server::{Backend, Event, Events, Subscription, Watcher, DEBOUNCE};
+use mindweaver_cli::backend::{PanelBackend, Query};
+use mindweaver_server::{Backend, Event, Events, Subscription, Watcher, DEBOUNCE};
 use serde_json::json;
 
 /// How long a change that is coming takes at most to be told.

@@ -7,9 +7,9 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::install::{Installation, Installed};
-use mindflayer_core::update::{self, Plan, ProjectPlan, Step, Update};
-use mindflayer_core::{paths, AgentHomes, Excluded, FlayerWorkspace, MindProject, Reference};
+use mindweaver_core::install::{Installation, Installed};
+use mindweaver_core::update::{self, Plan, ProjectPlan, Step, Update};
+use mindweaver_core::{paths, AgentHomes, Excluded, FlayerWorkspace, MindProject, Reference};
 
 use super::gather::scrubbed;
 use super::install::{edits, left_out, named};

@@ -21,11 +21,11 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
-use mindflayer_core::code::Said;
-use mindflayer_core::gather::Watch;
-use mindflayer_core::resolve::{self, resolve, Intent, Resolved};
-use mindflayer_core::view::{self, Directory, Held, LoadedWorkspace, Snapshot};
-use mindflayer_core::{
+use mindweaver_core::code::Said;
+use mindweaver_core::gather::Watch;
+use mindweaver_core::resolve::{self, resolve, Intent, Resolved};
+use mindweaver_core::view::{self, Directory, Held, LoadedWorkspace, Snapshot};
+use mindweaver_core::{
     scan, FlayerWorkspace, Kind, MarkerFile, MindProject, Template, WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};

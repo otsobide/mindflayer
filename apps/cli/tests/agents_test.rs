@@ -343,7 +343,7 @@ fn flayer_share_changes_a_project_the_workspace_manages() {
         .starts_with("set share to shared in collapse, where it was local\n"));
     assert!(
         MindProject::open(&root).unwrap().settings().unwrap().share
-            == mindflayer_core::Share::Shared
+            == mindweaver_core::Share::Shared
     );
 }
 

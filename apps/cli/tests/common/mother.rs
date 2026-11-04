@@ -1,4 +1,4 @@
-//! The CLI's own mothers, beside core's (`mindflayer_core::mother`), which
+//! The CLI's own mothers, beside core's (`mindweaver_core::mother`), which
 //! make the domain's values: what a suite types into a command where it
 //! takes free text, and a workspace left as an older build left it.
 //!
@@ -7,8 +7,8 @@
 
 use std::path::Path;
 
-use mindflayer_core::mother::random;
-use mindflayer_core::FlayerWorkspace;
+use mindweaver_core::mother::random;
+use mindweaver_core::FlayerWorkspace;
 
 /// Makes the values a person or a browser types where a command takes free
 /// text: a description, a template's name, a reference.

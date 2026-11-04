@@ -15,7 +15,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::task::Poll;
 
-use mindflayer_server::{Listening, Server};
+use mindweaver_server::{Listening, Server};
 use serde::Serialize;
 use tokio::sync::oneshot;
 

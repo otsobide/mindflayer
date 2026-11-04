@@ -3,9 +3,9 @@
 use std::fs;
 use std::path::Path;
 
-use mindflayer_core::ledger::{Action, LedgerError, Outcome};
-use mindflayer_core::workspace::{FLAYER_FORMAT_VERSION, MIND_FORMAT_VERSION, MIND_TOML_VERSION};
-use mindflayer_core::{
+use mindweaver_core::ledger::{Action, LedgerError, Outcome};
+use mindweaver_core::workspace::{FLAYER_FORMAT_VERSION, MIND_FORMAT_VERSION, MIND_TOML_VERSION};
+use mindweaver_core::{
     resolve, Directories, FlayerWorkspace, Initialization, Inputs, Intent, Kind, MindProject,
     Reason, Registration, Resolved, WorkspaceError, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG,
     MIND_DIR,

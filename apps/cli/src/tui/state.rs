@@ -12,9 +12,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 
-use mindflayer_core::gather::{Progress, Watch};
-use mindflayer_core::scan;
-use mindflayer_core::{
+use mindweaver_core::gather::{Progress, Watch};
+use mindweaver_core::scan;
+use mindweaver_core::{
     paths, Agent, Kind, Layout, MarkerFile, Reason, Share, State, DEFAULT_SUBDIRECTORY,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};

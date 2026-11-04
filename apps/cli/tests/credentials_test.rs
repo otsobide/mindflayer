@@ -8,7 +8,7 @@ mod common;
 
 use common::mother::OlderBuildMother;
 use common::*;
-use mindflayer_core::mother::{random, Credentialed, GitRepositoryMother, UrlMother};
+use mindweaver_core::mother::{random, Credentialed, GitRepositoryMother, UrlMother};
 
 /// The refusal a gather of a URL with a credential in it ends with, after
 /// the URL without it.
@@ -331,8 +331,8 @@ mod panel {
     //! older build stored.
 
     use super::*;
-    use mindflayer_cli::backend::{PanelBackend, Query};
-    use mindflayer_server::Backend;
+    use mindweaver_cli::backend::{PanelBackend, Query};
+    use mindweaver_server::Backend;
     use serde_json::{json, Value};
 
     fn backend(root: &Path) -> PanelBackend {

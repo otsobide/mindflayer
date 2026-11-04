@@ -4,9 +4,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::migrate::{self, Left, Move, Refusal};
-use mindflayer_core::AgentHomes;
-use mindflayer_core::{create, Catalog, FlayerWorkspace, Kind, MindProject};
+use mindweaver_core::migrate::{self, Left, Move, Refusal};
+use mindweaver_core::AgentHomes;
+use mindweaver_core::{create, Catalog, FlayerWorkspace, Kind, MindProject};
 use tempfile::TempDir;
 
 mod common;
@@ -121,7 +121,7 @@ fn what_a_project_at_the_root_shares_with_the_workspace_is_left_to_it() {
     // workspace does, and its rules apart.
     MindProject::init_with(
         root,
-        &mindflayer_core::Directories::default().with(Kind::Rule, ".claude/rules"),
+        &mindweaver_core::Directories::default().with(Kind::Rule, ".claude/rules"),
     )
     .unwrap();
     let (workspace, _) = FlayerWorkspace::init_with(root, &common::beside()).unwrap();
@@ -227,7 +227,7 @@ fn a_folder_outside_the_workspace_is_refused_and_left_as_it_is() {
         matches!(
             plan.refusals.as_slice(),
             [Refusal::Misplaced(
-                mindflayer_core::WorkspaceError::OutsideWorkspace {
+                mindweaver_core::WorkspaceError::OutsideWorkspace {
                     kind: Kind::Skill,
                     ..
                 }
@@ -264,7 +264,7 @@ fn a_folder_on_the_shelf_is_refused_by_the_plan() {
         matches!(
             plan.refusals.as_slice(),
             [Refusal::Misplaced(
-                mindflayer_core::WorkspaceError::OverlapsGathered {
+                mindweaver_core::WorkspaceError::OverlapsGathered {
                     kind: Kind::Skill,
                     ..
                 }
@@ -501,7 +501,7 @@ fn a_project_at_the_root_keeps_what_it_shares_and_the_marker_moves_on() {
 
 #[test]
 fn an_installed_skill_is_still_current_once_its_source_has_moved() {
-    use mindflayer_core::install::{self, Installed, Standing};
+    use mindweaver_core::install::{self, Installed, Standing};
 
     let (dir, mut workspace) = beside();
     let alpha = dir.path().join("alpha");

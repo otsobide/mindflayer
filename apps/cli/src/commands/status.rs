@@ -4,7 +4,7 @@
 //! Core builds and orders the report ([`Status`]); this only lays it out, as
 //! a table naming no more than its rows need to be told apart.
 
-use mindflayer_core::{
+use mindweaver_core::{
     Agent, FlayerWorkspace, Kind, MarkerFile, MindProject, Missed, Status, StatusFailure, Unreached,
 };
 

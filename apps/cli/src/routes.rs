@@ -15,8 +15,8 @@
 //! and adding one does not. So a test pins each of them by name
 //! (`routes_test`), as one pins a report's JSON.
 
-use mindflayer_core::install::Cell;
-use mindflayer_server::{Arguments, Method, Parameter, Route, Shape};
+use mindweaver_core::install::Cell;
+use mindweaver_server::{Arguments, Method, Parameter, Route, Shape};
 use serde::Deserialize;
 
 use crate::backend::{Draft, Query};

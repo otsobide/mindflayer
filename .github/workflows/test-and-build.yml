@@ -79,7 +79,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Test mindflayer-core
+      - name: Test mindweaver-core
         run: make core/test
 
   test-cli:
@@ -110,7 +110,7 @@ jobs:
       - name: Install zsh
         run: sudo apt-get update && sudo apt-get install -y zsh
 
-      - name: Test mindflayer-cli
+      - name: Test mindweaver-cli
         run: make cli/test
 
   # The types the panel compiles against are written from core's and the
@@ -163,7 +163,7 @@ jobs:
       - name: Check the API's OpenAPI document is the one Rust writes
         run: make api/openapi/check
 
-  # The server depends on no mindflayer crate, core included, so nothing here
+  # The server depends on no mindweaver crate, core included, so nothing here
   # needs core's tests to pass first. It waits for them anyway: core is the
   # gate for everything downstream, and a red core stops the run before it
   # spends a runner on anything else.
@@ -189,7 +189,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Test mindflayer-server
+      - name: Test mindweaver-server
         run: make server/test
 
   # The panel needs no Rust, and no Rust job needs Node: none sets it up, and
@@ -362,10 +362,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Build mindflayer-core
+      - name: Build mindweaver-core
         run: make core/build
 
-      - name: Build mindflayer-core for release
+      - name: Build mindweaver-core for release
         run: make core/release
 
   # The binaries ship the panel, so they wait for its tests as well as their
@@ -405,7 +405,7 @@ jobs:
           name: panel
           path: apps/web/dist
 
-      - name: Build mindflayer-cli
+      - name: Build mindweaver-cli
         run: make cli/build
 
       # The runner's own triple, so the release built for it can be run.
@@ -417,7 +417,7 @@ jobs:
       # the folder as each request comes in. This runner has Node and no
       # pnpm, so `make cli/release` says the panel is not built here and
       # embeds the one downloaded above.
-      - name: Build mindflayer-cli for release, the panel embedded
+      - name: Build mindweaver-cli for release, the panel embedded
         run: make cli/release TARGET="$TARGET"
 
       # With the folder gone, so a binary reading it could not pass: the
@@ -539,8 +539,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Build mindflayer-server
+      - name: Build mindweaver-server
         run: make server/build
 
-      - name: Build mindflayer-server for release
+      - name: Build mindweaver-server for release
         run: make server/release

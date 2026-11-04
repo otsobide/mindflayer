@@ -4,9 +4,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::known::{self, Launch};
-use mindflayer_core::resolve::Reason;
-use mindflayer_core::{
+use mindweaver_core::known::{self, Launch};
+use mindweaver_core::resolve::Reason;
+use mindweaver_core::{
     FlayerWorkspace, MindProject, Registration, WorkspaceError, FLAYER_CONFIG, FLAYER_DIR,
 };
 use tempfile::TempDir;

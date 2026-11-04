@@ -9,20 +9,20 @@ mod common;
 use std::fs;
 use std::path::PathBuf;
 
-use mindflayer_core::agents_md::{self, Section};
-use mindflayer_core::claude_md::{self, Fallback, Reach};
-use mindflayer_core::claude_rules::{self, Warning as FileWarning};
-use mindflayer_core::code::Said;
-use mindflayer_core::install::rules::{self, Warning, Withheld};
-use mindflayer_core::install::{
+use mindweaver_core::agents_md::{self, Section};
+use mindweaver_core::claude_md::{self, Fallback, Reach};
+use mindweaver_core::claude_rules::{self, Warning as FileWarning};
+use mindweaver_core::code::Said;
+use mindweaver_core::install::rules::{self, Warning, Withheld};
+use mindweaver_core::install::{
     self, Candidate, Edits, InstallError, Installation, Installed, Removed, Standing,
     WORKSPACE_ORIGIN,
 };
-use mindflayer_core::ledger::{InstallRecord, Target};
-use mindflayer_core::lifecycle;
-use mindflayer_core::migrate;
-use mindflayer_core::value::ContentHash;
-use mindflayer_core::{
+use mindweaver_core::ledger::{InstallRecord, Target};
+use mindweaver_core::lifecycle;
+use mindweaver_core::migrate;
+use mindweaver_core::value::ContentHash;
+use mindweaver_core::{
     hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger, LifecycleError,
     MindProject, Missed, Reference, Share, State, Status,
 };

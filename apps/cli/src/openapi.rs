@@ -4,7 +4,7 @@
 //!
 //! Put together here, where both tables and every type are known: the
 //! server writes what is HTTP of each route of its own table and of the
-//! backend's ([`mindflayer_server::schema::paths`]), and asks this module
+//! backend's ([`mindweaver_server::schema::paths`]), and asks this module
 //! for the schema of each type a route names ([`Describe`]), each found by
 //! the name the route gives it among the roots core, the CLI and the
 //! server list, as a file of `docs/api/schemas` is. Walking the very
@@ -25,11 +25,11 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use mindflayer_core::code::CoreCode;
-use mindflayer_core::known::Switchable;
-use mindflayer_core::schema::{self as core, given_settings, taken_settings, Visitor};
-use mindflayer_server::schema::{self as server, Called, Carried, Describe, Way};
-use mindflayer_server::{Backend, Grounds, Method, Sent, API};
+use mindweaver_core::code::CoreCode;
+use mindweaver_core::known::Switchable;
+use mindweaver_core::schema::{self as core, given_settings, taken_settings, Visitor};
+use mindweaver_server::schema::{self as server, Called, Carried, Describe, Way};
+use mindweaver_server::{Backend, Grounds, Method, Sent, API};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde_json::{json, Map, Value};
 

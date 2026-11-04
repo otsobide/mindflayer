@@ -10,9 +10,9 @@ workspace `members`, and its test and build jobs in CI, never reshaping the
 tree.
 
 ```
-apps/core    mindflayer-core     the engine
-apps/cli     mindflayer-cli      the `mind` and `flayer` binaries
-apps/server  mindflayer-server   the local server behind the web panel
+apps/core    mindweaver-core     the engine
+apps/cli     mindweaver-cli      the `mind` and `flayer` binaries
+apps/server  mindweaver-server   the local server behind the web panel
 apps/web     mindflayer-web      the web panel, in Vue
 ```
 
@@ -159,13 +159,13 @@ rewritten, and a new one is its author's to watch.
 
 ## Where the line between core and a front end falls
 
-`mindflayer-core` knows what a mind project is, what a flayer workspace is, and
+`mindweaver-core` knows what a mind project is, what a flayer workspace is, and
 what each kind of artifact is. It reads and writes files, and the only other
 I/O it does is fetching a repository when asked to gather, through a port whose
 adapter is `gix`, and reading the clock ([values, ports and
 adapters](#values-ports-and-adapters)). It has no idea a terminal exists.
 
-`mindflayer-cli` parses a command line, asks core for values, and renders them.
+`mindweaver-cli` parses a command line, asks core for values, and renders them.
 It holds no rules about artifacts: not the name limits, not the front matter
 format, not which folder a kind lives in, not what a change does to the
 record of an install.
@@ -1842,7 +1842,7 @@ core gives it, listed after `echoed`, which `code()` gives and `CODES` leaves
 out, so the panel meets one code for one condition whichever way it was
 reached. The rest are the CLI's own (`install_no_projects`,
 `not_a_terminal`), and so are a refusal's ([every change is a command
-line](#every-change-is-a-command-line)). `mindflayer_cli::CODES` lists them
+line](#every-change-is-a-command-line)). `mindweaver_cli::CODES` lists them
 as `code::ALL` lists core's, and a test holds none of them to be given
 twice, there or in core, and each echoed one to be one core gives. A code
 the CLI took of its own for a condition core names was the other way, and
@@ -4400,7 +4400,7 @@ choice is made seeing where the project went.
 
 ## The local server
 
-`apps/server` (`mindflayer-server`) is the transport under the web panel
+`apps/server` (`mindweaver-server`) is the transport under the web panel
 ([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): a library crate that
 binds a port, checks who is asking, carries JSON between the browser and a
 front end, and serves the panel's files. What it carries is an HTTP API for
@@ -4557,7 +4557,7 @@ of the server's own (`Condition`, `apps/server/src/code.rs`):
 | 500 | `writer_stopped` | the thread every run and switch goes through has stopped |
 
 **The server's codes are its own**, written once. Core's `codes!` would
-write them, but the server depends on no mindflayer crate, so a macro of its
+write them, but the server depends on no mindweaver crate, so a macro of its
 own mirrors that one's rules: one arm for each condition, `Self::` and its
 name with its status and its code, from which a match with no wildcard
 writes `code()` and `status()`, and the same arms `ALL` and `CODES`. So a
@@ -4637,7 +4637,7 @@ description beside the handlers that could disagree with them, each body
 and answer the schema of the type it names, found by that name ([the API's
 description is written from both
 tables](#the-apis-description-is-written-from-both-tables)). A handler per read in the server was the alternative, which would
-put the CLI's reads in a crate that depends on no mindflayer crate, or a
+put the CLI's reads in a crate that depends on no mindweaver crate, or a
 trait method per read, which the server would have to grow with every read
 the CLI adds.
 
@@ -4712,7 +4712,7 @@ hands them over and serializes what comes back, without ever naming one; a
 makes one of what a request sent ([a table of reads](#a-table-of-reads)), so
 the trait asks nothing of it but that it can be sent to the pool. So the CLI
 can implement `Backend` with its own `Task` and depend on the server, while
-the server depends on no mindflayer crate at all, which `crate_test` checks
+the server depends on no mindweaver crate at all, which `crate_test` checks
 through `cargo metadata`. A protocol crate holding the shared types was the
 alternative, and it would put a third crate between every change to a task
 and the code that runs it. The server's own suites use a fake backend whose
@@ -5521,7 +5521,7 @@ All of it is behind the CLI crate's `ui` feature, on by default so the one
 binary somebody installs has the panel
 ([D-17](#d-17-the-next-front-end-is-a-local-web-panel)): the server, axum,
 rust-embed, tokio's signal handling and `webbrowser`. `cargo build -p
-mindflayer-cli --no-default-features` builds the commands and the TUI
+mindweaver-cli --no-default-features` builds the commands and the TUI
 without them, and `ui` is then no command; `tests/crate_test.rs` holds that
 build to no server, axum, embed or `webbrowser`, `make cli/build` builds
 it first, and `make cli/test` runs its unit tests, one of which finds no
@@ -5759,7 +5759,7 @@ answers, a preview, a run, each event and a refusal (`Preview`, `Ran`,
   `rename_all`, `skip`, `deny_unknown_fields`, `default`), so a schema
   says what serde writes or reads; schemars 1.x, the current major, whose
   default is 2020-12. The server derives its own under its own feature: it
-  may depend on schemars, which is no mindflayer crate, and what it carries
+  may depend on schemars, which is no mindweaver crate, and what it carries
   of the backend's unread, an item of a preview's `confirm`, a run's
   `outcome`, a change's scope, is any JSON in its schemas, which backend
   type fills it being the front end's to say, as a route's answer is.
@@ -5773,7 +5773,7 @@ answers, a preview, a run, each event and a refusal (`Preview`, `Ran`,
   (schemars' contract). Each crate's `schema::roots` names every root and
   which way it goes through a `Visitor`, as `typescript::roots` names the
   TypeScript's; the server's names its own through a visitor of its own,
-  since it depends on no mindflayer crate, and the CLI lists them beside
+  since it depends on no mindweaver crate, and the CLI lists them beside
   its own, as the API they are part of is the one it serves.
 - **What serde writes by hand is said from what it writes**, beside its
   serializer, as its TypeScript is, for the same reason. A word is a
@@ -10035,7 +10035,7 @@ an open question below.
   Rust](#its-types-come-from-rust)): the server has no `ts` feature, and its
   own tests hold what it answers and tells. `TS` derived beside their
   schemas under a feature would bring them under the drift check, at the
-  price of ts-rs in the one crate that depends on no mindflayer crate.
+  price of ts-rs in the one crate that depends on no mindweaver crate.
 - **The TUI asks its own questions.** It asks before an unlink, a removal,
   a relink, an adoption and applying the install screen, whatever its marks
   hold, in words of its own for what they are about; the panel asks before
@@ -11083,7 +11083,7 @@ an open question below.
   test could hold to the value it names. Nor do the CLI's own warnings,
   worded from what it found (a gathered name that is not one folder name, an
   update that cannot tell where a copy came from), carry a code of the CLI's:
-  each would join `mindflayer_cli::CODES` once the panel acts on it.
+  each would join `mindweaver_cli::CODES` once the panel acts on it.
 - **A run left behind by Ctrl-C.** The first Ctrl-C to `flayer ui` waits
   for every request under way, but a run whose client stopped waiting is no
   request any more: it goes on on the server's writer thread, which nothing

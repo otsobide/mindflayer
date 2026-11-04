@@ -12,10 +12,10 @@ use std::collections::BTreeMap;
 
 use common::contract;
 use common::*;
-use mindflayer_cli::backend::{Outcome, PanelBackend, Query, Switch};
-use mindflayer_cli::task::{naming, shell, Caution};
-use mindflayer_core::watch;
-use mindflayer_server::{Backend, Grounds, Own, Preview, Ran, Refusal, API};
+use mindweaver_cli::backend::{Outcome, PanelBackend, Query, Switch};
+use mindweaver_cli::task::{naming, shell, Caution};
+use mindweaver_core::watch;
+use mindweaver_server::{Backend, Grounds, Own, Preview, Ran, Refusal, API};
 use serde_json::{json, Value};
 
 /// The backend over the workspace at `root`, launched there with nothing
@@ -604,7 +604,7 @@ fn a_skills_file_comes_back_as_text_inside_json() {
     // What `edit --if-unchanged` takes of it, core's hash of its bytes.
     assert_eq!(
         answer["hash"],
-        mindflayer_core::hash::bytes(skill_file("alpha", "A skill").as_bytes()).as_str()
+        mindweaver_core::hash::bytes(skill_file("alpha", "A skill").as_bytes()).as_str()
     );
     // Cut where core cuts it, so the panel draws what it declares apart.
     assert_eq!(answer["manifest"]["front_matter"][0]["key"], "name");
@@ -693,7 +693,7 @@ fn a_rule_that_links_out_of_its_project_is_not_shown_to_the_browser() {
 #[test]
 fn an_oversized_file_is_not_served_as_content() {
     let (_dir, backend, skill) = contents_fixture();
-    let cap = mindflayer_core::contents::CAP;
+    let cap = mindweaver_core::contents::CAP;
     fs::write(
         skill.join("huge.md"),
         "a".repeat(usize::try_from(cap).unwrap() + 1),
@@ -2671,7 +2671,7 @@ fn contents_an_edit_refuses_and_a_holder_not_linked_are_refused_with_their_codes
 fn save(text: &str, read: &str) -> Task {
     task(json!({
         "type": "save", "holder": {"type": "workspace"}, "kind": "skill", "name": "deploy",
-        "text": text, "hash": mindflayer_core::hash::bytes(read.as_bytes()),
+        "text": text, "hash": mindweaver_core::hash::bytes(read.as_bytes()),
     }))
 }
 
@@ -2702,13 +2702,13 @@ fn a_save_writes_the_text_through_edit_contents_and_takes_its_file_away_after() 
 
     assert!(ran.ok, "{ran:?}");
     assert_eq!(preview.lines, [ran.runs[0].command.clone()]);
-    let route = mindflayer_cli::task::scratch_route(&text);
+    let route = mindweaver_cli::task::scratch_route(&text);
     assert_eq!(
         ran.runs[0].command,
         format!(
             "flayer -W {} edit --contents {route} --if-unchanged {} skill:deploy",
             root.display(),
-            mindflayer_core::hash::bytes(read.as_bytes())
+            mindweaver_core::hash::bytes(read.as_bytes())
         )
     );
     assert!(
@@ -2758,7 +2758,7 @@ fn a_save_takes_the_text_left_under_its_name_and_refuses_anything_else_there() {
     let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
     let read = fs::read_to_string(&manifest).unwrap();
     let text = read.replace("Ship it", "Ship it today");
-    let left = root.join(mindflayer_cli::task::scratch_route(&text));
+    let left = root.join(mindweaver_cli::task::scratch_route(&text));
     fs::create_dir_all(left.parent().unwrap()).unwrap();
     fs::write(&left, &text).unwrap();
     let backend = backend(root);

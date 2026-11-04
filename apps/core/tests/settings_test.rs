@@ -6,7 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use mindflayer_core::{
+use mindweaver_core::{
     create, scan, Agent, AgentTarget, Catalog, CreateError, Directories, FlayerWorkspace,
     Initialization, Kind, MarkerFile, MindProject, Misplaced, MisplacedTarget, ProjectWarning,
     Settings, Share, Targets, WorkspaceError, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_FILE,
@@ -1044,7 +1044,7 @@ fn a_change_in_toml_of_the_version_or_the_id_is_refused_and_writes_nothing() {
 
     for change in [
         (|settings: &mut Settings| settings.version = TARGETS_VERSION) as fn(&mut Settings),
-        |settings: &mut Settings| settings.id = mindflayer_core::ProjectId::generate(),
+        |settings: &mut Settings| settings.id = mindweaver_core::ProjectId::generate(),
     ] {
         let error = project.change_settings(change).unwrap_err();
 

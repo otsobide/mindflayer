@@ -22,10 +22,10 @@ pub(crate) mod workspace;
 
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::gather::Watch;
-use mindflayer_core::resolve::{self, resolve, Intent};
-use mindflayer_core::view::Listing;
-use mindflayer_core::{
+use mindweaver_core::gather::Watch;
+use mindweaver_core::resolve::{self, resolve, Intent};
+use mindweaver_core::view::Listing;
+use mindweaver_core::{
     paths, scan, Catalog, Change, FlayerWorkspace, MindProject, Reference, Share,
 };
 

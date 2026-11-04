@@ -8,7 +8,7 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::*;
-use mindflayer_core::mother::{ArtifactNameMother, SkillMother};
+use mindweaver_core::mother::{ArtifactNameMother, SkillMother};
 use serde_json::Value;
 
 /// Where an artifact is added: a project's own, through `mind`, or the
@@ -312,7 +312,7 @@ fn says_why(failure: &Failure, code: &str, why: &str, what: &str) {
     let said = failure.error.to_string();
     let limit = format!(
         "characters, over the {} character limit",
-        mindflayer_core::skill::MAX_NAME_SEGMENT_LEN
+        mindweaver_core::skill::MAX_NAME_SEGMENT_LEN
     );
     let expected = match why {
         "empty" => "the name is empty",

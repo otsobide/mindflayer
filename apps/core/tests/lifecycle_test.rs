@@ -4,12 +4,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::hash;
-use mindflayer_core::install::{self, InstallError, Standing};
-use mindflayer_core::ledger::{Ledger, SourceKind};
-use mindflayer_core::lifecycle::{self, Record, Target};
-use mindflayer_core::AgentHomes;
-use mindflayer_core::{
+use mindweaver_core::hash;
+use mindweaver_core::install::{self, InstallError, Standing};
+use mindweaver_core::ledger::{Ledger, SourceKind};
+use mindweaver_core::lifecycle::{self, Record, Target};
+use mindweaver_core::AgentHomes;
+use mindweaver_core::{
     create, Agent, Catalog, Directories, FlayerWorkspace, Kind, LifecycleError, MindProject,
     Reference, Share, ValidationIssue,
 };

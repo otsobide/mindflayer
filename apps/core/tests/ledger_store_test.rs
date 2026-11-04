@@ -19,17 +19,17 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 
-use mindflayer_core::adapter::SystemClock;
-use mindflayer_core::ledger::{
+use mindweaver_core::adapter::SystemClock;
+use mindweaver_core::ledger::{
     Action, Carried, Forgotten, InstallRecord, LedgerError, Moved, Outcome, Source, Target,
 };
-use mindflayer_core::mother::ledger::RouteMother;
-use mindflayer_core::mother::{
+use mindweaver_core::mother::ledger::RouteMother;
+use mindweaver_core::mother::{
     random, ArtifactNameMother, ContentHashMother, InstallRecordMother, OriginMother,
     ProjectIdMother, RedactedMother, RevisionMother, TargetMother, UrlMother,
 };
-use mindflayer_core::value::{ArtifactName, Origin, Redacted};
-use mindflayer_core::{Agent, Clock, Kind, Ledger, ProjectId, SourceKind, LEDGER_FILE};
+use mindweaver_core::value::{ArtifactName, Origin, Redacted};
+use mindweaver_core::{Agent, Clock, Kind, Ledger, ProjectId, SourceKind, LEDGER_FILE};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -295,7 +295,7 @@ fn source(store: &Store, url: &str) -> Source {
             SourceKind::Git,
             url,
             None,
-            mindflayer_core::DEFAULT_SUBDIRECTORY,
+            mindweaver_core::DEFAULT_SUBDIRECTORY,
         )
         .unwrap()
 }
@@ -355,7 +355,7 @@ fn a_new_store_records_nothing(mut store: Store) {
 fn a_refusal_names_where_the_store_is_kept_and_records_nothing(mut store: Store) {
     // A source the store never registered, which nothing it lists could
     // name: an artifact of it, and an installation pointing at it.
-    let unregistered = mindflayer_core::mother::SourceMother::random();
+    let unregistered = mindweaver_core::mother::SourceMother::random();
     let name = ArtifactNameMother::random();
     let mut pointing = InstallRecordMother::skill(&name);
     pointing.source_id = Some(unregistered.id);
@@ -1083,7 +1083,7 @@ fn a_migration_moves_each_installation_fills_a_missing_hash_and_logs_each_line(m
 /// were kept. `MovedMother::skill` names the copies an install writes
 /// today, which a store given them would seem to leave where they were.
 fn moved_skill(name: &str) -> Moved {
-    let mut moved = mindflayer_core::mother::MovedMother::skill(name);
+    let mut moved = mindweaver_core::mother::MovedMother::skill(name);
     moved.targets = moved
         .targets
         .into_iter()
@@ -1329,7 +1329,7 @@ fn coordinate() -> (String, Option<String>, String) {
         UrlMother::clean(),
         random::chance().then(random::word),
         random::pick(&[
-            String::from(mindflayer_core::DEFAULT_SUBDIRECTORY),
+            String::from(mindweaver_core::DEFAULT_SUBDIRECTORY),
             random::word(),
         ]),
     )

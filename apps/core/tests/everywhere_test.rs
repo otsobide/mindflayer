@@ -9,10 +9,10 @@ use std::fs;
 use std::path::PathBuf;
 
 use common::skill;
-use mindflayer_core::assign;
-use mindflayer_core::everywhere::{self, Plan, Step};
-use mindflayer_core::install::{Edits, Removed};
-use mindflayer_core::{
+use mindweaver_core::assign;
+use mindweaver_core::everywhere::{self, Plan, Step};
+use mindweaver_core::install::{Edits, Removed};
+use mindweaver_core::{
     create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference, Share,
     Standing,
 };
@@ -214,7 +214,7 @@ fn removing_it_everywhere_takes_out_what_is_unchanged_and_leaves_the_rest() {
     }
     let ledger = workspace.ledger_for_reading().unwrap();
     let standings: Vec<(String, Standing)> =
-        mindflayer_core::install::standings(&workspace, &ledger, &projects[2], Kind::Skill)
+        mindweaver_core::install::standings(&workspace, &ledger, &projects[2], Kind::Skill)
             .unwrap();
     assert_eq!(standings, [(String::from("deploy"), Standing::Edited)]);
     assert!(

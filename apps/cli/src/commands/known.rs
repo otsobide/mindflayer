@@ -9,8 +9,8 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindflayer_core::resolve::{resolve, Intent};
-use mindflayer_core::{known, Known, KnownWorkspace};
+use mindweaver_core::resolve::{resolve, Intent};
+use mindweaver_core::{known, Known, KnownWorkspace};
 
 use super::{reading, typed};
 use crate::render::{as_stored, json, plural, printable, table};

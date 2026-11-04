@@ -9,8 +9,8 @@
 
 use std::path::Path;
 
-use mindflayer_core::activate::{self, Shell, WORKSPACE_VARIABLE};
-use mindflayer_core::resolve::{self, resolve, Intent, Reason, Resolved};
+use mindweaver_core::activate::{self, Shell, WORKSPACE_VARIABLE};
+use mindweaver_core::resolve::{self, resolve, Intent, Reason, Resolved};
 
 use super::{reading, typed, workspace_to_read};
 use crate::homes::variable;

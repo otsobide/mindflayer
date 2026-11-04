@@ -5,7 +5,7 @@
 //! read as an option or a command ([`crate::task`]) keeps a value from
 //! changing what a line is; this keeps each value a browser could aim at
 //! the disk to what the workspace the panel was launched on allows
-//! ([`mindflayer_core::policy`]), and names each project to the command by
+//! ([`mindweaver_core::policy`]), and names each project to the command by
 //! the path its entry resolves to, never as the browser spelled it:
 //!
 //! - **A holder** is an entry the registry holds, and becomes the `-C` of
@@ -27,9 +27,9 @@
 //! is core's, so a second front end taking tasks from outside asks the same
 //! questions and gets the same answers.
 
-use mindflayer_core::install::Cell;
-use mindflayer_core::policy::{self, PolicyError};
-use mindflayer_core::{FlayerWorkspace, Member};
+use mindweaver_core::install::Cell;
+use mindweaver_core::policy::{self, PolicyError};
+use mindweaver_core::{FlayerWorkspace, Member};
 
 use crate::commands::consulted;
 use crate::commands::workspace::same_directory;

@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::*;
-use mindflayer_core::{Agent, Share};
+use mindweaver_core::{Agent, Share};
 use tui::state::Step as TuiStep;
 
 // ---------------------------------------------------------------------------
@@ -30,11 +30,11 @@ fn flayer_on_its_own_is_the_tui_at_both_spellings() {
     assert!(bare.command.is_none());
     assert!(matches!(
         named.command,
-        Some(mindflayer_cli::FlayerCommand::Tui)
+        Some(mindweaver_cli::FlayerCommand::Tui)
     ));
     assert!(matches!(
         long.command,
-        Some(mindflayer_cli::Command::Flayer { command: None })
+        Some(mindweaver_cli::Command::Flayer { command: None })
     ));
 }
 
@@ -495,12 +495,12 @@ fn flayer_minds_is_a_command_at_both_spellings() {
 
     assert!(matches!(
         direct.command,
-        Some(mindflayer_cli::FlayerCommand::Minds { ref roots }) if roots.is_empty()
+        Some(mindweaver_cli::FlayerCommand::Minds { ref roots }) if roots.is_empty()
     ));
     assert!(matches!(
         nested.command,
-        Some(mindflayer_cli::Command::Flayer {
-            command: Some(mindflayer_cli::FlayerCommand::Minds { ref roots })
+        Some(mindweaver_cli::Command::Flayer {
+            command: Some(mindweaver_cli::FlayerCommand::Minds { ref roots })
         }) if roots == &[PathBuf::from("work")]
     ));
 }
@@ -1657,7 +1657,7 @@ fn disk(root: &Path) -> std::collections::BTreeMap<String, Option<Vec<u8>>> {
 
 /// What the ledger of the workspace at `root` records of every installation
 /// in each of `projects`.
-fn recorded(root: &Path, projects: &[&str]) -> Vec<mindflayer_core::ledger::InstallRecord> {
+fn recorded(root: &Path, projects: &[&str]) -> Vec<mindweaver_core::ledger::InstallRecord> {
     let ledger = FlayerWorkspace::open(root)
         .unwrap()
         .ledger_for_reading()
@@ -2015,7 +2015,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
     // And the free text arrives word for word.
     let line = tasks[4].commands().remove(0);
     let cli = Cli::try_parse_from(&line).unwrap();
-    let Some(mindflayer_cli::Command::Add { description, .. }) = cli.command else {
+    let Some(mindweaver_cli::Command::Add { description, .. }) = cli.command else {
         panic!("{line:?}");
     };
     assert_eq!(description, awkward);
@@ -2039,7 +2039,7 @@ fn the_agents_and_share_toggles_parse_back_into_what_they_were() {
     let agents = Cli::try_parse_from(&lines[0]).unwrap();
     assert_eq!(agents.directory, Some(PathBuf::from("../collapse")));
     assert_eq!(agents.workspace.as_deref(), Some("."));
-    let Some(mindflayer_cli::Command::Agents {
+    let Some(mindweaver_cli::Command::Agents {
         change: None,
         named,
     }) = agents.command
@@ -2050,7 +2050,7 @@ fn the_agents_and_share_toggles_parse_back_into_what_they_were() {
     assert!(named.yes);
 
     let share = Cli::try_parse_from(&lines[1]).unwrap();
-    let Some(mindflayer_cli::Command::Share { mode }) = share.command else {
+    let Some(mindweaver_cli::Command::Share { mode }) = share.command else {
         panic!("{:?}", lines[1]);
     };
     assert_eq!(mode.share, Share::Local);
@@ -2085,7 +2085,7 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
     assert!(install.writes() && uninstall.writes());
 
     let line = install.commands().remove(0);
-    let Some(mindflayer_cli::FlayerCommand::Install {
+    let Some(mindweaver_cli::FlayerCommand::Install {
         projects,
         all_projects,
         name,
@@ -2104,7 +2104,7 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
     );
 
     let line = uninstall.commands().remove(0);
-    let Some(mindflayer_cli::FlayerCommand::Uninstall {
+    let Some(mindweaver_cli::FlayerCommand::Uninstall {
         projects,
         name,
         orphaned,
@@ -2626,11 +2626,11 @@ fn a_projects_own_skill_that_cannot_be_read_takes_the_row_its_agents_copy_has() 
     flayer(dir.path(), &["init"]).unwrap();
     let alpha = dir.path().join("alpha");
     fs::create_dir(&alpha).unwrap();
-    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    let directories = mindweaver_core::Directories::default().with(Kind::Skill, "skills");
     MindProject::init_settings(
         &alpha,
-        &mindflayer_core::Agent::ALL,
-        mindflayer_core::Share::Shared,
+        &mindweaver_core::Agent::ALL,
+        mindweaver_core::Share::Shared,
         &directories,
     )
     .unwrap();

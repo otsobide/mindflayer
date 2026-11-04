@@ -8,13 +8,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use common::skill;
-use mindflayer_core::adopt::{self, AdoptError, Git};
-use mindflayer_core::copy;
-use mindflayer_core::hash;
-use mindflayer_core::install::{self, Edits};
-use mindflayer_core::ledger::Target;
-use mindflayer_core::update;
-use mindflayer_core::{
+use mindweaver_core::adopt::{self, AdoptError, Git};
+use mindweaver_core::copy;
+use mindweaver_core::hash;
+use mindweaver_core::install::{self, Edits};
+use mindweaver_core::ledger::Target;
+use mindweaver_core::update;
+use mindweaver_core::{
     create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference, Share,
 };
 use tempfile::TempDir;
@@ -644,7 +644,7 @@ fn a_local_project_keeps_an_adopted_copy_git_tracks_in_git_and_the_rest_out() {
 
     assert!(matches!(
         done.excluded,
-        Some(mindflayer_core::Excluded::Written { .. })
+        Some(mindweaver_core::Excluded::Written { .. })
     ));
     assert_eq!(excluded(&project), ["/.agents/skills/notes/"]);
 

@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 
 mod common;
 
-use mindflayer_core::install::{self, InstallError, Installed, Offer, Standing};
-use mindflayer_core::ledger::Ledger;
-use mindflayer_core::AgentHomes;
-use mindflayer_core::{
+use mindweaver_core::install::{self, InstallError, Installed, Offer, Standing};
+use mindweaver_core::ledger::Ledger;
+use mindweaver_core::AgentHomes;
+use mindweaver_core::{
     resolve_except, FlayerWorkspace, Inputs, Intent, Kind, MindProject, Registration, ResolveError,
     WorkspaceError, FLAYER_CONFIG, FLAYER_DIR,
 };
@@ -26,7 +26,7 @@ fn target_and_team(
     target.link(&project).unwrap();
     let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
     for name in team_skills {
-        mindflayer_core::create(
+        mindweaver_core::create(
             &team.own(),
             Kind::Skill,
             name,
@@ -238,7 +238,7 @@ fn the_default_workspace_is_not_offered_as_somewhere_to_load_itself() {
 #[test]
 fn a_loaded_workspaces_own_skills_are_offered_after_the_workspaces_own() {
     let (_dir, mut target, project, team) = target_and_team(&["deploy"]);
-    mindflayer_core::create(&target.own(), Kind::Skill, "commit-style", "Ours").unwrap();
+    mindweaver_core::create(&target.own(), Kind::Skill, "commit-style", "Ours").unwrap();
     target.load(&team).unwrap();
     let ledger = Ledger::in_memory().unwrap();
 
@@ -345,7 +345,7 @@ fn a_loaded_workspace_under_the_target_reads_as_a_path_not_as_the_workspaces_own
     // A workspace in a folder called `workspace`: its entry is the word the
     // workspace's own go by.
     let (inner, _) = FlayerWorkspace::init(dir.path().join("workspace")).unwrap();
-    mindflayer_core::create(&inner.own(), Kind::Skill, "deploy", "Theirs").unwrap();
+    mindweaver_core::create(&inner.own(), Kind::Skill, "deploy", "Theirs").unwrap();
     target.load(&inner).unwrap();
     let ledger = Ledger::in_memory().unwrap();
 
@@ -360,7 +360,7 @@ fn a_loaded_workspace_under_the_target_reads_as_a_path_not_as_the_workspaces_own
 fn a_loaded_workspace_is_not_followed_into_what_it_loads() {
     let (dir, mut target, project, mut team) = target_and_team(&[]);
     let (further, _) = FlayerWorkspace::init(dir.path().join("further")).unwrap();
-    mindflayer_core::create(&further.own(), Kind::Skill, "deploy", "Far").unwrap();
+    mindweaver_core::create(&further.own(), Kind::Skill, "deploy", "Far").unwrap();
     team.load(&further).unwrap();
     target.load(&team).unwrap();
     // And the other way round too, which would loop if loads were followed.
@@ -414,7 +414,7 @@ fn a_loaded_workspace_that_is_the_project_itself_is_never_copied_onto_itself() {
     let (mut shared, _) = FlayerWorkspace::init_with(&repo, &common::beside()).unwrap();
     let (project, _) = MindProject::init(&repo).unwrap();
     shared.link(&project).unwrap();
-    mindflayer_core::create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
+    mindweaver_core::create(&project, Kind::Skill, "deploy", "Ship it").unwrap();
     target.link(&project).unwrap();
     target.load(&shared).unwrap();
     let ledger = Ledger::in_memory().unwrap();
@@ -557,7 +557,7 @@ fn a_loaded_workspace_inside_the_folder_it_would_install_into_is_not_deleted() {
     // A workspace sitting where the project would put `deploy`.
     let nested = project.directory_for(Kind::Skill).unwrap().join("deploy");
     let (inner, _) = FlayerWorkspace::init(&nested).unwrap();
-    mindflayer_core::create(&inner.own(), Kind::Skill, "deploy", "Nested").unwrap();
+    mindweaver_core::create(&inner.own(), Kind::Skill, "deploy", "Nested").unwrap();
     target.load(&inner).unwrap();
     let ledger = Ledger::in_memory().unwrap();
     let mut candidate =
@@ -721,10 +721,10 @@ fn something_gathered_and_loaded_from_one_directory_has_two_origins() {
     let (_dir, mut target, project, _) = target_and_team(&[]);
     let ledger = target.ledger().unwrap();
     let url = common::url(&repo);
-    mindflayer_core::gather::gather(
+    mindweaver_core::gather::gather(
         &target,
         &ledger,
-        &mindflayer_core::gather::Request::git(url.clone()),
+        &mindweaver_core::gather::Request::git(url.clone()),
     )
     .unwrap();
     target
@@ -799,7 +799,7 @@ fn what_a_loaded_workspace_keeps_in_a_projects_folder_is_never_overwritten_or_re
     // target loads: a record from before the load says the folder is ours.
     let dir = TempDir::new().unwrap();
     let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
-    mindflayer_core::create(&target.own(), Kind::Skill, "x", "Ours").unwrap();
+    mindweaver_core::create(&target.own(), Kind::Skill, "x", "Ours").unwrap();
     let (project, _) = MindProject::init(dir.path().join("lib")).unwrap();
     target.link(&project).unwrap();
     let ledger = Ledger::in_memory().unwrap();
@@ -1015,7 +1015,7 @@ fn nothing_is_installed_into_the_folder_a_loaded_workspace_keeps_its_own_in() {
     // could never be updated or removed again, so none is made.
     let dir = TempDir::new().unwrap();
     let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
-    mindflayer_core::create(&target.own(), Kind::Skill, "lint", "Ours").unwrap();
+    mindweaver_core::create(&target.own(), Kind::Skill, "lint", "Ours").unwrap();
     let (project, _) = MindProject::init(dir.path().join("target/team")).unwrap();
     let (team, _) = FlayerWorkspace::init_with(project.root(), &common::beside()).unwrap();
     target.link(&project).unwrap();

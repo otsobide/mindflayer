@@ -1,8 +1,8 @@
 //! The server's own mothers: what a request says of where it is going and
 //! who sent it, for the guards to be handed both sides of every rule.
 //!
-//! Of its own rather than core's (`mindflayer_core::mother`), since the
-//! server depends on no mindflayer crate, its dev-dependencies included
+//! Of its own rather than core's (`mindweaver_core::mother`), since the
+//! server depends on no mindweaver crate, its dev-dependencies included
 //! (`crate_test.rs`). Random, as core's are, and drawn the way core draws:
 //! from `std`'s hasher keys, with no generator kept for tests alone. A test
 //! drawing from one names the value in what it asserts, so a failure says

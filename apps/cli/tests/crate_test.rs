@@ -9,7 +9,7 @@ use std::process::Command;
 /// written in, the embed that carries the panel's files, and what opens a
 /// browser on it. Not hyper or tokio, which gix's HTTP transport brings to
 /// core already.
-const PANEL: [&str; 4] = ["mindflayer-server", "axum", "rust-embed", "webbrowser"];
+const PANEL: [&str; 4] = ["mindweaver-server", "axum", "rust-embed", "webbrowser"];
 
 #[test]
 fn without_the_ui_feature_nothing_of_the_panels_is_built() {
@@ -33,7 +33,7 @@ fn packages(features: &[&str]) -> BTreeSet<String> {
     let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
     let output = Command::new(env!("CARGO"))
         .args(["tree", "--offline", "--manifest-path", manifest])
-        .args(["-p", "mindflayer-cli", "-e", "normal"])
+        .args(["-p", "mindweaver-cli", "-e", "normal"])
         .args(["--prefix", "none", "--format", "{p}"])
         .args(features)
         .output()

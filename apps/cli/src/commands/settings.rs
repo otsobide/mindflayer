@@ -8,8 +8,8 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use mindflayer_core::reapply::{self, Change, Ignore, Plan, Retarget, Why};
-use mindflayer_core::{
+use mindweaver_core::reapply::{self, Change, Ignore, Plan, Retarget, Why};
+use mindweaver_core::{
     paths, Agent, AgentHomes, Excluded, FlayerWorkspace, Kind, MindProject, Settings, Share,
 };
 

@@ -7,8 +7,8 @@
 
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::activate::WORKSPACE_VARIABLE;
-use mindflayer_core::{AgentHomes, Inputs, Intent};
+use mindweaver_core::activate::WORKSPACE_VARIABLE;
+use mindweaver_core::{AgentHomes, Inputs, Intent};
 
 use crate::AgentHomeOptions;
 

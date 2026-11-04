@@ -45,8 +45,8 @@ fmt/check: ## Fail if any Rust code is not formatted
 # The features that describe what the crates hand a front end: the panel's
 # TypeScript (`ts`, core's and the CLI's) and the API's JSON Schema
 # (`schema`, the server's too).
-TS_FEATURES := mindflayer-core/ts,mindflayer-cli/ts
-SCHEMA_FEATURES := mindflayer-core/schema,mindflayer-server/schema,mindflayer-cli/schema
+TS_FEATURES := mindweaver-core/ts,mindweaver-cli/ts
+SCHEMA_FEATURES := mindweaver-core/schema,mindweaver-server/schema,mindweaver-cli/schema
 
 # Twice: as everything builds, and with the `ts` and `schema` features,
 # whose code (the panel's types, the API's schemas and the tests holding
@@ -76,7 +76,7 @@ SCHEMAS := docs/api/schemas
 .PHONY: api/schemas
 api/schemas: ## Write the API's JSON Schemas from Rust into docs/api/schemas (cargo only)
 	rm -rf $(SCHEMAS)
-	cargo test -p mindflayer-core -p mindflayer-server -p mindflayer-cli --features $(SCHEMA_FEATURES),$(TS_FEATURES) --lib schema
+	cargo test -p mindweaver-core -p mindweaver-server -p mindweaver-cli --features $(SCHEMA_FEATURES),$(TS_FEATURES) --lib schema
 
 # As web/types/check: `git diff --exit-code` for a file that changed or
 # went, and an untracked one for a root that is new.
@@ -99,7 +99,7 @@ OPENAPI := docs/api/openapi.json
 
 .PHONY: api/openapi
 api/openapi: ## Write the API's OpenAPI document from Rust into docs/api/openapi.json (cargo only)
-	cargo test -p mindflayer-cli --features $(SCHEMA_FEATURES),$(TS_FEATURES) --lib openapi
+	cargo test -p mindweaver-cli --features $(SCHEMA_FEATURES),$(TS_FEATURES) --lib openapi
 
 # As api/schemas/check, for the one file.
 .PHONY: api/openapi/check
@@ -181,7 +181,7 @@ install: ## Install `mind` and `flayer` as copies in cargo's bin directory, the 
 
 .PHONY: dev/link
 dev/link: ## Build, then symlink `mind`, `flayer` and `mf` into BINDIR
-	cargo build -p mindflayer-cli
+	cargo build -p mindweaver-cli
 	@mkdir -p "$(BINDIR)"
 	@for bin in $(BINS); do \
 		ln -sfn "$(CURDIR)/target/debug/$$bin" "$(BINDIR)/$$bin"; \
@@ -207,7 +207,7 @@ dev/unlink: ## Remove the dev/link symlinks (leaves installed copies alone)
 			rm "$$target" && echo "removed $$target"; \
 		elif [ -e "$$target" ]; then \
 			echo "$$target is a real file, not a symlink: left alone"; \
-			echo "(that is an installed copy; remove it with \`cargo uninstall mindflayer-cli\`)"; \
+			echo "(that is an installed copy; remove it with \`cargo uninstall mindweaver-cli\`)"; \
 		else \
 			echo "nothing to remove at $$target"; \
 		fi; \
@@ -217,7 +217,7 @@ dev/unlink: ## Remove the dev/link symlinks (leaves installed copies alone)
 dev/watch: ## Rebuild on every change, so the dev/link symlink is always current
 	@command -v cargo-watch >/dev/null 2>&1 \
 		|| { echo "cargo-watch is not installed: cargo install cargo-watch"; exit 1; }
-	cargo watch -x 'build -p mindflayer-cli'
+	cargo watch -x 'build -p mindweaver-cli'
 
 .PHONY: help
 help: ## Show this help

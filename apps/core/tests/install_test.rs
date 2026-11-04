@@ -7,12 +7,12 @@ use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use common::{repository, skill, url};
-use mindflayer_core::copy;
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Installed, Removed, Standing};
-use mindflayer_core::ledger::{Ledger, Target};
-use mindflayer_core::AgentHomes;
-use mindflayer_core::{
+use mindweaver_core::copy;
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::{self, Installed, Removed, Standing};
+use mindweaver_core::ledger::{Ledger, Target};
+use mindweaver_core::AgentHomes;
+use mindweaver_core::{
     Agent, Directories, FlayerWorkspace, Kind, MindProject, Settings, Share, Targets, MIND_DIR,
     SETTINGS_FILE,
 };
@@ -419,9 +419,9 @@ fn installing_into_a_project_marked_by_its_settings_puts_one_copy_where_each_age
         .installation("alpha", Kind::Skill, "deploy")
         .unwrap()
         .unwrap();
-    let hash = mindflayer_core::hash::tree(&agents).unwrap();
+    let hash = mindweaver_core::hash::tree(&agents).unwrap();
     assert_eq!(record.content_hash.as_deref(), Some(hash.as_str()));
-    assert_eq!(mindflayer_core::hash::tree(&claude).unwrap(), hash);
+    assert_eq!(mindweaver_core::hash::tree(&claude).unwrap(), hash);
     assert_eq!(
         record.targets,
         [
@@ -663,7 +663,7 @@ fn a_record_naming_a_copy_outside_the_project_is_refused_rather_than_removed() {
     ledger
         .installed(
             "alpha",
-            &mindflayer_core::ledger::InstallRecord {
+            &mindweaver_core::ledger::InstallRecord {
                 kind: Kind::Skill,
                 name: "deploy".into(),
                 source_id: None,
@@ -1045,7 +1045,7 @@ fn own_skills(names: &[&str], files: usize) -> (TempDir, FlayerWorkspace, MindPr
     workspace.link(&project).unwrap();
     for name in names {
         let skill =
-            mindflayer_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
+            mindweaver_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
                 .unwrap();
         for file in 0..files {
             fs::write(
@@ -1439,7 +1439,7 @@ fn with_own(shelf: &[&str], own: &[&str]) -> (TempDir, FlayerWorkspace, MindProj
     let mut workspace = FlayerWorkspace::open(dir.path()).unwrap();
     workspace.link(&project).unwrap();
     for name in own {
-        mindflayer_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
+        mindweaver_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
             .unwrap();
     }
     (dir, workspace, project, ledger)
@@ -1614,7 +1614,7 @@ fn a_gathered_skill_holding_a_claude_plugin_folder_is_installed_without_it_and_s
     let [agents, _] = agents_copies(&project, "deploy");
     assert_eq!(
         record.content_hash,
-        Some(mindflayer_core::hash::tree(&agents).unwrap())
+        Some(mindweaver_core::hash::tree(&agents).unwrap())
     );
 }
 
@@ -1706,7 +1706,7 @@ fn a_local_install_keeps_every_copy_out_of_git_and_its_uninstall_takes_them_back
     );
     assert_eq!(
         done.excluded,
-        Some(mindflayer_core::Excluded::Written { file: file.clone() })
+        Some(mindweaver_core::Excluded::Written { file: file.clone() })
     );
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
@@ -1725,7 +1725,7 @@ fn a_local_install_keeps_every_copy_out_of_git_and_its_uninstall_takes_them_back
     );
     assert_eq!(
         again.excluded,
-        Some(mindflayer_core::Excluded::Unchanged { file: file.clone() })
+        Some(mindweaver_core::Excluded::Unchanged { file: file.clone() })
     );
 
     let removed = install::uninstall(
@@ -1766,7 +1766,7 @@ fn a_local_install_keeps_no_copy_git_tracks_out_of_git() {
     install_from_shelf(&workspace, &ledger, &project, "deploy");
     // The team commits deploy's copies, as a project that was shared would
     // have, and its lines go.
-    mindflayer_core::exclude::forget(project.root(), &id).unwrap();
+    mindweaver_core::exclude::forget(project.root(), &id).unwrap();
     common::indexed(project.root());
     let file = exclude_file(&project);
     let before = fs::read_to_string(&file).unwrap();
@@ -1814,7 +1814,7 @@ fn a_local_install_outside_git_says_nothing_keeps_its_copies_out() {
 
     let excluded = done.excluded.unwrap();
     assert!(
-        matches!(excluded, mindflayer_core::Excluded::Outside { .. }),
+        matches!(excluded, mindweaver_core::Excluded::Outside { .. }),
         "{excluded:?}"
     );
     assert!(excluded
@@ -2017,10 +2017,10 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
             summary: Some(String::from("Review a change")),
             revision: Some("4f9c2a7".into()),
             gathered_at: 1_790_000_000,
-            source: mindflayer_core::ledger::Source {
+            source: mindweaver_core::ledger::Source {
                 id: 1,
-                kind: mindflayer_core::SourceKind::Git,
-                url: mindflayer_core::value::Redacted::new(
+                kind: mindweaver_core::SourceKind::Git,
+                url: mindweaver_core::value::Redacted::new(
                     "https://me:s3cret@github.com/acme/skills.git",
                 ),
                 reference: Some(String::from("main")),

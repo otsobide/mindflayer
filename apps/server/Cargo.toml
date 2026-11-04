@@ -1,11 +1,11 @@
 [package]
-name = "mindflayer-server"
+name = "mindweaver-server"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
-description = "The local server that carries the web panel's requests to a mindflayer front end"
+description = "The local server that carries the web panel's requests to a mindweaver front end"
 
-# Transport only: no mindflayer crate is a dependency, the CLI least of all.
+# Transport only: no mindweaver crate is a dependency, the CLI least of all.
 # The front end that runs this server implements `Backend` for its own types,
 # so the dependency points from it to here and never back.
 [dependencies]

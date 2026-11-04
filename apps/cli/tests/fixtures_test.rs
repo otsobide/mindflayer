@@ -22,10 +22,10 @@
 mod common;
 
 use common::*;
-use mindflayer_cli::backend::{PanelBackend, Query};
-use mindflayer_core::ledger::{Action, Outcome as Logged};
-use mindflayer_core::SourceKind;
-use mindflayer_server::Backend;
+use mindweaver_cli::backend::{PanelBackend, Query};
+use mindweaver_core::ledger::{Action, Outcome as Logged};
+use mindweaver_core::SourceKind;
+use mindweaver_server::Backend;
 use serde_json::{json, Value};
 
 /// Where the fixtures go: the panel's tests, beside this crate, whichever
@@ -1461,7 +1461,7 @@ fn write_what_judging_drafts_in_the_library_is_answered_with() {
 /// library.
 #[test]
 fn write_what_each_change_authoring_sends_is_answered_with() {
-    let read = mindflayer_core::hash::bytes(REVIEW.as_bytes());
+    let read = mindweaver_core::hash::bytes(REVIEW.as_bytes());
     let save = json!({
         "type": "save", "holder": {"type": "workspace"}, "kind": "skill", "name": "review",
         "text": review_saved(), "hash": read,

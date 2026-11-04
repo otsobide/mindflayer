@@ -11,13 +11,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Edits, Installed, Removed, Standing};
-use mindflayer_core::ledger::Ledger;
-use mindflayer_core::mother::random;
-use mindflayer_core::mother::{GitRepositoryMother, ProjectMother, ShelfMother, SkillMother};
-use mindflayer_core::update;
-use mindflayer_core::{Agent, AgentHomes, FlayerWorkspace, Kind, MindProject, Share, MIND_DIR};
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::{self, Edits, Installed, Removed, Standing};
+use mindweaver_core::ledger::Ledger;
+use mindweaver_core::mother::random;
+use mindweaver_core::mother::{GitRepositoryMother, ProjectMother, ShelfMother, SkillMother};
+use mindweaver_core::update;
+use mindweaver_core::{Agent, AgentHomes, FlayerWorkspace, Kind, MindProject, Share, MIND_DIR};
 
 const ROUNDS: usize = 8;
 
@@ -230,7 +230,7 @@ fn an_edited_copy_is_kept_until_it_is_forced_out() {
 fn a_source_that_moved_on_outdates_its_copies_and_an_update_brings_them_current() {
     for _ in 0..ROUNDS {
         let (name, agents) = (random::kebab(), agents());
-        let (dir, workspace) = mindflayer_core::mother::WorkspaceMother::empty();
+        let (dir, workspace) = mindweaver_core::mother::WorkspaceMother::empty();
         let source = GitRepositoryMother::with_skills(&[name.as_str()]);
         let url = GitRepositoryMother::url(&source);
         let ledger = workspace.ledger().unwrap();

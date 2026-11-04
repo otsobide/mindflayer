@@ -236,7 +236,7 @@ fn edit_refuses_contents_whose_front_matter_does_not_read_and_writes_nothing() {
 fn edit_refuses_contents_made_from_what_the_file_no_longer_holds() {
     let dir = TempDir::new().unwrap();
     let manifest = drafted(dir.path(), SHIP);
-    let read = mindflayer_core::hash::bytes(&fs::read(&manifest).unwrap());
+    let read = mindweaver_core::hash::bytes(&fs::read(&manifest).unwrap());
     // Somebody else's change, after the contents were made from the file.
     let mut theirs = fs::read_to_string(&manifest).unwrap();
     theirs.push_str("Theirs.\n");
@@ -266,7 +266,7 @@ fn edit_refuses_contents_made_from_what_the_file_no_longer_holds() {
     );
     assert_eq!(fs::read_to_string(&manifest).unwrap(), theirs);
 
-    let now = mindflayer_core::hash::bytes(theirs.as_bytes());
+    let now = mindweaver_core::hash::bytes(theirs.as_bytes());
     let outcome = mind(
         dir.path(),
         &[
@@ -830,11 +830,11 @@ fn put(root: &Path, route: &str, contents: &str) {
 #[test]
 fn a_skill_only_in_an_agents_folder_is_not_changed_from_a_project() {
     let dir = TempDir::new().unwrap();
-    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    let directories = mindweaver_core::Directories::default().with(Kind::Skill, "skills");
     MindProject::init_settings(
         dir.path(),
-        &mindflayer_core::Agent::ALL,
-        mindflayer_core::Share::Shared,
+        &mindweaver_core::Agent::ALL,
+        mindweaver_core::Share::Shared,
         &directories,
     )
     .unwrap();
@@ -861,11 +861,11 @@ fn a_skill_only_in_an_agents_folder_is_not_changed_from_a_project() {
 #[test]
 fn a_name_the_project_authors_and_its_agents_read_is_one_row_whose_change_reaches_only_its_own() {
     let dir = TempDir::new().unwrap();
-    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    let directories = mindweaver_core::Directories::default().with(Kind::Skill, "skills");
     MindProject::init_settings(
         dir.path(),
-        &mindflayer_core::Agent::ALL,
-        mindflayer_core::Share::Shared,
+        &mindweaver_core::Agent::ALL,
+        mindweaver_core::Share::Shared,
         &directories,
     )
     .unwrap();

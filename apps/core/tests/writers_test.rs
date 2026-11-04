@@ -14,15 +14,15 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::{repository, skill, url, workspace};
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Installed, Removed, Standing};
-use mindflayer_core::ledger::{Action, Outcome, SourceKind};
-use mindflayer_core::lifecycle::{self, Record};
-use mindflayer_core::lock::{HOLDER_FILE, WAIT};
-use mindflayer_core::migrate;
-use mindflayer_core::reapply::{self, Change};
-use mindflayer_core::AgentHomes;
-use mindflayer_core::{
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::{self, Installed, Removed, Standing};
+use mindweaver_core::ledger::{Action, Outcome, SourceKind};
+use mindweaver_core::lifecycle::{self, Record};
+use mindweaver_core::lock::{HOLDER_FILE, WAIT};
+use mindweaver_core::migrate;
+use mindweaver_core::reapply::{self, Change};
+use mindweaver_core::AgentHomes;
+use mindweaver_core::{
     Agent, Directories, FlayerWorkspace, Kind, Ledger, LockError, MindProject, Reference, Share,
     WorkspaceError, LEDGER_FILE,
 };
@@ -229,7 +229,7 @@ fn two_ledger_connections_writing_at_once_both_succeed() {
                     let target = format!("writer {writer}, entry {entry}");
                     ledger.log(Action::Gather, Some(&target), Outcome::Ok, None)?;
                 }
-                Ok::<_, mindflayer_core::LedgerError>(())
+                Ok::<_, mindweaver_core::LedgerError>(())
             })
         })
         .collect();
@@ -270,7 +270,7 @@ fn a_ledger_a_newer_build_wrote_is_refused_before_its_journal_is_changed() {
     assert!(
         matches!(
             error,
-            mindflayer_core::LedgerError::Version { found: 99, .. }
+            mindweaver_core::LedgerError::Version { found: 99, .. }
         ),
         "{error:?}"
     );
@@ -572,7 +572,7 @@ fn a_gather_waits_for_the_writer_before_it() {
 fn kept_beside() -> (TempDir, FlayerWorkspace) {
     let dir = TempDir::new().unwrap();
     let (workspace, _) = FlayerWorkspace::init_with(dir.path(), &common::beside()).unwrap();
-    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    mindweaver_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
     (dir, workspace)
 }
 
@@ -600,7 +600,7 @@ fn a_migration_plans_again_once_it_holds_the_workspace() {
     let writer = thread::spawn(move || migrate::library(&mut migrating).unwrap());
     thread::sleep(Duration::from_millis(100));
     // Added while the migration waits, after any plan made before it.
-    mindflayer_core::create(&workspace.own(), Kind::Skill, "review", "Look").unwrap();
+    mindweaver_core::create(&workspace.own(), Kind::Skill, "review", "Look").unwrap();
     drop(held);
 
     let migrated = writer.join().unwrap();

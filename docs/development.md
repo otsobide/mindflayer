@@ -11,13 +11,13 @@ Every unit of the product is an app under `apps/`, so adding a front end means
 adding a directory rather than reshaping the tree:
 
 ```
-apps/core    mindflayer-core     projects, workspaces, artifacts.
+apps/core    mindweaver-core     projects, workspaces, artifacts.
                                  No I/O beyond files, and git when gathering.
-apps/cli     mindflayer-cli      the `mind` and `flayer` binaries, the TUI,
+apps/cli     mindweaver-cli      the `mind` and `flayer` binaries, the TUI,
                                  and the panel's backend. Parsing and
                                  rendering only; all of it goes through one
                                  parser.
-apps/server  mindflayer-server   the local server behind the web panel, which
+apps/server  mindweaver-server   the local server behind the web panel, which
                                  `flayer ui` runs. Transport only: it moves
                                  JSON between the browser and a front end,
                                  and holds no rules.
@@ -63,12 +63,12 @@ links: a file one names has to be there, an anchor has to be a heading's,
 and every image in `docs/images` has to be shown by some page.
 
 ```bash
-cargo test -p mindflayer-cli --test tui_test          # one area
-cargo test -p mindflayer-core --lib workspace         # one module's unit tests
+cargo test -p mindweaver-cli --test tui_test          # one area
+cargo test -p mindweaver-core --lib workspace         # one module's unit tests
 ```
 
 What a test needs is built by an object mother rather than by hand:
-`mindflayer_core::mother` has one for each value object
+`mindweaver_core::mother` has one for each value object
 (`ContentHashMother`, `RedactedMother`, `OriginMother`, `ArtifactNameMother`,
 `RevisionMother`, `ProjectIdMother`), for each record the ledger keeps
 (`InstallRecordMother`, `SourceMother` and the rest), for a skill's and a
@@ -83,11 +83,11 @@ mothers of its values, so a value's rule changes in one place. What is
 random is drawn afresh every run, so a rule tested on a mother's values is
 tried on cases no test spells, and a test names the value it was handed in
 what it asserts. Core's unit tests reach the mothers as `crate::mother`;
-its integration suites and the CLI's as `mindflayer_core::mother`, through a
+its integration suites and the CLI's as `mindweaver_core::mother`, through a
 dev-dependency on core with its `mother` feature, which no build of a binary
 turns on. The CLI's suites add mothers of what only a command takes in
 `apps/cli/tests/common/mother.rs`, and the server, which depends on no
-mindflayer crate, keeps all of its own in `apps/server/tests/common/mother.rs`.
+mindweaver crate, keeps all of its own in `apps/server/tests/common/mother.rs`.
 
 Working on it, the loop is `make dev/link` once, then:
 

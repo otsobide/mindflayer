@@ -11,21 +11,21 @@ pub mod mother;
 pub mod panel;
 
 pub use clap::Parser;
-pub use mindflayer_cli::install::state::{Focus, Screen, Step};
-pub use mindflayer_cli::install::{self as install_screen, ui};
-pub use mindflayer_cli::tui;
-pub use mindflayer_cli::tui::state::{
+pub use mindweaver_cli::install::state::{Focus, Screen, Step};
+pub use mindweaver_cli::install::{self as install_screen, ui};
+pub use mindweaver_cli::tui;
+pub use mindweaver_cli::tui::state::{
     AgentsLine, App, Done, Holder, Mode, Runner, Scope, Task, View,
 };
-pub use mindflayer_cli::{
+pub use mindweaver_cli::{
     agent_homes, default_home, run, run_flayer_cli, run_flayer_cli_watched, run_watched,
     AgentHomeOptions, Cli, CliError, Failure, FlayerCli, Lookup, Outcome,
 };
-pub use mindflayer_core::gather::{Progress, Watch};
-pub use mindflayer_core::install::Standing;
-pub use mindflayer_core::ledger::Ledger;
-pub use mindflayer_core::{AgentHomes, FlayerWorkspace, Reason};
-pub use mindflayer_core::{
+pub use mindweaver_core::gather::{Progress, Watch};
+pub use mindweaver_core::install::Standing;
+pub use mindweaver_core::ledger::Ledger;
+pub use mindweaver_core::{AgentHomes, FlayerWorkspace, Reason};
+pub use mindweaver_core::{
     Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR, SETTINGS_FILE,
     SETTINGS_JSON_FILE,
 };
@@ -344,7 +344,7 @@ pub fn directory_for(root: &Path, kind: Kind) -> PathBuf {
 /// marks, whose one folder does.
 pub fn copies(root: &Path, name: &str) -> Vec<PathBuf> {
     let project = MindProject::open(root).expect("an initialized mind project");
-    let targets = mindflayer_core::install::targets(&project, Kind::Skill)
+    let targets = mindweaver_core::install::targets(&project, Kind::Skill)
         .expect("somewhere to install into");
     assert!(!targets.is_empty(), "{}: no target", root.display());
     targets
@@ -577,7 +577,7 @@ pub fn json_project(root: &Path) {
     gix::init(root).expect("initialize a repository");
     let mind = root.join(MIND_DIR);
     fs::create_dir_all(&mind).unwrap();
-    fs::write(mind.join(".gitignore"), mindflayer_core::MIND_IGNORE).unwrap();
+    fs::write(mind.join(".gitignore"), mindweaver_core::MIND_IGNORE).unwrap();
     let name = root.file_name().unwrap().to_str().unwrap();
     fs::write(
         mind.join(SETTINGS_JSON_FILE),
@@ -586,7 +586,7 @@ pub fn json_project(root: &Path) {
              \"agents\": [\"claude\", \"codex\", \"opencode\"],\n  \"share\": \"local\",\n  \
              \"edit_tracked\": false,\n  \"directories\": {{\n    \"skills\": \"skills\",\n    \
              \"rules\": \"rules\"\n  }}\n}}\n",
-            mindflayer_core::ProjectId::generate()
+            mindweaver_core::ProjectId::generate()
         ),
     )
     .unwrap();

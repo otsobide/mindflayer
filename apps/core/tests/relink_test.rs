@@ -6,11 +6,11 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::exclude::{self, Followed};
-use mindflayer_core::install;
-use mindflayer_core::relink::{self, RelinkError};
-use mindflayer_core::scan;
-use mindflayer_core::{
+use mindweaver_core::exclude::{self, Followed};
+use mindweaver_core::install;
+use mindweaver_core::relink::{self, RelinkError};
+use mindweaver_core::scan;
+use mindweaver_core::{
     Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, ProjectId, Share,
     WorkspaceError,
 };
@@ -22,7 +22,7 @@ use tempfile::TempDir;
 fn installed(share: Share) -> (TempDir, FlayerWorkspace, MindProject) {
     let dir = TempDir::new().unwrap();
     let (mut workspace, _) = FlayerWorkspace::init(dir.path().join("Projects")).unwrap();
-    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    mindweaver_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
     let root = dir.path().join("Projects/collapse");
     fs::create_dir_all(&root).unwrap();
     gix::init(&root).unwrap();
@@ -151,8 +151,8 @@ fn copied(from: &Path, to: &Path) {
     }
 }
 
-fn scanned(workspace: &FlayerWorkspace) -> mindflayer_core::Scan {
-    mindflayer_core::scan(workspace, &mindflayer_core::scan::Request::default())
+fn scanned(workspace: &FlayerWorkspace) -> mindweaver_core::Scan {
+    mindweaver_core::scan(workspace, &mindweaver_core::scan::Request::default())
 }
 
 #[test]
@@ -175,7 +175,7 @@ fn a_scan_finds_a_project_moved_from_a_stale_entry_by_its_id() {
 fn a_moved_project_is_matched_to_its_entry_by_where_each_points() {
     let dir = TempDir::new().unwrap();
     let (mut workspace, _) = FlayerWorkspace::init(dir.path().join("Projects")).unwrap();
-    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    mindweaver_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
     let elsewhere = dir.path().join("Elsewhere");
     let project = linked(&mut workspace, &elsewhere.join("collapse"));
     linked(&mut workspace, &elsewhere.join("other"));
@@ -188,7 +188,7 @@ fn a_moved_project_is_matched_to_its_entry_by_where_each_points() {
         roots: vec![elsewhere.clone()],
         ..scan::Request::default()
     };
-    let scan = mindflayer_core::scan(&workspace, &request);
+    let scan = mindweaver_core::scan(&workspace, &request);
 
     let found = scan.found.iter().find(|found| found.path == moved).unwrap();
     // Outside the workspace, spelled by its path, where the marker spells
@@ -273,7 +273,7 @@ fn two_copies_of_a_project_that_moved_are_a_duplicate_and_neither_is_its_move() 
     assert!(scan.found.iter().all(|found| found.moved.is_none()));
     assert!(matches!(
         &scan.failures[..],
-        [mindflayer_core::scan::ScanFailure::Duplicate(duplicate)]
+        [mindweaver_core::scan::ScanFailure::Duplicate(duplicate)]
             if duplicate.paths == [first.clone(), second.clone()]
     ));
 }
@@ -285,7 +285,7 @@ fn two_linked_copies_are_a_failure_of_the_status_naming_both() {
     copied(project.root(), &copy);
     workspace.link(&MindProject::open(&copy).unwrap()).unwrap();
 
-    let (status, failures) = mindflayer_core::Status::of_workspace(&workspace);
+    let (status, failures) = mindweaver_core::Status::of_workspace(&workspace);
 
     assert_eq!(status.projects.len(), 2);
     let said: Vec<String> = failures.iter().map(ToString::to_string).collect();
@@ -332,7 +332,7 @@ fn marker(workspace: &FlayerWorkspace) -> String {
 /// How each artifact of the project at `entry` stands, as `flayer status`
 /// reports it.
 fn states(workspace: &FlayerWorkspace, entry: &str) -> Vec<(String, String)> {
-    let (status, failures) = mindflayer_core::Status::of_workspace(workspace);
+    let (status, failures) = mindweaver_core::Status::of_workspace(workspace);
     assert!(failures.is_empty(), "{failures:?}");
     status
         .projects
@@ -391,7 +391,7 @@ fn a_project_moved_inside_its_repository_takes_its_exclude_lines_along() {
     let repository = dir.path().join("monorepo");
     gix::init(&repository).unwrap();
     let (mut workspace, _) = FlayerWorkspace::init(&repository).unwrap();
-    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    mindweaver_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
     let project = linked(&mut workspace, &repository.join("packages/app"));
     install_deploy(&workspace, &project);
     let id = id_of(project.root());

@@ -15,11 +15,11 @@ use std::fs;
 use std::io::{self, Read as _};
 use std::path::Path;
 
-use mindflayer_core::everywhere::{self, EverywhereError, Plan, Step};
-use mindflayer_core::install::{InstallError, Removed};
-use mindflayer_core::lifecycle::{self, Edited, Record};
-use mindflayer_core::template::{self, Origin, Template};
-use mindflayer_core::{
+use mindweaver_core::everywhere::{self, EverywhereError, Plan, Step};
+use mindweaver_core::install::{InstallError, Removed};
+use mindweaver_core::lifecycle::{self, Edited, Record};
+use mindweaver_core::template::{self, Origin, Template};
+use mindweaver_core::{
     paths, AgentHomes, FlayerWorkspace, Kind, MindProject, Reference, Standing, Target,
     WorkspaceError,
 };

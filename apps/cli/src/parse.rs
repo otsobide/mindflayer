@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{ArgGroup, Args, Parser, Subcommand};
-use mindflayer_core::scan::DEFAULT_DEPTH;
-use mindflayer_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
+use mindweaver_core::scan::DEFAULT_DEPTH;
+use mindweaver_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
 //

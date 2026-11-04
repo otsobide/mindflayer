@@ -4,9 +4,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use mindflayer_core::ledger::{InstallRecord, Target};
-use mindflayer_core::value::ContentHash;
-use mindflayer_core::{
+use mindweaver_core::ledger::{InstallRecord, Target};
+use mindweaver_core::value::ContentHash;
+use mindweaver_core::{
     hash, Agent, ArtifactStatus, Directories, FlayerWorkspace, Kind, Ledger, MarkerFile,
     MindProject, ProjectStatus, Share, State, Status, StatusFailure, Unreached, MIND_DIR,
     SETTINGS_JSON_FILE,
@@ -674,7 +674,7 @@ fn reading_a_project_hands_back_the_catalog_it_read_with_the_records_marked() {
 fn installing_in(project: &mut MindProject, folders: &[&str]) {
     project
         .change_settings(|settings| {
-            settings.targets = mindflayer_core::Targets::default()
+            settings.targets = mindweaver_core::Targets::default()
                 .with(Kind::Skill, folders.iter().map(PathBuf::from).collect());
         })
         .unwrap();

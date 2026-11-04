@@ -8,10 +8,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use mindflayer_core::resolve::{Reason, Resolved};
-use mindflayer_core::view::Snapshot;
-use mindflayer_core::watch::{self, Scope, Watched};
-use mindflayer_core::{
+use mindweaver_core::resolve::{Reason, Resolved};
+use mindweaver_core::view::Snapshot;
+use mindweaver_core::watch::{self, Scope, Watched};
+use mindweaver_core::{
     claude_rules, Agent, Catalog, Directories, FlayerWorkspace, Kind, MindProject, Share,
     FLAYER_DIR, LEDGER_FILE,
 };

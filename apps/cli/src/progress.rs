@@ -8,7 +8,7 @@
 use std::io::{self, IsTerminal as _, Write};
 use std::sync::{Arc, Mutex};
 
-use mindflayer_core::gather::{Progress, Watch};
+use mindweaver_core::gather::{Progress, Watch};
 
 /// One step of a gather, as a person reads it: what is being counted, and
 /// how far it has got.

@@ -80,7 +80,7 @@ GENERATED := src/api/generated
 # writes them, so which crate's runs first changes nothing.
 types/export: ## Write the types the panel takes from Rust into src/api/generated (cargo only)
 	rm -rf $(GENERATED)
-	cargo test -p mindflayer-core -p mindflayer-cli --features mindflayer-core/ts,mindflayer-cli/ts --lib typescript
+	cargo test -p mindweaver-core -p mindweaver-cli --features mindweaver-core/ts,mindweaver-cli/ts --lib typescript
 
 types: types/export $(INSTALLED) ## Write the types from Rust, then check the panel's against them (vue-tsc)
 	$(PNPM) run typecheck
@@ -105,7 +105,7 @@ FIXTURES := tests/fixtures
 
 fixtures: ## Write the snapshots and answers the panel's tests render from into tests/fixtures (cargo only)
 	rm -rf $(FIXTURES)
-	cargo test -p mindflayer-cli --features ts --test fixtures_test
+	cargo test -p mindweaver-cli --features ts --test fixtures_test
 
 # As types/check: a fixture that changed or went, or one new to git.
 fixtures/check: fixtures ## Fail if the snapshots written from Rust are not the ones committed (cargo and git only)
@@ -151,7 +151,7 @@ e2e/browsers: $(INSTALLED) ## Download the browsers the end-to-end suite runs in
 # The panel, then the binaries, which a server compiled before dist/ was
 # there would leave without it (see `build`), then the suite on them.
 e2e: build ## Build the panel and the debug binaries, then run the end-to-end suite on them
-	cargo build -p mindflayer-cli
+	cargo build -p mindweaver-cli
 	$(MAKE) e2e/run
 
 # ARGS go to `playwright test`: a spec, `-g <title>`, `--debug`, `--ui`.
@@ -167,7 +167,7 @@ e2e/run: $(INSTALLED) ## Run the end-to-end suite on the flayer and mind in E2E_
 # WebKit does not run everywhere. Neither part of `test` nor of CI: the
 # images are taken when what the panel shows changes, and committed.
 screenshots: build ## Build the panel and the debug binaries, then take the README's screenshots into docs/images
-	cargo build -p mindflayer-cli
+	cargo build -p mindweaver-cli
 	$(MAKE) screenshots/run
 
 screenshots/run: $(INSTALLED) ## Take the README's screenshots with the flayer and mind in E2E_BIN

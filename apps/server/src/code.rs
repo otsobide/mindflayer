@@ -11,7 +11,7 @@
 //! as every refusal of a backend's does, and every error core gives.
 //!
 //! The server's codes are its own, written here once. Core's `codes!`
-//! would be the natural tool, but the server depends on no mindflayer crate
+//! would be the natural tool, but the server depends on no mindweaver crate
 //! (`tests/crate_test.rs`), so it mirrors its rules instead:
 //!
 //! - **One code per condition**, named for it, in snake_case, in as few

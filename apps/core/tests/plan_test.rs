@@ -9,12 +9,12 @@ use std::path::{Path, PathBuf};
 use std::slice;
 
 use common::{repository, skill};
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Candidate, Cell, Change, Plan};
-use mindflayer_core::ledger::Ledger;
-use mindflayer_core::resolve::{Reason, Resolved};
-use mindflayer_core::view::Snapshot;
-use mindflayer_core::{
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::{self, Candidate, Cell, Change, Plan};
+use mindweaver_core::ledger::Ledger;
+use mindweaver_core::resolve::{Reason, Resolved};
+use mindweaver_core::view::Snapshot;
+use mindweaver_core::{
     create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Share, State,
     MIND_DIR, SETTINGS_FILE,
 };

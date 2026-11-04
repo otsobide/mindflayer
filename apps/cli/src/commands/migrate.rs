@@ -7,8 +7,8 @@
 
 use std::fmt::Write as _;
 
-use mindflayer_core::migrate::{self, MigrateError, Plan, ProjectPlan, Stranded};
-use mindflayer_core::{Agent, AgentHomes, FlayerWorkspace, MarkerFile, MindProject, Share};
+use mindweaver_core::migrate::{self, MigrateError, Plan, ProjectPlan, Stranded};
+use mindweaver_core::{Agent, AgentHomes, FlayerWorkspace, MarkerFile, MindProject, Share};
 
 use super::all_or_nothing;
 use super::consulted;

@@ -9,11 +9,11 @@ use std::fs;
 use std::path::PathBuf;
 
 use common::{repository, skill, url};
-use mindflayer_core::copy;
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Edits, Installed, Removed, Standing};
-use mindflayer_core::value::ContentHash;
-use mindflayer_core::{
+use mindweaver_core::copy;
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::{self, Edits, Installed, Removed, Standing};
+use mindweaver_core::value::ContentHash;
+use mindweaver_core::{
     claude_rules, create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger,
     MindProject, Share,
 };

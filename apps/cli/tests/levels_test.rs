@@ -96,7 +96,7 @@ fn mind_init_writes_settings_kept_out_of_git_and_empty_folders_that_git_does_not
     );
     assert_eq!(
         fs::read_to_string(marker.join(".gitignore")).unwrap(),
-        mindflayer_core::MIND_IGNORE
+        mindweaver_core::MIND_IGNORE
     );
     // The `.mind` ignores itself, and git lists no empty folder: nothing for
     // `git status` to offer until an artifact is written.
@@ -120,7 +120,7 @@ fn mind_init_shared_writes_no_gitignore_so_git_lists_its_settings() {
     let project = MindProject::open(&root).unwrap();
     assert_eq!(
         project.settings().unwrap().share,
-        mindflayer_core::Share::Shared
+        mindweaver_core::Share::Shared
     );
     // The team's to commit: the one thing git has to offer.
     assert_eq!(untracked(&root), [".mind"]);
@@ -758,5 +758,5 @@ fn mind_on_its_own_is_the_tui_too() {
     let named = Cli::try_parse_from(["mind", "tui"]).unwrap();
 
     assert!(bare.command.is_none());
-    assert!(matches!(named.command, Some(mindflayer_cli::Command::Tui)));
+    assert!(matches!(named.command, Some(mindweaver_cli::Command::Tui)));
 }

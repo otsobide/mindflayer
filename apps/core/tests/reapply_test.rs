@@ -7,11 +7,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use common::{skill, workspace};
-use mindflayer_core::hash;
-use mindflayer_core::install;
-use mindflayer_core::ledger::{Ledger, Target};
-use mindflayer_core::reapply::{self, Change, Ignore, Why};
-use mindflayer_core::{
+use mindweaver_core::hash;
+use mindweaver_core::install;
+use mindweaver_core::ledger::{Ledger, Target};
+use mindweaver_core::reapply::{self, Change, Ignore, Why};
+use mindweaver_core::{
     Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MarkerFile, MindProject, ReapplyError,
     Share, WorkspaceError, MIND_DIR, MIND_IGNORE, SETTINGS_FILE, SETTINGS_JSON_FILE,
 };
@@ -804,7 +804,7 @@ fn setting_targets_moves_each_installation_there_and_out_of_the_agents_folders()
     // No agent reads `.skills` until somebody points it there.
     assert_eq!(
         plan.unreached,
-        [mindflayer_core::Unreached {
+        [mindweaver_core::Unreached {
             kind: Kind::Skill,
             targets: vec![String::from(".skills")],
             agents: Agent::ALL.to_vec(),
@@ -826,7 +826,7 @@ fn setting_targets_moves_each_installation_there_and_out_of_the_agents_folders()
     // Written as the settings spell a folder, at the one version a
     // `settings.toml` holds.
     let settings = reopened(&project).settings().unwrap().clone();
-    assert_eq!(settings.version, mindflayer_core::SETTINGS_TOML_VERSION);
+    assert_eq!(settings.version, mindweaver_core::SETTINGS_TOML_VERSION);
     assert_eq!(
         settings.targets.get(Kind::Skill),
         Some(&[PathBuf::from(".skills")][..])
@@ -883,7 +883,7 @@ fn resetting_targets_moves_copies_back_and_leaves_somebodys_where_it_is_said() {
     );
     let settings = reopened(&project).settings().unwrap().clone();
     assert!(settings.targets.is_empty());
-    assert_eq!(settings.version, mindflayer_core::SETTINGS_TOML_VERSION);
+    assert_eq!(settings.version, mindweaver_core::SETTINGS_TOML_VERSION);
     assert!(!fs::read_to_string(settings_file(&project))
         .unwrap()
         .contains("\n[targets]\n"));

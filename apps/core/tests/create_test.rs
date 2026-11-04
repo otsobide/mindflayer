@@ -3,8 +3,8 @@
 use std::fs;
 use std::path::Path;
 
-use mindflayer_core::template::{self, Origin};
-use mindflayer_core::{
+use mindweaver_core::template::{self, Origin};
+use mindweaver_core::{
     create, create_from, Catalog, CreateError, Declared, Directories, FlayerWorkspace, Kind,
     MindProject, TemplateError,
 };

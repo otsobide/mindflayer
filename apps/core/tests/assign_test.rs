@@ -9,9 +9,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use common::skill;
-use mindflayer_core::assign::{self, Install, Offered, Part};
-use mindflayer_core::install::{self, Edits, Installed, Removed};
-use mindflayer_core::{
+use mindweaver_core::assign::{self, Install, Offered, Part};
+use mindweaver_core::install::{self, Edits, Installed, Removed};
+use mindweaver_core::{
     create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference, Share,
 };
 use tempfile::TempDir;

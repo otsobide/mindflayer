@@ -34,8 +34,8 @@ use std::path::Path;
 use common::contract;
 use common::panel::*;
 use common::*;
-use mindflayer_cli::backend::PanelBackend;
-use mindflayer_server::{Backend, Condition, Own, API};
+use mindweaver_cli::backend::PanelBackend;
+use mindweaver_server::{Backend, Condition, Own, API};
 use serde_json::Value;
 
 /// The guide, read when this suite compiles, so that changing it rebuilds

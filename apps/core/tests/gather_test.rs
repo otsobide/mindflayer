@@ -6,9 +6,9 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use common::{commit, repository, skill, url, workspace, write_files};
-use mindflayer_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
-use mindflayer_core::ledger::{Action, Ledger, SourceKind};
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject, ValidationIssue};
+use mindweaver_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
+use mindweaver_core::ledger::{Action, Ledger, SourceKind};
+use mindweaver_core::{FlayerWorkspace, Kind, MindProject, ValidationIssue};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------

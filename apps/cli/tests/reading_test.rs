@@ -681,11 +681,11 @@ fn put(root: &Path, route: &str, contents: &str) {
 /// A project in `dir`, marked by its settings, naming every agent and
 /// authoring skills in `skills/`.
 fn marked(dir: &Path) -> MindProject {
-    let directories = mindflayer_core::Directories::default().with(Kind::Skill, "skills");
+    let directories = mindweaver_core::Directories::default().with(Kind::Skill, "skills");
     MindProject::init_settings(
         dir,
-        &mindflayer_core::Agent::ALL,
-        mindflayer_core::Share::Shared,
+        &mindweaver_core::Agent::ALL,
+        mindweaver_core::Share::Shared,
         &directories,
     )
     .unwrap()

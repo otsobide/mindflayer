@@ -1,15 +1,15 @@
 //! `flayer adopt`: a skill somebody keeps in a project's agents' folders
 //! brought into the workspace's library, and the project's copies recorded
 //! as installed from there, as core plans and does it
-//! ([`mindflayer_core::adopt`]). Here it is only said.
+//! ([`mindweaver_core::adopt`]). Here it is only said.
 //!
 //! No `mind` form: what it writes is the workspace's library, which `mind`
 //! changes nowhere, as `flayer add` without `-p` has none.
 
 use std::fmt::Write as _;
 
-use mindflayer_core::adopt::{self, Git, Plan};
-use mindflayer_core::{AgentHomes, Excluded, FlayerWorkspace, MindProject, Reference};
+use mindweaver_core::adopt::{self, Git, Plan};
+use mindweaver_core::{AgentHomes, Excluded, FlayerWorkspace, MindProject, Reference};
 
 use crate::commands::gather::scrubbed;
 use crate::commands::install::shown;

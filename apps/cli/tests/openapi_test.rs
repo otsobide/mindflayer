@@ -13,8 +13,8 @@ mod common;
 use std::collections::BTreeSet;
 
 use common::contract::{contract, DOCUMENT};
-use mindflayer_cli::backend::PanelBackend;
-use mindflayer_server::{Backend, Own};
+use mindweaver_cli::backend::PanelBackend;
+use mindweaver_server::{Backend, Own};
 use serde_json::Value;
 
 #[test]

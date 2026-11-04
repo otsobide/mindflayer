@@ -9,14 +9,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::slice;
 
-use mindflayer_core::assign;
-use mindflayer_core::install::{self, Edits};
-use mindflayer_core::known;
-use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
-use mindflayer_core::reapply::{self, Change};
-use mindflayer_core::resolve::{Inputs, Intent, Reason};
-use mindflayer_core::view::{Health, Held, Listing, LoadedWorkspace, Project, Snapshot};
-use mindflayer_core::{
+use mindweaver_core::assign;
+use mindweaver_core::install::{self, Edits};
+use mindweaver_core::known;
+use mindweaver_core::ledger::{Action, InstallRecord, Outcome, Target};
+use mindweaver_core::reapply::{self, Change};
+use mindweaver_core::resolve::{Inputs, Intent, Reason};
+use mindweaver_core::view::{Health, Held, Listing, LoadedWorkspace, Project, Snapshot};
+use mindweaver_core::{
     create, hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference,
     Share, SourceKind, State, FLAYER_DIR, MIND_DIR, SETTINGS_JSON_FILE,
 };

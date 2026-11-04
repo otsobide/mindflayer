@@ -21,8 +21,8 @@
 //! `tab` shows the next kind, which means the same either way round, so the
 //! two cannot share it.
 
-use mindflayer_core::install::{self, Asked, Candidate, Cell, Plan, Standing};
-use mindflayer_core::{Kind, MindProject};
+use mindweaver_core::install::{self, Asked, Candidate, Cell, Plan, Standing};
+use mindweaver_core::{Kind, MindProject};
 use ratatui::crossterm::event::KeyCode;
 
 use crate::commands::install::named;
@@ -146,7 +146,7 @@ pub struct Target {
     /// ([`FlayerWorkspace::naming`]): the `-p` the lines its marks amount
     /// to name it by.
     ///
-    /// [`FlayerWorkspace::naming`]: mindflayer_core::FlayerWorkspace::naming
+    /// [`FlayerWorkspace::naming`]: mindweaver_core::FlayerWorkspace::naming
     pub picked_by: String,
     /// Every kind's, each kind's together in the order [`Kind::ALL`] gives.
     pub rows: Vec<Row>,

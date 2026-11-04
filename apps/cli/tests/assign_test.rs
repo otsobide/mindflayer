@@ -6,7 +6,7 @@
 mod common;
 
 use common::*;
-use mindflayer_cli::Warning;
+use mindweaver_cli::Warning;
 
 /// A workspace with a skill of its own, `commit-style`, linking `alpha`,
 /// `beta` and `gamma`.
