@@ -142,6 +142,148 @@ waits on the watcher's debounce, and would come in an order no literal
 example could hold. Unix alone, as the guide's lines are a POSIX shell's
 and the server is stopped by `kill`.
 
+### The CLI end to end, a use case a test
+
+Every other suite of the CLI's stops short of the process: it parses a line
+with the real parsers and runs it inside the test (`common::mind`,
+`common::flayer`), its options pinned so it reaches no real home. What lies
+between a person's shell and that function goes untested there: the
+binaries' `main`, the environment they read, the exit status, which stream
+a line goes to, and standard input. `apps/cli/tests/e2e_test.rs` crosses it,
+one use case a test: it builds the world that use case needs, runs one
+command line in it as the built binary, and holds the exit status, stdout
+and stderr word for word, and what the command left on the disk. It runs in
+`test (cli)` with every other suite of the app, a target of its own and not
+a job, as the tests are split by app and by nothing else ([in `make test`,
+and in CI](#in-make-test-and-in-ci)).
+
+**The world is built, never shared.** Each test makes its own (`Scenario`,
+in `tests/e2e/scenario.rs`), in a temporary folder, so any one runs alone
+and none can depend on another having run. What a person or a git server
+makes is made directly: folders, a repository to be a project (gix, so no
+`git` binary), a file an editor saved, a source of skills committed once
+and again. What Mindflayer keeps is made only by its commands (`given`),
+each held to exit 0 with nothing on stderr, as the panel's browser suite
+builds its fixture: a step that warned would be building something other
+than what the test names, and a database written by hand would test what no
+command writes.
+
+**The line run is the line typed.** A command is the binary
+(`CARGO_BIN_EXE_mind`, `CARGO_BIN_EXE_flayer`) started from the folder the
+line is typed in, with an environment holding only `PATH` and the
+scenario's home, rather than the developer's with `MINDFLAYER_*` and the
+agent homes taken out: what any other variable would change is a test's to
+say, for that command alone, as an activated workspace is. No option is
+added to the line, which the in-process suites must do (`common::PINNED`)
+since they share one process and its environment. Words are split as a
+shell would (`shell-words`), and a leading `~` is the home.
+
+**Paths read as the reference's.** The folder is read as `/home` in what a
+command prints, and its home is `you`, so an expected output reads
+`/home/you/Projects/collapse` where the reference does, and a test is the
+reference's example with its scenario around it. A test may spell a path in
+a line from `/home` too. What would still differ from run to run is spelled
+from the scenario: the commit a source is on (`head`), a project's id
+(`project_id`). A source is gathered by its path from the workspace, never
+its absolute one: a table pads every row to its longest, so a temporary
+folder's length would leak into the spaces of every row, and the shelf
+folder a source is gathered into is named from it.
+
+Rejected: case files read by a runner (trycmd's `.toml` and `.md`), which
+would put the input and the output side by side with no Rust, but leave the
+scenario to a folder copied in, which builds Mindflayer's state by hand, or
+to steps in a format of their own. A test in Rust builds the world with the
+commands, names the use case in its own name, as every suite here does, and
+says what it holds on the disk besides the output, as an install's copies.
+
+Unix alone: a Windows path, its drive and its backslashes, never reads as
+the reference's, so every use case printing one would fail there for how
+the path is spelled.
+
+### The server end to end, a request a test
+
+The server has no binary: what a person or a script runs is `flayer ui`,
+which serves it over the CLI's backend. Its suites run against a fake
+backend, `backend_test` drives the real one with no port bound,
+`ui_test` checks every route and guard on the suites' common fixtures,
+and `api_guide_test` replays the guide's one walk-through; none of them
+is a use case built for itself. `apps/cli/tests/api_e2e_test.rs` is, as `e2e_test` is for the
+command line: each test builds the world it needs with the CLI suite's
+`Scenario`, types `flayer ui --no-open` in one of its folders, in the same
+environment as every command there, reads where it listens and its token
+from the link it prints, and sends one request over loopback as curl
+sends it (`tests/api_e2e/served.rs`), holding its status and its answer,
+and what it left: on the disk, in what a command reads next, or in what
+the server tells or prints after. It lives in the CLI's crate because the
+binary does, and runs in `test (cli)`.
+
+**A part of an answer, as a script reads it.** An answer is held whole
+where it is small (a preview, a run, a refusal, a plan), and otherwise
+the part the use case is about, picked by a JSON pointer as the guide
+picks one with jq (`answers_at`): the snapshot holds times, and a
+project's tally and templates would make every test about a project hold
+what it is not about. The paths in a request are spelled under `/home`,
+and read back so in an answer, as in the CLI's suite. Every answer to a
+route the API describes is held to its OpenAPI document besides
+(`common/contract.rs`), so a use case meeting one outside it fails.
+
+**What only the API leaves is built through it.** Mindflayer's state is
+made by the commands (`given`), as in the CLI's suite; what is the
+server's alone, the transcript of what it ran, is made by tasks held to
+run clean (`Served::given`), since no command writes it.
+
+**An event is waited for, never counted.** The watcher takes in what
+happens together before it tells it, so how many `changed` events a
+change makes depends on the machine: a test reads the stream until the
+event it is about (`Stream::until`) and holds that one, and leaves the
+others out of what a run is told (`command_started`, `command_finished`).
+
+Rejected: the suite in `apps/server`, finding `flayer` in `target/`.
+Cargo names a binary to the tests of its own crate alone
+(`CARGO_BIN_EXE_<name>`), so the server would need the CLI as a
+dev-dependency, which `crate_test` refuses since the CLI depends on it, or
+a path guessed from the build's layout. Unix alone, as the server is
+stopped by a SIGINT `kill` sends.
+
+### Core end to end, a call a test
+
+Core has no binary and prints nothing: to the CLI, the TUI and the panel it
+is its public API, whose answers they render and whose read types they
+print as JSON. Its suites hold a module each, or a flow through several
+built by its mothers over values drawn afresh (`flows_test`), each to the
+Rust values it returns. `apps/core/tests/e2e_test.rs` holds it as a front
+end meets it, one use case a test: it builds the world that use case needs
+(`World`, in `tests/e2e/world.rs`), makes one public call in it, as a
+command makes it, and holds what core answered as a front end reads it,
+and what it left on the disk. It runs in `test (core)`.
+
+**Mindflayer's state is made by core's own calls.** As the CLI's suite
+makes it with the commands, never by hand: each step is the call a command
+makes for it, `MindProject::init_asked` for `mind init`,
+`FlayerWorkspace::init` and `known::remember` for `flayer init`,
+`FlayerWorkspace::link`, `lifecycle::add`, `assign::install`, handed what a
+front end hands them (the home, and the agents' own folders under it,
+`AgentHomes::defaults_under`), and held to go cleanly: an install that
+added nothing, or left something out, would be building another world than
+the one the test names.
+
+**An answer is read as a front end reads it.** A read type is held as its
+JSON, every path under the world read as `/home`, the home being
+`/home/you`, so an answer reads as the reference's and the API guide's do:
+that is the contract every front end prints, and a field named otherwise
+fails here as it would fail a script. A refusal is held by its `code()`,
+which a front end acts on, and its words, which it shows. What a change
+did is held on the disk and in the snapshot every front end reads next.
+
+**A gather names its source by its absolute path.** The tests share their
+process's folder, so a source cannot be named from the workspace as the
+CLI's suite names it, and the shelf folder a gather names from the address
+spells the temporary folder out: a test holds that folder by its shape,
+and every skill gathered to lie in it, rather than word for word.
+
+Unix alone, as the other two: a Windows path never reads as the
+reference's.
+
 ### No em dash in what the repository says
 
 The owner finds the em dash reads as machine-written, so none is written:

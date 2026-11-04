@@ -67,6 +67,80 @@ cargo test -p mindflayer-cli --test tui_test          # one area
 cargo test -p mindflayer-core --lib workspace         # one module's unit tests
 ```
 
+The CLI is tested end to end too, in `apps/cli/tests/e2e_test.rs`: each
+test is one use case, which builds its own world in a temporary folder,
+runs one command line in it with the built `mind` or `flayer`, as a
+process with an environment of its own, and holds what it prints and
+leaves on the disk to what the reference shows. That folder is read as
+`/home`, so a path in an expected output reads `/home/you/Projects/...`,
+as the reference's do:
+
+```rust
+let scenario = Scenario::projects(&["collapse"]);       // ~/Projects, linking collapse
+scenario.given(
+    "~/Projects",
+    "flayer add skill commit-style \"How every repo here writes commits\"",
+);
+
+scenario
+    .run("~/Projects", "flayer install -p collapse commit-style")
+    .succeeds()
+    .prints("installed commit-style into collapse, from workspace\n")
+    .quiet();
+```
+
+```bash
+cargo test -p mindflayer-cli --test e2e_test                    # every use case
+cargo test -p mindflayer-cli --test e2e_test installing::       # one area
+```
+
+The server is tested end to end beside it, in
+`apps/cli/tests/api_e2e_test.rs`, since `flayer ui` is what serves it: a
+test builds its scenario the same way, starts `flayer ui --no-open` in
+it, sends one request over loopback as a script does, with the token the
+link printed, and holds the status and the answer to what the API's
+guide shows, paths read as `/home` there too:
+
+```rust
+let scenario = guide_workspace();                        // ~/Projects, linking api, with review
+let served = scenario.serve("~/Projects");
+
+served
+    .post("/tasks", json!({"type": "link", "path": "/home/you/Projects/web"}))
+    .is(200)
+    .answers_at("/outcome/runs/0/stdout", json!("linked web as web\n"));
+assert_eq!(entries(&served.get("/projects")), ["api", "web"]);
+```
+
+```bash
+cargo test -p mindflayer-cli --test api_e2e_test                # every use case
+cargo test -p mindflayer-cli --test api_e2e_test following::    # one area
+```
+
+Core has one too, in `apps/core/tests/e2e_test.rs`, through the public
+calls every front end makes: a test builds its world the same way, the
+Mindflayer state in it by core's own calls, makes one call as a front
+end makes it, and holds what core answered as the JSON a front end is
+handed, and what it left on the disk:
+
+```rust
+let world = World::projects(&["api"]);                  // ~/Projects, linking api
+world.add("~/Projects", "~/Projects", Kind::Skill, "review", REVIEW);
+
+let installed = install(&world, "skill:review", Edits::Kept);
+
+assert!(matches!(installed, Installed::Added { .. }));
+assert_eq!(
+    at(&world.snapshot("~/Projects"), "/projects/0/artifacts/0/state"),
+    "current"
+);
+```
+
+```bash
+cargo test -p mindflayer-core --test e2e_test                   # every use case
+cargo test -p mindflayer-core --test e2e_test gathering::       # one area
+```
+
 What a test needs is built by an object mother rather than by hand:
 `mindflayer_core::mother` has one for each value object
 (`ContentHashMother`, `RedactedMother`, `OriginMother`, `ArtifactNameMother`,
