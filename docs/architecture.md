@@ -698,7 +698,8 @@ and no file an agent reads, so they needed what the first two did not:
   root, a version 1 one none inside `.mind`, and neither `mind init` nor
   `mind migrate` names one ([where a project keeps its
   artifacts](#where-a-project-keeps-its-artifacts)). A workspace keeps one
-  in its library whatever its marker says (D-05).
+  in its library unless its marker names a folder for it, which none
+  `mindweaver init` writes does (D-05).
 - **Words of its own in a sentence**, `Kind::noun` and `Kind::plural`
   (`MCP server`, `MCP servers`), since a message spelled `{kind}s` holds a
   kind to having a slug a sentence can make a plural of, which an

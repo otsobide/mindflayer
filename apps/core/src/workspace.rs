@@ -413,8 +413,8 @@ impl Directories {
             // folder called `mcp` at a repository's root is as likely to be
             // the code of a server as anything Mindweaver should read. A
             // project that authors definitions names the folder; the
-            // workspace's own are in its library whatever its marker says
-            // (D-05).
+            // workspace's own are in its library unless its marker names
+            // one (D-05).
             Kind::Mcp => None,
         }
     }

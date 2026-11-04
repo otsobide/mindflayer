@@ -1645,9 +1645,9 @@ They live in the workspace's library, `.mindweaver/library/skills` and
 `.mindweaver/library/rules`, inside `.mindweaver` where no agent looks: they
 reach an agent by being installed into its project, never by sitting in a
 directory above it. Its [MCP servers](#what-an-mcp-server-looks-like) are
-kept there too, in `.mindweaver/library/mcp`, whatever `weaver.toml` says,
-since no marker written before them names a folder for them. `mindweaver
-init` writes the first two into `weaver.toml`:
+kept there too, in `.mindweaver/library/mcp`, unless `weaver.toml` names a
+folder for them, which no marker written before them does. `mindweaver init`
+writes the first two into `weaver.toml`:
 
 ```toml
 [directories]

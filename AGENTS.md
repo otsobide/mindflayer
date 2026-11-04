@@ -1013,8 +1013,9 @@ These are easy to break from a single file without noticing.
   not told about that has a default). A kind added since markers said where
   each kind lives has no default (`Directories::default_for`, `None` for MCP
   servers): no `mind.toml` reads a folder for it, `mind init` and `mind
-  migrate` name none, and a workspace keeps it in its library whatever its
-  marker says, which spells no line for it, so no marker's version moved. An
+  migrate` name none, and a workspace keeps it in its library unless its
+  marker names a folder for it, which none `mindweaver init` writes does, so
+  no marker's version moved. An
   MCP server's definition carries a format of its own (`MCP_FORMAT`), refused
   from a newer one as a marker is. Each version is written in one file
   (`MarkerFile::of_version`), and one found in another is refused. Any of the

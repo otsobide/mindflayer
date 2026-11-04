@@ -4,9 +4,9 @@
 //!
 //! A marker written before the kind came says nothing of it, and must not
 //! be read as if it named a folder: a workspace keeps its own in its
-//! library whatever its marker says (D-05), and a project only where its
-//! settings name one, so a folder called `mcp` that holds a server's code is
-//! nobody's definitions.
+//! library unless its marker names a folder for them (D-05), and a project
+//! only where its settings name one, so a folder called `mcp` that holds a
+//! server's code is nobody's definitions.
 
 use std::fs;
 use std::path::Path;
@@ -118,6 +118,30 @@ fn a_workspace_keeping_its_skills_beside_its_projects_keeps_its_servers_in_its_l
         Some(dir.path().join(".mindweaver/library/mcp"))
     );
     assert_eq!(servers(&workspace.own()), (vec![], vec![]));
+}
+
+#[test]
+fn a_workspace_marker_naming_a_folder_for_servers_is_followed_as_one_naming_any_kind_is() {
+    let dir = TempDir::new().unwrap();
+    let named = Directories::default().with(Kind::Mcp, "defs");
+    let (workspace, _) = WeaverWorkspace::init_with(dir.path(), &named).unwrap();
+    write(
+        &dir.path().join("defs"),
+        &[("deploy.toml", &McpMother::http("deploy"))],
+    );
+    write(
+        &dir.path().join(".mindweaver/library/mcp"),
+        &[("elsewhere.toml", &McpMother::sse("elsewhere"))],
+    );
+
+    assert_eq!(
+        workspace.own().directory_for(Kind::Mcp),
+        Some(dir.path().join("defs"))
+    );
+    assert_eq!(
+        servers(&workspace.own()),
+        (vec![String::from("deploy")], vec![])
+    );
 }
 
 #[test]
