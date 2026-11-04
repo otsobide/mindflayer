@@ -359,9 +359,9 @@ impl Ledger {
         Sqlite::in_memory().map(Self::over)
     }
 
-    /// The file this ledger is.
-    /// Stamp what it writes by `clock` rather than [`SystemClock`](crate::adapter::SystemClock): the port
-    /// the ledger reads the time through, as a fixture pins it.
+    /// Stamp what it writes by `clock` rather than
+    /// [`SystemClock`](crate::adapter::SystemClock): the port the ledger
+    /// reads the time through, as a fixture pins it.
     pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> Self {
         self.0.stamp_by(clock);
         self
