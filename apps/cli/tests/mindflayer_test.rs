@@ -284,3 +284,54 @@ fn migrate_names_refuses_a_name_taken_and_moves_nothing() {
     );
     assert!(root.join(".mindflayer/flayer.toml").is_file());
 }
+
+/// What a line run on a workspace a Mindflayer build made says last.
+fn hint(root: &Path) -> String {
+    format!(
+        "hint: the workspace at {} was made by a Mindflayer build, and is kept under its \
+         names; `mindweaver migrate --names` moves it, and what it wrote in its projects, to \
+         Mindweaver's",
+        root.display()
+    )
+}
+
+#[test]
+fn every_line_on_a_mindflayer_workspace_says_once_how_to_move_it() {
+    let dir = TempDir::new().unwrap();
+    MindflayerMother::create(dir.path());
+
+    let listed = weaver(dir.path(), &["list"]).unwrap();
+    let added = weaver(dir.path(), &["add", "skill", "review", "Read it first"]).unwrap();
+
+    assert_eq!(listed.stderr, [hint(dir.path())]);
+    assert!(listed.ok);
+    assert_eq!(added.stderr, [hint(dir.path())]);
+    // Not the move itself, which says what it moves, nor a line once it
+    // has moved.
+    let planned = weaver(dir.path(), &["migrate", "--names"]).unwrap();
+    assert!(planned.stderr.is_empty(), "{:?}", planned.stderr);
+    weaver(dir.path(), &["migrate", "--names", "--yes"]).unwrap();
+    assert!(weaver(dir.path(), &["list"]).unwrap().stderr.is_empty());
+}
+
+#[test]
+fn an_old_workspace_left_beside_a_new_one_is_said_and_the_new_one_read() {
+    let dir = TempDir::new().unwrap();
+    MindflayerMother::create(&dir.path().join("old"));
+    weaver(dir.path(), &["init", "here"]).unwrap();
+    let here = dir.path().join("here");
+    std::fs::rename(dir.path().join("old/.mindflayer"), here.join(".mindflayer")).unwrap();
+
+    let listed = weaver(&here, &["list"]).unwrap();
+
+    assert_eq!(
+        listed.stderr,
+        [format!(
+            "note: {}: left over beside the {} the workspace is read from, which an older build \
+             reads instead; remove it, or move it aside, once nothing needs it",
+            here.join(".mindflayer").display(),
+            here.join(".mindweaver").display()
+        )]
+    );
+    assert!(listed.stdout.starts_with("here "), "{}", listed.stdout);
+}

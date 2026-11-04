@@ -26,7 +26,7 @@ use mindweaver_core::gather::Watch;
 use mindweaver_core::resolve::{self, resolve, Intent};
 use mindweaver_core::view::Listing;
 use mindweaver_core::{
-    paths, scan, Catalog, Change, MindProject, Reference, Share, WeaverWorkspace,
+    paths, scan, Catalog, Change, MindProject, Names, Reference, Share, WeaverWorkspace,
 };
 
 use clap::Parser as _;
@@ -78,29 +78,84 @@ pub fn run_watched(cli: &Cli, watch: &Watch) -> Result<Outcome, Failure> {
         cli.workspace.as_deref(),
         &cli.agent_homes,
     );
-    looked_up(run_with(cli, &lookup, watch), &lookup)
+    let moving = match &cli.command {
+        Some(Command::Migrate { names, .. }) => *names,
+        Some(Command::Weaver {
+            command: Some(command),
+        }) => moves_names(command),
+        _ => false,
+    };
+    let result = run_with(cli, &lookup, watch);
+    looked_up(result, &lookup, cli.directory.as_deref(), moving)
+}
+
+/// Whether `command` is the move to Mindweaver's names, which says what it
+/// moves itself.
+fn moves_names(command: &WeaverCommand) -> bool {
+    matches!(command, WeaverCommand::Migrate { names: true, .. })
 }
 
 /// `result`, what a line typed in a shell came to, with what deciding where
-/// to look had to say put first: each variable taken under the name a
-/// Mindflayer build read ([`Lookup::older`]).
+/// to look had to say: first each variable taken under the name a
+/// Mindflayer build read ([`Lookup::older`]), and last, of the workspace
+/// the line used, read again once it has run, how to move it to
+/// Mindweaver's names when a Mindflayer build made it, and the old folder
+/// left beside a new one, which an older build reads instead (D-26).
 ///
-/// Said by the two entry points a shell reaches alone, since that is where
-/// the environment was read: a line the TUI or the panel runs reads none,
-/// so its own launch says it once. A note, which reaches no envelope and
-/// fails nothing, as a hint does.
-fn looked_up(mut result: Result<Outcome, Failure>, lookup: &Lookup) -> Result<Outcome, Failure> {
+/// Said once a line, by the two entry points a shell reaches alone, since
+/// that is where the environment was read and where somebody who can move
+/// the workspace reads what is said: a line the TUI or the panel runs
+/// reads none, so its own launch says it once, as it closes. Said whatever
+/// the line did, a read as well as a write, being about the workspace
+/// rather than the line; never by the move itself (`moving`), which says
+/// what it moves. Notes and a hint, which reach no envelope and fail
+/// nothing: what was read is as it was written.
+fn looked_up(
+    mut result: Result<Outcome, Failure>,
+    lookup: &Lookup,
+    directory: Option<&Path>,
+    moving: bool,
+) -> Result<Outcome, Failure> {
     let said: Vec<Warning> = lookup
         .older
         .iter()
         .map(|older| Warning::from(older.note()))
         .collect();
+    // Read again rather than handed up from the command, which resolved it
+    // wherever it needed to, and as it is now: a line that moved it, or made
+    // a new one, is said nothing of the old.
+    let used = working_directory(directory)
+        .ok()
+        .and_then(|directory| resolve(&lookup.inputs(&directory, Intent::Read)).ok())
+        .flatten()
+        .map(|resolved| resolved.workspace);
+    let mut after: Vec<Warning> = Vec::new();
+    if let Some(workspace) = used.filter(|_| !moving) {
+        if let Some(leftover) = workspace.leftover() {
+            after.push(Warning::from(format!(
+                "note: {}: left over beside the {} the workspace is read from, which an older \
+                 build reads instead; remove it, or move it aside, once nothing needs it",
+                leftover.display(),
+                workspace.weaver_dir().display()
+            )));
+        }
+        if workspace.names() == Names::Mindflayer {
+            after.push(Warning::from(format!(
+                "hint: the workspace at {} was made by a Mindflayer build, and is kept under \
+                 its names; `mindweaver migrate --names` moves it, and what it wrote in its \
+                 projects, to Mindweaver's",
+                workspace.root().display()
+            )));
+        }
+    }
     match &mut result {
         Ok(outcome) => {
             outcome.stderr.splice(0..0, said);
+            outcome.stderr.extend(after);
         }
         Err(failure) => {
             failure.warnings.splice(0..0, said);
+            failure.warnings.extend(after);
         }
     }
     result
@@ -320,7 +375,9 @@ pub fn run_weaver_cli_watched(cli: &WeaverCli, watch: &Watch) -> Result<Outcome,
         cli.workspace.as_deref(),
         &cli.agent_homes,
     );
-    looked_up(run_weaver_with(cli, &lookup, watch), &lookup)
+    let moving = cli.command.as_ref().is_some_and(moves_names);
+    let result = run_weaver_with(cli, &lookup, watch);
+    looked_up(result, &lookup, cli.directory.as_deref(), moving)
 }
 
 /// [`run_with`], for `mindweaver`.
