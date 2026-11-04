@@ -625,6 +625,19 @@ makes none if Codex refuses its configuration before the session starts.
 OpenCode's four call no model. Without `PROBE_ONLY`, the same command also
 runs Claude's seven runs of #17 again, six of them paid.
 
+That command runs the V2 on `PATH`, 2.2.5 at the time of writing. #18 and
+D-12 name 2.1.x, and the owner's 2.1.3 is installed beside it, so a second
+pass runs OpenCode's three V2 runs on it, at no cost, since none calls a
+model:
+
+```bash
+PROBE_ONLY='opencode-mcp-v2 opencode-mcp-v1-shape opencode-mcp-service' \
+  PROBE_OPENCODE_BIN=~/.local/share/mise/installs/opencode/2.1.3/node_modules/.bin/opencode \
+  scripts/agent-probe/probe.sh opencode
+```
+
+Its results go in the 2.1.3 half of each V2 cell below.
+
 Beyond what #17 needs:
 
 - `python3` in `/usr/bin` or `/bin`, for the stand-in server. Each prepare
@@ -976,9 +989,9 @@ not write. Each run asks `opencode mcp list` from the project, with
 
 | Run | Binary | Shape | How |
 |---|---|---|---|
-| `opencode-mcp-v2` | V2 as installed | V2 | `--standalone`: a private server in the list's own process and environment |
-| `opencode-mcp-v1-shape` | V2 as installed | V1 | `--standalone` |
-| `opencode-mcp-service` | V2 as installed | V2 | through V2's background server, the way a person runs OpenCode, read twice: below |
+| `opencode-mcp-v2` | V2: 2.2.5, then 2.1.3 | V2 | `--standalone`: a private server in the list's own process and environment |
+| `opencode-mcp-v1-shape` | V2: 2.2.5, then 2.1.3 | V1 | `--standalone` |
+| `opencode-mcp-service` | V2: 2.2.5, then 2.1.3 | V2 | through V2's background server, the way a person runs OpenCode, read twice: below |
 | `opencode-mcp-1-19` | 1.19.4 | V2 | in process, with `--print-logs --log-level DEBUG` |
 
 The background server is the question in `opencode-mcp-service`: whether it
@@ -1013,34 +1026,37 @@ keeps its server: the probe's could not start, or the operator's could not
 while the probe's ran. A `service set port` that fails is a mismatch, and
 the run stops there.
 
+Each V2 run's cell holds 2.2.5's result, from the first command under
+[Running them](#running-them), then 2.1.3's, from the second.
+
 | Check | Expected | `opencode-mcp-v2` | `opencode-mcp-v1-shape` | `opencode-mcp-service.inherited` | `opencode-mcp-1-19` |
 |---|---|---|---|---|---|
-| `probe-stdio`'s stand-in, so `{env:}` in the command's first word too | loaded | pending | pending | pending | pending |
-| Its `--arg`: `{env:}` in `command` | `probe-arg-value` | pending | pending | pending | pending |
-| Its `PROBE_MCP_ENV`: `{env:}` in `environment` | `probe-env-value` | pending | pending | pending | pending |
-| `probe-http`'s stand-in | loaded | pending | pending | pending | pending |
-| The path: `{env:}` in `url` | `/probe-http/probe-url-value` | pending | pending | pending | pending |
-| `X-Probe-Header`: `{env:}` in `headers` | `probe-header-value` | pending | pending | pending | pending |
-| `Authorization`: inside a longer value | `Bearer probe-token-value` | pending | pending | pending | pending |
-| Each server's word in the list | recorded | pending | pending | pending | pending |
+| `probe-stdio`'s stand-in, so `{env:}` in the command's first word too | loaded | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | pending |
+| Its `--arg`: `{env:}` in `command` | `probe-arg-value` | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | pending |
+| Its `PROBE_MCP_ENV`: `{env:}` in `environment` | `probe-env-value` | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | pending |
+| `probe-http`'s stand-in | loaded | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | pending |
+| The path: `{env:}` in `url` | `/probe-http/probe-url-value` | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | pending |
+| `X-Probe-Header`: `{env:}` in `headers` | `probe-header-value` | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | pending |
+| `Authorization`: inside a longer value | `Bearer probe-token-value` | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | pending |
+| Each server's word in the list | recorded | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | 2.2.5 pending, 2.1.3 pending | pending |
 
 The reading with the server started apart, `opencode-mcp-service`, records
 what it is asked to find out rather than expecting it:
 
-| Check | Expected | Result |
-|---|---|---|
-| `opencode service set port` | exit 0 | pending |
-| `opencode service start`, without the five variables | exit 0 | pending |
-| `opencode service stop`, before the second reading | exit 0 | pending |
-| `probe-stdio`'s stand-in, its first word from the server's own environment | loaded | pending |
-| Its `--arg`: `{env:}` in `command` | recorded: `probe-arg-value` from the list's environment, empty from the server's | pending |
-| Its `PROBE_MCP_ENV`: `{env:}` in `environment` | recorded: `probe-env-value`, or empty | pending |
-| `probe-http`'s stand-in | loaded | pending |
-| The path: `{env:}` in `url` | recorded: `/probe-http/probe-url-value`, or `/probe-http/` | pending |
-| `X-Probe-Header`: `{env:}` in `headers` | recorded: `probe-header-value`, or empty | pending |
-| `Authorization`: inside a longer value | recorded: `Bearer probe-token-value`, or `Bearer` with nothing after it, which the stand-in keeps as its length alone | pending |
-| Whose environment filled them | recorded: `the list's: 5 of 5 expanded`, `not the list's: 0 of 5 expanded` (the server's own when the five read empty), or `mixed` | pending |
-| Each server's word in the list | recorded | pending |
+| Check | Expected | 2.2.5 | 2.1.3 |
+|---|---|---|---|
+| `opencode service set port` | exit 0 | pending | pending |
+| `opencode service start`, without the five variables | exit 0 | pending | pending |
+| `opencode service stop`, before the second reading | exit 0 | pending | pending |
+| `probe-stdio`'s stand-in, its first word in either environment | loaded | pending | pending |
+| Its `--arg`: `{env:}` in `command` | recorded: `probe-arg-value` from the list's environment, empty from the server's | pending | pending |
+| Its `PROBE_MCP_ENV`: `{env:}` in `environment` | recorded: `probe-env-value`, or empty | pending | pending |
+| `probe-http`'s stand-in | loaded | pending | pending |
+| The path: `{env:}` in `url` | recorded: `/probe-http/probe-url-value`, or `/probe-http/` | pending | pending |
+| `X-Probe-Header`: `{env:}` in `headers` | recorded: `probe-header-value`, or empty | pending | pending |
+| `Authorization`: inside a longer value | recorded: `Bearer probe-token-value`, or `Bearer` with nothing after it, which the stand-in keeps as its length alone | pending | pending |
+| Whose environment filled them | recorded: `the list's: 5 of 5 expanded`, `not the list's: 0 of 5 expanded` (the server's own when the five read empty), or `mixed` | pending | pending |
+| Each server's word in the list | recorded | pending | pending |
 
 ### Assumptions the run confirms
 
@@ -1061,16 +1077,17 @@ packages, and a run that disagrees fails or records it.
   lists; a session starts its servers whether or not the model is reached;
   `cli_auth_credentials_store = "file"` has it read the copied `auth.json`;
   a ChatGPT login is refreshed past about eight days.
-- OpenCode 2.2.5 and 1.19.4: `opencode mcp list` connects to each server,
-  as 1.19.4's handler and 2.2.5's status values say; `--standalone` runs a
-  private server in 2.2.5; 1.19.4 turns `mcp.servers` into its own entries,
-  as its binary's conversion does. In 2.2.5, `opencode service start`
-  returns once the background server answers, `opencode service stop`
-  returns once it is gone, and `opencode service set port` keeps the port
-  in the service settings under `$XDG_CONFIG_HOME/opencode`, which the
-  server reads when it starts; a list finds the server through the
-  registration under `$XDG_STATE_HOME/opencode`, both in the temp home, so
-  it never reaches the operator's.
+- OpenCode 2.2.5, 2.1.3 and 1.19.4: `opencode mcp list` connects to each
+  server, as 1.19.4's handler and 2.2.5's status values say; `--standalone`
+  runs a private server in 2.2.5 and 2.1.3, whose binary has the same
+  option and `opencode service` commands; 1.19.4 turns `mcp.servers` into
+  its own entries, as its binary's conversion does. In V2, `opencode
+  service start` returns once the background server answers, `opencode
+  service stop` returns once it is gone, and `opencode service set port`
+  keeps the port in the service settings under `$XDG_CONFIG_HOME/opencode`,
+  which the server reads when it starts; a list finds the server through
+  the registration under `$XDG_STATE_HOME/opencode`, both in the temp home,
+  so it never reaches the operator's.
 
 ### The MCP runs
 
@@ -1079,8 +1096,9 @@ runs](#the-claude-code-runs) are recorded above.
 
 - **When:** pending.
 - **Binaries:** pending. At the time of writing this machine had Claude Code
-  2.1.318, Codex 0.166.0 and OpenCode 2.2.5 installed through mise, and the
-  issue names OpenCode 2.1.x, which 2.2.5 has replaced here.
+  2.1.318, Codex 0.166.0 and OpenCode 2.2.5 on `PATH`, installed through
+  mise, with the OpenCode 2.1.3 the issue and D-12 name beside it, which
+  the second pass runs.
 - **Models:** pending (`haiku`, and `gpt-6-luna` at low effort, as
   resolved).
 - **Host:** pending.
@@ -1159,7 +1177,7 @@ the check that will settle it, under [MCP servers](#mcp-servers).
 | #91 | A trusted project's `.codex/config.toml` loads, and an untrusted one's does not. | pending (`codex-mcp-trusted`, `codex-mcp-untrusted`) |
 | #91 | `env_vars`, `env_http_headers` and `bearer_token_env_var` fill a value from a variable. | pending (`codex-mcp-trusted`) |
 | #91 | A server of the same name in `$CODEX_HOME/config.toml`, with another transport, breaks the whole configuration or leaves one layer's standing. | pending, recorded (`codex-mcp-collision`) |
-| #92 | V2's `mcp.servers` loads in V2 and in 1.19.4, and V1's `mcp.<name>` loads in V2. | pending (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`) |
-| #92 | `{env:}` expands in the command, the environment, the URL and the headers, through V2's background server too when that server holds the variable. | pending (all four OpenCode runs) |
+| #92 | V2's `mcp.servers` loads in V2 (2.2.5 and 2.1.3) and in 1.19.4, and V1's `mcp.<name>` loads in V2. | pending (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`) |
+| #92 | `{env:}` expands in the command, the environment, the URL and the headers, through V2's background server too when that server holds the variable. | pending (all four OpenCode runs, the V2 ones on 2.2.5 and 2.1.3) |
 | #92, #96 | Whose environment V2's background server fills `{env:}` from: the asking client's, or its own. | pending, recorded (`opencode-mcp-service`) |
 | #93, #94 | Each agent loads its project's servers from the one file the target table will name: `.mcp.json`, `.codex/config.toml` (trusted), `opencode.json`. | pending (every MCP run) |

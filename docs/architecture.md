@@ -9521,7 +9521,8 @@ would change:
   servers lost, #91 refuses a name a lower layer holds, as it plans; if one
   layer wins or the name is dropped alone, it warns instead.
 - **V2's `mcp.servers` loads in V2 and in 1.19.4, and V1's `mcp.<name>` in
-  V2** (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`).
+  V2** (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`,
+  the V2 runs on 2.2.5 and on the owner's 2.1.3).
   Were 1.19.4 not to read V2's shape, D-12's minimal V2 entry would miss V1,
   and #92 would write V1's shape, which V2 reads too. Were V2 not to read
   V1's, #92 would never write it, even into a file that already uses it.
@@ -10846,7 +10847,8 @@ an open question below.
   ([docs/agents.md](agents.md#mcp-servers)). Until then, what #87 and #90 to
   #94 build on is docs-only or read from the installed packages, and D-10
   and D-11 say what each result would change. The checks run OpenCode's V2
-  as installed, 2.2.5 at the time of writing, where #18 named 2.1.x.
+  on `PATH`, 2.2.5 at the time of writing, and in a second pass, which
+  calls no model, the 2.1.3 #18 and D-12 name.
 - **Folders an agent reads and is sent nothing in.** A project marked by its
   settings is read in its agents' targets and in its authored folder, not in
   every folder they read ([read where its agents
