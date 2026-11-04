@@ -1,26 +1,33 @@
 #!/usr/bin/env bash
-# Asks the coding agents themselves where they read skills and rules (#17), so
-# that the adapters build on what the binaries do rather than on what their
-# documentation says. docs/agents.md records each run: the version, the
-# environment, the commands and what every agent answered.
+# Asks the coding agents themselves where they read skills and rules (#17), and
+# what they make of a project's MCP servers (#18), so that the adapters build
+# on what the binaries do rather than on what their documentation says.
+# docs/agents.md records each run: the version, the environment, the commands
+# and what every agent answered.
 #
-#   scripts/agent-probe/probe.sh [claude]
+#   scripts/agent-probe/probe.sh [claude] [codex] [opencode]
 #   PROBE_ONLY='claude-import claude-local' scripts/agent-probe/probe.sh
 #
 # It runs the agents against their APIs with the operator's own login, which is
-# why it is run by hand and never by CI or `make test`. Only Claude Code has
-# checks so far. An agent gets them from a file beside this one, <agent>.sh,
-# defining <agent>_prepare, run out here where the real home is visible,
-# <agent>_checks, run inside the namespace below, and <agent>_runs, the names
-# of its runs (see claude.sh).
+# why it is run by hand and never by CI or `make test`. Each agent gets its
+# checks from a file beside this one, <agent>.sh, defining <agent>_prepare, run
+# out here where the real home is visible, <agent>_checks, run inside the
+# namespace below, and <agent>_runs, the names of its runs (see claude.sh).
+# Claude Code's are about skills, rules and MCP servers; Codex's and
+# OpenCode's only about MCP servers so far, so where those two read skills and
+# rules is still docs-only. The MCP checks share mcp.sh, and the stand-in
+# server each of them starts, mcp_server.py.
 #
-# Every run costs a paid agent call, so PROBE_ONLY, a space-separated list of
-# those names, limits a re-run to the runs it names, after a change to those
-# alone. Unset, everything runs.
+# Nearly every run costs a paid agent call (OpenCode's list their servers and
+# call no model), so PROBE_ONLY, a space-separated list of those names, limits
+# a re-run to the runs it names, after a change to those alone. Unset,
+# everything runs.
 #
 # Linux only. It needs bubblewrap (bwrap) on PATH, jq and git in /usr/bin or
-# /bin, the only PATH inside the namespace, and each agent's own binary
-# rather than a script or shim that would run something the namespace hides.
+# /bin, the only PATH inside the namespace, python3 there too for the MCP
+# checks' stand-in, npm on PATH to fetch OpenCode 1.19.4, and each agent's own
+# binary rather than a script or shim that would run something the namespace
+# hides.
 #
 # Isolation. An agent reads folders in the user's home whatever its own
 # variable says: Codex and OpenCode read ~/.agents/skills, which on the owner's
