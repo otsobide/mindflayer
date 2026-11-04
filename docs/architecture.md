@@ -11165,12 +11165,13 @@ how).
   same lockfile, on whatever Node the image has, rather than embed the one
   `test (web)` tested; a variable telling `make web/build/if-node` to take
   `dist/` as it is would settle it, at the price of a knob only CI turns.
-- **The agent probe still says Mindflayer.** `scripts/agent-probe/`
-  runs the binaries by their old names and its words name the product
-  ([D-26](#d-26-the-product-is-mindweaver)): #228 left it as it was, since
-  #18 was changing the same scripts on a branch of its own, and its rename
-  is done there, once #18 has landed or as it lands. Nothing runs it in CI or
-  `make test`, so nothing fails meanwhile.
+- **The agent probe still says Mindflayer.** `scripts/agent-probe/` runs
+  neither binary: it writes the blocks and Claude's rules folder itself,
+  under #229's names, which are still right, and only its comments name the
+  product the old way ([D-26](#d-26-the-product-is-mindweaver)). #228 left
+  it as it was, since #18 was changing the same scripts on a branch of its
+  own, and its comments are renamed there, once #18 has landed or as it
+  lands; what it writes moves with #229's names.
 - **The names written outside the code, until #229.** A workspace's
   folder, its marker and ledger, the blocks' markers, Claude's rules
   folder, the variables, `flayer-deactivate`, the panel's header and its
