@@ -53,7 +53,7 @@ remembered: boolean,
 in_use: boolean, 
 /**
  * How many projects it links, each directory once, stale ones among
- * them: its own count, which says which of several flayers is which.
+ * them: its own count, which says which of several weavers is which.
  */
 projects: number, 
 /**

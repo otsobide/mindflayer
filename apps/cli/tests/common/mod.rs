@@ -357,7 +357,7 @@ pub fn copies(root: &Path, name: &str) -> Vec<PathBuf> {
 /// workspace as [`directory_for`] asks a project.
 pub fn own_directory_for(root: &Path, kind: Kind) -> PathBuf {
     WeaverWorkspace::open(root)
-        .expect("an initialized flayer workspace")
+        .expect("an initialized weaver workspace")
         .own()
         .directory_for(kind)
         .unwrap()

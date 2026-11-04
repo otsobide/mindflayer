@@ -453,7 +453,7 @@
           "type": "string"
         },
         "projects": {
-          "description": "How many projects it links, each directory once, stale ones among\nthem: its own count, which says which of several flayers is which.",
+          "description": "How many projects it links, each directory once, stale ones among\nthem: its own count, which says which of several weavers is which.",
           "type": "integer",
           "format": "uint",
           "minimum": 0

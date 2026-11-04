@@ -112,7 +112,7 @@ fn settings_project(root: &Path, directories: Directories) -> PathBuf {
 }
 
 /// A directory that is both a mind project, marked by settings at the newest
-/// version a project's marker has, and a flayer workspace, so each marker
+/// version a project's marker has, and a weaver workspace, so each marker
 /// can be made newer while the other is read beside it.
 fn both_markers() -> (tempfile::TempDir, PathBuf, PathBuf) {
     let dir = tempfile::TempDir::new().unwrap();

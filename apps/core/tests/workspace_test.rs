@@ -1,4 +1,4 @@
-//! Creating, finding and reading mind projects and flayer workspaces.
+//! Creating, finding and reading mind projects and weaver workspaces.
 
 use std::fs;
 use std::path::Path;

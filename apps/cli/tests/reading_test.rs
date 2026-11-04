@@ -293,7 +293,7 @@ fn each_binary_describes_itself_rather_than_the_crate() {
     // One crate description cannot be right for two binaries: `mind --help`
     // used to advertise the pre-split, cross-project scope.
     assert!(mind.contains("in a mind project"), "{mind}");
-    assert!(weaver.contains("flayer workspace"), "{weaver}");
+    assert!(weaver.contains("weaver workspace"), "{weaver}");
     assert_ne!(mind.lines().next().unwrap(), weaver.lines().next().unwrap());
 }
 

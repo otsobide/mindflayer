@@ -31,7 +31,7 @@ fn mind_init_creates_a_project_and_weaver_init_a_workspace() {
         .join(WEAVER_CONFIG)
         .is_file());
     assert!(!workspace.path().join(MIND_DIR).exists());
-    assert!(two.stdout.starts_with("initialized flayer workspace"));
+    assert!(two.stdout.starts_with("initialized weaver workspace"));
 }
 
 #[test]
@@ -161,16 +161,16 @@ fn mind_init_refuses_an_agent_it_does_not_know_before_writing_anything() {
 #[test]
 fn weaver_init_makes_the_workspace_in_the_directory_it_is_given() {
     let dir = TempDir::new().unwrap();
-    let writing = dir.path().join("flayers/writing");
+    let writing = dir.path().join("weavers/writing");
 
     // Typed from where the command works, and made, parents and all, as
     // `python -m venv` makes the directory it is given.
-    let outcome = weaver(dir.path(), &["init", "flayers/writing"]).unwrap();
+    let outcome = weaver(dir.path(), &["init", "weavers/writing"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
         format!(
-            "initialized flayer workspace `writing` in {}\n",
+            "initialized weaver workspace `writing` in {}\n",
             writing.join(WEAVER_DIR).display()
         )
     );
@@ -220,7 +220,7 @@ fn weaver_init_says_in_the_marker_that_its_own_go_in_its_library() {
              # here is kept there too. Each folder is made the first time something\n\
              # is added to it.\n\
              #\n\
-             # `loaded` lists other flayer workspaces whose own skills its projects\n\
+             # `loaded` lists other weaver workspaces whose own skills its projects\n\
              # can install too, read from there each time: `mindweaver load <path>`.\n\
              version = 2\n\
              name = \"{name}\"\n\
@@ -389,7 +389,7 @@ fn a_workspace_that_keeps_its_own_beside_its_projects_still_does() {
          # the ones every project it manages can install, beside the projects'\n\
          # own. They are made the first time something is added to them.\n\
          #\n\
-         # `loaded` lists other flayer workspaces whose own skills its projects\n\
+         # `loaded` lists other weaver workspaces whose own skills its projects\n\
          # can install too, read from there each time: `mindweaver load <path>`.\n\
          version = 2\n\
          name = \"projects\"\n\

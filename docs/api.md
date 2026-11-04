@@ -36,7 +36,7 @@ repository, `web`, made a project and not linked yet:
 ```console
 $ cd /home/you/Projects
 $ mindweaver init
-initialized flayer workspace `Projects` in /home/you/Projects/.mindflayer
+initialized weaver workspace `Projects` in /home/you/Projects/.mindflayer
 $ git init --quiet api && mind -C api init
 initialized mind project `api` in /home/you/Projects/api/.mind
 $ mindweaver link api

@@ -72,9 +72,9 @@ pub enum CliError {
     },
     #[error("{0} is not inside a mind project (run `mind init` to create one here)")]
     NotInProject(PathBuf),
-    #[error("{0} is not inside a flayer workspace (run `mindweaver init` to create one here)")]
+    #[error("{0} is not inside a weaver workspace (run `mindweaver init` to create one here)")]
     NotInWorkspace(PathBuf),
-    #[error("no flayer workspace{} at or above {from} to {verb}, and no default one", if *named { " but the ones named" } else { "" })]
+    #[error("no weaver workspace{} at or above {from} to {verb}, and no default one", if *named { " but the ones named" } else { "" })]
     NowhereToLoad {
         from: PathBuf,
         verb: &'static str,
@@ -164,7 +164,7 @@ pub enum CliError {
         #[source]
         source: io::Error,
     },
-    #[error("no flayer workspace above {0}; make one with `mindweaver init` in the directory that holds your projects")]
+    #[error("no weaver workspace above {0}; make one with `mindweaver init` in the directory that holds your projects")]
     NoWorkspaceAbove(PathBuf),
     #[error("{0}: not known, since there is no default workspace to remember it (--home or ${HOME_VARIABLE} names none)")]
     NoDefault(PathBuf),

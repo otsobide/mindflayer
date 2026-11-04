@@ -20,7 +20,7 @@ use crate::mother::random;
 use crate::settings::Share;
 use crate::workspace::{Directories, MindProject, WeaverWorkspace};
 
-/// Makes flayer workspaces.
+/// Makes weaver workspaces.
 pub struct WorkspaceMother;
 
 impl WorkspaceMother {

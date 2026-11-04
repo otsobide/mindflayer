@@ -3,7 +3,7 @@ name = "mindweaver-core"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
-description = "Mind projects, flayer workspaces, and the skills they hold"
+description = "Mind projects, weaver workspaces, and the skills they hold"
 
 [dependencies]
 thiserror = "2"

@@ -37,7 +37,7 @@ tables](#the-apis-description-is-written-from-both-tables)).
 
 ### The examples are a workspace
 
-`examples/` sits beside `apps/` and is content, not an app: a flayer
+`examples/` sits beside `apps/` and is content, not an app: a weaver
 workspace (`examples/.mindflayer/flayer.toml`) holding two skills and two
 rules of its own, so there is something to install while gathering is
 paused. A workspace rather than files the binaries embed or `mindweaver init`
@@ -159,7 +159,7 @@ rewritten, and a new one is its author's to watch.
 
 ## Where the line between core and a front end falls
 
-`mindweaver-core` knows what a mind project is, what a flayer workspace is, and
+`mindweaver-core` knows what a mind project is, what a weaver workspace is, and
 what each kind of artifact is. It reads and writes files, and the only other
 I/O it does is fetching a repository when asked to gather, through a port whose
 adapter is `gix`, and reading the clock ([values, ports and
@@ -620,7 +620,7 @@ describe. The `.mind` itself is the checkout's: its settings keep themselves
 out of git unless the project is shared
 ([D-01](#d-01-a-projects-mind-ignores-itself)).
 
-A **flayer workspace** carries `.mindflayer` and references the mind projects
+A **weaver workspace** carries `.mindflayer` and references the mind projects
 it manages, so their skills can be handled together. It is the level above, and
 it does not have to be a repository at all: the directory your repos happen to
 sit in is the usual case. It also holds skills and rules of its own: the ones
@@ -3413,7 +3413,7 @@ then runs `mindweaver adopt -p <project> --yes skill:<name>`.
 ### Loading: a third place, read live
 
 `mindweaver load <path>` adds a third place that offers: the own artifacts of
-another flayer workspace, `install::Offer::Loaded`, between the workspace's own
+another weaver workspace, `install::Offer::Loaded`, between the workspace's own
 and the shelf. Its entry sits in a `loaded` array in `flayer.toml`, beside
 `projects` and edited the same way (`edit_array`), rather than in the ledger:
 it is configuration a person may read and edit, like the registry, and a load
@@ -6620,7 +6620,7 @@ name](#what-a-browser-may-name)):
 - **What it shows is core's.** The folder, its trail from the root as
   buttons, and the folders directly inside it, in the order of their
   names, each with an icon and a word for what core says it is
-  (`browse::Is`: a mind project by any marker, a flayer workspace, a git
+  (`browse::Is`: a mind project by any marker, a weaver workspace, a git
   repository or any other folder, the strongest when it is more than one),
   whether the workspace links it and whether it is a link, and the same of
   the folder open, so it can be chosen too. The panel puts no path
@@ -7357,7 +7357,7 @@ workspace, since an unmade one has loaded nothing.
 
 The default workspace keeps a list of the others on the machine, a `known`
 array in its `flayer.toml` beside `projects` and `loaded`, so switching
-between several flayers, in the CLI, the TUI and the panel's header (#84),
+between several weavers, in the CLI, the TUI and the panel's header (#84),
 has somewhere to read them from. `mindweaver workspaces` lists it, `mindweaver
 workspaces forget PATH` takes one out, and `w` in the TUI runs `mindweaver
 workspaces` and shows what it prints, as `s` shows `mindweaver gather list`. What
@@ -7373,7 +7373,7 @@ snapshot's, beside the row the list prints (`view::KnownHere`), since it
 is of that workspace rather than of the machine.
 
 In the default workspace's marker rather than in a file of its own or in the
-ledger. Home is the one place every flayer on a machine can find; its marker
+ledger. Home is the one place every weaver on a machine can find; its marker
 is already edited one array at a time (`edit_array`), under its lock, with
 every comment kept; and the list is configuration a person may read and
 prune by hand, like the registry. A file of its own would be one more format
@@ -9357,7 +9357,7 @@ Existing ones keep the explicit `[directories]` in their `flayer.toml` until
 says. `flayer.toml` already spells its directories out, so the new default
 needs no format bump; no agent scans `.mindflayer`, which keeps
 instruction-shaped files out of the directories above projects; and a
-venv-style flayer becomes one folder. Rejected: beside the projects, as today,
+venv-style weaver becomes one folder. Rejected: beside the projects, as today,
 which puts `~/skills` and `~/rules` in the home directory; and moving only the
 home workspace's library, which leaves two layouts to explain. Unblocks #52,
 #53 and #86.
@@ -9378,7 +9378,7 @@ Installs go to the agent folders the project targets (D-07), not to the
 authored ones. That keeps every existing workflow, makes the workspace the
 default source, and keeps the marker minimal. Rejected: receiving only, which
 would strand what v2 projects authored; and today's model unchanged, against
-vision points 2 and 8 (the flayer as the source, a minimal `.mind`). The plan
+vision points 2 and 8 (the weaver as the source, a minimal `.mind`). The plan
 made the folders opt-in (`--skills`, `--rules`); the owner prefers them to
 exist from the start. Unblocks #29, #33, #35 and #59.
 
@@ -9438,7 +9438,7 @@ explicit `-W` wins even when empty, and empty means none, following the
 keep meaning where the default lives. One core function decides, fed by the
 front ends, and an explicit or activated path that is not a workspace is an
 error, never a silent fallback. Activation exists to override location, as a
-virtualenv does. Rejected: walking up first, under which an activated flayer
+virtualenv does. Rejected: walking up first, under which an activated weaver
 silently loses to any workspace above the current directory; reusing `--home`,
 which confuses where the default lives with which workspace to use; and a
 direnv-style activation file, hidden state in repositories meant to stay

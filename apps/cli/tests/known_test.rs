@@ -27,17 +27,17 @@ fn known_in(home: &Path) -> Vec<PathBuf> {
 fn init_remembers_the_workspace_in_the_default_one() {
     let (_dir, home) = made_home();
 
-    let outcome = weaver_at_home(&home, &home, &["init", "flayers/writing"]).unwrap();
+    let outcome = weaver_at_home(&home, &home, &["init", "weavers/writing"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
         format!(
-            "initialized flayer workspace `writing` in {}\n  remembered as flayers/writing by the default workspace\n",
-            home.join("flayers/writing").join(WEAVER_DIR).display()
+            "initialized weaver workspace `writing` in {}\n  remembered as weavers/writing by the default workspace\n",
+            home.join("weavers/writing").join(WEAVER_DIR).display()
         )
     );
     assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
-    assert_eq!(known_in(&home), [PathBuf::from("flayers/writing")]);
+    assert_eq!(known_in(&home), [PathBuf::from("weavers/writing")]);
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn init_again_remembers_a_workspace_made_before_the_default_and_nothing_more() {
     let second = weaver_at_home(dir.path(), &home, &["init", "writing"]).unwrap();
 
     let already = format!(
-        "flayer workspace `writing` already initialized in {}\n",
+        "weaver workspace `writing` already initialized in {}\n",
         dir.path().join("writing").join(WEAVER_DIR).display()
     );
     assert_eq!(
@@ -118,7 +118,7 @@ fn a_default_that_cannot_remember_is_a_warning_after_the_init() {
     assert!(
         outcome
             .stdout
-            .starts_with("initialized flayer workspace `writing`"),
+            .starts_with("initialized weaver workspace `writing`"),
         "{}",
         outcome.stdout
     );
@@ -138,13 +138,13 @@ fn a_default_that_cannot_remember_is_a_warning_after_the_init() {
 // Listing
 // ---------------------------------------------------------------------------
 
-/// `made_home`, with `home/flayers/writing` and `notes`, beside home, made
+/// `made_home`, with `home/weavers/writing` and `notes`, beside home, made
 /// and remembered, and a project linked into `writing`.
 fn home_with_two() -> (TempDir, PathBuf) {
     let (dir, home) = made_home();
-    weaver_at_home(&home, &home, &["init", "flayers/writing"]).unwrap();
+    weaver_at_home(&home, &home, &["init", "weavers/writing"]).unwrap();
     weaver_at_home(dir.path(), &home, &["init", "notes"]).unwrap();
-    let writing = home.join("flayers/writing");
+    let writing = home.join("weavers/writing");
     fs::create_dir(writing.join("essays")).unwrap();
     new_project(&writing.join("essays"));
     weaver(&writing, &["link", "essays"]).unwrap();
@@ -154,7 +154,7 @@ fn home_with_two() -> (TempDir, PathBuf) {
 #[test]
 fn workspaces_lists_the_default_then_what_it_remembers_with_the_one_in_use_marked() {
     let (dir, home) = home_with_two();
-    let writing = home.join("flayers/writing");
+    let writing = home.join("weavers/writing");
 
     let outcome = weaver_at_home(&writing.join("essays"), &home, &["workspaces"]).unwrap();
 
@@ -175,7 +175,7 @@ fn workspaces_lists_the_default_then_what_it_remembers_with_the_one_in_use_marke
 #[test]
 fn mind_weaver_workspaces_is_the_same_list() {
     let (_dir, home) = home_with_two();
-    let essays = home.join("flayers/writing/essays");
+    let essays = home.join("weavers/writing/essays");
 
     let weaver = weaver_at_home(&essays, &home, &["workspaces"]).unwrap();
     let mind = mind_at_home(&essays, &home, &["weaver", "workspaces"]).unwrap();
@@ -199,14 +199,14 @@ fn a_remembered_workspace_that_has_gone_is_shown_not_raised() {
              -        {}                 cannot be opened\n\
              \n  `mindweaver workspaces forget <path>` forgets one that cannot be opened\n",
             home.display(),
-            home.join("flayers/writing").display(),
+            home.join("weavers/writing").display(),
             notes.display(),
         )
     );
     assert_eq!(
         outcome.stderr,
         [format!(
-            "warning: {}: not a flayer workspace (no .mindflayer/flayer.toml)",
+            "warning: {}: not a weaver workspace (no .mindflayer/flayer.toml)",
             notes.display()
         )]
     );
@@ -216,7 +216,7 @@ fn a_remembered_workspace_that_has_gone_is_shown_not_raised() {
 #[test]
 fn stale_projects_are_counted_beside_the_rest() {
     let (_dir, home) = home_with_two();
-    let writing = home.join("flayers/writing");
+    let writing = home.join("weavers/writing");
     fs::create_dir(writing.join("letters")).unwrap();
     new_project(&writing.join("letters"));
     weaver(&writing, &["link", "letters"]).unwrap();
@@ -292,13 +292,13 @@ fn nothing_is_known_with_no_default() {
 
     // `common::weaver` pins `--home=`: the default and what it remembers are
     // out of reach, and only the workspace in use is left to list.
-    let outcome = weaver(&home.join("flayers/writing"), &["workspaces"]).unwrap();
+    let outcome = weaver(&home.join("weavers/writing"), &["workspaces"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
         format!(
             "* writing  {}  1 project; not remembered\n",
-            home.join("flayers/writing").display()
+            home.join("weavers/writing").display()
         )
     );
 }
@@ -328,13 +328,13 @@ fn json_prints_the_list_in_the_envelope_with_its_warnings() {
     let (dir, home) = home_with_two();
     let notes = dir.path().join("notes");
     fs::remove_dir_all(&notes).unwrap();
-    let writing = home.join("flayers/writing");
+    let writing = home.join("weavers/writing");
 
     let outcome = weaver_at_home(&writing, &home, &["workspaces", "--json"]).unwrap();
 
     let (listed, warnings): (Listed, _) = enveloped(&outcome);
     let gone = format!(
-        "{}: not a flayer workspace (no .mindflayer/flayer.toml)",
+        "{}: not a weaver workspace (no .mindflayer/flayer.toml)",
         notes.display()
     );
     assert_eq!(
@@ -386,21 +386,21 @@ fn json_prints_the_list_in_the_envelope_with_its_warnings() {
 #[test]
 fn forget_removes_every_spelling_of_a_path() {
     let (_dir, home) = home_with_two();
-    let writing = home.join("flayers/writing");
+    let writing = home.join("weavers/writing");
     let path = home.join(WEAVER_DIR).join(WEAVER_CONFIG);
     let absolute = writing.to_string_lossy().into_owned();
     let text = registry(&home).replace(
-        "\"flayers/writing\",",
-        &format!("\"flayers/writing\", \"./flayers/writing/\", \"{absolute}\","),
+        "\"weavers/writing\",",
+        &format!("\"weavers/writing\", \"./weavers/writing/\", \"{absolute}\","),
     );
     fs::write(&path, text).unwrap();
 
     let outcome =
-        weaver_at_home(&home, &home, &["workspaces", "forget", "flayers/writing"]).unwrap();
+        weaver_at_home(&home, &home, &["workspaces", "forget", "weavers/writing"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
-        format!("forgot flayers/writing\nforgot ./flayers/writing/\nforgot {absolute}\n")
+        format!("forgot weavers/writing\nforgot ./weavers/writing/\nforgot {absolute}\n")
     );
     assert_eq!(known_in(&home), [PathBuf::from("../notes")]);
     let listed = weaver_at_home(&home, &home, &["workspaces"]).unwrap();

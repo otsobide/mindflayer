@@ -3,7 +3,7 @@
 //! Mindflayer works at two levels. A **mind project** carries a `.mind`, the
 //! way a repository carries a `.git`, and holds skills and rules in the
 //! directories its marker names (`skills/` and `rules/` by default). A
-//! **flayer workspace** carries a `.mindflayer` that references the mind
+//! **weaver workspace** carries a `.mindflayer` that references the mind
 //! projects it manages, so their artifacts can be handled together. Both live
 //! in [`workspace`].
 //!

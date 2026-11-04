@@ -1,9 +1,9 @@
 //! The mindweaver workspaces this machine knows: a `known` array in the default
-//! workspace's marker, the one in home, so switching between several flayers
+//! workspace's marker, the one in home, so switching between several weavers
 //! has somewhere to read them from.
 //!
 //! In the default workspace rather than a file of its own beside it: home is
-//! the one place every flayer on a machine can find, its marker is already
+//! the one place every weaver on a machine can find, its marker is already
 //! edited a key at a time (`edit_array`), under its lock, with every comment
 //! and every other key kept, and a list a person may read and prune by hand
 //! belongs beside the `projects` and `loaded` it reads like. A file of its
@@ -70,7 +70,7 @@ pub struct KnownWorkspace {
     /// The one in use where the list was asked for, as `resolve` chose it.
     pub in_use: bool,
     /// How many projects it links, each directory once, stale ones among
-    /// them: its own count, which says which of several flayers is which.
+    /// them: its own count, which says which of several weavers is which.
     pub projects: usize,
     /// How many of those would not open.
     pub stale_projects: usize,

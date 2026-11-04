@@ -22,7 +22,7 @@ test('a project walked to in the explorer is the folder the Link form previews',
   await explorer.getByTestId('crumb').last().click()
   await expect(explorer.getByTestId('crumb-here')).toHaveText(basename(dirname(at.workspace)))
   await explorer.getByRole('button', { name: `Open ${basename(at.workspace)}`, exact: true }).click()
-  await expect(explorer.getByTestId('folder-here').getByTestId('folder-is')).toHaveText('flayer workspace')
+  await expect(explorer.getByTestId('folder-here').getByTestId('folder-is')).toHaveText('weaver workspace')
   const row = explorer.getByTestId('folder').filter({ has: page.getByRole('button', { name: 'Open api', exact: true }) })
   await expect(row.getByTestId('folder-is')).toHaveText('mind project')
   await expect(row.getByTestId('folder-linked')).toHaveText('linked')

@@ -119,7 +119,7 @@ pub struct Folder {
 /// it in words.
 ///
 /// What a link and a scan look for: a mind project by any of its markers
-/// ([`MindProject::is_marked`]), which is linked as it is; a flayer
+/// ([`MindProject::is_marked`]), which is linked as it is; a weaver
 /// workspace, which is loaded rather than linked; a git repository, which
 /// `mind init` makes a project; and any other folder, which is still
 /// chosen, for the command it goes to to say what it needs. A project at a
@@ -179,7 +179,7 @@ impl Serialize for Is {
 #[cfg(any(feature = "ts", feature = "schema"))]
 crate::described::words! {
     /// What a folder is, the strongest of what it holds: a mind project, a
-    /// flayer workspace, a git repository, or any other folder.
+    /// weaver workspace, a git repository, or any other folder.
     Is as "FolderIs", by slug { Project, Workspace, Repository, Folder }
 }
 

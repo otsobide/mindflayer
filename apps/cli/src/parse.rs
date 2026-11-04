@@ -242,13 +242,13 @@ pub enum Command {
         json: bool,
     },
 
-    /// Register this project with the flayer workspace above it.
+    /// Register this project with the weaver workspace above it.
     Link,
 
-    /// Drop this project from the flayer workspace above it.
+    /// Drop this project from the weaver workspace above it.
     Unlink,
 
-    /// Offer other flayer workspaces' own skills and rules to the workspace
+    /// Offer other weaver workspaces' own skills and rules to the workspace
     /// above this project, read live from where they are; on its own, list
     /// what it loads.
     Load {
@@ -389,7 +389,7 @@ pub enum Command {
     #[cfg(feature = "ui")]
     Ui(UiOptions),
 
-    /// Act on the flayer workspace instead. Also reachable as `mindweaver <cmd>`.
+    /// Act on the weaver workspace instead. Also reachable as `mindweaver <cmd>`.
     ///
     /// On its own it opens the TUI, as `mindweaver` on its own does.
     Weaver {
@@ -404,7 +404,7 @@ pub enum Command {
     name = "mindweaver",
     version,
     propagate_version = true,
-    about = "Manage the mind projects a flayer workspace orchestrates",
+    about = "Manage the mind projects a weaver workspace orchestrates",
     long_about = None
 )]
 pub struct WeaverCli {
@@ -440,7 +440,7 @@ pub struct WeaverCli {
 
 #[derive(Debug, Subcommand)]
 pub enum WeaverCommand {
-    /// Create a flayer workspace here, or in the directory given.
+    /// Create a weaver workspace here, or in the directory given.
     Init {
         /// The directory to make it in, made as well when it is not there
         /// [default: the directory the command works in].
@@ -488,7 +488,7 @@ pub enum WeaverCommand {
     /// -W, activated, found walking up, or the default one.
     Which,
 
-    /// List the flayer workspaces this machine knows: the default one, each
+    /// List the weaver workspaces this machine knows: the default one, each
     /// one `mindweaver init` has made or been run on since the default was made,
     /// and the one in use, marked with `*`.
     ///
@@ -685,7 +685,7 @@ pub enum WeaverCommand {
         new: PathBuf,
     },
 
-    /// Offer other flayer workspaces' own skills and rules to this
+    /// Offer other weaver workspaces' own skills and rules to this
     /// workspace's projects, read live from where they are.
     ///
     /// Into the workspace at or above here that is not one being loaded, or

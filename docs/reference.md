@@ -43,12 +43,12 @@ says why each part is the way it is.
 | | Marker | Holds | Think of it as |
 |---|---|---|---|
 | **Mind project** | `.mind/settings.toml` | the agents that work in it, and its artifacts, in the directories the marker names | a repository's `.git` |
-| **Flayer workspace** | `.mindflayer/flayer.toml` | references to mind projects, and artifacts of its own it shares with them | the directory your repos sit in |
+| **Weaver workspace** | `.mindflayer/flayer.toml` | references to mind projects, and artifacts of its own it shares with them | the directory your repos sit in |
 
 A mind project's `.mind` belongs to the checkout it is in: a short settings
 file that keeps itself out of git, the way a Python virtualenv does. What the
 project writes itself, its skills and rules, sits beside its code and is
-committed with it, so whoever clones the repository gets them. A flayer
+committed with it, so whoever clones the repository gets them. A weaver
 workspace is the level above, where several projects are managed together,
 and where the skills and rules that belong to all of them live, once, to be
 installed into whichever needs them.
@@ -102,17 +102,17 @@ every workspace says so instead.
 Walking up is what happens when nothing says otherwise. `-W DIR`
 (`--workspace`) names the workspace a command uses, by its directory or its
 `.mindflayer`, from wherever you are; `$MINDFLAYER_WORKSPACE`, which `mindweaver
-activate` sets ([several flayers](#several-flayers)), does the same for every
+activate` sets ([several weavers](#several-weavers)), does the same for every
 command run in a shell, the way an activated Python virtualenv does.
-Either one wins over a workspace above you, so you can keep several flayers
+Either one wins over a workspace above you, so you can keep several weavers
 for different purposes and pick one:
 
 ```
 $ cd ~/Projects/collapse                   # under the ~/Projects workspace
-$ mindweaver -W ~/flayers/writing list     # a workspace beside it instead
+$ mindweaver -W ~/weavers/writing list     # a workspace beside it instead
 prose-style  How every essay here is written
 
-$ export MINDFLAYER_WORKSPACE=~/flayers/writing
+$ export MINDFLAYER_WORKSPACE=~/weavers/writing
 $ mindweaver list                          # the same, for every command
 prose-style  How every essay here is written
 $ mind link                                # this project, into that one
@@ -127,32 +127,32 @@ never passed over for the one above and never made into one:
 
 ```
 $ mindweaver -W ~/notes list
-error: -W names a workspace that cannot be used: /home/you/notes: not a flayer workspace (no .mindflayer/flayer.toml)
+error: -W names a workspace that cannot be used: /home/you/notes: not a weaver workspace (no .mindflayer/flayer.toml)
 ```
 
 `-W ""` names none and leaves `$MINDFLAYER_WORKSPACE` out too, and an empty
 variable counts as unset. `--home` still says only where the default lives.
 
-### Several flayers
+### Several weavers
 
-A flayer can be made anywhere and switched to for a whole shell, the way a
+A weaver can be made anywhere and switched to for a whole shell, the way a
 Python virtualenv is. `mindweaver init DIR` makes one in `DIR`, which the
-workspace in your home remembers ([the flayers this machine
-knows](#the-flayers-this-machine-knows)), and `mindweaver activate DIR` prints the
+workspace in your home remembers ([the weavers this machine
+knows](#the-weavers-this-machine-knows)), and `mindweaver activate DIR` prints the
 shell code that activates it, for `eval` to run:
 
 ```
-$ mindweaver init ~/flayers/writing
-initialized flayer workspace `writing` in /home/you/flayers/writing/.mindflayer
-  remembered as flayers/writing by the default workspace
+$ mindweaver init ~/weavers/writing
+initialized weaver workspace `writing` in /home/you/weavers/writing/.mindflayer
+  remembered as weavers/writing by the default workspace
 $ cd ~/Projects/collapse
 $ mindweaver which
 Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
-$ eval "$(mindweaver activate ~/flayers/writing)"
+$ eval "$(mindweaver activate ~/weavers/writing)"
 (weaver:writing) $ mindweaver which
-writing at /home/you/flayers/writing, activated by $MINDFLAYER_WORKSPACE
+writing at /home/you/weavers/writing, activated by $MINDFLAYER_WORKSPACE
 (weaver:writing) $ source .venv/bin/activate
-(.venv) (weaver:writing) $ deactivate      # the virtualenv's; the flayer stays
+(.venv) (weaver:writing) $ deactivate      # the virtualenv's; the weaver stays
 (weaver:writing) $ flayer-deactivate
 $ mindweaver which
 Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
@@ -160,7 +160,7 @@ Projects at /home/you/Projects, found walking up from /home/you/Projects/collaps
 
 Activating sets `$MINDFLAYER_WORKSPACE` and puts `(weaver:<name>)` in front
 of your prompt; `flayer-deactivate` puts both back as they were, a variable
-you had set yourself included. Activating another flayer swaps one for the
+you had set yourself included. Activating another weaver swaps one for the
 other, and `mindweaver activate` on its own activates the one a command run there
 would use. `mindweaver which` says which workspace that is and why: named by
 `-W`, activated, found walking up, or the default one.
@@ -176,12 +176,12 @@ does (`bash`, `zsh`, `fish` or `pwsh`). fish and PowerShell run it their own
 way:
 
 ```
-mindweaver activate --shell fish ~/flayers/writing | source
-mindweaver activate --shell pwsh ~/flayers/writing | Out-String | Invoke-Expression
+mindweaver activate --shell fish ~/weavers/writing | source
+mindweaver activate --shell pwsh ~/weavers/writing | Out-String | Invoke-Expression
 ```
 
-In those two, a virtualenv activated before the flayer and deactivated before
-it takes the flayer's prefix with it: the flayer stays active, as `mindweaver
+In those two, a virtualenv activated before the weaver and deactivated before
+it takes the weaver's prefix with it: the weaver stays active, as `mindweaver
 which` says, but the prompt no longer shows it for the rest of that shell.
 
 Activating writes nothing anywhere, and what cannot be activated prints no
@@ -189,12 +189,12 @@ code, so `eval` runs nothing and the shell is left as it was:
 
 ```
 $ eval "$(mindweaver activate ~/notes)"
-error: /home/you/notes: not a flayer workspace (no .mindflayer/flayer.toml)
+error: /home/you/notes: not a weaver workspace (no .mindflayer/flayer.toml)
 ```
 
-### The flayers this machine knows
+### The weavers this machine knows
 
-The workspace in your home keeps a list of the other flayers on this machine,
+The workspace in your home keeps a list of the other weavers on this machine,
 so they can all be seen in one place and one picked to activate. `mindweaver init`
 adds each one it makes, once the workspace in your home is made, and `mindweaver
 workspaces` lists them, with a `*` before the one a command run where you are
@@ -204,33 +204,33 @@ would use:
 $ cd ~/Projects/collapse
 $ mindweaver workspaces
   you       /home/you                  no projects; the default one
-  writing   /home/you/flayers/writing  no projects
+  writing   /home/you/weavers/writing  no projects
 * Projects  /home/you/Projects         3 projects, 1 stale; not remembered
 
   `mindweaver init <path>` remembers the one in use, and changes nothing else in it
 $ mindweaver init ~/Projects
-flayer workspace `Projects` already initialized in /home/you/Projects/.mindflayer
+weaver workspace `Projects` already initialized in /home/you/Projects/.mindflayer
   remembered as Projects by the default workspace
 ```
 
 Each one says how many projects it links, and how many of those are stale. A
-flayer made before the workspace in your home was, or by an older Mindflayer,
+weaver made before the workspace in your home was, or by an older Mindflayer,
 is not on the list until `mindweaver init` runs on it again, which changes nothing
 else in it; the one in use is listed all the same, marked as not remembered.
-Activating a flayer does not remember it, since activating writes nothing. One
+Activating a weaver does not remember it, since activating writes nothing. One
 that has gone is listed as `cannot be opened`, with a warning, and `mindweaver
 workspaces forget` takes it off the list, under every spelling it was
-remembered by, leaving the flayer itself, if it is still there, as it is:
+remembered by, leaving the weaver itself, if it is still there, as it is:
 
 ```
-$ mindweaver workspaces forget ~/flayers/writing
-forgot flayers/writing
+$ mindweaver workspaces forget ~/weavers/writing
+forgot weavers/writing
 ```
 
 The list is a `known` array in `~/.mindflayer/flayer.toml`, which you can read
 and edit by hand, and which an older Mindflayer reads past and keeps. Listing
 never makes the workspace in your home; until something does, it knows no
-flayer, and with `--home ""` there is none to know them. `--json` prints the
+weaver, and with `--home ""` there is none to know them. `--json` prints the
 list in the envelope every reading command's `--json` shares, and `w` shows it
 in [the TUI](#the-tui). The [control panel](#control-panel)'s **Loads** page
 lists them too, and loads any of them into the workspace it shows.
@@ -321,7 +321,7 @@ $ git status --short
 
 $ cd ~/Projects
 $ mindweaver init
-initialized flayer workspace `Projects` in /home/you/Projects/.mindflayer
+initialized weaver workspace `Projects` in /home/you/Projects/.mindflayer
 $ mindweaver link collapse
 linked collapse as collapse
 $ mindweaver list
@@ -453,7 +453,7 @@ mindweaver activate [DIR] [--shell SHELL]
                            # the code that activates a workspace: eval "$(...)"
 mindweaver which           # the workspace a command here would use, and why
 mindweaver workspaces [--json]
-                           # the flayers this machine knows, the one in use
+                           # the weavers this machine knows, the one in use
                            # marked
 mindweaver workspaces forget <path>
                            # take one off that list
@@ -738,7 +738,7 @@ https://github.com/acme/skills at a1b2c3d
 
 The repository's `skills` folder is what gets harvested; `--path agents` takes
 another one, and `--ref v2` takes a branch or a tag instead of the default. A
-repository that is a flayer workspace made by `mindweaver init` keeps its own in
+repository that is a weaver workspace made by `mindweaver init` keeps its own in
 [its library](#the-workspaces-own-skills-and-rules), so it is gathered with
 `--path .mindflayer/library/skills`, or [loaded](#loading-another-workspace)
 from a clone instead.
@@ -1149,7 +1149,7 @@ installed commit-style into alpha, from workspace
 
 ## Loading another workspace
 
-A flayer workspace can be a repository of skills in its own right: its own
+A weaver workspace can be a repository of skills in its own right: its own
 skills and rules, kept for sharing. `mindweaver load <path>` makes one of those a
 source for the workspace that manages you, without copying anything:
 
@@ -1378,8 +1378,8 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
 - `gather list`: what can be installed from elsewhere, each with the `place`
   it comes from (`loaded` or `shelf`) and its `origin`, as `--from` takes it.
 - `status`, `workspaces` and `scan`: the reports shown in [what each project
-  has](#what-each-project-has), [the flayers this machine
-  knows](#the-flayers-this-machine-knows) and [commands](#commands).
+  has](#what-each-project-has), [the weavers this machine
+  knows](#the-weavers-this-machine-knows) and [commands](#commands).
 
 `warnings` holds what the text says on stderr as `warning:` lines, without
 the prefix, and `coded_warnings` the same lines, in the same order, each
@@ -1758,7 +1758,7 @@ Every key runs a command you could have typed, through the same parser:
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `mindweaver gather git <url>` |
 | `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `mindweaver load <path>`, `mindweaver unload <path>` |
 | `s` | what is on the shelf | `mindweaver gather list` |
-| `w` | the flayers this machine knows, the one in use marked | `mindweaver workspaces` |
+| `w` | the weavers this machine knows, the one in use marked | `mindweaver workspaces` |
 | `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `mindweaver install` opens it; `a` runs `mindweaver install -p <project>... --from <origin> <kind:name>` and `mindweaver uninstall -p <project>... <kind:name>` |
 | `R` | read the disk again | nothing: it changes nothing |
 
@@ -1924,7 +1924,7 @@ under, so you need not type its path. **Browse**, beside the field above
 the projects table, opens it at the folder the field holds, or at the
 workspace's own when it holds none. It lists the folders directly inside
 one, in the order of their names, each saying what it is (a mind project,
-by any of its markers, a flayer workspace, a git repository or a plain
+by any of its markers, a weaver workspace, a git repository or a plain
 folder), whether the workspace links it, and whether it is a link to a
 folder elsewhere, which opens like any other; and says the same of the
 folder open. Open a folder by its name, go back up by the trail above
@@ -2067,8 +2067,8 @@ open, and what it offers, each skill and rule by its name and what it is
 for, with a link to **Assign** showing those alone. **Unload** runs `mindweaver
 unload <entry>`, a confirmation, since the workspace then stops offering
 them; what was installed from it stays where it is. Below are the
-workspaces this machine knows ([the flayers this machine
-knows](#the-flayers-this-machine-knows)), the default first, each saying
+workspaces this machine knows ([the weavers this machine
+knows](#the-weavers-this-machine-knows)), the default first, each saying
 whether it is the default, this workspace, loaded already and by which
 entry, or one that does not open, with how many projects it links. One the
 workspace could load, which is none of this one, one it loads already and
@@ -2081,7 +2081,7 @@ is the line the TUI's load form runs for the same workspace.
 workspace the panel acts on and how it was chosen: `named with -W`,
 `activated`, `found above` or `default workspace`, as the TUI's header says
 it. Press it for every workspace you may switch to: those this machine
-knows ([the flayers this machine knows](#the-flayers-this-machine-knows)),
+knows ([the weavers this machine knows](#the-weavers-this-machine-knows)),
 the default first, and the one the panel was launched on, each with where
 it is, whether it is the default or the one in use, which is checked, how
 many projects it links, or why it does not open. Choose one and the panel

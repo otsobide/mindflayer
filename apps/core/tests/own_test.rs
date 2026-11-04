@@ -1,4 +1,4 @@
-//! The workspace's own artifacts: the skills and rules a flayer workspace
+//! The workspace's own artifacts: the skills and rules a weaver workspace
 //! keeps for the projects it manages, beside those projects' own.
 
 use std::fs;

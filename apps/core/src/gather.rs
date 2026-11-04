@@ -1,4 +1,4 @@
-//! Harvesting artifacts from somewhere else into a flayer workspace.
+//! Harvesting artifacts from somewhere else into a weaver workspace.
 //!
 //! Gathering fills the workspace's own shelf and stops there. Nothing is
 //! written into a mind project: which of the gathered skills a project should

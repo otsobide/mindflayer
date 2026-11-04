@@ -44,7 +44,7 @@ pub(crate) fn init_project(
     )))
 }
 
-/// `mindweaver init`: the directory made a flayer workspace, and remembered by
+/// `mindweaver init`: the directory made a weaver workspace, and remembered by
 /// the default one in `lookup`'s home, when that is made, so `mindweaver
 /// workspaces` lists it.
 ///
@@ -61,7 +61,7 @@ pub(crate) fn init_workspace(
     let directories = asked_directories(skills, rules);
     let (workspace, outcome) = WeaverWorkspace::init_with(directory, &directories)?;
     let mut stdout = initialized(
-        "flayer workspace",
+        "weaver workspace",
         workspace.name(),
         &workspace.weaver_dir(),
         outcome,

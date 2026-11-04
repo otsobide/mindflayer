@@ -61,7 +61,7 @@ fn without_a_workspace_the_tui_offers_to_create_one_here() {
     let dir = TempDir::new().unwrap();
     let mut app = tui_in(dir.path());
     assert!(matches!(app.view, View::Nowhere));
-    assert!(tui_drawn(&app).contains("No flayer workspace here"));
+    assert!(tui_drawn(&app).contains("No weaver workspace here"));
 
     let task = press_and_run(&mut app, KeyCode::Enter);
 
@@ -2527,7 +2527,7 @@ fn the_first_change_from_the_tui_makes_the_default_workspace() {
     assert_eq!(
         app.transcript(),
         format!(
-            "$ mindweaver init\ninitialized flayer workspace `{}` in {}\n\
+            "$ mindweaver init\ninitialized weaver workspace `{}` in {}\n\
              $ mindweaver link alpha\nlinked alpha as alpha\n",
             home.path().file_name().unwrap().to_string_lossy(),
             home.path().join(WEAVER_DIR).display()
@@ -3708,8 +3708,8 @@ fn w_lists_the_workspaces_this_machine_knows_with_the_one_on_screen_marked() {
     let home = dir.path().join("home");
     fs::create_dir(&home).unwrap();
     weaver_at_home(&home, &home, &["init"]).unwrap();
-    weaver_at_home(&home, &home, &["init", "flayers/writing"]).unwrap();
-    let writing = home.join("flayers/writing");
+    weaver_at_home(&home, &home, &["init", "weavers/writing"]).unwrap();
+    let writing = home.join("weavers/writing");
     let mut app = tui_at_home(&writing, &home);
 
     assert_eq!(

@@ -848,7 +848,7 @@ fn project_here(directory: &Path) -> Result<MindProject, CliError> {
     MindProject::locate(directory)?.ok_or_else(|| CliError::NotInProject(directory.to_path_buf()))
 }
 
-/// The flayer workspace a command that writes acts on: the one `lookup`
+/// The weaver workspace a command that writes acts on: the one `lookup`
 /// resolves from `directory`, which is the default one in home, made there
 /// the first time a command needs it, when nothing chooses another. A
 /// command that only reads asks [`workspace_to_read`] instead.
@@ -858,7 +858,7 @@ fn workspace_here(directory: &Path, lookup: &Lookup) -> Result<WeaverWorkspace, 
         .ok_or_else(|| CliError::NotInWorkspace(directory.to_path_buf()))
 }
 
-/// The flayer workspace a command that only reads looks at: the one `lookup`
+/// The weaver workspace a command that only reads looks at: the one `lookup`
 /// resolves from `directory` (the default one in home made, or as it will
 /// be once something makes it).
 ///

@@ -1525,7 +1525,7 @@ impl App {
                     }
                     None => {
                         form.error =
-                            Some(String::from("type the path of a flayer workspace to load"));
+                            Some(String::from("type the path of a weaver workspace to load"));
                         (Mode::Loading(form), Step::Stay)
                     }
                 };
@@ -2110,7 +2110,7 @@ pub struct LinkForm {
     pub error: Option<String>,
 }
 
-/// A flayer workspace about to be loaded, typed; or one already loaded,
+/// A weaver workspace about to be loaded, typed; or one already loaded,
 /// picked to unload.
 #[derive(Debug, Clone, Default)]
 pub struct LoadForm {

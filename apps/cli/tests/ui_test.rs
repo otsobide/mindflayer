@@ -838,7 +838,7 @@ fn both_binaries_take_a_token_file_for_ui() {
     ])
     .unwrap();
     let Some(Command::Weaver { command }) = nested.command else {
-        panic!("not flayer: {:?}", nested.command);
+        panic!("not weaver: {:?}", nested.command);
     };
     assert_eq!(ui(command), given);
     let weaver = WeaverCli::try_parse_from([

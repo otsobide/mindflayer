@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository.
 
 Mindflayer manages the skills and rules coding agents read, the way git manages
 code. A **mind project** (`.mind/settings.toml`) holds artifacts beside its
-code; a **flayer workspace** (`.mindflayer/flayer.toml`) links mind projects,
+code; a **weaver workspace** (`.mindflayer/flayer.toml`) links mind projects,
 holds artifacts of its own, gathers skills from git onto a shelf and installs
 them into projects. `README.md` is the first page a newcomer reads: short,
 friendly and centred on the control panel (`mindweaver ui`), with screenshots
@@ -357,7 +357,7 @@ under `apps/` with its own `Makefile`:
   `environment.ts`, `demo.ts` builds the README's demo workspace and
   `screenshots.ts` takes the images of it (`make docs/screenshots`).
 
-Beside them, `examples/` is content and not an app: a flayer workspace whose
+Beside them, `examples/` is content and not an app: a weaver workspace whose
 own two skills and two rules anyone can `mindweaver load` to try Mindflayer
 without gathering. `apps/cli/tests/examples_test.rs` holds every example to
 `validate` with no warning and finds the "Try it with the examples" output

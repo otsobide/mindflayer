@@ -1,4 +1,4 @@
-//! The commands about the flayer workspaces this machine knows:
+//! The commands about the weaver workspaces this machine knows:
 //! `workspaces`, which lists them, with the one in use marked, and
 //! `workspaces forget`, which takes one out of the list.
 //!

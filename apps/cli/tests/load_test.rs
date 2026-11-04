@@ -125,7 +125,7 @@ fn load_loads_none_when_one_path_is_not_a_workspace() {
     let error = weaver(&target, &["load", "../team", "../plain"]).unwrap_err();
 
     assert!(
-        error.error.to_string().contains("not a flayer workspace"),
+        error.error.to_string().contains("not a weaver workspace"),
         "{}",
         error.error
     );
@@ -360,7 +360,7 @@ fn a_path_that_is_not_a_workspace_keeps_the_load_form_open_with_why() {
     assert!(
         form.error
             .as_deref()
-            .is_some_and(|error| error.contains("not a flayer workspace")),
+            .is_some_and(|error| error.contains("not a weaver workspace")),
         "{:?}",
         form.error
     );
@@ -486,7 +486,7 @@ fn install_says_a_loaded_workspace_has_gone_rather_than_only_that_nothing_is_off
         error
             .warnings
             .iter()
-            .any(|warning| warning.text.contains("not a flayer workspace")),
+            .any(|warning| warning.text.contains("not a weaver workspace")),
         "{:?}",
         error.warnings
     );
@@ -674,11 +674,11 @@ fn loading_what_has_gone() -> (TempDir, PathBuf, WeaverWorkspace) {
 /// How many times `outcome` says anything of a workspace that is not one,
 /// stdout and stderr together.
 fn said_gone(outcome: &Outcome) -> usize {
-    outcome.stdout.matches("not a flayer workspace").count()
+    outcome.stdout.matches("not a weaver workspace").count()
         + outcome
             .stderr
             .iter()
-            .filter(|line| line.text.contains("not a flayer workspace"))
+            .filter(|line| line.text.contains("not a weaver workspace"))
             .count()
 }
 

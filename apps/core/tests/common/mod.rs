@@ -43,7 +43,7 @@ pub fn skill(name: &str, description: &str) -> String {
     SkillMother::create(name, description)
 }
 
-/// A flayer workspace with nothing gathered yet.
+/// A weaver workspace with nothing gathered yet.
 pub fn workspace() -> (TempDir, WeaverWorkspace) {
     WorkspaceMother::empty()
 }

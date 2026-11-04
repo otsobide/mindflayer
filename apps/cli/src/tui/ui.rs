@@ -70,7 +70,7 @@ fn nowhere(app: &App, frame: &mut Frame, area: Rect) {
     let directory = printable(&app.directory.display().to_string());
     let (missing, what, command) = match app.opened {
         Scope::Workspace => (
-            "No flayer workspace here",
+            "No weaver workspace here",
             "A workspace keeps track of the mind projects you manage together.",
             "mindweaver init",
         ),

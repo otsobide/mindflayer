@@ -5,7 +5,7 @@
 //! skills and rules beside the code, in the directories the marker names
 //! (`skills/<name>/SKILL.md` and `rules/` by default).
 //!
-//! A **flayer workspace** sits above them, carrying a `.mindflayer` that
+//! A **weaver workspace** sits above them, carrying a `.mindflayer` that
 //! references the mind projects it manages, so their artifacts can be listed
 //! and moved across several projects at once, and holds artifacts of its own
 //! to share with them, in a library inside that `.mindflayer` by default.
@@ -120,7 +120,7 @@ pub const SETTINGS_TOML_VERSION: u32 = 5;
 pub const MIND_DIR: &str = ".mind";
 /// The marker file inside [`MIND_DIR`].
 pub const MIND_CONFIG: &str = "mind.toml";
-/// The directory a flayer workspace is identified by.
+/// The directory a weaver workspace is identified by.
 pub const WEAVER_DIR: &str = ".mindflayer";
 /// The marker file inside [`WEAVER_DIR`].
 pub const WEAVER_CONFIG: &str = "flayer.toml";
@@ -172,7 +172,7 @@ pub const MIND_IGNORE: &str = "\
 pub enum Marker {
     /// A mind project's [`MIND_CONFIG`].
     Project,
-    /// A flayer workspace's [`WEAVER_CONFIG`].
+    /// A weaver workspace's [`WEAVER_CONFIG`].
     Workspace,
 }
 
@@ -1135,7 +1135,7 @@ impl MindProject {
 }
 
 // ---------------------------------------------------------------------------
-// Flayer workspaces
+// Weaver workspaces
 // ---------------------------------------------------------------------------
 
 /// The contents of `.mindflayer/flayer.toml`.
@@ -1152,7 +1152,7 @@ pub struct WeaverConfig {
     /// projects, read live from where they are; relative to its root.
     #[serde(default)]
     pub loaded: Vec<PathBuf>,
-    /// The other flayer workspaces this machine knows, relative to its root:
+    /// The other weaver workspaces this machine knows, relative to its root:
     /// read only in the default workspace, the one in home, which
     /// [`crate::known`] keeps it in.
     ///
@@ -1277,7 +1277,7 @@ impl WeaverWorkspace {
         self.made
     }
 
-    /// Walk up from `start` looking for a flayer workspace.
+    /// Walk up from `start` looking for a weaver workspace.
     pub fn locate(start: impl AsRef<Path>) -> Result<Option<Self>, WorkspaceError> {
         let marked = |root: &Path| root.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file();
         match locate_marker(start.as_ref(), marked)? {
@@ -2239,7 +2239,7 @@ const KNOWN_KEY: &str = "known";
 fn explained(key: &str) -> Option<&'static str> {
     (key == KNOWN_KEY).then_some(
         "\n\
-         # `known` lists the other flayer workspaces on this machine, which\n\
+         # `known` lists the other weaver workspaces on this machine, which\n\
          # `mindweaver workspaces` shows. While this is the default workspace,\n\
          # `mindweaver init` adds each one it makes; `mindweaver workspaces forget <path>`\n\
          # takes one out.\n",
@@ -2363,7 +2363,7 @@ pub enum WorkspaceError {
          or {MIND_DIR}/{MIND_CONFIG})"
     )]
     NotAProject { path: PathBuf },
-    #[error("{path}: not a flayer workspace (no {WEAVER_DIR}/{WEAVER_CONFIG})")]
+    #[error("{path}: not a weaver workspace (no {WEAVER_DIR}/{WEAVER_CONFIG})")]
     NotAWorkspace { path: PathBuf },
     #[error("{path}: written by a newer Mindflayer ({marker} version {found}, this one reads {supported})", supported = .marker.version())]
     Version {
@@ -2782,7 +2782,7 @@ fn weaver_template(name: &str, directories: &Directories) -> String {
          # here is kept there too. Each folder is made the first time something\n\
          # is added to it.\n\
          #\n\
-         # `loaded` lists other flayer workspaces whose own skills its projects\n\
+         # `loaded` lists other weaver workspaces whose own skills its projects\n\
          # can install too, read from there each time: `mindweaver load <path>`.\n\
          version = {WEAVER_FORMAT_VERSION}\n\
          name = {}\n\

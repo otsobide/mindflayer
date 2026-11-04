@@ -12,12 +12,12 @@ use mindweaver_core::{
 use tempfile::TempDir;
 
 /// A temporary directory holding `home`, a made default workspace, and
-/// `home/flayers/writing`, a workspace somebody made under it.
+/// `home/weavers/writing`, a workspace somebody made under it.
 fn home_and_writing() -> (TempDir, PathBuf, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
     WeaverWorkspace::init(&home).unwrap();
-    let (writing, _) = WeaverWorkspace::init(home.join("flayers/writing")).unwrap();
+    let (writing, _) = WeaverWorkspace::init(home.join("weavers/writing")).unwrap();
     (dir, home, writing)
 }
 
@@ -33,18 +33,18 @@ fn remember_records_a_workspace_as_a_route_from_home_and_says_what_known_is() {
 
     assert_eq!(
         remembered,
-        Some((PathBuf::from("flayers/writing"), Registration::Added))
+        Some((PathBuf::from("weavers/writing"), Registration::Added))
     );
     let text = marker(&home);
-    assert!(text.contains("known = [\"flayers/writing\"]"), "{text}");
+    assert!(text.contains("known = [\"weavers/writing\"]"), "{text}");
     assert!(
-        text.contains("# `known` lists the other flayer workspaces on this machine"),
+        text.contains("# `known` lists the other weaver workspaces on this machine"),
         "{text}"
     );
     assert!(text.contains("# Mindflayer workspace."), "comments kept");
     assert_eq!(
         WeaverWorkspace::open(&home).unwrap().config().known,
-        [PathBuf::from("flayers/writing")]
+        [PathBuf::from("weavers/writing")]
     );
 }
 
@@ -54,13 +54,13 @@ fn remembering_twice_changes_nothing_and_says_the_spelling_the_file_uses() {
     known::remember(Some(&home), &writing).unwrap();
     let before = marker(&home);
 
-    let again = WeaverWorkspace::open(home.join("flayers/./writing/")).unwrap();
+    let again = WeaverWorkspace::open(home.join("weavers/./writing/")).unwrap();
     let remembered = known::remember(Some(&home), &again).unwrap();
 
     assert_eq!(
         remembered,
         Some((
-            PathBuf::from("flayers/writing"),
+            PathBuf::from("weavers/writing"),
             Registration::AlreadyRegistered
         ))
     );
@@ -77,7 +77,7 @@ fn a_second_workspace_goes_after_the_first_under_one_comment() {
 
     let text = marker(&home);
     assert!(
-        text.contains("known = [\"flayers/writing\", \"notes\"]"),
+        text.contains("known = [\"weavers/writing\", \"notes\"]"),
         "{text}"
     );
     assert_eq!(text.matches("# `known` lists").count(), 1, "{text}");
@@ -145,18 +145,18 @@ fn forget_removes_every_spelling_of_a_workspace() {
     let absolute = writing.root().to_string_lossy().into_owned();
     let path = home.join(WEAVER_DIR).join(WEAVER_CONFIG);
     let text = marker(&home).replace(
-        "known = [\"flayers/writing\"]",
-        &format!("known = [\"flayers/writing\", \"./flayers/writing/\", \"{absolute}\"]"),
+        "known = [\"weavers/writing\"]",
+        &format!("known = [\"weavers/writing\", \"./weavers/writing/\", \"{absolute}\"]"),
     );
     fs::write(&path, text).unwrap();
 
-    let forgotten = known::forget(&home, &home.join("flayers/writing")).unwrap();
+    let forgotten = known::forget(&home, &home.join("weavers/writing")).unwrap();
 
     assert_eq!(
         forgotten,
         [
-            PathBuf::from("flayers/writing"),
-            PathBuf::from("./flayers/writing/"),
+            PathBuf::from("weavers/writing"),
+            PathBuf::from("./weavers/writing/"),
             PathBuf::from(&absolute),
         ]
     );
@@ -177,7 +177,7 @@ fn a_workspace_that_has_gone_is_forgotten_by_its_path() {
 
     let forgotten = known::forget(&home, writing.root()).unwrap();
 
-    assert_eq!(forgotten, [PathBuf::from("flayers/writing")]);
+    assert_eq!(forgotten, [PathBuf::from("weavers/writing")]);
 }
 
 #[test]
@@ -186,9 +186,9 @@ fn forgetting_takes_the_comment_above_its_entry_and_leaves_the_others() {
     known::remember(Some(&home), &writing).unwrap();
     let path = home.join(WEAVER_DIR).join(WEAVER_CONFIG);
     let text = marker(&home).replace(
-        "known = [\"flayers/writing\"]",
-        "known = [\n    # the work flayer\n    \"flayers/work\",\n    # the writing flayer\n    \
-         \"flayers/writing\",\n    # notes, keep\n    \"flayers/notes\",\n]",
+        "known = [\"weavers/writing\"]",
+        "known = [\n    # the work weaver\n    \"weavers/work\",\n    # the writing weaver\n    \
+         \"weavers/writing\",\n    # notes, keep\n    \"weavers/notes\",\n]",
     );
     fs::write(&path, text).unwrap();
 
@@ -196,16 +196,16 @@ fn forgetting_takes_the_comment_above_its_entry_and_leaves_the_others() {
     let text = marker(&home);
     assert!(
         text.contains(
-            "known = [\n    # the work flayer\n    \"flayers/work\",\n    \
-             # notes, keep\n    \"flayers/notes\",\n]\n"
+            "known = [\n    # the work weaver\n    \"weavers/work\",\n    \
+             # notes, keep\n    \"weavers/notes\",\n]\n"
         ),
         "{text}"
     );
 
-    known::forget(&home, &home.join("flayers/work")).unwrap();
+    known::forget(&home, &home.join("weavers/work")).unwrap();
     let text = marker(&home);
     assert!(
-        text.contains("known = [\n    # notes, keep\n    \"flayers/notes\",\n]\n"),
+        text.contains("known = [\n    # notes, keep\n    \"weavers/notes\",\n]\n"),
         "{text}"
     );
 }
@@ -253,7 +253,7 @@ fn linking_into_the_default_keeps_what_it_knows() {
         .unwrap();
 
     let text = marker(&home);
-    assert!(text.contains("known = [\"flayers/writing\"]"), "{text}");
+    assert!(text.contains("known = [\"weavers/writing\"]"), "{text}");
     assert!(text.contains("projects = [\"collapse\"]"), "{text}");
 }
 
@@ -345,7 +345,7 @@ fn a_remembered_workspace_that_has_gone_is_listed_with_why_and_a_failure() {
     assert_eq!(gone.path, writing.root());
     assert!(gone.remembered);
     let why = format!(
-        "{}: not a flayer workspace (no .mindflayer/flayer.toml)",
+        "{}: not a weaver workspace (no .mindflayer/flayer.toml)",
         writing.root().display()
     );
     assert_eq!(gone.stale.as_deref(), Some(why.as_str()));
@@ -360,8 +360,8 @@ fn two_spellings_of_one_workspace_are_listed_once() {
     let path = home.join(WEAVER_DIR).join(WEAVER_CONFIG);
     let absolute = writing.root().to_string_lossy().into_owned();
     let text = marker(&home).replace(
-        "known = [\"flayers/writing\"]",
-        &format!("known = [\"flayers/writing\", \"{absolute}\", \".\"]"),
+        "known = [\"weavers/writing\"]",
+        &format!("known = [\"weavers/writing\", \"{absolute}\", \".\"]"),
     );
     fs::write(&path, text).unwrap();
 
