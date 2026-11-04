@@ -44,6 +44,7 @@ cargo test -p mindflayer-cli --test tui_test                 # apps/cli/tests/tu
 cargo test -p mindflayer-cli --test e2e_test gathering::     # the CLI end to end, one area of use cases
 cargo test -p mindflayer-cli --test api_e2e_test changing:: # the server's API end to end, one area of use cases
 cargo test -p mindflayer-core --test e2e_test installing::  # core end to end, one area of use cases
+cargo test -p mindflayer-cli --test tui_e2e_test changing:: # the TUI end to end, in a terminal of its own
 cargo test -p mindflayer-core --test install_test <substring>
 cargo test -p mindflayer-core --lib workspace                # src/workspace_test.rs
 cargo test -p mindflayer-server --test commands_test         # apps/server/tests/commands_test.rs
@@ -1420,6 +1421,23 @@ These are easy to break from a single file without noticing.
   (`World::said`), and the disk. A gather is by a source's absolute path,
   since the tests share the process's folder, so the shelf folder it is
   named into is held by its shape alone. Unix alone.
+- The TUI end to end is `apps/cli/tests/tui_e2e_test.rs`, its modules under
+  `tests/tui_e2e/` grouped by what a person does on the screen (browsing,
+  changing, screens, starting), on the CLI suite's `Scenario`. Each test
+  starts `flayer` or `mind` in a pseudo-terminal of its own
+  (`tui_e2e/terminal.rs`, `Terminal`, 120 by 24), its process the leader of
+  a session with that terminal as its controlling one (rustix's `pty`,
+  `setsid` and `TIOCSCTTY`), since crossterm reads the window's size from
+  `/dev/tty`, which would otherwise be the developer's terminal or none
+  under CI. The keys are typed as a terminal sends them (`types`,
+  `presses`, an escape given a moment alone, or it reads as Alt with the
+  next key), what the screen draws is fed to `vt100`, and a test waits,
+  bounded, for what it expects (`shows`, `no_longer_shows`, `draws` for
+  rows word for word), then quits (`exits`) and holds the exit status, the
+  transcript the terminal shows once the window is given back, and the
+  disk. A row with a path inside a box is held by what it says, not word
+  for word: read as `/home`, the path is shorter than the one the box was
+  drawn around. Unix alone.
 - The server's suites run against a fake backend with types of its own
   (`common::Fake`, its reads `common::fake_routes`), never the CLI's.
   `routes_test.rs` holds the server to the table: a path and its
@@ -1549,8 +1567,8 @@ These are easy to break from a single file without noticing.
   not.
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
-  the event loops in `tui.rs` and `install.rs` go untested, so keep logic out
-  of them. A task that runs apart is started by `tui::step` and taken in by
+  the event loops in `tui.rs` and `install.rs` go untested there, and only
+  the TUI's end-to-end suite reaches them, so keep logic out of them. A task that runs apart is started by `tui::step` and taken in by
   `tui::settle` or `tui::wait`; to make one slow, stand a `Runner` in for the
   real command lines (`App::runner`).
 - Fixtures use `tempfile::TempDir`. Test names are sentences

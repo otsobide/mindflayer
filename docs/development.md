@@ -141,6 +141,30 @@ cargo test -p mindflayer-core --test e2e_test                   # every use case
 cargo test -p mindflayer-core --test e2e_test gathering::       # one area
 ```
 
+The TUI runs in a terminal of its own in `apps/cli/tests/tui_e2e_test.rs`:
+a test starts `flayer` in a pseudo-terminal, types the keys a person
+presses, and waits for what the screen draws, then quits it and reads the
+transcript it prints:
+
+```rust
+let mut terminal = scenario.open("~/Projects", "flayer");
+terminal
+    .types("a")
+    .shows("Add to collapse")
+    .types("review")
+    .presses(Key::Tab)
+    .types("Read a change")
+    .shows("runs         mind -C collapse add skill review 'Read a change'")
+    .presses(Key::Enter)
+    .shows(">   skill review        authored           Read a change");
+terminal.types("q");
+let closed = terminal.exits();
+```
+
+```bash
+cargo test -p mindflayer-cli --test tui_e2e_test                # every use case
+```
+
 What a test needs is built by an object mother rather than by hand:
 `mindflayer_core::mother` has one for each value object
 (`ContentHashMother`, `RedactedMother`, `OriginMother`, `ArtifactNameMother`,

@@ -287,6 +287,42 @@ and every skill gathered to lie in it, rather than word for word.
 Unix alone, as the other two: a Windows path never reads as the
 reference's.
 
+### The TUI end to end, in a terminal of its own
+
+The screen's suite drives its state with key events and renders it into
+ratatui's test backend, so what lies between that and a person is never
+run there: the event loops, raw mode and the alternate screen, keys as a
+terminal sends them, and the transcript printed once the window is given
+back. `apps/cli/tests/tui_e2e_test.rs` runs the binary in a
+pseudo-terminal, one use case a test, on the CLI suite's scenario.
+
+**The terminal is the screen's own.** crossterm reads the window's size
+from `/dev/tty`, the controlling terminal, and not from what its standard
+streams are: a child of the test, in the test's session, would be sized
+by the developer's terminal, or by none under CI. So the screen is started
+as a shell starts a job, the leader of a session of its own with the
+pseudo-terminal as its controlling one (`setsid`, then `TIOCSCTTY`, in
+`pre_exec`), at a size the test sets, 120 by 24. rustix, which crossterm
+builds already, opens the terminal; `vt100` reads what is drawn on it back
+as rows, the one crate the suite adds beside vte.
+
+**A test waits for what is drawn, never sleeps.** The screen draws when it
+is ready and again when something changes, so each step waits, bounded,
+until the rows show what it expects, and fails with the screen as it was.
+The one pause is after an escape: one read together with the key after it
+is that key with Alt held, in any terminal, and a person's next key comes
+later than a test's.
+
+**A row with a path in a box is held by what it says.** The screen pads a
+box's rows to its width around the path it shows, so a path read back as
+`/home` is shorter than the one drawn, and the box's edge moves: such a
+row is held by its text, every other row word for word.
+
+Rejected: expect-style crates (rexpect, expectrl) that match a stream of
+bytes, which an alternate screen redrawn cell by cell never reads as a
+row, and portable-pty, which brings crates of its own for what rustix,
+built already, does in a few calls.
+
 ### No em dash in what the repository says
 
 The owner finds the em dash reads as machine-written, so none is written:
