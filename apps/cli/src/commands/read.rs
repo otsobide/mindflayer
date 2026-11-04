@@ -16,7 +16,7 @@ use mindweaver_core::view::Listing;
 use mindweaver_core::{Artifact, Catalog, Kind, MindProject, Reference, WeaverWorkspace};
 
 use super::consulted;
-use crate::render::{as_json, plural, printable, table, verdict};
+use crate::render::{as_json, counted_kind, plural, printable, table, verdict};
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// Which level a command reports at.
@@ -624,14 +624,7 @@ fn counted(artifacts: &[&Artifact]) -> String {
                 .iter()
                 .filter(|artifact| artifact.kind() == kind)
                 .count();
-            (count > 0).then(|| {
-                let noun = if count == 1 {
-                    kind.slug()
-                } else {
-                    kind.folder()
-                };
-                format!("{count} {noun}")
-            })
+            (count > 0).then(|| counted_kind(count, kind))
         })
         .collect();
     match parts.split_last() {

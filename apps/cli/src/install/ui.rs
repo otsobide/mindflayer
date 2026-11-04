@@ -190,7 +190,7 @@ fn receivers(screen: &Screen, frame: &mut Frame, area: Rect) {
                     Style::default().fg(Color::DarkGray),
                 ),
                 Span::styled(
-                    format!("  (takes no {kind}s)"),
+                    format!("  (takes no {})", kind.plural()),
                     Style::default().fg(Color::DarkGray),
                 ),
             ])),

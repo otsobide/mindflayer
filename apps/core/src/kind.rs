@@ -56,6 +56,30 @@ impl Kind {
         }
     }
 
+    /// How a sentence names one of this kind: its slug, where that is a
+    /// word a reader knows.
+    ///
+    /// Apart from the slug, which is what a command line takes and a report
+    /// prints, so that a kind whose slug is no word a sentence can use (an
+    /// abbreviation) says itself in one it can, without a message or a
+    /// count spelling its kind by hand.
+    pub const fn noun(self) -> &'static str {
+        match self {
+            Kind::Skill => "skill",
+            Kind::Rule => "rule",
+        }
+    }
+
+    /// How a sentence names more than one of this kind: its folder's word,
+    /// where that is a plural, for the reason [`noun`](Self::noun) is apart
+    /// from the slug.
+    pub const fn plural(self) -> &'static str {
+        match self {
+            Kind::Skill => "skills",
+            Kind::Rule => "rules",
+        }
+    }
+
     /// What this kind looks like on disk.
     pub const fn layout(self) -> Layout {
         match self {

@@ -779,7 +779,7 @@ pub enum GatherError {
     CredentialsInUrl { url: String },
     #[error("{url}: has no `{subdirectory}` folder to gather from")]
     NoSuchFolder { subdirectory: String, url: String },
-    #[error("{kind}s cannot be gathered yet")]
+    #[error("{} cannot be gathered yet", .kind.plural())]
     NotGatherable { kind: Kind },
     #[error("{path}: cannot be read: {source}")]
     Read {

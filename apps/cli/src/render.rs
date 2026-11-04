@@ -9,7 +9,7 @@ use std::io;
 use std::path::Path;
 use std::process::ExitCode;
 
-use mindweaver_core::{paths, ArtifactError, ResolveError, ValidationIssue, WorkspaceError};
+use mindweaver_core::{paths, ArtifactError, Kind, ResolveError, ValidationIssue, WorkspaceError};
 use serde::Serialize;
 
 use crate::CliError;
@@ -402,6 +402,17 @@ pub(crate) fn verdict(text: &mut String, label: &str, issues: &[ValidationIssue]
         let _ = writeln!(text, "  - {marked}{}", printable(&issue.to_string()));
     }
     problems > 0
+}
+
+/// "1 skill", "2 skills": a count of a kind, in the words core gives it for
+/// one and for more ([`Kind::noun`], [`Kind::plural`]).
+pub(crate) fn counted_kind(count: usize, kind: Kind) -> String {
+    let noun = if count == 1 {
+        kind.noun()
+    } else {
+        kind.plural()
+    };
+    format!("{count} {noun}")
 }
 
 /// "1 skill", "2 skills".

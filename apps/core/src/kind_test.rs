@@ -30,6 +30,14 @@ fn every_kind_has_its_own_folder_and_slug() {
 }
 
 #[test]
+fn a_sentence_names_a_kind_by_the_words_a_command_line_takes_where_they_are_words() {
+    for kind in [Kind::Skill, Kind::Rule] {
+        assert_eq!(kind.noun(), kind.slug());
+        assert_eq!(kind.plural(), kind.folder());
+    }
+}
+
+#[test]
 fn a_kind_is_serialized_as_the_word_a_command_line_takes() {
     let serialized = serde_json::to_string(&Kind::ALL).unwrap();
 

@@ -596,7 +596,10 @@ impl Misplaced {
                 "it is inside {GIT_DIR}, which holds a repository's own files and no agent reads"
             ),
             Misplaced::NotInstalled => {
-                format!("{kind}s are not installed into a project as folders yet")
+                format!(
+                    "{} are not installed into a project as folders yet",
+                    kind.plural()
+                )
             }
         }
     }
@@ -2539,7 +2542,7 @@ pub enum WorkspaceError {
          and is kept out of git unless the project is shared"
     )]
     InsideMind { path: PathBuf, kind: Kind },
-    #[error("{path}: keeps no {kind}s of its own, since its marker names no folder for them")]
+    #[error("{path}: keeps no {} of its own, since its marker names no folder for them", .kind.plural())]
     NoDirectory { path: PathBuf, kind: Kind },
     /// A folder a change to a project's settings would send a kind's
     /// installs to that no install would use ([`Misplaced`]).

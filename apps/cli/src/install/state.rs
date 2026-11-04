@@ -623,8 +623,8 @@ impl Screen {
     pub fn none_offered(&self) -> String {
         if self.none_can_take() {
             return format!(
-                "no project here can take {}s; v turns the screen back, where each says why",
-                self.kind
+                "no project here can take {}; v turns the screen back, where each says why",
+                self.kind.plural()
             );
         }
         nothing(self.kind).to_owned()
