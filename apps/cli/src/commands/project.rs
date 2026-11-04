@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use mindweaver_core::relink;
 use mindweaver_core::scan::{Order, Reason, MAX_LISTED};
 use mindweaver_core::{
-    known, scan, Agent, Directories, FlayerWorkspace, Initialization, Kind, MindProject,
-    Registration, Scan, Share, WorkspaceError,
+    known, scan, Agent, Directories, Initialization, Kind, MindProject, Registration, Scan, Share,
+    WeaverWorkspace, WorkspaceError,
 };
 
 use super::gather::scrubbed;
@@ -59,11 +59,11 @@ pub(crate) fn init_workspace(
     lookup: &Lookup,
 ) -> Result<Outcome, Failure> {
     let directories = asked_directories(skills, rules);
-    let (workspace, outcome) = FlayerWorkspace::init_with(directory, &directories)?;
+    let (workspace, outcome) = WeaverWorkspace::init_with(directory, &directories)?;
     let mut stdout = initialized(
         "flayer workspace",
         workspace.name(),
-        &workspace.flayer_dir(),
+        &workspace.weaver_dir(),
         outcome,
     );
     let mut stderr = Vec::new();
@@ -292,7 +292,7 @@ fn unlinked(removed: &[PathBuf]) -> String {
 /// made, since what is under it does not wait for that; as JSON when
 /// `as_json`.
 pub(crate) fn scan_workspace(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     request: &scan::Request,
     as_json: bool,
 ) -> Outcome {

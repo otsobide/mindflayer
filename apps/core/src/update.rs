@@ -56,7 +56,7 @@ use crate::paths;
 use crate::status::State;
 use crate::value::{ArtifactName, Origin};
 use crate::view::StateCount;
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// What an update would do: [`plan`], or what [`apply`] did.
 #[derive(Debug)]
@@ -390,7 +390,7 @@ codes!(UpdateError {} carried {
 /// (`deploy`, `rule:git/commits`), or every one when they name none. An
 /// edited copy is written over only when `edits` says so, as `--force` does.
 pub fn plan(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     references: &[Reference],
     edits: Edits,
@@ -421,7 +421,7 @@ pub fn plan(
 /// ahead: each one is written whole or not at all, as an install is, and
 /// the same update run again finishes the rest.
 pub fn apply(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     references: &[Reference],
     edits: Edits,
@@ -500,7 +500,7 @@ pub fn apply(
 
 /// [`plan`], against `ledger`.
 fn plan_with(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     projects: &[MindProject],
     references: &[Reference],
@@ -593,7 +593,7 @@ fn plan_with(
 /// written from when it is written: in the order a standing is said in,
 /// edited first, so an edit is never written over unless `edits` forces it.
 fn step(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     surveyed: &install::Surveyed,
     edits: Edits,
 ) -> (Step, Option<Candidate>) {
@@ -707,7 +707,7 @@ impl Updates {
     ///
     /// Refused as a whole only when the ledger cannot be read; an entry
     /// that opens no project is said among the rest.
-    pub fn read(workspace: &FlayerWorkspace) -> Result<Updates, UpdateError> {
+    pub fn read(workspace: &WeaverWorkspace) -> Result<Updates, UpdateError> {
         let mut unread = Vec::new();
         let mut entries: Vec<(String, PathBuf)> = Vec::new();
         let mut projects: Vec<MindProject> = Vec::new();

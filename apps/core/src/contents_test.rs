@@ -320,7 +320,7 @@ fn a_skill_whose_manifest_does_not_read_can_still_be_read_out() {
 #[test]
 fn the_workspaces_own_are_read_from_its_library() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let skill = workspace
         .own()
         .directory_for(Kind::Skill)
@@ -360,7 +360,7 @@ fn the_workspaces_own_are_read_from_its_library() {
 #[test]
 fn a_workspaces_own_file_that_links_out_of_its_library_is_refused() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let skill = workspace
         .own()
         .directory_for(Kind::Skill)
@@ -642,7 +642,7 @@ fn a_skill_holding_more_than_the_cap_is_listed_up_to_it() {
 #[test]
 fn a_workspaces_own_is_listed_held_to_its_library() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let skill = workspace
         .own()
         .directory_for(Kind::Skill)

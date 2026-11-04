@@ -18,7 +18,7 @@ const AGENT_HOMES: [(&str, &[&str]); 4] = [
 
 fn help(line: &[&str]) -> String {
     let error = match line[0] {
-        "flayer" => FlayerCli::try_parse_from(line).unwrap_err(),
+        "flayer" => WeaverCli::try_parse_from(line).unwrap_err(),
         _ => Cli::try_parse_from(line).unwrap_err(),
     };
     assert_eq!(
@@ -60,7 +60,7 @@ fn both_binaries_document_every_agent_home_and_its_fallbacks() {
 #[test]
 fn an_agent_home_is_taken_wherever_a_global_option_is() {
     let cli =
-        FlayerCli::try_parse_from(["flayer", "gather", "list", "--codex-home", "/codex"]).unwrap();
+        WeaverCli::try_parse_from(["flayer", "gather", "list", "--codex-home", "/codex"]).unwrap();
     assert_eq!(cli.agent_homes.codex_home.as_deref(), Some("/codex"));
 
     let cli = Cli::try_parse_from(["mind", "--agents-dir=", "flayer", "list"]).unwrap();
@@ -99,13 +99,13 @@ fn the_helpers_pin_the_default_home_the_workspace_and_every_agent_home_to_none()
     };
 
     let mind = parsed_mind(dir.path(), &["list"]);
-    let flayer = parsed_flayer(dir.path(), &["list"]);
+    let weaver = parsed_weaver(dir.path(), &["list"]);
 
     // Given empty, not left out: left out, each would fall through to the
     // environment running the tests and to the developer's own home.
     for (home, workspace, agents) in [
         (&mind.home, &mind.workspace, &mind.agent_homes),
-        (&flayer.home, &flayer.workspace, &flayer.agent_homes),
+        (&weaver.home, &weaver.workspace, &weaver.agent_homes),
     ] {
         assert_eq!(home, &empty);
         assert_eq!(workspace, &empty);
@@ -122,7 +122,7 @@ fn the_helpers_pin_the_default_home_the_workspace_and_every_agent_home_to_none()
 fn a_test_can_still_give_a_home_of_its_own_in_either_spelling() {
     let dir = TempDir::new().unwrap();
 
-    let cli = parsed_flayer(dir.path(), &["list", "--codex-home=/codex", "--home", "/h"]);
+    let cli = parsed_weaver(dir.path(), &["list", "--codex-home=/codex", "--home", "/h"]);
 
     assert_eq!(cli.agent_homes.codex_home.as_deref(), Some("/codex"));
     assert_eq!(cli.home.as_deref(), Some("/h"));
@@ -140,7 +140,7 @@ fn a_test_can_still_name_a_workspace_in_any_spelling() {
         vec!["list", "--workspace", "/w"],
         vec!["list", "--workspace=/w"],
     ] {
-        let cli = parsed_flayer(dir.path(), &given);
+        let cli = parsed_weaver(dir.path(), &given);
         assert_eq!(cli.workspace.as_deref(), Some("/w"), "{given:?}");
     }
 }

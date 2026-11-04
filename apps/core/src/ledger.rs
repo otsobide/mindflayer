@@ -323,7 +323,7 @@ impl Ledger {
     /// [`open`](Self::open), with `known` asked, only when a step to schema 5
     /// is taken, for the id each project it may hold records of holds and
     /// the route the ledger names it by: what a workspace's linked projects
-    /// say ([`crate::workspace::FlayerWorkspace::ledger`]), which no SQL in
+    /// say ([`crate::workspace::WeaverWorkspace::ledger`]), which no SQL in
     /// the file can know.
     pub fn open_knowing(
         path: impl Into<PathBuf>,
@@ -436,7 +436,7 @@ impl fmt::Debug for Ledger {
 #[derive(Debug, Error)]
 pub enum LedgerError {
     /// The workspace could not be had to scrub clones in, opening its ledger
-    /// to write ([`crate::workspace::FlayerWorkspace::ledger_to_write`]).
+    /// to write ([`crate::workspace::WeaverWorkspace::ledger_to_write`]).
     #[error(transparent)]
     Lock(#[from] crate::lock::LockError),
     #[error("{path}: cannot be created: {source}")]

@@ -33,7 +33,7 @@ impl Place {
         match level {
             Level::Project => new_project(dir.path()),
             Level::Workspace => {
-                flayer(dir.path(), &["init"]).unwrap();
+                weaver(dir.path(), &["init"]).unwrap();
             }
         }
         Place { dir, level }
@@ -62,7 +62,7 @@ impl Place {
     fn run(&self, args: &[&str]) -> Result<Outcome, Failure> {
         match self.level {
             Level::Project => mind(self.root(), args),
-            Level::Workspace => flayer(self.root(), args),
+            Level::Workspace => weaver(self.root(), args),
         }
     }
 

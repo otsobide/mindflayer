@@ -12,7 +12,7 @@ import { useSnapshot } from '@/api/snapshot'
 import { TransportError, type Task } from '@/api/transport'
 import { UPDATE_ALL, useUpdates } from '@/api/updates'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
+import CommandHint, { weaver, making } from '@/components/CommandHint.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import StateBadge from '@/components/StateBadge.vue'
 import { projectLink } from '@/routes'
@@ -237,7 +237,7 @@ function why(error: unknown): string {
             <CommandHint
               :commands="[
                 ...making(snapshot.workspace),
-                { line: flayer(snapshot.workspace, 'update --all'), does: 'says so too' }
+                { line: weaver(snapshot.workspace, 'update --all'), does: 'says so too' }
               ]"
             />
           </div>

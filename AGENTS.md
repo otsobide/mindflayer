@@ -432,14 +432,14 @@ These are easy to break from a single file without noticing.
 - **Two binaries, one parser.** `flayer <cmd>` is `mind flayer <cmd>`, and
   both reach the same function. `mind add` and `flayer add` (with or without
   `-p`) are one implementation given a different holder
-  (`FlayerWorkspace::own` makes the workspace look like a `MindProject`).
+  (`WeaverWorkspace::own` makes the workspace look like a `MindProject`).
 - **The TUI and the panel only run commands.** A key produces a `Task`
   (`src/task.rs`, shared by every front end that runs commands),
   and `Task::commands` turns it into argument lines that a `Runner` hands to
   `execute`, which runs each through `commands::run_line`: it parses them
-  with `Cli`/`FlayerCli` and runs them through `run_with`/`run_flayer_with`
+  with `Cli`/`WeaverCli` and runs them through `run_with`/`run_weaver_with`
   with the screen's `Lookup` and a `gather::Watch`, what the binaries'
-  `run_watched`/`run_flayer_cli_watched` call once they have read the
+  `run_watched`/`run_weaver_cli_watched` call once they have read the
   environment. A test's stand-in `Runner` is handed the same words. The
   panel is the second front end built this way: the browser sends a task as
   JSON, the backend holds it to the path policy (`admit::Admission`), shows
@@ -476,7 +476,7 @@ These are easy to break from a single file without noticing.
   screen names it by its route. What a front end with
   no terminal does not run is one list, `task::Refusal`, read off the
   parsed command by a match with no wildcard (`Refusal::of_mind`,
-  `of_flayer`), so a new command says whether it is refused before it
+  `of_weaver`), so a new command says whether it is refused before it
   compiles; a task is refused for its lines (`Task::refusal`). `edit` is
   refused in an editor and with `--contents -`, standard input, and run
   with `--contents FILE` (`Refusal::of_edit`); the one task that builds
@@ -489,7 +489,7 @@ These are easy to break from a single file without noticing.
   `ui`, which would hold it until a Ctrl-C the screen keeps for itself, and
   standard input, which is the screen's own keys. What a line takes away, which a front end with
   no terminal asks somebody to confirm before it runs it, is one list too,
-  `task::Caution`, read the same way (`Caution::of_mind`, `of_flayer`,
+  `task::Caution`, read the same way (`Caution::of_mind`, `of_weaver`,
   `task::cautions`), and the panel's backend says it of the lines it
   plans with each preview (`backend::Confirm`), never a list in
   TypeScript. Each front end hands back, when it closes, every
@@ -835,7 +835,7 @@ These are easy to break from a single file without noticing.
     or `-p`, or after a `--` among positionals; a test feeds every variant
     values that start with a dash. A save's text reaches no line at all:
     the line names the workspace's scratch file for it, in `.mindflayer`
-    (`FlayerWorkspace::scratch_dir`, and `scratch_route` for the line, both
+    (`WeaverWorkspace::scratch_dir`, and `scratch_route` for the line, both
     core's), which the backend writes with
     `create_new`, in a folder made with `create_dir` and refused when it is
     a link, taking a file there under the name only when it holds the text
@@ -920,7 +920,7 @@ These are easy to break from a single file without noticing.
     scrub (`Remote::scrub`) to a clone's config and reflogs. A gather refuses a URL that carries one, and one typed as its branch or
     folder, which the ledger would keep word for word. A
     command that writes to the ledger opens it with
-    `FlayerWorkspace::ledger_to_write`, which scrubs what an older build
+    `WeaverWorkspace::ledger_to_write`, which scrubs what an older build
     stored first and hands back what it took out to be said; one that only
     reads opens it with `ledger_for_reading`, which scrubs nothing. The
     install screen is a read until it applies, and the lines it then runs
@@ -931,10 +931,10 @@ These are easy to break from a single file without noticing.
     which writes itself out redacted whatever built it. Never a `String`
     redacted where it is written.
 - **Writers take turns; readers never wait.** Core's writers hold the
-  workspace's `.mindflayer/lock` (`FlayerWorkspace::lock`) while they change
+  workspace's `.mindflayer/lock` (`WeaverWorkspace::lock`) while they change
   it: `edit_array`, `install::install` and `uninstall`,
   `install::rules::render`, `gather::gather`,
-  `gather::scrub`, which `FlayerWorkspace::ledger_to_write` runs, when it has
+  `gather::scrub`, which `WeaverWorkspace::ledger_to_write` runs, when it has
   clones to rewrite, `migrate::library`, from its plan to its rewrite of
   the marker, `migrate::project`, for a move from a `mind.toml`, from before
   it reads the project again until its ledger is written (a move from a
@@ -958,7 +958,7 @@ These are easy to break from a single file without noticing.
   Opening the ledger takes no lock: a schema migration keeps itself apart
   in its own transaction. The lock is not re-entrant: a writer never calls
   another while it holds it, and a front end never takes it. Reads
-  (`FlayerWorkspace::open`, `ledger_for_reading`) never take it. A wait is
+  (`WeaverWorkspace::open`, `ledger_for_reading`) never take it. A wait is
   bounded (`lock::WAIT`), ending in a `LockError::Busy` that names the
   holder's pid, except a record drop's or carry's (`install::disown`,
   `install::carry`), which follows a change already made.
@@ -972,7 +972,7 @@ These are easy to break from a single file without noticing.
   retry after a remote branch named `HEAD`, a connection the callback cannot
   reach.
 - **Formats are versioned.** Each marker carries its own `version`
-  (`MIND_FORMAT_VERSION` for a project's, `FLAYER_FORMAT_VERSION` for
+  (`MIND_FORMAT_VERSION` for a project's, `WEAVER_FORMAT_VERSION` for
   `flayer.toml`, so bumping one never makes older builds refuse the other)
   and the ledger uses SQLite's `user_version`. A project's marker is
   `mind.toml` up to `MIND_TOML_VERSION`, which only `MindProject::init` still
@@ -1001,7 +1001,7 @@ These are easy to break from a single file without noticing.
     (`apps/core/tests/fixtures/ledger-v<N>.sql`) for a test to migrate.
     What no SQL can know is handed to the step rather than read by it:
     schema 5 is told each linked project's id (`Ledger::open_knowing`, from
-    `FlayerWorkspace::known`).
+    `WeaverWorkspace::known`).
 - **A project is found again by its id, never by a guess.** The ledger
   keeps the id it last saw at each route (`projects`), learned from the
   projects themselves every time it is opened to write (`Ledger::knew`),
@@ -1028,7 +1028,7 @@ These are easy to break from a single file without noticing.
   chose it (`Reason`). A named or activated path that is not
   a workspace is an error, never a fallback, and is never made. A project's
   workspace (`resolve::managing`, `resolve::consulted`) and which project
-  `-p` names (`FlayerWorkspace::pick`, `holder`) are core's too: no front end
+  `-p` names (`WeaverWorkspace::pick`, `holder`) are core's too: no front end
   walks up, or picks a holder, itself.
 - **A change is handed its workspace.** The lifecycle changes
   (`lifecycle::add`, `finish_edit`, `rename`, `remove`) and template lookup
@@ -1321,7 +1321,7 @@ These are easy to break from a single file without noticing.
   developer's shell activated, which `HOME`, `MINDFLAYER_HOME`,
   `MINDFLAYER_WORKSPACE`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
   `OPENCODE_CONFIG_DIR` lead to. In-process tests pin options: CLI tests call
-  `common::mind` / `common::flayer`, which parse through the real parsers and
+  `common::mind` / `common::weaver`, which parse through the real parsers and
   append `-C <dir>`, `--home=`, `--workspace=` and the four agent-home
   options empty (`common::PINNED`), so no command they run can reach or
   create the real home workspace, use an activated one or read a real agent
@@ -1486,7 +1486,7 @@ These are easy to break from a single file without noticing.
   `tui::settle` or `tui::wait`; to make one slow, stand a `Runner` in for the
   real command lines (`App::runner`).
 - Fixtures use `tempfile::TempDir`. Test names are sentences
-  (`init_flayer_is_the_same_as_init`).
+  (`init_weaver_is_the_same_as_init`).
 - `apps/cli/tests/docs_test.rs` holds `README.md` and every page under
   `docs/` to their relative links, in Rust so it runs without Node or the
   network: each file a link names is there, each anchor is a heading's as

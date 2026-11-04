@@ -25,7 +25,7 @@ use crate::install;
 use crate::ledger::LedgerError;
 use crate::paths;
 use crate::settings::{ProjectId, Share};
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// What [`relink`] did.
 #[derive(Debug)]
@@ -90,7 +90,7 @@ pub struct Relinked {
 ///
 /// [`Ledger::relinked`]: crate::ledger::Ledger::relinked
 pub fn relink(
-    workspace: &mut FlayerWorkspace,
+    workspace: &mut WeaverWorkspace,
     old: &Path,
     new: &Path,
 ) -> Result<Relinked, RelinkError> {
@@ -267,7 +267,7 @@ pub struct Renewed {
 /// same work tree keeps its own lines under the old id. When `workspace`
 /// links the project, its ledger knows the project by the new id from then
 /// on, and so does every record of it, as it would at the next write
-/// ([`FlayerWorkspace::ledger_to_write`]): what was installed stays the
+/// ([`WeaverWorkspace::ledger_to_write`]): what was installed stays the
 /// project's.
 ///
 /// Refused for a project an older marker marks, as a change to its settings
@@ -279,7 +279,7 @@ pub struct Renewed {
 /// settings are read again until its ledger is written, as a change to the
 /// project's agents does ([`crate::reapply::apply`]).
 pub fn new_id(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
 ) -> Result<Renewed, RelinkError> {
     project.changeable()?;

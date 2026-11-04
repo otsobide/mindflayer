@@ -10,7 +10,7 @@ import { useSnapshot } from '@/api/snapshot'
 import { first } from '@/address'
 import AgentBadges from '@/components/AgentBadges.vue'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer } from '@/components/CommandHint.vue'
+import CommandHint, { weaver } from '@/components/CommandHint.vue'
 import HealthBadge from '@/components/HealthBadge.vue'
 import IssueList from '@/components/IssueList.vue'
 import MigrateOffer from '@/components/MigrateOffer.vue'
@@ -219,8 +219,8 @@ function spelled(words: string[]): string {
             />
             <CommandHint
               :commands="[
-                { line: flayer(snapshot.workspace, `relink ${named(project)} <PATH>`), does: 'follow it to where it moved' },
-                { line: flayer(snapshot.workspace, `unlink ${named(project)}`), does: 'or let it go' }
+                { line: weaver(snapshot.workspace, `relink ${named(project)} <PATH>`), does: 'follow it to where it moved' },
+                { line: weaver(snapshot.workspace, `unlink ${named(project)}`), does: 'or let it go' }
               ]"
             />
           </div>
@@ -312,8 +312,8 @@ function spelled(words: string[]): string {
                 </p>
                 <CommandHint
                   :commands="[
-                    { line: flayer(snapshot.workspace, `install -p ${named(project)} ${kind}:<NAME>`), does: 'one the workspace offers' },
-                    { line: flayer(snapshot.workspace, `add -p ${named(project)} ${kind} <NAME> <DESCRIPTION>`), does: 'one of its own' }
+                    { line: weaver(snapshot.workspace, `install -p ${named(project)} ${kind}:<NAME>`), does: 'one the workspace offers' },
+                    { line: weaver(snapshot.workspace, `add -p ${named(project)} ${kind} <NAME> <DESCRIPTION>`), does: 'one of its own' }
                   ]"
                 />
               </div>

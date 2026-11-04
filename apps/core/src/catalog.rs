@@ -17,7 +17,7 @@ use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError};
 use crate::paths;
 use crate::value::ContentHash;
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace};
 
 /// The artifacts discovered across some mind projects, and what went wrong.
 ///
@@ -258,7 +258,7 @@ impl Catalog {
     /// file edited or broken since it was gathered is found as it is now. Each
     /// source has a folder of its own under the kind's, holding what it
     /// yielded the way a project's folder holds its skills.
-    pub fn discover_gathered(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Self {
+    pub fn discover_gathered(workspace: &WeaverWorkspace, kinds: &[Kind]) -> Self {
         let mut catalog = Catalog::default();
 
         for kind in kinds {
@@ -310,7 +310,7 @@ impl Catalog {
     /// is about its one file, and settling keeps one failure a path. It leaves
     /// their copies unrecorded: foreign or authored, which nothing changes,
     /// rather than installed, which an uninstall may delete.
-    pub fn with_records(mut self, workspace: &FlayerWorkspace, ledger: &Ledger) -> Self {
+    pub fn with_records(mut self, workspace: &WeaverWorkspace, ledger: &Ledger) -> Self {
         let mut recorded: BTreeMap<(PathBuf, Kind), BTreeSet<String>> = BTreeMap::new();
         let Catalog {
             artifacts,

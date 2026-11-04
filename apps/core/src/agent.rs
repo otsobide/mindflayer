@@ -446,7 +446,7 @@ impl AgentHomes {
     /// front end takes once neither its option nor the agent's own variable
     /// answers.
     ///
-    /// Named here, as [`FLAYER_DIR`](crate::FLAYER_DIR) is, rather than in the
+    /// Named here, as [`WEAVER_DIR`](crate::WEAVER_DIR) is, rather than in the
     /// front end: which folder an agent reads is a fact about the agent, and a
     /// second front end must not spell it differently. Finding the user's home
     /// is still the front end's, so this reads no environment.

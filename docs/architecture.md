@@ -234,7 +234,7 @@ and `list`, `show` and `validate` read one catalog. `commands.rs` dispatches,
 and asks core what a command acts on, the one thing every family needs: which
 workspace is core's `resolve` to decide (see [which workspace a command
 uses](#which-workspace-a-command-uses)), and which of its projects `-p` names
-is `FlayerWorkspace::pick`.
+is `WeaverWorkspace::pick`.
 
 ## Values, ports and adapters
 
@@ -727,7 +727,7 @@ command itself rather than a copy of it.
 
 They are held the way a project holds its own: in directories the marker
 names (`[directories]` in `flayer.toml`), found by the same catalog, created,
-renamed and removed by the same functions. `FlayerWorkspace::own` hands the
+renamed and removed by the same functions. `WeaverWorkspace::own` hands the
 workspace out as a `MindProject`-shaped holder for exactly that reason:
 everything that touches an artifact asks its holder where it is, what it is
 called and where each kind lives, and a workspace answers those as a project
@@ -1428,7 +1428,7 @@ the lock of the workspace that links the project around it.
 ### Formats are versioned
 
 Each marker carries a `version`, and each has its own: `MIND_FORMAT_VERSION`
-for a project's marker, `FLAYER_FORMAT_VERSION` for `flayer.toml`. A marker
+for a project's marker, `WEAVER_FORMAT_VERSION` for `flayer.toml`. A marker
 written by a newer Mindflayer is refused with a message naming which of the
 two it is and which version this build reads, which is what lets a format
 change later without an old binary silently misreading a newer project or
@@ -2144,7 +2144,7 @@ second way in, and every record written so far re-keying.
 The ledger learns the ids from the projects themselves, never from the
 entries: a step to schema 5 is told those of every project the workspace
 links, and the ledger, opened to write, is told them again every time
-(`FlayerWorkspace::ledger_to_write`, `Ledger::knew`), as the scrub runs every
+(`WeaverWorkspace::ledger_to_write`, `Ledger::knew`), as the scrub runs every
 time, so an entry written by hand, a project given a new id and one whose
 route holds another project now are all followed without each command that
 links remembering to. A stale entry keeps the id last seen there, which is
@@ -2302,8 +2302,8 @@ with the new clone, or with none.
 `flayer gather` on a terminal draws each step over the last on one line of
 stderr, and wipes it before the report. Piped or captured it draws nothing,
 so what it prints there is what it always printed. The binaries run every
-line with that line's watch (`run_watched`, `run_flayer_cli_watched`), and
-`run` and `run_flayer_cli`, which the tests call, with one nobody follows. The
+line with that line's watch (`run_watched`, `run_weaver_cli_watched`), and
+`run` and `run_weaver_cli`, which the tests call, with one nobody follows. The
 TUI runs a gather on a thread of its own, and `esc` cancels it ([A gather runs
 apart](#a-gather-runs-apart)).
 
@@ -2395,7 +2395,7 @@ showing (`task::shell`), so the box that says what is running and the
 transcript printed on the way out both leave the token out.
 
 What a Mindflayer from before the refusal stored is **scrubbed** when a
-command that writes opens the ledger. `FlayerWorkspace::ledger_to_write` is
+command that writes opens the ledger. `WeaverWorkspace::ledger_to_write` is
 the one way to open it for writing: it runs `gather::scrub`, which only core
 can call, and hands back what that took out for the front end to say, the way
 `resolve` with `Intent::Write` is the one way to find a workspace that may be
@@ -2708,7 +2708,7 @@ because a checkbox looked untidy. The rule costs one query and removes the
 whole class.
 
 The record names the project by its route from the workspace, taken to where
-the workspace's own entry for it leads (`FlayerWorkspace::spelling_of`)
+the workspace's own entry for it leads (`WeaverWorkspace::spelling_of`)
 rather than to however the command spelled the project. `mind` spells its
 project the way the operating system reports the directory it runs in,
 through no symlink, while a workspace named with `-W` or activated keeps the
@@ -3073,7 +3073,7 @@ nothing that one install would not.
   (`install::install_held`), to guard nothing a project's own install does
   not.
 - **The front end names the projects.** `-p` picks each as everywhere
-  (`FlayerWorkspace::pick`), and one the workspace does not link refuses
+  (`WeaverWorkspace::pick`), and one the workspace does not link refuses
   the line before anything is installed anywhere: a typo in one name is no
   reason to change the rest without it. `--all-projects` is every entry
   that opens, with a warning for each that does not, as `flayer update
@@ -3167,7 +3167,7 @@ in TypeScript.
 The install screen plans through the same function, from the standings it
 surveyed when it opened (`Screen::task`): every box that disagrees with how
 it started, each project named as its lines name it
-(`FlayerWorkspace::naming`), the box an offer ticked in its place unticked
+(`WeaverWorkspace::naming`), the box an offer ticked in its place unticked
 asked away all the same, for core to see it replaced. Its keys still hold a
 box somebody's or edited, and untick another offer of a name when one is
 ticked, which is what the screen shows; neither is a rule of the batch,
@@ -3805,7 +3805,7 @@ the screen is no reason to change the rest without asking again.
   when run again after another place starts offering the name, and whether a
   name needs `--from` is core's to say (`install::offered`), not the
   screen's to work out again.
-- **`-p` as core says** (`FlayerWorkspace::naming`): a project's entry, or
+- **`-p` as core says** (`WeaverWorkspace::naming`): a project's entry, or
   `./<entry>` when another project declares the entry as its name, which
   `pick` would otherwise refuse as naming two.
 - **What a line warns of is the command's.** A line says what the command
@@ -4087,10 +4087,10 @@ each project has](#what-each-project-has)).
 
 A key that asks for work produces a `Task`, and `Task::commands` turns it into
 the words a person would type: `flayer link beta`, `mind -C beta add skill
-deploy 'Ship it'`. Those words are parsed by `Cli` and `FlayerCli`, the parsers
-the binaries use, and run through `run_with` and `run_flayer_with`, what the
-binaries' `run_watched` and `run_flayer_cli_watched` call once they have read
-where to look for a workspace (`run` and `run_flayer_cli` are the same with a
+deploy 'Ship it'`. Those words are parsed by `Cli` and `WeaverCli`, the parsers
+the binaries use, and run through `run_with` and `run_weaver_with`, what the
+binaries' `run_watched` and `run_weaver_cli_watched` call once they have read
+where to look for a workspace (`run` and `run_weaver_cli` are the same with a
 watch nobody follows). The TUI has no code path of its own for linking, adding
 or gathering, and it cannot grow one, because there is nowhere in it to put
 one.
@@ -4137,7 +4137,7 @@ joined to it by `=` when it starts with a dash (`--path=-odd`); as a `-C` or
 a `-p` that starts with one, behind a `./`, which names the same directory
 and the same project by its path; or among the positionals, which go behind
 a `--` whenever one of them starts with a dash. So a task names each project
-it gives `-p` as `FlayerWorkspace::naming` does, by its entry or a path from
+it gives `-p` as `WeaverWorkspace::naming` does, by its entry or a path from
 the root, never by the project's name, which behind a `./` would be read as
 a path instead: a `-p=-odd` would keep it a name, and change the line the
 TUI has always shown for such a project. A test holds every variant to it:
@@ -4201,7 +4201,7 @@ and `flayer remove --everywhere --yes` take copies out, `unlink` and
 install, an uninstall or an update told `--yes` writes over or takes out an
 edited copy. A front end with no terminal asks somebody before it runs such
 a line, the panel with each preview ([its changes](#its-changes)); a match
-over every command with no wildcard (`Caution::of_mind`, `of_flayer`), so a
+over every command with no wildcard (`Caution::of_mind`, `of_weaver`), so a
 new command says what it takes away before it compiles. The TUI asks its own
 questions still, worded for its rows ([open questions](#open-questions)).
 
@@ -6416,8 +6416,8 @@ core says of them, never by a rule of the panel's (#82).
   <hash> <kind:name>`, the file the workspace's scratch file for the text:
   `.mindflayer/tmp/edit-<the first sixteen hex digits of its SHA-256>.md`,
   a route from the root the lines run from (`task::scratch_route`, the
-  folder's route core's, `FlayerWorkspace::scratch_route`, the one
-  `FlayerWorkspace::scratch_dir` is made of, where the backend writes). The
+  folder's route core's, `WeaverWorkspace::scratch_route`, the one
+  `WeaverWorkspace::scratch_dir` is made of, where the backend writes). The
   workspace's command at either level, `-p` naming a project, so the route
   reads from where the lines run. Named by what it holds rather than drawn
   for the run, so the line the preview shows is the line that runs, a
@@ -6432,7 +6432,7 @@ core says of them, never by a rule of the panel's (#82).
   A file already there under the name is taken when it holds the text
   exactly, as an interrupted run would have left it, and anything else
   there, or a link, refuses the save (`scratch_unwritable`). In the
-  workspace's `.mindflayer` (`FlayerWorkspace::scratch_dir`), where no agent
+  workspace's `.mindflayer` (`WeaverWorkspace::scratch_dir`), where no agent
   looks: not the system's temporary folder, where another user could read
   what is about to be written, nor a project's `.mind/tmp`, which a cloned
   repository can bring with it, or a link in its place.
@@ -6628,7 +6628,7 @@ name](#what-a-browser-may-name)):
   answer names (the launch's, normalized as core takes it everywhere,
   when the path policy takes it), and the workspace's root no path at
   all. Which folder is a project and which the workspace links are rules
-  (`MindProject::is_marked`, `FlayerWorkspace::is_linked`), and a listing
+  (`MindProject::is_marked`, `WeaverWorkspace::is_linked`), and a listing
   put together in TypeScript would be a second copy of them.
 - **What it leaves out is core's too.** A hidden folder is listed only
   once its switch is on, which says how many there are, counted by core
@@ -7197,7 +7197,7 @@ the panel runs names it with `-W` from then on. Only for `Home` does the TUI als
 workspace here or above: the directory home is can also be named with `-W`,
 activated, or reached walking up from below it. Which workspace a command
 changed is another question, about the workspace rather than the rule, and
-`load` and `unload` answer it from the path (`FlayerWorkspace::is_default`).
+`load` and `unload` answer it from the path (`WeaverWorkspace::is_default`).
 They call the one in home the default one however it was reached, so their
 line reads the same on the run that makes it, from anywhere, as on every run
 after, which from below home finds it walking up.
@@ -7306,7 +7306,7 @@ It is made by the first command that **writes** to it, and by nothing that
 only reads, and the caller says which with an `Intent`. `flayer link`, `add`,
 `gather git`, `load`, `install` and `uninstall` resolve with `Intent::Write`,
 which makes `~/.mindflayer` when nothing up the tree has one. A read resolves
-with `Intent::Read`, which falls back instead to `FlayerWorkspace::unmade`:
+with `Intent::Read`, which falls back instead to `WeaverWorkspace::unmade`:
 the workspace `init` would make there, parsed from the same template rather
 than written. That is `flayer list`, `show`, `validate`, `scan`, `templates`,
 `gather list`, and `load` and `install` on their own.
@@ -7427,7 +7427,7 @@ in the envelope ([JSON, in one envelope](#json-in-one-envelope)), each field
 by its name: `name`, `path`, `default`, `remembered`, `in_use`, `projects`,
 `stale_projects` and `stale`.
 
-`known` moves no `FLAYER_FORMAT_VERSION`. A build from before it reads past
+`known` moves no `WEAVER_FORMAT_VERSION`. A build from before it reads past
 the key, which says nothing about the workspace holding it, so there is
 nothing for it to misread, and keeps it when it edits the marker, since every
 edit goes through `toml_edit` ([formats are
@@ -7453,7 +7453,7 @@ chose it meant that one to be told.
 With `-W` or an activation, that is the chosen workspace wherever it sits,
 which is how a project linked from beside its workspace is managed from
 inside the project: walking up never reaches such a workspace. Which of a
-workspace's projects `-p` names is core's too (`FlayerWorkspace::pick`, and
+workspace's projects `-p` names is core's too (`WeaverWorkspace::pick`, and
 `holder` for the workspace's own when nothing is named).
 
 `load` resolves with `resolve_except`, which passes over the workspaces being
@@ -7486,7 +7486,7 @@ price of a project's row no longer teaching a project's command.
 ### A read leaves the ledger as it finds it
 
 `mindflayer.db` belongs to the workspace like its marker, and a read does not
-make it either. `FlayerWorkspace::ledger_for_reading` opens it only when it
+make it either. `WeaverWorkspace::ledger_for_reading` opens it only when it
 exists (`Ledger::open_existing`, without SQLite's create flag) and otherwise
 answers from an empty ledger in memory, which says what a ledger nothing was
 ever written to would. So `flayer gather list`, the snapshot every front end
@@ -7754,7 +7754,7 @@ one that reads them.
 They are options rather than variables read where a check needs them, for the
 reasons `--home` is one: core reads no environment, and a test cannot safely
 set a variable, because every other test in the process would see it. An
-option is pinned per command line, so `common::mind` and `common::flayer` give
+option is pinned per command line, so `common::mind` and `common::weaver` give
 all four empty and no test can read a developer's real `~/.claude`. A test that
 spawns a binary has no parser to pin through, so it clears the variables and
 points `HOME` at a temp dir instead.
@@ -7878,7 +7878,7 @@ Never force-push a branch somebody else may have pulled.
   that project too, beside its own: a monorepo's root, above its packages.
   A block is refused in such a folder, a stale entry's included, and in the
   workspace's own root unless a project it links is there. The workspace
-  puts nothing in its own directory (`FlayerWorkspace::own` is a holder at
+  puts nothing in its own directory (`WeaverWorkspace::own` is a holder at
   that root, not a project), while a project at the root is a project like
   any other, and its `AGENTS.md` its own. A render that leaves no block goes
   ahead in either: a block written before a project was linked below it, or
@@ -8793,7 +8793,7 @@ them (the CLI, and through it the panel's backend, by a file of its own,
   the repository, to the user's own `~/.claude` say, would otherwise carry
   the write along. Not the root of the workspace's own, which may be a
   home: what is in the folder the workspace keeps its own of a kind in
-  (`FlayerWorkspace::own`, of a kind `own_kinds` gives it) is held to that
+  (`WeaverWorkspace::own`, of a kind `own_kinds` gives it) is held to that
   folder alone, as a read of it is. Told by the folder, since the holder
   is a `MindProject` either way, so whatever reaches the library's folder
   is held as the library is, and a project's folder anywhere else to the
@@ -9030,7 +9030,7 @@ other, and none of them makes a reader wait for the workspace.
   from before it reads the project again until its ledger is written
   (`migrate::project`); a move from a `settings.json` changes nothing of the
   workspace's, and takes none.
-  Core takes it inside each of them (`FlayerWorkspace::lock`), so no front end
+  Core takes it inside each of them (`WeaverWorkspace::lock`), so no front end
   has to remember to. An install looks again at what the project holds once
   it has the lock: the standing it is handed comes from a survey made before,
   minutes before on the install screen, and a copy somebody has written or
@@ -10658,7 +10658,7 @@ an open question below.
   cancel only once it is receiving. `BatchMode=yes` would close the TUI's ssh
   case too.
 - **When the scrub can stop.** `gather::scrub` runs whenever a command
-  opens the ledger to write (`FlayerWorkspace::ledger_to_write`), because an
+  opens the ledger to write (`WeaverWorkspace::ledger_to_write`), because an
   older build could write a token into the same file. Schema 3 (#30) changes
   that, since a build older than it refuses the file: the scrub could run
   once, as part of that migration, and stop. It has not moved there, because

@@ -16,12 +16,12 @@ fn older_in(dir: &Path, project: &str, names: &[&str]) -> PathBuf {
     fs::create_dir(&root).unwrap();
     gix::init(&root).unwrap();
     older_project(&root);
-    flayer(dir, &["link", project]).unwrap();
+    weaver(dir, &["link", project]).unwrap();
     for name in names {
         if !own_directory_for(dir, Kind::Skill).join(name).exists() {
-            flayer(dir, &["add", "skill", name, &format!("What {name} does")]).unwrap();
+            weaver(dir, &["add", "skill", name, &format!("What {name} does")]).unwrap();
         }
-        flayer(dir, &["install", "-p", project, name]).unwrap();
+        weaver(dir, &["install", "-p", project, name]).unwrap();
     }
     root
 }
@@ -29,7 +29,7 @@ fn older_in(dir: &Path, project: &str, names: &[&str]) -> PathBuf {
 /// A made workspace holding nothing yet.
 fn workspace() -> TempDir {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     dir
 }
 
@@ -43,7 +43,7 @@ fn settings(root: &Path) -> PathBuf {
 
 /// What the workspace at `dir` records of `name` in `project`, by path.
 fn recorded(dir: &Path, project: &str) -> Vec<String> {
-    FlayerWorkspace::open(dir)
+    WeaverWorkspace::open(dir)
         .unwrap()
         .ledger()
         .unwrap()
@@ -138,11 +138,11 @@ fn mind_migrate_says_what_it_would_move_then_moves_it_and_then_has_nothing_to_do
 }
 
 #[test]
-fn flayer_migrate_moves_one_project_it_links_by_name() {
+fn weaver_migrate_moves_one_project_it_links_by_name() {
     let dir = workspace();
     let root = older_in(dir.path(), "collapse", &["deploy"]);
 
-    let done = flayer(
+    let done = weaver(
         dir.path(),
         &["migrate", "-p", "collapse", "--agents", "claude", "--yes"],
     )
@@ -171,9 +171,9 @@ fn a_project_already_keeping_its_skills_where_claude_reads_keeps_that_copy() {
         "version = 2\nname = \"collapse\"\n\n[directories]\nskills = \".claude/skills\"\n",
     )
     .unwrap();
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
-    flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
-    flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
 
     let done = mind(&root, &["migrate", "--yes"]).unwrap();
 
@@ -231,9 +231,9 @@ fn every_older_project_is_listed_without_yes_and_nothing_is_written() {
     let gamma = dir.path().join("gamma");
     fs::create_dir(&gamma).unwrap();
     new_project(&gamma);
-    flayer(dir.path(), &["link", "gamma"]).unwrap();
+    weaver(dir.path(), &["link", "gamma"]).unwrap();
 
-    let dry = flayer(dir.path(), &["migrate", "--all-projects"]).unwrap();
+    let dry = weaver(dir.path(), &["migrate", "--all-projects"]).unwrap();
 
     assert_eq!(
         dry.stdout,
@@ -267,7 +267,7 @@ fn every_older_project_is_moved_on_its_own_and_one_refused_is_named() {
     fs::create_dir_all(kept.parent().unwrap()).unwrap();
     fs::write(&kept, "").unwrap();
 
-    let done = flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    let done = weaver(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
 
     assert_eq!(
         done.stdout,
@@ -290,11 +290,11 @@ fn every_older_project_is_moved_on_its_own_and_one_refused_is_named() {
     assert!(settings(&alpha).is_file());
     assert!(marker(&beta).is_file() && !settings(&beta).exists());
 
-    let again = flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    let again = weaver(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
     assert!(!again.ok, "beta is still refused");
     fs::remove_file(&kept).unwrap();
-    flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
-    let none = flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    weaver(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    let none = weaver(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
     assert_eq!(
         none.stdout,
         "nothing to migrate: every project the workspace links is marked by its settings.toml already\n"
@@ -302,10 +302,10 @@ fn every_older_project_is_moved_on_its_own_and_one_refused_is_named() {
 }
 
 #[test]
-fn flayer_migrate_naming_nothing_says_what_there_is_to_migrate() {
+fn weaver_migrate_naming_nothing_says_what_there_is_to_migrate() {
     let dir = workspace();
 
-    let failure = flayer(dir.path(), &["migrate", "--yes"]).unwrap_err();
+    let failure = weaver(dir.path(), &["migrate", "--yes"]).unwrap_err();
 
     assert_eq!(
         failure.error.to_string(),
@@ -320,7 +320,7 @@ fn flayer_migrate_naming_nothing_says_what_there_is_to_migrate() {
         &["migrate", "-p", "alpha", "--local", "--shared"],
     ] {
         assert!(
-            FlayerCli::try_parse_from(line("flayer", refused, dir.path())).is_err(),
+            WeaverCli::try_parse_from(line("flayer", refused, dir.path())).is_err(),
             "{refused:?}"
         );
     }
@@ -393,14 +393,14 @@ fn a_project_linked_from_beside_is_told_how_to_reach_its_workspace() {
     let dir = TempDir::new().unwrap();
     let hub = dir.path().join("hub");
     fs::create_dir(&hub).unwrap();
-    flayer(&hub, &["init"]).unwrap();
+    weaver(&hub, &["init"]).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     gix::init(&root).unwrap();
     older_project(&root);
-    flayer(&hub, &["link", "../collapse"]).unwrap();
-    flayer(&hub, &["add", "skill", "deploy", "What deploy does"]).unwrap();
-    flayer(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
+    weaver(&hub, &["link", "../collapse"]).unwrap();
+    weaver(&hub, &["add", "skill", "deploy", "What deploy does"]).unwrap();
+    weaver(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
 
     // Walking up from the project never reaches it, so its records are not
     // read, and the hint names what does reach it.
@@ -450,7 +450,7 @@ fn a_project_the_workspace_above_does_not_link_is_told_how_to_link_it() {
 fn a_project_whose_workspace_cannot_be_read_is_not_moved() {
     let dir = workspace();
     let root = older_in(dir.path(), "collapse", &["deploy"]);
-    let config = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let config = dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG);
     let written = fs::read_to_string(&config).unwrap();
     fs::write(&config, format!("{written}garbage = [\n")).unwrap();
     let before = fs::read(marker(&root)).unwrap();
@@ -528,9 +528,9 @@ fn mind_migrate_moves_a_settings_json_to_a_settings_toml_saying_the_same() {
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     json_project(&root);
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
-    flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
-    flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
     let before = fs::read_to_string(json(&root)).unwrap();
     let held = MindProject::open(&root)
         .unwrap()
@@ -597,8 +597,8 @@ fn a_settings_json_moves_beside_a_workspace_that_cannot_be_read_and_says_so() {
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     json_project(&root);
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
-    let config = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+    let config = dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG);
     let written = fs::read_to_string(&config).unwrap();
     fs::write(&config, format!("{written}garbage = [\n")).unwrap();
 
@@ -628,9 +628,9 @@ fn every_project_on_an_older_marker_is_moved_by_all_projects() {
     let beta = dir.path().join("beta");
     fs::create_dir(&beta).unwrap();
     json_project(&beta);
-    flayer(dir.path(), &["link", "beta"]).unwrap();
+    weaver(dir.path(), &["link", "beta"]).unwrap();
 
-    let dry = flayer(dir.path(), &["migrate", "--all-projects"]).unwrap();
+    let dry = weaver(dir.path(), &["migrate", "--all-projects"]).unwrap();
 
     assert_eq!(
         dry.stdout,
@@ -642,13 +642,13 @@ fn every_project_on_an_older_marker_is_moved_by_all_projects() {
          nothing changed: add --yes to go ahead\n"
     );
 
-    flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    weaver(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
 
     for root in [&alpha, &beta] {
         assert!(settings(root).is_file(), "{}", root.display());
         assert!(!marker(root).exists() && !json(root).exists());
     }
-    let none = flayer(dir.path(), &["migrate", "-p", "beta", "--yes"]).unwrap();
+    let none = weaver(dir.path(), &["migrate", "-p", "beta", "--yes"]).unwrap();
     assert_eq!(
         none.stdout,
         "nothing to migrate: beta is marked by its settings.toml already\n"

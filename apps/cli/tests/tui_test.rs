@@ -22,15 +22,15 @@ use tui::state::Step as TuiStep;
 // ---------------------------------------------------------------------------
 
 #[test]
-fn flayer_on_its_own_is_the_tui_at_both_spellings() {
-    let bare = FlayerCli::try_parse_from(["flayer"]).unwrap();
-    let named = FlayerCli::try_parse_from(["flayer", "tui"]).unwrap();
+fn weaver_on_its_own_is_the_tui_at_both_spellings() {
+    let bare = WeaverCli::try_parse_from(["flayer"]).unwrap();
+    let named = WeaverCli::try_parse_from(["flayer", "tui"]).unwrap();
     let long = Cli::try_parse_from(["mind", "flayer"]).unwrap();
 
     assert!(bare.command.is_none());
     assert!(matches!(
         named.command,
-        Some(mindweaver_cli::FlayerCommand::Tui)
+        Some(mindweaver_cli::WeaverCommand::Tui)
     ));
     assert!(matches!(
         long.command,
@@ -66,7 +66,7 @@ fn without_a_workspace_the_tui_offers_to_create_one_here() {
     let task = press_and_run(&mut app, KeyCode::Enter);
 
     assert_eq!(task, Some(Task::InitWorkspace));
-    assert!(dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG).is_file());
+    assert!(dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG).is_file());
     assert!(matches!(app.view, View::Workspace(_)));
     assert!(app.transcript().starts_with("$ flayer init\n"));
 }
@@ -99,7 +99,7 @@ fn a_new_workspace_goes_straight_to_linking_what_is_under_it() {
 #[test]
 fn a_repository_is_made_a_mind_project_only_when_that_is_confirmed() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     fs::create_dir_all(dir.path().join("gamma/.git")).unwrap();
     let mut app = tui_in(dir.path());
 
@@ -139,7 +139,7 @@ fn a_repository_is_made_a_mind_project_only_when_that_is_confirmed() {
 #[test]
 fn a_typed_path_that_is_not_a_project_is_asked_about_too() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     // Not a repository either, so the workspace could not have offered it.
     fs::create_dir(dir.path().join("plain")).unwrap();
     let mut app = tui_in(dir.path());
@@ -272,11 +272,11 @@ fn workspace_with_one_of_each() -> TempDir {
 }
 
 #[test]
-fn the_minds_screen_lists_what_flayer_scan_suggest_does_in_its_order_and_words() {
+fn the_minds_screen_lists_what_weaver_scan_suggest_does_in_its_order_and_words() {
     let dir = workspace_with_one_of_each();
     let app = tui::minds(dir.path(), &[], &Lookup::default()).unwrap();
 
-    let suggested = flayer(dir.path(), &["scan", "--suggest"]).unwrap();
+    let suggested = weaver(dir.path(), &["scan", "--suggest"]).unwrap();
 
     // Each line of the command as the route and what follows its standing.
     let lines: Vec<(String, String)> = suggested
@@ -407,13 +407,13 @@ fn the_minds_screen_cuts_a_long_reason_to_keep_what_applying_does_in_sight() {
 }
 
 #[test]
-fn the_minds_screen_and_the_link_form_say_a_moved_project_moved_as_flayer_scan_suggest_does() {
+fn the_minds_screen_and_the_link_form_say_a_moved_project_moved_as_weaver_scan_suggest_does() {
     let dir = workspace_with_own();
-    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
     fs::create_dir(dir.path().join("apps")).unwrap();
     fs::rename(dir.path().join("alpha"), dir.path().join("apps/alpha")).unwrap();
 
-    let suggested = flayer(dir.path(), &["scan", "--suggest"]).unwrap();
+    let suggested = weaver(dir.path(), &["scan", "--suggest"]).unwrap();
 
     // Each line of the command not linked, as its route and what follows
     // its standing.
@@ -489,18 +489,18 @@ fn applying_an_untouched_minds_screen_asks_nothing() {
 }
 
 #[test]
-fn flayer_minds_is_a_command_at_both_spellings() {
-    let direct = FlayerCli::try_parse_from(["flayer", "minds"]).unwrap();
+fn weaver_minds_is_a_command_at_both_spellings() {
+    let direct = WeaverCli::try_parse_from(["flayer", "minds"]).unwrap();
     let nested = Cli::try_parse_from(["mind", "flayer", "minds", "work"]).unwrap();
 
     assert!(matches!(
         direct.command,
-        Some(mindweaver_cli::FlayerCommand::Minds { ref roots }) if roots.is_empty()
+        Some(mindweaver_cli::WeaverCommand::Minds { ref roots }) if roots.is_empty()
     ));
     assert!(matches!(
         nested.command,
         Some(mindweaver_cli::Command::Flayer {
-            command: Some(mindweaver_cli::FlayerCommand::Minds { ref roots })
+            command: Some(mindweaver_cli::WeaverCommand::Minds { ref roots })
         }) if roots == &[PathBuf::from("work")]
     ));
 }
@@ -519,7 +519,7 @@ fn candidates_and_a_folder_beside() -> (TempDir, TempDir) {
 }
 
 #[test]
-fn flayer_minds_given_a_folder_offers_what_is_under_it_beside_every_linked_one() {
+fn weaver_minds_given_a_folder_offers_what_is_under_it_beside_every_linked_one() {
     let (dir, work) = candidates_and_a_folder_beside();
 
     let app = tui::minds(dir.path(), &[work.path().to_path_buf()], &Lookup::default()).unwrap();
@@ -541,7 +541,7 @@ fn flayer_minds_given_a_folder_offers_what_is_under_it_beside_every_linked_one()
 }
 
 #[test]
-fn flayer_minds_given_a_folder_that_is_not_there_says_so_beside_what_the_others_hold() {
+fn weaver_minds_given_a_folder_that_is_not_there_says_so_beside_what_the_others_hold() {
     let (dir, work) = candidates_and_a_folder_beside();
     let missing = work.path().join("wrok");
 
@@ -567,9 +567,9 @@ fn flayer_minds_given_a_folder_that_is_not_there_says_so_beside_what_the_others_
 }
 
 #[test]
-fn flayer_minds_given_only_a_folder_that_is_not_there_is_not_an_empty_answer() {
+fn weaver_minds_given_only_a_folder_that_is_not_there_is_not_an_empty_answer() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
     let app = tui::minds(dir.path(), &[dir.path().join("wrok")], &Lookup::default()).unwrap();
 
@@ -598,7 +598,7 @@ fn applying_the_minds_screen_given_a_folder_links_by_path_and_looks_there_again(
             unlink: Vec::new(),
         })
     );
-    assert!(FlayerWorkspace::open(dir.path()).unwrap().is_linked(&delta));
+    assert!(WeaverWorkspace::open(dir.path()).unwrap().is_linked(&delta));
     let transcript = app.transcript();
     assert!(
         transcript.contains(&format!("$ flayer link {spelled}\n")),
@@ -712,8 +712,8 @@ fn unlinking_asks_first_and_forgets_without_deleting() {
 #[test]
 fn u_updates_the_project_or_the_artifact_under_the_cursor_and_shows_what_it_said() {
     let dir = workspace_with_own();
-    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
-    flayer(dir.path(), &["install", "-p", "beta", "commit-style"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "beta", "commit-style"]).unwrap();
     let manifest = own_directory_for(dir.path(), Kind::Skill).join("commit-style/SKILL.md");
     let since = fs::read_to_string(&manifest).unwrap() + "Since.\n";
     fs::write(&manifest, &since).unwrap();
@@ -818,7 +818,7 @@ fn a_stale_entry_is_shown_where_it_can_be_unlinked() {
 #[test]
 fn a_stale_entry_the_scan_found_moved_is_relinked_where_it_went() {
     let dir = workspace_with_own();
-    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
     fs::create_dir(dir.path().join("apps")).unwrap();
     fs::rename(dir.path().join("alpha"), dir.path().join("apps/alpha")).unwrap();
     let mut app = tui_in(dir.path());
@@ -843,7 +843,7 @@ fn a_stale_entry_the_scan_found_moved_is_relinked_where_it_went() {
     );
     assert_eq!(task, Some(relink));
     assert!(registry(dir.path()).contains("\"apps/alpha\""));
-    let status = flayer(dir.path(), &["status", "-p", "apps/alpha"]).unwrap();
+    let status = weaver(dir.path(), &["status", "-p", "apps/alpha"]).unwrap();
     assert!(
         status.stdout.contains("commit-style  current"),
         "{}",
@@ -904,7 +904,7 @@ fn a_on_a_foreign_skill_adopts_it_into_the_library_once_asked() {
     assert!(own_directory_for(dir.path(), Kind::Skill)
         .join("notes/SKILL.md")
         .is_file());
-    let status = flayer(dir.path(), &["status", "-p", "alpha"]).unwrap();
+    let status = weaver(dir.path(), &["status", "-p", "alpha"]).unwrap();
     assert!(
         status
             .stdout
@@ -960,7 +960,7 @@ fn enter_on_an_artifact_shows_it_as_mind_show_does() {
 #[test]
 fn a_ledger_that_will_not_open_is_said_on_each_projects_rows() {
     let dir = workspace_with_two();
-    let ledger = dir.path().join(FLAYER_DIR).join("mindflayer.db");
+    let ledger = dir.path().join(WEAVER_DIR).join("mindflayer.db");
     fs::write(&ledger, "not a database\n").unwrap();
     let mut app = tui_in(dir.path());
 
@@ -996,19 +996,19 @@ fn an_invalid_artifact_is_marked_where_it_is_listed() {
 #[test]
 fn a_projects_rows_say_how_each_artifact_stands_and_which_agents_read_it() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let collapse = dir.path().join("collapse");
     fs::create_dir(&collapse).unwrap();
     new_project(&collapse);
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
-    flayer(
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+    weaver(
         dir.path(),
         &["add", "skill", "commit-style", "How commits are written"],
     )
     .unwrap();
-    flayer(dir.path(), &["install", "-p", "collapse", "commit-style"]).unwrap();
-    flayer(dir.path(), &["add", "skill", "deploy", "Ship the service"]).unwrap();
-    flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "collapse", "commit-style"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "deploy", "Ship the service"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
     fs::remove_dir_all(collapse.join(".claude/skills/deploy")).unwrap();
     mind(&collapse, &["add", "skill", "review", "Review a change"]).unwrap();
     let notes = collapse.join(".claude/skills/notes");
@@ -1030,7 +1030,7 @@ fn a_projects_rows_say_how_each_artifact_stands_and_which_agents_read_it() {
     ] {
         assert!(drawn.contains(row), "{row}\n{drawn}");
     }
-    let status = flayer(dir.path(), &["status", "-p", "collapse"]).unwrap();
+    let status = weaver(dir.path(), &["status", "-p", "collapse"]).unwrap();
     assert_eq!(
         status.stdout,
         "\
@@ -1048,7 +1048,7 @@ review        authored  -
 }
 
 #[test]
-fn validate_in_the_tui_reads_as_flayer_validate_does() {
+fn validate_in_the_tui_reads_as_weaver_validate_does() {
     let dir = workspace_with_two();
     let mut app = tui_in(dir.path());
 
@@ -1057,7 +1057,7 @@ fn validate_in_the_tui_reads_as_flayer_validate_does() {
     let Mode::Reading(reader) = &app.mode else {
         panic!("{:?}", app.mode);
     };
-    let expected = flayer(dir.path(), &["validate"]).unwrap().stdout;
+    let expected = weaver(dir.path(), &["validate"]).unwrap().stdout;
     let lines: Vec<&str> = reader.lines.iter().map(|(_, line)| line.as_str()).collect();
     assert_eq!(lines, expected.lines().collect::<Vec<_>>());
     press_key(&mut app, KeyCode::Esc);
@@ -1093,9 +1093,9 @@ fn a_stand_in_runner_is_handed_the_lines_a_task_is() {
 }
 
 #[test]
-fn gathering_in_the_tui_is_flayer_gather_git() {
+fn gathering_in_the_tui_is_weaver_gather_git() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let url = source.path().to_string_lossy().into_owned();
     let mut app = tui_in(dir.path());
@@ -1123,7 +1123,7 @@ fn gathering_in_the_tui_is_flayer_gather_git() {
 #[test]
 fn a_gather_runs_apart_with_its_progress_drawn_until_it_is_over() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let mut app = tui_in(dir.path());
     let (go, gate) = mpsc::channel();
     app.runner = Some(slow_gather(gate));
@@ -1172,7 +1172,7 @@ fn a_gather_runs_apart_with_its_progress_drawn_until_it_is_over() {
 #[test]
 fn esc_cancels_a_running_gather_and_the_form_says_so() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let mut app = tui_in(dir.path());
     let (_go, gate) = mpsc::channel();
     app.runner = Some(slow_gather(gate));
@@ -1202,7 +1202,7 @@ fn esc_cancels_a_running_gather_and_the_form_says_so() {
 #[test]
 fn a_gather_already_placing_says_a_cancel_is_too_late_and_finishes() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let mut app = tui_in(dir.path());
     let (go, gate) = mpsc::channel();
     app.runner = Some(placing_gather(gate));
@@ -1230,7 +1230,7 @@ fn a_gather_already_placing_says_a_cancel_is_too_late_and_finishes() {
 #[test]
 fn leaving_while_a_gather_runs_cancels_it_and_waits_for_it() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let mut app = tui_in(dir.path());
     let (_go, gate) = mpsc::channel();
     app.runner = Some(slow_gather(gate));
@@ -1250,7 +1250,7 @@ fn leaving_while_a_gather_runs_cancels_it_and_waits_for_it() {
 #[test]
 fn the_working_boxes_are_drawn_on_a_terminal_narrower_than_they_are() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let mut app = tui_in(dir.path());
     let (_go, gate) = mpsc::channel();
     app.runner = Some(slow_gather(gate));
@@ -1270,7 +1270,7 @@ fn the_working_boxes_are_drawn_on_a_terminal_narrower_than_they_are() {
 #[test]
 fn a_gather_refused_for_a_token_in_its_url_shows_the_token_neither_while_it_runs_nor_after() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let mut app = tui_in(dir.path());
 
     press_key(&mut app, KeyCode::Char('g'));
@@ -1293,7 +1293,7 @@ fn a_gather_refused_for_a_token_in_its_url_shows_the_token_neither_while_it_runs
 
 /// Where the shelf `shelved` gathered offers its skills from, as the
 /// install screen says it.
-fn shelf_origin(workspace: &FlayerWorkspace, ledger: &Ledger) -> String {
+fn shelf_origin(workspace: &WeaverWorkspace, ledger: &Ledger) -> String {
     screen_for(workspace, ledger).targets[0].rows[0]
         .candidate
         .origin()
@@ -1394,7 +1394,7 @@ fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_r
 "#,
     )
     .unwrap();
-    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    weaver(dir.path(), &["link", "alpha"]).unwrap();
     let mut app = tui_in(dir.path());
 
     press_and_run(&mut app, KeyCode::Char('i'));
@@ -1412,7 +1412,7 @@ fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_r
     let agents = fs::read(root.join(".agents/skills/deploy/SKILL.md")).unwrap();
     assert_eq!(claude, agents);
     // Opened again, now that it links `alpha`.
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
     let origin = shelf_origin(&workspace, &workspace.ledger_for_reading().unwrap());
     assert!(
         app.transcript().starts_with(&format!(
@@ -1427,7 +1427,7 @@ fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_r
 #[test]
 fn a_rule_ticked_on_the_install_screen_inside_the_tui_is_installed_from_there() {
     let (dir, _workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
-    flayer(
+    weaver(
         dir.path(),
         &[
             "add",
@@ -1572,7 +1572,7 @@ fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() 
 fn a_line_of_the_install_screen_that_fails_does_not_keep_the_rest_from_running() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     let origin = shelf_origin(&workspace, &ledger);
-    flayer(
+    weaver(
         dir.path(),
         &["add", "skill", "ours", "Of the workspace's own"],
     )
@@ -1658,7 +1658,7 @@ fn disk(root: &Path) -> std::collections::BTreeMap<String, Option<Vec<u8>>> {
 /// What the ledger of the workspace at `root` records of every installation
 /// in each of `projects`.
 fn recorded(root: &Path, projects: &[&str]) -> Vec<mindweaver_core::ledger::InstallRecord> {
-    let ledger = FlayerWorkspace::open(root)
+    let ledger = WeaverWorkspace::open(root)
         .unwrap()
         .ledger_for_reading()
         .unwrap();
@@ -1720,12 +1720,12 @@ fn a_line_as_the_transcript_shows_it_reads_back_into_its_words() {
 fn the_lines_the_install_screen_ran_run_again_on_a_copy_leave_the_same_ledger_and_disk() {
     let (dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy", "lint"]);
     let origin = shelf_origin(&workspace, &ledger);
-    flayer(
+    weaver(
         dir.path(),
         &["add", "rule", "git/commits", "Commit one step at a time"],
     )
     .unwrap();
-    flayer(dir.path(), &["install", "-p", "tanukeys", "lint"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "tanukeys", "lint"]).unwrap();
     let copy = TempDir::new().unwrap();
     copy_tree(dir.path(), copy.path());
     let projects = ["collapse", "tanukeys"];
@@ -1781,7 +1781,7 @@ fn the_lines_the_install_screen_ran_run_again_on_a_copy_leave_the_same_ledger_an
         let words = words_of(line);
         assert_eq!(words[0], "flayer", "{line}");
         let args: Vec<&str> = words[1..].iter().map(String::as_str).collect();
-        let replayed = flayer(copy.path(), &args).unwrap();
+        let replayed = weaver(copy.path(), &args).unwrap();
         assert!(replayed.ok, "{line}: {replayed:?}");
     }
 
@@ -2005,7 +2005,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
         for line in task.commands() {
             let parsed = match line[0].as_str() {
                 "mind" => Cli::try_parse_from(&line).err(),
-                "flayer" => FlayerCli::try_parse_from(&line).err(),
+                "flayer" => WeaverCli::try_parse_from(&line).err(),
                 other => panic!("{task:?} runs `{other}`"),
             };
             assert!(parsed.is_none(), "{line:?} does not parse: {parsed:?}");
@@ -2085,13 +2085,13 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
     assert!(install.writes() && uninstall.writes());
 
     let line = install.commands().remove(0);
-    let Some(mindweaver_cli::FlayerCommand::Install {
+    let Some(mindweaver_cli::WeaverCommand::Install {
         projects,
         all_projects,
         name,
         from,
         force,
-    }) = FlayerCli::try_parse_from(&line).unwrap().command
+    }) = WeaverCli::try_parse_from(&line).unwrap().command
     else {
         panic!("{line:?}");
     };
@@ -2104,13 +2104,13 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
     );
 
     let line = uninstall.commands().remove(0);
-    let Some(mindweaver_cli::FlayerCommand::Uninstall {
+    let Some(mindweaver_cli::WeaverCommand::Uninstall {
         projects,
         name,
         orphaned,
         force,
         ..
-    }) = FlayerCli::try_parse_from(&line).unwrap().command
+    }) = WeaverCli::try_parse_from(&line).unwrap().command
     else {
         panic!("{line:?}");
     };
@@ -2297,7 +2297,7 @@ fn the_add_form_offers_what_the_workspace_in_your_home_has_to_a_project_elsewher
     let project = elsewhere.path().join("collapse");
     fs::create_dir(&project).unwrap();
     mind(&project, &["init"]).unwrap();
-    flayer_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
+    weaver_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
     let template = home.path().join(".mindflayer/templates/runbook/SKILL.md");
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nFrom home.\n").unwrap();
@@ -2336,8 +2336,8 @@ fn mind_calls_the_workspace_in_your_home_the_default_only_when_it_is_not_above()
         fs::create_dir(project).unwrap();
         mind(project, &["init"]).unwrap();
     }
-    flayer_at_home(elsewhere.path(), home.path(), &["link", "far"]).unwrap();
-    flayer_at_home(home.path(), home.path(), &["link", "near"]).unwrap();
+    weaver_at_home(elsewhere.path(), home.path(), &["link", "far"]).unwrap();
+    weaver_at_home(home.path(), home.path(), &["link", "near"]).unwrap();
     let default =
         |project: &Path| match tui::load_project(project, &Lookup::at_home(Some(home.path())))
             .unwrap()
@@ -2374,7 +2374,7 @@ fn with_the_default_workspace_not_made_the_tui_opens_on_it_empty() {
         .message
         .as_ref()
         .is_some_and(|message| message.text.contains("is made by the first change")));
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -2399,7 +2399,7 @@ fn reading_from_the_tui_leaves_the_default_workspace_unmade() {
         app.message.as_ref().map(|message| message.text.as_str()),
         Some("no projects to install into yet; l links one")
     );
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
     assert_eq!(app.transcript(), "");
 }
 
@@ -2416,7 +2416,7 @@ fn the_minds_screen_lists_what_is_under_the_default_workspace_before_it_is_made(
 
     assert!(matches!(app.mode, Mode::Minds(_)), "{:?}", app.mode);
     assert!(tui_drawn(&app).contains("alpha"));
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 /// The paths the minds screen lists, in its order.
@@ -2440,7 +2440,7 @@ fn home_inside_a_workspace() -> (TempDir, PathBuf) {
 }
 
 #[test]
-fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
+fn weaver_minds_opens_on_the_default_workspace_without_making_it() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
     let alpha = home.path().join("alpha");
@@ -2450,11 +2450,11 @@ fn flayer_minds_opens_on_the_default_workspace_without_making_it() {
     let app = tui::minds(elsewhere.path(), &[], &Lookup::at_home(Some(home.path()))).unwrap();
 
     assert_eq!(minds_rows(&app), vec!["alpha"]);
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
-fn flayer_minds_with_no_workspace_and_no_default_says_so() {
+fn weaver_minds_with_no_workspace_and_no_default_says_so() {
     let elsewhere = TempDir::new().unwrap();
 
     let error = tui::minds(elsewhere.path(), &[], &Lookup::default()).unwrap_err();
@@ -2463,7 +2463,7 @@ fn flayer_minds_with_no_workspace_and_no_default_says_so() {
 }
 
 #[test]
-fn flayer_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
+fn weaver_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
     let (_outer, home) = home_inside_a_workspace();
     let elsewhere = TempDir::new().unwrap();
 
@@ -2472,7 +2472,7 @@ fn flayer_minds_opens_on_the_default_workspace_not_on_one_above_its_home() {
     // Not `alpha`, `beta` and `h/gamma`: those are the workspace above.
     assert_eq!(minds_rows(&app), vec!["gamma"]);
     assert_eq!(app.base(), home);
-    assert!(!home.join(FLAYER_DIR).exists());
+    assert!(!home.join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -2490,7 +2490,7 @@ fn the_install_screen_opens_on_the_default_workspace_not_on_one_above_its_home()
         app.message.as_ref().map(|message| message.text.as_str()),
         Some("no projects to install into yet; l links one")
     );
-    assert!(!home.join(FLAYER_DIR).exists());
+    assert!(!home.join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -2526,7 +2526,7 @@ fn the_first_change_from_the_tui_makes_the_default_workspace() {
             "$ flayer init\ninitialized flayer workspace `{}` in {}\n\
              $ flayer link alpha\nlinked alpha as alpha\n",
             home.path().file_name().unwrap().to_string_lossy(),
-            home.path().join(FLAYER_DIR).display()
+            home.path().join(WEAVER_DIR).display()
         )
     );
 }
@@ -2584,7 +2584,7 @@ fn a_gather_from_the_tui_runs_apart_after_making_the_default_workspace_where_it_
     assert!(workspace.made);
     assert_eq!(workspace.root, home);
     assert_eq!(workspace.shelf, 1);
-    let above = flayer(outer.path(), &["gather", "list"]).unwrap();
+    let above = weaver(outer.path(), &["gather", "list"]).unwrap();
     assert!(
         above.stdout.starts_with("nothing gathered yet"),
         "{}",
@@ -2623,7 +2623,7 @@ fn a_skill_that_cannot_be_read_is_listed_where_it_can_be_dealt_with() {
 #[test]
 fn a_projects_own_skill_that_cannot_be_read_takes_the_row_its_agents_copy_has() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let alpha = dir.path().join("alpha");
     fs::create_dir(&alpha).unwrap();
     let directories = mindweaver_core::Directories::default().with(Kind::Skill, "skills");
@@ -2634,7 +2634,7 @@ fn a_projects_own_skill_that_cannot_be_read_takes_the_row_its_agents_copy_has() 
         &directories,
     )
     .unwrap();
-    flayer(dir.path(), &["link", "alpha"]).unwrap();
+    weaver(dir.path(), &["link", "alpha"]).unwrap();
     write_skill(&alpha, "deploy", "no front matter at all\n");
     let claudes = alpha.join(".claude/skills/deploy");
     fs::create_dir_all(&claudes).unwrap();
@@ -2686,7 +2686,7 @@ fn the_workspaces_own_row_sits_above_its_projects() {
 #[test]
 fn d_on_the_workspaces_own_offers_to_remove_it_everywhere_with_e() {
     let dir = workspace_with_own();
-    flayer(dir.path(), &["install", "commit-style", "-p", "alpha"]).unwrap();
+    weaver(dir.path(), &["install", "commit-style", "-p", "alpha"]).unwrap();
     let mut app = tui_in(dir.path());
     press_key(&mut app, KeyCode::Up);
     press_key(&mut app, KeyCode::Right);
@@ -2742,7 +2742,7 @@ fn d_on_a_projects_own_has_no_everywhere_to_offer() {
 }
 
 #[test]
-fn adding_on_the_workspaces_row_is_flayer_add() {
+fn adding_on_the_workspaces_row_is_weaver_add() {
     let dir = workspace_with_two();
     let mut app = tui_in(dir.path());
     press_key(&mut app, KeyCode::Up);
@@ -2833,7 +2833,7 @@ fn mind_opens_a_project_on_its_own_with_what_only_a_workspace_has_explained() {
 #[test]
 fn l_on_a_loose_project_links_it_and_the_screen_becomes_the_workspaces() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let alpha = dir.path().join("alpha");
     fs::create_dir(&alpha).unwrap();
     mind(&alpha, &["init"]).unwrap();
@@ -2977,18 +2977,18 @@ fn hub_beside_outer() -> (TempDir, PathBuf, PathBuf, PathBuf) {
     for root in [&outer, &hub, &collapse] {
         fs::create_dir(root).unwrap();
     }
-    flayer(&outer, &["init"]).unwrap();
-    flayer(&hub, &["init"]).unwrap();
+    weaver(&outer, &["init"]).unwrap();
+    weaver(&hub, &["init"]).unwrap();
     older_project(&collapse);
-    flayer(&hub, &["link", "../collapse"]).unwrap();
-    flayer(&hub, &["add", "skill", "hub-skill", "The hub's"]).unwrap();
-    flayer(&hub, &["install", "-p", "collapse", "hub-skill"]).unwrap();
+    weaver(&hub, &["link", "../collapse"]).unwrap();
+    weaver(&hub, &["add", "skill", "hub-skill", "The hub's"]).unwrap();
+    weaver(&hub, &["install", "-p", "collapse", "hub-skill"]).unwrap();
     (dir, outer, hub, collapse)
 }
 
 /// What `hub`'s ledger says it installed into `collapse`.
 fn recorded_in_hub(hub: &Path) -> Vec<String> {
-    FlayerWorkspace::open(hub)
+    WeaverWorkspace::open(hub)
         .unwrap()
         .ledger()
         .unwrap()
@@ -3093,7 +3093,7 @@ fn the_header_flags_projects_a_mind_toml_marks_with_the_command_that_moves_them(
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
         older_project(&root);
-        flayer(dir.path(), &["link", name]).unwrap();
+        weaver(dir.path(), &["link", name]).unwrap();
     }
 
     let flagged = header(dir.path());
@@ -3113,7 +3113,7 @@ fn the_header_flags_projects_a_mind_toml_marks_with_the_command_that_moves_them(
         "{own}"
     );
 
-    flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    weaver(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
     assert!(
         !header(dir.path()).contains("mind.toml"),
         "{}",
@@ -3134,7 +3134,7 @@ fn the_header_flags_projects_a_settings_json_marks_as_it_flags_a_mind_toml() {
     let json = dir.path().join("json");
     fs::create_dir(&json).unwrap();
     json_project(&json);
-    flayer(dir.path(), &["link", "json"]).unwrap();
+    weaver(dir.path(), &["link", "json"]).unwrap();
 
     let flagged = header(dir.path());
     assert!(
@@ -3147,7 +3147,7 @@ fn the_header_flags_projects_a_settings_json_marks_as_it_flags_a_mind_toml() {
     let old = dir.path().join("old");
     fs::create_dir(&old).unwrap();
     older_project(&old);
-    flayer(dir.path(), &["link", "old"]).unwrap();
+    weaver(dir.path(), &["link", "old"]).unwrap();
     let both = header(dir.path());
     assert!(
         both.contains(
@@ -3169,7 +3169,7 @@ fn the_header_flags_projects_a_settings_json_marks_as_it_flags_a_mind_toml() {
         "{own}"
     );
 
-    flayer(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
+    weaver(dir.path(), &["migrate", "--all-projects", "--yes"]).unwrap();
     let moved = header(dir.path());
     assert!(!moved.contains("marked by"), "{moved}");
 }
@@ -3279,7 +3279,7 @@ fn a_project_under_the_workspace_on_screen_keeps_the_plain_line() {
 #[test]
 fn t_on_a_project_opens_its_agents_and_share_toggles_and_runs_the_command() {
     let dir = workspace_with_own();
-    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
     let mut app = tui_in(dir.path());
     assert_eq!(app.member().unwrap().name, "alpha");
 
@@ -3393,7 +3393,7 @@ fn t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
     let old = dir.path().join("old");
     fs::create_dir(&old).unwrap();
     older_project(&old);
-    flayer(dir.path(), &["link", "old"]).unwrap();
+    weaver(dir.path(), &["link", "old"]).unwrap();
     let mut app = tui_in(dir.path());
 
     press_key(&mut app, KeyCode::Up);
@@ -3426,7 +3426,7 @@ fn t_and_capital_t_on_a_project_a_settings_json_marks_say_why_not() {
     let json = dir.path().join("json");
     fs::create_dir(&json).unwrap();
     json_project(&json);
-    flayer(dir.path(), &["link", "json"]).unwrap();
+    weaver(dir.path(), &["link", "json"]).unwrap();
     let mut app = tui_in(dir.path());
     while app.member().unwrap().name != "json" {
         press_key(&mut app, KeyCode::Down);
@@ -3455,7 +3455,7 @@ fn a_project_installing_where_no_agent_reads_is_marked_and_its_pane_says_why() {
     let dir = workspace_with_own();
     let alpha = dir.path().join("alpha");
     mind(&alpha, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
-    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
 
     let app = tui_in(dir.path());
 
@@ -3487,7 +3487,7 @@ fn a_project_given_a_rule_some_of_its_agents_read_nowhere_is_marked_and_its_pane
         "---\npaths:\n  - \"**/*.rs\"\n---\n\n# Comments say why, not what\n",
     )
     .unwrap();
-    flayer(dir.path(), &["install", "-p", "alpha", "style/comments"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "alpha", "style/comments"]).unwrap();
 
     let app = tui_in(dir.path());
 
@@ -3553,7 +3553,7 @@ fn a_strip_is_drawn_on_a_terminal_too_short_for_it() {
 #[test]
 fn capital_t_on_a_project_opens_where_it_installs_skills_and_runs_targets_set() {
     let dir = workspace_with_own();
-    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
     let mut app = tui_in(dir.path());
     assert_eq!(app.member().unwrap().name, "alpha");
 
@@ -3661,7 +3661,7 @@ fn capital_t_on_the_workspaces_own_row_or_an_older_project_says_why_not() {
     let old = dir.path().join("old");
     fs::create_dir(&old).unwrap();
     older_project(&old);
-    flayer(dir.path(), &["link", "old"]).unwrap();
+    weaver(dir.path(), &["link", "old"]).unwrap();
     let mut app = tui_in(dir.path());
 
     press_key(&mut app, KeyCode::Up);
@@ -3693,8 +3693,8 @@ fn w_lists_the_workspaces_this_machine_knows_with_the_one_on_screen_marked() {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
     fs::create_dir(&home).unwrap();
-    flayer_at_home(&home, &home, &["init"]).unwrap();
-    flayer_at_home(&home, &home, &["init", "flayers/writing"]).unwrap();
+    weaver_at_home(&home, &home, &["init"]).unwrap();
+    weaver_at_home(&home, &home, &["init", "flayers/writing"]).unwrap();
     let writing = home.join("flayers/writing");
     let mut app = tui_at_home(&writing, &home);
 
@@ -3723,7 +3723,7 @@ fn w_on_a_project_on_its_own_marks_the_workspace_its_commands_would_use() {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
     fs::create_dir(&home).unwrap();
-    flayer_at_home(&home, &home, &["init"]).unwrap();
+    weaver_at_home(&home, &home, &["init"]).unwrap();
     let project = home.join("collapse");
     fs::create_dir(&project).unwrap();
     new_project(&project);

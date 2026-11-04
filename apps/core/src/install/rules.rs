@@ -52,7 +52,7 @@ use crate::ledger::{Action, InstallRecord, Ledger, Outcome, Target};
 use crate::paths;
 use crate::settings::Share;
 use crate::value::{ArtifactName, ContentHash, Origin};
-use crate::workspace::{replace_bytes_unresolved, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{replace_bytes_unresolved, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// How the ledger names a project's `AGENTS.md`: its route from the project,
 /// as it names every copy.
@@ -265,7 +265,7 @@ pub(crate) fn receives(project: &MindProject) -> Result<(), InstallError> {
 /// `offers`, each with how it stands in `project`, which its settings mark:
 /// [`Held::standing`].
 pub(crate) fn survey(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     offers: &[Offer],
@@ -291,7 +291,7 @@ struct Held {
 
 impl Held {
     fn read(
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         ledger: &Ledger,
         project: &MindProject,
     ) -> Result<Held, InstallError> {
@@ -314,7 +314,7 @@ impl Held {
     /// nothing, as a copy nothing records is not.
     fn standing(
         &self,
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         project: &MindProject,
         route: &str,
         offers: &[Offer],
@@ -355,7 +355,7 @@ impl Held {
 /// `AGENTS.md`, or at its place in Claude's folder of Mindflayer's rules, as
 /// [`uninstall`] tells it.
 pub(crate) fn somebodys(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     route: &str,
@@ -390,7 +390,7 @@ pub(crate) fn claude_file(route: &str) -> String {
 /// rule the project has into a project marked by its settings, copied into
 /// one a `mind.toml` marks.
 pub(crate) fn install(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
@@ -416,7 +416,7 @@ pub(crate) fn install(
 /// [`install`], with the workspace's lock held already, as
 /// [`super::install_held`] is for a skill.
 pub(crate) fn install_held(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
@@ -495,7 +495,7 @@ pub(crate) fn install_held(
 /// ([`InstallError::Withheld`]), which would keep the section with no record
 /// of it.
 pub(crate) fn uninstall(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     name: &str,
@@ -559,7 +559,7 @@ pub(crate) fn uninstall(
 /// [`super::install`]. Holds the workspace's lock throughout, as an install
 /// does.
 pub fn render(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     homes: &AgentHomes,
@@ -596,7 +596,7 @@ pub fn render(
 /// reading the block and those reading Claude's folder read two versions of
 /// one rule.
 pub(crate) fn update_held(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     homes: &AgentHomes,
@@ -687,7 +687,7 @@ struct Wanted {
 impl Wanted {
     /// The rule `offer` stands for, read where it is offered from.
     fn of(
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         offer: &Offer,
         before: Option<InstallRecord>,
     ) -> Result<Wanted, InstallError> {
@@ -757,7 +757,7 @@ impl Wanted {
 
 /// Where links in the rule `offer` offers, at `path`, may lead: the
 /// workspace that keeps it, as for a skill's copy.
-fn within(workspace: &FlayerWorkspace, offer: &Offer, path: &Path) -> PathBuf {
+fn within(workspace: &WeaverWorkspace, offer: &Offer, path: &Path) -> PathBuf {
     match offer {
         Offer::Loaded { entry, .. } => paths::normalize(&workspace.root().join(entry)),
         Offer::Workspace { .. } => workspace.root().to_path_buf(),
@@ -833,7 +833,7 @@ fn withholding(project: &MindProject) -> Option<Withheld> {
 /// rule an update leaves for an edit is kept whole instead, the copy not
 /// edited too, with its record as it was ([`update_held`]).
 fn render_held(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     homes: &AgentHomes,
@@ -1520,7 +1520,7 @@ fn read(file: &Path) -> Result<Option<Vec<u8>>, InstallError> {
 /// as files before rules had one, and a copy is what it reads them as. An
 /// unrecorded file at that place is somebody's, and refuses the install.
 fn copy_in(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
@@ -1550,7 +1550,7 @@ fn copy_in(
 
 /// [`copy_in`], with the workspace's lock held already.
 fn copy_in_held(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,

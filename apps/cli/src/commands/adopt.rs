@@ -9,7 +9,7 @@
 use std::fmt::Write as _;
 
 use mindweaver_core::adopt::{self, Git, Plan};
-use mindweaver_core::{AgentHomes, Excluded, FlayerWorkspace, MindProject, Reference};
+use mindweaver_core::{AgentHomes, Excluded, MindProject, Reference, WeaverWorkspace};
 
 use crate::commands::gather::scrubbed;
 use crate::commands::install::shown;
@@ -34,7 +34,7 @@ const UNADOPTED: &str = "nothing adopted: add --yes to go ahead\n";
 /// `homes` are the agents' own folders the command line decided, which core
 /// refuses to adopt from.
 pub(crate) fn adopt_from(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     typed: &str,
     yes: bool,
@@ -58,7 +58,7 @@ pub(crate) fn adopt_from(
 }
 
 /// What `plan` does, or did once `done`.
-fn said(workspace: &FlayerWorkspace, plan: &Plan, done: bool) -> Outcome {
+fn said(workspace: &WeaverWorkspace, plan: &Plan, done: bool) -> Outcome {
     let project = &plan.project;
     let into = project.name();
     let name = &plan.name;

@@ -15,7 +15,7 @@ use mindweaver_core::claude_md::{
 };
 use mindweaver_core::claude_rules::Mode;
 use mindweaver_core::{
-    Agent, AgentHomes, Artifact, Directories, FlayerWorkspace, MindProject, Share,
+    Agent, AgentHomes, Artifact, Directories, MindProject, Share, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -779,7 +779,7 @@ fn a_dot_claude_md_imports_the_agents_md_in_the_folder_above_it() {
 /// and a library of rules to render from.
 struct Rules {
     _dir: TempDir,
-    workspace: FlayerWorkspace,
+    workspace: WeaverWorkspace,
     project: MindProject,
     library: PathBuf,
 }
@@ -788,7 +788,7 @@ impl Rules {
     fn new() -> Self {
         let dir = clean();
         gix::init(dir.path()).unwrap();
-        let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+        let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
         let root = folder(dir.path(), "app");
         let (project, _) =
             MindProject::init_settings(&root, &Agent::ALL, Share::Local, &Directories::default())

@@ -13,7 +13,7 @@ use mindweaver_core::code::Said;
 use mindweaver_core::reading::{Shown, Validation};
 use mindweaver_core::value::Redacted;
 use mindweaver_core::view::Listing;
-use mindweaver_core::{Artifact, Catalog, FlayerWorkspace, Kind, MindProject, Reference};
+use mindweaver_core::{Artifact, Catalog, Kind, MindProject, Reference, WeaverWorkspace};
 
 use super::consulted;
 use crate::render::{as_json, plural, printable, table, verdict};
@@ -88,7 +88,7 @@ where
 /// Run a reading command over the whole workspace: its own artifacts and
 /// every managed project's, in one catalog.
 pub(crate) fn everywhere<F>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
@@ -107,7 +107,7 @@ where
 /// something has to be able to say so again later. Listing the shelf is
 /// `gather list`'s, so `list` and `show` keep to what is held.
 pub(crate) fn everywhere_and_the_shelf<F>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
@@ -121,7 +121,7 @@ where
 
 /// The two above.
 fn workspace_wide<F>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
@@ -288,7 +288,7 @@ pub(crate) fn looked_in(text: &mut String, projects: &[MindProject]) {
 pub(crate) fn list_workspace(
     catalog: &Catalog,
     projects: &[MindProject],
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     level: Level,
 ) -> (String, bool) {
     // The workspace's own artifacts are worth listing whether or not it
@@ -336,7 +336,7 @@ pub(crate) struct Holders {
 }
 
 impl Holders {
-    fn of(workspace: &FlayerWorkspace, own_kinds: &[Kind], shelf_kinds: &[Kind]) -> Self {
+    fn of(workspace: &WeaverWorkspace, own_kinds: &[Kind], shelf_kinds: &[Kind]) -> Self {
         let own = workspace.own();
         Self {
             own: own_kinds

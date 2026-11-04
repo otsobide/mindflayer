@@ -7,7 +7,7 @@ import type { Snapshot } from '@/api/generated/Snapshot'
 import { useSnapshot } from '@/api/snapshot'
 import { first, useQueryChange } from '@/address'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
+import CommandHint, { weaver, making } from '@/components/CommandHint.vue'
 import IssueList from '@/components/IssueList.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import StateBadge from '@/components/StateBadge.vue'
@@ -171,7 +171,7 @@ function folder(snapshot: Snapshot, kind: Kind): string | undefined {
             <CommandHint
               :commands="[
                 ...making(snapshot.workspace),
-                { line: flayer(snapshot.workspace, `add ${kind} <NAME> <DESCRIPTION>`), does: 'one of its own, to install into projects' }
+                { line: weaver(snapshot.workspace, `add ${kind} <NAME> <DESCRIPTION>`), does: 'one of its own, to install into projects' }
               ]"
             />
           </div>

@@ -39,7 +39,7 @@ use thiserror::Error;
 use crate::code::{codes, Said};
 use crate::paths;
 use crate::policy;
-use crate::workspace::{FlayerWorkspace, MindProject, FLAYER_CONFIG, FLAYER_DIR};
+use crate::workspace::{MindProject, WeaverWorkspace, WEAVER_CONFIG, WEAVER_DIR};
 
 /// The most subfolders one listing holds: a thousand.
 ///
@@ -156,7 +156,7 @@ impl Is {
     fn of(folder: &Path) -> Is {
         if MindProject::is_marked(folder) {
             Is::Project
-        } else if folder.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() {
+        } else if folder.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file() {
             Is::Workspace
         } else if folder.join(".git").exists() {
             // `exists`, not `is_dir`: a worktree or a submodule has a `.git`
@@ -269,7 +269,7 @@ impl Folders {
     /// are: here each subfolder is held to it again, and one it refuses is
     /// left out, neither listed nor counted.
     pub fn read(
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         folder: &Path,
         hidden: bool,
         home: Option<&Path>,

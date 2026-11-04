@@ -45,7 +45,7 @@ use crate::kind::Kind;
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::skill::SkillManifest;
 use crate::value::{ArtifactName, ContentHash, Origin};
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// What the `metadata` keys start with that `gh skill` writes into a skill
 /// it installed, saying where it came from: shown ([`Plan::provenance`]),
@@ -222,7 +222,7 @@ codes!(AdoptError {
 /// `homes` are the agents' own folders, which the front end decides, as for
 /// an install: a copy inside one is no one project's to adopt.
 pub fn plan(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     reference: &Reference,
     homes: &AgentHomes,
@@ -252,7 +252,7 @@ pub fn plan(
 /// it is after an install, with what was adopted left adopted, both halves
 /// of it there. Nothing in the project is written, ever.
 pub fn apply(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     reference: &Reference,
     homes: &AgentHomes,
@@ -390,7 +390,7 @@ fn into_library(plan: &Plan) -> Result<(), AdoptError> {
 /// updates, and recording it would leave the next install, which records
 /// its copies afresh, to make it somebody's again.
 fn plan_with(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     reference: &Reference,
@@ -541,7 +541,7 @@ fn plan_with(
 /// the library holds that name already, by its folder or by what one of
 /// its skills declares, which would be two skills of one name the
 /// workspace offers.
-fn in_library(workspace: &FlayerWorkspace, name: &str, copy: &Path) -> Result<PathBuf, AdoptError> {
+fn in_library(workspace: &WeaverWorkspace, name: &str, copy: &Path) -> Result<PathBuf, AdoptError> {
     let own = workspace.own();
     let folder = own.required_directory(Kind::Skill)?;
     let library = install::copy_at(&folder, Kind::Skill, name);

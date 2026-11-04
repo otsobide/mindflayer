@@ -422,7 +422,7 @@ fn workspace(home: &Path) -> String {
         path
     };
 
-    said("flayer init", flayer_at_home(&projects, home, &["init"]));
+    said("flayer init", weaver_at_home(&projects, home, &["init"]));
     let api = repository("api");
     said(
         "git init --quiet api && mind -C api init",
@@ -430,11 +430,11 @@ fn workspace(home: &Path) -> String {
     );
     said(
         "flayer link api",
-        flayer_at_home(&projects, home, &["link", "api"]),
+        weaver_at_home(&projects, home, &["link", "api"]),
     );
     said(
         &format!("flayer add skill review '{REVIEW}'"),
-        flayer_at_home(&projects, home, &["add", "skill", "review", REVIEW]),
+        weaver_at_home(&projects, home, &["add", "skill", "review", REVIEW]),
     );
     let web = repository("web");
     said(

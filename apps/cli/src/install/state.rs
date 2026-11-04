@@ -143,10 +143,10 @@ impl Row {
 pub struct Target {
     pub project: MindProject,
     /// What picks it out of the workspace on a command line, as core says
-    /// ([`FlayerWorkspace::naming`]): the `-p` the lines its marks amount
+    /// ([`WeaverWorkspace::naming`]): the `-p` the lines its marks amount
     /// to name it by.
     ///
-    /// [`FlayerWorkspace::naming`]: mindweaver_core::FlayerWorkspace::naming
+    /// [`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming
     pub picked_by: String,
     /// Every kind's, each kind's together in the order [`Kind::ALL`] gives.
     pub rows: Vec<Row>,

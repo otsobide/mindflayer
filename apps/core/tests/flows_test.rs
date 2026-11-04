@@ -17,7 +17,7 @@ use mindweaver_core::ledger::Ledger;
 use mindweaver_core::mother::random;
 use mindweaver_core::mother::{GitRepositoryMother, ProjectMother, ShelfMother, SkillMother};
 use mindweaver_core::update;
-use mindweaver_core::{Agent, AgentHomes, FlayerWorkspace, Kind, MindProject, Share, MIND_DIR};
+use mindweaver_core::{Agent, AgentHomes, Kind, MindProject, Share, WeaverWorkspace, MIND_DIR};
 
 const ROUNDS: usize = 8;
 
@@ -67,7 +67,7 @@ fn ready(
     names: &[String],
     agents: &[Agent],
     share: Share,
-) -> (tempfile::TempDir, FlayerWorkspace, Ledger, MindProject) {
+) -> (tempfile::TempDir, WeaverWorkspace, Ledger, MindProject) {
     let borrowed: Vec<&str> = names.iter().map(String::as_str).collect();
     let (dir, mut workspace, ledger) = ShelfMother::gathered(&borrowed);
     let root = dir.path().join("app");
@@ -80,7 +80,7 @@ fn ready(
     (dir, workspace, ledger, project)
 }
 
-fn install_all(workspace: &FlayerWorkspace, ledger: &Ledger, project: &MindProject) {
+fn install_all(workspace: &WeaverWorkspace, ledger: &Ledger, project: &MindProject) {
     for candidate in install::survey(workspace, ledger, project, Kind::Skill).unwrap() {
         let installed = install::install(
             workspace,
@@ -99,7 +99,7 @@ fn install_all(workspace: &FlayerWorkspace, ledger: &Ledger, project: &MindProje
 }
 
 fn standings(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
 ) -> Vec<(String, Standing)> {

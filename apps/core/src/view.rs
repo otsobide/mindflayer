@@ -11,7 +11,7 @@
 //! prints, so a script reads a project as a front end draws it.
 //!
 //! - **A read, and nothing more.** No file is made or changed: the ledger is
-//!   opened only through [`FlayerWorkspace::ledger_for_reading`], the
+//!   opened only through [`WeaverWorkspace::ledger_for_reading`], the
 //!   default workspace is never made for it, and no scrub runs. A ledger
 //!   from an older schema is migrated, as every open migrates it, which is
 //!   upkeep of Mindflayer's own file rather than a change.
@@ -50,7 +50,7 @@ use crate::status::{ArtifactStatus, Missed, ProjectStatus, State, Unreached};
 use crate::template::{self, Template};
 use crate::value::{ArtifactName, Origin, Redacted};
 use crate::workspace::{
-    same_directory, FlayerWorkspace, MarkerFile, Member, MindProject, WorkspaceError,
+    same_directory, MarkerFile, Member, MindProject, WeaverWorkspace, WorkspaceError,
 };
 
 /// The version of what a snapshot holds, which it carries as `format`.
@@ -614,7 +614,7 @@ pub struct KnownHere {
 
 impl KnownHere {
     /// `known`, as `workspace`, which loads `loaded`, stands with it.
-    fn of(known: KnownWorkspace, workspace: &FlayerWorkspace, loaded: &[LoadedWorkspace]) -> Self {
+    fn of(known: KnownWorkspace, workspace: &WeaverWorkspace, loaded: &[LoadedWorkspace]) -> Self {
         let loaded_as = loaded
             .iter()
             .find(|load| same_directory(&load.path, &known.path))
@@ -781,7 +781,7 @@ pub struct HeldBox {
 /// A ledger that will not open, or a shelf that will not read, is said among
 /// the snapshot's warnings already, so it offers nothing here, rather than
 /// saying it again in every project.
-fn boxes(workspace: &FlayerWorkspace, members: &[Member]) -> (Vec<Offered>, Vec<Boxes>) {
+fn boxes(workspace: &WeaverWorkspace, members: &[Member]) -> (Vec<Offered>, Vec<Boxes>) {
     let ledger = workspace.ledger_for_reading().ok();
     let offers: Vec<(Kind, Vec<Offer>)> = Kind::ALL
         .into_iter()
@@ -832,7 +832,7 @@ impl Boxes {
     /// of each kind, read against `ledger`.
     fn of(
         entry: String,
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         ledger: &Ledger,
         project: &MindProject,
         offers: &[(Kind, Vec<Offer>)],
@@ -902,7 +902,7 @@ pub struct Listing {
 impl Listing {
     /// What `workspace` holds of `kinds`: its own, and every entry in its
     /// registry, against its ledger.
-    pub fn of_workspace(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Listing {
+    pub fn of_workspace(workspace: &WeaverWorkspace, kinds: &[Kind]) -> Listing {
         Listing {
             library: Some(Library::of(workspace, kinds)),
             projects: workspace
@@ -917,7 +917,7 @@ impl Listing {
     /// against what `workspace` records when that one links it.
     pub fn of_project(
         project: &MindProject,
-        workspace: Option<&FlayerWorkspace>,
+        workspace: Option<&WeaverWorkspace>,
         kinds: &[Kind],
     ) -> Listing {
         Listing {
@@ -1065,9 +1065,9 @@ impl Snapshot {
 
 impl Library {
     /// `workspace`'s own, of the kinds among `kinds` it keeps apart from a
-    /// project at its root ([`FlayerWorkspace::own_kinds`]), with its
+    /// project at its root ([`WeaverWorkspace::own_kinds`]), with its
     /// templates and its folders of those kinds.
-    fn of(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Library {
+    fn of(workspace: &WeaverWorkspace, kinds: &[Kind]) -> Library {
         let own = workspace.own();
         let own_kinds: Vec<Kind> = workspace
             .own_kinds()
@@ -1093,14 +1093,14 @@ impl Project {
     /// records when that one links it, with `workspace`'s templates: for a
     /// front end showing a project no workspace links, `workspace` being the
     /// one above it, if any, as `mind` would consult it.
-    pub fn read(project: &MindProject, workspace: Option<&FlayerWorkspace>) -> Project {
+    pub fn read(project: &MindProject, workspace: Option<&WeaverWorkspace>) -> Project {
         Project::read_kinds(project, workspace, &Kind::ALL)
     }
 
     /// [`read`](Self::read), for `kinds` alone.
     fn read_kinds(
         project: &MindProject,
-        workspace: Option<&FlayerWorkspace>,
+        workspace: Option<&WeaverWorkspace>,
         kinds: &[Kind],
     ) -> Project {
         let entry = workspace
@@ -1112,7 +1112,7 @@ impl Project {
     /// One entry of `workspace`'s registry, named as that entry spells it
     /// rather than as the first entry pointing at the same directory does,
     /// read for `kinds`.
-    fn of_member(member: Member, workspace: &FlayerWorkspace, kinds: &[Kind]) -> Project {
+    fn of_member(member: Member, workspace: &WeaverWorkspace, kinds: &[Kind]) -> Project {
         let entry = paths::as_route(&member.entry);
         match member.project {
             Ok(project) => Project::opened(Some(entry), &project, Some(workspace), kinds),
@@ -1125,7 +1125,7 @@ impl Project {
     fn opened(
         entry: Option<String>,
         project: &MindProject,
-        workspace: Option<&FlayerWorkspace>,
+        workspace: Option<&WeaverWorkspace>,
         kinds: &[Kind],
     ) -> Project {
         let (status, catalog, placed) = ProjectStatus::read_placed(project, kinds, workspace);
@@ -1348,7 +1348,7 @@ fn holdings(
 /// What `mind add --template` can start from in `project`, with
 /// `workspace`'s, of `kinds`; one that cannot be read among `failures`.
 fn templates(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kinds: &[Kind],
     failures: &mut Vec<Said>,
@@ -1389,7 +1389,7 @@ fn directories(project: &MindProject, kinds: &[Kind]) -> Vec<Directory> {
 /// answer, by each project linked, and an entry that opens no project, as
 /// its `stale`.
 fn holders(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     own: &MindProject,
     artifacts: &[Held],
 ) -> Vec<LibraryHolder> {
@@ -1466,14 +1466,14 @@ impl LoadedWorkspace {
     /// Every workspace `workspace` loads, as a snapshot lists them: for a
     /// front end showing a project no workspace links, what `mind load` has
     /// put into the one above it.
-    pub fn of(workspace: &FlayerWorkspace) -> Vec<LoadedWorkspace> {
+    pub fn of(workspace: &WeaverWorkspace) -> Vec<LoadedWorkspace> {
         loaded(workspace, &install::offered_by_loads(workspace).offers)
     }
 }
 
 /// Every workspace `workspace` loads, with how many of `offers`, what the
 /// loads offer, each comes with.
-fn loaded(workspace: &FlayerWorkspace, offers: &[Offer]) -> Vec<LoadedWorkspace> {
+fn loaded(workspace: &WeaverWorkspace, offers: &[Offer]) -> Vec<LoadedWorkspace> {
     let loads = workspace.loads();
     loads
         .iter()

@@ -51,7 +51,7 @@ use crate::install;
 use crate::lines::{self, Line};
 use crate::paths;
 use crate::value::ContentHash;
-use crate::workspace::{replace_bytes, same_directory, FlayerWorkspace, MindProject};
+use crate::workspace::{replace_bytes, same_directory, MindProject, WeaverWorkspace};
 
 /// The line that opens Mindflayer's block.
 pub const BEGIN: &str = "<!-- mindflayer:begin -->";
@@ -262,7 +262,7 @@ impl Section {
 /// [`crate::config_entry::ConfigFile`] does, and the lock is not
 /// re-entrant.
 pub fn render<'a>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     rules: impl IntoIterator<Item = &'a Artifact>,
     created: bool,
@@ -278,7 +278,7 @@ pub fn render<'a>(
 /// other rule. In the order of their routes with the rest, which is the
 /// order a listing gives the rules ([`report_order`]).
 pub(crate) fn render_keeping<'a>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     rules: impl IntoIterator<Item = &'a Artifact>,
     kept: Vec<Section>,
@@ -526,7 +526,7 @@ fn codex_warnings(project: &Path) -> Vec<Warning> {
 /// project the workspace links is refused, a stale entry's included, since
 /// its project may only have moved for a moment. So is the workspace's own
 /// root, unless a project it links is there: `flayer init` and the
-/// workspace's own artifacts put nothing in it ([`FlayerWorkspace::own`] is
+/// workspace's own artifacts put nothing in it ([`WeaverWorkspace::own`] is
 /// a holder at that root, not a project), while a project at the root is a
 /// project like any other, and its `AGENTS.md` its own (D-03).
 ///
@@ -540,7 +540,7 @@ fn codex_warnings(project: &Path) -> Vec<Warning> {
 /// Every renderer of a project's rules asks this of the file it would
 /// write, so none of them leaves rules where the others refuse to.
 pub(crate) fn misplaced(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     homes: &AgentHomes,
     folder: &Path,
     file: &Path,

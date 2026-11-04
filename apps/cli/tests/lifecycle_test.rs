@@ -332,7 +332,7 @@ fn edit_takes_contents_or_an_editor_and_a_hash_only_with_contents() {
             let words = line(binary, args, dir.path());
             let parsed = match binary {
                 "mind" => Cli::try_parse_from(&words).map(drop),
-                _ => FlayerCli::try_parse_from(&words).map(drop),
+                _ => WeaverCli::try_parse_from(&words).map(drop),
             };
             assert_eq!(parsed.unwrap_err().kind(), kind, "{words:?}");
         }
@@ -358,15 +358,15 @@ fn edit_takes_the_contents_from_standard_input_given_as_a_dash() {
 }
 
 #[test]
-fn flayer_edit_replaces_the_contents_of_one_of_the_workspaces_own_or_a_projects() {
+fn weaver_edit_replaces_the_contents_of_one_of_the_workspaces_own_or_a_projects() {
     let dir = workspace_with_two();
-    flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
     fs::write(dir.path().join("draft.md"), SHIP).unwrap();
     let alpha = skill_file("alpha", "A skill, rewritten");
     fs::write(dir.path().join("alpha.md"), &alpha).unwrap();
 
-    let own = flayer(dir.path(), &["edit", "deploy", "--contents", "draft.md"]).unwrap();
-    let projects = flayer(
+    let own = weaver(dir.path(), &["edit", "deploy", "--contents", "draft.md"]).unwrap();
+    let projects = weaver(
         dir.path(),
         &["edit", "-p", "alpha", "alpha", "--contents", "alpha.md"],
     )
@@ -475,11 +475,11 @@ fn an_installed_skill_that_is_renamed_stays_installed_under_its_new_name() {
 #[test]
 fn an_installed_rule_that_is_renamed_still_holds_what_was_installed_and_says_so() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let project = dir.path().join("collapse");
     fs::create_dir(&project).unwrap();
     older_project(&project);
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
     let own = dir.path().join(".mindflayer/library/rules/git");
     fs::create_dir_all(&own).unwrap();
     fs::write(own.join("no-force-push.md"), "Never force-push.\n").unwrap();
@@ -671,9 +671,9 @@ fn linked_from_beside(make: fn(&Path)) -> (TempDir, PathBuf, PathBuf) {
     for root in [&hub, &project] {
         fs::create_dir(root).unwrap();
     }
-    flayer(&hub, &["init"]).unwrap();
+    weaver(&hub, &["init"]).unwrap();
     make(&project);
-    flayer(&hub, &["link", "../collapse"]).unwrap();
+    weaver(&hub, &["link", "../collapse"]).unwrap();
     (dir, hub, project)
 }
 
@@ -682,17 +682,17 @@ fn linked_from_beside(make: fn(&Path)) -> (TempDir, PathBuf, PathBuf) {
 /// it authors in, where a change from the workspace reaches it.
 fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
     let (dir, hub, project) = linked_from_beside(older_project);
-    flayer(&hub, &["add", "skill", "deploy", "Ship it"]).unwrap();
-    flayer(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
+    weaver(&hub, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(&hub, &["install", "-p", "collapse", "deploy"]).unwrap();
     (dir, hub, project)
 }
 
 #[cfg(unix)]
 #[test]
-fn a_workspace_beside_a_project_keeps_its_record_when_flayer_edits_the_copy() {
+fn a_workspace_beside_a_project_keeps_its_record_when_weaver_edits_the_copy() {
     let (_dir, hub, project) = installed_from_beside();
 
-    let outcome = flayer(
+    let outcome = weaver(
         &hub,
         &[
             "edit",
@@ -708,7 +708,7 @@ fn a_workspace_beside_a_project_keeps_its_record_when_flayer_edits_the_copy() {
     // Walking up from the project never reaches the workspace; the one the
     // command runs in is the one asked.
     assert!(outcome.stdout.contains("stays so"), "{}", outcome.stdout);
-    let left = flayer(&hub, &["uninstall", "-p", "collapse", "deploy"]).unwrap();
+    let left = weaver(&hub, &["uninstall", "-p", "collapse", "deploy"]).unwrap();
     assert_eq!(
         left.stderr,
         vec![
@@ -729,8 +729,8 @@ fn mind_keeps_the_record_of_the_workspace_in_your_home_when_that_manages_the_pro
     // Made as an older Mindflayer made it, so the copy installed is in the
     // folder it authors in, where `mind edit` reaches it.
     older_project(&project);
-    flayer_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
-    flayer_at_home(
+    weaver_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
+    weaver_at_home(
         elsewhere.path(),
         home.path(),
         &["add", "skill", "deploy", "Ship it"],
@@ -758,7 +758,7 @@ fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();
 
-    flayer(
+    weaver(
         &hub,
         &[
             "add",
@@ -779,7 +779,7 @@ fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
         "{manifest}"
     );
     assert_eq!(
-        flayer(&hub, &["templates", "-p", "collapse"])
+        weaver(&hub, &["templates", "-p", "collapse"])
             .unwrap()
             .stdout,
         "full     skill  built in\n\
@@ -793,7 +793,7 @@ fn mind_add_from_a_template_refuses_when_the_workspace_that_lends_it_cannot_be_r
     let template = dir.path().join(".mindflayer/templates/full/SKILL.md");
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nThe team's full.\n").unwrap();
-    let marker = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let marker = dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG);
     let newer: String = fs::read_to_string(&marker)
         .unwrap()
         .lines()

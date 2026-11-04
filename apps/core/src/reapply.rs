@@ -52,7 +52,7 @@ use crate::settings::{Settings, Share};
 use crate::status::{self, Unreached};
 use crate::value::ArtifactName;
 use crate::workspace::{
-    ignore_itself, misplaced_target, same_directory, FlayerWorkspace, MindProject, WorkspaceError,
+    ignore_itself, misplaced_target, same_directory, MindProject, WeaverWorkspace, WorkspaceError,
     MIND_IGNORE,
 };
 
@@ -415,7 +415,7 @@ codes!(ReapplyError {
 /// would land inside one of `homes` or in a folder a loaded workspace keeps
 /// as its own; and a record naming a copy outside the project.
 pub fn plan(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     change: &Change,
     homes: &AgentHomes,
@@ -449,7 +449,7 @@ pub fn plan(
 /// collected in [`Applied::failures`], and the same change run again
 /// finishes it.
 pub fn apply(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     change: &Change,
     homes: &AgentHomes,
@@ -634,9 +634,9 @@ pub fn apply(
 /// when an older marker marks it ([`MindProject::changeable`]), before any
 /// ledger is opened.
 fn linking<'a>(
-    workspace: Option<&'a FlayerWorkspace>,
+    workspace: Option<&'a WeaverWorkspace>,
     project: &MindProject,
-) -> Result<Option<&'a FlayerWorkspace>, ReapplyError> {
+) -> Result<Option<&'a WeaverWorkspace>, ReapplyError> {
     project.changeable()?;
     Ok(workspace.filter(|workspace| workspace.is_made() && workspace.is_linked(project.root())))
 }
@@ -644,7 +644,7 @@ fn linking<'a>(
 /// [`plan`], against `records`: the workspace that links the project and
 /// its ledger, or none.
 fn plan_with(
-    records: Option<(&FlayerWorkspace, &Ledger)>,
+    records: Option<(&WeaverWorkspace, &Ledger)>,
     project: &MindProject,
     change: &Change,
     homes: &AgentHomes,
@@ -1108,7 +1108,7 @@ fn place(project: &MindProject, retarget: &Retarget, applied: &mut Applied) -> b
 /// Write down where `retarget`'s copies are now (`targets`), and log what
 /// moved.
 fn record(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     retarget: &Retarget,

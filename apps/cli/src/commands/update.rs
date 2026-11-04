@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use mindweaver_core::install::{Installation, Installed};
 use mindweaver_core::update::{self, Plan, ProjectPlan, Step, Update};
-use mindweaver_core::{paths, AgentHomes, Excluded, FlayerWorkspace, MindProject, Reference};
+use mindweaver_core::{paths, AgentHomes, Excluded, MindProject, Reference, WeaverWorkspace};
 
 use super::gather::scrubbed;
 use super::install::{edits, left_out, named};
@@ -30,7 +30,7 @@ const UNCHANGED: &str = "nothing changed: add --yes to go ahead\n";
 /// either way, as an install refused over it is, and an orphaned one a
 /// note, never a failure, since nothing could be done for it.
 pub(crate) fn update_projects(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     typed: &[String],
     force: bool,

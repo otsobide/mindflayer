@@ -41,7 +41,7 @@ use crate::gather::Scrub;
 use crate::install::{self, Edits, Found, InstallError, Offer, Removed, Standing};
 use crate::ledger::{Ledger, LedgerError};
 use crate::lifecycle::{self, LifecycleError, Target};
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// What removing one of the workspace's own everywhere would do: [`plan`],
 /// or what [`apply`] did.
@@ -141,7 +141,7 @@ codes!(EverywhereError {} carried {
 ///
 /// The artifact is found among the workspace's own as `remove` finds it
 /// ([`lifecycle::find_to_change`]), and refused as it would be there.
-pub fn plan(workspace: &FlayerWorkspace, reference: &Reference) -> Result<Plan, EverywhereError> {
+pub fn plan(workspace: &WeaverWorkspace, reference: &Reference) -> Result<Plan, EverywhereError> {
     let target = lifecycle::find_to_change(Some(workspace), &workspace.own(), reference)?;
     let ledger = workspace.ledger_for_reading()?;
     plan_with(workspace, &ledger, target)
@@ -166,7 +166,7 @@ pub fn plan(workspace: &FlayerWorkspace, reference: &Reference) -> Result<Plan, 
 /// `homes` are the agents' own folders, which the front end decides, as for
 /// an uninstall.
 pub fn apply(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     reference: &Reference,
     homes: &AgentHomes,
 ) -> Result<Applied, EverywhereError> {
@@ -201,7 +201,7 @@ pub fn apply(
 
 /// [`plan`], for `target`, against `ledger`.
 fn plan_with(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     target: Target,
 ) -> Result<Plan, EverywhereError> {

@@ -15,21 +15,21 @@ use mindweaver_core::install::{self, Edits};
 use mindweaver_core::ledger::Target;
 use mindweaver_core::update;
 use mindweaver_core::{
-    create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference, Share,
+    create, Agent, AgentHomes, Directories, Kind, MindProject, Reference, Share, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
 /// A workspace linking `collapse`, a git repository marked by settings
 /// naming every agent, sharing as `share` says, that keeps `notes` in
 /// `.claude/skills` by hand.
-fn given(share: Share) -> (TempDir, FlayerWorkspace, MindProject) {
+fn given(share: Share) -> (TempDir, WeaverWorkspace, MindProject) {
     given_with(share, &Directories::default())
 }
 
 /// [`given`], the project authoring in `directories`.
-fn given_with(share: Share, directories: &Directories) -> (TempDir, FlayerWorkspace, MindProject) {
+fn given_with(share: Share, directories: &Directories) -> (TempDir, WeaverWorkspace, MindProject) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     gix::init(&root).unwrap();
@@ -53,7 +53,7 @@ fn agents(project: &MindProject, name: &str) -> PathBuf {
 }
 
 /// Where the workspace keeps its own `name`.
-fn library(workspace: &FlayerWorkspace, name: &str) -> PathBuf {
+fn library(workspace: &WeaverWorkspace, name: &str) -> PathBuf {
     workspace
         .own()
         .directory_for(Kind::Skill)
@@ -62,7 +62,7 @@ fn library(workspace: &FlayerWorkspace, name: &str) -> PathBuf {
 }
 
 fn plan(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     typed: &str,
 ) -> Result<adopt::Plan, AdoptError> {
@@ -351,7 +351,7 @@ fn a_local_project_keeps_an_untracked_copy_out_of_git_and_leaves_a_tracked_one()
 #[test]
 fn a_local_project_no_work_tree_holds_keeps_no_copy_out_of_git_and_says_so() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) =
@@ -409,7 +409,7 @@ fn what_gh_skill_says_of_where_it_came_from_is_shown() {
 // Adopting
 // ---------------------------------------------------------------------------
 
-fn adopted(workspace: &FlayerWorkspace, project: &MindProject, typed: &str) -> adopt::Adopted {
+fn adopted(workspace: &WeaverWorkspace, project: &MindProject, typed: &str) -> adopt::Adopted {
     adopt::apply(
         workspace,
         project,
@@ -441,7 +441,7 @@ fn files(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
     found
 }
 
-fn standing(workspace: &FlayerWorkspace, project: &MindProject, name: &str) -> install::Standing {
+fn standing(workspace: &WeaverWorkspace, project: &MindProject, name: &str) -> install::Standing {
     let ledger = workspace.ledger_for_reading().unwrap();
     install::standings(workspace, &ledger, project, Kind::Skill)
         .unwrap()
@@ -451,7 +451,7 @@ fn standing(workspace: &FlayerWorkspace, project: &MindProject, name: &str) -> i
         .unwrap_or_else(|| panic!("{name} is not recorded"))
 }
 
-fn update(workspace: &FlayerWorkspace, project: &MindProject) -> update::Applied {
+fn update(workspace: &WeaverWorkspace, project: &MindProject) -> update::Applied {
     update::apply(
         workspace,
         std::slice::from_ref(project),

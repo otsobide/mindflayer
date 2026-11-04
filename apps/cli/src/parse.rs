@@ -394,7 +394,7 @@ pub enum Command {
     /// On its own it opens the TUI, as `flayer` on its own does.
     Flayer {
         #[command(subcommand)]
-        command: Option<FlayerCommand>,
+        command: Option<WeaverCommand>,
     },
 }
 
@@ -407,10 +407,10 @@ pub enum Command {
     about = "Manage the mind projects a flayer workspace orchestrates",
     long_about = None
 )]
-pub struct FlayerCli {
+pub struct WeaverCli {
     /// What to do [default: open the TUI].
     #[command(subcommand)]
-    pub command: Option<FlayerCommand>,
+    pub command: Option<WeaverCommand>,
 
     /// Directory to work in [default: the current directory].
     ///
@@ -439,7 +439,7 @@ pub struct FlayerCli {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum FlayerCommand {
+pub enum WeaverCommand {
     /// Create a flayer workspace here, or in the directory given.
     Init {
         /// The directory to make it in, made as well when it is not there

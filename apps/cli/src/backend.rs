@@ -84,8 +84,8 @@ use mindweaver_core::value::Redacted;
 use mindweaver_core::view::Snapshot;
 use mindweaver_core::{paths, policy, watch};
 use mindweaver_core::{
-    FlayerWorkspace, Found, Kind, LifecycleError, MindProject, Reference, Scan, WorkspaceError,
-    FLAYER_CONFIG, FLAYER_DIR,
+    Found, Kind, LifecycleError, MindProject, Reference, Scan, WeaverWorkspace, WorkspaceError,
+    WEAVER_CONFIG, WEAVER_DIR,
 };
 use mindweaver_server::{Backend, Grounds, Preview, Refusal, Route, Watched};
 use serde::{Deserialize, Serialize};
@@ -302,7 +302,7 @@ pub struct Suggestion {
 
 impl Scanned {
     /// What `scan` found in `workspace`, as the panel is answered with it.
-    fn of(workspace: &FlayerWorkspace, scan: &Scan) -> Scanned {
+    fn of(workspace: &WeaverWorkspace, scan: &Scan) -> Scanned {
         let members = workspace.members();
         let left = |moved: &str| {
             members
@@ -461,12 +461,12 @@ impl Pin {
     /// Only the default one: any other was there when it was pinned, and
     /// one gone since is refused rather than taken for one to make, which
     /// the first change would do to it.
-    fn workspace(&self) -> Result<FlayerWorkspace, Refusal> {
-        let made = self.root.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file();
+    fn workspace(&self) -> Result<WeaverWorkspace, Refusal> {
+        let made = self.root.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file();
         if made || self.reason != Reason::Home {
-            FlayerWorkspace::open(&self.root)
+            WeaverWorkspace::open(&self.root)
         } else {
-            FlayerWorkspace::unmade(&self.root)
+            WeaverWorkspace::unmade(&self.root)
         }
         .map_err(|error| refused(error.code(), error))
     }
@@ -474,9 +474,9 @@ impl Pin {
     /// The workspace, or, when it will not open now, gone or broken since
     /// it was pinned, as it would be once made again: what is watched, and
     /// what the panel may switch away from, either way.
-    fn opened_or_not(&self) -> Result<FlayerWorkspace, Refusal> {
+    fn opened_or_not(&self) -> Result<WeaverWorkspace, Refusal> {
         self.workspace()
-            .or_else(|refusal| FlayerWorkspace::unmade(&self.root).map_err(|_| refusal))
+            .or_else(|refusal| WeaverWorkspace::unmade(&self.root).map_err(|_| refusal))
     }
 }
 
@@ -561,7 +561,7 @@ impl PanelBackend {
     /// made. Before then the default is named by nothing, and found as the
     /// TUI's lines find it, walking up from its root; its first change makes
     /// it first ([`plan`](Self::plan)).
-    fn pinned(&self, workspace: &FlayerWorkspace) -> Lookup {
+    fn pinned(&self, workspace: &WeaverWorkspace) -> Lookup {
         Lookup {
             flag: Some(if workspace.is_made() {
                 workspace.root().to_path_buf()
@@ -927,7 +927,7 @@ impl Backend for PanelBackend {
 
 /// A save's text, in the file its line reads it from
 /// ([`task::scratch_route`]): the workspace's scratch folder as core has it
-/// ([`FlayerWorkspace::scratch_dir`]), the file named by the text
+/// ([`WeaverWorkspace::scratch_dir`]), the file named by the text
 /// ([`task::scratch_name`]). Held for as long as this is: taken away when
 /// it is dropped, whatever came of the line.
 ///
@@ -948,7 +948,7 @@ struct Scratch {
 
 impl Scratch {
     /// `text`, put where the line saving it reads it from, in `workspace`.
-    fn put(workspace: &FlayerWorkspace, text: &str) -> Result<Scratch, CliError> {
+    fn put(workspace: &WeaverWorkspace, text: &str) -> Result<Scratch, CliError> {
         let folder = workspace.scratch_dir();
         let path = folder.join(task::scratch_name(text));
         let unwritable = |source| CliError::Scratch {
@@ -1010,7 +1010,7 @@ fn scope(scope: watch::Scope) -> serde_json::Value {
 /// other, as a task's holder is ([`policy::linked`]). An entry no registry
 /// holds, or one whose folder holds no project any more, is refused as
 /// absent, as a read's parameter names it.
-fn linked(workspace: &FlayerWorkspace, holder: Holder) -> Result<Option<MindProject>, Refusal> {
+fn linked(workspace: &WeaverWorkspace, holder: Holder) -> Result<Option<MindProject>, Refusal> {
     match holder {
         Holder::Workspace => Ok(None),
         Holder::Project(entry) | Holder::Elsewhere(entry) => {
@@ -1150,7 +1150,7 @@ impl Absence for PolicyError {
             PolicyError::Url { .. }
             | PolicyError::Relative { .. }
             | PolicyError::Unnormalized { .. }
-            | PolicyError::InMindflayer { .. }
+            | PolicyError::InWeaverDir { .. }
             | PolicyError::Unlisted { .. } => false,
         }
     }

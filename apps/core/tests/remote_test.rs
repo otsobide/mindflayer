@@ -22,7 +22,7 @@ use mindweaver_core::mother::{
 use mindweaver_core::port::{Cloned, GitError, Remote};
 use mindweaver_core::url::redacted;
 use mindweaver_core::value::Revision;
-use mindweaver_core::{FlayerWorkspace, Kind, SourceKind};
+use mindweaver_core::{Kind, SourceKind, WeaverWorkspace};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -623,7 +623,7 @@ fn a_fresh_clone_has_nothing_to_scrub_and_neither_has_a_folder_never_cloned<U: U
 // ---------------------------------------------------------------------------
 
 /// A workspace to gather into, with its ledger.
-fn gathering() -> (TempDir, FlayerWorkspace, mindweaver_core::Ledger) {
+fn gathering() -> (TempDir, WeaverWorkspace, mindweaver_core::Ledger) {
     let (dir, workspace) = WorkspaceMother::empty();
     let ledger = workspace.ledger().expect("open the ledger");
     (dir, workspace, ledger)

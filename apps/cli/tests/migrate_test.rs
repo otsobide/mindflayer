@@ -18,13 +18,13 @@ fn at(root: &Path, parts: &[&str]) -> String {
 /// A workspace keeping its own beside its projects, as `flayer init` made
 /// every one before the library, with a skill and a rule of its own.
 fn beside(root: &Path) {
-    flayer(root, &["init", "--skills", "skills", "--rules", "rules"]).unwrap();
-    flayer(
+    weaver(root, &["init", "--skills", "skills", "--rules", "rules"]).unwrap();
+    weaver(
         root,
         &["add", "skill", "commit-style", "How commits are written"],
     )
     .unwrap();
-    flayer(
+    weaver(
         root,
         &["add", "rule", "git/no-force-push", "Never force-push"],
     )
@@ -33,17 +33,17 @@ fn beside(root: &Path) {
 
 /// What the dry run and the migration say of the two in [`beside`].
 fn report(root: &Path, moving: &str, pointing: &str) -> String {
-    let marker = at(root, &[FLAYER_DIR, FLAYER_CONFIG]);
+    let marker = at(root, &[WEAVER_DIR, WEAVER_CONFIG]);
     format!(
         "{moving} {} to {}\n\
          {moving} {} to {}\n\
          {pointing} skills and rules in {marker} at the library, ",
         at(root, &["skills", "commit-style"]),
-        at(root, &[FLAYER_DIR, "library", "skills", "commit-style"]),
+        at(root, &[WEAVER_DIR, "library", "skills", "commit-style"]),
         at(root, &["rules", "git", "no-force-push.md"]),
         at(
             root,
-            &[FLAYER_DIR, "library", "rules", "git", "no-force-push.md"]
+            &[WEAVER_DIR, "library", "rules", "git", "no-force-push.md"]
         ),
     )
 }
@@ -52,25 +52,25 @@ fn report(root: &Path, moving: &str, pointing: &str) -> String {
 fn the_dry_run_says_what_would_move_and_moves_nothing() {
     let dir = TempDir::new().unwrap();
     beside(dir.path());
-    let marker = fs::read_to_string(dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG)).unwrap();
+    let marker = fs::read_to_string(dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG)).unwrap();
 
-    let outcome = flayer(dir.path(), &["migrate", "--library"]).unwrap();
+    let outcome = weaver(dir.path(), &["migrate", "--library"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
         format!(
             "{}keeping it as it is in {}\nnothing moved: add --yes to go ahead\n",
             report(dir.path(), "would move", "would point"),
-            at(dir.path(), &[FLAYER_DIR, "flayer.toml.v2"]),
+            at(dir.path(), &[WEAVER_DIR, "flayer.toml.v2"]),
         )
     );
     assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
     assert!(dir.path().join("skills/commit-style/SKILL.md").is_file());
     assert_eq!(
-        fs::read_to_string(dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG)).unwrap(),
+        fs::read_to_string(dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG)).unwrap(),
         marker
     );
-    assert!(!dir.path().join(FLAYER_DIR).join("flayer.toml.v2").exists());
+    assert!(!dir.path().join(WEAVER_DIR).join("flayer.toml.v2").exists());
 }
 
 #[test]
@@ -78,17 +78,17 @@ fn migrating_moves_them_and_a_second_run_has_nothing_to_move() {
     let dir = TempDir::new().unwrap();
     beside(dir.path());
 
-    let migrated = flayer(dir.path(), &["migrate", "--library", "--yes"]).unwrap();
-    let again = flayer(dir.path(), &["migrate", "--library", "--yes"]).unwrap();
-    let dry = flayer(dir.path(), &["migrate", "--library"]).unwrap();
-    let listed = flayer(dir.path(), &["list"]).unwrap();
+    let migrated = weaver(dir.path(), &["migrate", "--library", "--yes"]).unwrap();
+    let again = weaver(dir.path(), &["migrate", "--library", "--yes"]).unwrap();
+    let dry = weaver(dir.path(), &["migrate", "--library"]).unwrap();
+    let listed = weaver(dir.path(), &["list"]).unwrap();
 
     assert_eq!(
         migrated.stdout,
         format!(
             "{}kept as it was in {}\n",
             report(dir.path(), "moved", "pointed"),
-            at(dir.path(), &[FLAYER_DIR, "flayer.toml.v2"]),
+            at(dir.path(), &[WEAVER_DIR, "flayer.toml.v2"]),
         )
     );
     let nothing = "nothing to move: the workspace keeps its own in its library already\n";
@@ -111,7 +111,7 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
     let home_path = home.path();
     // Made as `flayer init` made the one in a home before the library, and
     // used from outside it, as the default.
-    flayer(
+    weaver(
         home_path,
         &["init", "--skills", "skills", "--rules", "rules"],
     )
@@ -119,7 +119,7 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
     let alpha = home_path.join("alpha");
     fs::create_dir(&alpha).unwrap();
     mind(&alpha, &["init"]).unwrap();
-    let run = |args: &[&str]| flayer_at_home(elsewhere.path(), home_path, args);
+    let run = |args: &[&str]| weaver_at_home(elsewhere.path(), home_path, args);
     run(&["link", alpha.to_str().unwrap()]).unwrap();
     run(&["add", "skill", "x", "Ours"]).unwrap();
     run(&["install", "-p", "alpha", "x"]).unwrap();
@@ -133,7 +133,7 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
         migrated.stdout.starts_with(&format!(
             "moved {} to {}\n",
             at(home_path, &["skills", "x"]),
-            at(home_path, &[FLAYER_DIR, "library", "skills", "x"]),
+            at(home_path, &[WEAVER_DIR, "library", "skills", "x"]),
         )),
         "{}",
         migrated.stdout
@@ -161,14 +161,14 @@ fn a_destination_already_there_refuses_the_dry_run_and_the_migration() {
     let taken = dir.path().join(".mindflayer/library/skills/commit-style");
     fs::create_dir_all(&taken).unwrap();
 
-    let dry = flayer(dir.path(), &["migrate", "--library"]).unwrap_err();
-    let yes = flayer(dir.path(), &["migrate", "--library", "--yes"]).unwrap_err();
+    let dry = weaver(dir.path(), &["migrate", "--library"]).unwrap_err();
+    let yes = weaver(dir.path(), &["migrate", "--library", "--yes"]).unwrap_err();
 
     let said = format!(
         "nothing moved: {}: already there, so {} cannot be moved onto it",
         at(
             dir.path(),
-            &[FLAYER_DIR, "library", "skills", "commit-style"]
+            &[WEAVER_DIR, "library", "skills", "commit-style"]
         ),
         at(dir.path(), &["skills", "commit-style"]),
     );
@@ -183,15 +183,15 @@ fn a_destination_already_there_refuses_the_dry_run_and_the_migration() {
 fn a_project_at_the_root_keeps_what_it_shares_and_is_said_to() {
     let dir = TempDir::new().unwrap();
     mind(dir.path(), &["init"]).unwrap();
-    flayer(
+    weaver(
         dir.path(),
         &["init", "--skills", "skills", "--rules", "rules"],
     )
     .unwrap();
-    flayer(dir.path(), &["link", "."]).unwrap();
+    weaver(dir.path(), &["link", "."]).unwrap();
     mind(dir.path(), &["add", "skill", "deploy", "The project's"]).unwrap();
 
-    let outcome = flayer(dir.path(), &["migrate", "--library", "--yes"]).unwrap();
+    let outcome = weaver(dir.path(), &["migrate", "--library", "--yes"]).unwrap();
 
     assert!(
         outcome.stdout.starts_with(&format!(
@@ -212,18 +212,18 @@ fn what_an_unlinked_project_at_the_root_keeps_is_said_to_be_the_workspaces_no_mo
     // A home made a project and never linked: the workspace counts what is
     // in `skills` as its own, and installs it from there.
     mind(root, &["init"]).unwrap();
-    flayer(root, &["init", "--skills", "skills", "--rules", "rules"]).unwrap();
+    weaver(root, &["init", "--skills", "skills", "--rules", "rules"]).unwrap();
     let alpha = root.join("alpha");
     fs::create_dir(&alpha).unwrap();
     mind(&alpha, &["init"]).unwrap();
-    flayer(root, &["link", "alpha"]).unwrap();
-    flayer(root, &["add", "skill", "x", "Ours"]).unwrap();
-    flayer(root, &["install", "-p", "alpha", "x"]).unwrap();
+    weaver(root, &["link", "alpha"]).unwrap();
+    weaver(root, &["add", "skill", "x", "Ours"]).unwrap();
+    weaver(root, &["install", "-p", "alpha", "x"]).unwrap();
 
-    let dry = flayer(root, &["migrate", "--library"]).unwrap();
-    let migrated = flayer(root, &["migrate", "--library", "--yes"]).unwrap();
-    let installed = flayer(root, &["install", "-p", "alpha", "x"]).unwrap_err();
-    let uninstalled = flayer(root, &["uninstall", "-p", "alpha", "x"]).unwrap();
+    let dry = weaver(root, &["migrate", "--library"]).unwrap();
+    let migrated = weaver(root, &["migrate", "--library", "--yes"]).unwrap();
+    let installed = weaver(root, &["install", "-p", "alpha", "x"]).unwrap_err();
+    let uninstalled = weaver(root, &["uninstall", "-p", "alpha", "x"]).unwrap();
 
     let skill = at(root, &["skills", "x"]);
     let project = root.display();
@@ -261,7 +261,7 @@ fn migrate_is_told_what_to_migrate() {
     let dir = TempDir::new().unwrap();
     beside(dir.path());
 
-    let failure = flayer(dir.path(), &["migrate"]).unwrap_err();
+    let failure = weaver(dir.path(), &["migrate"]).unwrap_err();
 
     let said = failure.error.to_string();
     assert!(
@@ -272,12 +272,12 @@ fn migrate_is_told_what_to_migrate() {
 }
 
 #[test]
-fn mind_flayer_migrate_is_the_same_command() {
+fn mind_weaver_migrate_is_the_same_command() {
     let dir = TempDir::new().unwrap();
     beside(dir.path());
 
     let long = mind(dir.path(), &["flayer", "migrate", "--library"]).unwrap();
-    let short = flayer(dir.path(), &["migrate", "--library"]).unwrap();
+    let short = weaver(dir.path(), &["migrate", "--library"]).unwrap();
 
     assert_eq!(long, short);
 }
@@ -287,7 +287,7 @@ fn the_default_workspace_unmade_has_nothing_to_move_and_is_not_made() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
 
-    let outcome = flayer_at_home(
+    let outcome = weaver_at_home(
         elsewhere.path(),
         home.path(),
         &["migrate", "--library", "--yes"],
@@ -300,5 +300,5 @@ fn the_default_workspace_unmade_has_nothing_to_move_and_is_not_made() {
     );
     assert_eq!(outcome.stderr.len(), 1);
     assert!(outcome.stderr[0].text.starts_with("hint: "), "{outcome:?}");
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }

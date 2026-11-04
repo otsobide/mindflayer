@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use mindweaver_core::ledger::{InstallRecord, Target};
 use mindweaver_core::{
-    Agent, ArtifactCopy, Catalog, Declared, Directories, DiscoveryFailure, FlayerWorkspace, Kind,
-    Ledger, MindProject, Provenance, Reference, RuleManifest, Share, ValidationIssue,
+    Agent, ArtifactCopy, Catalog, Declared, Directories, DiscoveryFailure, Kind, Ledger,
+    MindProject, Provenance, Reference, RuleManifest, Share, ValidationIssue, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -520,7 +520,7 @@ fn find_spans_the_projects_a_workspace_manages() {
 #[test]
 fn the_shelf_is_read_source_by_source_and_found_as_it_is_now() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = mindweaver_core::FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = mindweaver_core::WeaverWorkspace::init(dir.path()).unwrap();
     let shelf = workspace.gathered_dir(Kind::Skill);
     for (source, folder, contents) in [
         ("acme-skills", "deploy", skill_file("deploy")),
@@ -556,7 +556,7 @@ fn the_shelf_is_read_source_by_source_and_found_as_it_is_now() {
 #[test]
 fn a_workspace_that_never_gathered_has_an_empty_shelf_and_no_failure() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = mindweaver_core::FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = mindweaver_core::WeaverWorkspace::init(dir.path()).unwrap();
 
     let catalog = Catalog::discover_gathered(&workspace, &Kind::ALL);
 
@@ -915,9 +915,9 @@ fn a_copy_holding_a_link_is_said_rather_than_followed_to_compare_it() {
 /// A workspace in a temporary folder, linking `alpha` beside it, a project
 /// marked by its settings naming every agent and authoring skills in
 /// `skills`, if anywhere.
-fn linked(skills: Option<&str>) -> (TempDir, FlayerWorkspace, MindProject) {
+fn linked(skills: Option<&str>) -> (TempDir, WeaverWorkspace, MindProject) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = marked(&dir, "alpha", &Agent::ALL, skills);
     workspace.link(&project).unwrap();
     (dir, workspace, project)

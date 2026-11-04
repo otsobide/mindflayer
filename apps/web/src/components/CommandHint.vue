@@ -21,13 +21,13 @@ export interface Command {
  * project's line is a `flayer` one naming it with `-p`, as the reference's
  * own do, rather than a `mind` one typed from its folder.
  */
-export function flayer(workspace: Workspace, words: string): string {
+export function weaver(workspace: Workspace, words: string): string {
   return `flayer -W ${workspace.path} ${words}`
 }
 
 /**
  * The line that makes `workspace` when it is not made yet, which a line of
- * [`flayer`] needs first: a workspace `-W` names is never made for it, and
+ * [`weaver`] needs first: a workspace `-W` names is never made for it, and
  * `flayer init` makes it where the first command that writes would.
  */
 export function making(workspace: Workspace): Command[] {

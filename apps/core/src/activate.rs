@@ -27,7 +27,7 @@ use std::str::FromStr;
 use thiserror::Error;
 
 use crate::code::codes;
-use crate::workspace::FlayerWorkspace;
+use crate::workspace::WeaverWorkspace;
 
 /// The variable that activates a workspace for every command a shell runs,
 /// which the front end reads and hands to [`resolve`](crate::resolve::resolve)
@@ -144,7 +144,7 @@ codes!(ActivateError {
 ///
 /// Refused rather than written for a workspace that is not on disk: the
 /// variable would name a directory every command then refuses.
-pub fn script(workspace: &FlayerWorkspace, shell: Shell) -> Result<String, ActivateError> {
+pub fn script(workspace: &WeaverWorkspace, shell: Shell) -> Result<String, ActivateError> {
     if !workspace.is_made() {
         return Err(ActivateError::Unmade {
             path: workspace.root().to_path_buf(),

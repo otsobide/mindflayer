@@ -10,7 +10,7 @@ use mindweaver_core::agents_md::{
     self, AgentsMdError, Malformed, Rendered, Warning, Written, BEGIN, CODEX_BUDGET, CODEX_NEAR,
     END,
 };
-use mindweaver_core::{AgentHomes, Artifact, FlayerWorkspace, MindProject};
+use mindweaver_core::{AgentHomes, Artifact, MindProject, WeaverWorkspace};
 use tempfile::TempDir;
 
 /// What a team's `AGENTS.md` holds before Mindflayer writes in it.
@@ -28,7 +28,7 @@ const NO_HOMES: AgentHomes = AgentHomes {
 /// render from, in a git work tree whose root is the workspace's.
 struct Fixture {
     dir: TempDir,
-    workspace: FlayerWorkspace,
+    workspace: WeaverWorkspace,
     project: MindProject,
     library: PathBuf,
 }
@@ -42,7 +42,7 @@ fn fixture() -> Fixture {
 /// The same, in no git work tree.
 fn outside_git() -> Fixture {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, &dir.path().join("app"));
     Fixture {
         library: dir.path().join("library"),
@@ -53,7 +53,7 @@ fn outside_git() -> Fixture {
 }
 
 /// A project made at `root` and linked by `workspace`.
-fn linked(workspace: &mut FlayerWorkspace, root: &std::path::Path) -> MindProject {
+fn linked(workspace: &mut WeaverWorkspace, root: &std::path::Path) -> MindProject {
     fs::create_dir_all(root).unwrap();
     let (project, _) = MindProject::init(root).unwrap();
     workspace.link(&project).unwrap();
@@ -425,7 +425,7 @@ fn the_workspaces_own_folder_is_refused() {
 #[test]
 fn a_project_the_workspace_links_at_its_root_is_given_its_rules() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, dir.path());
     let library = TempDir::new().unwrap();
     let file = library.path().join("a.md");
@@ -440,7 +440,7 @@ fn a_project_the_workspace_links_at_its_root_is_given_its_rules() {
 #[test]
 fn a_project_unlinked_from_the_workspaces_root_is_refused_a_block_and_can_drop_its_own() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, dir.path());
     let library = TempDir::new().unwrap();
     let file = library.path().join("a.md");

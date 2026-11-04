@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use mindweaver_core::reapply::{self, Change, Ignore, Plan, Retarget, Why};
 use mindweaver_core::{
-    paths, Agent, AgentHomes, Excluded, FlayerWorkspace, Kind, MindProject, Settings, Share,
+    paths, Agent, AgentHomes, Excluded, Kind, MindProject, Settings, Share, WeaverWorkspace,
 };
 
 use super::consulted;
@@ -122,7 +122,7 @@ pub(crate) fn change_here(
 /// to one project the workspace manages, carrying what its ledger records
 /// along.
 pub(crate) fn change_of(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     change: &Change,
     yes: bool,
@@ -147,7 +147,7 @@ const NOTHING: &str = "nothing to change";
 /// reaches them once they are pointed at it, which `status` warns of until
 /// they are.
 fn change_project(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     change: &Change,
     yes: bool,

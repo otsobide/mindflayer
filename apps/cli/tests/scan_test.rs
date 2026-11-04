@@ -13,10 +13,10 @@ use serde::Deserialize;
 #[test]
 fn scan_says_what_is_under_the_workspace_and_what_is_linked() {
     let dir = workspace_with_two();
-    flayer(dir.path(), &["unlink", "beta"]).unwrap();
+    weaver(dir.path(), &["unlink", "beta"]).unwrap();
     fs::create_dir_all(dir.path().join("gamma/.git")).unwrap();
 
-    let outcome = flayer(dir.path(), &["scan"]).unwrap();
+    let outcome = weaver(dir.path(), &["scan"]).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     let lines: Vec<&str> = outcome.stdout.lines().collect();
@@ -34,7 +34,7 @@ fn scan_says_what_is_under_the_workspace_and_what_is_linked() {
 fn scan_with_everything_linked_has_no_advice_to_give() {
     let dir = workspace_with_two();
 
-    let outcome = flayer(dir.path(), &["scan"]).unwrap();
+    let outcome = weaver(dir.path(), &["scan"]).unwrap();
 
     assert_eq!(outcome.stdout, "alpha  linked\nbeta   linked\n");
 }
@@ -42,9 +42,9 @@ fn scan_with_everything_linked_has_no_advice_to_give() {
 #[test]
 fn scan_of_an_empty_workspace_says_so() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
-    let outcome = flayer(dir.path(), &["scan"]).unwrap();
+    let outcome = weaver(dir.path(), &["scan"]).unwrap();
 
     assert!(outcome
         .stdout
@@ -58,7 +58,7 @@ fn scan_spells_each_path_as_link_takes_it_from_where_it_runs() {
     fs::create_dir_all(sub.join("delta")).unwrap();
     new_project(&sub.join("delta"));
 
-    let outcome = flayer(&sub, &["scan"]).unwrap();
+    let outcome = weaver(&sub, &["scan"]).unwrap();
 
     // What is outside where it ran is spelled whole; what is inside, as a
     // route from there.
@@ -73,7 +73,7 @@ fn scan_spells_each_path_as_link_takes_it_from_where_it_runs() {
             format!("{:width$}  not linked  mind project", "delta"),
         ]
     );
-    let linked = flayer(&sub, &["link", "delta"]).unwrap();
+    let linked = weaver(&sub, &["link", "delta"]).unwrap();
     assert_eq!(linked.stdout, "linked delta as sub/delta\n");
 }
 
@@ -82,7 +82,7 @@ fn scan_looks_under_each_folder_given_taken_from_where_it_runs() {
     let dir = TempDir::new().unwrap();
     let ws = dir.path().join("ws");
     fs::create_dir(&ws).unwrap();
-    flayer(&ws, &["init"]).unwrap();
+    weaver(&ws, &["init"]).unwrap();
     fs::create_dir_all(ws.join("inside/.git")).unwrap();
     let work = dir.path().join("work");
     let alpha = work.join("acme/alpha");
@@ -93,7 +93,7 @@ fn scan_looks_under_each_folder_given_taken_from_where_it_runs() {
     let before = registry(&ws);
 
     // `work` from where it runs, as `link` takes a path; `other` whole.
-    let outcome = flayer(&ws, &["scan", "../work", other.to_str().unwrap()]).unwrap();
+    let outcome = weaver(&ws, &["scan", "../work", other.to_str().unwrap()]).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     let alpha = alpha.display().to_string();
@@ -119,7 +119,7 @@ fn scan_goes_as_deep_as_it_is_told_and_three_levels_unless_told() {
     fs::create_dir_all(dir.path().join("a/b/c/d/deeper/.git")).unwrap();
 
     let routes = |args: &[&str]| -> Vec<String> {
-        let outcome = flayer(dir.path(), args).unwrap();
+        let outcome = weaver(dir.path(), args).unwrap();
         outcome
             .stdout
             .lines()
@@ -146,7 +146,7 @@ fn scan_of_folders_holding_nothing_says_where_it_looked() {
     let empty = dir.path().join("empty");
     fs::create_dir_all(empty.join("plain")).unwrap();
 
-    let outcome = flayer(dir.path(), &["scan", "empty"]).unwrap();
+    let outcome = weaver(dir.path(), &["scan", "empty"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -161,7 +161,7 @@ fn scan_of_folders_holding_nothing_says_where_it_looked() {
 fn scan_of_a_folder_that_is_not_there_warns_and_still_reports_the_rest() {
     let dir = workspace_with_two();
 
-    let outcome = flayer(dir.path(), &["scan", "wrok", "."]).unwrap();
+    let outcome = weaver(dir.path(), &["scan", "wrok", "."]).unwrap();
 
     assert!(!outcome.ok);
     assert_eq!(outcome.stdout, "alpha  linked\nbeta   linked\n");
@@ -204,11 +204,11 @@ struct Found {
 #[test]
 fn scan_json_is_the_envelope_with_each_one_found_and_its_id() {
     let dir = workspace_with_two();
-    flayer(dir.path(), &["unlink", "beta"]).unwrap();
+    weaver(dir.path(), &["unlink", "beta"]).unwrap();
     fs::create_dir_all(dir.path().join("gamma/.git")).unwrap();
     fs::write(dir.path().join("gamma/AGENTS.md"), "# Agents\n").unwrap();
 
-    let outcome = flayer(dir.path(), &["scan", "--json", "--depth", "2"]).unwrap();
+    let outcome = weaver(dir.path(), &["scan", "--json", "--depth", "2"]).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
@@ -301,8 +301,8 @@ fn scan_json_says_what_it_could_not_read_and_that_it_stopped_as_warnings() {
         fs::create_dir_all(crowded.join(format!("d{index:04}"))).unwrap();
     }
 
-    let outcome = flayer(dir.path(), &["scan", "--json", "wrok", "crowded"]).unwrap();
-    let text = flayer(dir.path(), &["scan", "wrok", "crowded"]).unwrap();
+    let outcome = weaver(dir.path(), &["scan", "--json", "wrok", "crowded"]).unwrap();
+    let text = weaver(dir.path(), &["scan", "wrok", "crowded"]).unwrap();
 
     // Failed as the text would have, and said on stderr as the text says it.
     assert!(!outcome.ok);
@@ -337,7 +337,7 @@ fn a_scan_that_stops_early_says_so_on_stderr() {
     }
     fs::create_dir_all(dir.path().join("other/alpha/.git")).unwrap();
 
-    let outcome = flayer(dir.path(), &["scan", "crowded", "other"]).unwrap();
+    let outcome = weaver(dir.path(), &["scan", "crowded", "other"]).unwrap();
 
     assert!(!outcome.ok);
     // The second folder is still looked under.
@@ -356,12 +356,12 @@ fn a_scan_that_stops_early_says_so_on_stderr() {
 }
 
 #[test]
-fn flayer_scan_looks_three_levels_down_unless_told() {
-    let parsed = FlayerCli::try_parse_from(["flayer", "scan"]).unwrap();
+fn weaver_scan_looks_three_levels_down_unless_told() {
+    let parsed = WeaverCli::try_parse_from(["flayer", "scan"]).unwrap();
 
     assert!(matches!(
         parsed.command,
-        Some(mindweaver_cli::FlayerCommand::Scan {
+        Some(mindweaver_cli::WeaverCommand::Scan {
             ref roots,
             depth: DEFAULT_DEPTH,
             suggest: false,
@@ -399,7 +399,7 @@ fn workspace_with_one_of_each() -> TempDir {
 fn scan_suggest_lists_what_is_not_linked_first_each_with_why() {
     let dir = workspace_with_one_of_each();
 
-    let outcome = flayer(dir.path(), &["scan", "--suggest"]).unwrap();
+    let outcome = weaver(dir.path(), &["scan", "--suggest"]).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert_eq!(
@@ -422,7 +422,7 @@ beta     linked
 fn scan_without_suggest_keeps_its_order_by_route_and_its_words() {
     let dir = workspace_with_one_of_each();
 
-    let outcome = flayer(dir.path(), &["scan"]).unwrap();
+    let outcome = weaver(dir.path(), &["scan"]).unwrap();
 
     let lines: Vec<&str> = outcome.stdout.lines().take(6).collect();
     assert_eq!(
@@ -442,7 +442,7 @@ fn scan_without_suggest_keeps_its_order_by_route_and_its_words() {
 fn scan_suggest_json_is_the_envelope_in_the_order_suggested_with_each_reason() {
     let dir = workspace_with_one_of_each();
 
-    let outcome = flayer(dir.path(), &["scan", "--suggest", "--json"]).unwrap();
+    let outcome = weaver(dir.path(), &["scan", "--suggest", "--json"]).unwrap();
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     let (report, warnings): (Report, _) = enveloped(&outcome);
@@ -476,11 +476,11 @@ fn scan_suggest_json_is_the_envelope_in_the_order_suggested_with_each_reason() {
 fn scan_suggest_links_nothing_and_writes_nothing() {
     let dir = workspace_with_one_of_each();
     let before = registry(dir.path());
-    let ledger = FlayerWorkspace::open(dir.path()).unwrap().ledger_path();
+    let ledger = WeaverWorkspace::open(dir.path()).unwrap().ledger_path();
     let had_ledger = ledger.exists();
 
-    flayer(dir.path(), &["scan", "--suggest"]).unwrap();
-    flayer(dir.path(), &["scan", "--suggest", "--json"]).unwrap();
+    weaver(dir.path(), &["scan", "--suggest"]).unwrap();
+    weaver(dir.path(), &["scan", "--suggest", "--json"]).unwrap();
 
     assert_eq!(registry(dir.path()), before);
     assert_eq!(ledger.exists(), had_ledger);
@@ -498,7 +498,7 @@ fn scan_suggest_of_a_folder_outside_the_workspace_reads_without_making_the_defau
     fs::create_dir_all(worked.join(".git")).unwrap();
     fs::write(worked.join("CLAUDE.md"), "").unwrap();
 
-    let outcome = flayer_at_home(
+    let outcome = weaver_at_home(
         work.path(),
         home.path(),
         &["scan", "--suggest", work.path().to_str().unwrap()],
@@ -513,16 +513,16 @@ fn scan_suggest_of_a_folder_outside_the_workspace_reads_without_making_the_defau
             "plain   not linked  git repository",
         ]
     );
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
-fn flayer_scan_takes_suggest() {
-    let parsed = FlayerCli::try_parse_from(["flayer", "scan", "--suggest", "work"]).unwrap();
+fn weaver_scan_takes_suggest() {
+    let parsed = WeaverCli::try_parse_from(["flayer", "scan", "--suggest", "work"]).unwrap();
 
     assert!(matches!(
         parsed.command,
-        Some(mindweaver_cli::FlayerCommand::Scan {
+        Some(mindweaver_cli::WeaverCommand::Scan {
             ref roots,
             suggest: true,
             ..

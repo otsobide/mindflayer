@@ -49,8 +49,8 @@ use crate::ledger::{Action, Ledger, LedgerError, Moved, Target};
 use crate::reapply::{self, Retarget, Why};
 use crate::settings::{Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
 use crate::workspace::{
-    ignore_itself, misplaced_authored, same_directory, write_new, Directories, FlayerWorkspace,
-    MarkerFile, MindConfig, MindProject, ProjectConfig, WorkspaceError, DIRECTORIES_VERSION,
+    ignore_itself, misplaced_authored, same_directory, write_new, Directories, MarkerFile,
+    MindConfig, MindProject, ProjectConfig, WeaverWorkspace, WorkspaceError, DIRECTORIES_VERSION,
     MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION,
 };
 
@@ -122,7 +122,7 @@ pub struct ProjectPlan {
 /// inside one of `homes`, or where a loaded workspace keeps its own, as an
 /// install refuses one.
 pub fn project_plan(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     agents: &[Agent],
     share: Share,
@@ -311,7 +311,7 @@ pub enum Stranded {
 /// said ([`MigrateError::left_behind`]). Only once the ledger holds the move
 /// are the copies taken out deleted, with the stage.
 pub fn project(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     agents: &[Agent],
     share: Share,
@@ -361,7 +361,7 @@ pub fn project(
 /// folder, everything written put back when a step fails.
 fn carry(
     project: &MindProject,
-    records: Option<(&FlayerWorkspace, &Ledger)>,
+    records: Option<(&WeaverWorkspace, &Ledger)>,
     mut plan: ProjectPlan,
     scrub: Scrub,
 ) -> Result<ProjectMigrated, MigrateError> {
@@ -398,7 +398,7 @@ fn carry(
 /// `undo` as it is made, so a failure can put it back.
 fn carry_out(
     project: &MindProject,
-    records: Option<(&FlayerWorkspace, &Ledger)>,
+    records: Option<(&WeaverWorkspace, &Ledger)>,
     plan: &ProjectPlan,
     stage: &mut copy::Stage,
     undo: &mut Undo,
@@ -643,16 +643,16 @@ impl<'a> Undo<'a> {
 /// `workspace`, when it is made and links `project`: the one whose records
 /// say what in the project is Mindflayer's.
 pub(super) fn linking<'a>(
-    workspace: Option<&'a FlayerWorkspace>,
+    workspace: Option<&'a WeaverWorkspace>,
     project: &MindProject,
-) -> Option<&'a FlayerWorkspace> {
+) -> Option<&'a WeaverWorkspace> {
     workspace.filter(|workspace| workspace.is_made() && workspace.is_linked(project.root()))
 }
 
 /// [`project_plan`], against `records`: the workspace that links the
 /// project and its ledger, or none.
 pub(super) fn plan_with(
-    records: Option<(&FlayerWorkspace, &Ledger)>,
+    records: Option<(&WeaverWorkspace, &Ledger)>,
     project: &MindProject,
     agents: &[Agent],
     share: Share,

@@ -13,11 +13,11 @@ fn installed() -> (TempDir, PathBuf) {
     let projects = dir.path().join("Projects");
     let collapse = projects.join("collapse");
     fs::create_dir_all(&collapse).unwrap();
-    flayer(&projects, &["init"]).unwrap();
-    flayer(&projects, &["add", "skill", "deploy", "Ship the service"]).unwrap();
+    weaver(&projects, &["init"]).unwrap();
+    weaver(&projects, &["add", "skill", "deploy", "Ship the service"]).unwrap();
     new_project(&collapse);
-    flayer(&projects, &["link", "collapse"]).unwrap();
-    flayer(&projects, &["install", "-p", "collapse", "deploy"]).unwrap();
+    weaver(&projects, &["link", "collapse"]).unwrap();
+    weaver(&projects, &["install", "-p", "collapse", "deploy"]).unwrap();
     (dir, projects)
 }
 
@@ -50,7 +50,7 @@ fn a_suggestion_says_a_moved_project_moved_as_a_scan_does() {
     fs::create_dir_all(projects.join("apps")).unwrap();
     fs::rename(projects.join("collapse"), projects.join("apps/collapse")).unwrap();
 
-    let scan = flayer(&projects, &["scan", "--suggest"]).unwrap();
+    let scan = weaver(&projects, &["scan", "--suggest"]).unwrap();
 
     // Its reason is its id, but what to do about it is a relink.
     assert_eq!(
@@ -70,11 +70,11 @@ fn a_moved_project_is_stale_then_found_moved_and_relinked_with_every_install_cur
     fs::create_dir_all(projects.join("apps")).unwrap();
     fs::rename(projects.join("collapse"), projects.join("apps/collapse")).unwrap();
 
-    let status = flayer(&projects, &["status"]).unwrap();
+    let status = weaver(&projects, &["status"]).unwrap();
     assert_eq!(status.stdout, "collapse  stale\n");
     assert!(!status.ok);
 
-    let scan = flayer(&projects, &["scan"]).unwrap();
+    let scan = weaver(&projects, &["scan"]).unwrap();
     assert_eq!(
         scan.stdout,
         "\
@@ -85,7 +85,7 @@ apps/collapse  not linked  moved: collapse -> apps/collapse
     );
     assert!(scan.ok, "{:?}", scan.stderr);
 
-    let relinked = flayer(&projects, &["relink", "collapse", "apps/collapse"]).unwrap();
+    let relinked = weaver(&projects, &["relink", "collapse", "apps/collapse"]).unwrap();
     assert_eq!(
         relinked.stdout,
         "relinked collapse as apps/collapse, from collapse\n  1 install kept with it\n"
@@ -93,7 +93,7 @@ apps/collapse  not linked  moved: collapse -> apps/collapse
     assert!(relinked.ok, "{:?}", relinked.stderr);
     assert!(relinked.stderr.is_empty(), "{:?}", relinked.stderr);
 
-    let status = flayer(&projects, &["status"]).unwrap();
+    let status = weaver(&projects, &["status"]).unwrap();
     assert_eq!(
         status.stdout,
         "deploy  current  claude,codex,opencode  workspace\n"
@@ -113,13 +113,13 @@ fn a_project_moved_before_the_workspace_learned_its_id_is_pointed_at_relink_not_
     let projects = dir.path().join("Projects");
     let collapse = projects.join("collapse");
     fs::create_dir_all(&collapse).unwrap();
-    flayer(&projects, &["init"]).unwrap();
+    weaver(&projects, &["init"]).unwrap();
     new_project(&collapse);
-    flayer(&projects, &["link", "collapse"]).unwrap();
+    weaver(&projects, &["link", "collapse"]).unwrap();
     fs::create_dir_all(projects.join("apps")).unwrap();
     fs::rename(&collapse, projects.join("apps/collapse")).unwrap();
 
-    let scan = flayer(&projects, &["scan"]).unwrap();
+    let scan = weaver(&projects, &["scan"]).unwrap();
 
     assert_eq!(
         scan.stdout,
@@ -131,7 +131,7 @@ apps/collapse  not linked  mind project
 "
     );
     assert!(scan.ok, "{:?}", scan.stderr);
-    let relinked = flayer(&projects, &["relink", "collapse", "apps/collapse"]).unwrap();
+    let relinked = weaver(&projects, &["relink", "collapse", "apps/collapse"]).unwrap();
     assert_eq!(
         relinked.stdout,
         "relinked collapse as apps/collapse, from collapse\n"
@@ -147,7 +147,7 @@ fn a_directory_holding_another_id_is_refused_and_nothing_changes() {
     new_project(&other);
     let before = registry(&projects);
 
-    let failure = flayer(&projects, &["relink", "collapse", "other"]).unwrap_err();
+    let failure = weaver(&projects, &["relink", "collapse", "other"]).unwrap_err();
 
     let said = failure.error.to_string();
     assert!(
@@ -163,7 +163,7 @@ fn a_copy_made_with_its_mind_is_a_duplicate_and_never_a_move() {
     let (_dir, projects) = installed();
     copied(&projects.join("collapse"), &projects.join("copy"));
 
-    let scan = flayer(&projects, &["scan"]).unwrap();
+    let scan = weaver(&projects, &["scan"]).unwrap();
 
     assert_eq!(
         scan.stdout,
@@ -185,7 +185,7 @@ copy      not linked  mind project
         )]
     );
     assert!(!scan.ok);
-    let failure = flayer(&projects, &["relink", "collapse", "copy"]).unwrap_err();
+    let failure = weaver(&projects, &["relink", "collapse", "copy"]).unwrap_err();
     assert!(
         failure
             .error
@@ -200,8 +200,8 @@ copy      not linked  mind project
 fn relink_refuses_while_a_linked_copy_holds_the_id_until_it_runs_new_id() {
     let (_dir, projects) = installed();
     copied(&projects.join("collapse"), &projects.join("copy"));
-    flayer(&projects, &["link", "copy"]).unwrap();
-    let status = flayer(&projects, &["status"]).unwrap();
+    weaver(&projects, &["link", "copy"]).unwrap();
+    let status = weaver(&projects, &["status"]).unwrap();
     assert!(
         status
             .stderr
@@ -212,9 +212,9 @@ fn relink_refuses_while_a_linked_copy_holds_the_id_until_it_runs_new_id() {
     );
     fs::rename(projects.join("collapse"), projects.join("moved")).unwrap();
 
-    let scan = flayer(&projects, &["scan"]).unwrap();
+    let scan = weaver(&projects, &["scan"]).unwrap();
     assert!(!scan.stdout.contains("moved:"), "{}", scan.stdout);
-    let refused = flayer(&projects, &["relink", "collapse", "moved"]).unwrap_err();
+    let refused = weaver(&projects, &["relink", "collapse", "moved"]).unwrap_err();
     assert!(
         refused.error.to_string().contains("are both project"),
         "{}",
@@ -232,13 +232,13 @@ fn relink_refuses_while_a_linked_copy_holds_the_id_until_it_runs_new_id() {
     );
     assert!(renewed.ok, "{:?}", renewed.stderr);
 
-    let scan = flayer(&projects, &["scan"]).unwrap();
+    let scan = weaver(&projects, &["scan"]).unwrap();
     assert!(
         scan.stdout.contains("moved: collapse -> moved"),
         "{}",
         scan.stdout
     );
-    let relinked = flayer(&projects, &["relink", "collapse", "moved"]).unwrap();
+    let relinked = weaver(&projects, &["relink", "collapse", "moved"]).unwrap();
     assert_eq!(
         relinked.stdout,
         "relinked collapse as moved, from collapse\n  1 install kept with it\n"

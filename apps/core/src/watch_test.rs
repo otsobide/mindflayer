@@ -29,7 +29,7 @@ fn project_scope<'a>(watched: &'a [Watched], entry: &str) -> Vec<&'a Path> {
 }
 
 #[test]
-fn a_workspace_s_marker_is_in_its_flayer_folder() {
+fn a_workspace_s_marker_is_in_its_weaver_folder() {
     let root = PathBuf::from(format!("/{}", random::word()));
 
     assert_eq!(

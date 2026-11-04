@@ -16,7 +16,7 @@ use common::contract;
 use common::panel::*;
 use common::*;
 use mindweaver_cli::backend::PanelBackend;
-use mindweaver_cli::{Command, FlayerCommand, UiOptions};
+use mindweaver_cli::{Command, UiOptions, WeaverCommand};
 use mindweaver_server::Backend;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -181,8 +181,8 @@ fn the_panel_switches_only_to_a_workspace_this_machine_knows() {
     let home = TempDir::new().unwrap();
     let team = home.path().join("team");
     fs::create_dir_all(&team).unwrap();
-    flayer_at_home(home.path(), home.path(), &["init"]).unwrap();
-    flayer_at_home(&team, home.path(), &["init"]).unwrap();
+    weaver_at_home(home.path(), home.path(), &["init"]).unwrap();
+    weaver_at_home(&team, home.path(), &["init"]).unwrap();
     let panel = serve("flayer", dir.path(), home.path());
 
     for path in ["/etc", "--yes", "../team"] {
@@ -239,7 +239,7 @@ fn a_save_writes_the_text_and_leaves_nothing_in_the_scratch_folder() {
     assert_eq!(ran["outcome"]["ok"], true, "{ran}");
     let manifest = own_directory_for(dir.path(), Kind::Skill).join("commit-style/SKILL.md");
     assert_eq!(fs::read_to_string(manifest).unwrap(), text);
-    let scratch = FlayerWorkspace::open(dir.path()).unwrap().scratch_dir();
+    let scratch = WeaverWorkspace::open(dir.path()).unwrap().scratch_dir();
     assert_eq!(fs::read_dir(scratch).unwrap().count(), 0);
 }
 
@@ -818,8 +818,8 @@ fn both_binaries_take_a_token_file_for_ui() {
         token_file: Some(PathBuf::from("run/api.json")),
         ..UiOptions::default()
     };
-    let ui = |parsed: Option<FlayerCommand>| match parsed {
-        Some(FlayerCommand::Ui(options)) => options,
+    let ui = |parsed: Option<WeaverCommand>| match parsed {
+        Some(WeaverCommand::Ui(options)) => options,
         other => panic!("not ui: {other:?}"),
     };
 
@@ -841,12 +841,12 @@ fn both_binaries_take_a_token_file_for_ui() {
         panic!("not flayer: {:?}", nested.command);
     };
     assert_eq!(ui(command), given);
-    let flayer =
-        FlayerCli::try_parse_from(["flayer", "ui", "--no-open", "--token-file", "run/api.json"])
+    let weaver =
+        WeaverCli::try_parse_from(["flayer", "ui", "--no-open", "--token-file", "run/api.json"])
             .unwrap();
-    assert_eq!(ui(flayer.command), given);
+    assert_eq!(ui(weaver.command), given);
 
-    let bare = FlayerCli::try_parse_from(["flayer", "ui"]).unwrap();
+    let bare = WeaverCli::try_parse_from(["flayer", "ui"]).unwrap();
     assert_eq!(ui(bare.command).token_file, None);
 }
 
@@ -859,7 +859,7 @@ fn a_token_file_is_refused_without_a_path() {
     ] {
         let error = match line[0] {
             "mind" => Cli::try_parse_from(line).map(drop),
-            _ => FlayerCli::try_parse_from(line).map(drop),
+            _ => WeaverCli::try_parse_from(line).map(drop),
         }
         .expect_err(&line.join(" "));
 

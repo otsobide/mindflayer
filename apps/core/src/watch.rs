@@ -44,7 +44,7 @@ use crate::kind::Kind;
 use crate::paths;
 use crate::template;
 use crate::workspace::{
-    FlayerWorkspace, MarkerFile, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_DIR,
+    MarkerFile, MindProject, WeaverWorkspace, MIND_DIR, WEAVER_CONFIG, WEAVER_DIR,
 };
 
 /// One path to watch, and what a change to it is a change to.
@@ -80,7 +80,7 @@ pub enum Scope {
 /// whose default workspace's marker says which workspaces this machine
 /// knows. A read, as the snapshot is: nothing is made or changed, and what
 /// cannot be listed is left out, as discovery reports it.
-pub fn watched(workspace: &FlayerWorkspace, home: Option<&Path>) -> Vec<Watched> {
+pub fn watched(workspace: &WeaverWorkspace, home: Option<&Path>) -> Vec<Watched> {
     let mut list = List::default();
     let at_home = Scope::Workspace;
 
@@ -121,7 +121,7 @@ pub fn watched(workspace: &FlayerWorkspace, home: Option<&Path>) -> Vec<Watched>
 
 /// Where a workspace at `root` keeps its marker.
 fn marker_of_workspace(root: &Path) -> PathBuf {
-    root.join(FLAYER_DIR).join(FLAYER_CONFIG)
+    root.join(WEAVER_DIR).join(WEAVER_CONFIG)
 }
 
 /// The list being put together, each path once for each scope.
@@ -148,7 +148,7 @@ impl List {
     /// rules' block in `AGENTS.md` and the import in `CLAUDE.md` are read
     /// whichever it names, and a few files more are no cost against a
     /// change missed.
-    fn project(&mut self, scope: &Scope, project: &MindProject, workspace: &FlayerWorkspace) {
+    fn project(&mut self, scope: &Scope, project: &MindProject, workspace: &WeaverWorkspace) {
         self.markers(scope, project.root());
         for agent in Agent::ALL {
             for file in agent.reads_files() {
@@ -190,7 +190,7 @@ impl List {
     }
 
     /// Every folder the templates `holder` is offered are looked for in.
-    fn templates(&mut self, scope: &Scope, workspace: &FlayerWorkspace, holder: &MindProject) {
+    fn templates(&mut self, scope: &Scope, workspace: &WeaverWorkspace, holder: &MindProject) {
         for folder in template::looked_in(Some(workspace), holder) {
             self.add(scope, folder);
         }

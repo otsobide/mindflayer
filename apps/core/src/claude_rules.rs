@@ -57,7 +57,7 @@ use crate::exclude::{self, ExcludeError, Excluded};
 use crate::hash;
 use crate::install;
 use crate::value::ContentHash;
-use crate::workspace::{replace_bytes_unresolved, FlayerWorkspace, MindProject};
+use crate::workspace::{replace_bytes_unresolved, MindProject, WeaverWorkspace};
 
 /// The folders, from a project's root, the files go in.
 const FOLDER: [&str; 3] = [".claude", "rules", "mindflayer"];
@@ -267,7 +267,7 @@ codes!(Warning {
 /// Takes no lock: the caller holds the workspace's, as one calling
 /// [`crate::agents_md::render`] does, and the lock is not re-entrant.
 pub fn render<'a>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     rules: impl IntoIterator<Item = &'a Artifact>,
     mode: Mode,

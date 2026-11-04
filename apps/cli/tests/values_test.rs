@@ -16,7 +16,7 @@ use serde_json::Value;
 /// summarised by, by its kind and name, from `root`.
 fn summaries(root: &Path, holder: &Holder) -> Vec<((String, String), Value)> {
     let (listing, artifacts) = match holder {
-        Holder::Workspace => (flayer(root, &["list", "--json"]), "library"),
+        Holder::Workspace => (weaver(root, &["list", "--json"]), "library"),
         _ => (mind(root, &["list", "--json"]), "projects"),
     };
     let (data, warnings): (Value, _) = enveloped(&listing.unwrap());
@@ -61,7 +61,7 @@ fn places() -> Vec<(TempDir, Holder)> {
     let project = TempDir::new().unwrap();
     new_project(project.path());
     let workspace = TempDir::new().unwrap();
-    flayer(workspace.path(), &["init"]).unwrap();
+    weaver(workspace.path(), &["init"]).unwrap();
     vec![
         (project, Holder::Project(String::from("."))),
         (workspace, Holder::Workspace),
@@ -109,7 +109,7 @@ fn a_description_reaches_the_file_as_it_was_typed() {
             if kind == Kind::Skill {
                 let reference = format!("skill:{name}");
                 let shown = match &holder {
-                    Holder::Workspace => flayer(dir.path(), &["show", &reference, "--json"]),
+                    Holder::Workspace => weaver(dir.path(), &["show", &reference, "--json"]),
                     _ => mind(dir.path(), &["show", &reference, "--json"]),
                 };
                 let (shown, _): (Vec<Value>, _) = enveloped(&shown.unwrap());

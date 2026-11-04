@@ -161,7 +161,7 @@ fn the_prompt_shows_what_a_prompt_would_act_on_as_an_underscore() {
 }
 
 #[test]
-fn every_shell_sets_the_variable_and_defines_flayer_deactivate_and_never_deactivate() {
+fn every_shell_sets_the_variable_and_defines_its_own_deactivate_never_the_plain_one() {
     for shell in Shell::ALL {
         let code = written(shell, "/w", &prompt("w"));
 
@@ -208,7 +208,7 @@ fn a_word_that_is_no_shell_says_which_are() {
 #[test]
 fn a_workspace_not_made_yet_is_not_activated() {
     let home = tempfile::TempDir::new().unwrap();
-    let unmade = FlayerWorkspace::unmade(home.path()).unwrap();
+    let unmade = WeaverWorkspace::unmade(home.path()).unwrap();
 
     let error = script(&unmade, Shell::Bash).unwrap_err();
 
@@ -219,7 +219,7 @@ fn a_workspace_not_made_yet_is_not_activated() {
 fn a_made_workspace_is_activated_by_its_root_and_named_by_its_marker() {
     let dir = tempfile::TempDir::new().unwrap();
     let root = dir.path().join("writing");
-    let (workspace, _) = FlayerWorkspace::init(&root).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(&root).unwrap();
 
     let code = script(&workspace, Shell::Bash).unwrap();
 
@@ -235,7 +235,7 @@ fn a_path_that_is_not_utf8_is_refused_rather_than_mangled() {
 
     let dir = tempfile::TempDir::new().unwrap();
     let root = dir.path().join(OsStr::from_bytes(b"not-\xffutf8"));
-    let (workspace, _) = FlayerWorkspace::init(&root).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(&root).unwrap();
 
     let error = script(&workspace, Shell::Bash).unwrap_err();
 

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use common::{commit, repository, skill, url, workspace, write_files};
 use mindweaver_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
 use mindweaver_core::ledger::{Action, Ledger, SourceKind};
-use mindweaver_core::{FlayerWorkspace, Kind, MindProject, ValidationIssue};
+use mindweaver_core::{Kind, MindProject, ValidationIssue, WeaverWorkspace};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -364,7 +364,7 @@ fn gathering_writes_nothing_into_a_mind_project() {
     let dir = TempDir::new().unwrap();
     // A workspace that is also a project, which is the arrangement where a
     // gather leaking into `.mind` would be easiest to miss.
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let (project, _) = MindProject::init(dir.path()).unwrap();
     let ledger = workspace.ledger().unwrap();
 
@@ -720,7 +720,7 @@ fn a_password_cut_by_a_slash_is_refused_too_and_kept_nowhere() {
 /// gathering from `url` with a token in it: the URL in the source the clone
 /// in `directory` belongs to, in the log, and in that clone's config and
 /// reflog.
-fn left_by_an_older_build(workspace: &FlayerWorkspace, directory: &str, url: &str) {
+fn left_by_an_older_build(workspace: &WeaverWorkspace, directory: &str, url: &str) {
     let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
     database
         .execute("UPDATE sources SET url = ?1", [url])

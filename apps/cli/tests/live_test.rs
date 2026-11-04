@@ -62,7 +62,7 @@ fn changed(scope: serde_json::Value) -> Option<Event> {
 async fn reading_the_workspace_is_told_as_no_change() {
     let dir = workspace_with_two();
     // A ledger there, as an install leaves one, for the reads to open.
-    FlayerWorkspace::open(dir.path()).unwrap().ledger().unwrap();
+    WeaverWorkspace::open(dir.path()).unwrap().ledger().unwrap();
     let (backend, _watcher, _events, mut subscription) = watching(dir.path()).await;
 
     for _ in 0..3 {
@@ -94,7 +94,7 @@ async fn a_project_linked_from_a_terminal_is_told_and_then_watched() {
     let dir = workspace_with_two_unlinked();
     let (_backend, _watcher, _events, mut subscription) = watching(dir.path()).await;
 
-    flayer(dir.path(), &["link", "gamma"]).unwrap();
+    weaver(dir.path(), &["link", "gamma"]).unwrap();
     assert_eq!(
         next(&mut subscription).await,
         changed(json!({"type": "workspace"}))

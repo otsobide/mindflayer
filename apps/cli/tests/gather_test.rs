@@ -24,9 +24,9 @@ fn gather_reports_the_source_and_what_it_took() {
         ),
     ]);
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
-    let outcome = flayer(
+    let outcome = weaver(
         dir.path(),
         &["gather", "git", &source.path().to_string_lossy()],
     )
@@ -52,11 +52,11 @@ fn gather_reports_the_source_and_what_it_took() {
 fn gathering_again_says_nothing_moved() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let url = source.path().to_string_lossy().into_owned();
 
-    flayer(dir.path(), &["gather", "git", &url]).unwrap();
-    let again = flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    weaver(dir.path(), &["gather", "git", &url]).unwrap();
+    let again = weaver(dir.path(), &["gather", "git", &url]).unwrap();
 
     assert!(
         again
@@ -74,9 +74,9 @@ fn a_skill_that_cannot_be_read_is_a_warning_and_a_non_zero_exit() {
         ("skills/broken/SKILL.md", "no front matter\n"),
     ]);
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
-    let outcome = flayer(
+    let outcome = weaver(
         dir.path(),
         &["gather", "git", &source.path().to_string_lossy()],
     )
@@ -95,10 +95,10 @@ fn a_skill_with_nested_metadata_is_still_listed_with_a_warning() {
         "---\nname: nested\ndescription: Nested metadata\nmetadata:\n  owner:\n    team: ops\n---\n",
     )]);
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let url = source.path().to_string_lossy().into_owned();
 
-    let outcome = flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    let outcome = weaver(dir.path(), &["gather", "git", &url]).unwrap();
 
     assert!(
         outcome.stdout.contains("added  nested  Nested metadata"),
@@ -115,7 +115,7 @@ fn a_skill_with_nested_metadata_is_still_listed_with_a_warning() {
         outcome.stderr[0]
     );
     assert!(!outcome.ok);
-    let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
+    let listed = weaver(dir.path(), &["gather", "list"]).unwrap();
     assert!(listed.stdout.contains("nested"), "{}", listed.stdout);
 }
 
@@ -127,16 +127,16 @@ fn validate_reports_a_gathered_skill_without_hiding_it() {
     ]);
     let dir = workspace_with_two();
     let url = source.path().to_string_lossy().into_owned();
-    let gathered = flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    let gathered = weaver(dir.path(), &["gather", "git", &url]).unwrap();
     assert!(
         gathered.stdout.contains("added  a--b"),
         "{}",
         gathered.stdout
     );
 
-    let outcome = flayer(dir.path(), &["validate"]).unwrap();
+    let outcome = weaver(dir.path(), &["validate"]).unwrap();
 
-    let shelf = fs::read_dir(dir.path().join(FLAYER_DIR).join("skills"))
+    let shelf = fs::read_dir(dir.path().join(WEAVER_DIR).join("skills"))
         .unwrap()
         .next()
         .unwrap()
@@ -159,7 +159,7 @@ fn validate_reports_a_gathered_skill_without_hiding_it() {
     assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
     assert!(!outcome.ok);
     // One project's report is that project's, and the shelf is nobody's.
-    let one = flayer(dir.path(), &["validate", "-p", "alpha"]).unwrap();
+    let one = weaver(dir.path(), &["validate", "-p", "alpha"]).unwrap();
     assert_eq!(one.stdout, "alpha: ok\n\n1 skill checked, 0 invalid\n");
 }
 
@@ -173,11 +173,11 @@ fn a_gathered_name_cannot_put_a_carriage_return_on_the_terminal() {
         "---\nname: \"evil\\rfine (shelf/x): ok\"\ndescription: Evil\nmetadata:\n  \"k\\rok\": [1]\n---\n",
     )]);
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let url = source.path().to_string_lossy().into_owned();
 
-    let gathered = flayer(dir.path(), &["gather", "git", &url]).unwrap();
-    let validated = flayer(dir.path(), &["validate"]).unwrap();
+    let gathered = weaver(dir.path(), &["gather", "git", &url]).unwrap();
+    let validated = weaver(dir.path(), &["validate"]).unwrap();
 
     assert!(!gathered.stderr.is_empty());
     let said = gathered.stderr.iter().map(|line| &line.text);
@@ -197,11 +197,11 @@ fn a_gathered_name_cannot_put_a_carriage_return_on_the_terminal() {
 fn gather_list_names_where_each_skill_came_from() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let url = source.path().to_string_lossy().into_owned();
-    flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    weaver(dir.path(), &["gather", "git", &url]).unwrap();
 
-    let outcome = flayer(dir.path(), &["gather", "list"]).unwrap();
+    let outcome = weaver(dir.path(), &["gather", "list"]).unwrap();
 
     assert!(outcome.ok);
     assert!(outcome.stdout.contains("deploy"));
@@ -212,9 +212,9 @@ fn gather_list_names_where_each_skill_came_from() {
 #[test]
 fn an_empty_shelf_says_how_to_fill_it() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
-    let outcome = flayer(dir.path(), &["gather", "list"]).unwrap();
+    let outcome = weaver(dir.path(), &["gather", "list"]).unwrap();
 
     assert!(outcome.ok);
     assert!(outcome.stdout.starts_with("nothing gathered yet"));
@@ -224,10 +224,10 @@ fn an_empty_shelf_says_how_to_fill_it() {
 #[test]
 fn listing_a_shelf_that_has_no_ledger_makes_none() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
-    let ledger = dir.path().join(FLAYER_DIR).join("mindflayer.db");
+    weaver(dir.path(), &["init"]).unwrap();
+    let ledger = dir.path().join(WEAVER_DIR).join("mindflayer.db");
 
-    let outcome = flayer(dir.path(), &["gather", "list"]).unwrap();
+    let outcome = weaver(dir.path(), &["gather", "list"]).unwrap();
 
     assert!(outcome.stdout.starts_with("nothing gathered yet"));
     assert!(!ledger.exists());
@@ -237,7 +237,7 @@ fn listing_a_shelf_that_has_no_ledger_makes_none() {
 fn gathering_outside_a_workspace_says_what_to_run() {
     let dir = TempDir::new().unwrap();
 
-    let failure = flayer(dir.path(), &["gather", "list"]).unwrap_err();
+    let failure = weaver(dir.path(), &["gather", "list"]).unwrap_err();
 
     assert!(matches!(*failure.error, CliError::NotInWorkspace(_)));
     assert!(failure.error.to_string().contains("flayer init"));
@@ -247,10 +247,10 @@ fn gathering_outside_a_workspace_says_what_to_run() {
 fn gather_is_reachable_the_long_way_round_too() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let url = source.path().to_string_lossy().into_owned();
 
-    let short = flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    let short = weaver(dir.path(), &["gather", "git", &url]).unwrap();
     let long = mind(dir.path(), &["flayer", "gather", "list"]).unwrap();
 
     assert!(short.ok);
@@ -261,17 +261,17 @@ fn gather_is_reachable_the_long_way_round_too() {
 fn gather_list_tells_two_branches_of_one_repository_apart() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let url = source.path().to_string_lossy().into_owned();
 
     // The same URL at its default branch and at a named one: two sources, and
     // a listing that printed the URL alone would show one origin twice.
     let head = fs::read_to_string(source.path().join(".git").join("HEAD")).unwrap();
     let branch = head.trim().rsplit('/').next().unwrap().to_owned();
-    flayer(dir.path(), &["gather", "git", &url]).unwrap();
-    flayer(dir.path(), &["gather", "git", &url, "--ref", &branch]).unwrap();
+    weaver(dir.path(), &["gather", "git", &url]).unwrap();
+    weaver(dir.path(), &["gather", "git", &url, "--ref", &branch]).unwrap();
 
-    let outcome = flayer(dir.path(), &["gather", "list"]).unwrap();
+    let outcome = weaver(dir.path(), &["gather", "list"]).unwrap();
 
     assert_eq!(outcome.stdout.lines().count(), 2, "{}", outcome.stdout);
     assert!(
@@ -286,16 +286,16 @@ fn a_watched_gather_reports_its_steps_and_prints_what_an_unwatched_one_does() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let url = source.path().to_string_lossy().into_owned();
     let (watched, plain) = (TempDir::new().unwrap(), TempDir::new().unwrap());
-    flayer(watched.path(), &["init"]).unwrap();
-    flayer(plain.path(), &["init"]).unwrap();
+    weaver(watched.path(), &["init"]).unwrap();
+    weaver(plain.path(), &["init"]).unwrap();
     let seen = Arc::new(Mutex::new(Vec::new()));
     let watch = Watch::new().reporting_to({
         let seen = Arc::clone(&seen);
         move |progress| seen.lock().unwrap().push(progress)
     });
 
-    let outcome = run_flayer_cli_watched(
-        &parsed_flayer(watched.path(), &["gather", "git", &url]),
+    let outcome = run_weaver_cli_watched(
+        &parsed_weaver(watched.path(), &["gather", "git", &url]),
         &watch,
     )
     .unwrap();
@@ -306,7 +306,7 @@ fn a_watched_gather_reports_its_steps_and_prints_what_an_unwatched_one_does() {
     // The progress is the front end's to show; the report is the command's.
     assert_eq!(
         outcome,
-        flayer(plain.path(), &["gather", "git", &url]).unwrap()
+        weaver(plain.path(), &["gather", "git", &url]).unwrap()
     );
 }
 
@@ -314,7 +314,7 @@ fn a_watched_gather_reports_its_steps_and_prints_what_an_unwatched_one_does() {
 fn a_cancelled_gather_says_so_and_leaves_the_shelf_as_it_was() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let url = source.path().to_string_lossy().into_owned();
     let watch = Watch::new();
     watch.cancel();
@@ -330,7 +330,7 @@ fn a_cancelled_gather_says_so_and_leaves_the_shelf_as_it_was() {
         failure.error.to_string(),
         "cancelled, with nothing put on the shelf"
     );
-    let shelf = flayer(dir.path(), &["gather", "list"]).unwrap();
+    let shelf = weaver(dir.path(), &["gather", "list"]).unwrap();
     assert!(
         shelf.stdout.starts_with("nothing gathered yet"),
         "{}",
@@ -346,7 +346,7 @@ fn a_cancelled_gather_says_so_and_leaves_the_shelf_as_it_was() {
 /// left after gathering its one source from `url`: the URL in the source, in
 /// the log, and in the clone's config and reflog.
 fn left_by_an_older_build(dir: &Path, url: &str) {
-    let workspace = FlayerWorkspace::open(dir).unwrap();
+    let workspace = WeaverWorkspace::open(dir).unwrap();
     let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
     database
         .execute("UPDATE sources SET url = ?1", [url])
@@ -395,7 +395,7 @@ fn kept_by(dir: &Path) -> String {
             }
         }
     }
-    let workspace = FlayerWorkspace::open(dir).unwrap();
+    let workspace = WeaverWorkspace::open(dir).unwrap();
     let mut kept =
         String::from_utf8_lossy(&fs::read(workspace.ledger_path()).unwrap()).into_owned();
     text_under(&workspace.cache_dir(), &mut kept);
@@ -410,8 +410,8 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
         &skill_file("review", "Look again"),
     )]);
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
-    flayer(
+    weaver(dir.path(), &["init"]).unwrap();
+    weaver(
         dir.path(),
         &["gather", "git", &first.path().to_string_lossy()],
     )
@@ -420,7 +420,7 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
 
     // Listing reads, so it rewrites nothing, and it shows nothing it should
     // not.
-    let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
+    let listed = weaver(dir.path(), &["gather", "list"]).unwrap();
     assert_eq!(
         listed.stdout,
         "deploy  https://example.com/acme/skills  Ship it\n"
@@ -431,7 +431,7 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
     // The next command that writes takes it out of the ledger and the clone,
     // and says so.
     let second = second.path().to_string_lossy().into_owned();
-    let gathered = flayer(dir.path(), &["gather", "git", &second]).unwrap();
+    let gathered = weaver(dir.path(), &["gather", "git", &second]).unwrap();
     assert!(gathered.ok, "{:?}", gathered.stderr);
     assert_eq!(
         gathered.stderr,
@@ -446,7 +446,7 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
     assert!(!kept_by(dir.path()).contains("ghp_t0ken"));
     // Compared word by word: the second source is a temp dir, whose length
     // (long on macOS and Windows) sets how wide the URL column is padded.
-    let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
+    let listed = weaver(dir.path(), &["gather", "list"]).unwrap();
     assert!(
         listed.stdout.lines().any(|line| {
             line.split_whitespace().collect::<Vec<_>>()
@@ -457,16 +457,16 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
     );
 
     // Said once: there is nothing left to say the second time.
-    let again = flayer(dir.path(), &["gather", "git", &second]).unwrap();
+    let again = weaver(dir.path(), &["gather", "git", &second]).unwrap();
     assert!(again.stderr.is_empty(), "{:?}", again.stderr);
 }
 
 #[test]
 fn a_url_with_a_token_in_it_is_refused_and_nothing_kept_or_said_repeats_the_token() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
-    let failure = flayer(
+    let failure = weaver(
         dir.path(),
         &[
             "gather",
@@ -484,7 +484,7 @@ fn a_url_with_a_token_in_it_is_refused_and_nothing_kept_or_said_repeats_the_toke
     );
     assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
     assert!(!kept_by(dir.path()).contains("ghp_t0ken"));
-    let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
+    let listed = weaver(dir.path(), &["gather", "list"]).unwrap();
     assert!(
         listed.stdout.starts_with("nothing gathered yet"),
         "{}",

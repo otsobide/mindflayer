@@ -421,7 +421,7 @@ pub trait LedgerStore: Debug + Send {
     /// say how many of them the ledger did not know there already.
     ///
     /// For what a workspace's projects say now, read whenever it is opened
-    /// to write ([`crate::workspace::FlayerWorkspace::ledger_to_write`]): the
+    /// to write ([`crate::workspace::WeaverWorkspace::ledger_to_write`]): the
     /// ledger follows them, so it knows each linked project by the id it
     /// holds. An id it last saw at another route moves here, unless that
     /// route is one of `stale`, the entries the workspace links that open

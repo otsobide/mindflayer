@@ -7,12 +7,12 @@
 use std::process::ExitCode;
 
 use clap::Parser;
-use mindweaver_cli::{run_flayer_cli_watched, FlayerCli, ProgressLine};
+use mindweaver_cli::{run_weaver_cli_watched, ProgressLine, WeaverCli};
 
 fn main() -> ExitCode {
-    let cli = FlayerCli::parse();
+    let cli = WeaverCli::parse();
     let progress = ProgressLine::on_stderr();
-    let result = run_flayer_cli_watched(&cli, &progress.watch());
+    let result = run_weaver_cli_watched(&cli, &progress.watch());
     progress.clear();
     match result {
         Ok(outcome) => outcome.report(),

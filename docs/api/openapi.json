@@ -3584,7 +3584,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`FlayerWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\n[`FlayerWorkspace::naming`]: mindweaver_core::FlayerWorkspace::naming",
+            "description": "`flayer install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`WeaverWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\n[`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming",
             "properties": {
               "from": {
                 "type": [
@@ -4397,7 +4397,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`FlayerWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\n[`FlayerWorkspace::naming`]: mindweaver_core::FlayerWorkspace::naming",
+            "description": "`flayer install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`WeaverWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\n[`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming",
             "properties": {
               "from": {
                 "type": [

@@ -6,7 +6,7 @@
 //! entry and write it back keep only the entry written second, and two gathers
 //! of one source clone into one folder. So a writer takes `.mindflayer/lock`
 //! before it reads what it is about to change, and holds it until the change
-//! is written ([`crate::workspace::FlayerWorkspace::lock`]).
+//! is written ([`crate::workspace::WeaverWorkspace::lock`]).
 //!
 //! Readers never take it. A marker is replaced by a rename, and a read of the
 //! ledger sees only what was committed, so each file a reader opens is whole,

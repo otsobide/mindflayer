@@ -16,7 +16,7 @@ use std::time::Duration;
 use mindweaver_core::gather::Watch;
 use mindweaver_core::install;
 use mindweaver_core::ledger::Ledger;
-use mindweaver_core::{FlayerWorkspace, Kind, MindProject};
+use mindweaver_core::{Kind, MindProject, WeaverWorkspace};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
@@ -34,7 +34,7 @@ use state::{Screen, Step, Target};
 /// does from the shell; each with `lookup`, so they install nothing into the
 /// agents' own folders the command line was given, and use the workspace it
 /// chose.
-pub fn run(workspace: &FlayerWorkspace, lookup: &Lookup) -> Result<Outcome, Failure> {
+pub fn run(workspace: &WeaverWorkspace, lookup: &Lookup) -> Result<Outcome, Failure> {
     let (projects, warnings) = registered(workspace);
     let screen = open(workspace, projects)?;
 
@@ -79,7 +79,7 @@ pub fn run(workspace: &FlayerWorkspace, lookup: &Lookup) -> Result<Outcome, Fail
 /// TUI prints a session, warnings and errors included: on stderr, a warning
 /// would be cut off from the line it is about.
 pub fn finish(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     screen: &Screen,
     step: Step,
     lookup: &Lookup,
@@ -110,7 +110,7 @@ pub fn finish(
 /// The screen `flayer install` opens and the one inside the TUI both open here
 /// and apply as the lines [`Screen::task`] gives, so they cannot differ about
 /// either.
-pub fn open(workspace: &FlayerWorkspace, projects: Vec<MindProject>) -> Result<Screen, CliError> {
+pub fn open(workspace: &WeaverWorkspace, projects: Vec<MindProject>) -> Result<Screen, CliError> {
     let read = workspace.ledger_for_reading()?;
     Ok(build(workspace, &read, projects)?)
 }
@@ -127,7 +127,7 @@ pub fn open(workspace: &FlayerWorkspace, projects: Vec<MindProject>) -> Result<S
 /// it was by the time the line asks for it, by the origin the screen showed,
 /// which a scrub leaves as it was; and what only the source the scrub took
 /// out had gathered is refused as not offered, said where its line is.
-pub fn apply(workspace: &FlayerWorkspace, screen: &Screen, lookup: &Lookup) -> Outcome {
+pub fn apply(workspace: &WeaverWorkspace, screen: &Screen, lookup: &Lookup) -> Outcome {
     let dones: Vec<Done> = screen
         .task()
         .commands()
@@ -142,7 +142,7 @@ pub fn apply(workspace: &FlayerWorkspace, screen: &Screen, lookup: &Lookup) -> O
 }
 
 /// The projects a workspace manages, and what could not be opened.
-pub fn registered(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<Warning>) {
+pub fn registered(workspace: &WeaverWorkspace) -> (Vec<MindProject>, Vec<Warning>) {
     let (projects, failures) = workspace.projects();
     let warnings = failures
         .iter()
@@ -158,7 +158,7 @@ pub fn registered(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<Warning
 /// not need a terminal: a test builds a screen, presses the keys a person
 /// would, and applies the result.
 pub fn build(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     projects: Vec<MindProject>,
 ) -> Result<Screen, install::InstallError> {

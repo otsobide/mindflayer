@@ -12,15 +12,15 @@ use mindweaver_core::install;
 use mindweaver_core::ledger::{Ledger, Target};
 use mindweaver_core::reapply::{self, Change, Ignore, Why};
 use mindweaver_core::{
-    Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MarkerFile, MindProject, ReapplyError,
-    Share, WorkspaceError, MIND_DIR, MIND_IGNORE, SETTINGS_FILE, SETTINGS_JSON_FILE,
+    Agent, AgentHomes, Directories, Kind, MarkerFile, MindProject, ReapplyError, Share,
+    WeaverWorkspace, WorkspaceError, MIND_DIR, MIND_IGNORE, SETTINGS_FILE, SETTINGS_JSON_FILE,
 };
 use tempfile::TempDir;
 
 /// A workspace keeping a `deploy` skill of its own, and `collapse`, a
 /// repository linked to it, marked by its settings naming `agents` in
 /// `share` mode, with `deploy` installed.
-fn installed(agents: &[Agent], share: Share) -> (TempDir, FlayerWorkspace, MindProject) {
+fn installed(agents: &[Agent], share: Share) -> (TempDir, WeaverWorkspace, MindProject) {
     installed_after(agents, share, |_| {})
 }
 
@@ -30,7 +30,7 @@ fn installed_after(
     agents: &[Agent],
     share: Share,
     prepare: impl FnOnce(&Path),
-) -> (TempDir, FlayerWorkspace, MindProject) {
+) -> (TempDir, WeaverWorkspace, MindProject) {
     let (dir, mut workspace) = workspace();
     let folder = workspace
         .own()
@@ -76,7 +76,7 @@ fn agents(project: &MindProject, name: &str) -> PathBuf {
 }
 
 /// What the ledger records of `deploy` in `collapse`.
-fn targets(workspace: &FlayerWorkspace) -> Vec<Target> {
+fn targets(workspace: &WeaverWorkspace) -> Vec<Target> {
     workspace
         .ledger()
         .unwrap()
@@ -715,7 +715,7 @@ fn the_record_of_another_workspace_is_never_read_or_written() {
     // A ledger that names nothing in the project stands for a workspace that
     // installed nothing there.
     let elsewhere = TempDir::new().unwrap();
-    let (other, _) = FlayerWorkspace::init(elsewhere.path()).unwrap();
+    let (other, _) = WeaverWorkspace::init(elsewhere.path()).unwrap();
     Ledger::open(other.ledger_path()).unwrap();
 
     let plan = reapply::plan(

@@ -13,15 +13,15 @@ use mindweaver_core::install::{self, Installed, Removed, Standing};
 use mindweaver_core::ledger::{Ledger, Target};
 use mindweaver_core::AgentHomes;
 use mindweaver_core::{
-    Agent, Directories, FlayerWorkspace, Kind, MindProject, Settings, Share, Targets, MIND_DIR,
+    Agent, Directories, Kind, MindProject, Settings, Share, Targets, WeaverWorkspace, MIND_DIR,
     SETTINGS_FILE,
 };
 use tempfile::TempDir;
 
 /// A workspace with one project in it, and a shelf holding `names`.
-fn ready(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn ready(names: &[&str]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -74,7 +74,7 @@ fn the_shelf_is_what_a_project_can_be_offered() {
 #[test]
 fn installing_copies_the_skill_into_the_directory_the_project_named() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     // The project keeps its skills where its agents look, not where we assume.
@@ -105,7 +105,7 @@ fn installing_copies_the_skill_into_the_directory_the_project_named() {
 #[test]
 fn a_skills_whole_directory_arrives_with_it() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -259,7 +259,7 @@ fn a_project_whose_settings_name_no_agent_is_offered_nothing_and_refused_one_by_
 
 /// A workspace with a shelf holding `names`, and one project marked by its
 /// settings, naming `agents` and authoring its own skills in `skills`.
-fn ready_v3(names: &[&str], agents: &[Agent]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn ready_v3(names: &[&str], agents: &[Agent]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, _, ledger) = ready(names);
     let root = dir.path().join("alpha");
     fs::create_dir(&root).unwrap();
@@ -284,7 +284,7 @@ fn agents_copies(project: &MindProject, name: &str) -> [std::path::PathBuf; 2] {
 }
 
 fn install_from_shelf(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     name: &str,
@@ -305,7 +305,7 @@ fn install_from_shelf(
 fn ready_with_targets(
     names: &[&str],
     folders: &[&str],
-) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, mut project, ledger) = ready_v3(names, &Agent::ALL);
     project
         .change_settings(|settings| {
@@ -863,7 +863,7 @@ fn a_shelf_entry_whose_files_have_gone_is_named_in_the_error() {
 #[test]
 fn the_folder_is_named_after_the_skill_rather_than_after_its_shelf_folder() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -907,9 +907,9 @@ fn the_folder_is_named_after_the_skill_rather_than_after_its_shelf_folder() {
 // ---------------------------------------------------------------------------
 
 /// A workspace with one project, and a shelf gathered from these files.
-fn gathered(files: &[(&str, &str)]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn gathered(files: &[(&str, &str)]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -1036,9 +1036,9 @@ fn what_agents_read_past_does_not_stop_an_install() {
 /// A workspace managing one project and offering skills of its own, each with
 /// `files` references besides its `SKILL.md`, so that copying one takes long
 /// enough for somebody looking at the project to see it happen.
-fn own_skills(names: &[&str], files: usize) -> (TempDir, FlayerWorkspace, MindProject) {
+fn own_skills(names: &[&str], files: usize) -> (TempDir, WeaverWorkspace, MindProject) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -1059,7 +1059,7 @@ fn own_skills(names: &[&str], files: usize) -> (TempDir, FlayerWorkspace, MindPr
 }
 
 /// Change one of the workspace's own skills, so installing it again updates.
-fn edit_own(workspace: &FlayerWorkspace, name: &str, round: usize) {
+fn edit_own(workspace: &WeaverWorkspace, name: &str, round: usize) {
     let skill = workspace
         .own()
         .directory_for(Kind::Skill)
@@ -1069,7 +1069,7 @@ fn edit_own(workspace: &FlayerWorkspace, name: &str, round: usize) {
 }
 
 fn install_named(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     name: &str,
@@ -1434,9 +1434,9 @@ fn what_an_earlier_version_left_beside_the_copy_is_cleared_and_said_by_the_next_
 // ---------------------------------------------------------------------------
 
 /// `ready`, with the project linked and a skill of the workspace's own.
-fn with_own(shelf: &[&str], own: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn with_own(shelf: &[&str], own: &[&str]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, _, project, ledger) = ready(shelf);
-    let mut workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let mut workspace = WeaverWorkspace::open(dir.path()).unwrap();
     workspace.link(&project).unwrap();
     for name in own {
         mindweaver_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
@@ -1571,7 +1571,7 @@ fn from_typed_with_credentials_names_the_source_they_were_taken_out_of_and_repea
 /// A shelf holding `deploy` with a `.claude-plugin` folder beside its
 /// `SKILL.md`, as a plugin's skill is gathered, and a project marked by its
 /// settings naming every agent.
-fn plugin_skill() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn plugin_skill() -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, _, ledger) = gathered(&[
         ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
         (
@@ -1654,7 +1654,7 @@ fn a_skill_installed_without_what_is_left_out_is_still_current_and_installs_unch
 /// A shelf holding `deploy`, and a project marked by its settings, sharing
 /// as `share` says, naming every agent, at the root of a git repository of
 /// its own when `in_git`.
-fn local_v3(share: Share, in_git: bool) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn local_v3(share: Share, in_git: bool) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, _, ledger) = ready(&["deploy"]);
     let root = dir.path().join("alpha");
     fs::create_dir(&root).unwrap();

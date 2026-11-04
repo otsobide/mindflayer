@@ -12,7 +12,7 @@ use mindweaver_core::hash;
 use mindweaver_core::install::{self, Installed, Offer};
 use mindweaver_core::ledger::{backup_path, InstallRecord, Target, SCHEMA_VERSION};
 use mindweaver_core::AgentHomes;
-use mindweaver_core::{FlayerWorkspace, Kind, Ledger, MindProject, ProjectId, LEDGER_FILE};
+use mindweaver_core::{Kind, Ledger, MindProject, ProjectId, WeaverWorkspace, LEDGER_FILE};
 use rusqlite::types::Value;
 use rusqlite::Connection;
 use tempfile::TempDir;
@@ -20,13 +20,13 @@ use tempfile::TempDir;
 /// Under one directory: `target`, a workspace linking `target/collapse`,
 /// keeping `notes` as its own and with `deploy` on its shelf; and `team`, a
 /// workspace `target` loads, keeping `lint` as its own.
-fn three_places() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn three_places() -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let dir = TempDir::new().unwrap();
-    let (mut target, _) = FlayerWorkspace::init(dir.path().join("target")).unwrap();
+    let (mut target, _) = WeaverWorkspace::init(dir.path().join("target")).unwrap();
     let (project, _) = MindProject::init(dir.path().join("target/collapse")).unwrap();
     target.link(&project).unwrap();
     mindweaver_core::create(&target.own(), Kind::Skill, "notes", "How we take notes").unwrap();
-    let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
+    let (team, _) = WeaverWorkspace::init(dir.path().join("team")).unwrap();
     mindweaver_core::create(&team.own(), Kind::Skill, "lint", "How we lint").unwrap();
     target.load(&team).unwrap();
 
@@ -37,7 +37,7 @@ fn three_places() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
 }
 
 /// Install the one thing called `name` that is offered to `project`.
-fn install(workspace: &FlayerWorkspace, ledger: &Ledger, project: &MindProject, name: &str) {
+fn install(workspace: &WeaverWorkspace, ledger: &Ledger, project: &MindProject, name: &str) {
     let candidate = install::offered(workspace, ledger, project, Kind::Skill, name, None).unwrap();
     install::install(
         workspace,
@@ -426,7 +426,7 @@ fn a_version_2_ledger_is_copied_aside_and_the_copy_opens_at_version_2() {
 #[test]
 fn reading_a_version_2_ledger_migrates_it_through_the_same_copy() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     written_at(&dir.path().join(".mindflayer"), VERSION_2);
 
     let ledger = workspace.ledger_for_reading().unwrap();
@@ -600,9 +600,9 @@ fn a_version_4_ledger_is_copied_aside_and_the_copy_opens_at_version_4() {
 
 /// A workspace linking `names`, each a project marked by its settings under
 /// the workspace, shared so no repository is needed.
-fn linking(names: &[&str]) -> (TempDir, FlayerWorkspace, Vec<MindProject>) {
+fn linking(names: &[&str]) -> (TempDir, WeaverWorkspace, Vec<MindProject>) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let mut projects = Vec::new();
     for name in names {
         let (project, _) = MindProject::init_settings(

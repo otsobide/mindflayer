@@ -36,14 +36,14 @@ pub mod tui;
 pub mod typescript;
 
 pub use commands::read::WORKSPACE;
-pub use commands::{run, run_flayer_cli, run_flayer_cli_watched, run_watched};
+pub use commands::{run, run_watched, run_weaver_cli, run_weaver_cli_watched};
 pub use error::{CliError, CODES};
 pub use homes::{agent_homes, default_home, Lookup};
 #[cfg(feature = "ui")]
 pub use parse::UiOptions;
 pub use parse::{
-    AgentHomeOptions, AgentNames, AgentsChange, Cli, Command, Editing, FlayerCli, FlayerCommand,
-    GatherCommand, Given, Migrated, ShareMode, TargetsChange, WorkspacesCommand,
+    AgentHomeOptions, AgentNames, AgentsChange, Cli, Command, Editing, GatherCommand, Given,
+    Migrated, ShareMode, TargetsChange, WeaverCli, WeaverCommand, WorkspacesCommand,
 };
 pub use progress::ProgressLine;
 pub use render::{Failure, Outcome, Warning};

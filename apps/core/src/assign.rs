@@ -32,7 +32,7 @@ use crate::install::{self, Candidate, Edits, InstallError, Installation, Removed
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
 use crate::value::ArtifactName;
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace};
 
 /// What a batch did: [`install`] or [`uninstall`].
 #[derive(Debug)]
@@ -85,11 +85,11 @@ pub struct Offered {
 /// [`install::Installed::Foreign`], and nothing is written there.
 ///
 /// The ledger is opened to write once, for every part
-/// ([`FlayerWorkspace::ledger_to_write`]), as an update opens it, and only
+/// ([`WeaverWorkspace::ledger_to_write`]), as an update opens it, and only
 /// that refuses the whole batch, before anything is written. A batch of no
 /// project opens nothing: there is nothing to record.
 pub fn install(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     reference: &Reference,
     from: Option<&str>,
@@ -134,7 +134,7 @@ pub fn install(
 /// of them answer. The rest go ahead past a failure in one. The ledger is
 /// opened as [`install`] opens it.
 pub fn uninstall(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     reference: &Reference,
     homes: &AgentHomes,
@@ -184,7 +184,7 @@ pub struct Orphan {
 /// nothing is installed anywhere to be orphaned, and each project's part
 /// says so, empty, without a ledger made to say it.
 pub fn uninstall_orphaned(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     homes: &AgentHomes,
     edits: Edits,
@@ -206,7 +206,7 @@ pub fn uninstall_orphaned(
 
 /// One project's part of [`uninstall_orphaned`].
 fn orphans(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     homes: &AgentHomes,
@@ -231,7 +231,7 @@ fn orphans(
 /// `projects`; none for a batch of none, which records nothing and so has
 /// no reason to make a ledger, or to scrub one.
 fn opened(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
 ) -> Result<Option<(Ledger, Scrub)>, LedgerError> {
     if projects.is_empty() {

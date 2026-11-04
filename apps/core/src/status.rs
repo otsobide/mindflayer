@@ -35,7 +35,7 @@ use crate::relink::{self, Duplicate};
 use crate::settings::ProjectId;
 use crate::value::{ArtifactName, Origin};
 use crate::workspace::{
-    same_directory, FlayerWorkspace, MarkerFile, MindProject, MisplacedTarget, WorkspaceError,
+    same_directory, MarkerFile, MindProject, MisplacedTarget, WeaverWorkspace, WorkspaceError,
 };
 
 /// What every project a report covers holds.
@@ -344,7 +344,7 @@ impl Status {
     /// about its one file, so it is said once, with the first. Two projects
     /// holding one id are each reported, and a failure names them together
     /// ([`Duplicate`]).
-    pub fn of_workspace(workspace: &FlayerWorkspace) -> (Status, Vec<StatusFailure>) {
+    pub fn of_workspace(workspace: &WeaverWorkspace) -> (Status, Vec<StatusFailure>) {
         let mut status = Status::default();
         let mut failures = Vec::new();
         let mut ledger_said = false;
@@ -412,7 +412,7 @@ impl Status {
     /// in it is missing, which reads as nothing installed.
     pub fn of_project(
         project: &MindProject,
-        workspace: Option<&FlayerWorkspace>,
+        workspace: Option<&WeaverWorkspace>,
     ) -> (Status, Vec<StatusFailure>) {
         let (held, catalog) = ProjectStatus::read(project, &Kind::ALL, workspace);
         let (_, failures) = catalog.into_parts();
@@ -437,7 +437,7 @@ impl ProjectStatus {
     /// project with.
     ///
     /// The ledger is opened here, for reading
-    /// ([`FlayerWorkspace::ledger_for_reading`]), rather than handed in, so
+    /// ([`WeaverWorkspace::ledger_for_reading`]), rather than handed in, so
     /// no front end can refuse a report over one that will not open while
     /// another reports without it. One that cannot be opened or read leaves
     /// every copy unrecorded, as `with_records` does: foreign or authored,
@@ -452,7 +452,7 @@ impl ProjectStatus {
     pub fn read(
         project: &MindProject,
         kinds: &[Kind],
-        workspace: Option<&FlayerWorkspace>,
+        workspace: Option<&WeaverWorkspace>,
     ) -> (ProjectStatus, Catalog) {
         let (status, catalog, _) = Self::read_placed(project, kinds, workspace);
         (status, catalog)
@@ -471,7 +471,7 @@ impl ProjectStatus {
     pub(crate) fn read_placed(
         project: &MindProject,
         kinds: &[Kind],
-        workspace: Option<&FlayerWorkspace>,
+        workspace: Option<&WeaverWorkspace>,
     ) -> (ProjectStatus, Catalog, Vec<Vec<String>>) {
         let root = project.root();
         let mut catalog = Catalog::discover_kinds(std::slice::from_ref(project), kinds);

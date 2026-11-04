@@ -5,7 +5,7 @@ import type { Offered } from '@/api/generated/Offered'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { useRunner } from '@/api/commands'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
+import CommandHint, { weaver, making } from '@/components/CommandHint.vue'
 import LoadForm from '@/components/LoadForm.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import { assignLink } from '@/routes'
@@ -96,7 +96,7 @@ function links(known: KnownHere): string {
             <CommandHint
               :commands="[
                 ...making(snapshot.workspace),
-                { line: flayer(snapshot.workspace, 'load <PATH>'), does: 'offer another workspace\'s own here' }
+                { line: weaver(snapshot.workspace, 'load <PATH>'), does: 'offer another workspace\'s own here' }
               ]"
             />
           </div>

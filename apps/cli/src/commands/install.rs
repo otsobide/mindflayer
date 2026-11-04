@@ -8,7 +8,7 @@ use std::path::Path;
 
 use mindweaver_core::assign::{self, Offered};
 use mindweaver_core::install::rules::Rendered;
-use mindweaver_core::{AgentHomes, FlayerWorkspace, Kind, MindProject, Reference};
+use mindweaver_core::{AgentHomes, Kind, MindProject, Reference, WeaverWorkspace};
 
 use crate::commands::gather::{scrubbed, Scrubbed};
 use crate::commands::update::listed as words_listed;
@@ -42,7 +42,7 @@ use crate::{CliError, Failure, Outcome, Warning};
 /// refuses to install into. `force` writes over a copy edited since it was
 /// installed, which core otherwise leaves alone.
 pub(crate) fn install_named(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     typed: &str,
     from: Option<&str>,
@@ -453,7 +453,7 @@ pub(crate) fn shown(project: &MindProject, path: &Path) -> String {
 /// be, unless none of them has it, which is refused as that typo; the rest
 /// are said as [`together`] says them.
 pub(crate) fn uninstall_named(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     typed: &str,
     homes: &AgentHomes,
@@ -509,7 +509,7 @@ pub(crate) fn uninstall_named(
 /// loaded workspace that cannot be opened, is not taken for orphaned, and
 /// this is why it stays.
 pub(crate) fn uninstall_orphans(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     homes: &AgentHomes,
     force: bool,

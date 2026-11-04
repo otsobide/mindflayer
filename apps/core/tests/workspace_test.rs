@@ -4,11 +4,10 @@ use std::fs;
 use std::path::Path;
 
 use mindweaver_core::ledger::{Action, LedgerError, Outcome};
-use mindweaver_core::workspace::{FLAYER_FORMAT_VERSION, MIND_FORMAT_VERSION, MIND_TOML_VERSION};
+use mindweaver_core::workspace::{MIND_FORMAT_VERSION, MIND_TOML_VERSION, WEAVER_FORMAT_VERSION};
 use mindweaver_core::{
-    resolve, Directories, FlayerWorkspace, Initialization, Inputs, Intent, Kind, MindProject,
-    Reason, Registration, Resolved, WorkspaceError, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG,
-    MIND_DIR,
+    resolve, Directories, Initialization, Inputs, Intent, Kind, MindProject, Reason, Registration,
+    Resolved, WeaverWorkspace, WorkspaceError, MIND_CONFIG, MIND_DIR, WEAVER_CONFIG, WEAVER_DIR,
 };
 use tempfile::TempDir;
 
@@ -81,7 +80,7 @@ fn locate_finds_nothing_when_there_is_no_project() {
     let dir = TempDir::new().unwrap();
 
     assert!(MindProject::locate(dir.path()).unwrap().is_none());
-    assert!(FlayerWorkspace::locate(dir.path()).unwrap().is_none());
+    assert!(WeaverWorkspace::locate(dir.path()).unwrap().is_none());
 }
 
 #[test]
@@ -136,10 +135,10 @@ fn a_corrupt_marker_is_reported_as_such() {
 fn initializing_a_workspace_creates_an_empty_registry() {
     let dir = TempDir::new().unwrap();
 
-    let (workspace, outcome) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, outcome) = WeaverWorkspace::init(dir.path()).unwrap();
 
     assert_eq!(outcome, Initialization::Created);
-    assert!(dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG).is_file());
+    assert!(dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG).is_file());
     assert!(workspace.config().projects.is_empty());
     assert_eq!(workspace.projects().0, vec![]);
 }
@@ -147,19 +146,19 @@ fn initializing_a_workspace_creates_an_empty_registry() {
 #[test]
 fn a_workspace_opens_the_projects_it_references() {
     let dir = TempDir::new().unwrap();
-    FlayerWorkspace::init(dir.path()).unwrap();
+    WeaverWorkspace::init(dir.path()).unwrap();
     for name in ["alpha", "beta"] {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
         MindProject::init(&root).unwrap();
     }
     fs::write(
-        dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG),
+        dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG),
         "version = 1\nname = \"work\"\nprojects = [\"alpha\", \"beta\"]\n",
     )
     .unwrap();
 
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
     let (projects, failures) = workspace.projects();
 
     assert!(failures.is_empty());
@@ -170,17 +169,17 @@ fn a_workspace_opens_the_projects_it_references() {
 #[test]
 fn a_stale_reference_is_reported_without_losing_the_rest() {
     let dir = TempDir::new().unwrap();
-    FlayerWorkspace::init(dir.path()).unwrap();
+    WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("alpha");
     fs::create_dir(&root).unwrap();
     MindProject::init(&root).unwrap();
     fs::write(
-        dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG),
+        dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG),
         "version = 1\nname = \"work\"\nprojects = [\"alpha\", \"moved-away\"]\n",
     )
     .unwrap();
 
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
     let (projects, failures) = workspace.projects();
 
     assert_eq!(projects.len(), 1);
@@ -191,17 +190,17 @@ fn a_stale_reference_is_reported_without_losing_the_rest() {
 #[test]
 fn members_keep_the_registry_order_and_the_entry_a_stale_one_came_from() {
     let dir = TempDir::new().unwrap();
-    FlayerWorkspace::init(dir.path()).unwrap();
+    WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("alpha");
     fs::create_dir(&root).unwrap();
     MindProject::init(&root).unwrap();
     fs::write(
-        dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG),
+        dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG),
         "version = 1\nname = \"work\"\nprojects = [\"moved-away\", \"alpha\"]\n",
     )
     .unwrap();
 
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
     let members = workspace.members();
 
     let entries: Vec<&Path> = members.iter().map(|m| m.entry.as_path()).collect();
@@ -216,10 +215,10 @@ fn members_keep_the_registry_order_and_the_entry_a_stale_one_came_from() {
 fn one_directory_can_be_both_a_workspace_and_a_project() {
     let dir = TempDir::new().unwrap();
 
-    FlayerWorkspace::init(dir.path()).unwrap();
+    WeaverWorkspace::init(dir.path()).unwrap();
     MindProject::init(dir.path()).unwrap();
 
-    assert!(FlayerWorkspace::locate(dir.path()).unwrap().is_some());
+    assert!(WeaverWorkspace::locate(dir.path()).unwrap().is_some());
     assert!(MindProject::locate(dir.path()).unwrap().is_some());
 }
 
@@ -228,9 +227,9 @@ fn one_directory_can_be_both_a_workspace_and_a_project() {
 // ---------------------------------------------------------------------------
 
 /// A workspace with `count` mind projects beside it, none of them registered.
-fn workspace_with(count: usize) -> (TempDir, FlayerWorkspace, Vec<MindProject>) {
+fn workspace_with(count: usize) -> (TempDir, WeaverWorkspace, Vec<MindProject>) {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let projects = ["alpha", "beta", "gamma"]
         .iter()
         .take(count)
@@ -243,7 +242,7 @@ fn workspace_with(count: usize) -> (TempDir, FlayerWorkspace, Vec<MindProject>) 
     (dir, workspace, projects)
 }
 
-fn config_text(workspace: &FlayerWorkspace) -> String {
+fn config_text(workspace: &WeaverWorkspace) -> String {
     fs::read_to_string(workspace.config_path()).unwrap()
 }
 
@@ -276,7 +275,7 @@ fn link_keeps_the_comments_that_explain_the_file() {
         );
     }
     // And the keys it was not asked to touch.
-    assert!(after.contains(&format!("version = {FLAYER_FORMAT_VERSION}")));
+    assert!(after.contains(&format!("version = {WEAVER_FORMAT_VERSION}")));
     assert!(after.contains(&format!("name = \"{}\"", workspace.name())));
 }
 
@@ -318,7 +317,7 @@ fn a_project_outside_the_workspace_is_stored_as_a_route_out_of_it() {
     let outer = TempDir::new().unwrap();
     let inner = outer.path().join("workspace");
     fs::create_dir(&inner).unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(&inner).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(&inner).unwrap();
     let sibling = outer.path().join("collapse");
     fs::create_dir(&sibling).unwrap();
     let (project, _) = MindProject::init(&sibling).unwrap();
@@ -379,7 +378,7 @@ fn unlinking_the_first_entry_leaves_the_rest_laid_out_as_they_were() {
         "projects = [\n    \"beta\",\n    \"gamma\",\n]",
     );
     fs::write(workspace.config_path(), text).unwrap();
-    let mut workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let mut workspace = WeaverWorkspace::open(workspace.root()).unwrap();
     workspace.unlink(projects[1].root()).unwrap();
     assert!(
         config_text(&workspace).contains("projects = [\n    \"gamma\",\n]\n"),
@@ -400,7 +399,7 @@ fn unlinking_takes_the_comment_above_its_entry_and_leaves_the_others() {
          # notes, keep\n    \"gamma\",\n]",
     );
     fs::write(workspace.config_path(), text).unwrap();
-    let mut workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let mut workspace = WeaverWorkspace::open(workspace.root()).unwrap();
 
     workspace.unlink(projects[1].root()).unwrap();
     assert!(
@@ -450,7 +449,7 @@ fn link_restores_a_projects_key_someone_deleted() {
         "# kept\nversion = 1\nname = \"work\"\n",
     )
     .unwrap();
-    let mut workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let mut workspace = WeaverWorkspace::open(workspace.root()).unwrap();
 
     workspace.link(&projects[0]).unwrap();
 
@@ -464,7 +463,7 @@ fn linking_leaves_no_temporary_file_behind() {
 
     workspace.link(&projects[0]).unwrap();
 
-    let leftovers: Vec<_> = fs::read_dir(workspace.flayer_dir())
+    let leftovers: Vec<_> = fs::read_dir(workspace.weaver_dir())
         .unwrap()
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.file_name())
@@ -499,7 +498,7 @@ fn unlink_removes_every_spelling_that_pointed_at_the_project() {
         "version = 1\nname = \"w\"\nprojects = [\"alpha\", \"./alpha\", \"./alpha/\"]\n",
     )
     .unwrap();
-    let mut workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let mut workspace = WeaverWorkspace::open(workspace.root()).unwrap();
     let _ = (&dir, &projects);
 
     let removed = workspace.unlink(projects[0].root()).unwrap();
@@ -518,7 +517,7 @@ fn an_already_registered_link_reports_the_spelling_in_the_file() {
         "version = 1\nname = \"w\"\nprojects = [\"./alpha/\"]\n",
     )
     .unwrap();
-    let mut workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let mut workspace = WeaverWorkspace::open(workspace.root()).unwrap();
 
     let (entry, outcome) = workspace.link(&projects[0]).unwrap();
 
@@ -571,7 +570,7 @@ fn an_entry_is_only_stored_as_a_route_when_the_route_really_resolves() {
     fs::create_dir(dir.path().join("real/sibling")).unwrap();
     symlink("real/deep", dir.path().join("link")).unwrap();
 
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path().join("link/ws")).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path().join("link/ws")).unwrap();
     let (project, _) = MindProject::init(dir.path().join("real/sibling")).unwrap();
 
     let (entry, _) = workspace.link(&project).unwrap();
@@ -584,7 +583,7 @@ fn an_entry_is_only_stored_as_a_route_when_the_route_really_resolves() {
     assert_eq!(opened.len(), 1);
     // Read back through the directory's real spelling too, which is what any
     // later `cd` into it will use.
-    let real = FlayerWorkspace::open(dir.path().join("real/deep/ws")).unwrap();
+    let real = WeaverWorkspace::open(dir.path().join("real/deep/ws")).unwrap();
     assert_eq!(
         real.projects().0.len(),
         1,
@@ -779,17 +778,17 @@ fn with_nothing_above_the_default_workspace_is_made_in_home() {
     let resolved =
         resolved(elsewhere.path(), Some(home.path()), Intent::Write).expect("the one in home");
 
-    assert!(home.path().join(FLAYER_DIR).join(FLAYER_CONFIG).is_file());
+    assert!(home.path().join(WEAVER_DIR).join(WEAVER_CONFIG).is_file());
     assert_eq!(resolved.reason, Reason::Home);
     assert!(resolved.workspace.is_default(Some(home.path())));
-    assert!(!elsewhere.path().join(FLAYER_DIR).exists());
+    assert!(!elsewhere.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
 fn a_workspace_above_is_used_before_the_default_one() {
     let home = TempDir::new().unwrap();
     let dir = TempDir::new().unwrap();
-    FlayerWorkspace::init(dir.path()).unwrap();
+    WeaverWorkspace::init(dir.path()).unwrap();
     let below = dir.path().join("deep/er");
     fs::create_dir_all(&below).unwrap();
 
@@ -797,7 +796,7 @@ fn a_workspace_above_is_used_before_the_default_one() {
 
     assert_eq!(resolved.reason, Reason::Above);
     assert!(!resolved.workspace.is_default(Some(home.path())));
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -832,17 +831,17 @@ fn a_read_with_nothing_above_sees_the_default_workspace_without_making_it() {
     assert!(workspace.loads().is_empty());
     assert_eq!(
         workspace.own().directory_for(Kind::Skill).unwrap(),
-        home.join(FLAYER_DIR).join("library/skills")
+        home.join(WEAVER_DIR).join("library/skills")
     );
-    assert!(!home.join(FLAYER_DIR).exists());
-    assert!(!elsewhere.path().join(FLAYER_DIR).exists());
+    assert!(!home.join(WEAVER_DIR).exists());
+    assert!(!elsewhere.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
 fn a_read_sees_the_default_workspace_itself_once_it_is_made() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
-    FlayerWorkspace::init(home.path()).unwrap();
+    WeaverWorkspace::init(home.path()).unwrap();
 
     let workspace = resolved(elsewhere.path(), Some(home.path()), Intent::Read)
         .unwrap()
@@ -856,7 +855,7 @@ fn a_read_sees_the_default_workspace_itself_once_it_is_made() {
 fn a_read_uses_a_workspace_above_before_the_default_one() {
     let home = TempDir::new().unwrap();
     let dir = TempDir::new().unwrap();
-    FlayerWorkspace::init(dir.path()).unwrap();
+    WeaverWorkspace::init(dir.path()).unwrap();
     let below = dir.path().join("deep/er");
     fs::create_dir_all(&below).unwrap();
 
@@ -866,7 +865,7 @@ fn a_read_uses_a_workspace_above_before_the_default_one() {
 
     assert!(workspace.is_made());
     assert!(!workspace.is_default(Some(home.path())));
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -874,7 +873,7 @@ fn nothing_is_written_through_an_unmade_workspace() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
     let (project, _) = MindProject::init(elsewhere.path()).unwrap();
-    let mut workspace = FlayerWorkspace::unmade(home.path()).unwrap();
+    let mut workspace = WeaverWorkspace::unmade(home.path()).unwrap();
 
     let link = workspace.link(&project).unwrap_err();
     let ledger = workspace.ledger().unwrap_err();
@@ -891,7 +890,7 @@ fn nothing_is_written_through_an_unmade_workspace() {
         .gathered()
         .unwrap()
         .is_empty());
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 // ---------------------------------------------------------------------------
@@ -901,7 +900,7 @@ fn nothing_is_written_through_an_unmade_workspace() {
 #[test]
 fn reading_the_ledger_of_a_workspace_that_has_none_makes_none() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
 
     let ledger = workspace.ledger_for_reading().unwrap();
 
@@ -912,7 +911,7 @@ fn reading_the_ledger_of_a_workspace_that_has_none_makes_none() {
 #[test]
 fn reading_the_ledger_sees_what_was_written_to_it() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     workspace
         .ledger()
         .unwrap()

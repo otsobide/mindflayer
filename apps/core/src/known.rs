@@ -32,8 +32,8 @@ use crate::paths;
 use crate::resolve::Reason;
 use crate::value::Redacted;
 use crate::workspace::{
-    absolute, same_directory, FlayerWorkspace, Registration, WorkspaceError, FLAYER_CONFIG,
-    FLAYER_DIR,
+    absolute, same_directory, Registration, WeaverWorkspace, WorkspaceError, WEAVER_CONFIG,
+    WEAVER_DIR,
 };
 
 /// Every workspace this machine knows, as `flayer workspaces` lists them.
@@ -88,7 +88,7 @@ pub struct KnownWorkspace {
 
 impl KnownWorkspace {
     /// A workspace that opened, with its projects counted.
-    fn of(workspace: &FlayerWorkspace) -> Self {
+    fn of(workspace: &WeaverWorkspace) -> Self {
         let mut roots: Vec<PathBuf> = Vec::new();
         let mut stale_projects = 0;
         for member in workspace.members() {
@@ -138,7 +138,7 @@ impl KnownWorkspace {
 /// no workspace to mark.
 pub fn known(
     home: Option<&Path>,
-    in_use: Option<&FlayerWorkspace>,
+    in_use: Option<&WeaverWorkspace>,
 ) -> (Known, Vec<WorkspaceError>) {
     let mut workspaces: Vec<KnownWorkspace> = Vec::new();
     let mut failures = Vec::new();
@@ -258,7 +258,7 @@ pub struct Switchable {
 pub fn switchable(
     home: Option<&Path>,
     launch: &Launch<'_>,
-    in_use: &FlayerWorkspace,
+    in_use: &WeaverWorkspace,
 ) -> Vec<Switchable> {
     let (known, _) = known(home, Some(in_use));
     let mut rows = known.workspaces;
@@ -276,7 +276,7 @@ pub fn switchable(
                 let row = if default {
                     KnownWorkspace::of(in_use)
                 } else {
-                    match FlayerWorkspace::open(root) {
+                    match WeaverWorkspace::open(root) {
                         Ok(workspace) => KnownWorkspace::of(&workspace),
                         Err(error) => KnownWorkspace::gone(root.to_path_buf(), &error),
                     }
@@ -290,7 +290,7 @@ pub fn switchable(
         }
     }
     if !listed(&rows, launch.root) {
-        rows.push(match FlayerWorkspace::open(launch.root) {
+        rows.push(match WeaverWorkspace::open(launch.root) {
             Ok(workspace) => KnownWorkspace::of(&workspace),
             Err(error) => KnownWorkspace::gone(launch.root.to_path_buf(), &error),
         });
@@ -318,15 +318,15 @@ pub fn switchable(
 /// Opened only when its marker is there: a read of an unmade one would
 /// answer from the template, which knows no workspace, and a write must not
 /// make it.
-fn made_default(home: Option<&Path>) -> Result<Option<FlayerWorkspace>, WorkspaceError> {
+fn made_default(home: Option<&Path>) -> Result<Option<WeaverWorkspace>, WorkspaceError> {
     let Some(home) = home else {
         return Ok(None);
     };
     let home = absolute(home)?;
-    if !home.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() {
+    if !home.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file() {
         return Ok(None);
     }
-    FlayerWorkspace::open(&home).map(Some)
+    WeaverWorkspace::open(&home).map(Some)
 }
 
 /// Remember `workspace` in the default workspace at `home`: what `flayer
@@ -338,7 +338,7 @@ fn made_default(home: Option<&Path>) -> Result<Option<FlayerWorkspace>, Workspac
 /// already, by this spelling or another.
 pub fn remember(
     home: Option<&Path>,
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
 ) -> Result<Option<(PathBuf, Registration)>, WorkspaceError> {
     let Some(mut default) = made_default(home)? else {
         return Ok(None);

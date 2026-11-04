@@ -30,12 +30,12 @@ use clap::Parser as _;
 use mindweaver_core::install::Change;
 use mindweaver_core::url::redacted;
 use mindweaver_core::{
-    codes, hash, Agent, FlayerWorkspace, Kind, Share, DEFAULT_SUBDIRECTORY, QUALIFIER,
+    codes, hash, Agent, Kind, Share, WeaverWorkspace, DEFAULT_SUBDIRECTORY, QUALIFIER,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{Cli, Command, Editing, FlayerCli, FlayerCommand, GatherCommand, Given};
+use crate::{Cli, Command, Editing, GatherCommand, Given, WeaverCli, WeaverCommand};
 
 /// What an `agents` line says, as the toggles have it.
 ///
@@ -294,7 +294,7 @@ pub enum Task {
     },
     /// `flayer install -p <project>... [--from <origin>] <kind:name>`: one
     /// offer into each project named, by what picks it out
-    /// ([`FlayerWorkspace::naming`]), from the place `from` names when it
+    /// ([`WeaverWorkspace::naming`]), from the place `from` names when it
     /// names one.
     ///
     /// Each of `projects` is what `naming` gives, an entry or a path from
@@ -305,7 +305,7 @@ pub enum Task {
     /// would keep it a name, was the alternative, and it would change the
     /// line the TUI has always run and shown for such a project.
     ///
-    /// [`FlayerWorkspace::naming`]: mindweaver_core::FlayerWorkspace::naming
+    /// [`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming
     Install {
         projects: Vec<String>,
         kind: Kind,
@@ -943,7 +943,7 @@ impl Refusal {
     /// Why `mind <command>` is not run by a front end with no terminal, when
     /// it is not.
     ///
-    /// One arm per command with no wildcard, as `of_flayer`'s, so a new
+    /// One arm per command with no wildcard, as `of_weaver`'s, so a new
     /// command does not compile until it says whether a front end without a
     /// terminal runs it.
     pub fn of_mind(command: Option<&Command>) -> Option<Refusal> {
@@ -953,7 +953,7 @@ impl Refusal {
             Some(Command::Show { .. }) => Some(Refusal::Unheld),
             #[cfg(feature = "ui")]
             Some(Command::Ui(_)) => Some(Refusal::Panel),
-            Some(Command::Flayer { command }) => Refusal::of_flayer(command.as_ref()),
+            Some(Command::Flayer { command }) => Refusal::of_weaver(command.as_ref()),
             Some(
                 Command::Init { .. }
                 | Command::Add { .. }
@@ -980,52 +980,52 @@ impl Refusal {
 
     /// Why `flayer <command>` is not run by a front end with no terminal,
     /// when it is not.
-    pub fn of_flayer(command: Option<&FlayerCommand>) -> Option<Refusal> {
+    pub fn of_weaver(command: Option<&WeaverCommand>) -> Option<Refusal> {
         match command {
-            None | Some(FlayerCommand::Tui | FlayerCommand::Minds { .. }) => Some(Refusal::Screen),
+            None | Some(WeaverCommand::Tui | WeaverCommand::Minds { .. }) => Some(Refusal::Screen),
             // The screen only when it is what the line opens, as the command
             // decides: a project with nothing named is half an install,
             // which the command refuses with a reason and a code of its own
             // (`install_nothing_named`), and a screen it would not open is
             // no reason to give in their place.
-            Some(FlayerCommand::Install {
+            Some(WeaverCommand::Install {
                 name: None,
                 projects,
                 all_projects: false,
                 ..
             }) if projects.is_empty() => Some(Refusal::Screen),
-            Some(FlayerCommand::Edit { editing, .. }) => Refusal::of_edit(editing),
-            Some(FlayerCommand::Activate { .. }) => Some(Refusal::Shell),
-            Some(FlayerCommand::Show { .. }) => Some(Refusal::Unheld),
-            Some(FlayerCommand::Gather(GatherCommand::Git { .. })) => Some(Refusal::Unwatched),
+            Some(WeaverCommand::Edit { editing, .. }) => Refusal::of_edit(editing),
+            Some(WeaverCommand::Activate { .. }) => Some(Refusal::Shell),
+            Some(WeaverCommand::Show { .. }) => Some(Refusal::Unheld),
+            Some(WeaverCommand::Gather(GatherCommand::Git { .. })) => Some(Refusal::Unwatched),
             #[cfg(feature = "ui")]
-            Some(FlayerCommand::Ui(_)) => Some(Refusal::Panel),
+            Some(WeaverCommand::Ui(_)) => Some(Refusal::Panel),
             Some(
-                FlayerCommand::Init { .. }
-                | FlayerCommand::Which
-                | FlayerCommand::Workspaces { .. }
-                | FlayerCommand::Add { .. }
-                | FlayerCommand::Rename { .. }
-                | FlayerCommand::Remove { .. }
-                | FlayerCommand::Templates { .. }
-                | FlayerCommand::List { .. }
-                | FlayerCommand::Validate { .. }
-                | FlayerCommand::Status { .. }
-                | FlayerCommand::Link { .. }
-                | FlayerCommand::Unlink { .. }
-                | FlayerCommand::Relink { .. }
-                | FlayerCommand::Load { .. }
-                | FlayerCommand::Unload { .. }
-                | FlayerCommand::Scan { .. }
-                | FlayerCommand::Gather(GatherCommand::List { .. })
-                | FlayerCommand::Install { .. }
-                | FlayerCommand::Uninstall { .. }
-                | FlayerCommand::Update { .. }
-                | FlayerCommand::Adopt { .. }
-                | FlayerCommand::Agents { .. }
-                | FlayerCommand::Share { .. }
-                | FlayerCommand::Targets { .. }
-                | FlayerCommand::Migrate { .. },
+                WeaverCommand::Init { .. }
+                | WeaverCommand::Which
+                | WeaverCommand::Workspaces { .. }
+                | WeaverCommand::Add { .. }
+                | WeaverCommand::Rename { .. }
+                | WeaverCommand::Remove { .. }
+                | WeaverCommand::Templates { .. }
+                | WeaverCommand::List { .. }
+                | WeaverCommand::Validate { .. }
+                | WeaverCommand::Status { .. }
+                | WeaverCommand::Link { .. }
+                | WeaverCommand::Unlink { .. }
+                | WeaverCommand::Relink { .. }
+                | WeaverCommand::Load { .. }
+                | WeaverCommand::Unload { .. }
+                | WeaverCommand::Scan { .. }
+                | WeaverCommand::Gather(GatherCommand::List { .. })
+                | WeaverCommand::Install { .. }
+                | WeaverCommand::Uninstall { .. }
+                | WeaverCommand::Update { .. }
+                | WeaverCommand::Adopt { .. }
+                | WeaverCommand::Agents { .. }
+                | WeaverCommand::Share { .. }
+                | WeaverCommand::Targets { .. }
+                | WeaverCommand::Migrate { .. },
             ) => None,
         }
     }
@@ -1056,9 +1056,9 @@ pub fn refused(words: &[String]) -> Option<Refusal> {
         Some("mind") => Cli::try_parse_from(words)
             .ok()
             .and_then(|cli| Refusal::of_mind(cli.command.as_ref())),
-        Some("flayer") => FlayerCli::try_parse_from(words)
+        Some("flayer") => WeaverCli::try_parse_from(words)
             .ok()
-            .and_then(|cli| Refusal::of_flayer(cli.command.as_ref())),
+            .and_then(|cli| Refusal::of_weaver(cli.command.as_ref())),
         _ => None,
     }
 }
@@ -1120,7 +1120,7 @@ impl Caution {
             Some(Command::Update { force, yes, .. }) => when(*force && *yes, &[Caution::Forces]),
             Some(Command::Unlink) => vec![Caution::Unlinks],
             Some(Command::Unload { .. }) => vec![Caution::Unloads],
-            Some(Command::Flayer { command }) => Caution::of_flayer(command.as_ref()),
+            Some(Command::Flayer { command }) => Caution::of_weaver(command.as_ref()),
             #[cfg(feature = "ui")]
             Some(Command::Ui(_)) => Vec::new(),
             None
@@ -1146,50 +1146,50 @@ impl Caution {
     }
 
     /// What `flayer <command>` takes away.
-    pub fn of_flayer(command: Option<&FlayerCommand>) -> Vec<Caution> {
+    pub fn of_weaver(command: Option<&WeaverCommand>) -> Vec<Caution> {
         match command {
-            Some(FlayerCommand::Remove {
+            Some(WeaverCommand::Remove {
                 yes, everywhere, ..
             }) => match (*yes, *everywhere) {
                 (false, _) => Vec::new(),
                 (true, false) => vec![Caution::Removes],
                 (true, true) => vec![Caution::Removes, Caution::Uninstalls],
             },
-            Some(FlayerCommand::Install { force, .. }) => when(*force, &[Caution::Forces]),
-            Some(FlayerCommand::Uninstall { force, .. }) => uninstalling(*force),
-            Some(FlayerCommand::Update { force, yes, .. }) => {
+            Some(WeaverCommand::Install { force, .. }) => when(*force, &[Caution::Forces]),
+            Some(WeaverCommand::Uninstall { force, .. }) => uninstalling(*force),
+            Some(WeaverCommand::Update { force, yes, .. }) => {
                 when(*force && *yes, &[Caution::Forces])
             }
-            Some(FlayerCommand::Unlink { .. }) => vec![Caution::Unlinks],
-            Some(FlayerCommand::Unload { .. }) => vec![Caution::Unloads],
+            Some(WeaverCommand::Unlink { .. }) => vec![Caution::Unlinks],
+            Some(WeaverCommand::Unload { .. }) => vec![Caution::Unloads],
             #[cfg(feature = "ui")]
-            Some(FlayerCommand::Ui(_)) => Vec::new(),
+            Some(WeaverCommand::Ui(_)) => Vec::new(),
             None
             | Some(
-                FlayerCommand::Tui
-                | FlayerCommand::Init { .. }
-                | FlayerCommand::Activate { .. }
-                | FlayerCommand::Which
-                | FlayerCommand::Workspaces { .. }
-                | FlayerCommand::Add { .. }
-                | FlayerCommand::Edit { .. }
-                | FlayerCommand::Rename { .. }
-                | FlayerCommand::Templates { .. }
-                | FlayerCommand::List { .. }
-                | FlayerCommand::Show { .. }
-                | FlayerCommand::Validate { .. }
-                | FlayerCommand::Status { .. }
-                | FlayerCommand::Link { .. }
-                | FlayerCommand::Relink { .. }
-                | FlayerCommand::Load { .. }
-                | FlayerCommand::Minds { .. }
-                | FlayerCommand::Scan { .. }
-                | FlayerCommand::Gather(_)
-                | FlayerCommand::Adopt { .. }
-                | FlayerCommand::Agents { .. }
-                | FlayerCommand::Share { .. }
-                | FlayerCommand::Targets { .. }
-                | FlayerCommand::Migrate { .. },
+                WeaverCommand::Tui
+                | WeaverCommand::Init { .. }
+                | WeaverCommand::Activate { .. }
+                | WeaverCommand::Which
+                | WeaverCommand::Workspaces { .. }
+                | WeaverCommand::Add { .. }
+                | WeaverCommand::Edit { .. }
+                | WeaverCommand::Rename { .. }
+                | WeaverCommand::Templates { .. }
+                | WeaverCommand::List { .. }
+                | WeaverCommand::Show { .. }
+                | WeaverCommand::Validate { .. }
+                | WeaverCommand::Status { .. }
+                | WeaverCommand::Link { .. }
+                | WeaverCommand::Relink { .. }
+                | WeaverCommand::Load { .. }
+                | WeaverCommand::Minds { .. }
+                | WeaverCommand::Scan { .. }
+                | WeaverCommand::Gather(_)
+                | WeaverCommand::Adopt { .. }
+                | WeaverCommand::Agents { .. }
+                | WeaverCommand::Share { .. }
+                | WeaverCommand::Targets { .. }
+                | WeaverCommand::Migrate { .. },
             ) => Vec::new(),
         }
     }
@@ -1225,8 +1225,8 @@ pub fn cautions(words: &[String]) -> Vec<Caution> {
         Some("mind") => Cli::try_parse_from(words)
             .map(|cli| Caution::of_mind(cli.command.as_ref()))
             .unwrap_or_default(),
-        Some("flayer") => FlayerCli::try_parse_from(words)
-            .map(|cli| Caution::of_flayer(cli.command.as_ref()))
+        Some("flayer") => WeaverCli::try_parse_from(words)
+            .map(|cli| Caution::of_weaver(cli.command.as_ref()))
             .unwrap_or_default(),
         _ => Vec::new(),
     }
@@ -1292,8 +1292,8 @@ pub fn naming(line: &[String], root: &str) -> Vec<String> {
 /// Where a save's `text` is put for its line to read, as a route from the
 /// workspace's root, `/` separated: the file [`scratch_name`] names, in the
 /// workspace's scratch folder as core spells its route
-/// ([`FlayerWorkspace::scratch_route`]), so the file a front end writes
-/// there ([`FlayerWorkspace::scratch_dir`]) is the one the line reads.
+/// ([`WeaverWorkspace::scratch_route`]), so the file a front end writes
+/// there ([`WeaverWorkspace::scratch_dir`]) is the one the line reads.
 ///
 /// By what it holds rather than by a name drawn for the run, so the line a
 /// preview shows is the line that runs, a preview and a run being two
@@ -1306,7 +1306,7 @@ pub fn naming(line: &[String], root: &str) -> Vec<String> {
 pub fn scratch_route(text: &str) -> String {
     format!(
         "{}/{}",
-        FlayerWorkspace::scratch_route(),
+        WeaverWorkspace::scratch_route(),
         scratch_name(text)
     )
 }

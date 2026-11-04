@@ -13,16 +13,16 @@ use mindweaver_core::assign;
 use mindweaver_core::everywhere::{self, Plan, Step};
 use mindweaver_core::install::{Edits, Removed};
 use mindweaver_core::{
-    create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference, Share,
-    Standing,
+    create, Agent, AgentHomes, Directories, Kind, MindProject, Reference, Share, Standing,
+    WeaverWorkspace,
 };
 use tempfile::TempDir;
 
 /// A workspace with a skill of its own, `deploy`, linking a project for
 /// each of `names`, below it, each marked by settings naming every agent.
-fn given(names: &[&str]) -> (TempDir, FlayerWorkspace, Vec<MindProject>) {
+fn given(names: &[&str]) -> (TempDir, WeaverWorkspace, Vec<MindProject>) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let mut projects = Vec::new();
     for name in names {
         let root = dir.path().join(name);
@@ -46,7 +46,7 @@ fn copies(project: &MindProject, name: &str) -> Vec<PathBuf> {
 }
 
 /// The workspace's own `deploy`, in its library.
-fn library(workspace: &FlayerWorkspace) -> PathBuf {
+fn library(workspace: &WeaverWorkspace) -> PathBuf {
     workspace
         .own()
         .directory_for(Kind::Skill)
@@ -54,7 +54,7 @@ fn library(workspace: &FlayerWorkspace) -> PathBuf {
         .join("deploy")
 }
 
-fn install(workspace: &FlayerWorkspace, projects: &[MindProject], typed: &str) {
+fn install(workspace: &WeaverWorkspace, projects: &[MindProject], typed: &str) {
     let parts = assign::install(
         workspace,
         projects,
@@ -96,7 +96,7 @@ fn said(plan: &Plan) -> Vec<(String, Standing, Step)> {
 /// one, `bare`, that holds none: `current` installed after the library copy
 /// changed, `outdated` before, `edited` with a copy changed by hand, and
 /// `theirs` holding somebody's own of that name.
-fn every_kind_of_copy() -> (TempDir, FlayerWorkspace, Vec<MindProject>) {
+fn every_kind_of_copy() -> (TempDir, WeaverWorkspace, Vec<MindProject>) {
     let (dir, workspace, projects) = given(&["bare", "current", "edited", "outdated", "theirs"]);
     install(&workspace, &projects[2..4], "deploy");
     fs::write(
@@ -229,10 +229,10 @@ fn a_copy_installed_from_somewhere_else_is_left_out_of_it() {
     let (dir, mut workspace, projects) = given(&["alpha", "beta"]);
     let team = dir.path().join("team");
     fs::create_dir(&team).unwrap();
-    let (loaded, _) = FlayerWorkspace::init(&team).unwrap();
+    let (loaded, _) = WeaverWorkspace::init(&team).unwrap();
     create(&loaded.own(), Kind::Skill, "deploy", "Their way").unwrap();
     workspace.load(&loaded).unwrap();
-    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let workspace = WeaverWorkspace::open(workspace.root()).unwrap();
     install_from(&workspace, &projects[..1], "workspace");
     install_from(&workspace, &projects[1..], "load:team");
 
@@ -244,7 +244,7 @@ fn a_copy_installed_from_somewhere_else_is_left_out_of_it() {
     );
 }
 
-fn install_from(workspace: &FlayerWorkspace, projects: &[MindProject], from: &str) {
+fn install_from(workspace: &WeaverWorkspace, projects: &[MindProject], from: &str) {
     let parts = assign::install(
         workspace,
         projects,

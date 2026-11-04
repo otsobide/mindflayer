@@ -26,7 +26,7 @@ use mindweaver_core::gather::Watch;
 use mindweaver_core::resolve::{self, resolve, Intent, Resolved};
 use mindweaver_core::view::{self, Directory, Held, LoadedWorkspace, Snapshot};
 use mindweaver_core::{
-    scan, FlayerWorkspace, Kind, MarkerFile, MindProject, Template, WorkspaceError,
+    scan, Kind, MarkerFile, MindProject, Template, WeaverWorkspace, WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -409,9 +409,9 @@ const INPUT_IN_A_SCREEN: &str =
 /// opens the ledger to write, as that command does from the shell.
 fn open_install(base: &Path, unmade: bool) -> Performed {
     let workspace = if unmade {
-        FlayerWorkspace::unmade(base)
+        WeaverWorkspace::unmade(base)
     } else {
-        FlayerWorkspace::open(base)
+        WeaverWorkspace::open(base)
     };
     let screen = workspace.map_err(CliError::from).and_then(|workspace| {
         // What would not open is already on screen, beside what did.
@@ -608,7 +608,7 @@ fn own(snapshot: &Snapshot) -> Member {
 /// .`. So its templates are the screen's too, the ones the add form's line
 /// will find. Which workspace `mind` consults is the lookup's, which no
 /// snapshot holds, so it is asked here.
-fn member(project: &view::Project, screen: &FlayerWorkspace, lookup: &Lookup) -> Member {
+fn member(project: &view::Project, screen: &WeaverWorkspace, lookup: &Lookup) -> Member {
     let entry = project.entry.clone().unwrap_or_default();
     if let Some(stale) = &project.stale {
         return Member {

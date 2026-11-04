@@ -29,7 +29,7 @@
 
 use mindweaver_core::install::Cell;
 use mindweaver_core::policy::{self, PolicyError};
-use mindweaver_core::{FlayerWorkspace, Member};
+use mindweaver_core::{Member, WeaverWorkspace};
 
 use crate::commands::consulted;
 use crate::commands::workspace::same_directory;
@@ -41,7 +41,7 @@ use crate::task::{Holder, MindsChange, Task};
 ///
 /// Public, as [`Task`] is, for any front end that runs tasks it is sent.
 pub struct Admission<'a> {
-    pub workspace: &'a FlayerWorkspace,
+    pub workspace: &'a WeaverWorkspace,
     pub lookup: &'a Lookup,
 }
 
@@ -168,7 +168,7 @@ impl Admission<'_> {
 
     /// The folder the project `entry` names, as a `-p` names it.
     ///
-    /// The path rather than [`FlayerWorkspace::naming`], which the TUI's
+    /// The path rather than [`WeaverWorkspace::naming`], which the TUI's
     /// lines name a project by: `naming` is an entry, or a project's name
     /// would do, and either is a second spelling of what the registry
     /// resolved, where the path is the folder the policy checked.

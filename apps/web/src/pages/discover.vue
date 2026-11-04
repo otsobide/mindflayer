@@ -9,7 +9,7 @@ import { useSnapshot } from '@/api/snapshot'
 import { TransportError } from '@/api/transport'
 import { every, first, useQueryChange } from '@/address'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer } from '@/components/CommandHint.vue'
+import CommandHint, { weaver } from '@/components/CommandHint.vue'
 import FolderPicker from '@/components/FolderPicker.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 
@@ -464,7 +464,7 @@ const refusal = computed(() => {
               An entry here points where no project is any more, and the workspace never learned its id, so nothing found can be told to be it, moved. If you know where it went:
             </p>
             <CommandHint
-              :commands="scanned.untraced.map(entry => ({ line: flayer(workspace.workspace, `relink ${entry} <PATH>`), does: 'follow it to where it moved' }))"
+              :commands="scanned.untraced.map(entry => ({ line: weaver(workspace.workspace, `relink ${entry} <PATH>`), does: 'follow it to where it moved' }))"
             />
           </div>
 

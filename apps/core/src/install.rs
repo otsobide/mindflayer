@@ -45,7 +45,7 @@ use crate::paths;
 use crate::settings::Share;
 use crate::url::redacted;
 use crate::value::{ArtifactName, ContentHash, Origin};
-use crate::workspace::{same_directory, FlayerWorkspace, Loaded, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, Loaded, MindProject, WeaverWorkspace, WorkspaceError};
 
 mod plan;
 pub mod rules;
@@ -78,7 +78,7 @@ pub enum Edits {
 /// A copy whose record has no hash is held to where it came from, so the
 /// offers are looked for only then.
 fn edited(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -348,7 +348,7 @@ impl Offer {
     }
 
     /// The directory it is copied from.
-    pub(crate) fn source(&self, workspace: &FlayerWorkspace) -> PathBuf {
+    pub(crate) fn source(&self, workspace: &WeaverWorkspace) -> PathBuf {
         match self {
             Offer::Shelf(gathered) => workspace.root().join(&gathered.path),
             Offer::Workspace { path, .. } | Offer::Loaded { path, .. } => path.clone(),
@@ -373,7 +373,7 @@ pub fn loaded_origin(entry: &str) -> Origin {
 /// the workspace's own go by. So the path given to `flayer load` works as
 /// `--from` from wherever it was typed, not only spelled as the marker
 /// stores it.
-pub fn resolve_from(workspace: &FlayerWorkspace, base: &Path, from: &str) -> String {
+pub fn resolve_from(workspace: &WeaverWorkspace, base: &Path, from: &str) -> String {
     if from == WORKSPACE_ORIGIN {
         return from.to_owned();
     }
@@ -605,7 +605,7 @@ impl Candidate {
     }
 
     /// The directory it is copied from.
-    fn source(&self, workspace: &FlayerWorkspace) -> PathBuf {
+    fn source(&self, workspace: &WeaverWorkspace) -> PathBuf {
         self.offer.source(workspace)
     }
 }
@@ -621,7 +621,7 @@ pub struct Loads {
 /// The own artifacts of `kind` of every workspace `workspace` loads, in the
 /// order its marker lists them. What could not be offered is dropped here;
 /// [`offered_by_loads`] has it, for a front end to warn with.
-pub fn loaded_offers(workspace: &FlayerWorkspace, kind: Kind) -> Vec<Offer> {
+pub fn loaded_offers(workspace: &WeaverWorkspace, kind: Kind) -> Vec<Offer> {
     from_loads(workspace, &[kind]).offers
 }
 
@@ -633,7 +633,7 @@ pub fn loaded_offers(workspace: &FlayerWorkspace, kind: Kind) -> Vec<Offer> {
 /// Every kind, as [`survey`] offers every kind to install, so what a load
 /// is said to offer, in `flayer load`, `flayer gather list` and the TUI, is
 /// what the command line and the install screen let somebody install.
-pub fn offered_by_loads(workspace: &FlayerWorkspace) -> Loads {
+pub fn offered_by_loads(workspace: &WeaverWorkspace) -> Loads {
     from_loads(workspace, &Kind::ALL)
 }
 
@@ -643,7 +643,7 @@ pub fn offered_by_loads(workspace: &FlayerWorkspace) -> Loads {
 /// even kinds it keeps in one folder with a project of its, since that project
 /// is not what is being offered; and each loaded directory once, however many
 /// spellings of it the marker has.
-fn from_loads(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Loads {
+fn from_loads(workspace: &WeaverWorkspace, kinds: &[Kind]) -> Loads {
     let mut loads = Loads::default();
     let mut seen: Vec<PathBuf> = Vec::new();
     for loaded in workspace.loads() {
@@ -743,7 +743,7 @@ codes!(LoadFailure {
 /// every project a workspace links, where a refusal for one would hide the
 /// rest. Asking for one by name ([`offered`]) is refused.
 pub fn survey(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -766,7 +766,7 @@ pub fn survey(
 /// them: for a reader surveying every project a workspace links, which reads
 /// what is offered once rather than once a project, as a snapshot does.
 pub(crate) fn survey_among(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -829,7 +829,7 @@ pub(crate) fn survey_among(
 /// shelf offers, so that is what it says: a report reads that ledger too,
 /// and says a failure of it once, as discovery's.
 pub fn standings(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -844,7 +844,7 @@ pub fn standings(
 /// name order, as [`standings`] tells them, with what told each: where it
 /// is offered now and how each of its copies is found.
 pub(crate) fn surveyed(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -869,7 +869,7 @@ pub(crate) fn surveyed(
 /// removing one everywhere does ([`crate::everywhere`]): surveying each
 /// project whole would hash the copies of everything else installed there.
 pub(crate) fn surveyed_one(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -910,7 +910,7 @@ pub(crate) fn surveyed_one(
 /// somebody's artifact to mend, not a reason to take its copies out. By
 /// place ([`places`]), since what cannot be read cannot say its name.
 pub(crate) fn orphaned(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -958,10 +958,10 @@ pub(crate) fn orphaned(
 
 /// What the workspace's own could not offer of `kinds`: an artifact of it
 /// that cannot be read, or a folder of them that cannot be listed. None of
-/// a kind it does not keep ([`FlayerWorkspace::own_kinds`]), which it
+/// a kind it does not keep ([`WeaverWorkspace::own_kinds`]), which it
 /// offers none of. Failures collected, as every discovery's, for a front
 /// end to warn with, as [`offered_by_loads`] has a load's.
-pub fn own_failures(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Vec<DiscoveryFailure> {
+pub fn own_failures(workspace: &WeaverWorkspace, kinds: &[Kind]) -> Vec<DiscoveryFailure> {
     let kept = workspace.own_kinds();
     let kinds: Vec<Kind> = kinds
         .iter()
@@ -981,7 +981,7 @@ pub fn own_failures(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Vec<Discover
 /// workspace's that can be opened. A record from before origins were kept
 /// may have come from any of them. None for one from the shelf, whose
 /// offers are the ledger's rows, not a read that can fail.
-fn places(workspace: &FlayerWorkspace, loads: &[Loaded], record: &InstallRecord) -> Vec<PathBuf> {
+fn places(workspace: &WeaverWorkspace, loads: &[Loaded], record: &InstallRecord) -> Vec<PathBuf> {
     let any = record.origin.is_none() && record.source_id.is_none();
     let names = |origin: &str| any || record.origin.as_deref() == Some(origin);
     let mut places = Vec::new();
@@ -1028,7 +1028,7 @@ fn block_of(project: &MindProject, kind: Kind) -> Option<AgentsMd> {
 /// every offer of its kind, and `block`, the project's `AGENTS.md` as it
 /// reads now for a rule: what [`surveyed`] says of each.
 fn told(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     record: InstallRecord,
     offers: &[Offer],
@@ -1062,7 +1062,7 @@ fn told(
 /// shelf. Nothing whose name no copy can be filed under
 /// ([`is_installable_name`]).
 pub(crate) fn offers(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     kind: Kind,
 ) -> Result<Vec<Offer>, LedgerError> {
@@ -1154,7 +1154,7 @@ pub(crate) fn from_the_library(
 /// [`survey`] offers it nothing: "not offered" would send somebody to gather
 /// what could never be installed there anyway.
 pub fn offered(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -1213,7 +1213,7 @@ pub fn offered(
 /// Kind by kind: a kind that cannot go into the project at all refuses
 /// for that, which keeps no other from being found by the path.
 pub fn offered_typed(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     reference: &Reference,
@@ -1280,7 +1280,7 @@ pub fn offered_typed(
 /// ([`Removed::Foreign`]) before the absence the first kind finds: the name
 /// was typed because something by it is somewhere.
 pub fn uninstall_typed(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     reference: &Reference,
@@ -1383,7 +1383,7 @@ pub fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
 /// work, as a copy nothing records is, until [`install_with`] is told to
 /// write over it.
 pub fn install(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
@@ -1396,7 +1396,7 @@ pub fn install(
 /// `edits` says so, as `--force` does. Never over a copy nothing records,
 /// which is somebody's whatever is asked.
 pub fn install_with(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
@@ -1455,7 +1455,7 @@ pub fn install_with(
 /// install refuses is looked at again here, under the lock, whatever was
 /// looked at before it.
 pub(crate) fn install_held(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
@@ -1876,7 +1876,7 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
 /// every copy left where it is and the record kept ([`Removed::Edited`]),
 /// until [`uninstall_with`] is told to take it out.
 pub fn uninstall(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -1889,7 +1889,7 @@ pub fn uninstall(
 /// [`uninstall`], taking out a copy edited since it was installed when
 /// `edits` says so, as `--force` does.
 pub fn uninstall_with(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -1991,7 +1991,7 @@ pub fn uninstall_with(
 /// in Claude's folder of Mindflayer's rules ([`rules`]), as its uninstall
 /// tells.
 pub(crate) fn somebodys(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -2098,7 +2098,7 @@ pub(crate) fn recorded_copy(
 /// what that scrubbed comes back too, for the change to hand on: the changes
 /// in [`crate::lifecycle`] reach the ledger only through here.
 pub(crate) fn disown(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -2176,7 +2176,7 @@ pub(crate) fn disown(
 /// The workspace and the ledger are found and opened as for [`disown`], and
 /// only by the changes in [`crate::lifecycle`].
 pub(crate) fn carry(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -2281,7 +2281,7 @@ impl Default for Carry {
 /// is and says so. False for a workspace that does not manage the project,
 /// and one with no ledger, which is not made to look.
 pub(crate) fn recorded_at(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -2494,7 +2494,7 @@ codes!(Refused {
 /// place it came from offers now ([`Standing`]), a copy gone since included,
 /// which the next install puts back.
 fn standing(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     targets: &[InstallTarget],
     kind: Kind,
@@ -2570,16 +2570,16 @@ pub(crate) fn holds(copy: &Path, kind: Kind) -> bool {
 /// registered project is stored, so moving the two together keeps it true.
 ///
 /// The route to where the workspace's own entry leads
-/// ([`FlayerWorkspace::spelling_of`]), not to however the caller spelled the
+/// ([`WeaverWorkspace::spelling_of`]), not to however the caller spelled the
 /// project: `mind` run inside it and `flayer -p` must read and write one
 /// record, whichever symlinks either went through.
-fn project_entry(workspace: &FlayerWorkspace, project: &MindProject) -> String {
+fn project_entry(workspace: &WeaverWorkspace, project: &MindProject) -> String {
     entry_for_root(workspace, project.root())
 }
 
 /// [`project_entry`], for a project known only by its root, as an artifact
 /// knows the one it was found in.
-pub(crate) fn entry_for_root(workspace: &FlayerWorkspace, root: &Path) -> String {
+pub(crate) fn entry_for_root(workspace: &WeaverWorkspace, root: &Path) -> String {
     route(workspace.root(), &workspace.spelling_of(root))
 }
 
@@ -2633,7 +2633,7 @@ pub(crate) fn resolved(path: &Path) -> Option<PathBuf> {
 /// write or remove, from the first install on; otherwise an install today
 /// is the loaded workspace's own tomorrow, and can never be updated again.
 pub(crate) fn kept_by_a_load(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     kind: Kind,
     path: &Path,
 ) -> Option<PathBuf> {
@@ -2661,7 +2661,7 @@ pub(crate) fn kept_by_a_load(
 /// settings holds a rule's bytes alone to compare: its section is rendered,
 /// and Claude may have no file of it.
 pub fn is_current(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,

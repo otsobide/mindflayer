@@ -27,7 +27,7 @@ fn a_home_with_no_marker_has_no_default_and_is_not_given_one() {
     let dir = TempDir::new().unwrap();
 
     assert!(made_default(Some(dir.path())).unwrap().is_none());
-    assert!(!dir.path().join(FLAYER_DIR).exists());
+    assert!(!dir.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -140,13 +140,13 @@ fn a_workspace_in_use_that_nothing_remembers_is_the_one_row() {
 #[test]
 fn an_unmade_workspace_in_use_is_not_listed() {
     let dir = TempDir::new().unwrap();
-    let unmade = FlayerWorkspace::unmade(dir.path()).unwrap();
+    let unmade = WeaverWorkspace::unmade(dir.path()).unwrap();
 
     let (known, _) = known(Some(dir.path()), Some(&unmade));
 
     assert!(known.workspaces.is_empty(), "{known:?}");
     assert!(
-        !dir.path().join(FLAYER_DIR).exists(),
+        !dir.path().join(WEAVER_DIR).exists(),
         "listing makes nothing"
     );
 }
@@ -297,5 +297,5 @@ fn forgetting_with_no_default_made_names_what_was_not_known_and_where() {
         matches!(&refused, WorkspaceError::NotKnown { path, .. } if path == &root),
         "{refused:?}"
     );
-    assert!(!dir.path().join(FLAYER_DIR).exists());
+    assert!(!dir.path().join(WEAVER_DIR).exists());
 }

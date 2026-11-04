@@ -165,7 +165,7 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
     let root = dir.path();
     let alpha = under(root, &["alpha"]);
     let gamma = under(root, &["gamma"]);
-    let flayer = under(root, &[FLAYER_DIR]);
+    let weaver = under(root, &[WEAVER_DIR]);
     fs::create_dir(&gamma).unwrap();
     let backend = backend(root);
     let before = files(root);
@@ -278,17 +278,17 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
         // Inside a `.mindflayer`.
         (
             "the folder itself",
-            json!({"type": "link", "path": flayer}),
+            json!({"type": "link", "path": weaver}),
             "path_in_mindflayer",
         ),
         (
             "its library",
-            json!({"type": "load", "path": under(root, &[FLAYER_DIR, "skills"])}),
+            json!({"type": "load", "path": under(root, &[WEAVER_DIR, "skills"])}),
             "path_in_mindflayer",
         ),
         (
             "a clone on its shelf",
-            json!({"type": "init_and_link", "path": under(root, &[FLAYER_DIR, "shelf", "x"])}),
+            json!({"type": "init_and_link", "path": under(root, &[WEAVER_DIR, "shelf", "x"])}),
             "path_in_mindflayer",
         ),
         // URLs.
@@ -852,12 +852,12 @@ fn the_default_workspace_is_made_by_the_first_change_and_said_first() {
             format!("flayer -W {} link {}", home.display(), fresh.display())
         ]
     );
-    assert!(!home.join(FLAYER_DIR).exists(), "a preview made it");
+    assert!(!home.join(WEAVER_DIR).exists(), "a preview made it");
 
     let outcome: Outcome = backend.run(task(link)).unwrap();
 
     assert!(outcome.ok, "{outcome:?}");
-    let workspace = FlayerWorkspace::open(&home).unwrap();
+    let workspace = WeaverWorkspace::open(&home).unwrap();
     assert!(workspace.is_linked(&fresh));
 }
 
@@ -878,7 +878,7 @@ fn the_default_workspace_asked_to_be_made_is_made_by_one_line() {
 
     assert!(outcome.ok, "{outcome:?}");
     assert_eq!(outcome.runs.len(), 1, "{outcome:?}");
-    assert!(FlayerWorkspace::open(&home).is_ok());
+    assert!(WeaverWorkspace::open(&home).is_ok());
 }
 
 /// Pinned to the one it was launched on: a workspace that has gone since is
@@ -887,7 +887,7 @@ fn the_default_workspace_asked_to_be_made_is_made_by_one_line() {
 fn a_workspace_gone_since_launch_is_refused_rather_than_made_again() {
     let dir = workspace_with_two();
     let backend = backend(dir.path());
-    fs::remove_dir_all(dir.path().join(FLAYER_DIR)).unwrap();
+    fs::remove_dir_all(dir.path().join(WEAVER_DIR)).unwrap();
 
     let refusal = backend
         .preview(&task(
@@ -896,7 +896,7 @@ fn a_workspace_gone_since_launch_is_refused_rather_than_made_again() {
         .unwrap_err();
 
     assert_eq!(refusal.code, "not_a_workspace");
-    assert!(!dir.path().join(FLAYER_DIR).exists());
+    assert!(!dir.path().join(WEAVER_DIR).exists());
 }
 
 /// What the server watches is what core names for a snapshot, each path's
@@ -906,7 +906,7 @@ fn a_workspace_gone_since_launch_is_refused_rather_than_made_again() {
 fn the_backend_watches_what_core_names_each_by_the_holder_a_query_names() {
     let dir = workspace_with_two();
     let root = dir.path();
-    let workspace = FlayerWorkspace::open(root).unwrap();
+    let workspace = WeaverWorkspace::open(root).unwrap();
 
     let watched = backend(root).watched_paths();
 
@@ -928,7 +928,7 @@ fn the_backend_watches_what_core_names_each_by_the_holder_a_query_names() {
             .collect::<Vec<_>>(),
         named
     );
-    let marker = root.join(FLAYER_DIR).join("flayer.toml");
+    let marker = root.join(WEAVER_DIR).join("flayer.toml");
     assert!(named.contains(&(marker, json!({"type": "workspace"}))));
     let alpha = root.join("alpha").join(".mind").join("settings.toml");
     assert!(named.contains(&(alpha, json!({"type": "project", "entry": "alpha"}))));
@@ -940,11 +940,11 @@ fn the_backend_watches_what_core_names_each_by_the_holder_a_query_names() {
 fn a_workspace_gone_since_launch_is_watched_for_its_marker() {
     let dir = workspace_with_two();
     let backend = backend(dir.path());
-    fs::remove_dir_all(dir.path().join(FLAYER_DIR)).unwrap();
+    fs::remove_dir_all(dir.path().join(WEAVER_DIR)).unwrap();
 
     let watched = backend.watched_paths();
 
-    let marker = dir.path().join(FLAYER_DIR).join("flayer.toml");
+    let marker = dir.path().join(WEAVER_DIR).join("flayer.toml");
     assert!(watched
         .iter()
         .any(|each| each.path == marker && each.scope == json!({"type": "workspace"})));
@@ -1034,7 +1034,7 @@ fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
     );
     assert_eq!(preview.confirm.len(), 1, "{preview:?}");
     assert_eq!(preview.confirm[0]["line"], 1);
-    assert!(!home.join(FLAYER_DIR).exists(), "a preview made it");
+    assert!(!home.join(WEAVER_DIR).exists(), "a preview made it");
 }
 
 /// What a scan the panel asks for is answered with: what `flayer scan
@@ -1042,7 +1042,7 @@ fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
 /// order, the words the command says why in, and what marking each asks
 /// for; nothing for one linked.
 #[test]
-fn a_scan_is_answered_with_what_flayer_scan_suggest_finds_in_its_order_and_words() {
+fn a_scan_is_answered_with_what_weaver_scan_suggest_finds_in_its_order_and_words() {
     let dir = workspace_with_candidates();
     let backend = backend(dir.path());
 
@@ -1050,7 +1050,7 @@ fn a_scan_is_answered_with_what_flayer_scan_suggest_finds_in_its_order_and_words
         .query(query(json!({"type": "scan", "roots": [], "depth": null})))
         .unwrap();
 
-    let suggested = flayer(dir.path(), &["scan", "--suggest", "--json"]).unwrap();
+    let suggested = weaver(dir.path(), &["scan", "--suggest", "--json"]).unwrap();
     let printed: Value = serde_json::from_str(&suggested.stdout).unwrap();
     let found: Vec<&Value> = answer["found"]
         .as_array()
@@ -1108,13 +1108,13 @@ fn a_scan_walks_only_folders_the_policy_allows_and_writes_nothing() {
     let backend = backend(dir.path());
     let before = files(dir.path());
     let climbing = under(dir.path(), &["repo", ".."]);
-    let flayer_dir = under(dir.path(), &[FLAYER_DIR]);
+    let weaver_dir = under(dir.path(), &[WEAVER_DIR]);
 
     for (root, code) in [
         ("repo", "path_relative"),
         ("file:///etc", "path_url"),
         (climbing.as_str(), "path_unnormalized"),
-        (flayer_dir.as_str(), "path_in_mindflayer"),
+        (weaver_dir.as_str(), "path_in_mindflayer"),
     ] {
         let refusal = backend
             .query(query(
@@ -1143,7 +1143,7 @@ fn a_scan_walks_only_folders_the_policy_allows_and_writes_nothing() {
 /// answer, as `flayer scan` warns of it, never an empty answer passed off as
 /// complete.
 #[test]
-fn a_scan_says_what_it_could_not_read_as_flayer_scan_warns_of_it() {
+fn a_scan_says_what_it_could_not_read_as_weaver_scan_warns_of_it() {
     let dir = workspace_with_candidates();
     let missing = under(dir.path(), &["wrok"]);
 
@@ -1153,7 +1153,7 @@ fn a_scan_says_what_it_could_not_read_as_flayer_scan_warns_of_it() {
         ))
         .unwrap();
 
-    let scan = flayer(dir.path(), &["scan", &missing]).unwrap();
+    let scan = weaver(dir.path(), &["scan", &missing]).unwrap();
     assert_eq!(answer["found"], json!([]));
     let said: Vec<Value> = scan
         .stderr
@@ -1259,7 +1259,7 @@ fn a_folder_listing_names_the_launchs_home() {
     assert_eq!(root["home"], json!(home.to_str().unwrap()));
     assert_eq!(at_home["folders"][0]["name"], "Projects");
     assert!(
-        !home.join(FLAYER_DIR).exists(),
+        !home.join(WEAVER_DIR).exists(),
         "a listing made the default"
     );
 }
@@ -1274,17 +1274,17 @@ fn a_folder_is_listed_only_where_the_policy_allows_and_nothing_is_written() {
     let backend = backend(dir.path());
     let before = files(dir.path());
     let climbing = under(dir.path(), &["repo", ".."]);
-    let flayer_dir = under(dir.path(), &[FLAYER_DIR]);
+    let weaver_dir = under(dir.path(), &[WEAVER_DIR]);
     // Inside a `.mindflayer` and not there: refused for where it is, which
     // nothing had to be read to tell.
-    let unmade = under(dir.path(), &[FLAYER_DIR, "nowhere"]);
+    let unmade = under(dir.path(), &[WEAVER_DIR, "nowhere"]);
     let missing = under(dir.path(), &["wrok"]);
     // A link into the workspace's own `.mindflayer`, which only a system
     // with links can make.
     #[cfg(unix)]
     let through = {
         let link = dir.path().join("hub");
-        std::os::unix::fs::symlink(dir.path().join(FLAYER_DIR), &link).unwrap();
+        std::os::unix::fs::symlink(dir.path().join(WEAVER_DIR), &link).unwrap();
         Some(link.to_str().unwrap().to_owned())
     };
     #[cfg(not(unix))]
@@ -1294,7 +1294,7 @@ fn a_folder_is_listed_only_where_the_policy_allows_and_nothing_is_written() {
         ("file:///etc", "path_url"),
         ("--home=/etc", "path_relative"),
         (climbing.as_str(), "path_unnormalized"),
-        (flayer_dir.as_str(), "path_in_mindflayer"),
+        (weaver_dir.as_str(), "path_in_mindflayer"),
         (unmade.as_str(), "path_in_mindflayer"),
         (missing.as_str(), "browse_missing"),
     ];
@@ -1322,7 +1322,7 @@ fn a_folder_is_listed_only_where_the_policy_allows_and_nothing_is_written() {
         .iter()
         .map(|folder| folder["name"].as_str().unwrap())
         .collect();
-    assert!(!names.contains(&FLAYER_DIR), "{names:?}");
+    assert!(!names.contains(&WEAVER_DIR), "{names:?}");
     if through.is_some() {
         assert!(!names.contains(&"hub"), "{names:?}");
         fs::remove_file(dir.path().join("hub")).unwrap();
@@ -1445,11 +1445,11 @@ fn a_scan_names_the_entry_a_moved_project_left_for_its_relink() {
     let projects = dir.path().join("Projects");
     let collapse = projects.join("collapse");
     fs::create_dir_all(&collapse).unwrap();
-    flayer(&projects, &["init"]).unwrap();
-    flayer(&projects, &["add", "skill", "deploy", "Ship the service"]).unwrap();
+    weaver(&projects, &["init"]).unwrap();
+    weaver(&projects, &["add", "skill", "deploy", "Ship the service"]).unwrap();
     new_project(&collapse);
-    flayer(&projects, &["link", "collapse"]).unwrap();
-    flayer(&projects, &["install", "-p", "collapse", "deploy"]).unwrap();
+    weaver(&projects, &["link", "collapse"]).unwrap();
+    weaver(&projects, &["install", "-p", "collapse", "deploy"]).unwrap();
     fs::create_dir_all(projects.join("apps")).unwrap();
     let moved = projects.join("apps/collapse");
     fs::rename(&collapse, &moved).unwrap();
@@ -1617,7 +1617,7 @@ fn inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_fo
     tui::wait(&mut app);
 
     let entries = |dir: &Path| -> Vec<PathBuf> {
-        FlayerWorkspace::open(dir)
+        WeaverWorkspace::open(dir)
             .unwrap()
             .members()
             .into_iter()
@@ -1653,16 +1653,16 @@ fn knowing() -> (TempDir, PathBuf, PathBuf) {
     let team = dir.path().join("team");
     for workspace in [&home, &root, &team] {
         fs::create_dir_all(workspace).unwrap();
-        flayer_at_home(workspace, &home, &["init"]).unwrap();
+        weaver_at_home(workspace, &home, &["init"]).unwrap();
     }
-    flayer(
+    weaver(
         &team,
         &["add", "skill", "notes", "Keep notes as the team does"],
     )
     .unwrap();
     fs::create_dir_all(root.join("alpha")).unwrap();
     new_project(&root.join("alpha"));
-    flayer(&root, &["link", "alpha"]).unwrap();
+    weaver(&root, &["link", "alpha"]).unwrap();
     (dir, home, root)
 }
 
@@ -1773,19 +1773,19 @@ fn assigning() -> (TempDir, PathBuf) {
     let team = dir.path().join("team");
     for root in [&home, &team] {
         fs::create_dir_all(root).unwrap();
-        flayer(root, &["init"]).unwrap();
+        weaver(root, &["init"]).unwrap();
     }
-    flayer(&home, &["add", "skill", "deploy", "Ship the service"]).unwrap();
-    flayer(&home, &["add", "skill", "review", "Review a change"]).unwrap();
-    flayer(&team, &["add", "skill", "deploy", "Ship it the team's way"]).unwrap();
-    flayer(&home, &["load", "../team"]).unwrap();
+    weaver(&home, &["add", "skill", "deploy", "Ship the service"]).unwrap();
+    weaver(&home, &["add", "skill", "review", "Review a change"]).unwrap();
+    weaver(&team, &["add", "skill", "deploy", "Ship it the team's way"]).unwrap();
+    weaver(&home, &["load", "../team"]).unwrap();
     for name in ["alpha", "beta"] {
         let root = home.join(name);
         fs::create_dir(&root).unwrap();
         new_project(&root);
-        flayer(&home, &["link", name]).unwrap();
+        weaver(&home, &["link", name]).unwrap();
     }
-    flayer(
+    weaver(
         &home,
         &[
             "install",
@@ -1797,7 +1797,7 @@ fn assigning() -> (TempDir, PathBuf) {
         ],
     )
     .unwrap();
-    flayer(&home, &["install", "-p", "beta", "skill:review"]).unwrap();
+    weaver(&home, &["install", "-p", "beta", "skill:review"]).unwrap();
     (dir, home)
 }
 
@@ -1822,7 +1822,7 @@ fn held(
 ) {
     let kept = |route: &Path| {
         !route.components().any(|part| {
-            [".git", MIND_DIR, FLAYER_DIR].contains(&part.as_os_str().to_str().unwrap_or(""))
+            [".git", MIND_DIR, WEAVER_DIR].contains(&part.as_os_str().to_str().unwrap_or(""))
         })
     };
     let copies = files(home)
@@ -1830,7 +1830,7 @@ fn held(
         .map(|(path, bytes)| (path.strip_prefix(home).unwrap().to_path_buf(), bytes))
         .filter(|(route, _)| kept(route))
         .collect();
-    let workspace = FlayerWorkspace::locate(home).unwrap().unwrap();
+    let workspace = WeaverWorkspace::locate(home).unwrap().unwrap();
     let ledger = workspace.ledger_for_reading().unwrap();
     let mut records = Vec::new();
     for project in ["alpha", "beta"] {
@@ -2023,7 +2023,7 @@ fn applying_a_plans_tasks_leaves_what_the_install_screen_leaves_for_the_same_mar
     let (_screened, screened) = assigning();
     let (_panel, panel) = assigning();
 
-    let workspace = FlayerWorkspace::locate(&screened).unwrap().unwrap();
+    let workspace = WeaverWorkspace::locate(&screened).unwrap().unwrap();
     let (projects, _) = install_screen::registered(&workspace);
     let mut screen = install_screen::open(&workspace, projects).unwrap();
     // The team's `deploy` in the place of the workspace's, which unticks it.
@@ -2106,7 +2106,7 @@ fn applying_a_plans_tasks_leaves_what_the_install_screen_leaves_for_the_same_mar
 /// made, and each action with how it went. Without the times, which no two
 /// runs share.
 fn recorded(home: &Path) -> Vec<String> {
-    let workspace = FlayerWorkspace::open(home).unwrap();
+    let workspace = WeaverWorkspace::open(home).unwrap();
     let ledger = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
     let mut rows = Vec::new();
     for sql in [
@@ -2176,7 +2176,7 @@ fn applying_a_batch_leaves_the_ledger_as_running_its_lines_in_the_cli() {
         assert!(!line.contains(['\'', '"', '\\']), "{line}");
         let words: Vec<&str> = line.split_whitespace().collect();
         assert_eq!(words[0], "flayer", "{line}");
-        let ran = flayer(&typed, &words[1..]).unwrap();
+        let ran = weaver(&typed, &words[1..]).unwrap();
         assert!(ran.ok, "{line}: {ran:?}");
     }
 
@@ -2250,21 +2250,21 @@ fn updating() -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
     fs::create_dir_all(&home).unwrap();
-    flayer(&home, &["init"]).unwrap();
+    weaver(&home, &["init"]).unwrap();
     for (name, description) in [
         ("lint", "Tidy the code"),
         ("review", "Review a change"),
         ("old", "Done the old way"),
     ] {
-        flayer(&home, &["add", "skill", name, description]).unwrap();
+        weaver(&home, &["add", "skill", name, description]).unwrap();
     }
     for (project, installs) in [("alpha", &["lint", "review"]), ("beta", &["lint", "old"])] {
         let root = home.join(project);
         fs::create_dir(&root).unwrap();
         new_project(&root);
-        flayer(&home, &["link", project]).unwrap();
+        weaver(&home, &["link", project]).unwrap();
         for name in installs {
-            let installed = flayer(&home, &["install", "-p", project, name]).unwrap();
+            let installed = weaver(&home, &["install", "-p", project, name]).unwrap();
             assert!(installed.ok, "{installed:?}");
         }
     }
@@ -2281,7 +2281,7 @@ fn updating() -> (TempDir, PathBuf) {
         "Our own way.",
     );
     fs::remove_dir_all(home.join("alpha/.agents/skills/review")).unwrap();
-    let removed = flayer(&home, &["remove", "--yes", "skill:old"]).unwrap();
+    let removed = weaver(&home, &["remove", "--yes", "skill:old"]).unwrap();
     assert!(removed.stdout.starts_with("removed"), "{removed:?}");
     (dir, home)
 }
@@ -2356,7 +2356,7 @@ fn what_an_update_would_do_in_a_home_where_nothing_is_made_is_nothing_and_makes_
     assert_eq!(answer["projects"], json!([]));
     assert_eq!(answer["writes"], false);
     assert_eq!(answer["unread"], json!([]));
-    assert!(!home.join(FLAYER_DIR).exists(), "asking made the workspace");
+    assert!(!home.join(WEAVER_DIR).exists(), "asking made the workspace");
 }
 
 #[test]
@@ -2455,7 +2455,7 @@ fn updating_every_project_from_the_panel_leaves_what_the_cli_leaves() {
     let (_typed, typed) = updating();
     let (_panel, panel) = updating();
 
-    let cli = flayer(&typed, &["update", "--all", "--yes"]).unwrap();
+    let cli = weaver(&typed, &["update", "--all", "--yes"]).unwrap();
     let ran = backend(&panel)
         .run(task(json!({
             "type": "update", "holder": {"type": "workspace"}, "reference": null, "force": false,
@@ -2477,7 +2477,7 @@ fn updating_every_project_from_the_panel_leaves_what_the_cli_leaves() {
             .filter_map(|(path, bytes)| {
                 let route = path.strip_prefix(home).unwrap().to_path_buf();
                 let kept = !route.components().any(|part| {
-                    [".git", MIND_DIR, FLAYER_DIR]
+                    [".git", MIND_DIR, WEAVER_DIR]
                         .contains(&part.as_os_str().to_str().unwrap_or(""))
                 });
                 kept.then_some((route, bytes))
@@ -2563,7 +2563,7 @@ fn added(name: &str, description: &str) -> Value {
 fn a_draft_is_judged_as_the_command_writing_it_would_judge_it_and_nothing_is_written() {
     let dir = workspace_with_two();
     let root = dir.path();
-    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
     let backend = backend(root);
     let before = files(root);
     let own = json!({"type": "workspace"});
@@ -2579,7 +2579,7 @@ fn a_draft_is_judged_as_the_command_writing_it_would_judge_it_and_nothing_is_wri
 
     assert_eq!(fit, json!({"issues": [], "refused": null}));
     assert_eq!(files(root), before);
-    let said = flayer(root, &["add", "skill", "deploy", "Again"]).unwrap_err();
+    let said = weaver(root, &["add", "skill", "deploy", "Again"]).unwrap_err();
     assert_eq!(taken["refused"]["code"], said.error.code());
     assert_eq!(taken["refused"]["message"], said.error.to_string());
     let said = mind(
@@ -2597,7 +2597,7 @@ fn a_draft_is_judged_as_the_command_writing_it_would_judge_it_and_nothing_is_wri
 fn contents_are_judged_in_the_words_validate_says_them_in_once_written() {
     let dir = workspace_with_two();
     let root = dir.path();
-    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
     let text = "---\nname: deploy\ndescription: Ship it\ncompatibility: \"\"\n---\n\n# deploy\n";
 
     let judged = backend(root)
@@ -2612,7 +2612,7 @@ fn contents_are_judged_in_the_words_validate_says_them_in_once_written() {
     assert_eq!(issues.len(), 1, "{judged}");
     let draft = root.join("draft.md");
     fs::write(&draft, text).unwrap();
-    flayer(
+    weaver(
         root,
         &[
             "edit",
@@ -2622,7 +2622,7 @@ fn contents_are_judged_in_the_words_validate_says_them_in_once_written() {
         ],
     )
     .unwrap();
-    let said = flayer(root, &["validate"]).unwrap().stdout;
+    let said = weaver(root, &["validate"]).unwrap().stdout;
     for issue in issues {
         let marked = if issue["warning"] == true {
             "warning: "
@@ -2678,7 +2678,7 @@ fn save(text: &str, read: &str) -> Task {
 /// Whatever the workspace's scratch folder holds: nothing, once a run is
 /// over, a folder made for it left in place.
 fn scratch(root: &Path) -> Vec<PathBuf> {
-    let folder = FlayerWorkspace::open(root).unwrap().scratch_dir();
+    let folder = WeaverWorkspace::open(root).unwrap().scratch_dir();
     fs::read_dir(&folder)
         .map(|entries| entries.map(|entry| entry.unwrap().path()).collect())
         .unwrap_or_default()
@@ -2691,7 +2691,7 @@ fn scratch(root: &Path) -> Vec<PathBuf> {
 fn a_save_writes_the_text_through_edit_contents_and_takes_its_file_away_after() {
     let dir = workspace_with_two();
     let root = dir.path();
-    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
     let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
     let read = fs::read_to_string(&manifest).unwrap();
     let text = read.replace("Ship it", "Ship it today");
@@ -2725,7 +2725,7 @@ fn a_save_writes_the_text_through_edit_contents_and_takes_its_file_away_after() 
 fn a_save_the_edit_refuses_writes_nothing_and_still_takes_its_file_away() {
     let dir = workspace_with_two();
     let root = dir.path();
-    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
     let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
     let read = fs::read_to_string(&manifest).unwrap();
     let since = read.replace("Ship it", "Ship it now");
@@ -2754,7 +2754,7 @@ fn a_save_the_edit_refuses_writes_nothing_and_still_takes_its_file_away() {
 fn a_save_takes_the_text_left_under_its_name_and_refuses_anything_else_there() {
     let dir = workspace_with_two();
     let root = dir.path();
-    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
     let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
     let read = fs::read_to_string(&manifest).unwrap();
     let text = read.replace("Ship it", "Ship it today");
@@ -2780,13 +2780,13 @@ fn a_save_takes_the_text_left_under_its_name_and_refuses_anything_else_there() {
 fn a_save_whose_scratch_folder_is_a_link_is_refused_and_writes_nothing_where_it_leads() {
     let dir = workspace_with_two();
     let root = dir.path();
-    flayer(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(root, &["add", "skill", "deploy", "Ship it"]).unwrap();
     let manifest = own_directory_for(root, Kind::Skill).join("deploy/SKILL.md");
     let read = fs::read_to_string(&manifest).unwrap();
     let elsewhere = TempDir::new().unwrap();
     let commands = elsewhere.path().join("commands");
     fs::create_dir(&commands).unwrap();
-    let folder = FlayerWorkspace::open(root).unwrap().scratch_dir();
+    let folder = WeaverWorkspace::open(root).unwrap().scratch_dir();
     std::os::unix::fs::symlink(&commands, &folder).unwrap();
     let backend = backend(root);
 
@@ -2928,7 +2928,7 @@ fn a_switch_to_a_path_outside_the_list_is_refused_and_nothing_is_switched() {
     let (dir, home, root) = knowing();
     let stranger = dir.path().join("stranger");
     fs::create_dir_all(&stranger).unwrap();
-    flayer(&stranger, &["init"]).unwrap();
+    weaver(&stranger, &["init"]).unwrap();
     let team = dir.path().join("team");
     let backend = launched_knowing(&home, &root);
     let before = files(dir.path());
@@ -2998,7 +2998,7 @@ fn a_known_workspace_that_does_not_open_is_refused_and_never_made() {
     let (dir, home, root) = knowing();
     let team = dir.path().join("team");
     let backend = launched_knowing(&home, &root);
-    fs::remove_dir_all(team.join(FLAYER_DIR)).unwrap();
+    fs::remove_dir_all(team.join(WEAVER_DIR)).unwrap();
 
     assert_eq!(
         offered(&backend)[2],
@@ -3012,7 +3012,7 @@ fn a_known_workspace_that_does_not_open_is_refused_and_never_made() {
         Err("not_a_workspace"),
         "{refused:?}"
     );
-    assert!(!team.join(FLAYER_DIR).exists(), "it was made");
+    assert!(!team.join(WEAVER_DIR).exists(), "it was made");
     assert_eq!(
         snapshot_of(&backend),
         (json!(root.to_str().unwrap()), json!("above"))
@@ -3031,7 +3031,7 @@ fn a_workspace_whose_root_is_not_text_runs_its_lines_naming_none() {
     let dir = TempDir::new().unwrap();
     let root = dir.path().join(OsStr::from_bytes(b"caf\xe9"));
     fs::create_dir(&root).unwrap();
-    FlayerWorkspace::init(&root).unwrap();
+    WeaverWorkspace::init(&root).unwrap();
     let backend = backend(&root);
     let add = add_to(json!({"type": "workspace"}));
 
@@ -3066,7 +3066,7 @@ fn a_workspace_gone_since_it_was_switched_to_can_still_be_left() {
     backend
         .switch(switch(json!({"path": team.to_str().unwrap()})))
         .unwrap();
-    fs::remove_dir_all(team.join(FLAYER_DIR)).unwrap();
+    fs::remove_dir_all(team.join(WEAVER_DIR)).unwrap();
 
     let snapshot = backend.query(query(json!({"type": "snapshot"})));
     assert_eq!(

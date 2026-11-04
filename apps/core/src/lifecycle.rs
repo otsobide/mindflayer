@@ -20,7 +20,7 @@
 //! stale one in place.
 //!
 //! Changing a record opens the ledger to write, which scrubs it first
-//! ([`FlayerWorkspace::ledger_to_write`]), so each result that may also hands
+//! ([`WeaverWorkspace::ledger_to_write`]), so each result that may also hands
 //! back what that took out ([`Scrub`]) for the front end to say. Said
 //! nowhere, it would go unsaid for good: a scrub says what it found only the
 //! first time. An edit changes none, and only reads the ledger.
@@ -46,7 +46,7 @@ use crate::skill::SkillManifest;
 use crate::template::Template;
 use crate::value::{ArtifactName, ContentHash};
 use crate::workspace::{
-    replace_bytes_unresolved, replace_file, FlayerWorkspace, MindProject, WorkspaceError,
+    replace_bytes_unresolved, replace_file, MindProject, WeaverWorkspace, WorkspaceError,
 };
 
 /// An artifact found by what somebody typed.
@@ -135,7 +135,7 @@ pub struct Added {
 /// that links the project from somewhere that is not above it. With none,
 /// there is no record to drop.
 pub fn add(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -255,7 +255,7 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
 /// what the report just showed; the ledger says whether it is one, and the
 /// refusal says how to take it out instead.
 pub fn find_to_change(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     reference: &Reference,
 ) -> Result<Target, LifecycleError> {
@@ -399,7 +399,7 @@ pub fn start_edit(target: &Target) -> Edit {
 /// A front end finishes the edit whether or not the editor succeeded: one
 /// that wrote the file before it failed has changed the copy all the same.
 pub fn finish_edit(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     edit: Edit,
 ) -> Edited {
@@ -450,7 +450,7 @@ pub fn finish_edit(
 /// the artifact's file, not anything of the workspace's, whose ledger is
 /// only read.
 pub fn replace_contents(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     contents: &[u8],
@@ -509,7 +509,7 @@ pub fn replace_contents(
 /// whether it is still what an edit was made from, is the write's alone to
 /// tell, at the moment it writes.
 pub(crate) fn replaceable(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     contents: &[u8],
@@ -539,7 +539,7 @@ pub(crate) fn replaceable(
 /// a sibling's is not rewritten under a name that folder does not have.
 /// The widest first, so a refusal names the most the file leads out of.
 fn written_at(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     directory: &Path,
@@ -571,9 +571,9 @@ fn written_at(
 }
 
 /// Whether `directory`, where a holder keeps `kind`, is the folder
-/// `workspace` keeps its own of that kind in ([`FlayerWorkspace::own`]),
+/// `workspace` keeps its own of that kind in ([`WeaverWorkspace::own`]),
 /// of a kind it keeps apart from a project at its root
-/// ([`FlayerWorkspace::own_kinds`]): the library, as a read of it for the
+/// ([`WeaverWorkspace::own_kinds`]): the library, as a read of it for the
 /// panel finds it ([`crate::contents`]).
 ///
 /// Told by the folder, since the holder is a [`MindProject`] either way:
@@ -582,7 +582,7 @@ fn written_at(
 /// project's root. One at the workspace's root keeping a kind where the
 /// library does holds what is there itself, by `own_kinds`, and is held to
 /// its root too. With no workspace there is no library to be.
-fn library(workspace: Option<&FlayerWorkspace>, kind: Kind, directory: &Path) -> bool {
+fn library(workspace: Option<&WeaverWorkspace>, kind: Kind, directory: &Path) -> bool {
     workspace.is_some_and(|workspace| {
         workspace.own().directory_for(kind).as_deref() == Some(directory)
             && workspace.own_kinds().contains(&kind)
@@ -642,7 +642,7 @@ fn fit(target: &Target, contents: &[u8]) -> Result<(), LifecycleError> {
 /// `workspace` records a copy at `at`, and untouched when it records none
 /// or there is no workspace to ask.
 fn kept(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -697,7 +697,7 @@ pub struct Removed {
 /// uninstall of that copy would. `workspace` is the one consulted, as for
 /// [`add`].
 pub fn remove(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
 ) -> Result<Removed, LifecycleError> {
@@ -763,7 +763,7 @@ pub struct Renamed {
 /// copy renamed carried along with it. `workspace` is the one consulted, as
 /// for [`add`].
 pub fn rename(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     to: &str,
@@ -1019,7 +1019,7 @@ fn holds(kind: Kind, path: &Path) -> bool {
 /// that names the copy at `at`, the one the change reached, adding what
 /// opening the ledger to do it scrubbed out of it to `scrub`.
 fn disowned(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -1046,7 +1046,7 @@ fn disowned(
 /// moved it to, adding what opening the ledger to do it scrubbed out of it to
 /// `scrub`.
 fn carried(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     (name, at): (&str, &Path),

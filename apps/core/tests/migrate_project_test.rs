@@ -13,8 +13,8 @@ use mindweaver_core::ledger::{InstallRecord, Target};
 use mindweaver_core::migrate::{self, Refusal};
 use mindweaver_core::reapply::Why;
 use mindweaver_core::{
-    Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MarkerFile, MindProject, Settings,
-    Share, DIRECTORIES_VERSION, MIND_CONFIG, MIND_DIR, SETTINGS_FILE, SETTINGS_JSON_FILE,
+    Agent, AgentHomes, Directories, Kind, MarkerFile, MindProject, Settings, Share,
+    WeaverWorkspace, DIRECTORIES_VERSION, MIND_CONFIG, MIND_DIR, SETTINGS_FILE, SETTINGS_JSON_FILE,
     SETTINGS_TOML_VERSION, TARGETS_VERSION,
 };
 use tempfile::TempDir;
@@ -22,7 +22,7 @@ use tempfile::TempDir;
 /// A workspace keeping `names` as skills of its own, and `collapse`, a
 /// repository a version 2 `mind init` made a project, authoring in
 /// `directories` and linked, with each of `names` installed into it.
-fn older(names: &[&str], directories: &Directories) -> (TempDir, FlayerWorkspace, MindProject) {
+fn older(names: &[&str], directories: &Directories) -> (TempDir, WeaverWorkspace, MindProject) {
     let (dir, mut workspace) = workspace();
     let own = workspace.own().directory_for(Kind::Skill).unwrap();
     for name in names {
@@ -58,7 +58,7 @@ fn older(names: &[&str], directories: &Directories) -> (TempDir, FlayerWorkspace
 /// Rewrite the record of `name` the way a ledger from before schema 3 holds
 /// it, once migrated: no origin for something of the workspace's own, and
 /// no hash.
-fn from_before_hashes(workspace: &FlayerWorkspace, name: &str) {
+fn from_before_hashes(workspace: &WeaverWorkspace, name: &str) {
     let ledger = workspace.ledger().unwrap();
     let record = ledger
         .installation("collapse", Kind::Skill, name)
@@ -94,7 +94,7 @@ fn write_skill(folder: &Path, name: &str, description: &str) {
 }
 
 /// What the ledger records of `name` in `collapse`.
-fn targets(workspace: &FlayerWorkspace, name: &str) -> Vec<Target> {
+fn targets(workspace: &WeaverWorkspace, name: &str) -> Vec<Target> {
     workspace
         .ledger()
         .unwrap()
@@ -132,7 +132,7 @@ fn tree(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
 }
 
 fn plan(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     agents: &[Agent],
     share: Share,
@@ -334,7 +334,7 @@ fn somebodys_skill_where_a_copy_would_go_is_left_and_what_else_is_there_said() {
 fn a_project_no_workspace_links_moves_to_settings_and_carries_nothing() {
     let (dir, _workspace, project) = older(&["deploy"], &Directories::default());
     let elsewhere = TempDir::new().unwrap();
-    let (other, _) = FlayerWorkspace::init(elsewhere.path()).unwrap();
+    let (other, _) = WeaverWorkspace::init(elsewhere.path()).unwrap();
     let before = tree(dir.path());
 
     let plan = plan(&other, &project, &Agent::ALL, Share::Shared);
@@ -416,7 +416,7 @@ fn a_version_1_project_naming_its_folders_outside_mind_moves_with_them() {
 }
 
 fn migrated(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     agents: &[Agent],
     share: Share,
@@ -745,7 +745,7 @@ fn names_in(dir: &Path) -> Vec<String> {
 
 /// A workspace, and `collapse` beside it, a project [`JSON`] marks, linked:
 /// with no install, so the workspace has no ledger yet.
-fn json_project() -> (TempDir, FlayerWorkspace, MindProject) {
+fn json_project() -> (TempDir, WeaverWorkspace, MindProject) {
     let (dir, mut workspace) = workspace();
     let root = dir.path().join("collapse");
     fs::create_dir_all(root.join(MIND_DIR)).unwrap();

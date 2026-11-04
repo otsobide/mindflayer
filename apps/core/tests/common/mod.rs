@@ -12,7 +12,7 @@
 use std::path::Path;
 
 use mindweaver_core::mother::{GitRepositoryMother, SkillMother, WorkspaceMother};
-use mindweaver_core::{Directories, FlayerWorkspace, Kind};
+use mindweaver_core::{Directories, Kind, WeaverWorkspace};
 use tempfile::TempDir;
 
 /// A git repository holding exactly these files, with one commit.
@@ -44,7 +44,7 @@ pub fn skill(name: &str, description: &str) -> String {
 }
 
 /// A flayer workspace with nothing gathered yet.
-pub fn workspace() -> (TempDir, FlayerWorkspace) {
+pub fn workspace() -> (TempDir, WeaverWorkspace) {
     WorkspaceMother::empty()
 }
 

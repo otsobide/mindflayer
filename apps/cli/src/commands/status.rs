@@ -5,7 +5,7 @@
 //! a table naming no more than its rows need to be told apart.
 
 use mindweaver_core::{
-    Agent, FlayerWorkspace, Kind, MarkerFile, MindProject, Missed, Status, StatusFailure, Unreached,
+    Agent, Kind, MarkerFile, MindProject, Missed, Status, StatusFailure, Unreached, WeaverWorkspace,
 };
 
 use super::consulted;
@@ -24,7 +24,7 @@ type Said = (Option<&'static str>, String);
 
 /// `flayer status`: every project the workspace links, against its ledger,
 /// which core reads without making it; as JSON when `as_json`.
-pub(crate) fn status_of_workspace(workspace: &FlayerWorkspace, as_json: bool) -> Outcome {
+pub(crate) fn status_of_workspace(workspace: &WeaverWorkspace, as_json: bool) -> Outcome {
     // In JSON, a workspace with nothing linked is one with no projects in
     // its data, which a script reads like any other.
     if workspace.config().projects.is_empty() && !as_json {
@@ -46,7 +46,7 @@ pub(crate) fn status_of_workspace(workspace: &FlayerWorkspace, as_json: bool) ->
 
 /// `flayer status -p`: one project the workspace links.
 pub(crate) fn status_of_project(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: MindProject,
     as_json: bool,
 ) -> Outcome {

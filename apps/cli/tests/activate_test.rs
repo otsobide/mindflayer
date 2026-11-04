@@ -13,7 +13,7 @@ use mindweaver_core::ActivateError;
 
 /// What core writes to activate the workspace at `root` in `shell`.
 fn script(root: &Path, shell: Shell) -> String {
-    activate::script(&FlayerWorkspace::open(root).unwrap(), shell).unwrap()
+    activate::script(&WeaverWorkspace::open(root).unwrap(), shell).unwrap()
 }
 
 /// Every path under `dir`, in order: what a command that writes nothing
@@ -38,7 +38,7 @@ fn tree(dir: &Path) -> Vec<PathBuf> {
 /// that is not one.
 fn flayers() -> TempDir {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init", "writing"]).unwrap();
+    weaver(dir.path(), &["init", "writing"]).unwrap();
     fs::create_dir(dir.path().join("plain")).unwrap();
     dir
 }
@@ -47,7 +47,7 @@ fn flayers() -> TempDir {
 fn activate_prints_the_code_for_the_workspace_it_is_given() {
     let dir = flayers();
 
-    let outcome = flayer(dir.path(), &["activate", "writing", "--shell", "bash"]).unwrap();
+    let outcome = weaver(dir.path(), &["activate", "writing", "--shell", "bash"]).unwrap();
 
     assert_eq!(
         outcome,
@@ -62,9 +62,9 @@ fn activate_prints_the_code_for_the_workspace_it_is_given() {
 #[test]
 fn a_workspace_is_activated_by_its_mindflayer_folder_too() {
     let dir = flayers();
-    let folder = format!("writing/{FLAYER_DIR}");
+    let folder = format!("writing/{WEAVER_DIR}");
 
-    let outcome = flayer(dir.path(), &["activate", &folder, "--shell", "zsh"]).unwrap();
+    let outcome = weaver(dir.path(), &["activate", &folder, "--shell", "zsh"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -76,7 +76,7 @@ fn a_workspace_is_activated_by_its_mindflayer_folder_too() {
 fn activate_on_its_own_activates_the_workspace_a_command_here_would_use() {
     let dir = workspace_with_two();
 
-    let outcome = flayer(&dir.path().join("alpha"), &["activate", "--shell", "fish"]).unwrap();
+    let outcome = weaver(&dir.path().join("alpha"), &["activate", "--shell", "fish"]).unwrap();
 
     assert_eq!(outcome.stdout, script(dir.path(), Shell::Fish));
 }
@@ -87,7 +87,7 @@ fn activate_on_its_own_takes_the_workspace_w_names() {
     let other = flayers();
     let writing = other.path().join("writing");
 
-    let outcome = flayer(
+    let outcome = weaver(
         &dir.path().join("alpha"),
         &[
             "activate",
@@ -107,7 +107,7 @@ fn activating_a_directory_that_is_no_workspace_is_refused_and_writes_nothing() {
     let dir = flayers();
     let before = tree(dir.path());
 
-    let failure = flayer(dir.path(), &["activate", "plain", "--shell", "bash"]).unwrap_err();
+    let failure = weaver(dir.path(), &["activate", "plain", "--shell", "bash"]).unwrap_err();
 
     assert_eq!(
         failure.error.to_string(),
@@ -124,7 +124,7 @@ fn activating_the_default_workspace_before_it_is_made_makes_nothing() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
 
-    let failure = flayer_at_home(
+    let failure = weaver_at_home(
         elsewhere.path(),
         home.path(),
         &["activate", "--shell", "bash"],
@@ -143,13 +143,13 @@ fn activating_the_default_workspace_before_it_is_made_makes_nothing() {
 }
 
 #[test]
-fn activate_is_mind_flayer_activate_too() {
+fn activate_is_mind_weaver_activate_too() {
     let dir = flayers();
     let args = ["activate", "writing", "--shell", "bash"];
 
     let nested = mind(dir.path(), &[&["flayer"][..], &args].concat()).unwrap();
 
-    assert_eq!(nested, flayer(dir.path(), &args).unwrap());
+    assert_eq!(nested, weaver(dir.path(), &args).unwrap());
 }
 
 // ---------------------------------------------------------------------------

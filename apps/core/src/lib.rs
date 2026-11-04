@@ -96,9 +96,9 @@ pub use skill::{
 pub use status::{ArtifactStatus, Missed, ProjectStatus, State, Status, StatusFailure, Unreached};
 pub use template::{Template, TemplateError, TEMPLATES_DIR};
 pub use workspace::{
-    Directories, FlayerConfig, FlayerWorkspace, Initialization, Loaded, Marker, MarkerFile, Member,
-    MindConfig, MindProject, Misplaced, MisplacedTarget, ProjectConfig, ProjectWarning,
-    Registration, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, FLAYER_CONFIG, FLAYER_DIR,
-    LIBRARY_DIR, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION, SETTINGS_VERSION,
-    TARGETS_VERSION,
+    Directories, Initialization, Loaded, Marker, MarkerFile, Member, MindConfig, MindProject,
+    Misplaced, MisplacedTarget, ProjectConfig, ProjectWarning, Registration, WeaverConfig,
+    WeaverWorkspace, WorkspaceError, CACHE_DIR, DIRECTORIES_VERSION, LIBRARY_DIR, MIND_CONFIG,
+    MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION, SETTINGS_VERSION, TARGETS_VERSION, WEAVER_CONFIG,
+    WEAVER_DIR,
 };

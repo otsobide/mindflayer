@@ -13,22 +13,22 @@ use crate::task::{shell, Mark, MindsChange, Toggles};
 /// A workspace at `work` linking `alpha` under it and `beside` next to it,
 /// and loading `library`, next to it too: nothing above any of them, so
 /// `mind` run in `beside` consults no workspace at all.
-fn fixture() -> (TempDir, FlayerWorkspace) {
+fn fixture() -> (TempDir, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
     let root = dir.path().join("work");
-    let (mut workspace, _) = FlayerWorkspace::init(&root).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(&root).unwrap();
     for project in [root.join("alpha"), dir.path().join("beside")] {
         let (project, _) = MindProject::init(project).unwrap();
         workspace.link(&project).unwrap();
     }
-    let (library, _) = FlayerWorkspace::init(dir.path().join("library")).unwrap();
+    let (library, _) = WeaverWorkspace::init(dir.path().join("library")).unwrap();
     workspace.load(&library).unwrap();
-    (dir, FlayerWorkspace::open(&root).unwrap())
+    (dir, WeaverWorkspace::open(&root).unwrap())
 }
 
 /// `task` admitted against `workspace`, looked for from nowhere: no home,
 /// nothing named or activated.
-fn admitted(workspace: &FlayerWorkspace, task: &Task) -> Result<Task, PolicyError> {
+fn admitted(workspace: &WeaverWorkspace, task: &Task) -> Result<Task, PolicyError> {
     Admission {
         workspace,
         lookup: &Lookup::default(),
@@ -37,7 +37,7 @@ fn admitted(workspace: &FlayerWorkspace, task: &Task) -> Result<Task, PolicyErro
 }
 
 /// The lines `task`, once admitted, is, as a shell shows them.
-fn lines(workspace: &FlayerWorkspace, task: &Task) -> Vec<String> {
+fn lines(workspace: &WeaverWorkspace, task: &Task) -> Vec<String> {
     admitted(workspace, task)
         .unwrap()
         .commands()
@@ -307,7 +307,7 @@ fn a_folder_not_linked_yet_goes_to_the_command_as_given() {
 #[test]
 fn a_folder_that_is_not_absolute_normalized_and_outside_any_workspace_folder_is_refused() {
     let (_dir, workspace) = fixture();
-    let flayer = text(&workspace.flayer_dir());
+    let weaver = text(&workspace.weaver_dir());
     let climbing = format!("{}{}..", text(workspace.root()), std::path::MAIN_SEPARATOR);
 
     for (path, expected) in [
@@ -315,7 +315,7 @@ fn a_folder_that_is_not_absolute_normalized_and_outside_any_workspace_folder_is_
         ("-x", "path_relative"),
         ("file:///etc", "path_url"),
         (climbing.as_str(), "path_unnormalized"),
-        (flayer.as_str(), "path_in_mindflayer"),
+        (weaver.as_str(), "path_in_mindflayer"),
     ] {
         for task in [
             Task::Link {
@@ -480,7 +480,7 @@ fn what_names_nothing_on_the_disk_is_left_as_it_was_sent() {
 #[test]
 fn nothing_is_admitted_against_a_workspace_that_links_nothing() {
     let dir = TempDir::new().unwrap();
-    let workspace = FlayerWorkspace::unmade(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::unmade(dir.path()).unwrap();
 
     assert_eq!(
         code(admitted(
@@ -489,7 +489,7 @@ fn nothing_is_admitted_against_a_workspace_that_links_nothing() {
         )),
         "not_registered"
     );
-    assert!(!dir.path().join(mindweaver_core::FLAYER_DIR).exists());
+    assert!(!dir.path().join(mindweaver_core::WEAVER_DIR).exists());
 }
 
 #[test]

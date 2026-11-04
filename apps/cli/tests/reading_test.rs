@@ -80,7 +80,7 @@ fn the_workspace_shows_both_projects_declaring_one_name() {
         &skill_file("alpha", "The other one"),
     );
 
-    let outcome = flayer(dir.path(), &["show", "alpha"]).unwrap();
+    let outcome = weaver(dir.path(), &["show", "alpha"]).unwrap();
 
     assert!(outcome.stdout.contains("alpha (alpha)"));
     assert!(outcome.stdout.contains("alpha (beta)"));
@@ -194,10 +194,10 @@ fn a_project_is_found_from_a_subdirectory() {
 fn init_run_twice_says_so_and_succeeds() {
     let dir = TempDir::new().unwrap();
     mind(dir.path(), &["init"]).unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
     let project = mind(dir.path(), &["init"]).unwrap();
-    let workspace = flayer(dir.path(), &["init"]).unwrap();
+    let workspace = weaver(dir.path(), &["init"]).unwrap();
 
     assert!(project.ok && workspace.ok);
     assert!(project.stdout.contains("already initialized"));
@@ -210,7 +210,7 @@ fn a_workspace_whose_projects_all_broke_does_not_claim_to_manage_none() {
     fs::remove_dir_all(dir.path().join("alpha")).unwrap();
     fs::remove_dir_all(dir.path().join("beta")).unwrap();
 
-    let outcome = flayer(dir.path(), &["list"]).unwrap();
+    let outcome = weaver(dir.path(), &["list"]).unwrap();
 
     // "manages no projects yet" would send the user to link something that is
     // already linked; the registry has two entries that simply will not open.
@@ -244,16 +244,16 @@ fn a_failing_command_still_reports_what_it_had_already_noticed() {
 fn unlink_reports_every_entry_it_removed() {
     let dir = workspace_with_two();
     fs::write(
-        dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG),
+        dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG),
         "version = 1\nname = \"w\"\nprojects = [\"alpha\", \"./alpha\", \"beta\"]\n",
     )
     .unwrap();
 
-    let outcome = flayer(dir.path(), &["unlink", "alpha"]).unwrap();
+    let outcome = weaver(dir.path(), &["unlink", "alpha"]).unwrap();
 
     assert_eq!(outcome.stdout, "unlinked alpha\nunlinked ./alpha\n");
     // And it is genuinely gone, rather than reported gone.
-    let listed = flayer(dir.path(), &["list"]).unwrap();
+    let listed = weaver(dir.path(), &["list"]).unwrap();
     assert!(!listed.stdout.contains("alpha"), "{}", listed.stdout);
     assert!(listed.stdout.contains("beta"));
 }
@@ -274,7 +274,7 @@ fn both_spellings_answer_version_and_help() {
         );
     }
     assert_eq!(
-        FlayerCli::try_parse_from(["flayer", "--version"])
+        WeaverCli::try_parse_from(["flayer", "--version"])
             .unwrap_err()
             .kind(),
         clap::error::ErrorKind::DisplayVersion
@@ -286,15 +286,15 @@ fn each_binary_describes_itself_rather_than_the_crate() {
     let mind = Cli::try_parse_from(["mind", "--help"])
         .unwrap_err()
         .to_string();
-    let flayer = FlayerCli::try_parse_from(["flayer", "--help"])
+    let weaver = WeaverCli::try_parse_from(["flayer", "--help"])
         .unwrap_err()
         .to_string();
 
     // One crate description cannot be right for two binaries: `mind --help`
     // used to advertise the pre-split, cross-project scope.
     assert!(mind.contains("in a mind project"), "{mind}");
-    assert!(flayer.contains("flayer workspace"), "{flayer}");
-    assert_ne!(mind.lines().next().unwrap(), flayer.lines().next().unwrap());
+    assert!(weaver.contains("flayer workspace"), "{weaver}");
+    assert_ne!(mind.lines().next().unwrap(), weaver.lines().next().unwrap());
 }
 
 // ---------------------------------------------------------------------------
@@ -525,7 +525,7 @@ fn a_workspace_lists_every_kind_of_every_project() {
     let dir = workspace_with_two();
     write_rule(&dir.path().join("alpha"), "team/style.md", "House style.\n");
 
-    let outcome = flayer(dir.path(), &["list"]).unwrap();
+    let outcome = weaver(dir.path(), &["list"]).unwrap();
 
     // Three columns now: project, kind, name, each earning its place.
     assert_eq!(
@@ -536,7 +536,7 @@ fn a_workspace_lists_every_kind_of_every_project() {
     );
     // Narrowed to rules there is only one project left with any, so the
     // project column stops telling the reader anything and goes.
-    let rules = flayer(dir.path(), &["list", "rules"]).unwrap();
+    let rules = weaver(dir.path(), &["list", "rules"]).unwrap();
     assert_eq!(rules.stdout, "team/style  House style.\n");
 }
 
@@ -554,7 +554,7 @@ fn a_rule_is_listed_by_the_first_line_of_its_body() {
         "# Never force-push\n\nUse the lease.\n",
     );
 
-    let rules = flayer(dir.path(), &["list", "rules"]).unwrap();
+    let rules = weaver(dir.path(), &["list", "rules"]).unwrap();
 
     // Front matter is not what a rule says, so it is not its summary; a rule
     // without any is summarised as it always was.
@@ -653,15 +653,15 @@ fn init_refuses_a_directory_inside_the_mind_that_keeps_itself_out_of_git() {
 #[test]
 fn a_workspace_sees_a_project_that_keeps_its_skills_elsewhere() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let project = dir.path().join("collapse");
     fs::create_dir(&project).unwrap();
     // Not `.claude/skills`, which Claude's folder would reach anyway.
     mind(&project, &["init", "--skills", "docs/skills"]).unwrap();
     write_skill(&project, "deploy", &skill_file("deploy", "Ship it"));
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
 
-    let outcome = flayer(dir.path(), &["list"]).unwrap();
+    let outcome = weaver(dir.path(), &["list"]).unwrap();
 
     // The workspace reads the project's own answer rather than assuming one.
     assert!(outcome.stdout.contains("deploy"), "{}", outcome.stdout);

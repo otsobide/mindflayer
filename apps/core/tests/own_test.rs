@@ -7,15 +7,15 @@ use std::path::Path;
 use mindweaver_core::lifecycle;
 use mindweaver_core::template;
 use mindweaver_core::{
-    create, Catalog, Directories, FlayerWorkspace, Kind, MindProject, Reference, WorkspaceError,
+    create, Catalog, Directories, Kind, MindProject, Reference, WeaverWorkspace, WorkspaceError,
 };
 use tempfile::TempDir;
 
 mod common;
 
-fn workspace() -> (TempDir, FlayerWorkspace) {
+fn workspace() -> (TempDir, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     (dir, workspace)
 }
 
@@ -51,18 +51,18 @@ fn a_new_workspace_says_where_its_own_artifacts_go_and_makes_nothing_yet() {
 #[test]
 fn a_kind_the_marker_does_not_name_is_kept_in_the_library() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     // Every key taken out, and then one put back beside the projects.
     let marker = fs::read_to_string(workspace.config_path()).unwrap();
     let without = marker.split("[directories]").next().unwrap().to_owned();
     fs::write(workspace.config_path(), &without).unwrap();
-    let none = FlayerWorkspace::open(dir.path()).unwrap();
+    let none = WeaverWorkspace::open(dir.path()).unwrap();
     fs::write(
         workspace.config_path(),
         without + "[directories]\nskills = \"skills\"\n",
     )
     .unwrap();
-    let one = FlayerWorkspace::open(dir.path()).unwrap();
+    let one = WeaverWorkspace::open(dir.path()).unwrap();
 
     // Never a folder at the root, which for the default workspace is the
     // home directory: a kind added later lands in the library of every
@@ -88,7 +88,7 @@ fn a_workspace_told_to_keep_its_own_beside_its_projects_still_does() {
     // What every workspace made before the library was, and is until it is
     // migrated: the marker names the folders, and they are where it says.
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init_with(dir.path(), &common::beside()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init_with(dir.path(), &common::beside()).unwrap();
     let own = workspace.own();
 
     create(&own, Kind::Skill, "commit-style", "Shared").unwrap();
@@ -106,13 +106,13 @@ fn a_workspace_told_to_keep_its_own_beside_its_projects_still_does() {
 fn a_workspace_can_be_told_where_to_keep_them_as_long_as_it_is_inside() {
     let dir = TempDir::new().unwrap();
 
-    let (workspace, _) = FlayerWorkspace::init_with(
+    let (workspace, _) = WeaverWorkspace::init_with(
         dir.path(),
         &Directories::default().with(Kind::Skill, "shared/skills"),
     )
     .unwrap();
     let outside = TempDir::new().unwrap();
-    let error = FlayerWorkspace::init_with(
+    let error = WeaverWorkspace::init_with(
         outside.path(),
         &Directories::default().with(Kind::Rule, "../rules"),
     )
@@ -147,7 +147,7 @@ fn a_workspace_directory_overlapping_what_is_reserved_for_gathering_is_refused()
     ] {
         let dir = TempDir::new().unwrap();
 
-        let error = FlayerWorkspace::init_with(
+        let error = WeaverWorkspace::init_with(
             dir.path(),
             &Directories::default().with(Kind::Rule, directory),
         )
@@ -173,7 +173,7 @@ fn a_workspace_directory_overlapping_what_is_reserved_for_gathering_is_refused()
 fn a_workspace_directory_elsewhere_in_mindflayer_is_allowed() {
     let dir = TempDir::new().unwrap();
 
-    let (workspace, _) = FlayerWorkspace::init_with(
+    let (workspace, _) = WeaverWorkspace::init_with(
         dir.path(),
         &Directories::default().with(Kind::Skill, ".mindflayer/mine/skills"),
     )
@@ -235,9 +235,9 @@ fn the_workspace_templates_serve_its_own_artifacts_too() {
 }
 
 /// A workspace whose root is also a project it manages.
-fn workspace_at_a_project(directories: &Directories) -> (TempDir, FlayerWorkspace, MindProject) {
+fn workspace_at_a_project(directories: &Directories) -> (TempDir, WeaverWorkspace, MindProject) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init_with(dir.path(), directories).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init_with(dir.path(), directories).unwrap();
     let (project, _) = MindProject::init(dir.path()).unwrap();
     workspace.link(&project).unwrap();
     (dir, workspace, project)

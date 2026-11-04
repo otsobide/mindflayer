@@ -8,7 +8,7 @@
 use std::path::Path;
 
 use mindweaver_core::mother::random;
-use mindweaver_core::FlayerWorkspace;
+use mindweaver_core::WeaverWorkspace;
 
 /// Makes the values a person or a browser types where a command takes free
 /// text: a description, a template's name, a reference.
@@ -74,7 +74,7 @@ impl OlderBuildMother {
     /// Written again over what an earlier call left, so a suite trying
     /// every form of URL in one workspace finds only the last stored.
     pub fn stored(dir: &Path, url: &str) {
-        let workspace = FlayerWorkspace::open(dir).unwrap();
+        let workspace = WeaverWorkspace::open(dir).unwrap();
         let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
         database
             .execute("UPDATE sources SET url = ?1", [url])
@@ -133,7 +133,7 @@ impl OlderBuildMother {
                 }
             }
         }
-        let workspace = FlayerWorkspace::open(dir).unwrap();
+        let workspace = WeaverWorkspace::open(dir).unwrap();
         let mut kept =
             String::from_utf8_lossy(&std::fs::read(workspace.ledger_path()).unwrap()).into_owned();
         text_under(&workspace.cache_dir(), &mut kept);

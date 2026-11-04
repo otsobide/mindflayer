@@ -12,7 +12,7 @@ use mindweaver_core::claude_rules::{
     self, ClaudeRulesError, Mode, Recorded, Rendered, Warning, Written,
 };
 use mindweaver_core::{
-    hash, Agent, AgentHomes, Artifact, Directories, FlayerWorkspace, MindProject, Share,
+    hash, Agent, AgentHomes, Artifact, Directories, MindProject, Share, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -27,7 +27,7 @@ const UNSCOPED: &str = "Never force-push a branch somebody else may have pulled.
 /// root is the workspace's.
 struct Fixture {
     dir: TempDir,
-    workspace: FlayerWorkspace,
+    workspace: WeaverWorkspace,
     project: MindProject,
     library: PathBuf,
 }
@@ -43,7 +43,7 @@ fn fixture_with(share: Share, in_git: bool) -> Fixture {
     if in_git {
         gix::init(dir.path()).unwrap();
     }
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("app");
     fs::create_dir_all(&root).unwrap();
     let (project, _) =

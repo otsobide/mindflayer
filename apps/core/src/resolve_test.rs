@@ -29,7 +29,7 @@ fn fixture() -> Fixture {
         path("home"),
     );
     for root in [&named, &activated, &outer, &home] {
-        FlayerWorkspace::init(root).unwrap();
+        WeaverWorkspace::init(root).unwrap();
     }
     let start = outer.join("deep/er");
     fs::create_dir_all(&start).unwrap();
@@ -158,7 +158,7 @@ fn an_empty_activated_workspace_counts_as_none() {
 #[test]
 fn a_workspace_is_named_by_its_root_or_by_its_mindflayer_folder() {
     let fixture = fixture();
-    let folder = fixture.named.join(FLAYER_DIR);
+    let folder = fixture.named.join(WEAVER_DIR);
     let inputs = Inputs {
         flag: Some(&folder),
         ..inputs(&fixture)
@@ -173,14 +173,14 @@ fn a_workspace_named_as_an_argument_takes_the_spellings_w_takes() {
     let plain = fixture.outer.join("plain");
     fs::create_dir(&plain).unwrap();
 
-    for spelled in [fixture.named.clone(), fixture.named.join(FLAYER_DIR)] {
+    for spelled in [fixture.named.clone(), fixture.named.join(WEAVER_DIR)] {
         assert_eq!(named(&spelled).unwrap().root(), fixture.named);
     }
     assert!(matches!(
         named(&plain),
         Err(WorkspaceError::NotAWorkspace { .. })
     ));
-    assert!(!plain.join(FLAYER_DIR).exists());
+    assert!(!plain.join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -208,7 +208,7 @@ fn a_named_directory_that_is_no_workspace_is_refused_and_never_made() {
             ),
             "{error}"
         );
-        assert!(!plain.join(FLAYER_DIR).exists());
+        assert!(!plain.join(WEAVER_DIR).exists());
     }
 }
 
@@ -278,14 +278,14 @@ fn a_write_makes_the_default_workspace_the_first_time() {
 
     assert_eq!(resolved.reason, Reason::Home);
     assert!(resolved.workspace.is_made());
-    assert!(home.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file());
+    assert!(home.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file());
 }
 
 #[test]
 fn passing_over_a_workspace_carries_the_walk_on_above_it() {
     let fixture = fixture();
     let inner = fixture.outer.join("deep");
-    FlayerWorkspace::init(&inner).unwrap();
+    WeaverWorkspace::init(&inner).unwrap();
     let inputs = Inputs {
         flag: None,
         activated: None,
@@ -351,7 +351,7 @@ fn with_a_project() -> (Fixture, MindProject) {
     let fixture = fixture();
     let (project, _) = MindProject::init(fixture.named.parent().unwrap().join("collapse")).unwrap();
     for root in [&fixture.named, &fixture.activated] {
-        FlayerWorkspace::open(root).unwrap().link(&project).unwrap();
+        WeaverWorkspace::open(root).unwrap().link(&project).unwrap();
     }
     (fixture, project)
 }
@@ -450,9 +450,9 @@ fn a_change_to_a_project_consults_the_default_only_once_it_is_made() {
 
 /// `workspace`, managing `alpha` and `beta` under it, and `gone`, an entry
 /// whose directory has been removed.
-fn picking() -> (TempDir, FlayerWorkspace) {
+fn picking() -> (TempDir, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     for name in ["alpha", "beta", "gone"] {
         let (project, _) = MindProject::init(dir.path().join(name)).unwrap();
         workspace.link(&project).unwrap();

@@ -20,7 +20,7 @@ use mindweaver_core::install::{InstallError, Removed};
 use mindweaver_core::lifecycle::{self, Edited, Record};
 use mindweaver_core::template::{self, Origin, Template};
 use mindweaver_core::{
-    paths, AgentHomes, FlayerWorkspace, Kind, MindProject, Reference, Standing, Target,
+    paths, AgentHomes, Kind, MindProject, Reference, Standing, Target, WeaverWorkspace,
     WorkspaceError,
 };
 
@@ -36,7 +36,7 @@ use crate::{CliError, Editing, Failure, Given, Outcome, Warning};
 const UNREMOVED: &str = "nothing removed: add --yes to go ahead\n";
 
 pub(crate) fn add_to(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     kind: Kind,
     name: &str,
@@ -77,7 +77,7 @@ pub(crate) fn add_to(
 /// works in, as every path a command takes is, so a line a front end runs
 /// from the workspace's root reads what it names there.
 pub(crate) fn edit_in(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     reference: &str,
     editing: &Editing,
@@ -115,7 +115,7 @@ pub(crate) fn edit_in(
 /// Open `target` in `editor`, or the one the environment names, and say
 /// what the edit came to once it is closed.
 fn open(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     target: &Target,
     editor: Option<&str>,
@@ -168,7 +168,7 @@ fn read_given(given: Given<'_>, directory: &Path) -> Result<Vec<u8>, CliError> {
 }
 
 pub(crate) fn rename_in(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     reference: &str,
     to: &str,
@@ -206,7 +206,7 @@ pub(crate) fn rename_in(
 }
 
 pub(crate) fn remove_from(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     reference: &str,
     yes: bool,
@@ -257,7 +257,7 @@ pub(crate) fn remove_from(
 /// copy whole, offering it still, or a skill's folder half deleted, offering
 /// nothing, and either way its error is what there is to say.
 pub(crate) fn remove_own(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     reference: &str,
     yes: bool,
 ) -> Result<Outcome, Failure> {
@@ -319,7 +319,7 @@ fn orphaning(plan: &Plan, removed: bool) -> Vec<Warning> {
 /// written. A line for each project's copy, saying how it stands, then one
 /// for the library copy, in the order they would go.
 pub(crate) fn would_remove_everywhere(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     reference: &str,
 ) -> Result<Outcome, Failure> {
     let plan = everywhere::plan(workspace, &Reference::parse(reference)).map_err(CliError::from)?;
@@ -370,7 +370,7 @@ pub(crate) fn would_remove_everywhere(
 /// A copy whose uninstall failed is an error of its project, as among
 /// several in `flayer uninstall`, and the rest stand.
 pub(crate) fn remove_everywhere(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     reference: &str,
     homes: &AgentHomes,
 ) -> Result<Outcome, Failure> {
@@ -502,7 +502,7 @@ fn unread(outcome: &mut Outcome, unread: &[WorkspaceError]) {
 /// with the templates kept in `found`, for `--json` to print in place of
 /// the text.
 pub(crate) fn templates_of(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     found: &mut Option<Vec<Template>>,
 ) -> Result<Outcome, Failure> {

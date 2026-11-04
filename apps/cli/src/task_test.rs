@@ -7,7 +7,7 @@ use clap::{ArgMatches, CommandFactory, Parser};
 
 use super::*;
 use crate::tui::minds::{Minds, Row, Standing};
-use crate::{Cli, FlayerCli};
+use crate::{Cli, WeaverCli};
 
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
@@ -882,14 +882,14 @@ fn hostile() -> Vec<String> {
 /// costs, and the property below parses some tens of thousands.
 struct Parsers {
     mind: clap::Command,
-    flayer: clap::Command,
+    weaver: clap::Command,
 }
 
 impl Parsers {
     fn new() -> Self {
         Parsers {
             mind: Cli::command(),
-            flayer: FlayerCli::command(),
+            weaver: WeaverCli::command(),
         }
     }
 
@@ -898,7 +898,7 @@ impl Parsers {
     fn read(&mut self, line: &[String]) -> Read {
         let command = match line[0].as_str() {
             "mind" => &mut self.mind,
-            "flayer" => &mut self.flayer,
+            "flayer" => &mut self.weaver,
             other => panic!("{line:?} runs `{other}`"),
         };
         let matches = command
@@ -1023,7 +1023,7 @@ fn holding(read: &Read, value: &str) -> Read {
 }
 
 #[test]
-fn every_variant_s_lines_parse_with_cli_or_flayer_cli() {
+fn every_variant_s_lines_parse_with_cli_or_weaver_cli() {
     // Not the empty value: the parser refuses an empty path for what it is,
     // which is where one is to be refused.
     for value in VALUES.into_iter().filter(|value| !value.is_empty()) {
@@ -1031,7 +1031,7 @@ fn every_variant_s_lines_parse_with_cli_or_flayer_cli() {
             for line in task.commands() {
                 let error = match line[0].as_str() {
                     "mind" => Cli::try_parse_from(&line).err(),
-                    "flayer" => FlayerCli::try_parse_from(&line).err(),
+                    "flayer" => WeaverCli::try_parse_from(&line).err(),
                     other => panic!("{task:?} runs `{other}`"),
                 };
                 assert!(error.is_none(), "{line:?} does not parse: {error:?}");
@@ -1106,8 +1106,8 @@ fn a_line_named_for_a_workspace_names_it_once_and_is_otherwise_read_as_it_was() 
                 }
                 "flayer" => {
                     let (cli, plain) = (
-                        FlayerCli::try_parse_from(&named).unwrap(),
-                        FlayerCli::try_parse_from(&line).unwrap(),
+                        WeaverCli::try_parse_from(&named).unwrap(),
+                        WeaverCli::try_parse_from(&line).unwrap(),
                     );
                     assert_eq!(cli.directory, plain.directory, "{named:?}");
                     assert_eq!(
@@ -1143,7 +1143,7 @@ fn a_root_starting_with_a_dash_is_named_as_the_value_of_w() {
     let named = naming(&line("flayer link beta"), "-W");
 
     assert_eq!(named, line("flayer -W=-W link beta"));
-    let cli = FlayerCli::try_parse_from(&named).unwrap();
+    let cli = WeaverCli::try_parse_from(&named).unwrap();
     assert_eq!(cli.workspace.as_deref(), Some("-W"));
 }
 
@@ -1263,7 +1263,7 @@ fn without_the_ui_feature_there_is_no_ui_command() {
         let words = line(said);
         let parsed = match words[0].as_str() {
             "mind" => Cli::try_parse_from(&words).map(drop),
-            _ => FlayerCli::try_parse_from(&words).map(drop),
+            _ => WeaverCli::try_parse_from(&words).map(drop),
         };
         let error = parsed.expect_err(said);
         assert_eq!(
@@ -1587,7 +1587,7 @@ fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_
         route,
         format!(
             "{}/{}",
-            FlayerWorkspace::scratch_route(),
+            WeaverWorkspace::scratch_route(),
             scratch_name(text)
         )
     );

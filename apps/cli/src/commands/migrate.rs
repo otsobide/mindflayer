@@ -8,7 +8,7 @@
 use std::fmt::Write as _;
 
 use mindweaver_core::migrate::{self, MigrateError, Plan, ProjectPlan, Stranded};
-use mindweaver_core::{Agent, AgentHomes, FlayerWorkspace, MarkerFile, MindProject, Share};
+use mindweaver_core::{Agent, AgentHomes, MarkerFile, MindProject, Share, WeaverWorkspace};
 
 use super::all_or_nothing;
 use super::consulted;
@@ -25,7 +25,7 @@ use crate::{CliError, Failure, Lookup, Outcome, Warning};
 /// not one deletion that was asked for and did not happen. Refused, both say
 /// every reason at once, as a command given several things does, since each
 /// has to be put right before it can go ahead.
-pub(crate) fn migrate_library(workspace: &FlayerWorkspace, yes: bool) -> Result<Outcome, Failure> {
+pub(crate) fn migrate_library(workspace: &WeaverWorkspace, yes: bool) -> Result<Outcome, Failure> {
     if !yes {
         let mut plan = migrate::library_plan(workspace);
         refused(std::mem::take(&mut plan.refusals))?;
@@ -82,7 +82,7 @@ fn refused(refusals: Vec<migrate::Refusal>) -> Result<(), Failure> {
 
 /// A line for each artifact moved, each one a project keeps, and the
 /// marker's rewrite: as what will happen in a dry run, and as what did.
-fn report(workspace: &FlayerWorkspace, plan: &Plan, done: bool) -> String {
+fn report(workspace: &WeaverWorkspace, plan: &Plan, done: bool) -> String {
     let (moving, leaving, uncounted) = if done {
         ("moved", "left", "no longer counts")
     } else {
@@ -226,7 +226,7 @@ pub(crate) fn migrate_here(
 /// `flayer migrate -p`: one project the workspace links moved to a
 /// `settings.toml`, carrying what its ledger records along.
 pub(crate) fn migrate_one(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     asked: &Asked,
     homes: &AgentHomes,
@@ -248,7 +248,7 @@ pub(crate) fn migrate_one(
 /// nothing written. Those their `settings.toml` marks already are not
 /// listed, there being nothing to say of them.
 pub(crate) fn migrate_all(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     asked: &Asked,
     homes: &AgentHomes,
 ) -> Result<Outcome, Failure> {
@@ -366,7 +366,7 @@ impl Stopped {
 /// left out of a folder an agent the project names reads is a warning, as
 /// it is for `mind agents`.
 fn laid_out(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     asked: &Asked,
     homes: &AgentHomes,

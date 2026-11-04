@@ -10,8 +10,8 @@ use mindweaver_core::ledger::{Ledger, SourceKind};
 use mindweaver_core::lifecycle::{self, Record, Target};
 use mindweaver_core::AgentHomes;
 use mindweaver_core::{
-    create, Agent, Catalog, Directories, FlayerWorkspace, Kind, LifecycleError, MindProject,
-    Reference, Share, ValidationIssue,
+    create, Agent, Catalog, Directories, Kind, LifecycleError, MindProject, Reference, Share,
+    ValidationIssue, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -828,7 +828,7 @@ fn the_workspaces_own_are_held_to_the_folder_they_are_kept_in_and_not_its_root()
     // workspace's root, which may be a home: written there, as a read of it
     // for the panel reads it there.
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let own = workspace.own();
     let dotfiles = TempDir::new().unwrap();
     let folder = own.directory_for(Kind::Skill).unwrap();
@@ -884,9 +884,9 @@ fn the_workspaces_own_are_held_to_the_folder_they_are_kept_in_and_not_its_root()
 
 /// A workspace managing one project, `collapse`, from above it, with each of
 /// `names` among the workspace's own skills and installed into the project.
-fn installed(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn installed(names: &[&str]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -915,7 +915,7 @@ fn records(ledger: &Ledger) -> Vec<String> {
 
 /// How every skill installed into the project stands now, by name.
 fn standings(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
 ) -> Vec<(String, Standing)> {
@@ -924,7 +924,7 @@ fn standings(
 
 /// How the workspace's own `name` stands with the project now.
 fn standing(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     name: &str,
@@ -947,7 +947,7 @@ fn type_into(file: &Path) {
 /// A workspace with its own `names`, and a project marked by its settings,
 /// naming every agent and authoring skills in `skills`, linked to it, with
 /// each of the workspace's installed for its agents.
-fn installed_for_agents(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn installed_for_agents(names: &[&str]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     installed_authoring_in("skills", Share::Shared, names)
 }
 
@@ -957,9 +957,9 @@ fn installed_authoring_in(
     folder: &str,
     share: Share,
     names: &[&str],
-) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     gix::init(&root).unwrap();
@@ -1251,7 +1251,7 @@ fn a_copy_renamed_onto_a_name_installed_from_elsewhere_is_its_authors() {
 
 /// A workspace managing `collapse`, a project a `mind.toml` marks, with the
 /// workspace's own rule `git/no-force-push` copied into it.
-fn installed_rule() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn installed_rule() -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, project, ledger) = installed(&[]);
     let own = workspace.own().directory_for(Kind::Rule).unwrap();
     write(&own, "git/no-force-push.md", "Never force-push.\n");
@@ -1276,7 +1276,7 @@ fn installed_rule() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
 }
 
 fn rule_standings(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
 ) -> Vec<(String, Standing)> {
@@ -1386,7 +1386,7 @@ fn adding_a_rule_beside_an_installed_one_that_reaches_no_agent_keeps_its_record(
     // A project naming only Codex, given a rule about some files, which only
     // Claude reads: installed with no target at all.
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let directories = Directories::default().with(Kind::Rule, "rules");
@@ -1464,7 +1464,7 @@ fn adding_touches_no_record_but_one_under_the_name_it_writes() {
 #[test]
 fn a_change_asks_only_a_workspace_that_manages_the_project_and_creates_no_ledger() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -1667,7 +1667,7 @@ fn removing_an_installed_copy_uninstalls_it() {
 
 /// What an older build could have left in the same ledger: a source whose URL
 /// carries a token. Returns where its clone would be.
-fn tainted(workspace: &FlayerWorkspace, ledger: &Ledger) -> PathBuf {
+fn tainted(workspace: &WeaverWorkspace, ledger: &Ledger) -> PathBuf {
     let source = ledger
         .source_for(
             SourceKind::Git,
@@ -1796,7 +1796,7 @@ fn a_change_sees_to_the_record_of_the_workspace_it_is_given_wherever_that_sits()
     let dir = TempDir::new().unwrap();
     let hub = dir.path().join("hub");
     fs::create_dir(&hub).unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(&hub).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(&hub).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -1836,11 +1836,11 @@ fn a_record_is_kept_under_the_workspaces_spelling_of_a_project_whatever_the_syml
     let real = dir.path().join("real");
     fs::create_dir_all(real.join("collapse")).unwrap();
     std::os::unix::fs::symlink(&real, dir.path().join("link")).unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(real.join("hub")).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(real.join("hub")).unwrap();
     let (project, _) = MindProject::init(real.join("collapse")).unwrap();
     workspace.link(&project).unwrap();
     create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
-    let through_link = FlayerWorkspace::open(dir.path().join("link/hub")).unwrap();
+    let through_link = WeaverWorkspace::open(dir.path().join("link/hub")).unwrap();
     let ledger = workspace.ledger().unwrap();
     let recorded = || ledger.installations("../collapse", Kind::Skill).unwrap();
 

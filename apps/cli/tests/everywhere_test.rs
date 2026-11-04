@@ -16,19 +16,19 @@ use common::*;
 /// that name.
 fn workspace_with_copies() -> TempDir {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     for name in ["alpha", "beta", "collapse", "tanukeys"] {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
         new_project(&root);
-        flayer(dir.path(), &["link", name]).unwrap();
+        weaver(dir.path(), &["link", name]).unwrap();
     }
-    flayer(
+    weaver(
         dir.path(),
         &["add", "skill", "commit-style", "How commits are written"],
     )
     .unwrap();
-    let installed = flayer(
+    let installed = weaver(
         dir.path(),
         &[
             "install",
@@ -78,7 +78,7 @@ fn remove_everywhere_without_yes_says_each_copy_with_how_it_stands_then_the_libr
     let dir = workspace_with_copies();
     let library = own_directory_for(dir.path(), Kind::Skill).join("commit-style");
 
-    let outcome = flayer(dir.path(), &["remove", "commit-style", "--everywhere"]).unwrap();
+    let outcome = weaver(dir.path(), &["remove", "commit-style", "--everywhere"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -103,8 +103,8 @@ fn the_dry_run_writes_nothing() {
     let dir = workspace_with_copies();
     let before = every_file(dir.path());
 
-    flayer(dir.path(), &["remove", "commit-style", "--everywhere"]).unwrap();
-    flayer(dir.path(), &["remove", "skill:commit-style"]).unwrap_err();
+    weaver(dir.path(), &["remove", "commit-style", "--everywhere"]).unwrap();
+    weaver(dir.path(), &["remove", "skill:commit-style"]).unwrap_err();
 
     assert_eq!(every_file(dir.path()), before);
 }
@@ -118,7 +118,7 @@ fn a_dry_run_makes_no_default_workspace() {
         &["remove", "commit-style", "--everywhere"][..],
         &["remove", "commit-style"][..],
     ] {
-        let failure = flayer_at_home(elsewhere.path(), home.path(), args).unwrap_err();
+        let failure = weaver_at_home(elsewhere.path(), home.path(), args).unwrap_err();
         assert!(
             failure
                 .error
@@ -129,7 +129,7 @@ fn a_dry_run_makes_no_default_workspace() {
         );
     }
 
-    assert!(!home.path().join(FLAYER_DIR).exists());
+    assert!(!home.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -137,7 +137,7 @@ fn removing_it_everywhere_leaves_an_edited_copy_and_somebodys_and_says_so() {
     let dir = workspace_with_copies();
     let library = own_directory_for(dir.path(), Kind::Skill).join("commit-style");
 
-    let outcome = flayer(
+    let outcome = weaver(
         dir.path(),
         &["remove", "commit-style", "--everywhere", "--yes"],
     )
@@ -180,13 +180,13 @@ removed skill commit-style from {}
 
     // The edited copy is still Mindflayer's install, and the note's command
     // takes it out.
-    let status = flayer(dir.path(), &["status", "-p", "collapse"]).unwrap();
+    let status = weaver(dir.path(), &["status", "-p", "collapse"]).unwrap();
     assert!(
         status.stdout.contains("commit-style  edited"),
         "{}",
         status.stdout
     );
-    let forced = flayer(
+    let forced = weaver(
         dir.path(),
         &["uninstall", "-p", "collapse", "commit-style", "--force"],
     )
@@ -197,14 +197,14 @@ removed skill commit-style from {}
 #[test]
 fn a_rule_of_the_workspaces_own_goes_from_every_project_that_received_it() {
     let dir = workspace_with_copies();
-    flayer(dir.path(), &["add", "rule", "git/no-force-push", "Never"]).unwrap();
-    flayer(
+    weaver(dir.path(), &["add", "rule", "git/no-force-push", "Never"]).unwrap();
+    weaver(
         dir.path(),
         &["install", "git/no-force-push", "-p", "alpha", "-p", "beta"],
     )
     .unwrap();
 
-    let would = flayer(dir.path(), &["remove", "git/no-force-push", "--everywhere"]).unwrap();
+    let would = weaver(dir.path(), &["remove", "git/no-force-push", "--everywhere"]).unwrap();
     assert!(
         would.stdout.starts_with(
             "\
@@ -216,7 +216,7 @@ would remove rule git/no-force-push from "
         would.stdout
     );
 
-    let outcome = flayer(
+    let outcome = weaver(
         dir.path(),
         &["remove", "rule:git/no-force-push", "--everywhere", "--yes"],
     )
@@ -243,7 +243,7 @@ removed rule git/no-force-push from "
 fn everywhere_is_for_the_workspaces_own_and_not_a_projects() {
     let dir = workspace_with_copies();
 
-    let refused = FlayerCli::try_parse_from(line(
+    let refused = WeaverCli::try_parse_from(line(
         "flayer",
         &["remove", "commit-style", "-p", "alpha", "--everywhere"],
         dir.path(),
@@ -261,7 +261,7 @@ fn removing_one_of_the_workspaces_own_alone_says_whose_copies_it_orphans() {
     let dir = workspace_with_copies();
     let library = own_directory_for(dir.path(), Kind::Skill).join("commit-style");
 
-    let failure = flayer(dir.path(), &["remove", "commit-style"]).unwrap_err();
+    let failure = weaver(dir.path(), &["remove", "commit-style"]).unwrap_err();
     assert!(matches!(*failure.error, CliError::Unconfirmed { .. }));
     assert_eq!(
         failure.warnings,
@@ -271,7 +271,7 @@ fn removing_one_of_the_workspaces_own_alone_says_whose_copies_it_orphans() {
         ]
     );
 
-    let outcome = flayer(dir.path(), &["remove", "commit-style", "--yes"]).unwrap();
+    let outcome = weaver(dir.path(), &["remove", "commit-style", "--yes"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -286,7 +286,7 @@ fn removing_one_of_the_workspaces_own_alone_says_whose_copies_it_orphans() {
         ]
     );
     assert!(!outcome.ok);
-    let status = flayer(dir.path(), &["status", "-p", "alpha"]).unwrap();
+    let status = weaver(dir.path(), &["status", "-p", "alpha"]).unwrap();
     assert!(
         status.stdout.contains("commit-style  orphaned"),
         "{}",
@@ -323,12 +323,12 @@ impl Drop for ReadOnly {
 #[test]
 fn a_removal_that_fails_does_not_say_its_copies_are_orphaned() {
     let dir = workspace_with_copies();
-    flayer(dir.path(), &["add", "rule", "git/no-force-push", "Never"]).unwrap();
-    flayer(dir.path(), &["install", "git/no-force-push", "-p", "alpha"]).unwrap();
+    weaver(dir.path(), &["add", "rule", "git/no-force-push", "Never"]).unwrap();
+    weaver(dir.path(), &["install", "git/no-force-push", "-p", "alpha"]).unwrap();
     let folder = own_directory_for(dir.path(), Kind::Rule).join("git");
     let _read_only = ReadOnly::new(&folder);
 
-    let failure = flayer(dir.path(), &["remove", "git/no-force-push", "--yes"]).unwrap_err();
+    let failure = weaver(dir.path(), &["remove", "git/no-force-push", "--yes"]).unwrap_err();
 
     assert!(
         failure.error.to_string().contains("cannot be changed"),
@@ -343,9 +343,9 @@ fn a_removal_that_fails_does_not_say_its_copies_are_orphaned() {
 #[test]
 fn removing_one_installed_nowhere_says_nothing_of_projects() {
     let dir = workspace_with_copies();
-    flayer(dir.path(), &["add", "skill", "review", "How reviews go"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "review", "How reviews go"]).unwrap();
 
-    let outcome = flayer(dir.path(), &["remove", "review", "--yes"]).unwrap();
+    let outcome = weaver(dir.path(), &["remove", "review", "--yes"]).unwrap();
 
     assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
     assert!(outcome.ok);
@@ -354,11 +354,11 @@ fn removing_one_installed_nowhere_says_nothing_of_projects() {
 #[test]
 fn uninstall_orphaned_takes_out_what_nothing_offers_any_more_but_an_edit() {
     let dir = workspace_with_copies();
-    flayer(dir.path(), &["add", "skill", "review", "How reviews go"]).unwrap();
-    flayer(dir.path(), &["install", "review", "--all-projects"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "review", "How reviews go"]).unwrap();
+    weaver(dir.path(), &["install", "review", "--all-projects"]).unwrap();
     fs::remove_dir_all(own_directory_for(dir.path(), Kind::Skill).join("commit-style")).unwrap();
 
-    let outcome = flayer(dir.path(), &["uninstall", "--orphaned", "--all-projects"]).unwrap();
+    let outcome = weaver(dir.path(), &["uninstall", "--orphaned", "--all-projects"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -385,7 +385,7 @@ removed commit-style from beta
         .join("tanukeys/.claude/skills/commit-style/SKILL.md");
     assert!(fs::read_to_string(&theirs).unwrap().contains("Mine"));
 
-    let forced = flayer(
+    let forced = weaver(
         dir.path(),
         &["uninstall", "--orphaned", "-p", "collapse", "--force"],
     )
@@ -405,7 +405,7 @@ fn uninstall_orphaned_leaves_what_cannot_be_read_and_says_why() {
     )
     .unwrap();
 
-    let outcome = flayer(dir.path(), &["uninstall", "--orphaned", "-p", "alpha"]).unwrap();
+    let outcome = weaver(dir.path(), &["uninstall", "--orphaned", "-p", "alpha"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -443,7 +443,7 @@ fn mind_uninstall_orphaned_takes_them_out_of_the_project_it_is_in() {
 fn uninstall_orphaned_with_nothing_orphaned_says_so_and_does_not_fail() {
     let dir = workspace_with_copies();
 
-    let outcome = flayer(
+    let outcome = weaver(
         dir.path(),
         &["uninstall", "--orphaned", "-p", "alpha", "-p", "beta"],
     )
@@ -464,7 +464,7 @@ fn uninstall_takes_a_name_or_orphaned_and_not_both() {
         &["uninstall", "-p", "alpha", "deploy", "--orphaned"][..],
     ] {
         assert!(
-            FlayerCli::try_parse_from(line("flayer", args, dir.path())).is_err(),
+            WeaverCli::try_parse_from(line("flayer", args, dir.path())).is_err(),
             "{args:?}"
         );
     }

@@ -21,7 +21,7 @@ use crate::ledger::LedgerError;
 use crate::paths;
 use crate::relink::{self, Duplicate};
 use crate::settings::ProjectId;
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// How far below each root a scan looks unless it is told otherwise.
 ///
@@ -241,7 +241,7 @@ pub(crate) fn scans() -> usize {
 /// entered either: the first are tooling, and the second can loop. A root is
 /// entered whatever it is called and however it is reached, because somebody
 /// named it.
-pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
+pub fn scan(workspace: &WeaverWorkspace, request: &Request) -> Scan {
     #[cfg(test)]
     SCANS.with(|scans| scans.set(scans.get() + 1));
     // A root somebody named that is not there is a typo worth a warning; the
@@ -367,7 +367,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
 /// whose id nothing read, so a copy of it would pass for it moved; and one
 /// that opens holding another id holds another project, which the ledger
 /// follows the next time it is written
-/// ([`FlayerWorkspace::ledger_to_write`]). The ledger is read only when
+/// ([`WeaverWorkspace::ledger_to_write`]). The ledger is read only when
 /// there is something to match, and one that cannot be read is a failure
 /// beside what was found, which is listed with no move.
 ///
@@ -376,7 +376,7 @@ pub fn scan(workspace: &FlayerWorkspace, request: &Request) -> Scan {
 /// before anything wrote the ledger is found by nobody, and the entry is
 /// what `flayer relink` would be given for it, where `flayer link` would
 /// leave two entries for one project.
-fn follow(workspace: &FlayerWorkspace, from: &Path, scan: &mut Scan) {
+fn follow(workspace: &WeaverWorkspace, from: &Path, scan: &mut Scan) {
     let members = workspace.members();
     let mut held: Vec<(ProjectId, PathBuf)> = Vec::new();
     let found = scan
@@ -470,7 +470,7 @@ fn agent_files() -> Vec<PathBuf> {
 /// A project whose marker would not open is listed all the same: its marker
 /// still says it is one, and `flayer link`, refusing it, says why again.
 fn judge(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     directory: &Path,
     from: &Path,
     names: &[PathBuf],
