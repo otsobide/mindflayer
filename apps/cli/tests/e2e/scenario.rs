@@ -109,6 +109,18 @@ impl Scenario {
         self
     }
 
+    /// A project at `at` as a Mindflayer from before settings made one:
+    /// marked by a `.mind/mind.toml` naming the folders it authors in and
+    /// nothing else. No command of this build writes that marker any more,
+    /// so core's own `MindProject::init`, kept to write it for tests of such
+    /// a project, makes it, as that build's `mind init` did.
+    pub fn older_project(&self, at: &str) -> &Self {
+        let path = self.at(at);
+        fs::create_dir_all(&path).expect("make the project's folder");
+        mindflayer_core::MindProject::init(&path).expect("mark it with a mind.toml");
+        self
+    }
+
     /// A file at `at` holding `contents`, as an editor saves one.
     pub fn file(&self, at: &str, contents: &str) -> &Self {
         let path = self.at(at);
@@ -140,6 +152,13 @@ impl Scenario {
         let repository = gix::open(self.at(at)).expect("open the source");
         let id = repository.head_id().expect("a source has a commit");
         id.to_hex_with_len(7).to_string()
+    }
+
+    /// The commit the source at `at` is on, whole, as `--json` says it.
+    pub fn commit(&self, at: &str) -> String {
+        let repository = gix::open(self.at(at)).expect("open the source");
+        let id = repository.head_id().expect("a source has a commit");
+        id.to_string()
     }
 
     // ---------------------------------------------------------------------

@@ -200,3 +200,20 @@ fn a_url_carrying_a_token_is_refused_before_anything_is_fetched() {
              `flayer load <path>`\n",
         ));
 }
+
+#[test]
+fn flayer_validate_reads_the_shelf_beside_the_library_and_the_projects() {
+    let scenario = acme();
+    scenario.given("~/Projects", "flayer gather git ../src/acme-skills");
+
+    scenario
+        .run("~/Projects", "flayer validate")
+        .succeeds()
+        .prints(concat!(
+            "commit-style: ok\n",
+            "ddd-reviewer: ok\n",
+            "\n",
+            "2 skills checked, 0 invalid\n",
+        ))
+        .quiet();
+}

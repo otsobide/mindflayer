@@ -24,7 +24,10 @@
 //! <name>`). The use cases are grouped by what a person is doing: making
 //! projects and workspaces, writing skills and rules, installing them,
 //! gathering them from git, keeping copies up to date, reading what is
-//! where, and saying which workspace a command is about.
+//! where, saying which workspace a command is about, changing a project's
+//! agents, share and targets, adopting a skill somebody keeps, removing
+//! one everywhere, loading another workspace, upgrading what an older
+//! Mindflayer made, and reading it all as JSON.
 //!
 //! Unix alone: the reference's paths are a Unix home's, which a Windows
 //! path, its drive and its backslashes, never reads as, so every use case
@@ -56,6 +59,24 @@ mod reading;
 
 #[path = "e2e/workspaces.rs"]
 mod workspaces;
+
+#[path = "e2e/settings.rs"]
+mod settings;
+
+#[path = "e2e/adopting.rs"]
+mod adopting;
+
+#[path = "e2e/removing.rs"]
+mod removing;
+
+#[path = "e2e/loading.rs"]
+mod loading;
+
+#[path = "e2e/upgrading.rs"]
+mod upgrading;
+
+#[path = "e2e/json.rs"]
+mod json;
 
 #[path = "e2e/mistakes.rs"]
 mod mistakes;

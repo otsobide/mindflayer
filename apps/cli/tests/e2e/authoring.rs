@@ -197,3 +197,71 @@ fn remove_with_yes_deletes_the_skill() {
 
     assert!(!scenario.exists("~/Projects/collapse/skills/deploy"));
 }
+
+#[test]
+fn templates_lists_what_add_can_start_from_and_where_each_comes_from() {
+    let scenario = collapse_with_deploy();
+
+    scenario
+        .run("~/Projects/collapse", "mind templates")
+        .succeeds()
+        .prints("full  skill  built in\n")
+        .quiet();
+}
+
+#[test]
+fn a_skill_added_from_the_full_template_gets_its_sections_and_folders() {
+    let scenario = Scenario::projects(&["collapse"]);
+
+    scenario
+        .run(
+            "~/Projects/collapse",
+            "mind add skill deploy \"Ship the service\" --template full",
+        )
+        .succeeds()
+        .prints("created skill deploy at /home/you/Projects/collapse/skills/deploy/SKILL.md\n")
+        .quiet();
+    assert_eq!(
+        scenario.files("~/Projects/collapse/skills/deploy"),
+        ["SKILL.md", "references/.gitkeep", "scripts/.gitkeep"]
+    );
+    let manifest = scenario.read("~/Projects/collapse/skills/deploy/SKILL.md");
+    assert!(
+        manifest.starts_with("---\nname: deploy\ndescription: Ship the service\n---\n"),
+        "{manifest}"
+    );
+    scenario
+        .run("~/Projects/collapse", "mind validate")
+        .succeeds()
+        .prints("deploy: ok\n\n1 skill checked, 0 invalid\n");
+}
+
+#[test]
+fn a_template_of_the_projects_own_is_listed_and_copied_whole() {
+    let scenario = Scenario::projects(&["collapse"]);
+    scenario
+        .file(
+            "~/Projects/collapse/.mind/templates/runbook/SKILL.md",
+            "---\nname: runbook\ndescription: A runbook\n---\n\n# {{name}}\n\n{{description}}\n\n## Steps\n",
+        )
+        .file(
+            "~/Projects/collapse/.mind/templates/runbook/checklist.md",
+            "- [ ] page someone\n",
+        );
+
+    scenario
+        .run(
+            "~/Projects/collapse",
+            "mind add skill deploy \"Ship the service\" --template runbook",
+        )
+        .succeeds()
+        .quiet();
+    assert_eq!(
+        scenario.read("~/Projects/collapse/skills/deploy/SKILL.md"),
+        "---\nname: deploy\ndescription: Ship the service\n---\n\n# deploy\n\nShip the service\n\n## Steps\n"
+    );
+    assert_eq!(
+        scenario.read("~/Projects/collapse/skills/deploy/checklist.md"),
+        "- [ ] page someone\n"
+    );
+}
