@@ -746,7 +746,6 @@ fn rendered(
     records
         .into_iter()
         .map(|record| {
-            let file = install::rules::claude_file(&record.name);
             let found = |target: &Target| {
                 if target.path == agents_md::FILE {
                     block.iter().any(|route| route == record.name.as_str())
@@ -759,7 +758,10 @@ fn rendered(
                 .targets
                 .iter()
                 .any(|target| target.path == agents_md::FILE && found(target));
-            let given_file = record.targets.iter().find(|target| target.path == file);
+            let given_file = record
+                .targets
+                .iter()
+                .find(|target| install::rules::is_claude_file(&target.path, &record.name));
             let in_file = given_file.is_some_and(found);
             let reached = agents
                 .iter()

@@ -15,7 +15,7 @@
 //!   ([`Is`]), whether the workspace links it and whether it is a link, and
 //!   what the folder itself is, by the same words, so the one open can be
 //!   chosen too.
-//! - **Nothing a request may not name** ([`policy::path`]): a `.mindflayer`,
+//! - **Nothing a request may not name** ([`policy::path`]): a `.mindweaver`,
 //!   and a link leading into one, are never listed, since nothing in one
 //!   may be linked or scanned. A hidden folder is listed only when asked
 //!   for, and counted either way.
@@ -39,7 +39,7 @@ use thiserror::Error;
 use crate::code::{codes, Said};
 use crate::paths;
 use crate::policy;
-use crate::workspace::{MindProject, WeaverWorkspace, WEAVER_CONFIG, WEAVER_DIR};
+use crate::workspace::{MindProject, WeaverWorkspace};
 
 /// The most subfolders one listing holds: a thousand.
 ///
@@ -156,7 +156,7 @@ impl Is {
     fn of(folder: &Path) -> Is {
         if MindProject::is_marked(folder) {
             Is::Project
-        } else if folder.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file() {
+        } else if WeaverWorkspace::is_marked(folder) {
             Is::Workspace
         } else if folder.join(".git").exists() {
             // `exists`, not `is_dir`: a worktree or a submodule has a `.git`
@@ -337,7 +337,7 @@ impl Folders {
                 .collect(),
             // Spelled as normalizing it spells it, as core takes the home
             // everywhere else, so a launch's `HOME=/home/you/` still gives a
-            // way back; one relative or in a `.mindflayer` stays refused.
+            // way back; one relative or in a `.mindweaver` stays refused.
             home: home
                 .map(paths::normalize)
                 .as_deref()

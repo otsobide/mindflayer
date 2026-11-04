@@ -6,8 +6,8 @@
 //! would mean a `git clone` silently editing repositories.
 //!
 //! What lands where: a source's clone goes to
-//! `.mindflayer/cache/<source>/`, and each artifact it yields is copied to
-//! `.mindflayer/<kind folder>/<source>/<name>/`. Namespacing by source is what
+//! `.mindweaver/cache/<source>/`, and each artifact it yields is copied to
+//! `.mindweaver/<kind folder>/<source>/<name>/`. Namespacing by source is what
 //! lets two repositories both offer `commit-style`; [`crate::ledger`] is what
 //! remembers which is which.
 
@@ -186,7 +186,7 @@ pub struct Harvested {
 pub struct Report {
     /// The revision that was gathered from, when there was one.
     pub revision: Option<Revision>,
-    /// The folder under `.mindflayer/<kind>/` this source owns.
+    /// The folder under `.mindweaver/<kind>/` this source owns.
     pub directory: String,
     pub added: Vec<Harvested>,
     pub updated: Vec<Harvested>,

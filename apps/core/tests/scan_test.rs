@@ -73,7 +73,7 @@ fn linked_is_decided_by_where_an_entry_points() {
     fs::create_dir(dir.path().join("beta")).unwrap();
     MindProject::init(dir.path().join("beta")).unwrap();
     fs::write(
-        dir.path().join(".mindflayer/flayer.toml"),
+        dir.path().join(".mindweaver/weaver.toml"),
         "version = 2\nname = \"w\"\nprojects = [\"./beta\"]\n",
     )
     .unwrap();

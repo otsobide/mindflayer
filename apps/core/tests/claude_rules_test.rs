@@ -12,7 +12,7 @@ use mindweaver_core::claude_rules::{
     self, ClaudeRulesError, Mode, Recorded, Rendered, Warning, Written,
 };
 use mindweaver_core::{
-    hash, Agent, AgentHomes, Artifact, Directories, MindProject, Share, WeaverWorkspace,
+    hash, Agent, AgentHomes, Artifact, Directories, MindProject, Names, Share, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -82,7 +82,7 @@ impl Fixture {
         )
     }
 
-    /// `.claude/rules/mindflayer` in the project.
+    /// `.claude/rules/mindweaver` in the project.
     fn folder(&self) -> PathBuf {
         self.project.root().join(claude_rules::folder())
     }
@@ -103,7 +103,7 @@ impl Fixture {
         let mut excludes = repository
             .excludes(&index, None, Default::default())
             .unwrap();
-        let path = format!("app/.claude/rules/mindflayer/{route}.md");
+        let path = format!("app/.claude/rules/mindweaver/{route}.md");
         excludes
             .at_path(path.as_str(), Some(gix::index::entry::Mode::FILE))
             .unwrap()
@@ -174,6 +174,7 @@ fn a_path_scoped_rule_is_one_file_and_no_section_in_the_block() {
         [Recorded {
             route: "rust/errors".to_owned(),
             hash: hash::bytes(SCOPED.as_bytes()),
+            names: Names::Mindweaver,
         }]
     );
     // Said, naming the project's agents it does not reach.
@@ -287,6 +288,7 @@ fn a_changed_rule_replaces_its_file_and_an_unchanged_one_is_left_alone() {
             Recorded {
                 route: "a".to_owned(),
                 hash: hash::bytes(b"Rule a, changed.\n"),
+                names: Names::Mindweaver,
             },
             first.recorded()[1].clone(),
         ]
@@ -597,6 +599,7 @@ fn a_recorded_route_that_is_no_name_is_refused_and_nothing_is_taken_away() {
     let recorded = [Recorded {
         route: "../../../../precious".to_owned(),
         hash: hash::bytes(UNSCOPED.as_bytes()),
+        names: Names::Mindweaver,
     }];
 
     let refused = fixture.render(&[], Mode::Fallback, &recorded);
@@ -632,8 +635,8 @@ fn a_local_project_keeps_its_rule_files_out_of_git_and_takes_them_back_in() {
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
         format!(
-            "{before}# mindflayer:begin\n# project {id}\n/app/.claude/rules/mindflayer/a.md\n\
-             /app/.claude/rules/mindflayer/git/no-force-push.md\n# mindflayer:end\n"
+            "{before}# mindweaver:begin\n# project {id}\n/app/.claude/rules/mindweaver/a.md\n\
+             /app/.claude/rules/mindweaver/git/no-force-push.md\n# mindweaver:end\n"
         )
     );
     assert!(fixture.ignored("a"));
@@ -697,7 +700,7 @@ fn a_local_project_outside_git_is_told_nothing_keeps_its_files_out() {
 fn an_exclude_block_that_cannot_be_read_refuses_the_render_with_nothing_written() {
     let fixture = fixture_with(Share::Local, true);
     let file = fixture.exclude_file();
-    fs::write(&file, "# mindflayer:begin\n/mine/\n").unwrap();
+    fs::write(&file, "# mindweaver:begin\n/mine/\n").unwrap();
     let rule = fixture.rule("a", "Rule a.\n");
 
     let refused = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap_err();
@@ -710,7 +713,7 @@ fn an_exclude_block_that_cannot_be_read_refuses_the_render_with_nothing_written(
     assert!(!fixture.folder().exists());
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
-        "# mindflayer:begin\n/mine/\n"
+        "# mindweaver:begin\n/mine/\n"
     );
 }
 
@@ -743,8 +746,8 @@ fn a_file_that_fails_to_land_takes_its_exclude_entry_back_out() {
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
         format!(
-            "{before}# mindflayer:begin\n# project {id}\n\
-             /app/.claude/rules/mindflayer/review/tone.md\n# mindflayer:end\n"
+            "{before}# mindweaver:begin\n# project {id}\n\
+             /app/.claude/rules/mindweaver/review/tone.md\n# mindweaver:end\n"
         )
     );
 }
@@ -849,6 +852,7 @@ fn a_link_out_of_the_project_is_refused_and_nothing_is_written_or_taken_away_the
     let recorded = [Recorded {
         route: "a".to_owned(),
         hash: hash::bytes(b"Rule a.\n"),
+        names: Names::Mindweaver,
     }];
 
     for rules in [vec![&rule], vec![]] {
@@ -862,7 +866,7 @@ fn a_link_out_of_the_project_is_refused_and_nothing_is_written_or_taken_away_the
         }
     }
     assert!(theirs.exists());
-    assert!(!outside.path().join("rules/mindflayer/b.md").exists());
+    assert!(!outside.path().join("rules/mindweaver/b.md").exists());
 }
 
 #[cfg(unix)]
@@ -877,7 +881,7 @@ fn a_link_inside_the_project_is_followed() {
     let rendered = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap();
 
     assert_eq!(written(&rendered), [("a", Written::Created)]);
-    assert!(kept.join("rules/mindflayer/a.md").is_file());
+    assert!(kept.join("rules/mindweaver/a.md").is_file());
 }
 
 #[test]

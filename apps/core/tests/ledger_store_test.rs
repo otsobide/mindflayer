@@ -199,6 +199,7 @@ every_store![
     a_gathered_artifact_reads_back_with_its_source,
     gathering_a_name_again_from_one_source_replaces_it_and_from_another_adds_it,
     what_was_gathered_is_listed_by_name_then_source,
+    a_shelf_moved_moves_every_path_under_it_and_nothing_else,
     no_credential_typed_into_a_url_comes_back_from_the_store,
     a_url_typed_with_a_credential_and_without_it_is_one_source,
     nothing_stored_through_the_port_is_left_to_scrub,
@@ -1528,7 +1529,7 @@ fn a_gathered_artifact_reads_back_with_its_source(store: Store) {
     let revision = RevisionMother::random();
     store.saw_source(from.id, Some(revision.as_str())).unwrap();
     let name = ArtifactNameMother::random();
-    let path = format!(".mindflayer/skills/{}/{name}", from.directory);
+    let path = format!(".mindweaver/skills/{}/{name}", from.directory);
     let summary = random::chance().then(|| random::text(30));
 
     store
@@ -1606,6 +1607,60 @@ fn gathering_a_name_again_from_one_source_replaces_it_and_from_another_adds_it(m
     assert_eq!(replaced[0].summary, None);
     assert_eq!(replaced[0].revision.as_ref(), Some(&revision));
     assert_eq!(of(&second)[0].summary.as_deref(), Some("Other"));
+}
+
+fn a_shelf_moved_moves_every_path_under_it_and_nothing_else(mut store: Store) {
+    let from = source(&store, &UrlMother::https());
+    let names = distinct_names(3);
+    let under = format!(".{}/skills/{}", random::word(), random::word());
+    store
+        .record(
+            &from,
+            Kind::Skill,
+            &names[0],
+            &format!("{under}/a"),
+            None,
+            None,
+        )
+        .unwrap();
+    store
+        .record(
+            &from,
+            Kind::Rule,
+            &names[1],
+            &format!("{under}/b.md"),
+            None,
+            None,
+        )
+        .unwrap();
+    // Beside it, spelled to look like it: a prefix of characters is not
+    // a folder.
+    let beside = format!("{under}_beside/c");
+    store
+        .record(&from, Kind::Skill, &names[2], &beside, None, None)
+        .unwrap();
+
+    let moved = store
+        .shelf_moved(&format!("{under}/"), "elsewhere/")
+        .unwrap();
+
+    store.reopen();
+    assert_eq!(moved, 2);
+    let mut paths: Vec<String> = store
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|gathered| gathered.path)
+        .collect();
+    paths.sort();
+    let mut expected = vec![
+        String::from("elsewhere/a"),
+        String::from("elsewhere/b.md"),
+        beside,
+    ];
+    expected.sort();
+    assert_eq!(paths, expected);
+    assert_eq!(store.shelf_moved("nowhere/", "anywhere/").unwrap(), 0);
 }
 
 fn what_was_gathered_is_listed_by_name_then_source(mut store: Store) {

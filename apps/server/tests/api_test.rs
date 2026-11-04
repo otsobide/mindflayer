@@ -287,7 +287,7 @@ async fn every_answer_under_the_api_that_is_no_success_carries_an_error_and_a_co
         ),
         (
             "a change by cookie without the header",
-            without(by_cookie(), "x-mindflayer"),
+            without(by_cookie(), "x-mindweaver"),
         ),
         (
             "a change by cookie as text",

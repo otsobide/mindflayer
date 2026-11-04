@@ -62,8 +62,9 @@ fail() {
 mkdir "$scratch/home" "$scratch/here"
 (
 	cd "$scratch/here"
-	exec env -u MINDFLAYER_HOME -u MINDFLAYER_WORKSPACE -u CLAUDE_CONFIG_DIR \
-		-u CODEX_HOME -u OPENCODE_CONFIG_DIR HOME="$scratch/home" \
+	exec env -u MINDWEAVER_HOME -u MINDWEAVER_WORKSPACE -u MINDFLAYER_HOME \
+		-u MINDFLAYER_WORKSPACE -u CLAUDE_CONFIG_DIR -u CODEX_HOME \
+		-u OPENCODE_CONFIG_DIR HOME="$scratch/home" \
 		"$binary" ui --no-open --port 0 --home="$scratch/home" --workspace= \
 		--claude-config-dir= --codex-home= --opencode-config-dir= --agents-dir=
 ) >"$scratch/stdout" 2>"$scratch/stderr" &

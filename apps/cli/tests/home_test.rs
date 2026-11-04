@@ -69,7 +69,7 @@ fn weaver_show_reads_the_default_workspace_without_making_it() {
     assert!(outcome.stdout.contains("Ship it"), "{}", outcome.stdout);
     assert_eq!(outcome.stderr, vec![hint(home.path())]);
     assert!(outcome.ok);
-    // `.mindflayer` is there already, holding the library the skill is in,
+    // `.mindweaver` is there already, holding the library the skill is in,
     // and the read adds nothing beside it: no marker, no ledger, no cache.
     let inside: Vec<_> = fs::read_dir(home.path().join(WEAVER_DIR))
         .unwrap()

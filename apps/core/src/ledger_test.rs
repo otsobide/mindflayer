@@ -514,14 +514,14 @@ fn an_entry_quoting_a_credentialed_url_anywhere_serializes_none() {
 
 #[test]
 fn each_ledger_error_of_its_own_gives_its_own_code() {
-    for (error, code) in every_own_error("/w/.mindflayer/mindflayer.db") {
+    for (error, code) in every_own_error("/w/.mindweaver/mindweaver.db") {
         assert_eq!(error.code(), code, "{error:?}");
     }
 }
 
 #[test]
 fn the_codes_a_ledger_error_gives_of_its_own_are_listed_in_order() {
-    let given: Vec<&str> = every_own_error("/w/.mindflayer/mindflayer.db")
+    let given: Vec<&str> = every_own_error("/w/.mindweaver/mindweaver.db")
         .into_iter()
         .map(|(_, code)| code)
         .collect();
@@ -535,8 +535,8 @@ fn the_codes_a_ledger_error_gives_of_its_own_are_listed_in_order() {
 #[test]
 fn a_ledger_error_carrying_the_lock_s_gives_the_lock_s_code() {
     for lock in [
-        lock_busy("/w/.mindflayer/lock"),
-        lock_unopened("/w/.mindflayer/lock"),
+        lock_busy("/w/.mindweaver/lock"),
+        lock_unopened("/w/.mindweaver/lock"),
     ] {
         let code = lock.code();
         let error = LedgerError::from(lock);
@@ -548,7 +548,7 @@ fn a_ledger_error_carrying_the_lock_s_gives_the_lock_s_code() {
 
 #[test]
 fn a_ledger_error_carrying_the_lock_s_says_what_the_lock_says() {
-    let lock = lock_busy("/w/.mindflayer/lock");
+    let lock = lock_busy("/w/.mindweaver/lock");
     let said = lock.to_string();
 
     assert_eq!(LedgerError::Lock(lock).to_string(), said);
@@ -557,7 +557,7 @@ fn a_ledger_error_carrying_the_lock_s_says_what_the_lock_says() {
 #[test]
 fn every_ledger_error_names_the_file_it_is_about() {
     for _ in 0..20 {
-        let path = format!("/{}/.mindflayer/{LEDGER_FILE}", random::word());
+        let path = format!("/{}/.mindweaver/{LEDGER_FILE}", random::word());
         for (error, _) in every_own_error(&path) {
             assert_eq!(error.path(), Path::new(&path), "{error:?}");
             assert!(error.to_string().starts_with(&path), "{error}");
@@ -567,23 +567,23 @@ fn every_ledger_error_names_the_file_it_is_about() {
 
 #[test]
 fn a_ledger_error_carrying_the_lock_s_names_the_lock_file() {
-    let error = LedgerError::Lock(lock_unopened("/w/.mindflayer/lock"));
+    let error = LedgerError::Lock(lock_unopened("/w/.mindweaver/lock"));
 
-    assert_eq!(error.path(), Path::new("/w/.mindflayer/lock"));
+    assert_eq!(error.path(), Path::new("/w/.mindweaver/lock"));
 }
 
 #[test]
 fn a_ledger_too_new_says_which_schema_it_holds_and_which_this_build_reads() {
     let found = SCHEMA_VERSION + random::between(1, 50) as u32;
     let error = LedgerError::Version {
-        path: PathBuf::from("/w/.mindflayer/mindflayer.db"),
+        path: PathBuf::from("/w/.mindweaver/mindweaver.db"),
         found,
     };
 
     assert_eq!(
         error.to_string(),
         format!(
-            "/w/.mindflayer/mindflayer.db: written by a newer Mindweaver \
+            "/w/.mindweaver/mindweaver.db: written by a newer Mindweaver \
              (schema version {found}, this one reads {SCHEMA_VERSION})"
         )
     );
@@ -606,12 +606,12 @@ fn a_failed_query_says_what_it_was_doing_and_what_the_store_said() {
 #[test]
 fn an_unmade_ledger_says_no_workspace_is_there_to_write_to() {
     let error = LedgerError::Unmade {
-        path: PathBuf::from("/w/.mindflayer/mindflayer.db"),
+        path: PathBuf::from("/w/.mindweaver/mindweaver.db"),
     };
 
     assert_eq!(
         error.to_string(),
-        "/w/.mindflayer/mindflayer.db: no workspace has been made here yet, \
+        "/w/.mindweaver/mindweaver.db: no workspace has been made here yet, \
          so there is no ledger to write to"
     );
 }

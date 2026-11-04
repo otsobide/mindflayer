@@ -641,8 +641,8 @@ fn the_ledger_lands_beside_the_marker_file() {
 
     assert!(dir
         .path()
-        .join(".mindflayer")
-        .join("mindflayer.db")
+        .join(".mindweaver")
+        .join("mindweaver.db")
         .is_file());
 }
 
@@ -833,7 +833,7 @@ fn a_source_that_becomes_one_with_another_takes_its_folders_with_it() {
                         subdirectory, '{older}', 0, 0 FROM sources;
              INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
                  VALUES ('skill', 'deploy', (SELECT id FROM sources WHERE directory = '{older}'),
-                         '.mindflayer/skills/{older}/deploy', 0);"
+                         '.mindweaver/skills/{older}/deploy', 0);"
         ))
         .unwrap();
 
@@ -931,7 +931,7 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
         directory: name.to_owned(),
         summary: Some(format!("About {name}")),
         path: std::path::PathBuf::from(format!(
-            "/work/.mindflayer/skills/github.com-acme-skills/{name}"
+            "/work/.mindweaver/skills/github.com-acme-skills/{name}"
         )),
     };
     let report = gather::Report {
@@ -941,7 +941,7 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
         updated: Vec::new(),
         unchanged: vec![harvested("review")],
         failures: vec![gather::Failure::UnusableName {
-            path: std::path::PathBuf::from("/work/.mindflayer/cache/x"),
+            path: std::path::PathBuf::from("/work/.mindweaver/cache/x"),
         }],
         warnings: vec![Warning {
             path: std::path::PathBuf::from("/work/SKILL.md"),
@@ -956,10 +956,10 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
         concat!(
             r#"{"revision":"4f9c2a7","directory":"github.com-acme-skills","#,
             r#""added":[{"name":"deploy","directory":"deploy","summary":"About deploy","#,
-            r#""path":"/work/.mindflayer/skills/github.com-acme-skills/deploy"}],"#,
+            r#""path":"/work/.mindweaver/skills/github.com-acme-skills/deploy"}],"#,
             r#""updated":[],"#,
             r#""unchanged":[{"name":"review","directory":"review","summary":"About review","#,
-            r#""path":"/work/.mindflayer/skills/github.com-acme-skills/review"}]}"#,
+            r#""path":"/work/.mindweaver/skills/github.com-acme-skills/review"}]}"#,
         )
     );
 }

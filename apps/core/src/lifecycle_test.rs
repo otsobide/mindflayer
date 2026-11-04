@@ -534,7 +534,7 @@ fn no_workspace_is_no_library() {
         assert!(!library(
             None,
             kind,
-            Path::new("/home/you/.mindflayer/skills")
+            Path::new("/home/you/.mindweaver/skills")
         ));
     }
 }

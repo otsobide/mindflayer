@@ -257,8 +257,8 @@ fn a_rules_copy_from_before_settings_goes_with_the_next_render_unless_changed() 
         rendered.warnings
     );
     let text = fs::read_to_string(project.root().join("AGENTS.md")).unwrap();
-    assert!(text.contains("<!-- mindflayer:rule git/no-force-push -->"));
-    assert!(text.contains("<!-- mindflayer:rule review/tone -->"));
+    assert!(text.contains("<!-- mindweaver:rule git/no-force-push -->"));
+    assert!(text.contains("<!-- mindweaver:rule review/tone -->"));
     // Each record names only what the render wrote, the changed copy no
     // longer among them: it is the project's own.
     for record in ledger.records("app", Kind::Rule).unwrap() {
@@ -617,7 +617,7 @@ fn in_block(hash: ContentHash) -> Target {
 fn for_claude(route: &str, source: &str) -> Target {
     Target {
         agent: Some(String::from("claude")),
-        path: format!(".claude/rules/mindflayer/{route}.md"),
+        path: format!(".claude/rules/mindweaver/{route}.md"),
         content_hash: Some(hash::bytes(source.as_bytes())),
     }
 }
@@ -652,11 +652,11 @@ fn two_rules_rendered_again_and_one_taken_out_leave_the_block_and_the_ledger_ali
         "{second:?}"
     );
     let both = format!(
-        "{TEAM}\n<!-- mindflayer:begin -->\n\
-         <!-- mindflayer:rule git/no-force-push -->\n{NO_FORCE_PUSH}\n\
-         <!-- mindflayer:rule review/tone -->\n\
+        "{TEAM}\n<!-- mindweaver:begin -->\n\
+         <!-- mindweaver:rule git/no-force-push -->\n{NO_FORCE_PUSH}\n\
+         <!-- mindweaver:rule review/tone -->\n\
          Say what a change does before what is wrong with it.\n\
-         <!-- mindflayer:end -->\n"
+         <!-- mindweaver:end -->\n"
     );
     assert_eq!(fixture.text(), both);
     // Claude reads the block itself, so no rule about every file is a file
@@ -697,9 +697,9 @@ fn two_rules_rendered_again_and_one_taken_out_leave_the_block_and_the_ledger_ali
     assert_eq!(
         fixture.text(),
         format!(
-            "{TEAM}\n<!-- mindflayer:begin -->\n\
-             <!-- mindflayer:rule git/no-force-push -->\n{NO_FORCE_PUSH}\
-             <!-- mindflayer:end -->\n"
+            "{TEAM}\n<!-- mindweaver:begin -->\n\
+             <!-- mindweaver:rule git/no-force-push -->\n{NO_FORCE_PUSH}\
+             <!-- mindweaver:end -->\n"
         )
     );
     assert_eq!(fixture.records(), recorded[..1]);
@@ -832,7 +832,7 @@ fn a_tracked_agents_md_in_a_local_project_is_left_alone_and_claude_gets_the_fall
         fs::read_to_string(fixture.claude_file("git/no-force-push")).unwrap(),
         NO_FORCE_PUSH
     );
-    assert!(fixture.ignored(".claude/rules/mindflayer/git/no-force-push.md"));
+    assert!(fixture.ignored(".claude/rules/mindweaver/git/no-force-push.md"));
     assert_eq!(
         rendered.warnings,
         [Warning::Withheld {
@@ -870,7 +870,7 @@ fn a_tracked_agents_md_in_a_shared_project_takes_the_block() {
 
     assert!(fixture
         .text()
-        .contains("<!-- mindflayer:rule git/no-force-push -->"));
+        .contains("<!-- mindweaver:rule git/no-force-push -->"));
     assert!(done.rendered.unwrap().warnings.is_empty());
 }
 
@@ -890,7 +890,7 @@ fn a_tracked_agents_md_in_a_local_project_with_edit_tracked_takes_the_block() {
     assert!(fixture.text().starts_with(TEAM));
     assert!(fixture
         .text()
-        .contains("<!-- mindflayer:rule git/no-force-push -->"));
+        .contains("<!-- mindweaver:rule git/no-force-push -->"));
     let rendered = done.rendered.unwrap();
     assert_eq!(rendered.block.unwrap().written, agents_md::Written::Changed);
     assert!(rendered.warnings.is_empty(), "{:?}", rendered.warnings);
@@ -1001,7 +1001,7 @@ fn a_rule_about_some_files_is_a_file_for_claude_alone_and_says_so() {
     assert!(!fixture
         .project
         .root()
-        .join(".claude/rules/mindflayer")
+        .join(".claude/rules/mindweaver")
         .exists());
     assert!(fixture.records().is_empty());
 }
@@ -1024,7 +1024,7 @@ fn claude_given_the_rules_by_its_own_files_has_each_once() {
     );
     assert!(fixture
         .text()
-        .contains("<!-- mindflayer:rule git/no-force-push -->"));
+        .contains("<!-- mindweaver:rule git/no-force-push -->"));
     assert_eq!(
         fs::read_to_string(fixture.claude_file("git/no-force-push")).unwrap(),
         NO_FORCE_PUSH
@@ -1073,7 +1073,7 @@ fn a_section_this_workspace_did_not_write_is_somebodys_and_refuses_the_render() 
     fixture.rule("git/no-force-push", NO_FORCE_PUSH);
     fixture.rule("review/tone", TONE);
     let theirs = format!(
-        "{TEAM}\n<!-- mindflayer:begin -->\n<!-- mindflayer:rule review/tone -->\nTheirs.\n<!-- mindflayer:end -->\n"
+        "{TEAM}\n<!-- mindweaver:begin -->\n<!-- mindweaver:rule review/tone -->\nTheirs.\n<!-- mindweaver:end -->\n"
     );
     fs::write(fixture.agents_md(), &theirs).unwrap();
 
@@ -1186,9 +1186,9 @@ fn rules_no_longer_offered_can_each_be_taken_out_and_the_rest_stay_as_they_are()
     assert_eq!(
         fixture.text(),
         format!(
-            "{TEAM}\n<!-- mindflayer:begin -->\n\
-             <!-- mindflayer:rule git/no-force-push -->\nNever force-push, ever.\n\
-             <!-- mindflayer:end -->\n"
+            "{TEAM}\n<!-- mindweaver:begin -->\n\
+             <!-- mindweaver:rule git/no-force-push -->\nNever force-push, ever.\n\
+             <!-- mindweaver:end -->\n"
         )
     );
     assert_eq!(
@@ -1248,11 +1248,11 @@ fn a_render_keeps_another_rules_edited_section_as_the_block_holds_it_and_says_so
     assert_eq!(
         fixture.text(),
         format!(
-            "{TEAM}\n<!-- mindflayer:begin -->\n\
-             <!-- mindflayer:rule git/no-force-push -->\nNever force-push, ever.\n\n\
-             <!-- mindflayer:rule review/tone -->\n\
+            "{TEAM}\n<!-- mindweaver:begin -->\n\
+             <!-- mindweaver:rule git/no-force-push -->\nNever force-push, ever.\n\n\
+             <!-- mindweaver:rule review/tone -->\n\
              Say what a change does before what is wrong with it.\nBe kind.\n\
-             <!-- mindflayer:end -->\n"
+             <!-- mindweaver:end -->\n"
         )
     );
     // Its record is what was rendered, so it reads as edited still.
@@ -1335,7 +1335,7 @@ fn a_forced_change_writes_over_and_takes_away_an_edited_file_for_claude() {
 fn a_block_that_cannot_be_read_refuses_the_install_with_nothing_recorded() {
     let fixture = fixture(Share::Shared, &Agent::ALL);
     fixture.rule("git/no-force-push", NO_FORCE_PUSH);
-    let broken = "<!-- mindflayer:begin -->\nLeft open.\n";
+    let broken = "<!-- mindweaver:begin -->\nLeft open.\n";
     fs::write(fixture.agents_md(), broken).unwrap();
 
     let refused = fixture.try_install("git/no-force-push").unwrap_err();
@@ -1597,7 +1597,7 @@ fn a_name_two_kinds_offer_is_installed_only_as_the_kind_it_is_qualified_with() {
 
     fixture.install_typed("rule:deploy");
 
-    assert!(fixture.text().contains("<!-- mindflayer:rule deploy -->"));
+    assert!(fixture.text().contains("<!-- mindweaver:rule deploy -->"));
     assert!(!fixture
         .project
         .root()
@@ -1656,7 +1656,7 @@ fn a_bare_name_installed_as_two_kinds_is_taken_out_only_once_qualified() {
         refused.to_string(),
         "`deploy` is installed as a skill and as a rule, so say which: `skill:deploy` or `rule:deploy`"
     );
-    assert!(fixture.text().contains("<!-- mindflayer:rule deploy -->"));
+    assert!(fixture.text().contains("<!-- mindweaver:rule deploy -->"));
     let (kind, _) = fixture.uninstall_typed("skill:deploy").unwrap();
     assert_eq!(kind, Kind::Skill);
     assert!(!fixture
@@ -1664,14 +1664,14 @@ fn a_bare_name_installed_as_two_kinds_is_taken_out_only_once_qualified() {
         .root()
         .join(".claude/skills/deploy")
         .exists());
-    assert!(fixture.text().contains("<!-- mindflayer:rule deploy -->"));
+    assert!(fixture.text().contains("<!-- mindweaver:rule deploy -->"));
 }
 
 #[test]
 fn a_bare_name_nothing_records_says_whose_is_there_of_either_kind() {
     let fixture = fixture(Share::Shared, &Agent::ALL);
     let theirs = format!(
-        "{TEAM}\n<!-- mindflayer:begin -->\n<!-- mindflayer:rule review/tone -->\nTheirs.\n<!-- mindflayer:end -->\n"
+        "{TEAM}\n<!-- mindweaver:begin -->\n<!-- mindweaver:rule review/tone -->\nTheirs.\n<!-- mindweaver:end -->\n"
     );
     fs::write(fixture.agents_md(), &theirs).unwrap();
     let skill = fixture.project.root().join(".claude/skills/notes");
@@ -1967,4 +1967,120 @@ fn a_change_aimed_at_a_rule_the_project_received_is_refused_as_received() {
         ),
         Err(LifecycleError::NotFound { .. })
     ));
+}
+
+/// A block a Mindflayer build rendered is given a new rule's section under
+/// its own markers, and taken out with its last rule as a new one is.
+#[test]
+fn a_block_a_mindflayer_build_rendered_is_rendered_again_under_its_markers() {
+    let fixture = fixture(Share::Shared, &[Agent::Codex]);
+    fixture.rule("a", "Rule a.\n");
+    fixture.rule("b", "Rule b.\n");
+    fixture.install("a");
+    mindweaver_core::mother::MindflayerMother::rendered_into(fixture.project.root());
+
+    fixture.install("b");
+
+    let text = fixture.text();
+    assert!(text.contains(agents_md::FLAYER_BEGIN), "{text}");
+    assert!(text.contains("<!-- mindflayer:rule b -->"), "{text}");
+    assert!(!text.contains("mindweaver:"), "{text}");
+    assert_eq!(fixture.standing("a"), Standing::Current);
+    assert_eq!(fixture.standing("b"), Standing::Current);
+
+    fixture.uninstall("a");
+    fixture.uninstall("b");
+    assert!(!fixture.agents_md().exists());
+}
+
+/// Claude's file of a rule a Mindflayer build installed stays in the folder
+/// it was filed in, written over and taken away there, while a rule given a
+/// file since goes into the new one.
+#[test]
+fn a_rule_file_a_mindflayer_build_filed_stays_where_its_record_says() {
+    let scoped = |says: &str| format!("---\npaths:\n  - \"src/**\"\n---\n{says}\n");
+    let fixture = fixture(Share::Local, &[Agent::Claude]);
+    fixture.rule("a", &scoped("Rule a."));
+    fixture.rule("b", &scoped("Rule b."));
+    fixture.install("a");
+    mindweaver_core::mother::MindflayerMother::installed_into(&fixture.workspace, &fixture.project);
+    let old = |route: &str| {
+        fixture
+            .project
+            .root()
+            .join(".claude/rules/mindflayer")
+            .join(format!("{route}.md"))
+    };
+    assert!(old("a").is_file());
+    assert_eq!(fixture.standing("a"), Standing::Current);
+
+    fixture.rule("a", &scoped("Rule a, changed."));
+    fixture.install("a");
+    fixture.install("b");
+
+    assert_eq!(
+        fs::read_to_string(old("a")).unwrap(),
+        scoped("Rule a, changed.")
+    );
+    assert!(!fixture.claude_file("a").exists());
+    assert_eq!(
+        fs::read_to_string(fixture.claude_file("b")).unwrap(),
+        scoped("Rule b.")
+    );
+    assert!(!old("b").exists());
+    assert!(fixture.ignored(".claude/rules/mindflayer/a.md"));
+    assert!(fixture.ignored(".claude/rules/mindweaver/b.md"));
+    let paths: Vec<String> = fixture
+        .records()
+        .into_iter()
+        .flat_map(|record| record.targets)
+        .map(|target| target.path)
+        .collect();
+    assert_eq!(
+        paths,
+        [
+            ".claude/rules/mindflayer/a.md",
+            ".claude/rules/mindweaver/b.md"
+        ]
+    );
+
+    fixture.uninstall("a");
+    assert!(!old("a").exists());
+    assert!(
+        !fixture
+            .project
+            .root()
+            .join(".claude/rules/mindflayer")
+            .exists(),
+        "its emptied folder goes with it"
+    );
+    assert!(!fixture.ignored(".claude/rules/mindflayer/a.md"));
+    assert_eq!(fixture.standing("b"), Standing::Current);
+}
+
+/// A file at a rule's place in the folder a Mindflayer build filed them in,
+/// that nothing records, is somebody's: the rule is not given a second file
+/// in the new folder, which Claude would read beside it.
+#[test]
+fn a_file_for_claude_in_mindflayer_s_folder_nothing_recorded_is_somebodys() {
+    let fixture = fixture(Share::Shared, &Agent::ALL);
+    fixture.rule("rust/errors", SCOPED);
+    let file = fixture
+        .project
+        .root()
+        .join(".claude/rules/mindflayer/rust/errors.md");
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, SCOPED).unwrap();
+
+    let refused = fixture.install("rust/errors");
+
+    assert_eq!(
+        refused.installed,
+        Installed::Foreign {
+            name: "rust/errors".into(),
+            path: file,
+        }
+    );
+    assert!(!fixture.claude_file("rust/errors").exists());
+    assert!(fixture.records().is_empty());
 }

@@ -184,7 +184,7 @@ refuses.
 | Block-level HTML comments are stripped before injection, and the text between two comment lines is kept. So #42's block reaches Claude without its markers. | verified | Run 2, `claude-excluded` (native), `claude-import` (imported) and `claude-user-memory` (native): the token inside the rule's marker never reached the model, and the rule text below it did. The [memory](https://code.claude.com/docs/en/memory) docs say the same. |
 | `AGENTS.md` is read natively since 2.1.277 (2.1.281 on Bedrock, Vertex, Foundry, gateways and with telemetry off). | docs-only | [changelog](https://code.claude.com/docs/en/changelog). The run had non-essential traffic off and read it on 2.1.309. Fallback: the import (#44) covers older versions when a `CLAUDE.md` exists; an older Claude in a project without one is documented, not handled. |
 | The "Project instructions" setting can switch native `AGENTS.md` reading off or on beside `CLAUDE.md`. | docs-only | [memory](https://code.claude.com/docs/en/memory). Out of #44's scope, which assumes the default. |
-| How an empty `CLAUDE_CONFIG_DIR` is read. | docs-only | The [docs](https://code.claude.com/docs/en/env-vars) are silent, and no run tried one. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--claude-config-dir` names it outright. An [open question](architecture.md#open-questions). |
+| How an empty `CLAUDE_CONFIG_DIR` is read. | docs-only | The [docs](https://code.claude.com/docs/en/env-vars) are silent, and no run tried one. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDWEAVER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--claude-config-dir` names it outright. An [open question](architecture.md#open-questions). |
 
 ### The Claude Code runs
 
@@ -197,6 +197,13 @@ moved under the temp home. `claude-touch`, `claude-parent` and `claude-local`
 stand from run 1; their kept files meet every verdict added since (the tools
 called, the turns taken and the debug log's count of native `AGENTS.md`
 reads).
+
+The runs, and the probe's scripts, spell the markers and Claude's rules
+folder as Mindflayer wrote them, `mindflayer:` and `.claude/rules/mindflayer`
+(D-26): what they verified is of a comment and a folder under
+`.claude/rules`, whatever word either holds, so it holds of `mindweaver:`
+and `.claude/rules/mindweaver` alike. The probe's own rename is #18's, with
+the scripts it changes.
 
 - **When:** 2026-10-26; run 1 from 18:43 to 18:44 UTC, run 2 from 19:18:24
   to 19:18:40 UTC.
@@ -535,7 +542,7 @@ developers.openai.com/codex to learn.chatgpt.com.
 | A project marked `trust_level = "untrusted"` skips project `AGENTS.md`; one with no trust entry still reads it. | docs-only | Source, [agents_md.rs](https://github.com/openai/codex/blob/main/codex-rs/core/src/agents_md.rs), [config_toml.rs](https://github.com/openai/codex/blob/main/codex-rs/config/src/config_toml.rs). Check 5 was not run. Fallback: a check that reads Codex's config (#96) can say a project is distrusted. |
 | An ignored `AGENTS.md` is read. | docs-only | Source search only. Fallback: shared mode, or `edit_tracked` for a tracked `AGENTS.md`, which no exclude touches. |
 | `CODEX_HOME` moves `~/.codex`. | docs-only | [config-reference](https://learn.chatgpt.com/docs/config-file/config-reference). Fallback: `--codex-home` names the folder outright. |
-| How an empty `CODEX_HOME` is read. | docs-only | The docs are silent. The source requires a set `CODEX_HOME` to name an existing folder ([home-dir](https://github.com/openai/codex/blob/main/codex-rs/utils/home-dir/src/lib.rs)), so an empty one may be refused rather than taken for unset; not run. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--codex-home` names it outright. An [open question](architecture.md#open-questions). |
+| How an empty `CODEX_HOME` is read. | docs-only | The docs are silent. The source requires a set `CODEX_HOME` to name an existing folder ([home-dir](https://github.com/openai/codex/blob/main/codex-rs/utils/home-dir/src/lib.rs)), so an empty one may be refused rather than taken for unset; not run. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDWEAVER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--codex-home` names it outright. An [open question](architecture.md#open-questions). |
 
 ## OpenCode
 
@@ -573,7 +580,7 @@ opencode.ai/v2/docs) ([releases](https://github.com/anomalyco/opencode/releases)
 |---|---|---|
 | `OPENCODE_CONFIG_DIR` adds a folder loaded after `~/.config/opencode` and the project's `.opencode`; it does not replace `~/.config/opencode`. | docs-only | [config](https://opencode.ai/docs/config/). Fallback: still an [open question](architecture.md#open-questions); `AgentHomes` takes both folders when a check first reads OpenCode's. |
 | Whether `$XDG_CONFIG_HOME` moves `~/.config/opencode`. | docs-only | The [config](https://opencode.ai/docs/config/) docs name `~/.config/opencode` and are silent on `$XDG_CONFIG_HOME`; not run. Fallback: Mindweaver takes `~/.config/opencode` whatever `$XDG_CONFIG_HOME` says, so if OpenCode follows it, a check reads the wrong folder while it is set; `--opencode-config-dir` names the right one outright. An [open question](architecture.md#open-questions). |
-| How an empty `OPENCODE_CONFIG_DIR` is read. | docs-only | The [config](https://opencode.ai/docs/config/) docs are silent; not run. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--opencode-config-dir` names it outright. An [open question](architecture.md#open-questions). |
+| How an empty `OPENCODE_CONFIG_DIR` is read. | docs-only | The [config](https://opencode.ai/docs/config/) docs are silent; not run. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDWEAVER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--opencode-config-dir` names it outright. An [open question](architecture.md#open-questions). |
 
 ## What says an agent works in a project
 

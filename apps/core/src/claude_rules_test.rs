@@ -4,13 +4,24 @@ use super::*;
 
 #[test]
 fn a_rules_file_is_filed_by_its_route_in_mindweavers_own_folder() {
-    let folder = Path::new(".claude").join("rules").join("mindflayer");
+    let folder = Path::new(".claude").join("rules").join("mindweaver");
     assert_eq!(super::folder(), folder);
     assert_eq!(file_for("commit-style"), folder.join("commit-style.md"));
     assert_eq!(
         file_for("git/no-force-push"),
         folder.join("git").join("no-force-push.md")
     );
+}
+
+#[test]
+fn a_mindflayer_build_filed_them_in_a_folder_of_its_own() {
+    let older = Path::new(".claude").join("rules").join("mindflayer");
+    assert_eq!(folder_under(Names::Mindflayer), older);
+    assert_eq!(
+        file_under(Names::Mindflayer, "git/no-force-push"),
+        older.join("git").join("no-force-push.md")
+    );
+    assert_eq!(folder_under(Names::Mindweaver), super::folder());
 }
 
 /// What [`plan`] decides, by name.

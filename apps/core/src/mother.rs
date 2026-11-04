@@ -32,7 +32,9 @@ pub mod url;
 pub mod value;
 
 pub use artifact::{RuleMother, SkillMother};
-pub use fixture::{GitRepositoryMother, ProjectMother, ShelfMother, WorkspaceMother};
+pub use fixture::{
+    GitRepositoryMother, MindflayerMother, ProjectMother, ShelfMother, WorkspaceMother,
+};
 pub use ledger::{
     EntryMother, GatheredMother, InstallRecordMother, MovedMother, SourceMother, TargetMother,
 };

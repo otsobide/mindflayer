@@ -302,7 +302,7 @@ fn a_relink_error_carrying_another_of_core_s_gives_its_code() {
         workspace: at("/w"),
     });
     let ledger = RelinkError::from(LedgerError::Unmade {
-        path: at("/w/.mindflayer/mindflayer.db"),
+        path: at("/w/.mindweaver/mindweaver.db"),
     });
 
     assert_eq!(workspace.code(), "not_registered");

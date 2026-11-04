@@ -1,5 +1,5 @@
 //! The [`LedgerStore`] a build keeps a workspace's records in: SQLite, in
-//! `.mindflayer/mindflayer.db`, every query and every step of its schema.
+//! `.mindweaver/mindweaver.db`, every query and every step of its schema.
 //!
 //! What it stores, and the promises it keeps of it (a URL kept redacted, a
 //! write whole or not at all, a schema refused when it is newer than this
@@ -85,7 +85,7 @@ impl Sqlite {
         // for each other at all: a reader goes on reading the ledger as the
         // last write left it while the next is made. It needs every process
         // using the file on one machine, sharing memory through
-        // `mindflayer.db-shm`, so a workspace on a network filesystem used
+        // `mindweaver.db-shm`, so a workspace on a network filesystem used
         // from two machines at once is beyond it, as it is beyond the
         // workspace lock.
         //
@@ -153,7 +153,7 @@ impl Sqlite {
     /// A ledger that keeps a write-ahead log, read where the log's files
     /// cannot be made, as a file nobody is changing.
     ///
-    /// SQLite makes `mindflayer.db-wal` and `mindflayer.db-shm` to read a
+    /// SQLite makes `mindweaver.db-wal` and `mindweaver.db-shm` to read a
     /// ledger that keeps its log, and takes them away when the last
     /// connection closes. So in a folder this process may read and not write
     /// (a sandboxed agent's view of the workspace, a read-only mount,
@@ -535,6 +535,18 @@ impl LedgerStore for Sqlite {
             )
             .map(|_| ())
             .map_err(|error| self.failed("recording an artifact", error))
+    }
+
+    fn shelf_moved(&self, from: &str, to: &str) -> Result<usize, LedgerError> {
+        // Compared as a prefix of bytes, never with LIKE, whose `%` and `_`
+        // a folder's name may hold.
+        self.connection
+            .execute(
+                "UPDATE artifacts SET path = ?2 || substr(path, length(?1) + 1)
+                  WHERE substr(path, 1, length(?1)) = ?1",
+                rusqlite::params![from, to],
+            )
+            .map_err(|error| self.failed("moving what was gathered", error))
     }
 
     fn gathered(&self) -> Result<Vec<Gathered>, LedgerError> {
@@ -1654,7 +1666,7 @@ struct Row {
 }
 
 /// Where a ledger at `path` is copied before a schema step takes it on from
-/// `version`: beside it, as `mindflayer.db.v2.bak` for version 2.
+/// `version`: beside it, as `mindweaver.db.v2.bak` for version 2.
 ///
 /// Named after the version it holds rather than numbered or dated, so which
 /// build reads a copy is in its name, and a ledger brought forward by several
@@ -1807,7 +1819,7 @@ fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
 /// A URL as a readable directory name.
 ///
 /// The scheme, any credentials and a trailing `.git` carry nothing a person
-/// browsing `.mindflayer/skills/` wants to read, and anything that is not a
+/// browsing `.mindweaver/skills/` wants to read, and anything that is not a
 /// plain character becomes a hyphen, so the result is a name every filesystem
 /// accepts and nobody has to quote.
 fn slug(url: &str) -> String {
@@ -1997,8 +2009,8 @@ UPDATE installations
 /// The fourth schema: what installing a rule writes (#45).
 ///
 /// A rule reaches a project marked by its settings as a section of the block
-/// in its `AGENTS.md` and, for Claude, as a file in
-/// `.claude/rules/mindflayer`, which hold different bytes: the section is the
+/// in its `AGENTS.md` and, for Claude, as a file in its rules folder
+/// (`.claude/rules/mindweaver`), which hold different bytes: the section is the
 /// rule without its front matter, the file the rule as written. So a target
 /// gains a `content_hash` of its own, which is what tells a section or a file
 /// edited since from the one written (D-04). A skill's copies leave it empty:

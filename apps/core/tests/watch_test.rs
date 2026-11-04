@@ -131,7 +131,7 @@ fn the_workspace_is_watched_by_its_marker_its_ledger_its_library_its_shelf_and_i
 
     let workspace = Scope::Workspace;
     for expected in [
-        of(&workspace, hub.join(WEAVER_DIR).join("flayer.toml")),
+        of(&workspace, hub.join(WEAVER_DIR).join("weaver.toml")),
         of(&workspace, hub.join(WEAVER_DIR).join(LEDGER_FILE)),
         of(&workspace, fixture.hub.gathered_dir(Kind::Skill)),
         of(&workspace, library.clone()),
@@ -141,12 +141,12 @@ fn the_workspace_is_watched_by_its_marker_its_ledger_its_library_its_shelf_and_i
             &workspace,
             hub.join(WEAVER_DIR).join("templates").join("release"),
         ),
-        of(&workspace, team.root().join(WEAVER_DIR).join("flayer.toml")),
+        of(&workspace, team.root().join(WEAVER_DIR).join("weaver.toml")),
         of(&workspace, offered.join("notes")),
         // Not made: the default workspace's marker, for when it is.
         of(
             &workspace,
-            fixture.home().join(WEAVER_DIR).join("flayer.toml"),
+            fixture.home().join(WEAVER_DIR).join("weaver.toml"),
         ),
     ] {
         assert!(watched.contains(&expected), "{expected:?} in {watched:#?}");

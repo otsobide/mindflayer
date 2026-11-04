@@ -6,7 +6,7 @@
 //! It is read exactly as it was written, so nothing moves them but being
 //! asked to (D-05). [`library_plan`] says what asking would do, and
 //! [`library`] does it: each of the workspace's own artifacts moved into
-//! `.mindflayer/library/<kind>`, and the marker's `[directories]` pointed
+//! `.mindweaver/library/<kind>`, and the marker's `[directories]` pointed
 //! there, with a copy of the marker as it was kept beside it.
 //!
 //! The ledger is not opened. An installation of one of the workspace's own
@@ -21,7 +21,11 @@
 //! date: [`project_plan`] and [`project`] move it from its `mind.toml` to a
 //! `settings.toml`, and what is installed into it to where its agents read,
 //! or from its `settings.json` to a `settings.toml` saying the same.
+//!
+//! And a workspace a Mindflayer build made is moved to Mindweaver's names,
+//! with what it wrote into its projects: [`names_plan`] and [`names()`].
 
+mod names;
 mod project;
 
 use std::fs;
@@ -30,18 +34,24 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::agents_md::AgentsMdError;
 use crate::catalog::{Catalog, DiscoveryFailure};
+use crate::claude_md::ClaudeMdError;
 use crate::code::codes;
 use crate::exclude::ExcludeError;
 use crate::install::InstallError;
 use crate::kind::Kind;
 use crate::ledger::LedgerError;
+use crate::names::Names;
 use crate::paths;
 use crate::workspace::{
     misplaced_own, Directories, MindProject, WeaverWorkspace, WorkspaceError, MIND_CONFIG,
-    WEAVER_CONFIG,
 };
 
+pub use names::{
+    names, names_plan, CarriedRule, KeptBlock, Left as LeftWhy, LeftRule, NamesFailure,
+    NamesMigrated, NamesPlan, ProjectNames, Renamed, Repointed,
+};
 pub use project::{
     carries_installs, project, project_plan, ProjectFailure, ProjectMigrated, ProjectPlan, Stranded,
 };
@@ -60,7 +70,7 @@ pub struct Plan {
     pub left: Vec<Left>,
     /// Why it cannot go ahead. Nothing is moved while there is any.
     pub refusals: Vec<Refusal>,
-    /// Where the marker is kept as it was: `flayer.toml.v<version>`, beside it.
+    /// Where the marker is kept as it was: `weaver.toml.v<version>`, beside it.
     pub backup: PathBuf,
 }
 
@@ -121,7 +131,7 @@ pub enum Refusal {
     /// The folder a kind is kept in, or one above it inside the workspace, is
     /// a link: what is in it lives wherever that leads, a dotfiles repository
     /// say, and a rename would take it out of there.
-    #[error("{folder}: a link to {target}, so moving the workspace's {kind}s would take them out of wherever it leads; move them yourself, or point {WEAVER_CONFIG} at the library")]
+    #[error("{folder}: a link to {target}, so moving the workspace's {kind}s would take them out of wherever it leads; move them yourself, or point the workspace's marker at the library")]
     Linked {
         kind: Kind,
         folder: PathBuf,
@@ -155,6 +165,30 @@ pub enum Refusal {
     /// one, or take from there.
     #[error("{0}")]
     Install(InstallError),
+    /// The ledger of a workspace to be moved to Mindweaver's names has its
+    /// log beside it: open in another process, which would go on writing
+    /// to a file of the old name, or left by one that stopped, holding
+    /// writes the file does not yet.
+    #[error(
+        "{path}: the ledger's log, kept by a process that has it open or left by one that \
+         stopped, so the ledger is not moved: close the panel or the TUI that has it open, or \
+         run any command that reads it, and migrate again"
+    )]
+    LedgerOpen { path: PathBuf },
+    /// A project a workspace to be moved to Mindweaver's names links whose
+    /// marker cannot be read: which of its files it wrote cannot be told.
+    #[error("{0}, so what Mindflayer wrote in it cannot be moved")]
+    Unopened(WorkspaceError),
+    /// The block of a project's `AGENTS.md` that cannot be read as one.
+    #[error("{0}, so its markers cannot be moved")]
+    AgentsMd(AgentsMdError),
+    /// The import of a project's `CLAUDE.md` that cannot be read as one.
+    #[error("{0}, so its markers cannot be moved")]
+    ClaudeMd(ClaudeMdError),
+    /// The block of the exclude file git reads for a project that cannot
+    /// be read as one.
+    #[error("{0}, so its markers cannot be moved")]
+    Excluded(ExcludeError),
 }
 
 codes!(Refusal {
@@ -164,12 +198,17 @@ codes!(Refusal {
     Self::Linked { .. } => "migrate_folder_linked",
     Self::Tangled { .. } => "migrate_folder_tangled",
     Self::NoAgent { .. } => "migrate_no_agent",
+    Self::LedgerOpen { .. } => "migrate_ledger_open",
 } carried {
     Self::Misplaced(error) => error,
     Self::Unlisted(error) => error,
     Self::Unreadable(error) => error,
     Self::Authored(error) => error,
     Self::Install(error) => error,
+    Self::Unopened(error) => error,
+    Self::AgentsMd(error) => error,
+    Self::ClaudeMd(error) => error,
+    Self::Excluded(error) => error,
 });
 
 /// What [`library`] did.
@@ -229,6 +268,16 @@ pub enum MigrateError {
         failure: Box<ProjectFailure>,
         stranded: Vec<Stranded>,
     },
+    /// A step of moving a workspace to Mindweaver's names failed, and what
+    /// it had done was put back, but for what `stranded` names
+    /// ([`MigrateError::left_behind_names`]).
+    #[error("{failure}; nothing was moved")]
+    Names {
+        /// Boxed, for the reason `Marker`'s source is.
+        #[source]
+        failure: Box<NamesFailure>,
+        stranded: Vec<PathBuf>,
+    },
 }
 
 codes!(MigrateError {
@@ -242,6 +291,7 @@ codes!(MigrateError {
     Self::Exclude(error) => error,
     Self::Marker { source, .. } => source,
     Self::Project { failure, .. } => failure,
+    Self::Names { failure, .. } => failure,
 });
 
 impl MigrateError {
@@ -262,6 +312,16 @@ impl MigrateError {
     pub fn left_behind(&self) -> &[Stranded] {
         match self {
             MigrateError::Project { stranded, .. } => stranded,
+            _ => &[],
+        }
+    }
+
+    /// What a move to Mindweaver's names that failed could not put back as
+    /// it was, for a front end to say: each a file or a folder left under
+    /// its new name, or the ledger, whose records name the new places.
+    pub fn left_behind_names(&self) -> &[PathBuf] {
+        match self {
+            MigrateError::Names { stranded, .. } => stranded,
             _ => &[],
         }
     }
@@ -303,7 +363,11 @@ pub fn library_plan(workspace: &WeaverWorkspace) -> Plan {
         .into_iter()
         .filter_map(|kind| {
             let from = paths::normalize(&own.directory_for(kind)?);
-            let to = paths::normalize(&workspace.root().join(Directories::library_for(kind)));
+            let to = paths::normalize(
+                &workspace
+                    .root()
+                    .join(Directories::library_under(workspace.names(), kind)),
+            );
             (from != to).then_some(Repoint { kind, from, to })
         })
         .collect();
@@ -332,7 +396,10 @@ pub fn library_plan(workspace: &WeaverWorkspace) -> Plan {
             .config()
             .directories
             .get(repoint.kind)
-            .map_or_else(|| Directories::library_for(repoint.kind), Path::to_path_buf);
+            .map_or_else(
+                || Directories::library_under(workspace.names(), repoint.kind),
+                Path::to_path_buf,
+            );
         if let Some(error) = misplaced_own(repoint.kind, &route) {
             plan.refusals.push(Refusal::Misplaced(error));
             continue;
@@ -451,8 +518,9 @@ pub fn library(workspace: &mut WeaverWorkspace) -> Result<Migrated, MigrateError
         }
         moved.push(one.clone());
     }
+    let names = current.names();
     if let Err(source) =
-        current.edit_marker_held(|document| point_at_library(document, &plan.kinds))
+        current.edit_marker_held(|document| point_at_library(document, &plan.kinds, names))
     {
         let stranded = put_back(&moved);
         let _ = fs::remove_file(&plan.backup);
@@ -469,16 +537,18 @@ pub fn library(workspace: &mut WeaverWorkspace) -> Result<Migrated, MigrateError
 }
 
 /// Where `workspace`'s marker is kept before a migration rewrites it: beside
-/// it, named after the version of the marker it holds, `flayer.toml.v2`.
+/// it, named after the version of the marker it holds, `weaver.toml.v2`.
 ///
 /// After its version, as the ledger's copy is, so which build reads it is in
 /// its name. Put back in place of the rewritten marker, it names the old
 /// folders again, though what was moved stays in the library until it is
 /// moved back.
 pub fn backup_path(workspace: &WeaverWorkspace) -> PathBuf {
-    workspace
-        .weaver_dir()
-        .join(format!("{WEAVER_CONFIG}.v{}", workspace.config().version))
+    workspace.weaver_dir().join(format!(
+        "{}.v{}",
+        workspace.names().workspace_config(),
+        workspace.config().version
+    ))
 }
 
 /// Every project whose artifacts can sit among the workspace's own, and the
@@ -678,6 +748,7 @@ fn put_back(moved: &[Move]) -> Vec<Move> {
 fn point_at_library(
     document: &mut toml_edit::DocumentMut,
     kinds: &[Repoint],
+    names: Names,
 ) -> Result<(), String> {
     let table = document
         .entry("directories")
@@ -685,7 +756,7 @@ fn point_at_library(
         .as_table_like_mut()
         .ok_or_else(|| String::from("`directories` is not a table"))?;
     for repoint in kinds {
-        let library = Directories::library_for(repoint.kind);
+        let library = Directories::library_under(names, repoint.kind);
         let library = paths::to_config_string(&library).unwrap_or_default();
         match table
             .get_mut(repoint.kind.folder())

@@ -430,6 +430,7 @@
           "markdown_block_unclosed",
           "markdown_block_unopened",
           "markdown_block_reopened",
+          "markdown_markers_mixed",
           "markdown_marker_stray",
           "markdown_section_repeated",
           "markdown_marker_miswritten",
@@ -530,6 +531,7 @@
           "exclude_block_unclosed",
           "exclude_block_unopened",
           "exclude_block_reopened",
+          "exclude_markers_mixed",
           "exclude_group_repeated",
           "front_matter_missing",
           "front_matter_unterminated",
@@ -625,10 +627,14 @@
           "migrate_folder_linked",
           "migrate_folder_tangled",
           "migrate_no_agent",
+          "migrate_ledger_open",
           "migrate_scratch_failed",
           "migrate_copy_failed",
           "migrate_retire_failed",
           "migrate_keep_failed",
+          "migrate_rename_failed",
+          "migrate_names_write_failed",
+          "migrate_ledger_opened",
           "path_url",
           "path_relative",
           "path_unnormalized",
@@ -2456,7 +2462,7 @@
         "description": "A source the shelf is filled from, with what `--from` takes for what it\nsupplied.",
         "properties": {
           "directory": {
-            "description": "The folder this source owns under `.mindflayer/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
+            "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
             "type": "string"
           },
           "kind": {
@@ -2698,7 +2704,7 @@
         "description": "A place artifacts have been gathered from.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name, but the row id, and the URL only through [`redacted`].",
         "properties": {
           "directory": {
-            "description": "The folder this source owns under `.mindflayer/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
+            "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
             "type": "string"
           },
           "kind": {
@@ -5156,9 +5162,9 @@
         "type": "http"
       },
       "cookie": {
-        "description": "The launch token, as the cookie the launch link sets, named `mf_` and the server's port: how the panel's page sends it. A change sent with it, which every POST is, needs `Sec-Fetch-Site: same-origin`, `X-Mindflayer: 1` and `Content-Type: application/json` beside it, which only the panel's own page sends.",
+        "description": "The launch token, as the cookie the launch link sets, named `mw_` and the server's port: how the panel's page sends it. A change sent with it, which every POST is, needs `Sec-Fetch-Site: same-origin`, `X-Mindweaver: 1` and `Content-Type: application/json` beside it, which only the panel's own page sends.",
         "in": "cookie",
-        "name": "mf_<port>",
+        "name": "mw_<port>",
         "type": "apiKey"
       }
     }

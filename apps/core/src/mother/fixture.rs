@@ -1,5 +1,6 @@
 //! Mothers of what lives on the disk: a workspace, a project, a git
-//! repository to gather from, and a workspace with a shelf already filled.
+//! repository to gather from, a workspace with a shelf already filled, and
+//! what a Mindflayer build left under its own names.
 //!
 //! Each lives in a temporary folder the caller holds, and goes when it is
 //! dropped, so no test reads or writes outside the folder it was given. The
@@ -13,10 +14,16 @@ use gix::objs::tree::{Entry, EntryKind};
 use tempfile::TempDir;
 
 use crate::agent::Agent;
+use crate::agents_md::AgentsMd;
+use crate::claude_md::ClaudeMd;
+use crate::claude_rules;
+use crate::exclude::ExcludeFile;
 use crate::gather::{self, Request};
+use crate::kind::Kind;
 use crate::ledger::Ledger;
 use crate::mother::artifact::SkillMother;
 use crate::mother::random;
+use crate::names::Names;
 use crate::settings::Share;
 use crate::workspace::{Directories, MindProject, WeaverWorkspace};
 
@@ -36,6 +43,126 @@ impl WorkspaceMother {
     pub fn create(root: &Path) -> WeaverWorkspace {
         fs::create_dir_all(root).expect("make the workspace's folder");
         WeaverWorkspace::init(root).expect("make a workspace").0
+    }
+}
+
+/// Makes what a Mindflayer build left on the disk, under the names it wrote
+/// before #229 (D-26), for a test of reading them and of moving them.
+///
+/// Through core's own writers, told those names, rather than files spelled
+/// here: what a test reads back is what such a build wrote, comments and
+/// all, and stays so when the format moves on. No command can be told them,
+/// so nothing but a mother makes a workspace under the old names.
+pub struct MindflayerMother;
+
+impl MindflayerMother {
+    /// A workspace such a build made in a temporary folder, in its
+    /// `.mindflayer`, with nothing linked, loaded or gathered.
+    pub fn empty() -> (TempDir, WeaverWorkspace) {
+        let dir = TempDir::new().expect("make a temporary folder");
+        let workspace = Self::create(dir.path());
+        (dir, workspace)
+    }
+
+    /// A workspace such a build made in `root`: `.mindflayer/flayer.toml`,
+    /// keeping its own in `.mindflayer/library`, its ledger made as
+    /// `mindflayer.db` the first time it is opened.
+    pub fn create(root: &Path) -> WeaverWorkspace {
+        fs::create_dir_all(root).expect("make the workspace's folder");
+        WeaverWorkspace::init_under(root, &Directories::default(), Names::Mindflayer)
+            .expect("make a workspace under Mindflayer's names")
+            .0
+    }
+
+    /// Leave what core rendered into the project at `root` as such a build
+    /// rendered it: the block of its `AGENTS.md`, the import in its
+    /// `CLAUDE.md` or `.claude/CLAUDE.md` and the block of the exclude file
+    /// git reads for it under that build's markers, every other byte as core
+    /// wrote it.
+    ///
+    /// Moved back by core's own parsers rather than spelled here, so what a
+    /// test reads is what such a build wrote, line endings and all.
+    pub fn rendered_into(root: &Path) {
+        let agents = root.join(crate::agents_md::FILE);
+        if let Ok(bytes) = fs::read(&agents) {
+            let mut file = AgentsMd::parse(&bytes).expect("read the block");
+            if file.renamed(Names::Mindflayer) {
+                fs::write(&agents, file.to_bytes()).expect("write the block back");
+            }
+        }
+        // A `CLAUDE.md` that is the `AGENTS.md`, through a link one way or
+        // the other, was moved back with it.
+        let agents = fs::canonicalize(&agents).ok();
+        for claude in [root.join("CLAUDE.md"), root.join(".claude/CLAUDE.md")] {
+            if agents.is_some() && fs::canonicalize(&claude).ok() == agents {
+                continue;
+            }
+            let Ok(bytes) = fs::read(&claude) else {
+                continue;
+            };
+            let mut file = ClaudeMd::parse(&bytes).expect("read the import");
+            if file.renamed(Names::Mindflayer) {
+                fs::write(&claude, file.to_bytes()).expect("write the import back");
+            }
+        }
+        let excluding = crate::exclude::locate(root).expect("find the exclude file");
+        if let Some(location) = excluding {
+            if let Ok(bytes) = fs::read(&location.file) {
+                let mut file = ExcludeFile::parse(&bytes).expect("read the exclude block");
+                if file.renamed(Names::Mindflayer) {
+                    fs::write(&location.file, file.to_bytes()).expect("write the block back");
+                }
+            }
+        }
+    }
+
+    /// [`rendered_into`](Self::rendered_into), and Claude's rule files filed
+    /// where such a build filed them: each file core wrote into
+    /// `.claude/rules/mindweaver` moved to `.claude/rules/mindflayer`, its
+    /// record in `workspace`'s ledger and its line in the exclude block with
+    /// it, as that build recorded and excluded them.
+    pub fn installed_into(workspace: &WeaverWorkspace, project: &MindProject) {
+        Self::rendered_into(project.root());
+        let root = project.root();
+        let new = root.join(claude_rules::folder_under(Names::Mindweaver));
+        let old = root.join(claude_rules::folder_under(Names::Mindflayer));
+        if new.exists() {
+            fs::create_dir_all(old.parent().expect("a folder above")).expect("make .claude/rules");
+            fs::rename(&new, &old).expect("move the rule files");
+        }
+        let ledger = workspace.ledger().expect("open the ledger");
+        let entry = crate::install::entry_for_root(workspace, root);
+        for record in ledger
+            .records(&entry, Kind::Rule)
+            .expect("read the records")
+        {
+            let targets: Vec<_> = record
+                .targets
+                .iter()
+                .cloned()
+                .map(|mut target| {
+                    if crate::install::rules::claude_file_names(&target.path, &record.name)
+                        == Some(Names::Mindweaver)
+                    {
+                        target.path = crate::install::rules::claude_file_under(
+                            Names::Mindflayer,
+                            &record.name,
+                        );
+                    }
+                    target
+                })
+                .collect();
+            ledger
+                .retargeted(&entry, Kind::Rule, &record.name, &targets)
+                .expect("record the files where they are");
+        }
+        if let Some(location) = crate::exclude::locate(root).expect("find the exclude file") {
+            if let Ok(text) = fs::read_to_string(&location.file) {
+                let moved =
+                    text.replace("/.claude/rules/mindweaver/", "/.claude/rules/mindflayer/");
+                fs::write(&location.file, moved).expect("write the exclude lines back");
+            }
+        }
     }
 }
 

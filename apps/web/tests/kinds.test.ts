@@ -32,7 +32,7 @@ function withAKindMore(): Snapshot {
     state: null,
     agents: [],
     origin: null,
-    targets: ['.mindflayer/library/mcp/linear.json'],
+    targets: ['.mindweaver/library/mcp/linear.json'],
     issues: [],
     unread: null
   })

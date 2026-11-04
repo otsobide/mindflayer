@@ -1110,7 +1110,7 @@ fn an_exclude_block_that_cannot_be_edited_is_reported_and_the_copys_record_still
         installed_authoring_in(".claude/skills", Share::Local, &["deploy"]);
     let file = project.root().join(".git/info/exclude");
     let mut text = fs::read_to_string(&file).unwrap();
-    text.push_str("# mindflayer:begin\n");
+    text.push_str("# mindweaver:begin\n");
     fs::write(&file, &text).unwrap();
 
     let removed = lifecycle::remove(

@@ -7,11 +7,11 @@ const { busy } = runner
 
 /**
  * The folder a workspace keeps itself in, which the form's description
- * names. Still the product's old name: it moves with the other names
- * written on the disk (#229), and is spelled here alone so that it moves
- * in one place.
+ * names: the one a workspace is made with now. One a Mindflayer build made
+ * keeps a `.mindflayer`, and loads all the same, which core decides; the
+ * form names the folder somebody looking for one today will find.
  */
-const WEAVER_DIR = '.mindflayer'
+const WEAVER_DIR = '.mindweaver'
 
 /**
  * The workspace to load, as typed. Whether a workspace is there, and
@@ -26,7 +26,7 @@ const path = ref('')
  * load form takes off too (`load_task`), so the same text typed is the same
  * task on either front end, and nothing when that leaves nothing, as there.
  * The server holds it to the path policy (absolute, normalized, outside
- * every `.mindflayer`) and says why when it is not, before anything runs.
+ * every `.mindweaver`) and says why when it is not, before anything runs.
  * Unicode's White_Space, which Rust's `str::trim` takes off, rather than
  * JavaScript's `trim`, which takes U+FEFF off as well and leaves U+0085: a
  * path ending in either would be two tasks.

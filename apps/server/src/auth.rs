@@ -18,7 +18,7 @@ use crate::token::Token;
 /// The check every `/api` request passes before a handler sees it.
 pub(crate) struct Gate {
     token: Token,
-    /// The cookie the token travels in: `mf_<port>`.
+    /// The cookie the token travels in: `mw_<port>`.
     cookie: String,
 }
 
@@ -96,7 +96,11 @@ pub(crate) fn offered(query: Option<&str>) -> Option<String> {
 /// Spelled here alone, as the panel's header is
 /// ([`PANEL_HEADER`](crate::guard::PANEL_HEADER)): a browser that holds the
 /// cookie holds it by this name, so a later one changes in one place.
-pub(crate) const COOKIE_PREFIX: &str = "mf_";
+///
+/// Mindflayer's `mf_` was renamed outright (D-26): the cookie holds one
+/// launch's token, which no other launch takes, so a browser holding one of
+/// the old name holds nothing to keep.
+pub(crate) const COOKIE_PREFIX: &str = "mw_";
 
 /// The cookie's name on a given port.
 ///

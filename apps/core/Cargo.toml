@@ -14,7 +14,7 @@ serde = { version = "1", features = ["derive"] }
 # continuation of serde_yaml, which upstream archived.
 serde_yaml_ng = "0.10"
 # The marker files (.mind/settings.toml, .mind/mind.toml,
-# .mindflayer/flayer.toml) are TOML: the format the Rust toolchain already
+# .mindweaver/weaver.toml) are TOML: the format the Rust toolchain already
 # asks everyone here to read and write.
 toml = "0.9"
 # Reading a marker is serde's job, or a key at a time for a project's

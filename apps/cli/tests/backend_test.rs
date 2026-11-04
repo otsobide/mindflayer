@@ -275,7 +275,7 @@ fn a_task_shaped_to_escape_is_refused_with_a_code_and_nothing_runs() {
             json!({"type": "unload_here", "path": gamma}),
             "not_loaded",
         ),
-        // Inside a `.mindflayer`.
+        // Inside a `.mindweaver`.
         (
             "the folder itself",
             json!({"type": "link", "path": weaver}),
@@ -928,7 +928,7 @@ fn the_backend_watches_what_core_names_each_by_the_holder_a_query_names() {
             .collect::<Vec<_>>(),
         named
     );
-    let marker = root.join(WEAVER_DIR).join("flayer.toml");
+    let marker = root.join(WEAVER_DIR).join("weaver.toml");
     assert!(named.contains(&(marker, json!({"type": "workspace"}))));
     let alpha = root.join("alpha").join(".mind").join("settings.toml");
     assert!(named.contains(&(alpha, json!({"type": "project", "entry": "alpha"}))));
@@ -944,7 +944,7 @@ fn a_workspace_gone_since_launch_is_watched_for_its_marker() {
 
     let watched = backend.watched_paths();
 
-    let marker = dir.path().join(WEAVER_DIR).join("flayer.toml");
+    let marker = dir.path().join(WEAVER_DIR).join("weaver.toml");
     assert!(watched
         .iter()
         .any(|each| each.path == marker && each.scope == json!({"type": "workspace"})));
@@ -1266,7 +1266,7 @@ fn a_folder_listing_names_the_launchs_home() {
 
 /// Only a folder the browser may name, as a folder to link is: one the
 /// policy refuses is refused with its code before anything of it is read,
-/// as given and through a link into a `.mindflayer`, one not there is
+/// as given and through a link into a `.mindweaver`, one not there is
 /// refused with core's, and a listing leaves the disk as it found it.
 #[test]
 fn a_folder_is_listed_only_where_the_policy_allows_and_nothing_is_written() {
@@ -1275,11 +1275,11 @@ fn a_folder_is_listed_only_where_the_policy_allows_and_nothing_is_written() {
     let before = files(dir.path());
     let climbing = under(dir.path(), &["repo", ".."]);
     let weaver_dir = under(dir.path(), &[WEAVER_DIR]);
-    // Inside a `.mindflayer` and not there: refused for where it is, which
+    // Inside a `.mindweaver` and not there: refused for where it is, which
     // nothing had to be read to tell.
     let unmade = under(dir.path(), &[WEAVER_DIR, "nowhere"]);
     let missing = under(dir.path(), &["wrok"]);
-    // A link into the workspace's own `.mindflayer`, which only a system
+    // A link into the workspace's own `.mindweaver`, which only a system
     // with links can make.
     #[cfg(unix)]
     let through = {
@@ -1813,7 +1813,7 @@ fn cell(project: &str, reference: &str, origin: &str, wanted: bool) -> Value {
 }
 
 /// What the projects under `home` hold: each file outside a `.git`, a
-/// `.mind` or the `.mindflayer`, by its route from `home`, and what the
+/// `.mind` or the `.mindweaver`, by its route from `home`, and what the
 /// workspace records installed in each, by kind and name, with where it
 /// came from.
 #[allow(clippy::type_complexity)]
@@ -2901,10 +2901,10 @@ fn a_switch_to_a_known_workspace_is_what_every_query_preview_and_run_acts_on() {
     let ran = backend.run(task(add)).unwrap();
     assert!(ran.ok, "{ran:?}");
     assert!(
-        team.join(".mindflayer/library/skills/minutes").is_dir(),
+        team.join(".mindweaver/library/skills/minutes").is_dir(),
         "{ran:?}"
     );
-    assert!(!root.join(".mindflayer/library/skills/minutes").exists());
+    assert!(!root.join(".mindweaver/library/skills/minutes").exists());
     let watched = backend.watched_paths();
     assert!(watched.iter().any(|each| each.path.starts_with(&team)));
     assert!(
@@ -2942,7 +2942,7 @@ fn a_switch_to_a_path_outside_the_list_is_refused_and_nothing_is_switched() {
         stranger.to_str().unwrap().to_owned(),
         // A listed one, spelled otherwise.
         format!("{team}/"),
-        format!("{team}/.mindflayer"),
+        format!("{team}/.mindweaver"),
         under(dir.path(), &["home", "..", "team"]),
         String::from("team"),
         String::from("../team"),
@@ -3052,7 +3052,7 @@ fn a_workspace_whose_root_is_not_text_runs_its_lines_naming_none() {
         "mindweaver add skill deploy 'Ship it'"
     );
     assert!(root
-        .join(".mindflayer/library/skills/deploy/SKILL.md")
+        .join(".mindweaver/library/skills/deploy/SKILL.md")
         .is_file());
     let offered: Vec<_> = offered(&backend)
         .into_iter()

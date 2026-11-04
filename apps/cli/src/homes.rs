@@ -4,10 +4,16 @@
 //! Resolved here, in the front end, because core never reads the environment.
 //! It takes what this module answers as parameters, which is what lets the
 //! tests hand it empty values and know nothing real is reached.
+//!
+//! The variables are Mindweaver's (`$MINDWEAVER_WORKSPACE`,
+//! `$MINDWEAVER_HOME`), and each is read before the name a Mindflayer build
+//! gave it (D-26): only where the new one is not set at all is the old one
+//! taken, so a shell an older `activate` set up keeps its workspace, and the
+//! line says so ([`Lookup::older`]).
 
 use std::path::{Path, PathBuf};
 
-use mindweaver_core::activate::WORKSPACE_VARIABLE;
+use mindweaver_core::activate::{FLAYER_WORKSPACE_VARIABLE, WORKSPACE_VARIABLE};
 use mindweaver_core::{AgentHomes, Inputs, Intent};
 
 use crate::AgentHomeOptions;
@@ -25,42 +31,90 @@ use crate::AgentHomeOptions;
 pub struct Lookup {
     /// The workspace `-W` names, as given: empty when given empty.
     pub flag: Option<PathBuf>,
-    /// The workspace `$MINDFLAYER_WORKSPACE` activates, as set.
+    /// The workspace `$MINDWEAVER_WORKSPACE` activates, as set, or the
+    /// `$MINDFLAYER_WORKSPACE` of a shell a Mindflayer build activated.
     pub activated: Option<PathBuf>,
     /// Where the default workspace lives ([`default_home`]).
     pub home: Option<PathBuf>,
     /// Where each agent keeps what it reads for every project
     /// ([`agent_homes`]); none of them unless given.
     pub agents: AgentHomes,
+    /// Each variable taken under the name a Mindflayer build read, because
+    /// the one it is called now was not set, for the line to say.
+    pub older: Vec<Older>,
+}
+
+/// A variable taken under its old name: `older`, read in place of `name`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Older {
+    pub older: &'static str,
+    pub name: &'static str,
+}
+
+impl Older {
+    /// What a line taking it says, a note rather than a warning: nothing is
+    /// wrong with what it read, and a script run in such a shell would fail
+    /// for nothing it did. How to set the new name is the variable's to say.
+    pub fn note(&self) -> String {
+        let how = if self.older == FLAYER_WORKSPACE_VARIABLE {
+            format!(
+                "`eval \"$(mindweaver activate \"${}\")\"` activates it again under the new one",
+                self.older
+            )
+        } else {
+            format!("set {} in its place", self.name)
+        };
+        format!(
+            "note: ${} is Mindflayer's name for ${}, which is not set, so it is taken; {how}",
+            self.older, self.name
+        )
+    }
 }
 
 impl Lookup {
     /// What a command line gave as `--home`, `-W` and the four agent homes,
     /// with the environment for what it left out.
     pub fn given(home: Option<&str>, workspace: Option<&str>, agents: &AgentHomeOptions) -> Self {
+        let (home, older_home) = home_from(home, &variable, std::env::home_dir());
+        let mut chosen = Self::chosen(workspace, &variable);
+        chosen.older.extend(older_home);
         Self {
-            home: default_home(home),
+            home,
             agents: agent_homes(agents),
-            ..Self::chosen(workspace, &variable)
+            ..chosen
         }
     }
 
-    /// What `-W` and `$MINDFLAYER_WORKSPACE` say, with the environment passed
+    /// What `-W` and `$MINDWEAVER_WORKSPACE` say, with the environment passed
     /// in, so the order is tested on values.
     ///
     /// `-W` given at all, even empty, is the whole answer, and the variable is
-    /// not read: the order `--home` and `$MINDFLAYER_HOME` are taken in.
+    /// not read: the order `--home` and `$MINDWEAVER_HOME` are taken in.
     /// What an empty value means is core's to say, and it says none, as the
-    /// variable's name is: it is what `mindweaver activate` sets.
+    /// variable's name is: it is what `mindweaver activate` sets. Unset, the
+    /// `$MINDFLAYER_WORKSPACE` a Mindflayer build's `activate` set is taken
+    /// in its place, and said.
     fn chosen(workspace: Option<&str>, variable: &dyn Fn(&str) -> Option<String>) -> Self {
+        let (activated, older) = match workspace {
+            Some(_) => (None, None),
+            None => either(WORKSPACE_VARIABLE, FLAYER_WORKSPACE_VARIABLE, variable),
+        };
         Self {
             flag: workspace.map(PathBuf::from),
-            activated: match workspace {
-                Some(_) => None,
-                None => variable(WORKSPACE_VARIABLE).map(PathBuf::from),
-            },
+            activated: activated.map(PathBuf::from),
+            older: older.into_iter().collect(),
             ..Self::default()
         }
+    }
+
+    /// The variable the activated workspace was read from:
+    /// `$MINDWEAVER_WORKSPACE`, or the `$MINDFLAYER_WORKSPACE` taken in its
+    /// place.
+    pub fn activated_by(&self) -> &'static str {
+        self.older
+            .iter()
+            .find(|older| older.name == WORKSPACE_VARIABLE)
+            .map_or(WORKSPACE_VARIABLE, |older| older.older)
     }
 
     /// Nothing named and nothing activated, with the default in `home`.
@@ -86,15 +140,52 @@ impl Lookup {
 /// The variable that says where the default workspace lives, read after
 /// `--home`. Spelled here alone, as the one that activates a workspace is
 /// ([`WORKSPACE_VARIABLE`]), so a later name changes in one place.
-pub const HOME_VARIABLE: &str = "MINDFLAYER_HOME";
+pub const HOME_VARIABLE: &str = "MINDWEAVER_HOME";
 
-/// Where the default workspace lives: `--home`, then `$MINDFLAYER_HOME`, then
-/// the user's home directory. Empty, from either, means there is none.
+/// [`HOME_VARIABLE`] as a Mindflayer build named it, taken while the new one
+/// is not set.
+pub const FLAYER_HOME_VARIABLE: &str = "MINDFLAYER_HOME";
+
+/// Where the default workspace lives: `--home`, then `$MINDWEAVER_HOME`
+/// (`$MINDFLAYER_HOME` while it is not set), then the user's home
+/// directory. Empty, from either, means there is none.
 ///
 /// A string rather than a path because empty is a meaningful answer here,
 /// and one a path cannot spell.
 pub fn default_home(given: Option<&str>) -> Option<PathBuf> {
-    resolve(given, variable(HOME_VARIABLE), std::env::home_dir())
+    home_from(given, &variable, std::env::home_dir()).0
+}
+
+/// [`default_home`], with the environment and the user's home passed in,
+/// and the old variable named when it is the one taken.
+fn home_from(
+    given: Option<&str>,
+    variable: &dyn Fn(&str) -> Option<String>,
+    user: Option<PathBuf>,
+) -> (Option<PathBuf>, Option<Older>) {
+    let (from_environment, older) = match given {
+        Some(_) => (None, None),
+        None => either(HOME_VARIABLE, FLAYER_HOME_VARIABLE, variable),
+    };
+    (resolve(given, from_environment, user), older)
+}
+
+/// The value of `name`, or, only while it is not set at all, of `older`,
+/// its name in a Mindflayer build, which is then named. Set empty, the new
+/// one is the answer, empty as it is: empty means none, and a shell that
+/// set the new name meant it.
+fn either(
+    name: &'static str,
+    older: &'static str,
+    variable: &dyn Fn(&str) -> Option<String>,
+) -> (Option<String>, Option<Older>) {
+    match variable(name) {
+        Some(value) => (Some(value), None),
+        None => match variable(older) {
+            Some(value) => (Some(value), Some(Older { older, name })),
+            None => (None, None),
+        },
+    }
 }
 
 /// Where each agent keeps what it reads for every project: the option, then
@@ -161,7 +252,7 @@ fn resolve(
 }
 
 /// A variable's value. One that is not Unicode counts as unset, as it always
-/// has for `$MINDFLAYER_HOME`: a path that cannot be spelled is no answer.
+/// has for `$MINDWEAVER_HOME`: a path that cannot be spelled is no answer.
 pub(crate) fn variable(name: &str) -> Option<String> {
     std::env::var(name).ok()
 }

@@ -52,8 +52,8 @@ use crate::settings::{Settings, Share};
 use crate::status::{self, Unreached};
 use crate::value::ArtifactName;
 use crate::workspace::{
-    ignore_itself, misplaced_target, same_directory, MindProject, WeaverWorkspace, WorkspaceError,
-    MIND_IGNORE,
+    ignore_itself, is_mind_ignore, misplaced_target, same_directory, MindProject, WeaverWorkspace,
+    WorkspaceError,
 };
 
 /// What a change asks of a project's settings.
@@ -615,7 +615,7 @@ pub fn apply(
         .extend(unexcluded.map(ReapplyFailure::StillExcluded));
     if let Some(Ignore::Remove(path)) = &plan.ignore {
         // Looked at again, so one changed since the plan read it is left.
-        if fs::read(path).is_ok_and(|bytes| bytes == MIND_IGNORE.as_bytes()) {
+        if fs::read(path).is_ok_and(|bytes| is_mind_ignore(&bytes)) {
             if let Err(source) = fs::remove_file(path) {
                 applied.failures.push(ReapplyFailure::Ignore {
                     path: path.clone(),
@@ -1009,7 +1009,7 @@ fn ignore(project: &MindProject, share: Share) -> Option<Ignore> {
         Share::Local if fs::symlink_metadata(&path).is_err() => Some(Ignore::Write(path)),
         Share::Local => None,
         Share::Shared => match fs::read(&path) {
-            Ok(bytes) if bytes == MIND_IGNORE.as_bytes() => Some(Ignore::Remove(path)),
+            Ok(bytes) if is_mind_ignore(&bytes) => Some(Ignore::Remove(path)),
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
             _ => Some(Ignore::Kept(path)),
         },

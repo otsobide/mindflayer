@@ -11,7 +11,7 @@ import { expect, test } from './panel.ts'
 const FOREIGN = 'http://evil.example'
 
 /** What the panel's page sends beside the cookie with every change. */
-const PANEL = { 'Sec-Fetch-Site': 'same-origin', 'X-Mindflayer': '1' }
+const PANEL = { 'Sec-Fetch-Site': 'same-origin', 'X-Mindweaver': '1' }
 
 test('a read sent with the cookie from another origin is refused', async ({ page, panel, served }) => {
   await panel.open('/')

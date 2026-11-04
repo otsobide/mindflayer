@@ -44,7 +44,7 @@ const { data: scanned, error, isFetching, refetch, forget, stale } = useScan(ask
 /**
  * The folders as typed, one a line, sent as they are for the server to
  * hold to the path policy, as the folder to link is: absolute, normalized,
- * outside every `.mindflayer`. Checked nowhere here, so the panel cannot
+ * outside every `.mindweaver`. Checked nowhere here, so the panel cannot
  * let through a folder the CLI would refuse, or refuse one it takes.
  */
 const roots = ref('')

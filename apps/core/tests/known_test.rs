@@ -345,7 +345,7 @@ fn a_remembered_workspace_that_has_gone_is_listed_with_why_and_a_failure() {
     assert_eq!(gone.path, writing.root());
     assert!(gone.remembered);
     let why = format!(
-        "{}: not a weaver workspace (no .mindflayer/flayer.toml)",
+        "{}: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)",
         writing.root().display()
     );
     assert_eq!(gone.stale.as_deref(), Some(why.as_str()));

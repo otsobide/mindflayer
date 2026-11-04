@@ -28,7 +28,7 @@
 //! - **A task names only what the path policy allows** ([`Admission`]): a
 //!   project by its entry, which becomes the folder the registry resolves,
 //!   and a folder not linked yet by an absolute, normalized path outside
-//!   every `.mindflayer`, shown verbatim.
+//!   every `.mindweaver`, shown verbatim.
 //! - **A task no front end without a terminal runs is refused**
 //!   ([`Task::refusal`]): a screen, an editor, a shell's code, a gather, and
 //!   `show`, which prints an artifact whole through any link.
@@ -85,7 +85,6 @@ use mindweaver_core::view::Snapshot;
 use mindweaver_core::{paths, policy, watch};
 use mindweaver_core::{
     Found, Kind, LifecycleError, MindProject, Reference, Scan, WeaverWorkspace, WorkspaceError,
-    WEAVER_CONFIG, WEAVER_DIR,
 };
 use mindweaver_server::{Backend, Grounds, Preview, Refusal, Route, Watched};
 use serde::{Deserialize, Serialize};
@@ -153,7 +152,7 @@ pub enum Query {
     },
     /// What could be linked under `roots`, `depth` levels down, as `mindweaver
     /// scan --suggest` finds it ([`Scanned`]): each root an absolute,
-    /// normalized path outside every `.mindflayer` ([`policy::path`]), as a
+    /// normalized path outside every `.mindweaver` ([`policy::path`]), as a
     /// folder to link is, which is only read; none is the workspace's root,
     /// and no depth core's own (`scan::DEFAULT_DEPTH`), as for the command.
     ///
@@ -166,7 +165,7 @@ pub enum Query {
     },
     /// The folders directly inside `path`, for the panel's explorer to pick
     /// one from ([`Folders`]): an absolute, normalized path outside every
-    /// `.mindflayer` ([`policy::path`]), as a folder to link or a root to
+    /// `.mindweaver` ([`policy::path`]), as a folder to link or a root to
     /// scan is, held to it before anything is read; none is the workspace's
     /// root. Hidden folders only when `hidden` asks for them. Answered with
     /// the launch's home beside them, for a way back to it.
@@ -462,7 +461,7 @@ impl Pin {
     /// one gone since is refused rather than taken for one to make, which
     /// the first change would do to it.
     fn workspace(&self) -> Result<WeaverWorkspace, Refusal> {
-        let made = self.root.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file();
+        let made = WeaverWorkspace::is_marked(&self.root);
         if made || self.reason != Reason::Home {
             WeaverWorkspace::open(&self.root)
         } else {
@@ -597,7 +596,7 @@ impl PanelBackend {
             Some(root) => lines.iter().map(|line| task::naming(line, root)).collect(),
             None => lines,
         };
-        let lines = admitted.commands();
+        let lines = admitted.commands_in(&workspace);
         // As the TUI does: a change to the default before it is made makes
         // it first, by a line of its own, rather than leave the change to
         // find a workspace above home while it walks up from the root. Not
@@ -932,7 +931,7 @@ impl Backend for PanelBackend {
 /// it is dropped, whatever came of the line.
 ///
 /// Made with `create_new`, in a folder made with `create_dir`, never
-/// `create_dir_all`, so no `.mindflayer` is made where there is none, which
+/// `create_dir_all`, so no `.mindweaver` is made where there is none, which
 /// a line of the panel's would then take for a workspace. The folder is
 /// looked at once it is there, and a link in its place refuses the save:
 /// `create_dir` says a link is there as it says a folder is, and

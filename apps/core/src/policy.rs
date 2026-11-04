@@ -16,7 +16,7 @@
 //! - **A folder that is not linked yet is named by a path that reads the same
 //!   from anywhere** ([`path`]): absolute, spelled as normalizing it would
 //!   spell it, so that what the preview shows is the folder the command
-//!   acts on, and outside every `.mindflayer`, where a workspace keeps its
+//!   acts on, and outside every `.mindweaver` (and `.mindflayer`), where a workspace keeps its
 //!   marker, its ledger, its library and the clones it gathered, none of
 //!   which is a project to make or link. A path that leads into one through
 //!   a link is refused as one inside it.
@@ -39,9 +39,10 @@ use thiserror::Error;
 use crate::code::codes;
 use crate::install;
 use crate::known::Switchable;
+use crate::names::Names;
 use crate::paths;
 use crate::resolve::Reason;
-use crate::workspace::{Loaded, Member, WeaverWorkspace, WorkspaceError, WEAVER_DIR};
+use crate::workspace::{Loaded, Member, WeaverWorkspace, WorkspaceError};
 
 /// Why a value a request holds is not one it may name.
 #[derive(Debug, Error)]
@@ -52,8 +53,11 @@ pub enum PolicyError {
     Relative { given: String },
     #[error("`{given}` is not spelled as the folder it names, `{normal}`: no `.` or `..` part, and no doubled or trailing separator")]
     Unnormalized { given: String, normal: String },
-    #[error("`{given}` is inside a `{WEAVER_DIR}`, which holds a workspace's own files: name a folder outside it")]
-    InWeaverDir { given: String },
+    /// Inside a `.mindweaver`, or the `.mindflayer` of a workspace a
+    /// Mindflayer build made: `folder` is the one it is in. Still the code
+    /// it was given under the old name, as every code is kept.
+    #[error("`{given}` is inside a `{folder}`, which holds a workspace's own files: name a folder outside it")]
+    InWeaverDir { given: String, folder: &'static str },
     /// A workspace to switch to that no list of what may be switched to
     /// holds, by the path it spells: a typo, a list read before it changed,
     /// or a path somebody put together, none of which is gone to.
@@ -77,15 +81,16 @@ codes!(PolicyError {
 });
 
 /// `given`, as a path a request may name: absolute, spelled exactly as
-/// [`paths::normalize`] would spell it, and outside every `.mindflayer`,
-/// both as given and once its links are followed.
+/// [`paths::normalize`] would spell it, and outside every `.mindweaver` and
+/// every `.mindflayer` a Mindflayer build made, both as given and once its
+/// links are followed.
 ///
 /// Spelled as given is spelled normalized, rather than normalized for it, so
 /// the path a preview shows is the one the command is given, character for
 /// character. A path that does not exist yet is followed as far as it does
 /// exist, the rest appended ([`install::resolved`]): `mind init` makes a
 /// project in a folder that may be new, and one new under a link into a
-/// `.mindflayer` would be made inside it.
+/// `.mindweaver` would be made inside it.
 pub fn path(given: &str) -> Result<PathBuf, PolicyError> {
     let path = Path::new(given);
     if !path.is_absolute() {
@@ -109,13 +114,14 @@ pub fn path(given: &str) -> Result<PathBuf, PolicyError> {
         });
     }
     let followed = install::resolved(path);
-    if [Some(path), followed.as_deref()]
+    if let Some(folder) = [Some(path), followed.as_deref()]
         .into_iter()
         .flatten()
-        .any(in_weaver_dir)
+        .find_map(in_weaver_dir)
     {
         return Err(PolicyError::InWeaverDir {
             given: given.to_owned(),
+            folder,
         });
     }
     Ok(normal)
@@ -228,10 +234,16 @@ pub fn spelled(path: &Path) -> Result<String, PolicyError> {
     })
 }
 
-/// Whether some part of `path` is a `.mindflayer`.
-fn in_weaver_dir(path: &Path) -> bool {
-    path.components()
-        .any(|component| component == Component::Normal(WEAVER_DIR.as_ref()))
+/// Which workspace's folder some part of `path` is, under either names:
+/// `.mindweaver`, or a Mindflayer build's `.mindflayer`.
+fn in_weaver_dir(path: &Path) -> Option<&'static str> {
+    Names::ALL
+        .into_iter()
+        .map(Names::workspace_dir)
+        .find(|folder| {
+            path.components()
+                .any(|component| component == Component::Normal(folder.as_ref()))
+        })
 }
 
 #[cfg(test)]

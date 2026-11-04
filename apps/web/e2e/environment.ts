@@ -12,11 +12,14 @@ import { dirname, join, relative } from 'node:path'
 /**
  * The variables that lead a command to a real workspace or a real agent
  * home, as the CLI's own tests name them (`common::CLEARED`): an activated
- * workspace, the default one's home, and the agents' folders. The driver
+ * workspace, the default one's home, each under the name a Mindflayer build
+ * read it by too, and the agents' folders. The driver
  * starts Playwright without them, so neither the server nor any command a
  * spec runs, nor a worker, ever sees them.
  */
 export const CLEARED = [
+  'MINDWEAVER_HOME',
+  'MINDWEAVER_WORKSPACE',
   'MINDFLAYER_HOME',
   'MINDFLAYER_WORKSPACE',
   'CLAUDE_CONFIG_DIR',
@@ -49,7 +52,7 @@ export interface Places {
    * empty, and held to stay that way (run.ts).
    */
   home: string
-  /** The fixture workspace, holding `.mindflayer` and the projects it links. */
+  /** The fixture workspace, holding `.mindweaver` and the projects it links. */
   workspace: string
   /** The folder holding the `mindweaver` and `mind` under test. */
   bin: string
@@ -85,15 +88,22 @@ export function given(): Places {
 }
 
 /**
- * The folder above `folder`, itself included, that holds a `.mind` or a
- * `.mindflayer`, if one does: resolving walks up the tree before it looks
- * at a home, so a workspace built under such a folder could reach it.
- * Here rather than in the driver, so that whatever else builds a workspace
- * in the temporary folder refuses the same.
+ * What makes a folder a project or a workspace to a command walking up the
+ * tree: a `.mind`, a `.mindweaver`, or the `.mindflayer` a Mindflayer build
+ * made a workspace in, which resolving still finds.
+ */
+const MARKS = ['.mind', '.mindweaver', '.mindflayer']
+
+/**
+ * The folder above `folder`, itself included, that holds any of `MARKS`, if
+ * one does: resolving walks up the tree before it looks at a home, so a
+ * workspace built under such a folder could reach it. Here rather than in
+ * the driver, so that whatever else builds a workspace in the temporary
+ * folder refuses the same.
  */
 export function marked(folder: string): string | undefined {
   for (let at = folder; ; at = dirname(at)) {
-    if (existsSync(join(at, '.mind')) || existsSync(join(at, '.mindflayer'))) {
+    if (MARKS.some(mark => existsSync(join(at, mark)))) {
       return at
     }
     if (dirname(at) === at) {
@@ -156,7 +166,7 @@ export function environment(at: Places): Record<string, string> {
  * The options every line names its home, its workspace and the agent homes
  * by: `--home` the temporary one, `--workspace` the fixture, or, before
  * there is one to name, empty, which names none and ignores
- * `$MINDFLAYER_WORKSPACE` too, and every agent home empty. Named on every
+ * `$MINDWEAVER_WORKSPACE` too, and every agent home empty. Named on every
  * line even though `-C` is under the temporary folder: resolving walks up
  * from there, and only a line that names its workspace cannot be led to
  * another.

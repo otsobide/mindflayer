@@ -146,7 +146,7 @@ const at: Places = (() => {
   const temporary = tmpdir()
   const holder = marked(temporary)
   if (holder) {
-    refuse(`the temporary folder ${temporary} is inside ${holder}, which holds a .mind or a .mindflayer a command run from the demo could reach`)
+    refuse(`the temporary folder ${temporary} is inside ${holder}, which holds a .mind, a .mindweaver or a .mindflayer a command run from the demo could reach`)
   }
   if (!existsSync(chromium.executablePath())) {
     refuse('no Chromium of Playwright\'s to take them in: `make web/e2e/browsers BROWSERS=chromium` downloads it, into node_modules')
@@ -400,7 +400,7 @@ async function take(browser: Browser, served: Serving, mode: 'light' | 'dark', s
   const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: SCALE, locale: LOCALE, timezoneId: ZONE, colorScheme: mode, reducedMotion: 'reduce' })
   // The panel is dark until somebody picks, and keeps what they picked in
   // a cookie of its own (src/preferences.ts): picked here before it opens.
-  await context.addCookies([{ name: 'mindflayer-vueuse-color-scheme', value: mode, url: served.origin }])
+  await context.addCookies([{ name: 'mindweaver-vueuse-color-scheme', value: mode, url: served.origin }])
   const page = await context.newPage()
   const thrown: string[] = []
   page.on('pageerror', error => thrown.push(error.message))

@@ -300,7 +300,7 @@ fn a_workspace_named_that_is_none_still_refuses_mind_status() {
 #[test]
 fn a_ledger_that_will_not_open_is_a_warning_beside_the_report() {
     let (_dir, projects) = workspace_with_everything();
-    let ledger = projects.join(WEAVER_DIR).join("mindflayer.db");
+    let ledger = projects.join(WEAVER_DIR).join("mindweaver.db");
     fs::write(&ledger, "not a database\n").unwrap();
 
     let text = weaver(&projects, &["status", "-p", "collapse"]).unwrap();
@@ -353,7 +353,7 @@ fn status_makes_neither_a_ledger_nor_the_default_workspace() {
         .starts_with("hint: no workspace here or above"));
     assert!(!home.path().join(WEAVER_DIR).exists());
     assert!(linked.ok, "{linked:?}");
-    assert!(!dir.path().join(WEAVER_DIR).join("mindflayer.db").exists());
+    assert!(!dir.path().join(WEAVER_DIR).join("mindweaver.db").exists());
 }
 
 #[test]

@@ -19,7 +19,7 @@
 //!   those commands take an entry by.
 //! - **A folder `link`, `load`, `init` or the minds screen's marks name**,
 //!   the panel's marks among them, is absolute, spelled normalized and
-//!   outside every `.mindflayer`, and goes to the command verbatim, so the
+//!   outside every `.mindweaver`, and goes to the command verbatim, so the
 //!   preview shows the folder it acts on; one marked to unlink is one an
 //!   entry points at.
 //!

@@ -13,30 +13,33 @@ const NAME: &str = r#"it's a "weaver""#;
 const BOURNE: &str = r#"if typeset -f flayer-deactivate >/dev/null 2>&1; then
     flayer-deactivate
 fi
-if [ -n "${MINDFLAYER_WORKSPACE+set}" ]; then
-    _WEAVER_OLD_WORKSPACE="$MINDFLAYER_WORKSPACE"
+if typeset -f mindweaver-deactivate >/dev/null 2>&1; then
+    mindweaver-deactivate
+fi
+if [ -n "${MINDWEAVER_WORKSPACE+set}" ]; then
+    _WEAVER_OLD_WORKSPACE="$MINDWEAVER_WORKSPACE"
 else
     unset _WEAVER_OLD_WORKSPACE
 fi
-export MINDFLAYER_WORKSPACE='/home/you/it'\''s a "weaver"'
+export MINDWEAVER_WORKSPACE='/home/you/it'\''s a "weaver"'
 _WEAVER_PROMPT='(weaver:it'\''s a "weaver") '
 PS1="$_WEAVER_PROMPT${PS1-}"
 if [ -n "${_OLD_VIRTUAL_PS1+set}" ]; then
     _OLD_VIRTUAL_PS1="$_WEAVER_PROMPT$_OLD_VIRTUAL_PS1"
 fi
-flayer-deactivate() {
+mindweaver-deactivate() {
     if [ -n "${_WEAVER_OLD_WORKSPACE+set}" ]; then
-        export MINDFLAYER_WORKSPACE="$_WEAVER_OLD_WORKSPACE"
+        export MINDWEAVER_WORKSPACE="$_WEAVER_OLD_WORKSPACE"
         unset _WEAVER_OLD_WORKSPACE
     else
-        unset MINDFLAYER_WORKSPACE
+        unset MINDWEAVER_WORKSPACE
     fi
     PS1="${PS1/"$_WEAVER_PROMPT"/}"
     if [ -n "${_OLD_VIRTUAL_PS1+set}" ]; then
         _OLD_VIRTUAL_PS1="${_OLD_VIRTUAL_PS1/"$_WEAVER_PROMPT"/}"
     fi
     unset _WEAVER_PROMPT
-    unset -f flayer-deactivate
+    unset -f mindweaver-deactivate
 }
 "#;
 
@@ -56,12 +59,15 @@ fn fish_is_given_its_own_code_with_its_two_escapes() {
         r#"if functions -q flayer-deactivate
     flayer-deactivate
 end
-if set -q MINDFLAYER_WORKSPACE
-    set -g _weaver_old_workspace $MINDFLAYER_WORKSPACE
+if functions -q mindweaver-deactivate
+    mindweaver-deactivate
+end
+if set -q MINDWEAVER_WORKSPACE
+    set -g _weaver_old_workspace $MINDWEAVER_WORKSPACE
 else
     set -e _weaver_old_workspace
 end
-set -gx MINDFLAYER_WORKSPACE '/home/you/it\'s a \\weaver\\'
+set -gx MINDWEAVER_WORKSPACE '/home/you/it\'s a \\weaver\\'
 set -g _weaver_prompt '(weaver:it\'s a "weaver") '
 if not functions -q _weaver_old_fish_prompt
     functions -c fish_prompt _weaver_old_fish_prompt
@@ -74,15 +80,15 @@ if not functions -q _weaver_old_fish_prompt
         _weaver_old_fish_prompt
     end
 end
-function flayer-deactivate
+function mindweaver-deactivate
     if set -q _weaver_old_workspace
-        set -gx MINDFLAYER_WORKSPACE $_weaver_old_workspace
+        set -gx MINDWEAVER_WORKSPACE $_weaver_old_workspace
         set -e _weaver_old_workspace
     else
-        set -e MINDFLAYER_WORKSPACE
+        set -e MINDWEAVER_WORKSPACE
     end
     set -e _weaver_prompt
-    functions -e flayer-deactivate
+    functions -e mindweaver-deactivate
 end
 "#
     );
@@ -95,12 +101,15 @@ fn powershell_is_given_its_own_code_with_quotes_doubled() {
         r#"if (Test-Path -Path Function:flayer-deactivate) {
     flayer-deactivate
 }
-if (Test-Path -Path Env:MINDFLAYER_WORKSPACE) {
-    $global:_WeaverOldWorkspace = $Env:MINDFLAYER_WORKSPACE
+if (Test-Path -Path Function:mindweaver-deactivate) {
+    mindweaver-deactivate
+}
+if (Test-Path -Path Env:MINDWEAVER_WORKSPACE) {
+    $global:_WeaverOldWorkspace = $Env:MINDWEAVER_WORKSPACE
 } else {
     Remove-Variable -Name _WeaverOldWorkspace -Scope Global -ErrorAction SilentlyContinue
 }
-$Env:MINDFLAYER_WORKSPACE = '/home/you/it''s a "weaver"'
+$Env:MINDWEAVER_WORKSPACE = '/home/you/it''s a "weaver"'
 $global:_WeaverPrompt = '(weaver:it''s a "weaver") '
 if (-not (Get-Variable -Name _WeaverOldPrompt -Scope Global -ErrorAction SilentlyContinue)) {
     $global:_WeaverOldPrompt = $Function:prompt
@@ -109,16 +118,16 @@ if (-not (Get-Variable -Name _WeaverOldPrompt -Scope Global -ErrorAction Silentl
         & $global:_WeaverOldPrompt
     }
 }
-function global:flayer-deactivate {
+function global:mindweaver-deactivate {
     $old = Get-Variable -Name _WeaverOldWorkspace -Scope Global -ErrorAction SilentlyContinue
     if ($old) {
-        $Env:MINDFLAYER_WORKSPACE = $old.Value
+        $Env:MINDWEAVER_WORKSPACE = $old.Value
         Remove-Variable -Name _WeaverOldWorkspace -Scope Global
     } else {
-        Remove-Item -Path Env:MINDFLAYER_WORKSPACE -ErrorAction SilentlyContinue
+        Remove-Item -Path Env:MINDWEAVER_WORKSPACE -ErrorAction SilentlyContinue
     }
     $global:_WeaverPrompt = ''
-    Remove-Item -Path Function:flayer-deactivate
+    Remove-Item -Path Function:mindweaver-deactivate
 }
 "#
     );
@@ -167,14 +176,26 @@ fn every_shell_sets_the_variable_and_defines_its_own_deactivate_never_the_plain_
 
         assert!(code.contains(WORKSPACE_VARIABLE), "{shell}:\n{code}");
         assert!(code.contains(DEACTIVATE), "{shell}:\n{code}");
-        // Every `deactivate` it names is its own: the plain one is an active
+        // Every `deactivate` it names is its own, or the one a Mindflayer
+        // build defined, which it only runs: the plain one is an active
         // virtualenv's, and redefining it would take it away.
         for (at, word) in code.match_indices("deactivate") {
+            let named = &code[..at + word.len()];
             assert!(
-                code[..at + word.len()].ends_with(DEACTIVATE),
+                named.ends_with(DEACTIVATE) || named.ends_with(FLAYER_DEACTIVATE),
                 "{shell}:\n{code}"
             );
         }
+        // Nothing of the old activation's is set or defined, only undone.
+        assert!(
+            !code.contains(FLAYER_WORKSPACE_VARIABLE),
+            "{shell}:\n{code}"
+        );
+        assert_eq!(
+            code.matches(FLAYER_DEACTIVATE).count(),
+            2,
+            "asked about and run, once each: {shell}:\n{code}"
+        );
     }
 }
 

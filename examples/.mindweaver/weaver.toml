@@ -7,7 +7,7 @@
 #
 # `directories` is spelled out rather than left to the default, so this folder
 # reads the same whatever a new workspace keeps its own in. Beside this
-# .mindflayer rather than inside it, so the examples are where somebody
+# .mindweaver rather than inside it, so the examples are where somebody
 # browsing the repository looks for them.
 version = 2
 name = "examples"

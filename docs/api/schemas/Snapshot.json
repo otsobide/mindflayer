@@ -923,7 +923,7 @@
       "type": "object",
       "properties": {
         "directory": {
-          "description": "The folder this source owns under `.mindflayer/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
+          "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
           "type": "string"
         },
         "kind": {
@@ -1023,7 +1023,7 @@
       "type": "object",
       "properties": {
         "directory": {
-          "description": "The folder this source owns under `.mindflayer/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
+          "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
           "type": "string"
         },
         "kind": {

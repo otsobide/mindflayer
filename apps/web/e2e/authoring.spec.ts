@@ -21,7 +21,7 @@ function sha256(text: string): string {
 
 /** Where the workspace at `root` keeps its own skills, and the file `review` is read from. */
 function library(root: string): string {
-  return join(root, '.mindflayer', 'library', 'skills')
+  return join(root, '.mindweaver', 'library', 'skills')
 }
 
 function manifest(root: string): string {
@@ -54,14 +54,14 @@ test('a library skill edited in the browser is written on disk as mindweaver edi
 
   await page.getByTestId('save').click()
   const dialog = page.getByRole('dialog')
-  const route = `.mindflayer/tmp/edit-${sha256(text).slice(0, 16)}.md`
+  const route = `.mindweaver/tmp/edit-${sha256(text).slice(0, 16)}.md`
   await expect(dialog.getByTestId('command')).toHaveText([`$ mindweaver -W ${own.at.workspace} edit --contents ${route} --if-unchanged ${sha256(before)} skill:${AUTHORED}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
   await expect(page.getByTestId('unsaved')).toHaveCount(0)
 
   expect(readFileSync(manifest(own.at.workspace), 'utf8')).toBe(text)
-  expect(readdirSync(join(own.at.workspace, '.mindflayer', 'tmp')), 'the text put there for the line is taken away').toEqual([])
+  expect(readdirSync(join(own.at.workspace, '.mindweaver', 'tmp')), 'the text put there for the line is taken away').toEqual([])
   const twin = own.twin
   const typed = draft(twin, 'review.md', text)
   succeed(twin, 'mindweaver', twin.workspace, ['edit', '--contents', typed, '--if-unchanged', sha256(before), `skill:${AUTHORED}`])
@@ -89,7 +89,7 @@ test('a change made on disk while the editor is open makes the save fail with co
   await expect(said.getByTestId('line')).toContainText(['edit_stale'])
   await expect(said.getByTestId('line')).toContainText([message])
   expect(readFileSync(manifest(own.at.workspace), 'utf8')).toBe(elsewhere)
-  expect(readdirSync(join(own.at.workspace, '.mindflayer', 'tmp'))).toEqual([])
+  expect(readdirSync(join(own.at.workspace, '.mindweaver', 'tmp'))).toEqual([])
 })
 
 test('a skill added from a template and one renamed are what mindweaver add and mindweaver rename write', async ({ page, own }) => {

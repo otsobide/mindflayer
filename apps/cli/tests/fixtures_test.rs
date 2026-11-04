@@ -473,7 +473,7 @@ fn shelve(root: &Path) {
         ("format", "Format the code the way the team does"),
         ("triage", "Sort new issues by what they need"),
     ] {
-        let shelf = format!(".mindflayer/skills/{}/{name}", source.directory);
+        let shelf = format!(".mindweaver/skills/{}/{name}", source.directory);
         write_files(
             &root.join(&shelf),
             &[("SKILL.md", &skill_file(name, summary))],
@@ -995,7 +995,7 @@ fn write_what_planning_boxes_of_a_workspace_to_assign_in_is_answered_with() {
     let home = dir.path().join("you");
     let root = assigning(&home);
     let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
-    let before = fs::read(root.join(WEAVER_DIR).join("mindflayer.db")).unwrap();
+    let before = fs::read(root.join(WEAVER_DIR).join("mindweaver.db")).unwrap();
 
     let answers: Vec<Value> = [
         format_into_two(),
@@ -1013,7 +1013,7 @@ fn write_what_planning_boxes_of_a_workspace_to_assign_in_is_answered_with() {
     .collect();
 
     assert_eq!(
-        fs::read(root.join(WEAVER_DIR).join("mindflayer.db")).unwrap(),
+        fs::read(root.join(WEAVER_DIR).join("mindweaver.db")).unwrap(),
         before,
         "a plan wrote to the ledger"
     );
@@ -1210,12 +1210,12 @@ fn write_what_asking_what_an_update_would_do_is_answered_with() {
     let home = dir.path().join("you");
     let root = updating(&home);
     let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
-    let before = fs::read(root.join(WEAVER_DIR).join("mindflayer.db")).unwrap();
+    let before = fs::read(root.join(WEAVER_DIR).join("mindweaver.db")).unwrap();
 
     let answers = vec![asked(&backend, json!({"type": "updates"}))];
 
     assert_eq!(
-        fs::read(root.join(WEAVER_DIR).join("mindflayer.db")).unwrap(),
+        fs::read(root.join(WEAVER_DIR).join("mindweaver.db")).unwrap(),
         before,
         "asking wrote to the ledger"
     );

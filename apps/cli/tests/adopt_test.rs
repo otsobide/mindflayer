@@ -65,7 +65,7 @@ fn adopt_without_yes_says_what_it_would_do_and_writes_nothing() {
     assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
     assert!(outcome.ok);
     assert!(!library(dir.path()).exists());
-    assert!(!dir.path().join(WEAVER_DIR).join("mindflayer.db").exists());
+    assert!(!dir.path().join(WEAVER_DIR).join("mindweaver.db").exists());
     let status = weaver(dir.path(), &["status", "-p", "alpha"]).unwrap();
     assert!(
         status.stdout.contains("notes  foreign"),

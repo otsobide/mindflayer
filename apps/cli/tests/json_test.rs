@@ -359,7 +359,7 @@ fn the_hint_about_an_unmade_default_workspace_stays_on_stderr() {
     assert_eq!(json.stderr.len(), 1, "{:?}", json.stderr);
     assert!(json.stderr[0].text.starts_with("hint: "));
     assert!(json.ok);
-    assert!(!home.path().join(".mindflayer").exists());
+    assert!(!home.path().join(".mindweaver").exists());
 }
 
 /// `mind list --json` reads how each stands against the workspace `mind`

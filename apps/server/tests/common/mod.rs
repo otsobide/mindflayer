@@ -441,7 +441,7 @@ pub fn request(
                 .header(header::COOKIE, pair)
                 .header(header::ORIGIN, format!("http://{}", server.address()))
                 .header("sec-fetch-site", "same-origin")
-                .header("x-mindflayer", "1")
+                .header("x-mindweaver", "1")
         }
     }
     match body {

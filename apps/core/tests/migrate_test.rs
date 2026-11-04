@@ -22,7 +22,7 @@ fn beside() -> (TempDir, WeaverWorkspace) {
 }
 
 fn library(root: &Path, kind: Kind) -> PathBuf {
-    root.join(".mindflayer/library").join(kind.folder())
+    root.join(".mindweaver/library").join(kind.folder())
 }
 
 fn marker(workspace: &WeaverWorkspace) -> String {
@@ -73,9 +73,9 @@ fn the_plan_names_each_own_artifact_and_where_it_goes_and_moves_nothing() {
         ]
     );
     assert!(plan.refusals.is_empty(), "{:?}", plan.refusals);
-    assert_eq!(plan.backup, root.join(".mindflayer/flayer.toml.v2"));
+    assert_eq!(plan.backup, root.join(".mindweaver/weaver.toml.v2"));
     assert!(root.join("skills/commit-style/SKILL.md").is_file());
-    assert!(!root.join(".mindflayer/library").exists());
+    assert!(!root.join(".mindweaver/library").exists());
     assert!(!plan.backup.exists());
 }
 
@@ -101,7 +101,7 @@ fn a_destination_already_there_is_refused_by_the_plan() {
 #[test]
 fn a_marker_kept_by_an_earlier_migration_is_refused_by_the_plan() {
     let (dir, workspace) = beside();
-    let backup = dir.path().join(".mindflayer/flayer.toml.v2");
+    let backup = dir.path().join(".mindweaver/weaver.toml.v2");
     fs::write(&backup, "kept\n").unwrap();
 
     let plan = migrate::library_plan(&workspace);
@@ -184,15 +184,15 @@ fn a_project_that_cannot_be_read_refuses_the_plan_only_where_it_could_hold_them(
 fn a_folder_holding_the_library_is_refused_by_the_plan() {
     let (dir, workspace) = beside();
     // Allowed by `mindweaver init`, unlike the root, which is not inside the
-    // workspace, or `.mindflayer`, which holds the shelf.
+    // workspace, or `.mindweaver`, which holds the shelf.
     let text =
-        marker(&workspace).replace("skills = \"skills\"", "skills = \".mindflayer/library\"");
+        marker(&workspace).replace("skills = \"skills\"", "skills = \".mindweaver/library\"");
     fs::write(workspace.config_path(), text).unwrap();
     let workspace = WeaverWorkspace::open(dir.path()).unwrap();
 
     let plan = migrate::library_plan(&workspace);
 
-    let holding = dir.path().join(".mindflayer/library");
+    let holding = dir.path().join(".mindweaver/library");
     assert!(
         matches!(
             plan.refusals.as_slice(),
@@ -247,9 +247,9 @@ fn a_folder_outside_the_workspace_is_refused_and_left_as_it_is() {
 #[test]
 fn a_folder_on_the_shelf_is_refused_by_the_plan() {
     let (dir, workspace) = beside();
-    let text = marker(&workspace).replace("skills = \"skills\"", "skills = \".mindflayer/skills\"");
+    let text = marker(&workspace).replace("skills = \"skills\"", "skills = \".mindweaver/skills\"");
     fs::write(workspace.config_path(), text).unwrap();
-    let gathered = dir.path().join(".mindflayer/skills/gathered");
+    let gathered = dir.path().join(".mindweaver/skills/gathered");
     fs::create_dir_all(&gathered).unwrap();
     fs::write(
         gathered.join("SKILL.md"),
@@ -372,11 +372,11 @@ fn migrating_moves_them_and_points_the_marker_at_the_library() {
         before
             .replace(
                 "skills = \"skills\"",
-                "skills = \".mindflayer/library/skills\""
+                "skills = \".mindweaver/library/skills\""
             )
-            .replace("rules = \"rules\"", "rules = \".mindflayer/library/rules\"")
+            .replace("rules = \"rules\"", "rules = \".mindweaver/library/rules\"")
     );
-    let backup = root.join(".mindflayer/flayer.toml.v2");
+    let backup = root.join(".mindweaver/weaver.toml.v2");
     assert_eq!(migrated.backup.as_deref(), Some(backup.as_path()));
     assert_eq!(fs::read_to_string(&backup).unwrap(), before);
     // The workspace handed back is the one on disk, and finds them there.
@@ -400,7 +400,7 @@ fn a_second_migration_changes_nothing() {
         .unwrap()
         .modified()
         .unwrap();
-    let backup = dir.path().join(".mindflayer/flayer.toml.v2");
+    let backup = dir.path().join(".mindweaver/weaver.toml.v2");
     let kept = fs::read_to_string(&backup).unwrap();
 
     let again = migrate::library(&mut workspace).unwrap();
@@ -434,7 +434,7 @@ fn a_refused_migration_moves_nothing_and_writes_nothing() {
     assert!(dir.path().join("skills/commit-style/SKILL.md").is_file());
     assert!(!library(dir.path(), Kind::Skill).exists());
     assert_eq!(marker(&workspace), before);
-    assert!(!dir.path().join(".mindflayer/flayer.toml.v2").exists());
+    assert!(!dir.path().join(".mindweaver/weaver.toml.v2").exists());
 }
 
 #[test]
@@ -442,7 +442,7 @@ fn a_move_that_fails_puts_back_what_had_moved() {
     let (dir, mut workspace) = beside();
     let before = marker(&workspace);
     // The skill moves first; the rule's folder cannot be made over a file.
-    fs::create_dir_all(dir.path().join(".mindflayer/library")).unwrap();
+    fs::create_dir_all(dir.path().join(".mindweaver/library")).unwrap();
     fs::write(library(dir.path(), Kind::Rule), "in the way\n").unwrap();
 
     let error = migrate::library(&mut workspace).unwrap_err();
@@ -459,7 +459,7 @@ fn a_move_that_fails_puts_back_what_had_moved() {
         .join("commit-style")
         .exists());
     assert_eq!(marker(&workspace), before);
-    assert!(!dir.path().join(".mindflayer/flayer.toml.v2").exists());
+    assert!(!dir.path().join(".mindweaver/weaver.toml.v2").exists());
 }
 
 #[test]
@@ -569,5 +569,5 @@ fn an_unmade_workspace_has_nothing_to_move_and_is_not_made() {
     let migrated = migrate::library(&mut workspace).unwrap();
 
     assert!(migrated.plan.is_empty());
-    assert!(!dir.path().join(".mindflayer").exists());
+    assert!(!dir.path().join(".mindweaver").exists());
 }

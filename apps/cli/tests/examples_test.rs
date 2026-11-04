@@ -217,7 +217,7 @@ fn a_workspace_loads_the_examples_and_installs_their_rules_where_the_reference_s
     let block = fs::read_to_string(collapse.join("AGENTS.md")).unwrap();
     let rule = fs::read_to_string(examples().join("rules/git/commits.md")).unwrap();
     assert!(
-        block.contains(&format!("<!-- mindflayer:rule git/commits -->\n{rule}")),
+        block.contains(&format!("<!-- mindweaver:rule git/commits -->\n{rule}")),
         "{block}"
     );
     // About some files: Claude's alone, and said.
@@ -229,7 +229,7 @@ fn a_workspace_loads_the_examples_and_installs_their_rules_where_the_reference_s
         ]
     );
     assert_eq!(
-        fs::read(collapse.join(".claude/rules/mindflayer/style/comments.md")).unwrap(),
+        fs::read(collapse.join(".claude/rules/mindweaver/style/comments.md")).unwrap(),
         fs::read(examples().join("rules/style/comments.md")).unwrap()
     );
     assert!(!block.contains("style/comments"), "{block}");

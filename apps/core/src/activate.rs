@@ -1,6 +1,6 @@
 //! The shell code `mindweaver activate` prints: what activates a workspace in one
 //! shell, as a Python virtualenv's `activate` script does, and the
-//! `flayer-deactivate` that undoes it.
+//! `mindweaver-deactivate` that undoes it.
 //!
 //! Printed for the shell to run rather than written into a file. Activation
 //! lasts as long as the shell, as a virtualenv's does, and leaves nothing in
@@ -13,10 +13,17 @@
 //! code, and none can write it differently.
 //!
 //! What it changes, and so what deactivating restores, is two things: the
-//! variable, and a prefix on the prompt. `flayer-deactivate` takes out only
-//! what activating put in, wherever it is by then, so that it gets along with
-//! an active virtualenv in either order. It is never called `deactivate`,
-//! which is the virtualenv's.
+//! variable, and a prefix on the prompt. `mindweaver-deactivate` takes out
+//! only what activating put in, wherever it is by then, so that it gets
+//! along with an active virtualenv in either order. It is never called
+//! `deactivate`, which is the virtualenv's.
+//!
+//! A shell a Mindflayer build activated holds `$MINDFLAYER_WORKSPACE` and
+//! that build's `flayer-deactivate` (D-26). It keeps working: the front end
+//! reads the old variable while the new one is not set. Activating again
+//! runs the old function first, if it is there, so the old activation is
+//! undone by the code that made it, its prompt's prefix with it, before the
+//! new one is made; never two activations, of two names, at once.
 //!
 //! [`resolve`]: crate::resolve::resolve
 
@@ -35,11 +42,20 @@ use crate::workspace::WeaverWorkspace;
 ///
 /// Spelled here alone, and taken from here by the code [`script`] writes, as
 /// [`DEACTIVATE`] is: a name the shell is handed changes in one place.
-pub const WORKSPACE_VARIABLE: &str = "MINDFLAYER_WORKSPACE";
+pub const WORKSPACE_VARIABLE: &str = "MINDWEAVER_WORKSPACE";
+
+/// [`WORKSPACE_VARIABLE`] as a Mindflayer build named it: what a shell that
+/// build activated still holds, which the front end reads while the new one
+/// is not set, and nothing writes.
+pub const FLAYER_WORKSPACE_VARIABLE: &str = "MINDFLAYER_WORKSPACE";
 
 /// What undoes an activation. Not `deactivate`, which an active virtualenv
 /// has already defined, and which defining again would take from it.
-pub const DEACTIVATE: &str = "flayer-deactivate";
+pub const DEACTIVATE: &str = "mindweaver-deactivate";
+
+/// [`DEACTIVATE`] as a Mindflayer build named it: run, when a shell has it,
+/// before an activation, which so undoes the old one by its own code.
+pub const FLAYER_DEACTIVATE: &str = "flayer-deactivate";
 
 /// A shell activation can be written for.
 ///
@@ -208,7 +224,10 @@ fn written(shell: Shell, root: &str, prompt: &str) -> String {
 /// nor brings it back once none is.
 fn bourne(root: &str, prompt: &str) -> String {
     format!(
-        r#"if typeset -f {deactivate} >/dev/null 2>&1; then
+        r#"if typeset -f {older} >/dev/null 2>&1; then
+    {older}
+fi
+if typeset -f {deactivate} >/dev/null 2>&1; then
     {deactivate}
 fi
 if [ -n "${{{variable}+set}}" ]; then
@@ -239,6 +258,7 @@ fi
 "#,
         variable = WORKSPACE_VARIABLE,
         deactivate = DEACTIVATE,
+        older = FLAYER_DEACTIVATE,
     )
 }
 
@@ -252,7 +272,10 @@ fi
 /// unwrapping would take away.
 fn fish(root: &str, prompt: &str) -> String {
     format!(
-        r#"if functions -q {deactivate}
+        r#"if functions -q {older}
+    {older}
+end
+if functions -q {deactivate}
     {deactivate}
 end
 if set -q {variable}
@@ -286,6 +309,7 @@ end
 "#,
         variable = WORKSPACE_VARIABLE,
         deactivate = DEACTIVATE,
+        older = FLAYER_DEACTIVATE,
     )
 }
 
@@ -295,7 +319,10 @@ end
 /// would make an error on every prompt.
 fn pwsh(root: &str, prompt: &str) -> String {
     format!(
-        r#"if (Test-Path -Path Function:{deactivate}) {{
+        r#"if (Test-Path -Path Function:{older}) {{
+    {older}
+}}
+if (Test-Path -Path Function:{deactivate}) {{
     {deactivate}
 }}
 if (Test-Path -Path Env:{variable}) {{
@@ -326,6 +353,7 @@ function global:{deactivate} {{
 "#,
         variable = WORKSPACE_VARIABLE,
         deactivate = DEACTIVATE,
+        older = FLAYER_DEACTIVATE,
     )
 }
 

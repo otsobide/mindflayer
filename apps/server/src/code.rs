@@ -105,10 +105,11 @@ pub enum Condition {
     /// same-origin`: from a page on another port of loopback, or from a
     /// script, which sends the token as Bearer instead.
     SameOriginRequired,
-    /// A change sent with the cookie without `X-Mindflayer: 1`
+    /// A change sent with the cookie without `X-Mindweaver: 1`
     /// ([`PANEL_HEADER`](crate::guard::PANEL_HEADER)), which the panel's own
-    /// requests carry. Its code spells the header, as it was given, since a
-    /// code once given is never renamed.
+    /// requests carry. Its code spells the header as Mindflayer named it,
+    /// `X-Mindflayer`, as it was given, since a code once given is never
+    /// renamed (D-26).
     PanelHeaderRequired,
     /// A body not sent as `application/json`: refused by the guard on a
     /// change by cookie and by the JSON extractor alike, one condition

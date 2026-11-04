@@ -3,7 +3,7 @@
 //!
 //! Templates are Mindweaver's, not the agents', so they live inside the
 //! markers rather than beside the code: `.mind/templates/` for one project,
-//! `.mindflayer/templates/` for every project a workspace manages. A skill
+//! `.mindweaver/templates/` for every project a workspace manages. A skill
 //! template is a folder holding a `SKILL.md` and whatever else the skill
 //! should start with; a rule template is one markdown file. Of two templates
 //! of one kind and one name, the closer wins (the project's over the
@@ -22,7 +22,7 @@ use crate::install;
 use crate::kind::{Kind, Layout};
 use crate::workspace::{MindProject, WeaverWorkspace};
 
-/// The folder inside `.mind` or `.mindflayer` that holds templates.
+/// The folder inside `.mind` or `.mindweaver` that holds templates.
 pub const TEMPLATES_DIR: &str = "templates";
 
 /// Where a template comes from.

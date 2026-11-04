@@ -413,7 +413,7 @@ fn a_target_outside_the_project_inside_mind_or_absolute_is_passed_over_and_said(
             ".mind/skills",
             absolute,
             ".",
-            "nested/.mindflayer/skills",
+            "nested/.mindweaver/skills",
             ".git",
             "vendor/lib/.GIT/skills",
         ],
@@ -441,7 +441,7 @@ fn a_target_outside_the_project_inside_mind_or_absolute_is_passed_over_and_said(
             misplaced(".mind/skills", Misplaced::InsideMind),
             misplaced(absolute, Misplaced::Outside),
             misplaced(".", Misplaced::Outside),
-            misplaced("nested/.mindflayer/skills", Misplaced::InsideWorkspace),
+            misplaced("nested/.mindweaver/skills", Misplaced::InsideWorkspace),
             misplaced(".git", Misplaced::InsideGit),
             misplaced("vendor/lib/.GIT/skills", Misplaced::InsideGit),
         ]
@@ -622,7 +622,7 @@ fn a_new_project_writes_exactly_its_settings_and_a_gitignore() {
     );
     assert_eq!(
         fs::read_to_string(mind.join(".gitignore")).unwrap(),
-        "# Mindflayer keeps this project's settings here, for this checkout alone.\n\
+        "# Mindweaver keeps this project's settings here, for this checkout alone.\n\
          # Nothing in this folder is meant to be committed.\n\
          *\n"
     );

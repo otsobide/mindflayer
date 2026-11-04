@@ -7,7 +7,7 @@ use std::fs;
 use tempfile::TempDir;
 
 use super::*;
-use crate::workspace::{MarkerFile, MIND_DIR};
+use crate::workspace::{MarkerFile, MIND_DIR, WEAVER_DIR};
 
 /// A workspace at `work`, linking `alpha` under it, which `mind init` made,
 /// and nothing else.
@@ -84,7 +84,7 @@ fn hidden_folders_are_left_out_and_counted_unless_asked_for() {
 
     assert_eq!(names(&without), ["alpha", "src"]);
     assert_eq!(names(&with), [".git", ".github", "alpha", "src"]);
-    // The workspace's own `.mindflayer` is hidden too, and counted in
+    // The workspace's own `.mindweaver` is hidden too, and counted in
     // neither, since asking for hidden folders never lists it.
     assert_eq!(without.hidden, 2);
     assert_eq!(with.hidden, 2);

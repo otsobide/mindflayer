@@ -131,13 +131,13 @@ describe('the library', () => {
 
   it('lists what could not be read in it above what it holds', async () => {
     const snapshot = fixture('workspace')
-    snapshot.library.failures = [{ code: 'unreadable_directory', message: '/home/you/Projects/.mindflayer/library/skills: cannot be listed' }]
+    snapshot.library.failures = [{ code: 'unreadable_directory', message: '/home/you/Projects/.mindweaver/library/skills: cannot be listed' }]
 
     const { page } = await render('/library', snapshot)
 
     const failure = page.get('[data-testid="failure"]')
     expect(failure.text()).toContain('unreadable_directory')
-    expect(failure.text()).toContain('/home/you/Projects/.mindflayer/library/skills: cannot be listed')
+    expect(failure.text()).toContain('/home/you/Projects/.mindweaver/library/skills: cannot be listed')
   })
 
   it('lights the library in the sidebar', async () => {

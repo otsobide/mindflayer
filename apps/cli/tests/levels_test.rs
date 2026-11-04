@@ -212,11 +212,11 @@ fn weaver_init_says_in_the_marker_that_its_own_go_in_its_library() {
              #\n\
              # It orchestrates the mind projects listed below, so their skills can be\n\
              # managed together. Paths are relative to this file's grandparent, the\n\
-             # directory holding .mindflayer.\n\
+             # directory holding .mindweaver.\n\
              #\n\
              # `directories` says where the workspace keeps its own skills and rules,\n\
              # the ones every project it manages can install. By default that is its\n\
-             # library, inside .mindflayer where no agent looks, and a kind not named\n\
+             # library, inside .mindweaver where no agent looks, and a kind not named\n\
              # here is kept there too. Each folder is made the first time something\n\
              # is added to it.\n\
              #\n\
@@ -228,8 +228,8 @@ fn weaver_init_says_in_the_marker_that_its_own_go_in_its_library() {
              loaded = []\n\
              \n\
              [directories]\n\
-             skills = \".mindflayer/library/skills\"\n\
-             rules = \".mindflayer/library/rules\"\n"
+             skills = \".mindweaver/library/skills\"\n\
+             rules = \".mindweaver/library/rules\"\n"
         )
     );
     // Made by the first artifact added, as before.
@@ -383,7 +383,7 @@ fn a_workspace_that_keeps_its_own_beside_its_projects_still_does() {
          #\n\
          # It orchestrates the mind projects listed below, so their skills can be\n\
          # managed together. Paths are relative to this file's grandparent, the\n\
-         # directory holding .mindflayer.\n\
+         # directory holding .mindweaver.\n\
          #\n\
          # `directories` says where the workspace keeps its own skills and rules:\n\
          # the ones every project it manages can install, beside the projects'\n\
@@ -439,20 +439,20 @@ fn a_workspace_that_keeps_its_own_beside_its_projects_still_does() {
 fn a_workspace_cannot_keep_its_own_on_the_shelf() {
     let dir = TempDir::new().unwrap();
 
-    let failure = weaver(dir.path(), &["init", "--skills", ".mindflayer/skills"]).unwrap_err();
+    let failure = weaver(dir.path(), &["init", "--skills", ".mindweaver/skills"]).unwrap_err();
     // A folder holding the shelf overlaps it too, which the words say rather
     // than leaving a folder nobody typed to explain itself.
-    let holding = weaver(dir.path(), &["init", "--rules", ".mindflayer"]).unwrap_err();
+    let holding = weaver(dir.path(), &["init", "--rules", ".mindweaver"]).unwrap_err();
 
     assert_eq!(
         failure.error.to_string(),
-        ".mindflayer/skills: cannot hold the workspace's skills, \
-         because it overlaps .mindflayer/skills, which is reserved for gathering"
+        ".mindweaver/skills: cannot hold the workspace's skills, \
+         because it overlaps .mindweaver/skills, which is reserved for gathering"
     );
     assert_eq!(
         holding.error.to_string(),
-        ".mindflayer: cannot hold the workspace's rules, \
-         because it overlaps .mindflayer/skills, which is reserved for gathering"
+        ".mindweaver: cannot hold the workspace's rules, \
+         because it overlaps .mindweaver/skills, which is reserved for gathering"
     );
     assert!(!dir.path().join(WEAVER_DIR).exists());
 }

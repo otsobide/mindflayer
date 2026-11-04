@@ -446,7 +446,7 @@ fn the_closest_template_of_a_name_wins() {
     let (project, _) = MindProject::init(&root).unwrap();
     write(
         dir.path(),
-        ".mindflayer/templates/runbook/SKILL.md",
+        ".mindweaver/templates/runbook/SKILL.md",
         "---\n---\nthe workspace's\n",
     );
 
@@ -458,7 +458,7 @@ fn the_closest_template_of_a_name_wins() {
         template::find(Some(&workspace), &project, Kind::Skill, "runbook").unwrap();
     assert_eq!(
         from_workspace.origin,
-        Origin::Path(dir.path().join(".mindflayer/templates/runbook"))
+        Origin::Path(dir.path().join(".mindweaver/templates/runbook"))
     );
 
     write(
@@ -513,14 +513,14 @@ fn a_workspace_that_manages_a_project_from_beside_it_offers_its_templates() {
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
-    write(&hub, ".mindflayer/templates/runbook/SKILL.md", "---\n---\n");
+    write(&hub, ".mindweaver/templates/runbook/SKILL.md", "---\n---\n");
     workspace.link(&project).unwrap();
 
     let runbook = template::find(Some(&workspace), &project, Kind::Skill, "runbook").unwrap();
 
     assert_eq!(
         runbook.origin,
-        Origin::Path(hub.join(".mindflayer/templates/runbook"))
+        Origin::Path(hub.join(".mindweaver/templates/runbook"))
     );
     assert!(template::find(None, &project, Kind::Skill, "runbook").is_err());
 }

@@ -36,13 +36,13 @@ repository, `web`, made a project and not linked yet:
 ```console
 $ cd /home/you/Projects
 $ mindweaver init
-initialized weaver workspace `Projects` in /home/you/Projects/.mindflayer
+initialized weaver workspace `Projects` in /home/you/Projects/.mindweaver
 $ git init --quiet api && mind -C api init
 initialized mind project `api` in /home/you/Projects/api/.mind
 $ mindweaver link api
 linked api as api
 $ mindweaver add skill review 'Read a change before it lands'
-created skill review at /home/you/Projects/.mindflayer/library/skills/review/SKILL.md
+created skill review at /home/you/Projects/.mindweaver/library/skills/review/SKILL.md
 $ git init --quiet web && mind -C web init
 initialized mind project `web` in /home/you/Projects/web/.mind
 ```
@@ -51,7 +51,7 @@ Your own answers differ from these where they name something of your
 machine's: the server's port, here `40185`, is the one the system picked,
 the token is made new at every launch, the paths are your own, and each
 project's id is the one `mind init` gave it at random. They are of a home
-with no default workspace yet: where yours has one (`~/.mindflayer`),
+with no default workspace yet: where yours has one (`~/.mindweaver`),
 `mindweaver init` also says the default remembered the new workspace, and
 `/workspaces` and the snapshot's `known` list the default beside it, the
 new one with `"remembered": true`. The rest is the same for the same
@@ -224,7 +224,7 @@ $ curl -s -H "Authorization: Bearer $token" "$api/library" | jq .artifacts
     "state": null,
     "summary": "Read a change before it lands",
     "targets": [
-      ".mindflayer/library/skills/review"
+      ".mindweaver/library/skills/review"
     ],
     "unread": null
   }
@@ -361,7 +361,8 @@ $ curl -s -H "Authorization: Bearer $token" "$api/folders?path=/home/you/Project
 ```
 
 A path the API takes is absolute and normalized, and never inside a
-`.mindflayer`: any other is refused, there or not, with the code of why.
+`.mindweaver`, nor the `.mindflayer` of a workspace a Mindflayer build
+made: any other is refused, there or not, with the code of why.
 
 ### Updates and workspaces
 
@@ -652,7 +653,7 @@ What the server finds itself has a code of its own:
 | 403 | `unknown_host` | the server named otherwise than as `127.0.0.1`, `localhost` or `[::1]` on its port |
 | 403 | `foreign_origin` | sent from a page of another origin |
 | 403 | `same_origin_required` | a change sent with the panel's cookie from anywhere but its page |
-| 403 | `x_mindflayer_required` | a change sent with the panel's cookie without `X-Mindflayer: 1` |
+| 403 | `x_mindflayer_required` | a change sent with the panel's cookie without `X-Mindweaver: 1` |
 | 404 | `unknown_route` | a path no route names, of another version or of none |
 | 405 | `method_not_allowed` | a method the route does not take |
 | 413 | `body_too_large` | a body larger than the server reads |
@@ -660,6 +661,9 @@ What the server finds itself has a code of its own:
 | 422 | `invalid_body` | JSON that is not what the route reads |
 | 500 | `backend_failed` | Mindweaver failed while it answered |
 | 500 | `writer_stopped` | the thread that runs tasks has stopped |
+
+The header's code still says `mindflayer`: the header was `X-Mindflayer`
+when the code was given, and a code once given is never renamed.
 
 Everything else is Mindweaver's own refusal, by the code of the rule it
 breaks, from the list a command's `--json` takes its codes from: a 404 for

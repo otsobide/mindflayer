@@ -5,7 +5,7 @@
 //! thing that is not, because it answers questions a file cannot: which of two
 //! identically named skills came from which repository, at which revision, and
 //! what happened the last four times a gather was run. It sits beside
-//! `flayer.toml` in `.mindflayer/`, so it travels with the workspace it
+//! `weaver.toml` in `.mindweaver/`, so it travels with the workspace it
 //! describes and two workspaces never share a history.
 //!
 //! Nothing here decides *what* is worth gathering. It records what
@@ -45,8 +45,13 @@ use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision};
 /// one before a step: the SQLite store's, named here where they always were.
 pub use crate::adapter::sqlite::{backup_path, SCHEMA_VERSION};
 
-/// The file name, under `.mindflayer/`.
-pub const LEDGER_FILE: &str = "mindflayer.db";
+/// The file name, under `.mindweaver/`.
+pub const LEDGER_FILE: &str = "mindweaver.db";
+/// [`LEDGER_FILE`] as a Mindflayer build named it, under the `.mindflayer/`
+/// of a workspace one made ([`crate::names::Names::Mindflayer`]): the same
+/// schema, opened and migrated as it is, under its own name until the
+/// workspace is moved.
+pub const FLAYER_LEDGER_FILE: &str = "mindflayer.db";
 
 /// What kind of place an artifact was gathered from.
 ///
@@ -114,7 +119,7 @@ pub struct Source {
     pub subdirectory: String,
     /// The commit last gathered from, once one has been resolved.
     pub revision: Option<Revision>,
-    /// The folder this source owns under `.mindflayer/<kind folder>/`.
+    /// The folder this source owns under `.mindweaver/<kind folder>/`.
     ///
     /// Stored rather than derived: two URLs can reduce to the same readable
     /// name, and where a source's files went is a fact about the past that

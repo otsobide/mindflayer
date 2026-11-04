@@ -482,7 +482,7 @@ fn an_installed_rule_that_is_renamed_still_holds_what_was_installed_and_says_so(
     fs::create_dir(&project).unwrap();
     older_project(&project);
     weaver(dir.path(), &["link", "collapse"]).unwrap();
-    let own = dir.path().join(".mindflayer/library/rules/git");
+    let own = dir.path().join(".mindweaver/library/rules/git");
     fs::create_dir_all(&own).unwrap();
     fs::write(own.join("no-force-push.md"), "Never force-push.\n").unwrap();
     mind(&project, &["install", "git/no-force-push"]).unwrap();
@@ -758,7 +758,7 @@ fn mind_keeps_the_record_of_the_workspace_in_your_home_when_that_manages_the_pro
 #[test]
 fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
     let (_dir, hub, project) = linked_from_beside(new_project);
-    let template = hub.join(".mindflayer/templates/runbook/SKILL.md");
+    let template = hub.join(".mindweaver/templates/runbook/SKILL.md");
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();
 
@@ -787,14 +787,14 @@ fn a_workspace_beside_a_project_offers_it_the_workspaces_templates() {
             .unwrap()
             .stdout,
         "full     skill  built in\n\
-         runbook  skill  ../hub/.mindflayer/templates/runbook\n"
+         runbook  skill  ../hub/.mindweaver/templates/runbook\n"
     );
 }
 
 #[test]
 fn mind_add_from_a_template_refuses_when_the_workspace_that_lends_it_cannot_be_read() {
     let dir = workspace_with_two();
-    let template = dir.path().join(".mindflayer/templates/full/SKILL.md");
+    let template = dir.path().join(".mindweaver/templates/full/SKILL.md");
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nThe team's full.\n").unwrap();
     let marker = dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG);

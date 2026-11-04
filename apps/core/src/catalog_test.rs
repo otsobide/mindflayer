@@ -798,11 +798,11 @@ fn each_discovery_failure_of_its_own_gives_its_own_code() {
 #[test]
 fn a_ledger_that_cannot_be_read_is_said_with_the_ledger_s_code_and_file() {
     let failure = DiscoveryFailure::Ledger(LedgerError::Unmade {
-        path: PathBuf::from("/w/.mindflayer/mindflayer.db"),
+        path: PathBuf::from("/w/.mindweaver/mindweaver.db"),
     });
 
     assert_eq!(failure.code(), "ledger_unmade");
-    assert_eq!(failure.path(), Path::new("/w/.mindflayer/mindflayer.db"));
+    assert_eq!(failure.path(), Path::new("/w/.mindweaver/mindweaver.db"));
     assert!(failure.is_unreadable());
 }
 

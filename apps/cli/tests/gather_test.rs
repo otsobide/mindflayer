@@ -225,7 +225,7 @@ fn an_empty_shelf_says_how_to_fill_it() {
 fn listing_a_shelf_that_has_no_ledger_makes_none() {
     let dir = TempDir::new().unwrap();
     weaver(dir.path(), &["init"]).unwrap();
-    let ledger = dir.path().join(WEAVER_DIR).join("mindflayer.db");
+    let ledger = dir.path().join(WEAVER_DIR).join("mindweaver.db");
 
     let outcome = weaver(dir.path(), &["gather", "list"]).unwrap();
 
