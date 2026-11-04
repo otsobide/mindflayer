@@ -121,7 +121,7 @@ pub enum Refusal {
     /// The folder a kind is kept in, or one above it inside the workspace, is
     /// a link: what is in it lives wherever that leads, a dotfiles repository
     /// say, and a rename would take it out of there.
-    #[error("{folder}: a link to {target}, so moving the workspace's {kind}s would take them out of wherever it leads; move them yourself, or point flayer.toml at the library")]
+    #[error("{folder}: a link to {target}, so moving the workspace's {kind}s would take them out of wherever it leads; move them yourself, or point {FLAYER_CONFIG} at the library")]
     Linked {
         kind: Kind,
         folder: PathBuf,

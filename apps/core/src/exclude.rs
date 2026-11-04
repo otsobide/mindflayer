@@ -953,11 +953,11 @@ fn check(key: &str, patterns: &[String]) -> Result<(), ExcludeError> {
 /// counted from 1.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Malformed {
-    #[error("line {line}: `# mindflayer:begin` is never closed by `# mindflayer:end`")]
+    #[error("line {line}: `{BEGIN}` is never closed by `{END}`")]
     Unclosed { line: usize },
-    #[error("line {line}: `# mindflayer:end` closes no `# mindflayer:begin`")]
+    #[error("line {line}: `{END}` closes no `{BEGIN}`")]
     Unopened { line: usize },
-    #[error("line {line}: a second `# mindflayer:begin`, where there can be one block")]
+    #[error("line {line}: a second `{BEGIN}`, where there can be one block")]
     Reopened { line: usize },
     #[error("line {line}: a second group for `{key}` in the block")]
     Regrouped { line: usize, key: String },

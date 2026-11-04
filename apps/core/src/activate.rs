@@ -32,6 +32,9 @@ use crate::workspace::FlayerWorkspace;
 /// The variable that activates a workspace for every command a shell runs,
 /// which the front end reads and hands to [`resolve`](crate::resolve::resolve)
 /// as the activated workspace.
+///
+/// Spelled here alone, and taken from here by the code [`script`] writes, as
+/// [`DEACTIVATE`] is: a name the shell is handed changes in one place.
 pub const WORKSPACE_VARIABLE: &str = "MINDFLAYER_WORKSPACE";
 
 /// What undoes an activation. Not `deactivate`, which an active virtualenv
@@ -205,35 +208,37 @@ fn written(shell: Shell, root: &str, prompt: &str) -> String {
 /// nor brings it back once none is.
 fn bourne(root: &str, prompt: &str) -> String {
     format!(
-        r#"if typeset -f flayer-deactivate >/dev/null 2>&1; then
-    flayer-deactivate
+        r#"if typeset -f {deactivate} >/dev/null 2>&1; then
+    {deactivate}
 fi
-if [ -n "${{MINDFLAYER_WORKSPACE+set}}" ]; then
-    _FLAYER_OLD_WORKSPACE="$MINDFLAYER_WORKSPACE"
+if [ -n "${{{variable}+set}}" ]; then
+    _FLAYER_OLD_WORKSPACE="${variable}"
 else
     unset _FLAYER_OLD_WORKSPACE
 fi
-export MINDFLAYER_WORKSPACE={root}
+export {variable}={root}
 _FLAYER_PROMPT={prompt}
 PS1="$_FLAYER_PROMPT${{PS1-}}"
 if [ -n "${{_OLD_VIRTUAL_PS1+set}}" ]; then
     _OLD_VIRTUAL_PS1="$_FLAYER_PROMPT$_OLD_VIRTUAL_PS1"
 fi
-flayer-deactivate() {{
+{deactivate}() {{
     if [ -n "${{_FLAYER_OLD_WORKSPACE+set}}" ]; then
-        export MINDFLAYER_WORKSPACE="$_FLAYER_OLD_WORKSPACE"
+        export {variable}="$_FLAYER_OLD_WORKSPACE"
         unset _FLAYER_OLD_WORKSPACE
     else
-        unset MINDFLAYER_WORKSPACE
+        unset {variable}
     fi
     PS1="${{PS1/"$_FLAYER_PROMPT"/}}"
     if [ -n "${{_OLD_VIRTUAL_PS1+set}}" ]; then
         _OLD_VIRTUAL_PS1="${{_OLD_VIRTUAL_PS1/"$_FLAYER_PROMPT"/}}"
     fi
     unset _FLAYER_PROMPT
-    unset -f flayer-deactivate
+    unset -f {deactivate}
 }}
-"#
+"#,
+        variable = WORKSPACE_VARIABLE,
+        deactivate = DEACTIVATE,
     )
 }
 
@@ -247,15 +252,15 @@ flayer-deactivate() {{
 /// unwrapping would take away.
 fn fish(root: &str, prompt: &str) -> String {
     format!(
-        r#"if functions -q flayer-deactivate
-    flayer-deactivate
+        r#"if functions -q {deactivate}
+    {deactivate}
 end
-if set -q MINDFLAYER_WORKSPACE
-    set -g _flayer_old_workspace $MINDFLAYER_WORKSPACE
+if set -q {variable}
+    set -g _flayer_old_workspace ${variable}
 else
     set -e _flayer_old_workspace
 end
-set -gx MINDFLAYER_WORKSPACE {root}
+set -gx {variable} {root}
 set -g _flayer_prompt {prompt}
 if not functions -q _flayer_old_fish_prompt
     functions -c fish_prompt _flayer_old_fish_prompt
@@ -268,17 +273,19 @@ if not functions -q _flayer_old_fish_prompt
         _flayer_old_fish_prompt
     end
 end
-function flayer-deactivate
+function {deactivate}
     if set -q _flayer_old_workspace
-        set -gx MINDFLAYER_WORKSPACE $_flayer_old_workspace
+        set -gx {variable} $_flayer_old_workspace
         set -e _flayer_old_workspace
     else
-        set -e MINDFLAYER_WORKSPACE
+        set -e {variable}
     end
     set -e _flayer_prompt
-    functions -e flayer-deactivate
+    functions -e {deactivate}
 end
-"#
+"#,
+        variable = WORKSPACE_VARIABLE,
+        deactivate = DEACTIVATE,
     )
 }
 
@@ -288,15 +295,15 @@ end
 /// would make an error on every prompt.
 fn pwsh(root: &str, prompt: &str) -> String {
     format!(
-        r#"if (Test-Path -Path Function:flayer-deactivate) {{
-    flayer-deactivate
+        r#"if (Test-Path -Path Function:{deactivate}) {{
+    {deactivate}
 }}
-if (Test-Path -Path Env:MINDFLAYER_WORKSPACE) {{
-    $global:_FlayerOldWorkspace = $Env:MINDFLAYER_WORKSPACE
+if (Test-Path -Path Env:{variable}) {{
+    $global:_FlayerOldWorkspace = $Env:{variable}
 }} else {{
     Remove-Variable -Name _FlayerOldWorkspace -Scope Global -ErrorAction SilentlyContinue
 }}
-$Env:MINDFLAYER_WORKSPACE = {root}
+$Env:{variable} = {root}
 $global:_FlayerPrompt = {prompt}
 if (-not (Get-Variable -Name _FlayerOldPrompt -Scope Global -ErrorAction SilentlyContinue)) {{
     $global:_FlayerOldPrompt = $Function:prompt
@@ -305,18 +312,20 @@ if (-not (Get-Variable -Name _FlayerOldPrompt -Scope Global -ErrorAction Silentl
         & $global:_FlayerOldPrompt
     }}
 }}
-function global:flayer-deactivate {{
+function global:{deactivate} {{
     $old = Get-Variable -Name _FlayerOldWorkspace -Scope Global -ErrorAction SilentlyContinue
     if ($old) {{
-        $Env:MINDFLAYER_WORKSPACE = $old.Value
+        $Env:{variable} = $old.Value
         Remove-Variable -Name _FlayerOldWorkspace -Scope Global
     }} else {{
-        Remove-Item -Path Env:MINDFLAYER_WORKSPACE -ErrorAction SilentlyContinue
+        Remove-Item -Path Env:{variable} -ErrorAction SilentlyContinue
     }}
     $global:_FlayerPrompt = ''
-    Remove-Item -Path Function:flayer-deactivate
+    Remove-Item -Path Function:{deactivate}
 }}
-"#
+"#,
+        variable = WORKSPACE_VARIABLE,
+        deactivate = DEACTIVATE,
     )
 }
 

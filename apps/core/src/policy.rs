@@ -52,7 +52,7 @@ pub enum PolicyError {
     Relative { given: String },
     #[error("`{given}` is not spelled as the folder it names, `{normal}`: no `.` or `..` part, and no doubled or trailing separator")]
     Unnormalized { given: String, normal: String },
-    #[error("`{given}` is inside a `.mindflayer`, which holds a workspace's own files: name a folder outside it")]
+    #[error("`{given}` is inside a `{FLAYER_DIR}`, which holds a workspace's own files: name a folder outside it")]
     InMindflayer { given: String },
     /// A workspace to switch to that no list of what may be switched to
     /// holds, by the path it spells: a typo, a list read before it changed,
