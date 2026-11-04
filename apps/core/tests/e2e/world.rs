@@ -276,13 +276,23 @@ impl World {
     /// `mind init` in `at`: a project for every agent, kept out of git, its
     /// folders where core puts them when none is asked for.
     pub fn init_project(&self, at: &str) -> &Self {
-        MindProject::init_asked(
-            self.at(at),
-            &Agent::ALL,
-            Share::Local,
-            &Directories::default(),
-        )
-        .unwrap_or_else(|error| panic!("mind init in {at}: {error}"));
+        self.init_project_for(at, &Agent::ALL)
+    }
+
+    /// `mind init --agents <agents>` in `at`.
+    pub fn init_project_for(&self, at: &str, agents: &[Agent]) -> &Self {
+        MindProject::init_asked(self.at(at), agents, Share::Local, &Directories::default())
+            .unwrap_or_else(|error| panic!("mind init in {at}: {error}"));
+        self
+    }
+
+    /// A project at `at` as a Mindflayer from before settings made one,
+    /// marked by a `.mind/mind.toml` naming its folders and nothing else,
+    /// which core's `MindProject::init` still writes for such a test.
+    pub fn older_project(&self, at: &str) -> &Self {
+        let path = self.at(at);
+        fs::create_dir_all(&path).expect("make the project's folder");
+        MindProject::init(&path).unwrap_or_else(|error| panic!("mark {at}: {error}"));
         self
     }
 

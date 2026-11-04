@@ -163,3 +163,30 @@ fn the_default_workspace_remembers_each_one_made_once_it_is_made_itself() {
         ])
     );
 }
+
+#[test]
+fn a_loaded_workspaces_own_are_offered_until_it_is_unloaded() {
+    let world = World::projects(&["collapse"]);
+    world.folder("~/src/team").init_workspace("~/src/team").add(
+        "~/src/team",
+        "~/src/team",
+        mindflayer_core::Kind::Skill,
+        "deploy",
+        "Ship the service to staging",
+    );
+    let mut workspace = world.workspace("~/Projects");
+
+    workspace
+        .load(&world.workspace("~/src/team"))
+        .expect("load team");
+
+    let offers = world.snapshot("~/Projects")["offers"].clone();
+    assert_eq!(offers[0]["name"], "deploy");
+    assert_eq!(offers[0]["origin"], "load:../src/team");
+
+    workspace
+        .unload(&world.at("~/src/team"))
+        .expect("unload team");
+
+    assert_eq!(world.snapshot("~/Projects")["offers"], json!([]));
+}

@@ -51,4 +51,13 @@ mod updating;
 #[path = "e2e/reading.rs"]
 mod reading;
 
+#[path = "e2e/settings.rs"]
+mod settings;
+
+#[path = "e2e/upgrading.rs"]
+mod upgrading;
+
+#[path = "e2e/adopting.rs"]
+mod adopting;
+
 pub use world::{at, World};
