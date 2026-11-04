@@ -617,6 +617,83 @@
             "warning",
             "message"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "transport_incomplete"
+            },
+            "field": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "transport": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "transport",
+            "field",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_repeated"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_unreferenced"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "kind",
+            "warning",
+            "message"
+          ]
         }
       ]
     }

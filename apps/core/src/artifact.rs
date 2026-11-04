@@ -13,6 +13,7 @@ use crate::agent::Agent;
 use crate::code::codes;
 use crate::frontmatter::{self, FrontMatterError};
 use crate::kind::{Kind, Layout};
+use crate::mcp::InputKind;
 use crate::rule::{Lenient, RuleManifest};
 use crate::skill::{
     Compatibility, SkillManifest, MAX_COMPATIBILITY_LEN, MAX_DESCRIPTION_LEN, MAX_NAME_SEGMENT_LEN,
@@ -801,6 +802,9 @@ pub enum ValidationIssue {
     FrontMatterUnparsed { reason: String },
     PathsNotStrings,
     DescriptionNotAString,
+    TransportIncomplete { transport: String, field: String },
+    InputRepeated { name: String },
+    InputUnreferenced { name: String, kind: InputKind },
 }
 
 codes!(ValidationIssue {
@@ -820,6 +824,9 @@ codes!(ValidationIssue {
     Self::FrontMatterUnparsed { .. } => "front_matter_unparsed",
     Self::PathsNotStrings => "paths_not_strings",
     Self::DescriptionNotAString => "description_not_a_string",
+    Self::TransportIncomplete { .. } => "transport_incomplete",
+    Self::InputRepeated { .. } => "input_repeated",
+    Self::InputUnreferenced { .. } => "input_unreferenced",
 });
 
 impl ValidationIssue {
@@ -874,7 +881,10 @@ impl ValidationIssue {
             | ValidationIssue::NameDirectoryMismatch { .. }
             | ValidationIssue::DescriptionEmpty
             | ValidationIssue::DescriptionTooLong { .. }
-            | ValidationIssue::Empty => false,
+            | ValidationIssue::Empty
+            | ValidationIssue::TransportIncomplete { .. }
+            | ValidationIssue::InputRepeated { .. }
+            | ValidationIssue::InputUnreferenced { .. } => false,
         }
     }
 }
@@ -947,6 +957,15 @@ impl ValidationIssue {
             ValidationIssue::FrontMatterUnparsed { reason } => {
                 vec![("reason", Carried::Text(reason))]
             }
+            ValidationIssue::TransportIncomplete { transport, field } => vec![
+                ("transport", Carried::Text(transport)),
+                ("field", Carried::Text(field)),
+            ],
+            ValidationIssue::InputRepeated { name } => vec![("name", Carried::Text(name))],
+            ValidationIssue::InputUnreferenced { name, kind } => vec![
+                ("name", Carried::Text(name)),
+                ("kind", Carried::Text(kind.slug())),
+            ],
         }
     }
 }
@@ -1083,6 +1102,15 @@ impl ValidationIssue {
             ValidationIssue::FrontMatterUnparsed { reason: text() },
             ValidationIssue::PathsNotStrings,
             ValidationIssue::DescriptionNotAString,
+            ValidationIssue::TransportIncomplete {
+                transport: text(),
+                field: text(),
+            },
+            ValidationIssue::InputRepeated { name: text() },
+            ValidationIssue::InputUnreferenced {
+                name: text(),
+                kind: InputKind::Env,
+            },
         ]
     }
 }
@@ -1144,6 +1172,20 @@ impl fmt::Display for ValidationIssue {
             ValidationIssue::DescriptionNotAString => write!(
                 f,
                 "`description` is not a string, so it is ignored, and left in the file as written"
+            ),
+            ValidationIssue::TransportIncomplete { transport, field } => write!(
+                f,
+                "the {transport} transport has no `{field}`, which no agent can start or reach the server without"
+            ),
+            ValidationIssue::InputRepeated { name } => write!(
+                f,
+                "input `{name}` is declared more than once, so which of them `{{{name}}}` stands for is not known"
+            ),
+            ValidationIssue::InputUnreferenced { name, kind } => write!(
+                f,
+                "input `{name}` is used nowhere: an input of kind `{}` is written `{{{name}}}` in {}",
+                kind.slug(),
+                kind.place()
             ),
         }
     }

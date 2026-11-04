@@ -139,6 +139,75 @@ fn a_rule_has_something_to_say_and_a_scoped_one_says_which_files() {
 }
 
 #[test]
+fn every_definition_the_mother_makes_reads_as_the_transport_it_is_named_for() {
+    use crate::mcp::{McpDefinition, Transport};
+
+    let name = random::kebab();
+    for (text, slug) in [
+        (McpMother::stdio(&name), "stdio"),
+        (McpMother::http(&name), "http"),
+        (McpMother::sse(&name), "sse"),
+    ] {
+        let definition = McpDefinition::parse(&text).unwrap_or_else(|error| panic!("{error}"));
+
+        assert_eq!(definition.name, name.as_str());
+        assert_eq!(definition.transport.slug(), slug);
+        assert!(!definition.inputs.is_empty(), "{slug}");
+        assert_eq!(definition.issues(), [], "{text}");
+    }
+    let sse = McpDefinition::parse(&McpMother::sse(&name)).unwrap();
+    assert!(matches!(sse.transport, Transport::Sse(_)));
+    for _ in 0..DRAWS {
+        let (name, text) = McpMother::random();
+        assert!(name_issues(&name).is_empty(), "{name}");
+        assert_eq!(McpDefinition::parse(&text).unwrap().issues(), [], "{text}");
+    }
+}
+
+#[test]
+fn a_definitions_named_shapes_break_the_rule_they_are_named_for() {
+    use crate::mcp::{McpDefinition, McpError};
+
+    let name = random::kebab();
+
+    assert!(matches!(
+        McpDefinition::parse(&McpMother::in_format(&name, "2")),
+        Err(McpError::FormatTooNew { found: 2 })
+    ));
+    for transport in ["stdio", "http", "sse"] {
+        let incomplete = McpDefinition::parse(&McpMother::incomplete(&name, transport)).unwrap();
+        assert!(matches!(
+            &incomplete.issues()[..],
+            [ValidationIssue::TransportIncomplete { .. }]
+        ));
+    }
+    let unreferenced = McpDefinition::parse(&McpMother::unreferenced(&name)).unwrap();
+    assert!(unreferenced
+        .issues()
+        .iter()
+        .any(|issue| matches!(issue, ValidationIssue::InputUnreferenced { .. })));
+}
+
+#[test]
+fn input_and_variable_names_are_drawn_as_they_are_usually_written() {
+    for _ in 0..DRAWS {
+        let input = InputNameMother::random();
+        let variable = VariableNameMother::random();
+
+        assert!(
+            input.chars().all(|c| c.is_ascii_lowercase() || c == '_'),
+            "{input}"
+        );
+        assert!(
+            variable.chars().all(|c| c.is_ascii_uppercase() || c == '_'),
+            "{variable}"
+        );
+        assert_eq!(InputNameMother::create(&input), input);
+        assert_eq!(VariableNameMother::create(&variable), variable);
+    }
+}
+
+#[test]
 fn random_settings_are_written_and_read_back_as_they_were() {
     let dir = tempfile::TempDir::new().unwrap();
     for _ in 0..DRAWS {

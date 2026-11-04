@@ -15,11 +15,12 @@
 //!   made only through the rule (the recipe, the generator or the parser, the
 //!   redaction), never from any text at all. A function that is handed one
 //!   need not check it again.
-//! - **Named apart**: [`ArtifactName`], [`Origin`] and [`Revision`], which
-//!   hold any text, since what core reads it reads leniently (a name on the
-//!   disk can break the rules a write is held to, and is listed all the same:
-//!   "strict when writing, lenient when reading"), but each a type of its own
-//!   so that one is never handed where another is meant.
+//! - **Named apart**: [`ArtifactName`], [`Origin`], [`Revision`],
+//!   [`InputName`] and [`VariableName`], which hold any text, since what
+//!   core reads it reads leniently (a name on the disk can break the rules a
+//!   write is held to, and is listed all the same: "strict when writing,
+//!   lenient when reading"), but each a type of its own so that one is never
+//!   handed where another is meant.
 //!
 //! Each goes out as the text it holds, and its contract is that text: serde
 //! writes a string, ts-rs says `string` (so no file of its own is exported
@@ -376,6 +377,34 @@ text_value! {
 }
 from_text!(Revision);
 as_text!(Revision);
+
+text_value! {
+    /// The name of an input an MCP server's definition declares
+    /// ([`crate::mcp::Input`]): what a value of its transport writes between
+    /// braces, `{token}`, where the value somebody supplies goes.
+    ///
+    /// Named apart and held to no rule, as an artifact's name is: a
+    /// definition on the disk is read whatever it calls an input, and
+    /// `validate` says when no value uses one. Not a [`VariableName`],
+    /// though an input is read from one: the two are written in different
+    /// places, and one handed where the other is meant would render a
+    /// placeholder as the variable or the variable as a placeholder.
+    pub struct InputName;
+}
+from_text!(InputName);
+as_text!(InputName);
+
+text_value! {
+    /// The name of an environment variable an MCP server's input is read
+    /// from when an agent starts the server (D-11): never the value, which
+    /// no file Mindweaver writes holds.
+    ///
+    /// Named apart and held to no rule here: which names an agent can read
+    /// a secret from is a rule of its own, held where secrets are (#87).
+    pub struct VariableName;
+}
+from_text!(VariableName);
+as_text!(VariableName);
 
 /// A project's id: 128 random bits, written as 32 lowercase hexadecimal
 /// digits.

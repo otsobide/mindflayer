@@ -458,6 +458,9 @@
           "front_matter_unparsed",
           "paths_not_strings",
           "description_not_a_string",
+          "transport_incomplete",
+          "input_repeated",
+          "input_unreferenced",
           "browse_missing",
           "browse_not_a_folder",
           "browse_unlisted",
@@ -618,6 +621,11 @@
           "change_failed",
           "workspace_busy",
           "lock_open_failed",
+          "mcp_unparsed",
+          "mcp_format_missing",
+          "mcp_format_too_new",
+          "mcp_format_unknown",
+          "mcp_malformed",
           "migrate_refused",
           "migrate_marker_backup_failed",
           "migrate_move_failed",
@@ -5094,6 +5102,83 @@
             },
             "required": [
               "code",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "transport_incomplete"
+              },
+              "field": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "transport": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "transport",
+              "field",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "input_repeated"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "input_unreferenced"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "kind",
               "warning",
               "message"
             ],

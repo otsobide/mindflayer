@@ -65,6 +65,7 @@ use crate::kind::UnknownKind;
 use crate::ledger::LedgerError;
 use crate::lifecycle::LifecycleError;
 use crate::lock::LockError;
+use crate::mcp::McpError;
 use crate::migrate::{MigrateError, NamesFailure, ProjectFailure, Refusal};
 use crate::policy::PolicyError;
 use crate::port::GitError;
@@ -227,6 +228,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("ledger::LedgerError", LedgerError::CODES),
     ("lifecycle::LifecycleError", LifecycleError::CODES),
     ("lock::LockError", LockError::CODES),
+    ("mcp::McpError", McpError::CODES),
     ("migrate::MigrateError", MigrateError::CODES),
     ("migrate::Refusal", Refusal::CODES),
     ("migrate::project::ProjectFailure", ProjectFailure::CODES),
