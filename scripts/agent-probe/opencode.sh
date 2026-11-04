@@ -233,6 +233,51 @@ opencode_mcp_v1_shape() {
 	opencode_expect $run "D-12: V1's mcp.<name> in $opencode_v2_version"
 }
 
+# opencode_service <name> <what> <dir> <arguments...>: `opencode service
+# <arguments>` from that folder, its output kept as <name>.<what> and its
+# exit status left in opencode_service_status.
+opencode_service() {
+	local name=$1 what=$2 dir=$3
+	shift 3
+	{
+		printf 'cd %q\n' "$dir"
+		printf '%s ' "${opencode_env[@]}"
+		printf '%q service' "$PROBE_OPENCODE_BIN"
+		printf ' %q' "$@"
+		printf '\n'
+	} >"$results/$name.$what.command"
+	opencode_service_status=0
+	# A start waits for the server to answer, two minutes at most.
+	(cd "$dir" && env "${opencode_env[@]}" timeout --kill-after=10 150 \
+		"$PROBE_OPENCODE_BIN" service "$@") </dev/null >"$results/$name.$what" 2>&1 ||
+		opencode_service_status=$?
+	say "  \$ opencode service $*: exit $opencode_service_status"
+	if [[ $opencode_service_status != 0 ]]; then
+		head -n 5 -- "$results/$name.$what" | sed 's/^/    /'
+	fi
+}
+
+# opencode_own_port <run> <dir>: the temp home's background server given a
+# port nothing holds. The namespace shares the host's network, and a V2
+# server takes its channel's fixed port, 49374, unless its settings name
+# another; the operator's own OpenCode may hold that one, which would fail
+# every reading here for a reason that has nothing to do with MCP, and keep
+# the operator's own server from starting while the probe's ran. `opencode
+# service set port` writes the temp home's service settings alone. False,
+# with a mismatch said and the run's http stand-in stopped, when it fails.
+opencode_own_port() {
+	local port
+	port=$("$mcp_python" -I -c 'import socket
+with socket.socket() as s:
+    s.bind(("127.0.0.1", 0))
+    print(s.getsockname()[1])') || port=
+	opencode_service "$1" port "$2" set port "$port"
+	verdict "$1" 0 "$opencode_service_status" 'service set port' 'the background server gets a port of its own'
+	[[ $opencode_service_status == 0 ]] && return 0
+	mcp_http_stop
+	return 1
+}
+
 # D-11: V2's shape in V2 through its background server, the way a person runs
 # OpenCode, which the list starts when none is running. Whether {env:} is
 # filled from the environment of whoever started it, or from the server's
@@ -242,14 +287,13 @@ opencode_mcp_v1_shape() {
 opencode_mcp_service() {
 	local run=opencode-mcp-service attempt
 	opencode_scenario $run "$stage/$run" v2
+	opencode_own_port $run "$stage/$run" || return 0
 	for attempt in 1 2 3 4 5; do
 		opencode_list $run "$stage/$run" "$PROBE_OPENCODE_BIN"
 		grep -q pending -- "$results/$run.list" || break
 		sleep 3
 	done
-	(cd "$stage/$run" && env "${opencode_env[@]}" timeout --kill-after=10 60 \
-		"$PROBE_OPENCODE_BIN" service stop) </dev/null >"$results/$run.stop" 2>&1 ||
-		say "  the background server did not stop: $(head -c 300 -- "$results/$run.stop")"
+	opencode_service $run stop "$stage/$run" stop
 	say "  asked $attempt time(s)"
 	opencode_expect $run "D-12: mcp.servers through $opencode_v2_version's background server"
 }
