@@ -140,7 +140,7 @@ describe('the shell', () => {
     await page.get('[data-testid="overview"] button[aria-label="Collapse sidebar"]').trigger('click')
     await flushPromises()
 
-    expect(JSON.parse(cookie('mindflayer-dashboard-sidebar-default') ?? '{}')).toMatchObject({ collapsed: true })
+    expect(JSON.parse(cookie('mindweaver-dashboard-sidebar-default') ?? '{}')).toMatchObject({ collapsed: true })
   })
 
   it('opens the next launch, on a port of its own, with the sidebar as it was left', async () => {
@@ -191,16 +191,26 @@ describe('the colour mode', () => {
     await render('/')
 
     expect(document.documentElement.classList.contains('dark')).toBe(true)
-    expect(cookie('mindflayer-vueuse-color-scheme')).toBe('dark')
+    expect(cookie('mindweaver-vueuse-color-scheme')).toBe('dark')
   })
 
   it('keeps the light mode this browser chose', async () => {
-    document.cookie = 'mindflayer-vueuse-color-scheme=light; Path=/'
+    document.cookie = 'mindweaver-vueuse-color-scheme=light; Path=/'
 
     await render('/')
 
     expect(document.documentElement.classList.contains('dark')).toBe(false)
     expect(document.documentElement.classList.contains('light')).toBe(true)
+  })
+
+  it('keeps the mode chosen under a Mindflayer build, moved to the new name once', async () => {
+    document.cookie = 'mindflayer-vueuse-color-scheme=light; Path=/'
+
+    await render('/')
+
+    expect(document.documentElement.classList.contains('light')).toBe(true)
+    expect(cookie('mindweaver-vueuse-color-scheme')).toBe('light')
+    expect(cookie('mindflayer-vueuse-color-scheme')).toBeUndefined()
   })
 
   it('switches from the header without adding a style element', async () => {
@@ -211,7 +221,7 @@ describe('the colour mode', () => {
 
     expect(document.documentElement.classList.contains('light')).toBe(true)
     expect(document.documentElement.classList.contains('dark')).toBe(false)
-    expect(cookie('mindflayer-vueuse-color-scheme')).toBe('light')
+    expect(cookie('mindweaver-vueuse-color-scheme')).toBe('light')
     expect(styles).toEqual([])
   })
 

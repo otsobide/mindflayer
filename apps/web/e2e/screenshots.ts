@@ -400,7 +400,7 @@ async function take(browser: Browser, served: Serving, mode: 'light' | 'dark', s
   const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: SCALE, locale: LOCALE, timezoneId: ZONE, colorScheme: mode, reducedMotion: 'reduce' })
   // The panel is dark until somebody picks, and keeps what they picked in
   // a cookie of its own (src/preferences.ts): picked here before it opens.
-  await context.addCookies([{ name: 'mindflayer-vueuse-color-scheme', value: mode, url: served.origin }])
+  await context.addCookies([{ name: 'mindweaver-vueuse-color-scheme', value: mode, url: served.origin }])
   const page = await context.newPage()
   const thrown: string[] = []
   page.on('pageerror', error => thrown.push(error.message))
