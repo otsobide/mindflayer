@@ -297,6 +297,22 @@ fn each_binary_describes_itself_rather_than_the_crate() {
     assert_ne!(mind.lines().next().unwrap(), weaver.lines().next().unwrap());
 }
 
+#[test]
+fn list_says_in_its_help_every_kind_it_takes() {
+    let mind = Cli::try_parse_from(["mind", "list", "--help"])
+        .unwrap_err()
+        .to_string();
+    let weaver = WeaverCli::try_parse_from(["mindweaver", "list", "--help"])
+        .unwrap_err()
+        .to_string();
+
+    for help in [mind, weaver] {
+        for kind in Kind::ALL {
+            assert!(help.contains(&format!("`{}`", kind.folder())), "{help}");
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // More than one kind
 // ---------------------------------------------------------------------------
