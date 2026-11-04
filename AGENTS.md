@@ -681,7 +681,7 @@ These are easy to break from a single file without noticing.
     exactly as it is and said, and so is a link at a rule's place. A new
     file is made with `create_new`; one replaced goes through
     `replace_bytes_unresolved`, whose temporary ends in `.tmp`, which
-    Claude never loads; emptied folders go up to and including `mindweaver`
+    Claude never loads; emptied folders go up to and including `mindflayer`
     and no further. A render asked for a rule is refused wherever the block
     is (`agents_md::misplaced`), and both renderers ask
     `RuleManifest::is_scoped` which rules are about some files only.

@@ -22,7 +22,7 @@
 //! A file holds the rule as written, front matter and all: Claude takes
 //! `paths` from it and strips the rest before the rule reaches the model
 //! (docs/agents.md, docs-only), and a file that is the rule byte for byte
-//! is one somebody can open and recognise. Below `mindweaver`, a folder of
+//! is one somebody can open and recognise. Below `mindflayer`, a folder of
 //! Mindweaver's own beside whatever somebody keeps in `.claude/rules`, a
 //! file is filed by the rule's route, folders and all, as in the library,
 //! so two rules never share one.
@@ -230,7 +230,7 @@ codes!(Warning {
 /// ([`Rendered::recorded`]), and decides what is Mindweaver's: a file that
 /// holds what was recorded for its route is replaced when its rule has
 /// changed, and taken away when its rule is no longer asked for, with every
-/// folder that leaves empty up to and including `mindweaver`. Anything else
+/// folder that leaves empty up to and including `mindflayer`. Anything else
 /// at a rule's place is somebody's: a file nothing recorded, or one changed
 /// since it was written, is left exactly as it is, and said
 /// ([`Written::Foreign`], [`Written::Edited`]). A file that is not there is
@@ -682,7 +682,7 @@ pub(crate) fn create(path: &Path, contents: &[u8]) -> io::Result<()> {
 }
 
 /// Remove the folders a removal leaves empty, from `from` up to and
-/// including `top`, the `mindweaver` folder.
+/// including `top`, the `mindflayer` folder.
 ///
 /// Not past it: `.claude/rules` and `.claude` may be somebody's even when
 /// empty, and Claude makes `.claude` itself, so nothing tells whether

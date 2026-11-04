@@ -7937,7 +7937,7 @@ renderer gives Claude the rules about every file when it reads no block.
   and a file that is the rule byte for byte is one somebody can open and
   recognise. A `paths` in a shape nothing reads makes a rule about every
   file here as in the block, and its front matter is still kept as written.
-- **A folder of Mindweaver's own.** `mindweaver` keeps the files apart from
+- **A folder of Mindweaver's own.** `mindflayer` keeps the files apart from
   rules somebody keeps in `.claude/rules` by hand, so no route names one of
   theirs. Below it a file is filed by its route, folders and all, as in the
   library; a route is held to the name rules (`name_issues`), so it never
@@ -7974,7 +7974,7 @@ renderer gives Claude the rules about every file when it reads no block.
   Every file is written before any is taken away, so a renamed rule is never
   missing from the folder between its old file and its new. Taking away the
   last file takes the folders it leaves empty, up to and including
-  `mindweaver`, and not `.claude/rules` or `.claude`, which may be
+  `mindflayer`, and not `.claude/rules` or `.claude`, which may be
   somebody's even when empty; a recorded file found gone (`Written::Gone`)
   leaves its folders to go the same way.
 - **Refused whole, or failed file by file.** A rule that is not a rule, one
@@ -10919,7 +10919,7 @@ how).
   writes over one it did not record; but the listing shows Mindweaver's
   files as the project's. The ledger records them now ([installing
   rules](#installing-rules)), so a listing could tell them apart as it
-  tells installed copies from authored ones; leaving out the `mindweaver`
+  tells installed copies from authored ones; leaving out the `mindflayer`
   folder where a project authors in `.claude/rules` would keep the two
   apart, and the status entry of each rule its one.
 - **A file replaced by a render stopped part way.** A render records each
