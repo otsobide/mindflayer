@@ -83,13 +83,18 @@ impl Lookup {
     }
 }
 
+/// The variable that says where the default workspace lives, read after
+/// `--home`. Spelled here alone, as the one that activates a workspace is
+/// ([`WORKSPACE_VARIABLE`]), so a later name changes in one place.
+pub const HOME_VARIABLE: &str = "MINDFLAYER_HOME";
+
 /// Where the default workspace lives: `--home`, then `$MINDFLAYER_HOME`, then
 /// the user's home directory. Empty, from either, means there is none.
 ///
 /// A string rather than a path because empty is a meaningful answer here,
 /// and one a path cannot spell.
 pub fn default_home(given: Option<&str>) -> Option<PathBuf> {
-    resolve(given, variable("MINDFLAYER_HOME"), std::env::home_dir())
+    resolve(given, variable(HOME_VARIABLE), std::env::home_dir())
 }
 
 /// Where each agent keeps what it reads for every project: the option, then

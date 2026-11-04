@@ -18,6 +18,7 @@ use mindflayer_core::{
 };
 use thiserror::Error;
 
+use crate::homes::HOME_VARIABLE;
 use crate::render::plural;
 use crate::task::Refusal;
 
@@ -165,7 +166,7 @@ pub enum CliError {
     },
     #[error("no flayer workspace above {0}; make one with `flayer init` in the directory that holds your projects")]
     NoWorkspaceAbove(PathBuf),
-    #[error("{0}: not known, since there is no default workspace to remember it (--home or $MINDFLAYER_HOME names none)")]
+    #[error("{0}: not known, since there is no default workspace to remember it (--home or ${HOME_VARIABLE} names none)")]
     NoDefault(PathBuf),
     #[error("{project}: not managed by the workspace at {workspace}; `mind link` adds it")]
     NotManaged {
