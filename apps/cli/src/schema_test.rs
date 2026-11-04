@@ -433,7 +433,7 @@ impl Fixtures {
                 let at = format!("{name}/refused");
                 self.refused(&at, &fixture["refused"], "to", "Switch");
             }
-            // What `flayer validate` prints, as text, which the editor's
+            // What `mindweaver validate` prints, as text, which the editor's
             // verdict is held to word for word: no answer of the API's.
             "validated" => {}
             other => panic!(

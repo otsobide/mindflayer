@@ -1,4 +1,4 @@
-//! `flayer activate`: the shell code that activates a workspace, printed for
+//! `mindweaver activate`: the shell code that activates a workspace, printed for
 //! `eval`, and nothing at all when there is nothing to activate.
 //!
 //! The code itself is core's, asserted whole for each shell there; what is
@@ -147,7 +147,7 @@ fn activate_is_mind_weaver_activate_too() {
     let dir = flayers();
     let args = ["activate", "writing", "--shell", "bash"];
 
-    let nested = mind(dir.path(), &[&["flayer"][..], &args].concat()).unwrap();
+    let nested = mind(dir.path(), &[&["weaver"][..], &args].concat()).unwrap();
 
     assert_eq!(nested, weaver(dir.path(), &args).unwrap());
 }
@@ -168,7 +168,7 @@ fn the_shell_is_guessed_from_shell() {
         ("/usr/bin/pwsh", Shell::Pwsh),
     ] {
         let printed = spawn(
-            "flayer",
+            "mindweaver",
             dir.path(),
             &["activate", "writing"],
             &[("SHELL", program)],
@@ -184,7 +184,7 @@ fn the_shell_named_wins_over_the_one_shell_names() {
     let dir = flayers();
 
     let printed = spawn(
-        "flayer",
+        "mindweaver",
         dir.path(),
         &["activate", "writing", "--shell", "fish"],
         &[("SHELL", "/bin/bash")],
@@ -206,7 +206,7 @@ fn with_no_shell_to_guess_activate_prints_no_code() {
         ("/bin/tcsh", "error: cannot tell which shell `/bin/tcsh` is; say which to write for with --shell (bash, zsh, fish or pwsh)\n"),
     ] {
         let printed = spawn(
-            "flayer",
+            "mindweaver",
             dir.path(),
             &["activate", "writing"],
             &[("SHELL", program)],
@@ -223,7 +223,7 @@ fn a_failed_activation_gives_eval_nothing_to_run() {
     let dir = flayers();
 
     let printed = spawn(
-        "flayer",
+        "mindweaver",
         dir.path(),
         &["activate", "plain", "--shell", "bash"],
         &[],

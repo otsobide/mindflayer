@@ -17,7 +17,7 @@ use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// `load`, at either level: the paths are typed from `directory`, and the
 /// workspace they go into is resolved from `start` (the directory itself
-/// for `flayer`, the project for `mind`). With no paths it lists what that
+/// for `mindweaver`, the project for `mind`). With no paths it lists what that
 /// workspace loads, as the other reads do: of the default one before it is
 /// made too, which loads nothing, rather than making it to say so.
 pub(crate) fn load_command(
@@ -130,13 +130,13 @@ fn acted_on(preposition: &str, workspace: &WeaverWorkspace, home: Option<&Path>)
     )
 }
 
-/// `flayer load` on its own: each loaded workspace, what it offers or why it
+/// `mindweaver load` on its own: each loaded workspace, what it offers or why it
 /// cannot be read, and which workspace loads them.
 fn loaded_listing(workspace: &WeaverWorkspace, home: Option<&Path>) -> Outcome {
     let loads = workspace.loads();
     if loads.is_empty() {
         return Outcome::plain(format!(
-            "nothing loaded\n  offer another workspace's own with `flayer load <path>`\n{}",
+            "nothing loaded\n  offer another workspace's own with `mindweaver load <path>`\n{}",
             acted_on("in", workspace, home)
         ));
     }
@@ -207,7 +207,7 @@ fn loaded(
 
 /// "2 skills to install", or that there is nothing yet, counted from what
 /// the install machinery itself offers through that entry, so the number is
-/// what `flayer install` will show.
+/// what `mindweaver install` will show.
 fn offering(workspace: &WeaverWorkspace, entry: &str) -> String {
     use mindweaver_core::install::{offered_by_loads, Offer};
     let offers = offered_by_loads(workspace).offers;

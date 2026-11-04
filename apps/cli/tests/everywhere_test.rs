@@ -1,4 +1,4 @@
-//! `flayer remove --everywhere` (#50): one of the workspace's own taken out
+//! `mindweaver remove --everywhere` (#50): one of the workspace's own taken out
 //! of every project it links, what was changed since it was installed and
 //! somebody's own of that name left and said, and then the library copy.
 //! And `uninstall --orphaned`, which takes out what removing it from the
@@ -159,7 +159,7 @@ removed skill commit-style from {}
     assert_eq!(
         outcome.stderr,
         [
-            "note: nothing offers commit-style in collapse any more; `flayer uninstall -p \
+            "note: nothing offers commit-style in collapse any more; `mindweaver uninstall -p \
              collapse commit-style --force` takes it out"
         ]
     );
@@ -244,7 +244,7 @@ fn everywhere_is_for_the_workspaces_own_and_not_a_projects() {
     let dir = workspace_with_copies();
 
     let refused = WeaverCli::try_parse_from(line(
-        "flayer",
+        "mindweaver",
         &["remove", "commit-style", "-p", "alpha", "--everywhere"],
         dir.path(),
     ))
@@ -281,7 +281,7 @@ fn removing_one_of_the_workspaces_own_alone_says_whose_copies_it_orphans() {
         outcome.stderr,
         [
             "warning: commit-style is still installed in alpha, beta and collapse, orphaned now \
-             that nothing offers it; `flayer uninstall --orphaned --all-projects` takes out what \
+             that nothing offers it; `mindweaver uninstall --orphaned --all-projects` takes out what \
              nothing offers"
         ]
     );
@@ -464,7 +464,7 @@ fn uninstall_takes_a_name_or_orphaned_and_not_both() {
         &["uninstall", "-p", "alpha", "deploy", "--orphaned"][..],
     ] {
         assert!(
-            WeaverCli::try_parse_from(line("flayer", args, dir.path())).is_err(),
+            WeaverCli::try_parse_from(line("mindweaver", args, dir.path())).is_err(),
             "{args:?}"
         );
     }

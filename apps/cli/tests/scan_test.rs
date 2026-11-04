@@ -1,4 +1,4 @@
-//! `flayer scan`.
+//! `mindweaver scan`.
 
 mod common;
 
@@ -7,7 +7,7 @@ use mindweaver_core::scan::{DEFAULT_DEPTH, MAX_LISTED};
 use serde::Deserialize;
 
 // ---------------------------------------------------------------------------
-// flayer scan
+// mindweaver scan
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -26,7 +26,7 @@ fn scan_says_what_is_under_the_workspace_and_what_is_linked() {
         lines[2],
         "gamma  not linked  git repository, not a mind project yet"
     );
-    assert!(outcome.stdout.contains("flayer link <path>"));
+    assert!(outcome.stdout.contains("mindweaver link <path>"));
     assert!(outcome.stdout.contains("mind -C <path> init"));
 }
 
@@ -357,7 +357,7 @@ fn a_scan_that_stops_early_says_so_on_stderr() {
 
 #[test]
 fn weaver_scan_looks_three_levels_down_unless_told() {
-    let parsed = WeaverCli::try_parse_from(["flayer", "scan"]).unwrap();
+    let parsed = WeaverCli::try_parse_from(["mindweaver", "scan"]).unwrap();
 
     assert!(matches!(
         parsed.command,
@@ -371,7 +371,7 @@ fn weaver_scan_looks_three_levels_down_unless_told() {
 }
 
 // ---------------------------------------------------------------------------
-// flayer scan --suggest
+// mindweaver scan --suggest
 // ---------------------------------------------------------------------------
 
 /// `workspace_with_two`, its `alpha` and `beta` linked, beside one of each
@@ -412,7 +412,7 @@ scratch  not linked  git repository
 alpha    linked
 beta     linked
 
-  link one with `flayer link <path>`
+  link one with `mindweaver link <path>`
   a repository needs `mind -C <path> init` before it can be linked
 "
     );
@@ -518,7 +518,7 @@ fn scan_suggest_of_a_folder_outside_the_workspace_reads_without_making_the_defau
 
 #[test]
 fn weaver_scan_takes_suggest() {
-    let parsed = WeaverCli::try_parse_from(["flayer", "scan", "--suggest", "work"]).unwrap();
+    let parsed = WeaverCli::try_parse_from(["mindweaver", "scan", "--suggest", "work"]).unwrap();
 
     assert!(matches!(
         parsed.command,

@@ -2,12 +2,12 @@
 //! it does, to link and unlink in one pass.
 //!
 //! What the link form and `u` do one project at a time, for everything under
-//! the workspace at once, or under the folders `flayer minds` was given,
-//! listed as `flayer scan --suggest` lists them: what is not linked first,
+//! the workspace at once, or under the folders `mindweaver minds` was given,
+//! listed as `mindweaver scan --suggest` lists them: what is not linked first,
 //! most worth linking first, each with why, then what is.
 //! Ticking only marks. Applying runs the commands the
 //! marks amount to (`mind -C <path> init` for a repository that is not a
-//! project yet, then one `flayer link` and one `flayer unlink`), so, as
+//! project yet, then one `mindweaver link` and one `mindweaver unlink`), so, as
 //! everywhere in the TUI, the screen does nothing a command could not.
 
 use ratatui::crossterm::event::KeyCode;
@@ -37,7 +37,7 @@ pub struct Row {
     pub path: String,
     pub standing: Standing,
     pub ticked: bool,
-    /// Why it is worth linking, in the words `flayer scan --suggest` says it
+    /// Why it is worth linking, in the words `mindweaver scan --suggest` says it
     /// with; empty for one linked.
     pub why: String,
 }
@@ -79,7 +79,7 @@ pub struct Minds {
 impl Minds {
     /// Every one found that is not registered, unticked, in the order the
     /// scan ranked them, then every registered project, ticked, by its
-    /// entry: the order `flayer scan --suggest` lists them in, because what
+    /// entry: the order `mindweaver scan --suggest` lists them in, because what
     /// the screen is opened for is what to link next.
     ///
     /// Those found are not sorted here: which is most worth linking is

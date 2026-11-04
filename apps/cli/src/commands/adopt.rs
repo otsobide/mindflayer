@@ -1,10 +1,10 @@
-//! `flayer adopt`: a skill somebody keeps in a project's agents' folders
+//! `mindweaver adopt`: a skill somebody keeps in a project's agents' folders
 //! brought into the workspace's library, and the project's copies recorded
 //! as installed from there, as core plans and does it
 //! ([`mindweaver_core::adopt`]). Here it is only said.
 //!
 //! No `mind` form: what it writes is the workspace's library, which `mind`
-//! changes nowhere, as `flayer add` without `-p` has none.
+//! changes nowhere, as `mindweaver add` without `-p` has none.
 
 use std::fmt::Write as _;
 
@@ -20,7 +20,7 @@ use crate::{CliError, Failure, Outcome};
 /// What a dry run ends with.
 const UNADOPTED: &str = "nothing adopted: add --yes to go ahead\n";
 
-/// `flayer adopt -p <project> <name>`: what adopting the skill `typed`
+/// `mindweaver adopt -p <project> <name>`: what adopting the skill `typed`
 /// names from `project` would do, without `yes`, nothing written; with it,
 /// done, and said the same way in the past tense.
 ///
@@ -105,12 +105,12 @@ fn said(workspace: &WeaverWorkspace, plan: &Plan, done: bool) -> Outcome {
         let _ = if done {
             writeln!(
                 outcome.stdout,
-                "{record} {at} missing: `flayer update -p {picked}` puts it there"
+                "{record} {at} missing: `mindweaver update -p {picked}` puts it there"
             )
         } else {
             writeln!(
                 outcome.stdout,
-                "{record} {at} missing, for `flayer update -p {picked}` to put there"
+                "{record} {at} missing, for `mindweaver update -p {picked}` to put there"
             )
         };
     }

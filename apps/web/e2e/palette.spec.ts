@@ -26,9 +26,9 @@ function held(at: Places, project: string): boolean[] {
   return FOLDERS.map(folder => existsSync(join(at.workspace, project, folder, OFFERED.name, 'SKILL.md')))
 }
 
-/** What `flayer list --json` says of the workspace `at` names, its folder written as `<workspace>`, to compare with a copy's. */
+/** What `mindweaver list --json` says of the workspace `at` names, its folder written as `<workspace>`, to compare with a copy's. */
 function said(at: Places): string {
-  const ran = succeed(at, 'flayer', at.workspace, ['list', '--json'])
+  const ran = succeed(at, 'mindweaver', at.workspace, ['list', '--json'])
   const envelope = JSON.parse(ran.stdout) as Envelope<Listing>
   return JSON.stringify(envelope.data).replaceAll(at.workspace, '<workspace>')
 }
@@ -85,7 +85,7 @@ test('a skill installed from the command palette with the keyboard alone is copi
 
   // The line core's plan of that one box runs, shown first, Run focused
   // since it takes nothing away, and run by Enter.
-  const line = `$ flayer -W ${own.at.workspace} install -p ${join(own.at.workspace, alpha)} --from ${OFFERED.origin} skill:${OFFERED.name}`
+  const line = `$ mindweaver -W ${own.at.workspace} install -p ${join(own.at.workspace, alpha)} --from ${OFFERED.origin} skill:${OFFERED.name}`
   const dialog = page.getByRole('dialog')
   await expect(dialog.getByTestId('command')).toHaveText([line])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
@@ -97,7 +97,7 @@ test('a skill installed from the command palette with the keyboard alone is copi
   expect(held(own.at, beta)).toEqual([false, false])
 
   const twin = own.twin
-  succeed(twin, 'flayer', twin.workspace, ['install', '-p', alpha, '--from', OFFERED.origin, `skill:${OFFERED.name}`])
+  succeed(twin, 'mindweaver', twin.workspace, ['install', '-p', alpha, '--from', OFFERED.origin, `skill:${OFFERED.name}`])
   for (const project of ASSIGNED) {
     expect(tree(join(own.at.workspace, project)), project).toEqual(tree(join(twin.workspace, project)))
   }

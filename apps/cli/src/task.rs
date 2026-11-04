@@ -3,7 +3,7 @@
 //! A [`Task`] is what a key in the TUI asks for, and what the panel will ask
 //! for over the local server (D-18): not a description of the work, but the
 //! work, since [`Task::commands`] is exactly the words the caller parses,
-//! with the parsers `mind` and `flayer` use, and runs. Here rather than in
+//! with the parsers `mind` and `mindweaver` use, and runs. Here rather than in
 //! the TUI, where it was born, so that every front end that runs commands
 //! builds its lines one way: a second one writing its own would be a second
 //! place for a line to be spelled wrong, or for a value to be taken for a
@@ -94,7 +94,7 @@ pub struct Toggles {
     deny_unknown_fields
 )]
 pub enum Holder {
-    /// The workspace, for its own artifacts: `flayer <cmd>`.
+    /// The workspace, for its own artifacts: `mindweaver <cmd>`.
     Workspace,
     /// A project, by its entry: `mind -C <entry> <cmd>`, or `mind <cmd>` for
     /// the one at the root the commands run from.
@@ -103,7 +103,7 @@ pub enum Holder {
     /// `mind -W . -C <entry> <cmd>`, which names the one on screen, so a
     /// change drops that workspace's record and an add takes its templates.
     ///
-    /// Still the project's command rather than `flayer <cmd> -p <entry>`,
+    /// Still the project's command rather than `mindweaver <cmd> -p <entry>`,
     /// which would consult the same workspace: a project's row teaches the
     /// project's command, at every row alike, and `-W` only where leaving
     /// it out would consult another.
@@ -126,26 +126,26 @@ pub enum Holder {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Task {
-    /// `flayer init`, where the TUI was opened.
+    /// `mindweaver init`, where the TUI was opened.
     InitWorkspace,
     /// `mind init`, where the TUI was opened.
     InitProject,
-    /// `flayer link <path>`.
+    /// `mindweaver link <path>`.
     Link { path: String },
     /// `mind link`: the project the TUI is on, into the workspace above it.
     LinkHere,
-    /// `mind -C <path> init`, then `flayer link <path>`.
+    /// `mind -C <path> init`, then `mindweaver link <path>`.
     InitAndLink { path: String },
-    /// `flayer unlink <entry>`.
+    /// `mindweaver unlink <entry>`.
     Unlink { entry: String },
-    /// `flayer relink <old> <new>`: a stale entry pointed at where the scan
+    /// `mindweaver relink <old> <new>`: a stale entry pointed at where the scan
     /// found its project, moved.
     Relink { old: String, new: String },
-    /// `flayer load <path>`.
+    /// `mindweaver load <path>`.
     Load { path: String },
     /// `mind load <path>`: into the workspace above the project the TUI is on.
     LoadHere { path: String },
-    /// `flayer unload <entry>`.
+    /// `mindweaver unload <entry>`.
     Unload { entry: String },
     /// `mind unload <path>`: out of the workspace above the project the TUI
     /// is on, by its absolute path, which reads the same from anywhere.
@@ -167,7 +167,7 @@ pub enum Task {
         kind: Kind,
         name: String,
     },
-    /// `flayer edit [-p <project>] --contents <file> --if-unchanged <hash>
+    /// `mindweaver edit [-p <project>] --contents <file> --if-unchanged <hash>
     /// <kind:name>`: what the artifact is read from, a skill's `SKILL.md`
     /// or a rule's file, replaced with `text` whole, only while it holds
     /// what `hash`, the SHA-256 the panel was given with what it read
@@ -196,7 +196,7 @@ pub enum Task {
         to: String,
     },
     /// `… remove --yes <kind:name>`: asked about before it gets here, which is
-    /// what the `--yes` says. `flayer remove --everywhere --yes <kind:name>`
+    /// what the `--yes` says. `mindweaver remove --everywhere --yes <kind:name>`
     /// when `everywhere`, one of the workspace's own taken out of every
     /// project it links first. Without `yes`, the dry run, which deletes
     /// nothing and says what would go, each project's copy with how it
@@ -208,10 +208,10 @@ pub enum Task {
         everywhere: bool,
         yes: bool,
     },
-    /// `flayer validate`, everything; `mind validate`, one project.
+    /// `mindweaver validate`, everything; `mind validate`, one project.
     Validate { holder: Holder },
     /// `mind -C <path> init` for each repository that is not a project yet,
-    /// then one `flayer link` and one `flayer unlink`: what the minds screen's
+    /// then one `mindweaver link` and one `mindweaver unlink`: what the minds screen's
     /// marks amount to, built from them by [`Task::minds`].
     Minds {
         init: Vec<String>,
@@ -234,12 +234,12 @@ pub enum Task {
     /// that rule again in TypeScript, and could leave a folder made a
     /// project and never linked.
     Marks { marks: Vec<Mark> },
-    /// `flayer gather list`.
+    /// `mindweaver gather list`.
     Shelf,
-    /// `flayer workspaces`: the workspaces this machine knows, the one in
+    /// `mindweaver workspaces`: the workspaces this machine knows, the one in
     /// use marked, to read.
     Workspaces,
-    /// `flayer gather git [--path <folder>] [--ref <ref>] <url>`.
+    /// `mindweaver gather git [--path <folder>] [--ref <ref>] <url>`.
     Gather {
         url: String,
         folder: String,
@@ -283,7 +283,7 @@ pub enum Task {
     },
     /// `… update --yes [<kind:name>]`: what is installed in a project, or
     /// the one artifact named, brought up to date and put back where a copy
-    /// has gone; `flayer update --all --yes [<kind:name>]` for the
+    /// has gone; `mindweaver update --all --yes [<kind:name>]` for the
     /// workspace's own row, in every project it links. With `force`, `--yes
     /// --force`, writing over a copy changed since it was installed too,
     /// which the line is then asked about for ([`Caution::Forces`]).
@@ -292,7 +292,7 @@ pub enum Task {
         reference: Option<String>,
         force: bool,
     },
-    /// `flayer install -p <project>... [--from <origin>] <kind:name>`: one
+    /// `mindweaver install -p <project>... [--from <origin>] <kind:name>`: one
     /// offer into each project named, by what picks it out
     /// ([`WeaverWorkspace::naming`]), from the place `from` names when it
     /// names one.
@@ -312,7 +312,7 @@ pub enum Task {
         name: String,
         from: Option<String>,
     },
-    /// `flayer uninstall -p <project>... <kind:name>`: one artifact taken
+    /// `mindweaver uninstall -p <project>... <kind:name>`: one artifact taken
     /// back out of each project named, whichever place its copy came from,
     /// each named as an install's are, by what `naming` gives. With
     /// `force`, `--force`, taking out a copy changed since it was installed
@@ -327,12 +327,12 @@ pub enum Task {
     },
     /// `… uninstall --orphaned`: every installation in a project that
     /// nothing offers any more where it came from, taken back out of it;
-    /// `flayer uninstall --all-projects --orphaned` for the workspace's own
+    /// `mindweaver uninstall --all-projects --orphaned` for the workspace's own
     /// row, out of every project it links, as an update reaches them. Never
     /// forced: one changed since it was installed is left, every copy of it,
     /// for a command line that says `--force` once somebody has looked.
     UninstallOrphaned { holder: Holder },
-    /// `flayer adopt -p <project> --yes <kind:name>`: somebody's skill in
+    /// `mindweaver adopt -p <project> --yes <kind:name>`: somebody's skill in
     /// the project's agents' folders brought into the workspace's library,
     /// its copies recorded as installed from there: asked about before it
     /// gets here, which is what the `--yes` says. The project is named as an
@@ -342,7 +342,7 @@ pub enum Task {
         kind: Kind,
         name: String,
     },
-    /// `flayer migrate -p <project> [--yes]`: one project the workspace
+    /// `mindweaver migrate -p <project> [--yes]`: one project the workspace
     /// links moved from an older marker, a `mind.toml` or a
     /// `settings.json`, to a `settings.toml`, what the workspace records of
     /// it carried along; without `yes`, the dry run, which writes nothing
@@ -357,7 +357,7 @@ pub enum Task {
     /// committed by design was, and what a `settings.json` names for one,
     /// for `mind agents` and `mind share` to change once it is moved.
     Migrate { project: String, yes: bool },
-    /// Open the install screen, which is what `flayer install` opens.
+    /// Open the install screen, which is what `mindweaver install` opens.
     OpenInstall,
     /// What the install screen marked, as the `Install` and `Uninstall`
     /// tasks it amounts to ([`Screen::task`]), each run whatever came
@@ -370,8 +370,8 @@ pub enum Task {
 }
 
 /// The task that runs one change core planned for a batch of boxes
-/// ([`Plan`](mindweaver_core::install::Plan)): `flayer install` of the
-/// offer from where it is, or `flayer uninstall` of the name, from each
+/// ([`Plan`](mindweaver_core::install::Plan)): `mindweaver install` of the
+/// offer from where it is, or `mindweaver uninstall` of the name, from each
 /// project the change names, spelled as the boxes named them.
 ///
 /// Here, beside the tasks it becomes, so the install screen and the panel
@@ -453,7 +453,7 @@ impl Task {
     ///
     /// Here rather than on the minds screen, so a front end that marks
     /// directories some other way builds the same lines from its marks: that
-    /// a directory made a project is then linked, in one `flayer link` with
+    /// a directory made a project is then linked, in one `mindweaver link` with
     /// the rest, is the batch's rule, and a front end spelling it again could
     /// leave one made and never linked. Each list keeps the order the
     /// directories were given in.
@@ -520,23 +520,23 @@ impl Task {
     /// Not a description of the task: the task. The caller parses these with
     /// the real parsers and runs what comes out, so a line here that does not
     /// parse is a task that cannot happen. Opening the install screen is the
-    /// exception, a read that builds the screen `flayer install` opens rather
+    /// exception, a read that builds the screen `mindweaver install` opens rather
     /// than a line run, and a refresh changes nothing.
     pub fn commands(&self) -> Vec<Vec<String>> {
         match self {
-            Task::InitWorkspace => vec![words(&["flayer", "init"], &[])],
+            Task::InitWorkspace => vec![words(&["mindweaver", "init"], &[])],
             Task::InitProject => vec![words(&["mind", "init"], &[])],
-            Task::Link { path } => vec![words(&["flayer", "link"], &[path])],
+            Task::Link { path } => vec![words(&["mindweaver", "link"], &[path])],
             Task::LinkHere => vec![words(&["mind", "link"], &[])],
             Task::InitAndLink { path } => vec![
                 words(&["mind", "-C", &directory(path), "init"], &[]),
-                words(&["flayer", "link"], &[path]),
+                words(&["mindweaver", "link"], &[path]),
             ],
-            Task::Unlink { entry } => vec![words(&["flayer", "unlink"], &[entry])],
-            Task::Relink { old, new } => vec![words(&["flayer", "relink"], &[old, new])],
-            Task::Load { path } => vec![words(&["flayer", "load"], &[path])],
+            Task::Unlink { entry } => vec![words(&["mindweaver", "unlink"], &[entry])],
+            Task::Relink { old, new } => vec![words(&["mindweaver", "relink"], &[old, new])],
+            Task::Load { path } => vec![words(&["mindweaver", "load"], &[path])],
             Task::LoadHere { path } => vec![words(&["mind", "load"], &[path])],
-            Task::Unload { entry } => vec![words(&["flayer", "unload"], &[entry])],
+            Task::Unload { entry } => vec![words(&["mindweaver", "unload"], &[entry])],
             Task::UnloadHere { path } => vec![words(&["mind", "unload"], &[path])],
             Task::Add {
                 holder,
@@ -566,9 +566,9 @@ impl Task {
                 hash,
             } => {
                 let mut head = match holder {
-                    Holder::Workspace => owned(&["flayer", "edit"]),
+                    Holder::Workspace => owned(&["mindweaver", "edit"]),
                     Holder::Project(entry) | Holder::Elsewhere(entry) => {
-                        picking(&["flayer", "edit"], std::slice::from_ref(entry))
+                        picking(&["mindweaver", "edit"], std::slice::from_ref(entry))
                     }
                 };
                 head.extend(option("--contents", &scratch_route(text)));
@@ -607,7 +607,7 @@ impl Task {
                 for (command, paths) in [("link", link), ("unlink", unlink)] {
                     if !paths.is_empty() {
                         let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
-                        lines.push(words(&["flayer", command], &paths));
+                        lines.push(words(&["mindweaver", command], &paths));
                     }
                 }
                 lines
@@ -616,14 +616,14 @@ impl Task {
                 Task::minds(marks.iter().map(|mark| (mark.path.clone(), mark.change)))
                     .map_or_else(Vec::new, |batch| batch.commands())
             }
-            Task::Shelf => vec![words(&["flayer", "gather", "list"], &[])],
-            Task::Workspaces => vec![words(&["flayer", "workspaces"], &[])],
+            Task::Shelf => vec![words(&["mindweaver", "gather", "list"], &[])],
+            Task::Workspaces => vec![words(&["mindweaver", "workspaces"], &[])],
             Task::Gather {
                 url,
                 folder,
                 reference,
             } => {
-                let mut head = vec!["flayer", "gather", "git"];
+                let mut head = vec!["mindweaver", "gather", "git"];
                 let path = option("--path", folder);
                 let at = reference
                     .as_deref()
@@ -697,7 +697,7 @@ impl Task {
                 let forced: &[&str] = if *force { &["--force"] } else { &[] };
                 match holder {
                     Holder::Workspace => {
-                        let head = [&["flayer", "update", "--all", "--yes"], forced].concat();
+                        let head = [&["mindweaver", "update", "--all", "--yes"], forced].concat();
                         vec![words(&head, &named)]
                     }
                     _ => vec![at(holder, &[&["update", "--yes"], forced].concat(), &named)],
@@ -709,7 +709,7 @@ impl Task {
                 name,
                 from,
             } => {
-                let mut head = picking(&["flayer", "install"], projects);
+                let mut head = picking(&["mindweaver", "install"], projects);
                 if let Some(from) = from {
                     head.extend(option("--from", from));
                 }
@@ -722,7 +722,7 @@ impl Task {
                 name,
                 force,
             } => {
-                let mut head = picking(&["flayer", "uninstall"], projects);
+                let mut head = picking(&["mindweaver", "uninstall"], projects);
                 if *force {
                     head.push(String::from("--force"));
                 }
@@ -731,7 +731,7 @@ impl Task {
             }
             Task::UninstallOrphaned { holder } => match holder {
                 Holder::Workspace => vec![words(
-                    &["flayer", "uninstall", "--all-projects", "--orphaned"],
+                    &["mindweaver", "uninstall", "--all-projects", "--orphaned"],
                     &[],
                 )],
                 _ => vec![at(holder, &["uninstall", "--orphaned"], &[])],
@@ -743,13 +743,13 @@ impl Task {
                 kind,
                 name,
             } => {
-                let mut head = picking(&["flayer", "adopt"], std::slice::from_ref(project));
+                let mut head = picking(&["mindweaver", "adopt"], std::slice::from_ref(project));
                 head.push(String::from("--yes"));
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
             }
             Task::Migrate { project, yes } => {
-                let mut head = picking(&["flayer", "migrate"], std::slice::from_ref(project));
+                let mut head = picking(&["mindweaver", "migrate"], std::slice::from_ref(project));
                 if *yes {
                     head.push(String::from("--yes"));
                 }
@@ -757,7 +757,7 @@ impl Task {
                 vec![words(&head, &[])]
             }
             Task::ApplyInstall { changes } => changes.iter().flat_map(Task::commands).collect(),
-            Task::OpenInstall => vec![words(&["flayer", "install"], &[])],
+            Task::OpenInstall => vec![words(&["mindweaver", "install"], &[])],
             Task::Refresh => Vec::new(),
         }
     }
@@ -811,7 +811,7 @@ impl Task {
     }
 
     /// Whether each of its lines leans on the one before, so that one failing
-    /// is reason not to run the rest: `flayer link` after a failed `mind
+    /// is reason not to run the rest: `mindweaver link` after a failed `mind
     /// init` would only fail again, less clearly. True of every task but the
     /// install screen's batch, whose lines are boxes marked one by one, each
     /// carried out or said whatever came of the others, as the screen did
@@ -849,7 +849,7 @@ impl Task {
     ///
     /// Asked of the lines, as [`refusal`](Self::refusal) is, so the one list
     /// decides whatever task a line came from: the minds screen's batch is
-    /// asked about for its `flayer unlink` line and for nothing else.
+    /// asked about for its `mindweaver unlink` line and for nothing else.
     pub fn cautions(&self) -> Vec<(usize, Caution)> {
         cautioned(&self.commands())
     }
@@ -885,8 +885,8 @@ impl Task {
 /// the keys it reads ([`Refusal::Input`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum Refusal {
-    /// The TUI (`mind` or `flayer` alone, or either's `tui`), the minds
-    /// screen (`flayer minds`), or the install screen (`flayer install`
+    /// The TUI (`mind` or `mindweaver` alone, or either's `tui`), the minds
+    /// screen (`mindweaver minds`), or the install screen (`mindweaver install`
     /// with neither a name nor a project).
     #[error("opens a screen of its own, which needs a terminal to draw on")]
     Screen,
@@ -900,11 +900,11 @@ pub enum Refusal {
     /// it a file instead.
     #[error("reads standard input, which only a shell can hand it")]
     Input,
-    /// `flayer activate`, which prints code for a shell to run, and means
+    /// `mindweaver activate`, which prints code for a shell to run, and means
     /// nothing anywhere else.
     #[error("prints code for a shell to run, which only a shell can")]
     Shell,
-    /// `flayer gather git`: the network, for as long as it takes, which only
+    /// `mindweaver gather git`: the network, for as long as it takes, which only
     /// a screen that shows how far it got and stops it on a key can watch,
     /// until #112 brings both to the server.
     #[error(
@@ -953,7 +953,7 @@ impl Refusal {
             Some(Command::Show { .. }) => Some(Refusal::Unheld),
             #[cfg(feature = "ui")]
             Some(Command::Ui(_)) => Some(Refusal::Panel),
-            Some(Command::Flayer { command }) => Refusal::of_weaver(command.as_ref()),
+            Some(Command::Weaver { command }) => Refusal::of_weaver(command.as_ref()),
             Some(
                 Command::Init { .. }
                 | Command::Add { .. }
@@ -978,7 +978,7 @@ impl Refusal {
         }
     }
 
-    /// Why `flayer <command>` is not run by a front end with no terminal,
+    /// Why `mindweaver <command>` is not run by a front end with no terminal,
     /// when it is not.
     pub fn of_weaver(command: Option<&WeaverCommand>) -> Option<Refusal> {
         match command {
@@ -1047,7 +1047,7 @@ impl Refusal {
 /// command line, when it does not.
 ///
 /// Read with the parsers that run it, so the list is of commands as they
-/// run, not as they are spelled: `mind flayer minds` is `flayer minds`, and
+/// run, not as they are spelled: `mind weaver minds` is `mindweaver minds`, and
 /// a flag in front of either changes nothing. A line neither takes is no
 /// refusal of this list's: running it says why it cannot run, in the
 /// parser's words.
@@ -1056,7 +1056,7 @@ pub fn refused(words: &[String]) -> Option<Refusal> {
         Some("mind") => Cli::try_parse_from(words)
             .ok()
             .and_then(|cli| Refusal::of_mind(cli.command.as_ref())),
-        Some("flayer") => WeaverCli::try_parse_from(words)
+        Some("mindweaver") => WeaverCli::try_parse_from(words)
             .ok()
             .and_then(|cli| Refusal::of_weaver(cli.command.as_ref())),
         _ => None,
@@ -1087,7 +1087,7 @@ pub enum Caution {
     /// `remove --yes`, at either level: the artifact deleted.
     #[error("deletes an artifact: its folder and everything in it, or its file")]
     Removes,
-    /// `uninstall`, every form of it, and `flayer remove --everywhere
+    /// `uninstall`, every form of it, and `mindweaver remove --everywhere
     /// --yes`, which uninstalls from every project first.
     #[error("takes copies Mindflayer installed out of projects")]
     Uninstalls,
@@ -1120,7 +1120,7 @@ impl Caution {
             Some(Command::Update { force, yes, .. }) => when(*force && *yes, &[Caution::Forces]),
             Some(Command::Unlink) => vec![Caution::Unlinks],
             Some(Command::Unload { .. }) => vec![Caution::Unloads],
-            Some(Command::Flayer { command }) => Caution::of_weaver(command.as_ref()),
+            Some(Command::Weaver { command }) => Caution::of_weaver(command.as_ref()),
             #[cfg(feature = "ui")]
             Some(Command::Ui(_)) => Vec::new(),
             None
@@ -1145,7 +1145,7 @@ impl Caution {
         }
     }
 
-    /// What `flayer <command>` takes away.
+    /// What `mindweaver <command>` takes away.
     pub fn of_weaver(command: Option<&WeaverCommand>) -> Vec<Caution> {
         match command {
             Some(WeaverCommand::Remove {
@@ -1217,15 +1217,15 @@ fn uninstalling(force: bool) -> Vec<Caution> {
 /// What `words`, a command line, takes away, which a front end asks about
 /// before it runs it; nothing for a line that takes nothing away.
 ///
-/// Read with the parsers that run it, as [`refused`] is: `mind flayer
-/// unlink alpha` is `flayer unlink alpha`, and a flag in front of either
+/// Read with the parsers that run it, as [`refused`] is: `mind weaver
+/// unlink alpha` is `mindweaver unlink alpha`, and a flag in front of either
 /// changes nothing. A line neither takes would not run, and takes nothing.
 pub fn cautions(words: &[String]) -> Vec<Caution> {
     match words.first().map(String::as_str) {
         Some("mind") => Cli::try_parse_from(words)
             .map(|cli| Caution::of_mind(cli.command.as_ref()))
             .unwrap_or_default(),
-        Some("flayer") => WeaverCli::try_parse_from(words)
+        Some("mindweaver") => WeaverCli::try_parse_from(words)
             .map(|cli| Caution::of_weaver(cli.command.as_ref()))
             .unwrap_or_default(),
         _ => Vec::new(),
@@ -1242,7 +1242,7 @@ pub fn cautioned(lines: &[Vec<String>]) -> Vec<(usize, Caution)> {
         .collect()
 }
 
-/// One command line, at the level a holder is at: `flayer <command>` for the
+/// One command line, at the level a holder is at: `mindweaver <command>` for the
 /// workspace's own, `mind -C <entry> <command>` for a project, and plain
 /// `mind <command>` for the one at the root, where `-C .` says nothing.
 ///
@@ -1250,7 +1250,7 @@ pub fn cautioned(lines: &[Vec<String>]) -> Vec<(usize, Caution)> {
 /// workspace on screen.
 fn at(holder: &Holder, command: &[&str], positionals: &[&str]) -> Vec<String> {
     let start: Vec<String> = match holder {
-        Holder::Workspace => vec![String::from("flayer")],
+        Holder::Workspace => vec![String::from("mindweaver")],
         Holder::Project(entry) if entry == "." => vec![String::from("mind")],
         Holder::Project(entry) => vec![String::from("mind"), String::from("-C"), directory(entry)],
         Holder::Elsewhere(entry) => ["mind", "-W", ".", "-C"]

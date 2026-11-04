@@ -1,4 +1,4 @@
-//! `flayer status` and `mind status`: what each project holds, where each
+//! `mindweaver status` and `mind status`: what each project holds, where each
 //! thing in it came from, which agents read it, and whether it is all there.
 
 mod common;
@@ -92,7 +92,7 @@ fn mind_status_says_of_its_project_what_weaver_status_p_does() {
 
     let here = mind(&projects.join("collapse"), &["status"]).unwrap();
     let named = weaver(&projects, &["status", "-p", "collapse"]).unwrap();
-    let through_mind = mind(&projects, &["flayer", "status", "-p", "collapse"]).unwrap();
+    let through_mind = mind(&projects, &["weaver", "status", "-p", "collapse"]).unwrap();
 
     assert_eq!(here.stdout, COLLAPSE);
     assert!(here.stderr.is_empty(), "{:?}", here.stderr);
@@ -344,7 +344,7 @@ fn status_makes_neither_a_ledger_nor_the_default_workspace() {
     assert_eq!(
         unmade.stdout,
         format!(
-            "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+            "{} manages no projects yet\n  link one with `mindweaver link <path>`\n",
             home.path().file_name().unwrap().to_string_lossy()
         )
     );

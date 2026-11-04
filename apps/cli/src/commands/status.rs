@@ -22,16 +22,16 @@ const STALE: &str = "stale";
 /// could not be read does, and what a project's agents do not see does not.
 type Said = (Option<&'static str>, String);
 
-/// `flayer status`: every project the workspace links, against its ledger,
+/// `mindweaver status`: every project the workspace links, against its ledger,
 /// which core reads without making it; as JSON when `as_json`.
 pub(crate) fn status_of_workspace(workspace: &WeaverWorkspace, as_json: bool) -> Outcome {
     // In JSON, a workspace with nothing linked is one with no projects in
     // its data, which a script reads like any other.
     if workspace.config().projects.is_empty() && !as_json {
-        // As `flayer list` says it, and for the same reason: a workspace with
+        // As `mindweaver list` says it, and for the same reason: a workspace with
         // nothing linked has nothing to report but how to link something.
         return Outcome::plain(format!(
-            "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+            "{} manages no projects yet\n  link one with `mindweaver link <path>`\n",
             workspace.name()
         ));
     }
@@ -44,7 +44,7 @@ pub(crate) fn status_of_workspace(workspace: &WeaverWorkspace, as_json: bool) ->
     )
 }
 
-/// `flayer status -p`: one project the workspace links.
+/// `mindweaver status -p`: one project the workspace links.
 pub(crate) fn status_of_project(
     workspace: &WeaverWorkspace,
     project: MindProject,

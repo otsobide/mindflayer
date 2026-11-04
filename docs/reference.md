@@ -6,7 +6,7 @@ a workspace above it carries a `.mindflayer` that orchestrates several such
 projects at once.
 
 One shared Rust engine (`mindweaver-core`) behind every front end: the CLI
-(`mind` for a project, `flayer` for a workspace), the TUI it opens, and a
+(`mind` for a project, `mindweaver` for a workspace), the TUI it opens, and a
 [control panel](#control-panel) in your browser, served by the same binary.
 The layout leaves room for a desktop app later without moving the engine.
 
@@ -54,31 +54,31 @@ and where the skills and rules that belong to all of them live, once, to be
 installed into whichever needs them.
 
 Every command that reads or changes artifacts works at both levels: `mind
-<cmd>` on the project you are in, `flayer <cmd>` on the workspace: its own
+<cmd>` on the project you are in, `mindweaver <cmd>` on the workspace: its own
 artifacts, or one of its projects with `-p`. What only a workspace has
-(`scan`, `gather`, `minds`) is `flayer`'s, and `mind flayer <cmd>` reaches it
+(`scan`, `gather`, `minds`) is `mindweaver`'s, and `mind weaver <cmd>` reaches it
 from inside a project.
 
 ### The workspace in your home
 
 A workspace is found the way `.git` is, by walking up from where you are. When
-nothing up there has a `.mindflayer`, `flayer` uses **the one in your home**,
+nothing up there has a `.mindflayer`, `mindweaver` uses **the one in your home**,
 `~/.mindflayer`, so projects scattered anywhere can still be managed together
-without choosing a directory first. `flayer init` somewhere else makes a
+without choosing a directory first. `mindweaver init` somewhere else makes a
 workspace there, and from inside it that one wins. The TUI says when it is
-showing the default one, and `flayer which` says which workspace a command
+showing the default one, and `mindweaver which` says which workspace a command
 would use, and why.
 
-The first command that writes to it makes it: `flayer link`, `add`, `gather
+The first command that writes to it makes it: `mindweaver link`, `add`, `gather
 git`, `load <path>`, `install -p PROJECT <SKILL>`. One that only reads (`load`
 and `install` on their own among them) leaves your home alone, answers as an
 empty workspace would, and says where the workspace will be:
 
 ```
-$ flayer list
+$ mindweaver list
 you manages no projects yet
-  link one with `flayer link <path>`
-hint: no workspace here or above, and the default one is not made yet; the first command that writes to it, such as `flayer link <path>`, makes it in /home/you/.mindflayer
+  link one with `mindweaver link <path>`
+hint: no workspace here or above, and the default one is not made yet; the first command that writes to it, such as `mindweaver link <path>`, makes it in /home/you/.mindflayer
 ```
 
 Made, it puts nothing in your home but `.mindflayer`. Its own skills and rules
@@ -86,7 +86,7 @@ go in its library inside it, where no agent looks, rather than in a `~/skills`
 and `~/rules` above every project you have:
 
 ```
-$ flayer add skill commit-style "How every repo here writes commits"
+$ mindweaver add skill commit-style "How every repo here writes commits"
 created skill commit-style at /home/you/.mindflayer/library/skills/commit-style/SKILL.md
 ```
 
@@ -101,7 +101,7 @@ every workspace says so instead.
 
 Walking up is what happens when nothing says otherwise. `-W DIR`
 (`--workspace`) names the workspace a command uses, by its directory or its
-`.mindflayer`, from wherever you are; `$MINDFLAYER_WORKSPACE`, which `flayer
+`.mindflayer`, from wherever you are; `$MINDFLAYER_WORKSPACE`, which `mindweaver
 activate` sets ([several flayers](#several-flayers)), does the same for every
 command run in a shell, the way an activated Python virtualenv does.
 Either one wins over a workspace above you, so you can keep several flayers
@@ -109,11 +109,11 @@ for different purposes and pick one:
 
 ```
 $ cd ~/Projects/collapse                   # under the ~/Projects workspace
-$ flayer -W ~/flayers/writing list         # a workspace beside it instead
+$ mindweaver -W ~/flayers/writing list     # a workspace beside it instead
 prose-style  How every essay here is written
 
 $ export MINDFLAYER_WORKSPACE=~/flayers/writing
-$ flayer list                              # the same, for every command
+$ mindweaver list                          # the same, for every command
 prose-style  How every essay here is written
 $ mind link                                # this project, into that one
 linked collapse as ../../Projects/collapse
@@ -126,7 +126,7 @@ variable names has to be a workspace already. Anything else is refused,
 never passed over for the one above and never made into one:
 
 ```
-$ flayer -W ~/notes list
+$ mindweaver -W ~/notes list
 error: -W names a workspace that cannot be used: /home/you/notes: not a flayer workspace (no .mindflayer/flayer.toml)
 ```
 
@@ -136,33 +136,33 @@ variable counts as unset. `--home` still says only where the default lives.
 ### Several flayers
 
 A flayer can be made anywhere and switched to for a whole shell, the way a
-Python virtualenv is. `flayer init DIR` makes one in `DIR`, which the
+Python virtualenv is. `mindweaver init DIR` makes one in `DIR`, which the
 workspace in your home remembers ([the flayers this machine
-knows](#the-flayers-this-machine-knows)), and `flayer activate DIR` prints the
+knows](#the-flayers-this-machine-knows)), and `mindweaver activate DIR` prints the
 shell code that activates it, for `eval` to run:
 
 ```
-$ flayer init ~/flayers/writing
+$ mindweaver init ~/flayers/writing
 initialized flayer workspace `writing` in /home/you/flayers/writing/.mindflayer
   remembered as flayers/writing by the default workspace
 $ cd ~/Projects/collapse
-$ flayer which
+$ mindweaver which
 Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
-$ eval "$(flayer activate ~/flayers/writing)"
-(weaver:writing) $ flayer which
+$ eval "$(mindweaver activate ~/flayers/writing)"
+(weaver:writing) $ mindweaver which
 writing at /home/you/flayers/writing, activated by $MINDFLAYER_WORKSPACE
 (weaver:writing) $ source .venv/bin/activate
 (.venv) (weaver:writing) $ deactivate      # the virtualenv's; the flayer stays
 (weaver:writing) $ flayer-deactivate
-$ flayer which
+$ mindweaver which
 Projects at /home/you/Projects, found walking up from /home/you/Projects/collapse
 ```
 
 Activating sets `$MINDFLAYER_WORKSPACE` and puts `(weaver:<name>)` in front
 of your prompt; `flayer-deactivate` puts both back as they were, a variable
 you had set yourself included. Activating another flayer swaps one for the
-other, and `flayer activate` on its own activates the one a command run there
-would use. `flayer which` says which workspace that is and why: named by
+other, and `mindweaver activate` on its own activates the one a command run there
+would use. `mindweaver which` says which workspace that is and why: named by
 `-W`, activated, found walking up, or the default one.
 
 It is `flayer-deactivate` and never `deactivate`, so it gets along with a
@@ -176,54 +176,54 @@ does (`bash`, `zsh`, `fish` or `pwsh`). fish and PowerShell run it their own
 way:
 
 ```
-flayer activate --shell fish ~/flayers/writing | source
-flayer activate --shell pwsh ~/flayers/writing | Out-String | Invoke-Expression
+mindweaver activate --shell fish ~/flayers/writing | source
+mindweaver activate --shell pwsh ~/flayers/writing | Out-String | Invoke-Expression
 ```
 
 In those two, a virtualenv activated before the flayer and deactivated before
-it takes the flayer's prefix with it: the flayer stays active, as `flayer
+it takes the flayer's prefix with it: the flayer stays active, as `mindweaver
 which` says, but the prompt no longer shows it for the rest of that shell.
 
 Activating writes nothing anywhere, and what cannot be activated prints no
 code, so `eval` runs nothing and the shell is left as it was:
 
 ```
-$ eval "$(flayer activate ~/notes)"
+$ eval "$(mindweaver activate ~/notes)"
 error: /home/you/notes: not a flayer workspace (no .mindflayer/flayer.toml)
 ```
 
 ### The flayers this machine knows
 
 The workspace in your home keeps a list of the other flayers on this machine,
-so they can all be seen in one place and one picked to activate. `flayer init`
-adds each one it makes, once the workspace in your home is made, and `flayer
+so they can all be seen in one place and one picked to activate. `mindweaver init`
+adds each one it makes, once the workspace in your home is made, and `mindweaver
 workspaces` lists them, with a `*` before the one a command run where you are
 would use:
 
 ```
 $ cd ~/Projects/collapse
-$ flayer workspaces
+$ mindweaver workspaces
   you       /home/you                  no projects; the default one
   writing   /home/you/flayers/writing  no projects
 * Projects  /home/you/Projects         3 projects, 1 stale; not remembered
 
-  `flayer init <path>` remembers the one in use, and changes nothing else in it
-$ flayer init ~/Projects
+  `mindweaver init <path>` remembers the one in use, and changes nothing else in it
+$ mindweaver init ~/Projects
 flayer workspace `Projects` already initialized in /home/you/Projects/.mindflayer
   remembered as Projects by the default workspace
 ```
 
 Each one says how many projects it links, and how many of those are stale. A
 flayer made before the workspace in your home was, or by an older Mindflayer,
-is not on the list until `flayer init` runs on it again, which changes nothing
+is not on the list until `mindweaver init` runs on it again, which changes nothing
 else in it; the one in use is listed all the same, marked as not remembered.
 Activating a flayer does not remember it, since activating writes nothing. One
-that has gone is listed as `cannot be opened`, with a warning, and `flayer
+that has gone is listed as `cannot be opened`, with a warning, and `mindweaver
 workspaces forget` takes it off the list, under every spelling it was
 remembered by, leaving the flayer itself, if it is still there, as it is:
 
 ```
-$ flayer workspaces forget ~/flayers/writing
+$ mindweaver workspaces forget ~/flayers/writing
 forgot flayers/writing
 ```
 
@@ -273,13 +273,13 @@ keeps its artifacts](#where-a-project-keeps-its-artifacts).
 From a fresh clone, one command builds both binaries and links them:
 
 ```bash
-make dev/link                  # `mind`, `flayer` and `mf` in ~/.cargo/bin, pointing at target/debug
+make dev/link                  # `mind`, `mindweaver` and `mw` in ~/.cargo/bin, pointing at target/debug
 ```
 
-`mf` is short for `flayer`, the command that manages minds: `mf init` makes a
-workspace, `mf link` registers projects with it, and `mf` on its own opens
+`mw` is short for `mindweaver`, the command that manages minds: `mw init` makes a
+workspace, `mw link` registers projects with it, and `mw` on its own opens
 [the TUI](#the-tui). It is only a link that `dev/link` makes, never installed by
-`make install`, because `mf` is METAFONT wherever TeX is installed.
+`make install`, because a name of two letters is easily another tool's.
 
 They are **symlinks**, not copies, so every later build updates the binaries
 you are running without reinstalling anything: `make cli/build`, which needs
@@ -290,13 +290,22 @@ same place. It builds [the control panel](#control-panel) into them first
 where Node 24 and pnpm run ([developing the panel](development.md#developing-the-panel) has
 which pnpm, and `PNPM` for one corepack has not put on your PATH). Without
 them it warns and makes the copies anyway, with the panel `apps/web/dist`
-holds from an earlier build, or none, and then their `flayer ui` serves only a
+holds from an earlier build, or none, and then their `mindweaver ui` serves only a
 page saying the panel was not built.
 
 That place is `~/.cargo/bin`, which is on your PATH if `rustup` put it there
 and is **not** if your Rust came from a system package. `make dev/link` says so
 when it is missing; `BINDIR` is how you point somewhere else, and
 [Development](development.md#development) has the rest.
+
+A build from before the project was called Mindweaver installed `flayer`
+where `mindweaver` now goes, and `make dev/link` linked `mf` beside it.
+Neither target takes them out, since what is in your bin directory is
+yours: `cargo uninstall mindflayer-cli` removes the copies an older `make
+install` put there, its `mind` with them, and has to come first, since
+cargo will not write a `mind` over one another package installed; `rm
+~/.cargo/bin/flayer ~/.cargo/bin/mf` removes the links an older `make
+dev/link` made.
 
 Then make a repository a mind project, and give the folder it sits in a
 workspace to manage it, and others like it, from:
@@ -311,11 +320,11 @@ $ git status --short
 ?? skills/
 
 $ cd ~/Projects
-$ flayer init
+$ mindweaver init
 initialized flayer workspace `Projects` in /home/you/Projects/.mindflayer
-$ flayer link collapse
+$ mindweaver link collapse
 linked collapse as collapse
-$ flayer list
+$ mindweaver list
 deploy  Ship the service to staging
 ```
 
@@ -328,11 +337,11 @@ with it. Every agent is named unless `--agents claude,codex` names fewer, and
 [where a project keeps its artifacts](#where-a-project-keeps-its-artifacts)
 has the rest.
 
-Or run `flayer` on its own and do all of that from [the TUI](#the-tui): it
+Or run `mindweaver` on its own and do all of that from [the TUI](#the-tui): it
 opens the workspace at or above where you are (or, with none, the one in your
 home, and says so) and lists the repositories under it so linking is a pick
 rather than a path to remember. To give `~/Projects` a workspace of its own,
-run `flayer init` there first.
+run `mindweaver init` there first.
 
 `init` never overwrites an existing marker. Run it twice and it says so and
 changes nothing, so it is safe in a script.
@@ -345,7 +354,7 @@ install before you have gathered anything. With the repository cloned in
 `~/src/mindflayer`, [name it](#choosing-a-workspace) to see what it holds:
 
 ```
-$ flayer -W ~/src/mindflayer/examples list
+$ mindweaver -W ~/src/mindflayer/examples list
 skill  code-review     Reviews a change for bugs, safety, tests and scope, most severe first.…
 skill  commit-style    Writes commit messages as "area: imperative summary". Use when writing,…
 rule   git/commits     Commit one coherent step at a time
@@ -357,13 +366,13 @@ projects, and install from it:
 
 ```
 $ cd ~/Projects
-$ flayer load ~/src/mindflayer/examples
+$ mindweaver load ~/src/mindflayer/examples
 loaded examples as ../src/mindflayer/examples: 2 skills and 2 rules to install
   into the workspace at /home/you/Projects
 
-$ flayer install -p collapse commit-style
+$ mindweaver install -p collapse commit-style
 installed commit-style into collapse, from load:../src/mindflayer/examples
-$ flayer install -p collapse git/commits
+$ mindweaver install -p collapse git/commits
 installed rule git/commits into collapse, from load:../src/mindflayer/examples
 ```
 
@@ -373,13 +382,13 @@ installed rule git/commits into collapse, from load:../src/mindflayer/examples
 `collapse/AGENTS.md` holds the rule, in a block of Mindflayer's that all
 three read, and all of it is kept out of git. `style/comments` installs the
 same way, but it states which files it is about, so it goes to Claude Code
-alone, and the install says so. `flayer -W ~/src/mindflayer/examples
+alone, and the install says so. `mindweaver -W ~/src/mindflayer/examples
 validate` says all four are ok.
 
 ## Commands
 
 The surface is split the way the model is. `mind` acts on the project you are
-standing in; `flayer` acts on the workspace above it.
+standing in; `mindweaver` acts on the workspace above it.
 
 ```bash
 mind                       # the TUI, on this project
@@ -433,79 +442,83 @@ mind migrate [--agents AGENTS] [--local|--shared] [--yes]
                            # settings.toml, and its installs where its
                            # agents read
 
-flayer                     # the TUI: everything below, a key each
-flayer ui [--port PORT] [--no-open] [--dev] [--token-file PATH]
+mindweaver                 # the TUI: everything below, a key each
+mindweaver ui [--port PORT] [--no-open] [--dev] [--token-file PATH]
                            # the control panel, in a browser, until Ctrl-C;
                            # mind ui is the same; with --no-open and
                            # --token-file, its API for scripts alone
-flayer init [PATH] [--skills DIR] [--rules DIR]
+mindweaver init [PATH] [--skills DIR] [--rules DIR]
                            # create a .mindflayer here, or in PATH
-flayer activate [DIR] [--shell SHELL]
+mindweaver activate [DIR] [--shell SHELL]
                            # the code that activates a workspace: eval "$(...)"
-flayer which               # the workspace a command here would use, and why
-flayer workspaces [--json] # the flayers this machine knows, the one in use
+mindweaver which           # the workspace a command here would use, and why
+mindweaver workspaces [--json]
+                           # the flayers this machine knows, the one in use
                            # marked
-flayer workspaces forget <path>
+mindweaver workspaces forget <path>
                            # take one off that list
-flayer add|edit|rename|remove|templates [-p PROJECT] ...
+mindweaver add|edit|rename|remove|templates [-p PROJECT] ...
                            # the same as mind's: the workspace's own by
                            # default, one of its projects with -p
-flayer remove <NAME> --everywhere [--yes]
+mindweaver remove <NAME> --everywhere [--yes]
                            # one of its own, out of every project it was
                            # installed into first; without --yes, the same
-flayer list|show|validate [-p PROJECT] [--json] ...
+mindweaver list|show|validate [-p PROJECT] [--json] ...
                            # the workspace's own and every project's, or one;
                            # validate checks the shelf too
-flayer status [-p PROJECT] [--json]
+mindweaver status [-p PROJECT] [--json]
                            # what every project holds, or one: current,
                            # outdated, edited, missing, orphaned, foreign or
                            # authored, for which agents, and from where
-flayer scan [DIR...] [--depth N] [--suggest] [--json]
+mindweaver scan [DIR...] [--depth N] [--suggest] [--json]
                            # the repositories under it, or under each DIR,
                            # which are linked, and which moved; --suggest
                            # lists what is most worth linking first
-flayer link <path>...      # register mind projects with it
-flayer unlink <path>...    # drop them
-flayer relink <old> <new>  # follow a project that moved, keeping what was
+mindweaver link <path>...  # register mind projects with it
+mindweaver unlink <path>...
+                           # drop them
+mindweaver relink <old> <new>
+                           # follow a project that moved, keeping what was
                            # installed into it
-flayer minds [DIR...]      # a screen for linking and unlinking many at once
-flayer load <path>...      # offer another workspace's own skills and rules,
+mindweaver minds [DIR...]  # a screen for linking and unlinking many at once
+mindweaver load <path>...  # offer another workspace's own skills and rules,
                            # read live
-flayer unload <path>...    # stop offering them
+mindweaver unload <path>...  # stop offering them
 
-flayer gather git <URL>    # collect skills from a repository onto the shelf
-flayer gather list [--json]
+mindweaver gather git <URL>
+                           # collect skills from a repository onto the shelf
+mindweaver gather list [--json]
                            # what is on the shelf or loaded, and where from
-flayer install             # a screen for putting skills and rules into its
+mindweaver install         # a screen for putting skills and rules into its
                            # projects
-flayer install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force]
+mindweaver install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force]
                            # one, into the projects named or every one,
                            # without the screen
-flayer uninstall (-p PROJECT)...|--all-projects <NAME>|--orphaned [--force]
-flayer update (-p PROJECT)...|--all [NAME...] [--force] [--yes]
+mindweaver uninstall (-p PROJECT)...|--all-projects <NAME>|--orphaned [--force]
+mindweaver update (-p PROJECT)...|--all [NAME...] [--force] [--yes]
                            # mind update, for the projects named or every one
-flayer adopt -p PROJECT <NAME> [--yes]
+mindweaver adopt -p PROJECT <NAME> [--yes]
                            # a skill a project keeps by hand in an agent's
                            # folder, into the library and managed from there;
                            # without --yes, say what would happen
-flayer agents|share|targets -p PROJECT ...
+mindweaver agents|share|targets -p PROJECT ...
                            # mind's agents, share and targets, for one of its
                            # projects
-flayer migrate --library [--yes]
+mindweaver migrate --library [--yes]
                            # move its own skills and rules into its library;
                            # without --yes, say what would move
-flayer migrate -p PROJECT|--all-projects [--agents AGENTS] [--local] [--yes]
+mindweaver migrate -p PROJECT|--all-projects [--agents AGENTS] [--local] [--yes]
                            # mind migrate, for one of its projects or every one
 
-mind flayer <cmd>          # the long way round; `flayer <cmd>` is the shortcut
-mind ls / flayer ls        # alias for list; `flayer gather ls` for gather list
+mind weaver <cmd>          # the long way round; `mindweaver <cmd>` is the shortcut
+mind ls / mindweaver ls    # alias for list; `mindweaver gather ls` for gather list
 mind -C <dir> ...          # work in <dir> instead of the current directory
 mind -W <dir> ...          # the workspace to use, from anywhere; "" for none
                            # named; $MINDFLAYER_WORKSPACE otherwise
 mind --home <dir> ...      # where the default workspace lives; "" for none
 mind --claude-config-dir|--codex-home|--opencode-config-dir|--agents-dir <dir> ...
                            # where each agent's own folder is; "" for none
-mind tui / flayer tui      # the TUIs, spelled out
+mind tui / mindweaver tui  # the TUIs, spelled out
 ```
 
 Both find what they act on the way git does, by walking up from wherever you
@@ -520,7 +533,7 @@ rule   git/no-force-push  Never force-push a shared branch
 $ mind list rules                          # narrowed to one kind
 git/no-force-push  Never force-push a shared branch
 
-$ flayer list                              # every project it manages
+$ mindweaver list                          # every project it manages
 collapse  skill  commit-style       How this repo writes commit messages
 tanukeys  skill  ddd-reviewer       Review a change against the DDD rules
 collapse  rule   git/no-force-push  Never force-push a shared branch
@@ -541,10 +554,10 @@ is always a name.
 
 A workspace lists the projects it was **told** to manage, not whatever happens
 to sit inside it, so the answer does not change with the directory you ran it
-from. `flayer link` is how you tell it:
+from. `mindweaver link` is how you tell it:
 
 ```
-$ flayer link ../collapse
+$ mindweaver link ../collapse
 linked collapse as ../collapse
 ```
 
@@ -555,17 +568,17 @@ nothing and says so, naming the spelling already in the file. `unlink` removes
 every entry pointing at the project, and still works on one whose directory has
 moved away, which is exactly the entry worth removing.
 
-`flayer scan` finds what there is to tell it about: every mind project and git
+`mindweaver scan` finds what there is to tell it about: every mind project and git
 repository under the workspace, three levels down, and whether each is linked
 yet. It links nothing.
 
 ```
-$ cd ~/Projects && flayer scan
+$ cd ~/Projects && mindweaver scan
 collapse  linked
 notes     not linked  git repository, not a mind project yet
 tanukeys  not linked  mind project
 
-  link one with `flayer link <path>`
+  link one with `mindweaver link <path>`
   a repository needs `mind -C <path> init` before it can be linked
 ```
 
@@ -584,26 +597,26 @@ to type, or a row to tick on [the minds screen](#the-tui), which lists them
 in this order.
 
 ```
-$ flayer scan --suggest
+$ mindweaver scan --suggest
 tanukeys  not linked  mind project with an id
 notes     not linked  git repository with CLAUDE.md
 collapse  linked
 
-  link one with `flayer link <path>`
+  link one with `mindweaver link <path>`
   a repository needs `mind -C <path> init` before it can be linked
 ```
 
 Name a folder, or several, and it looks under those instead; `--depth` says
-how many levels below each. Every path is spelled the way `flayer link` takes
+how many levels below each. Every path is spelled the way `mindweaver link` takes
 it from where you ran the scan, so a line of the report is a line to type: a
 route from here, or the whole path of one outside.
 
 ```
-$ flayer scan ~/Work
+$ mindweaver scan ~/Work
 /home/you/Work/acme/api  not linked  git repository, not a mind project yet
 /home/you/Work/acme/web  not linked  mind project
 
-  link one with `flayer link <path>`
+  link one with `mindweaver link <path>`
   a repository needs `mind -C <path> init` before it can be linked
 ```
 
@@ -614,7 +627,7 @@ into a crawl of the disk. It goes three levels below each folder unless
 its own. Agent files are looked for only at the top of each one it finds,
 by name: never opened, and never followed when they are links. However
 deep it goes, it stops after listing 4096 folders and says so.
-`flayer minds ~/Work` opens [the minds screen](#the-tui) on what is there,
+`mindweaver minds ~/Work` opens [the minds screen](#the-tui) on what is there,
 and `--json` prints the report in the envelope
 [`status --json`](#what-each-project-has) uses, with the id each project's
 settings name it by, the reason each is worth linking (`id`, `mind`,
@@ -622,7 +635,7 @@ settings name it by, the reason each is worth linking (`id`, `mind`,
 is in the suggested order:
 
 ```
-$ flayer scan ~/Work --depth 2 --json
+$ mindweaver scan ~/Work --depth 2 --json
 {
   "version": 2,
   "data": {
@@ -672,7 +685,7 @@ Each kind is checked against what it actually declares. A skill is held to the
 [Agent Skills rules](#what-a-skill-looks-like): its name has to match its
 directory, its description has to fit, and so on; a rule's front matter is
 optional, so the only things left to check are that its name is usable and that
-the file says something beyond its front matter. `flayer validate` checks what
+the file says something beyond its front matter. `mindweaver validate` checks what
 is on the [shelf](#gathering-skills-from-elsewhere) too.
 
 `validate` exits non-zero when anything is wrong, so it works in CI. What an
@@ -715,7 +728,7 @@ A workspace has a **shelf**: skills collected from somewhere else, held by the
 workspace and belonging to no project yet.
 
 ```
-$ flayer gather git https://github.com/acme/skills
+$ mindweaver gather git https://github.com/acme/skills
 https://github.com/acme/skills at a1b2c3d
   added  commit-style  How this repo writes commit messages
   added  ddd-reviewer  Review a change against the DDD layering rules
@@ -725,7 +738,7 @@ https://github.com/acme/skills at a1b2c3d
 
 The repository's `skills` folder is what gets harvested; `--path agents` takes
 another one, and `--ref v2` takes a branch or a tag instead of the default. A
-repository that is a flayer workspace made by `flayer init` keeps its own in
+repository that is a flayer workspace made by `mindweaver init` keeps its own in
 [its library](#the-workspaces-own-skills-and-rules), so it is gathered with
 `--path .mindflayer/library/skills`, or [loaded](#loading-another-workspace)
 from a clone instead.
@@ -738,14 +751,14 @@ stderr piped or redirected, it says nothing until the report.
 Gathering fills the shelf and stops there. **Nothing is written into a mind
 project**: which of these a project should carry is a separate decision, and a
 `git clone` that quietly edited your repositories would be the wrong kind of
-convenient. [`flayer install`](#installing-into-a-project) is where that
+convenient. [`mindweaver install`](#installing-into-a-project) is where that
 decision is made.
 
 Run it again and it says what moved, which is the only thing worth reading the
 second time:
 
 ```
-$ flayer gather git https://github.com/acme/skills
+$ mindweaver gather git https://github.com/acme/skills
 https://github.com/acme/skills at 9f8e7d6
   updated    commit-style  How this repo writes commit messages
   unchanged  ddd-reviewer  Review a change against the DDD layering rules
@@ -758,7 +771,7 @@ gets its own folder under `.mindflayer/skills/`, and the workspace's database
 records which came from where.
 
 ```
-$ flayer gather git https://github.com/other/rules
+$ mindweaver gather git https://github.com/other/rules
 https://github.com/other/rules at 4d5e6f7
   added  commit-style  Conventional commits, strictly
   added  pdf--forms    Fill in PDF forms
@@ -766,7 +779,7 @@ https://github.com/other/rules at 4d5e6f7
 2 skills: 2 added, 0 updated, 0 unchanged
 warning: /home/you/Projects/.mindflayer/skills/github.com-other-rules/pdf--forms/SKILL.md: `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
 
-$ flayer gather list
+$ mindweaver gather list
 commit-style  https://github.com/acme/skills  How this repo writes commit messages
 commit-style  https://github.com/other/rules  Conventional commits, strictly
 ddd-reviewer  https://github.com/acme/skills  Review a change against the DDD layering rules
@@ -778,11 +791,11 @@ beside it from being gathered. One that reads but breaks a rule of the [skill
 format](#what-a-skill-looks-like) (a doubled hyphen in its name, like
 `pdf--forms` above, or metadata that is not all strings) is gathered anyway,
 with a warning saying what is wrong: leaving it behind would hide the problem
-along with the skill. `flayer validate` says so again whenever you ask, naming
+along with the skill. `mindweaver validate` says so again whenever you ask, naming
 the source folder each skill on the shelf sits in:
 
 ```
-$ flayer validate skills
+$ mindweaver validate skills
 commit-style (shelf/github.com-acme-skills): ok
 commit-style (shelf/github.com-other-rules): ok
 commit-style (collapse): ok
@@ -798,7 +811,7 @@ Installing is where it has to be right, because a project's copy is what its
 agents load:
 
 ```
-$ flayer install -p collapse pdf--forms
+$ mindweaver install -p collapse pdf--forms
 error: `pdf--forms` cannot be installed: `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens
 ```
 
@@ -809,7 +822,7 @@ password, so a source that needs one nobody has fails, and says what to set
 up:
 
 ```
-$ flayer gather git https://github.com/acme/private-skills
+$ mindweaver gather git https://github.com/acme/private-skills
 error: https://github.com/acme/private-skills: needs credentials, and gathering never prompts for them: configure a git credential helper, or use ssh-agent for an ssh URL
 ```
 
@@ -823,7 +836,7 @@ into a command line is already where `ps` and your shell history show it. Give
 the token to a git credential helper, and gather the URL without it:
 
 ```
-$ flayer gather git https://me:ghp_t0ken@github.com/acme/private-skills
+$ mindweaver gather git https://me:ghp_t0ken@github.com/acme/private-skills
 error: https://github.com/acme/private-skills: a password, a token or, over http(s), a user name in the URL is refused, because gathering stores and shows the URL: gather it without one, and configure a git credential helper that has it
 ```
 
@@ -848,14 +861,14 @@ The token is taken out of `mindflayer.db` and out of the clone in
 it:
 
 ```
-$ flayer install -p collapse deploy
+$ mindweaver install -p collapse deploy
 installed deploy into collapse, from https://github.com/acme/private-skills
 note: https://github.com/acme/private-skills: the user name, password or token an older Mindflayer stored in this URL is taken out; gathering it again needs a git credential helper that has it
 note: 2 action log entries: the user names, passwords or tokens an older Mindflayer stored in URLs in them are taken out
 ```
 
 The install screen does it when you apply what you marked, not when it opens.
-A command that only reads, such as `flayer gather list`, shows the URL without
+A command that only reads, such as `mindweaver gather list`, shows the URL without
 the token and leaves the file as it is.
 
 ### What a workspace keeps
@@ -864,7 +877,7 @@ the token and leaves the file as it is.
 .mindflayer/
   flayer.toml     the projects it manages, the workspaces it loads, and where
                   its own skills and rules are
-  flayer.toml.v2  flayer.toml as it was before `flayer migrate --library`
+  flayer.toml.v2  flayer.toml as it was before `mindweaver migrate --library`
                   rewrote it, if it did
   library/skills/<name>/SKILL.md
   library/rules/<name>.md
@@ -908,7 +921,7 @@ up to ten seconds for the other to finish, then gives up and says who it
 waited for:
 
 ```
-$ flayer link tanukeys
+$ mindweaver link tanukeys
 error: /home/you/Projects/.mindflayer/lock: workspace busy: waited 10s for process 3234405 to finish writing to it; try again once it has
 ```
 
@@ -923,7 +936,7 @@ on one machine, not programs on two.
 
 ## Installing into a project
 
-`flayer install` opens a screen. Projects on the left, and on the right what
+`mindweaver install` opens a screen. Projects on the left, and on the right what
 can be installed into the one under the cursor, one kind at a time, ticked
 where that project already holds it:
 
@@ -944,18 +957,18 @@ it instead, and the skills again (`shift+tab` goes the other way). `→` or
 back. Nothing touches a file until `a`, which asks first and then does
 everything at once, of both kinds: installs and removals together.
 
-What `a` runs is the commands you would have typed: a `flayer install` for
+What `a` runs is the commands you would have typed: a `mindweaver install` for
 each skill or rule ticked, with a `-p` for every project ticked to take it
-and `--from` for where the one ticked comes from, and a `flayer uninstall`
+and `--from` for where the one ticked comes from, and a `mindweaver uninstall`
 for each one unticked. It prints each with what it said, as the TUI prints a
 session when it closes, so a session with the screen in it can be run again
 without it:
 
 ```
-$ flayer install -p collapse -p tanukeys --from load:../src/mindflayer/examples skill:commit-style
+$ mindweaver install -p collapse -p tanukeys --from load:../src/mindflayer/examples skill:commit-style
 installed commit-style into collapse, from load:../src/mindflayer/examples
 installed commit-style into tanukeys, from load:../src/mindflayer/examples
-$ flayer uninstall -p collapse rule:git/commits
+$ mindweaver uninstall -p collapse rule:git/commits
 removed rule git/commits from collapse
 ```
 
@@ -1021,7 +1034,7 @@ An install with a copy gone since, deleted by hand or by a `git clean`,
 opens unticked and marked `(a copy gone since it was installed)`: ticking it
 puts every copy back. One that still has a copy left is taken out on [the
 command line](#without-the-screen), with `uninstall`. One whose skill or rule
-has changed where it came from since stays ticked, marked `(outdated; flayer
+has changed where it came from since stays ticked, marked `(outdated; mindweaver
 update refreshes it)`: [updating](#keeping-projects-up-to-date) brings it up
 to date.
 
@@ -1039,12 +1052,12 @@ the ones that want it.
 ### Without the screen
 
 ```bash
-mind install commit-style                  # into the project you are in
-flayer install -p collapse commit-style    # into one the workspace manages
-flayer install --all-projects commit-style # into every one it links
-mind install deploy --from workspace       # when two places offer one name
-mind install git/commits                   # a rule, by its route
-mind install rule:deploy                   # when a skill and a rule share it
+mind install commit-style                       # into the project you are in
+mindweaver install -p collapse commit-style     # into one the workspace manages
+mindweaver install --all-projects commit-style  # into every one it links
+mind install deploy --from workspace            # when two places offer one name
+mind install git/commits                        # a rule, by its route
+mind install rule:deploy                        # when a skill and a rule share it
 mind uninstall commit-style
 ```
 
@@ -1054,18 +1067,18 @@ loaded workspace's path or name, and is only needed when two places offer the
 same name: which of the two lands in the project's one folder of that name is
 not something to guess.
 
-`flayer install` takes `-p` once for each project, to install into several
-at once, or `--all-projects` for every one the workspace links, and `flayer
+`mindweaver install` takes `-p` once for each project, to install into several
+at once, or `--all-projects` for every one the workspace links, and `mindweaver
 uninstall` takes them the same way. Each project is said as an install into
 it alone says it, in the order asked, with what its rules warn of after its
 name (`warning: collapse: ...`), and one that refuses is said of it while the
 others go ahead:
 
 ```
-$ flayer install commit-style --all-projects
+$ mindweaver install commit-style --all-projects
 installed commit-style into collapse, from workspace
 warning: tanukeys already has a commit-style at skills/commit-style that Mindflayer did not put there, so it was left alone
-$ flayer uninstall commit-style --all-projects
+$ mindweaver uninstall commit-style --all-projects
 removed commit-style from collapse
 warning: commit-style at skills/commit-style in tanukeys was not installed by Mindflayer, so it was left alone
 ```
@@ -1137,7 +1150,7 @@ installed commit-style into alpha, from workspace
 ## Loading another workspace
 
 A flayer workspace can be a repository of skills in its own right: its own
-skills and rules, kept for sharing. `flayer load <path>` makes one of those a
+skills and rules, kept for sharing. `mindweaver load <path>` makes one of those a
 source for the workspace that manages you, without copying anything:
 
 ```
@@ -1156,19 +1169,19 @@ skills-equipo  skills-equipo  2 skills to install
 ```
 
 It goes into the workspace at or above where you run it that is not the one
-being loaded, so `mf load .` from inside `skills-equipo` goes into the one
+being loaded, so `mw load .` from inside `skills-equipo` goes into the one
 above it, or else [the one in your home](#the-workspace-in-your-home). The last
 line always says which.
 
 What it records is where the workspace is, in the `loaded` list of your
 `flayer.toml`, and its skills and rules are **read from there every time**:
-edit one in `skills-equipo` and the next `mf update -p api`, or `mf install`
+edit one in `skills-equipo` and the next `mw update -p api`, or `mw install`
 of it, [updates the copy](#keeping-projects-up-to-date) in `api`, with
-nothing to load again. `flayer gather list` and the install
+nothing to load again. `mindweaver gather list` and the install
 screen show what it offers beside the shelf's, as coming from `load:<path>`,
 which is also what `--from` takes, as do the path you gave `load`, from
 wherever you type it, and the workspace's name. Only a loaded workspace's own
-are offered, never what it loads in turn. `flayer unload <path>` forgets it;
+are offered, never what it loads in turn. `mindweaver unload <path>` forgets it;
 what was already installed from it stays where it is. `mind load <path>` does
 the same from inside a project, into the workspace above it, and the
 [control panel](#control-panel) does both from its **Loads** page.
@@ -1183,7 +1196,7 @@ like a skill that cannot be read or a loaded workspace that has gone.
 
 ## What each project has
 
-`flayer status` says what every project the workspace manages holds: whether
+`mindweaver status` says what every project the workspace manages holds: whether
 Mindflayer put each thing there, which agents read it, and where it came from.
 With [the examples loaded](#try-it-with-the-examples), and installed from
 there, `commit-style` and `code-review` into `collapse` and `commit-style` into
@@ -1191,7 +1204,7 @@ there, `commit-style` and `code-review` into `collapse` and `commit-style` into
 
 ```
 $ cd ~/Projects
-$ flayer status
+$ mindweaver status
 collapse  code-review   missing   codex,opencode         load:../src/mindflayer/examples
 collapse  commit-style  current   claude,codex,opencode  load:../src/mindflayer/examples
 collapse  deploy        authored  -
@@ -1222,7 +1235,7 @@ address. A project an older Mindflayer made, marked by a `mind.toml` or a
 `settings.json`, gets a hint after the report naming [`mind
 migrate`](#a-project-made-before-settings), which moves it to a
 `settings.toml`; the exit status stays the report's. `mind status` says the
-same of the project you are in, and `flayer status -p tanukeys` of one; as in
+same of the project you are in, and `mindweaver status -p tanukeys` of one; as in
 `list`, the project column is there only when there is more than one project
 to tell apart, and the kind column only when there is more than one kind.
 
@@ -1257,7 +1270,7 @@ since `installed` became `current`, `outdated` or `orphaned`, and `partial`
 became `missing`:
 
 ```
-$ flayer status -p tanukeys --json
+$ mindweaver status -p tanukeys --json
 {
   "version": 2,
   "data": {
@@ -1292,8 +1305,8 @@ hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a setting
 ## Machine-readable output
 
 The commands that report what is there take `--json`, at either level:
-`list`, `show`, `validate`, `templates` and `status`, and `flayer
-workspaces`, `flayer scan` and `flayer gather list`. Each prints what it
+`list`, `show`, `validate`, `templates` and `status`, and `mindweaver
+workspaces`, `mindweaver scan` and `mindweaver gather list`. Each prints what it
 read in one envelope, the same for every command, so a script or an agent
 reads them all one way, and reads what a workspace holds, its own
 artifacts and each project's, their templates and what it can install from
@@ -1391,8 +1404,8 @@ The workspace knows each project by its route from the workspace, so moving
 the repository leaves its entry `stale`, and the record of everything
 installed into it naming a place nothing is at. What moves with it is the
 `id` in its `.mind/settings.toml`, random, so that only a copy shares it,
-which the workspace keeps beside the route it last saw it at. `flayer scan`
-finds the project by it, and `flayer relink` follows it there. Say
+which the workspace keeps beside the route it last saw it at. `mindweaver scan`
+finds the project by it, and `mindweaver relink` follows it there. Say
 `collapse`, with `commit-style` and `git/commits` installed into it from the
 examples as [above](#try-it-with-the-examples), is the one project the
 workspace links, and moves into `apps/`:
@@ -1400,17 +1413,17 @@ workspace links, and moves into `apps/`:
 ```
 $ cd ~/Projects
 $ mkdir apps && mv collapse apps/
-$ flayer status
+$ mindweaver status
 collapse  stale
 warning: /home/you/Projects/collapse: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)
-$ flayer scan
+$ mindweaver scan
 apps/collapse  not linked  moved: collapse -> apps/collapse
 
-  follow one that moved with `flayer relink <old> <new>`
-$ flayer relink collapse apps/collapse
+  follow one that moved with `mindweaver relink <old> <new>`
+$ mindweaver relink collapse apps/collapse
 relinked collapse as apps/collapse, from collapse
   2 installs kept with it
-$ flayer status
+$ mindweaver status
 skill  commit-style  current  claude,codex,opencode  load:../src/mindflayer/examples
 rule   git/commits   current  claude,codex,opencode  load:../src/mindflayer/examples
 ```
@@ -1423,7 +1436,7 @@ one, in the same repository or the one it moved into, and a repository that
 moved whole has them right already. `M` in [the TUI](#the-tui), on a stale
 project the scan found, does the same.
 
-`flayer relink` refuses, with nothing changed: a directory that holds another
+`mindweaver relink` refuses, with nothing changed: a directory that holds another
 id than the one the workspace last saw at the entry, which is some other
 project; an entry that still holds a project, even one whose marker would not
 open, which has not moved; a project a `mind.toml` marks, which has no id to
@@ -1431,26 +1444,26 @@ be found by ([`mind migrate`](#a-project-made-before-settings) gives it one);
 and records from before ids were kept, which nothing says were that
 project's. A workspace learns each linked project's id when its ledger is
 made or brought up to this version, and again every time it writes, so a
-project moved before then is found by nobody. `flayer scan` names the entry
-it left instead, in a hint to `flayer relink <entry> <path>`, for you to say
-where it went: the entry keeps its place, where `flayer link` would leave it
+project moved before then is found by nobody. `mindweaver scan` names the entry
+it left instead, in a hint to `mindweaver relink <entry> <path>`, for you to say
+where it went: the entry keeps its place, where `mindweaver link` would leave it
 stale beside a second one.
 
 A repository copied with its `.mind` holds the same id as the one it was
 copied from, and nothing can tell which of the two the records were made for.
 So the copy is never taken for a move: wherever two projects holding one id
-are read together, by `flayer scan` or `flayer status`, it is a warning
-naming both, and a non-zero exit, and `flayer relink` refuses to follow it.
+are read together, by `mindweaver scan` or `mindweaver status`, it is a warning
+naming both, and a non-zero exit, and `mindweaver relink` refuses to follow it.
 `mind init --new-id` in the copy gives it an id of its own and keeps
 everything else, its name included:
 
 ```
 $ cp -r apps/collapse collapse-copy
-$ flayer scan
+$ mindweaver scan
 apps/collapse  linked
 collapse-copy  not linked  mind project
 
-  link one with `flayer link <path>`
+  link one with `mindweaver link <path>`
 warning: /home/you/Projects/collapse-copy and /home/you/Projects/apps/collapse are both project 4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5, copied with its .mind; `mind -C <copy> init --new-id` gives a copy an id of its own
 $ mind -C collapse-copy init --new-id
 gave collapse a new id, 0123456789abcdef0123456789abcdef (it was 4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5)
@@ -1466,7 +1479,7 @@ with `mind migrate`.
 What was installed stays what it was when it went in, so a skill or a rule
 changed where it is kept (the workspace's own, a workspace it loads, or the
 shelf once a gather brings something newer) leaves every project it went into
-behind it, and `status` says `outdated`. `flayer update` brings them up to
+behind it, and `status` says `outdated`. `mindweaver update` brings them up to
 date from where each was installed from, every copy at once, and puts back
 any copy that has gone, kept out of git again in a local project: one deleted
 by hand, or an `AGENTS.md` Mindflayer made, which `git clean -X` takes. A
@@ -1478,19 +1491,19 @@ somebody has written into `tanukeys`'s copy of it, with the rest as
 [above](#what-each-project-has):
 
 ```
-$ flayer status
+$ mindweaver status
 collapse  code-review   missing   codex,opencode         load:../src/mindflayer/examples
 collapse  commit-style  outdated  claude,codex,opencode  load:../src/mindflayer/examples
 collapse  deploy        authored  -
 collapse  notes         foreign   claude,opencode
 tanukeys  commit-style  edited    -                      load:../src/mindflayer/examples
 hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
-$ flayer update --all
+$ mindweaver update --all
 would put back code-review in collapse at .claude/skills/code-review, from load:../src/mindflayer/examples
 would update commit-style in collapse, from load:../src/mindflayer/examples
 nothing changed: add --yes to go ahead
 warning: commit-style in tanukeys was changed since it was installed, at skills/commit-style, so it would be left alone; --force writes over it
-$ flayer update --all --yes
+$ mindweaver update --all --yes
 put back code-review in collapse at .claude/skills/code-review, from load:../src/mindflayer/examples
 updated commit-style in collapse, from load:../src/mindflayer/examples
 warning: commit-style in tanukeys was changed since it was installed, at skills/commit-style, so it was left alone; --force writes over it
@@ -1501,7 +1514,7 @@ other copy of it, so the agents reading two folders never read two versions
 of one skill. `--force` writes over it, saying where the change was:
 
 ```
-$ flayer update -p tanukeys --force --yes
+$ mindweaver update -p tanukeys --force --yes
 updated commit-style in tanukeys, writing over the change at skills/commit-style, from load:../src/mindflayer/examples
 ```
 
@@ -1517,7 +1530,7 @@ nothing to update it from, so it is said and left as it is, never a failure,
 until it is uninstalled:
 
 ```
-$ flayer unload ~/src/mindflayer/examples
+$ mindweaver unload ~/src/mindflayer/examples
 unloaded ../src/mindflayer/examples
   from the workspace at /home/you/Projects
 $ cd collapse && mind update
@@ -1534,7 +1547,7 @@ moves when it is gathered again.
 Many repositories keep skills written by hand in `.claude/skills` or
 `.agents/skills`, committed with the code. Mindflayer lists each as
 `foreign`, somebody else's, and never touches it: no update reaches it, and
-an agent that reads the other folder never gets it. `flayer adopt` brings
+an agent that reads the other folder never gets it. `mindweaver adopt` brings
 one into the workspace's library, when you ask and never on its own, and
 records the project's copies as installed from there, exactly as they are:
 not a byte of the project is written. Say `collapse` is a local project that
@@ -1542,33 +1555,33 @@ keeps `notes` in `.claude/skills`, committed:
 
 ```
 $ cd ~/Projects
-$ flayer status -p collapse
+$ mindweaver status -p collapse
 notes  foreign  claude,opencode
-$ flayer adopt -p collapse notes
+$ mindweaver adopt -p collapse notes
 would copy notes from collapse into the library, at /home/you/Projects/.mindflayer/library/skills/notes
 would record notes in collapse as installed from workspace, at .claude/skills/notes
-would record .agents/skills/notes missing, for `flayer update -p collapse` to put there
+would record .agents/skills/notes missing, for `mindweaver update -p collapse` to put there
 nothing adopted: add --yes to go ahead
 note: git tracks .claude/skills/notes, so it stays in git though collapse is local: what an update writes there shows in `git status`
-$ flayer adopt -p collapse notes --yes
+$ mindweaver adopt -p collapse notes --yes
 copied notes from collapse into the library, at /home/you/Projects/.mindflayer/library/skills/notes
 recorded notes in collapse as installed from workspace, at .claude/skills/notes
-recorded .agents/skills/notes missing: `flayer update -p collapse` puts it there
+recorded .agents/skills/notes missing: `mindweaver update -p collapse` puts it there
 note: git tracks .claude/skills/notes, so it stays in git though collapse is local: what an update writes there shows in `git status`
-$ flayer update -p collapse --yes
+$ mindweaver update -p collapse --yes
 put back notes in collapse at .agents/skills/notes, from workspace
-$ flayer status -p collapse
+$ mindweaver status -p collapse
 notes  current  claude,codex,opencode  workspace
 ```
 
 From then on `notes` is the workspace's own, managed in `collapse` like
 anything installed there: current while nobody changes it, `edited` once
-somebody does, and brought up to date by `flayer update` when the library
+somebody does, and brought up to date by `mindweaver update` when the library
 copy changes. The update above gave Codex, which reads only
 `.agents/skills`, the copy it had never had; adopting itself writes nothing
 into a project, so a folder an install would put a copy in that holds none
 is recorded `missing` until then. Every other project can now be given it with
-`flayer install -p <project> notes`.
+`mindweaver install -p <project> notes`.
 
 A copy git tracks stays in git, even in a local project: a line in
 `info/exclude` would keep none of it out, and would hide every file added
@@ -1596,9 +1609,9 @@ A workspace keeps skills and rules of its own, for the projects it manages:
 
 ```bash
 cd ~/Projects
-flayer add skill commit-style "How every repo here writes commits"
-flayer add rule git/no-force-push "Never force-push a shared branch"
-flayer list
+mindweaver add skill commit-style "How every repo here writes commits"
+mindweaver add rule git/no-force-push "Never force-push a shared branch"
+mindweaver list
 ```
 
 ```
@@ -1610,7 +1623,7 @@ workspace  rule   git/no-force-push  Never force-push a shared branch
 They live in the workspace's library, `.mindflayer/library/skills` and
 `.mindflayer/library/rules`, inside `.mindflayer` where no agent looks: they
 reach an agent by being installed into its project, never by sitting in a
-directory above it. `flayer init` writes both into `flayer.toml`:
+directory above it. `mindweaver init` writes both into `flayer.toml`:
 
 ```toml
 [directories]
@@ -1618,52 +1631,52 @@ skills = ".mindflayer/library/skills"
 rules = ".mindflayer/library/rules"
 ```
 
-`flayer init --skills DIR --rules DIR` says otherwise, as `mind init` does for
+`mindweaver init --skills DIR --rules DIR` says otherwise, as `mind init` does for
 a project. Any folder inside the workspace will do except the shelf and the
 cache, which are reserved for gathering, a folder inside them, or one holding
 them, so `--skills .mindflayer/skills` and `--rules .mindflayer` are refused. A
 workspace made before the library keeps them in `skills/` and `rules/` beside
-its projects, because that is what its `flayer.toml` says, until `flayer
+its projects, because that is what its `flayer.toml` says, until `mindweaver
 migrate --library` [moves them](#upgrading). Either way nothing is made until
 the first one is added.
 
 A project holds what is in its own folders, because that is what its agents
 read, so the workspace's skills and rules reach a project by being installed
-into it (`mind install`, `flayer install`, or the install screen) and are
+into it (`mind install`, `mindweaver install`, or the install screen) and are
 managed there like anything else Mindflayer installed. Every command that
 changes an artifact works on the workspace's own the same way it works on a
-project's: `flayer edit`, `flayer rename`, `flayer remove`, and `-p <project>`
+project's: `mindweaver edit`, `mindweaver rename`, `mindweaver remove`, and `-p <project>`
 for one of its projects instead.
 
 ### Removing one everywhere
 
 Removing one of the workspace's own takes it out of the library, and only
 there: what was installed from it stays in each project, `orphaned`, since
-nothing offers it any more. `flayer remove` says so, in the dry run and once
+nothing offers it any more. `mindweaver remove` says so, in the dry run and once
 it is done:
 
 ```
-$ flayer remove commit-style
+$ mindweaver remove commit-style
 warning: commit-style is installed in collapse and tanukeys, which removing it alone would leave orphaned there; --everywhere takes it out of them too
 error: nothing removed: this deletes /home/you/Projects/.mindflayer/library/skills/commit-style and the 1 file in it; add --yes to go ahead
 ```
 
 `--everywhere` takes it out of every project the workspace links first, as
-`flayer uninstall` would, and then out of the library. Without `--yes` it
+`mindweaver uninstall` would, and then out of the library. Without `--yes` it
 says what each project holds of it and how that stands, and writes nothing.
 Here a copy in `tanukeys` was changed since it was installed:
 
 ```
-$ flayer remove commit-style --everywhere
+$ mindweaver remove commit-style --everywhere
 would remove commit-style from collapse, where it is current
 would leave commit-style in tanukeys, where it is edited, at .agents/skills/commit-style
 would remove skill commit-style from /home/you/Projects/.mindflayer/library/skills/commit-style and the 1 file in it
 nothing removed: add --yes to go ahead
-$ flayer remove commit-style --everywhere --yes
+$ mindweaver remove commit-style --everywhere --yes
 removed commit-style from collapse
 left commit-style in tanukeys, where it is edited, at .agents/skills/commit-style
 removed skill commit-style from /home/you/Projects/.mindflayer/library/skills/commit-style
-note: nothing offers commit-style in tanukeys any more; `flayer uninstall -p tanukeys commit-style --force` takes it out
+note: nothing offers commit-style in tanukeys any more; `mindweaver uninstall -p tanukeys commit-style --force` takes it out
 ```
 
 A copy that is current, outdated or missing one of its copies is
@@ -1681,10 +1694,10 @@ named, of every one with `--all-projects`, or of the one `mind` runs in. An
 edited one stays until `--force`:
 
 ```
-$ flayer remove commit-style --yes
+$ mindweaver remove commit-style --yes
 removed skill commit-style from /home/you/Projects/.mindflayer/library/skills/commit-style
-warning: commit-style is still installed in collapse and tanukeys, orphaned now that nothing offers it; `flayer uninstall --orphaned --all-projects` takes out what nothing offers
-$ flayer uninstall --orphaned --all-projects
+warning: commit-style is still installed in collapse and tanukeys, orphaned now that nothing offers it; `mindweaver uninstall --orphaned --all-projects` takes out what nothing offers
+$ mindweaver uninstall --orphaned --all-projects
 removed commit-style from collapse
 warning: commit-style in tanukeys was changed since it was installed, at .agents/skills/commit-style, so it was left alone; --force takes it out
 ```
@@ -1697,7 +1710,7 @@ to take its copies out.
 
 ## The TUI
 
-`flayer` on its own opens a screen over the whole workspace: its own artifacts
+`mindweaver` on its own opens a screen over the whole workspace: its own artifacts
 on the first row, marked `◆`, then every project it manages, and on the right
 what the one under the cursor holds.
 
@@ -1714,7 +1727,7 @@ q quit  ? keys  → open  a add  u update  m minds  l link  U unlink  v validate
 every change is a command, printed when you quit; ? lists them
 ```
 
-Each of a project's rows says what [`flayer status`](#what-each-project-has)
+Each of a project's rows says what [`mindweaver status`](#what-each-project-has)
 says of it: its state, then a badge for each agent that reads it, in a column
 of its own (`CC` for Claude Code, `CX` for Codex, `OC` for OpenCode), blank
 where that agent does not. The workspace's own are no project's, and their
@@ -1728,45 +1741,45 @@ Every key runs a command you could have typed, through the same parser:
 
 | Key | Does | Runs |
 |---|---|---|
-| `a` | add a skill or a rule | `mind -C <project> add <kind> <name> <description>`; on the `◆` row, `flayer add …` |
+| `a` | add a skill or a rule | `mind -C <project> add <kind> <name> <description>`; on the `◆` row, `mindweaver add …` |
 | `enter` | show an artifact | `mind -C <project> show <kind:name>` |
 | `e` | edit it: the TUI steps aside for your editor | `mind -C <project> edit <kind:name>` |
 | `r` | rename it | `mind -C <project> rename <kind:name> <new>` |
-| `d` | delete it, once you say yes; on the `◆` row, `e` says yes and takes it out of every project too | `mind -C <project> remove --yes <kind:name>`; on the `◆` row, `flayer remove --yes <kind:name>`, or with `e`, `flayer remove --everywhere --yes <kind:name>` |
-| `m` | tick and untick every project under the workspace | `mind -C <path> init`, `flayer link <path>...`, `flayer unlink <path>...` |
-| `u` | bring what is installed in the project up to date, or only the artifact under the cursor; on the `◆` row, in every project | `mind -C <project> update --yes [<kind:name>]`; on the `◆` row, `flayer update --all --yes [<kind:name>]` |
-| `l` | link a project | `flayer link <path>` |
-| `U` | unlink the project | `flayer unlink <path>` |
-| `M` | on a stale project the scan found moved, follow it there | `flayer relink <old> <new>` |
-| `A` | on a skill somebody keeps in a project's agents' folders, `foreign`, adopt it into the library, once you say yes | `flayer adopt -p <project> --yes <kind:name>` |
+| `d` | delete it, once you say yes; on the `◆` row, `e` says yes and takes it out of every project too | `mind -C <project> remove --yes <kind:name>`; on the `◆` row, `mindweaver remove --yes <kind:name>`, or with `e`, `mindweaver remove --everywhere --yes <kind:name>` |
+| `m` | tick and untick every project under the workspace | `mind -C <path> init`, `mindweaver link <path>...`, `mindweaver unlink <path>...` |
+| `u` | bring what is installed in the project up to date, or only the artifact under the cursor; on the `◆` row, in every project | `mind -C <project> update --yes [<kind:name>]`; on the `◆` row, `mindweaver update --all --yes [<kind:name>]` |
+| `l` | link a project | `mindweaver link <path>` |
+| `U` | unlink the project | `mindweaver unlink <path>` |
+| `M` | on a stale project the scan found moved, follow it there | `mindweaver relink <old> <new>` |
+| `A` | on a skill somebody keeps in a project's agents' folders, `foreign`, adopt it into the library, once you say yes | `mindweaver adopt -p <project> --yes <kind:name>` |
 | `t` | toggle the project's agents and share mode, then apply | `mind -C <project> agents --yes <agent>...`, `mind -C <project> share --yes local\|shared` |
 | `T` | type the folders the project installs skills in, or clear them for where its agents read | `mind -C <project> targets set --yes skills <dir>...`, `mind -C <project> targets reset --yes skills` |
-| `v` | validate everything | `flayer validate` |
-| `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `flayer gather git <url>` |
-| `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `flayer load <path>`, `flayer unload <path>` |
-| `s` | what is on the shelf | `flayer gather list` |
-| `w` | the flayers this machine knows, the one in use marked | `flayer workspaces` |
-| `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `flayer install` opens it; `a` runs `flayer install -p <project>... --from <origin> <kind:name>` and `flayer uninstall -p <project>... <kind:name>` |
+| `v` | validate everything | `mindweaver validate` |
+| `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `mindweaver gather git <url>` |
+| `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `mindweaver load <path>`, `mindweaver unload <path>` |
+| `s` | what is on the shelf | `mindweaver gather list` |
+| `w` | the flayers this machine knows, the one in use marked | `mindweaver workspaces` |
+| `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `mindweaver install` opens it; `a` runs `mindweaver install -p <project>... --from <origin> <kind:name>` and `mindweaver uninstall -p <project>... <kind:name>` |
 | `R` | read the disk again | nothing: it changes nothing |
 
 A project whose own commands would reach another workspace (linked from
 outside the workspace's tree, or with a nearer workspace above it) runs `mind
 -W . -C <project> …` instead, so the line acts on the workspace on screen
-rather than on the one the project would find by itself. `flayer -W <dir>` opens the screen on the
+rather than on the one the project would find by itself. `mindweaver -W <dir>` opens the screen on the
 workspace it names, and every line it runs uses that one; so does an
 activated workspace. The header says which it is showing and why: `named
 with -W`, `activated`, `found above`, or `default workspace`. It also counts
 the projects an older Mindflayer made, still marked by a `mind.toml` or a
-`settings.json`, and names the command that moves them, `flayer migrate
+`settings.json`, and names the command that moves them, `mindweaver migrate
 --all-projects`, or `mind migrate` for a project on its own
 ([upgrading](#a-project-made-before-settings)).
 
-`m`, or `flayer minds` straight from the shell, opens a list of every
+`m`, or `mindweaver minds` straight from the shell, opens a list of every
 project the workspace links and every repository under it that it does not,
-ticked where it does, in the order `flayer scan --suggest` gives: what is not
+ticked where it does, in the order `mindweaver scan --suggest` gives: what is not
 linked first, most worth linking first, each saying why, then what is.
-`flayer minds ~/Work` looks for those under that folder instead, as
-`flayer scan ~/Work` does, and says below the list what it could not read.
+`mindweaver minds ~/Work` looks for those under that folder instead, as
+`mindweaver scan ~/Work` does, and says below the list what it could not read.
 Tick and untick, then `a` applies all of it in one go, after saying which
 repositories `mind init` will write into. `link` and `unlink` are all or
 nothing: if one path is refused, none is changed.
@@ -1777,7 +1790,7 @@ TUI closes it prints every line that changed something, with what each said,
 so a session can be read afterwards, and repeated in a script:
 
 ```
-$ flayer link tanukeys
+$ mindweaver link tanukeys
 linked tanukeys as tanukeys
 $ mind -C tanukeys add skill deploy 'Ship the service to staging'
 created skill deploy at /home/you/Projects/tanukeys/skills/deploy/SKILL.md
@@ -1786,9 +1799,9 @@ created skill deploy at /home/you/Projects/tanukeys/skills/deploy/SKILL.md
 Opened where there is no workspace and no default one either (`--home ""`), it
 offers to create one there, then goes straight to linking; with a default, it
 opens that one and says so. It stays empty, and marked not made yet, until the
-first change you make from it, which runs `flayer init` there first. The link
-form lists what `flayer scan --suggest` finds under the workspace, or under
-the folders `flayer minds` was given (mind projects, and git repositories that
+first change you make from it, which runs `mindweaver init` there first. The link
+form lists what `mindweaver scan --suggest` finds under the workspace, or under
+the folders `mindweaver minds` was given (mind projects, and git repositories that
 are not one yet), in its order and with its reasons, and picking a repository
 asks before running `mind init` in it, because that writes into it. A project
 whose directory has gone is listed with a `!`, where `U` drops it, or, when
@@ -1798,11 +1811,11 @@ reason underneath.
 
 ## Control panel
 
-`flayer ui` serves a control panel for the workspace from the binary itself,
+`mindweaver ui` serves a control panel for the workspace from the binary itself,
 and opens it in your browser. It runs until Ctrl-C:
 
 ```
-$ flayer ui
+$ mindweaver ui
 http://127.0.0.1:40185/?token=bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513
 note: serving the workspace at /home/you/Projects on 127.0.0.1:40185 until Ctrl-C
 ```
@@ -1839,7 +1852,7 @@ second stops at once, and on the way out it prints every command that
 changed something, with what each said, as the TUI does when it closes:
 
 ```
-$ flayer -W /home/you/Projects install -p /home/you/Projects/collapse skill:commit-style
+$ mindweaver -W /home/you/Projects install -p /home/you/Projects/collapse skill:commit-style
 installed commit-style into collapse, from workspace
 ```
 
@@ -1880,7 +1893,7 @@ names the workspace it ran against with `-W`, before a switch or after it,
 and reads the rest of its words from the folder it is typed in, as any
 line does: the entry an `unlink`, `unload` or `relink` names, or the file
 a save reads. Across a switch, paste the lines run before it in that
-workspace's folder and those after it in the other's. What `flayer ui`
+workspace's folder and those after it in the other's. What `mindweaver ui`
 prints when it stops is the same, but for the tasks that only read, such as
 a `validate`.
 
@@ -1932,15 +1945,15 @@ made, and no command has it, since a shell has `ls` and completion.
 stands, which of the project's agents read it (one that does not is crossed
 out), where it came from, where its copies are, and what `validate` says of
 it or why its file does not read. What some of its agents never read is a
-warning above. A stale entry names `flayer relink` and `flayer unlink`, and a
-kind the project holds none of names `flayer install -p` and `flayer add -p`.
+warning above. A stale entry names `mindweaver relink` and `mindweaver unlink`, and a
+kind the project holds none of names `mindweaver install -p` and `mindweaver add -p`.
 Every command the panel names says `-W` and the workspace's path, so it acts
 on the workspace the panel shows wherever you type it, for a project linked
-from outside that workspace too; a workspace not made yet names `flayer init`
+from outside that workspace too; a workspace not made yet names `mindweaver init`
 first, since `-W` never makes the one it names. **Unlink**, at the top,
 asks first, and says that the workspace only forgets the project: nothing on
 disk is deleted. A row that reads `foreign`, somebody's own in a folder an
-agent reads, offers **Adopt**, `flayer adopt -p <project> --yes
+agent reads, offers **Adopt**, `mindweaver adopt -p <project> --yes
 <kind:name>` ([a repository that already has .claude/skills](#a-repository-that-already-has-claudeskills)), shown before it runs;
 what Mindflayer will not adopt, a rule or a skill an install could not have
 written, the line refuses, saying why.
@@ -1955,7 +1968,7 @@ what is installed is carried to where the agents now read. A project an
 older Mindflayer made, marked by a `mind.toml` or a `settings.json`, has no
 toggles until it moves to a `settings.toml`, and offers that move instead
 ([a project made before settings](#a-project-made-before-settings)): **See
-what migrating does** runs the dry run, `flayer migrate -p <project>`, and
+what migrating does** runs the dry run, `mindweaver migrate -p <project>`, and
 shows what it would write, move and leave, and only then **Migrate** runs it
 with `--yes`. One a `mind.toml` marks takes every agent and stays shared, as
 it was committed, and one a `settings.json` marks keeps the agents and the
@@ -1966,7 +1979,7 @@ repositories are kept in, one a line, each an absolute path, or add one
 with **Browse**, which opens the explorer at the last folder named and
 adds the one you choose, once; then how many levels down to look, empty
 for three, and press **Scan**: the panel asks for what
-`flayer scan --suggest` would find there, the workspace's own folder
+`mindweaver scan --suggest` would find there, the workspace's own folder
 offered to start from. It scans nothing until you ask, and nothing again by
 itself while you look, since a scan reads far more of the disk than the
 panel watches; a folder is only read. What is not linked comes first, most
@@ -1975,34 +1988,34 @@ with an id, one without, a git repository with the files that show an agent
 works in it, any other git repository. Tick the ones you want and press
 **Link what is marked**: the panel shows the lines first, a `mind -C <path>
 init` for each repository that is not a mind project yet, which it names
-before you ask since it writes into the repository, then one `flayer link`
+before you ask since it writes into the repository, then one `mindweaver link`
 of them all, the batch the TUI's minds screen runs for the same marks. The
 panel names each folder by its absolute path, where the minds screen names
 one inside the workspace by its route from there, so the lines read
 differently and act on the same folders.
 A project that moved, which the scan tells by its id, the one the workspace
-last saw where the entry it left points, offers **Relink** instead, `flayer
+last saw where the entry it left points, offers **Relink** instead, `mindweaver
 relink <old> <new>`, which keeps what was installed into it; an entry whose id the workspace never
-learned is named with the `flayer relink` that would follow it once you know
+learned is named with the `mindweaver relink` that would follow it once you know
 where it went. Below are the projects it found linked already. The folders
 and the depth stay in the address, so a reload scans the same again.
 
 **The library** has a page for each kind, `skill` and `rule`, listing the
 workspace's own with what each is for, which projects hold a copy of it and
 how each copy stands, and what `validate` says of it; type to filter by name
-or summary. A kind it holds none of names `flayer add`.
+or summary. A kind it holds none of names `mindweaver add`.
 **New skill** and **New rule**, at the top, open a page that adds one: its
 name, its description and what it starts from, nothing or one of the
 kind's templates ([from a template](#from-a-template)), judged as you type by what
-`flayer add` would refuse, in its words, and by what `validate` would say
-of it once written. **Add** runs `flayer add [--template <template>] <kind>
+`mindweaver add` would refuse, in its words, and by what `validate` would say
+of it once written. **Add** runs `mindweaver add [--template <template>] <kind>
 <name> <description>`, shown first, and opens what it added.
 
 **One of the library's own** opens from its name. It shows what its front
 matter declares, as a table, every key in the order written; its body,
 rendered as markdown; every file it holds, each of which opens as the text it
 is; what `validate` says of it; and the projects holding a copy, with the
-state, agents and targets of each, or the `flayer install` that would put it
+state, agents and targets of each, or the `mindweaver install` that would put it
 in one. What a skill holds is somebody else's, so the panel shows it and
 never runs it: HTML in a `SKILL.md` is shown as the markup it is, an image is
 named rather than loaded, and only a link to another site or a mail address
@@ -2013,14 +2026,14 @@ kind in is listed with why and never followed.
 **Edit**, at the top, opens the file it is read from, its `SKILL.md` or a
 rule's file, in an editor in the page, line numbers and markdown with its
 front matter coloured, Ctrl-S to save and Tab to leave it. As you stop
-typing, the text is judged as `flayer edit --contents` would judge it: why
+typing, the text is judged as `mindweaver edit --contents` would judge it: why
 it would refuse it, in its words (a name other than the skill's folder,
 which `rename` changes, front matter that does not read, or a rule the
 write is held to), and what `validate` would say of it once written, word
-for word as `flayer validate` then prints it. **Save** runs, shown first:
+for word as `mindweaver validate` then prints it. **Save** runs, shown first:
 
 ```
-$ flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review
+$ mindweaver -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review
 edited skill review: ok
 ```
 
@@ -2034,11 +2047,11 @@ save is refused with `edit_stale`, the file left as the change left it,
 until **Read it again** starts from what it holds now. A copy installed
 from it then reads as outdated, for **Updates** to bring along.
 
-Below its files, **Rename it** runs `flayer rename <kind:name> <new name>`,
+Below its files, **Rename it** runs `mindweaver rename <kind:name> <new name>`,
 shown first, and opens it under the name it has then.
 
 At the bottom, **See what removing it everywhere does** runs the dry run of
-`flayer remove --everywhere <kind:name>`, which deletes nothing, and shows
+`mindweaver remove --everywhere <kind:name>`, which deletes nothing, and shows
 what it said: each project's copy that would go, with how it stands, a copy
 changed since it was installed that would stay, somebody's own of the name,
 which is never touched, and the library's copy. Only then does **Remove
@@ -2051,7 +2064,7 @@ installed from it orphaned.
 workspace](#loading-another-workspace)), each with its entry, where it is,
 what `--from` takes for what it offers (`load:../team`), why one does not
 open, and what it offers, each skill and rule by its name and what it is
-for, with a link to **Assign** showing those alone. **Unload** runs `flayer
+for, with a link to **Assign** showing those alone. **Unload** runs `mindweaver
 unload <entry>`, a confirmation, since the workspace then stops offering
 them; what was installed from it stays where it is. Below are the
 workspaces this machine knows ([the flayers this machine
@@ -2059,7 +2072,7 @@ knows](#the-flayers-this-machine-knows)), the default first, each saying
 whether it is the default, this workspace, loaded already and by which
 entry, or one that does not open, with how many projects it links. One the
 workspace could load, which is none of this one, one it loads already and
-one that does not open, offers **Load**, `flayer load <path>`; any other is
+one that does not open, offers **Load**, `mindweaver load <path>`; any other is
 loaded by its absolute path, typed below, which the line refuses, saying
 why, when no workspace is there or it is this one. Each is shown first, and
 is the line the TUI's load form runs for the same workspace.
@@ -2097,14 +2110,14 @@ from, each with that same origin, the branch, the folder harvested, the
 commit last gathered and what it supplied, and below them what happened
 lately: the latest gathers, installs, uninstalls, relinks and adoptions the
 ledger logged, newest first, with every URL in them shown without
-credentials. An empty shelf names `flayer gather git`.
+credentials. An empty shelf names `mindweaver gather git`.
 
 **Assign** is a matrix of everything there is to install against every
 project: a row for each skill and rule the library, a loaded workspace or
 the shelf offers, under a heading for where it comes from, its origin as
 `--from` takes it, and a column for each project, or turned round, **by
 project**, with the origins over the columns. A box is ticked where the
-project holds that offer, as `flayer install` would leave it: of two
+project holds that offer, as `mindweaver install` would leave it: of two
 places offering one name, the one its install came from, and every one
 when somebody else's copy of the name is there. An icon over a box says
 how the name stands in the project (`current`, `outdated`, `edited`,
@@ -2117,8 +2130,8 @@ way round it is.
 Press a box, or move to it with the arrow keys and press Space, to mark it
 the other way round, and again to take the mark away. Whatever is marked
 is planned at once, and the plan shows below: the lines that carry it out,
-one `flayer install -p ... --from <origin> <kind:name>` for each offer
-ticked, with every project ticking it, and one `flayer uninstall -p ...
+one `mindweaver install -p ... --from <origin> <kind:name>` for each offer
+ticked, with every project ticking it, and one `mindweaver uninstall -p ...
 <kind:name>` for each name unticked, an offer ticked in place of another of
 its name replacing it rather than taking it out first; and what it holds
 back, each on its box and listed with its code: a box whose name is
@@ -2129,7 +2142,7 @@ lines, a confirmation when one uninstalls, and runs them as one batch, the
 install screen's; **Clear the marks** forgets them. A matrix of hundreds
 of offers and projects draws only what fits on screen.
 
-**Updates** is what `flayer update --all` would do, before it is told
+**Updates** is what `mindweaver update --all` would do, before it is told
 `--yes`: every installation an update says something of, under its state,
 `outdated`, `edited`, `missing` and `orphaned`, each counted, with its
 project, its origin as `--from` takes it, and what an update does with it:
@@ -2138,13 +2151,13 @@ writes it again from its origin (`refresh`), puts back the copies named
 changed since it was installed (`edited`), an origin that offers it no more
 (`no_longer_offered`), or one installed before origins were kept that two
 places offer (`origin_unknown`), which `install --from` settles. An entry
-that opens no project is said above. **Update all** runs `flayer update
+that opens no project is said above. **Update all** runs `mindweaver update
 --all --yes`, each project offers its own `mind -C <project> update --yes`
 where an update writes something, and each row its change: **Update**, the
 same line naming it; **Force update** for an edited copy, the line with
 `--force`, a confirmation since it writes over the change; and
-**Uninstall** for one nothing offers any more, `flayer uninstall -p
-<project> <kind:name>`, beside **Uninstall every orphaned one**, `flayer
+**Uninstall** for one nothing offers any more, `mindweaver uninstall -p
+<project> <kind:name>`, beside **Uninstall every orphaned one**, `mindweaver
 uninstall --all-projects --orphaned`. One nothing offers that was changed
 since it was installed, as removing it everywhere leaves one, stands as
 `edited`, and neither uninstall takes it out: its row offers **Force
@@ -2168,13 +2181,13 @@ changes things too, each as the page offering the same change does:
 - **Install** one skill or rule, from wherever it is offered, then one of
   the projects whose box of it on **Assign** is neither ticked nor closed.
   That one box is planned, as ticking it would plan it, and what the plan
-  says runs, `flayer install -p <project> --from <origin> <kind:name>`,
+  says runs, `mindweaver install -p <project> --from <origin> <kind:name>`,
   replacing another of its name the project holds; what holds it back, a
   copy somebody wrote (`foreign`) say, is said with its code, and nothing
   runs.
-- **Update all**, `flayer update --all --yes`, the button of **Updates**,
+- **Update all**, `mindweaver update --all --yes`, the button of **Updates**,
   offered whatever an update would do, which its line then says.
-- **Link**, offered last for whatever is typed, `flayer link <path>`, the
+- **Link**, offered last for whatever is typed, `mindweaver link <path>`, the
   line of the form above the projects table, which refuses, saying why,
   anything but the absolute path of a folder.
 
@@ -2219,7 +2232,7 @@ state in words, never by colour alone.
 
 **An HTTP API for scripts.** What the panel asks the server is an API under
 `/api/v1`, there for any script on this machine holding the launch token,
-the one in the link `flayer ui` prints, sent as `Authorization: Bearer
+the one in the link `mindweaver ui` prints, sent as `Authorization: Bearer
 <token>`:
 
 ```sh
@@ -2233,10 +2246,10 @@ it; what follows here is the whole of it, in short.
 **With no browser**, `--no-open` and `--token-file` serve the API to
 scripts alone: nothing is opened, and where the API is and the token go to
 the file named, as well as to the link. A script that did not start the
-panel reads them there rather than from what `flayer ui` printed:
+panel reads them there rather than from what `mindweaver ui` printed:
 
 ```
-$ flayer ui --no-open --token-file /home/you/.local/state/mindflayer.json
+$ mindweaver ui --no-open --token-file /home/you/.local/state/mindflayer.json
 http://127.0.0.1:40185/?token=bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513
 note: serving the workspace at /home/you/Projects on 127.0.0.1:40185 until Ctrl-C
 $ cat /home/you/.local/state/mindflayer.json
@@ -2517,7 +2530,7 @@ land and taken out after they go; a shared one leaves them for the team to
 commit:
 
 ```
-$ flayer install -p collapse commit-style
+$ mindweaver install -p collapse commit-style
 installed commit-style into collapse, from workspace
 $ tail -5 collapse/.git/info/exclude
 # mindflayer:begin
@@ -2595,8 +2608,8 @@ Turning shared removes `.mind/.gitignore`, if it is still the one
 Mindflayer wrote, and the project's whole group in `.git/info/exclude`, so
 the settings and the copies are the team's to commit; turning local writes
 both back, an entry for each copy installed that git does not track: one the
-team committed stays in git. `flayer agents -p collapse ...` and
-`flayer share -p collapse ...` do the same from the workspace, and `t` in
+team committed stays in git. `mindweaver agents -p collapse ...` and
+`mindweaver share -p collapse ...` do the same from the workspace, and `t` in
 [the TUI](#the-tui) toggles them for the project under the cursor. A project
 no workspace links still changes its settings, which are its own, and is told
 that nothing installed in it was carried along.
@@ -2662,7 +2675,7 @@ removed commit-style from .skills/commit-style
 left .skills/notes where it is: Mindflayer did not install it
 ```
 
-`flayer targets -p collapse ...` does the same from the workspace, and `T` in
+`mindweaver targets -p collapse ...` does the same from the workspace, and `T` in
 [the TUI](#the-tui) types the folders for the project under the cursor.
 
 ## What a skill looks like
@@ -2801,7 +2814,7 @@ applies; a skill cannot be filed in a folder; and nothing already there is
 written over, not even a folder that is not a skill. The description is one
 line, because the rest belongs in the file.
 
-A skill made this way is its author's, not Mindflayer's: `flayer install`
+A skill made this way is its author's, not Mindflayer's: `mindweaver install`
 treats it like anything else it did not put there, and never overwrites or
 removes it.
 
@@ -2817,7 +2830,7 @@ mind add skill deploy "Ship the service" --template full
 `.mindflayer/templates/` for every project it manages: a folder holding a
 `SKILL.md` for a skill, a markdown file for a rule. `mind templates` lists what
 is available and where each comes from; of two with one name, the closer wins.
-`flayer add -p` finds the workspace's wherever the project sits; `mind add`
+`mindweaver add -p` finds the workspace's wherever the project sits; `mind add`
 finds those of [the workspace named or
 activated](#choosing-a-workspace), or else the one above the project, or else
 the one in your home.
@@ -2877,7 +2890,7 @@ written through, and so is one under a folder linked out of the project,
 as `.claude` can be. The workspace's own are held to the folder it keeps
 them in, which may be linked elsewhere.
 
-What `flayer install` put in an agent's folder is not changed from the
+What `mindweaver install` put in an agent's folder is not changed from the
 project: `edit`, `rename` and `remove` refuse a skill found only where its
 agents read, which `mind uninstall` takes out. Where a copy sits in a folder
 the project writes in too (one whose `--skills` is an agent's folder, or a
@@ -2896,18 +2909,18 @@ $ mind install commit-style
 installed commit-style into app, from workspace
 $ mind rename commit-style commits
 renamed skill commit-style to commits at /home/you/Projects/app/.claude/skills/commits
-  it was installed by `flayer install`, and stays so under its new name; renamed, it is left alone by `flayer install` and `flayer uninstall` unless they are forced
+  it was installed by `mindweaver install`, and stays so under its new name; renamed, it is left alone by `mindweaver install` and `mindweaver uninstall` unless they are forced
 $ mind status
 commit-style  current  codex,opencode   workspace
 commits       edited   claude,opencode  workspace
 $ mind remove commits --yes
 removed skill commits from /home/you/Projects/app/.claude/skills/commits
-  it had been installed, and is uninstalled with it; `flayer install` can put it back
+  it had been installed, and is uninstalled with it; `mindweaver install` can put it back
 ```
 
 The copy in `.agents/skills`, which the rename did not reach, is still the
 install as it was. The record changed is the one held by the workspace the
-command works in: `flayer`'s, wherever the project sits, or for `mind` the
+command works in: `mindweaver`'s, wherever the project sits, or for `mind` the
 one named or activated, or else the workspace above the project, or else the
 one in your home. Another workspace that links the same project keeps its
 own (an [open question](architecture.md#open-questions)).
@@ -2920,20 +2933,20 @@ copying it aside ([what a workspace keeps](#what-a-workspace-keeps)).
 
 ### A workspace made before the library
 
-`flayer init` used to keep a workspace's own skills and rules in `skills/` and
+`mindweaver init` used to keep a workspace's own skills and rules in `skills/` and
 `rules/` beside its projects: `~/skills` and `~/rules`, for the workspace in
 your home. Such a workspace still works, because its `flayer.toml` names those
 folders, and keeps them there until you move them into its library. On its own
 the command changes nothing and says what `--yes` would do:
 
 ```
-$ flayer migrate --library
+$ mindweaver migrate --library
 would move /home/you/skills/commit-style to /home/you/.mindflayer/library/skills/commit-style
 would move /home/you/rules/git/no-force-push.md to /home/you/.mindflayer/library/rules/git/no-force-push.md
 would point skills and rules in /home/you/.mindflayer/flayer.toml at the library, keeping it as it is in /home/you/.mindflayer/flayer.toml.v2
 nothing moved: add --yes to go ahead
 
-$ flayer migrate --library --yes
+$ mindweaver migrate --library --yes
 moved /home/you/skills/commit-style to /home/you/.mindflayer/library/skills/commit-style
 moved /home/you/rules/git/no-force-push.md to /home/you/.mindflayer/library/rules/git/no-force-push.md
 pointed skills and rules in /home/you/.mindflayer/flayer.toml at the library, kept as it was in /home/you/.mindflayer/flayer.toml.v2
@@ -2946,13 +2959,13 @@ everything else in `flayer.toml` stay as they were. Run again, it has nothing
 to do and writes nothing:
 
 ```
-$ flayer migrate --library --yes
+$ mindweaver migrate --library --yes
 nothing to move: the workspace keeps its own in its library already
 ```
 
 What you installed into a project from what moved stays installed, and
 current: an install records that it came from `workspace`, not from which
-folder, so `flayer install` still finds the project's copy the same as the
+folder, so `mindweaver install` still finds the project's copy the same as the
 skill it came from.
 
 Nothing moves while anything is in the way, and every reason is said at once:
@@ -2961,12 +2974,12 @@ migration kept, a link whose target is relative to where it is, or a folder
 that cannot be read:
 
 ```
-$ flayer migrate --library --yes
+$ mindweaver migrate --library --yes
 error: nothing moved: /home/you/.mindflayer/library/skills/commit-style: already there, so /home/you/skills/commit-style cannot be moved onto it
 ```
 
 Nothing moves either while a folder it would empty is not the workspace's:
-one `flayer.toml` names outside the workspace or on its shelf, which `flayer
+one `flayer.toml` names outside the workspace or on its shelf, which `mindweaver
 init` would have refused, or one that is a link, or is reached through one, as
 `~/skills -> dotfiles/skills` is, which keeps its skills in your dotfiles on
 purpose.
@@ -2976,8 +2989,8 @@ keeping its skills in `~/skills` too, those are the project's: they stay where
 they are, the command says so, and the workspace's own skills start empty in
 its library. If you never linked your home, the workspace counted those skills
 as its own until then, and the line says it no longer does: one you installed
-from there stays installed and recorded, so `flayer uninstall` still takes it
-out, but nothing offers it to `flayer install` any more. A move that fails puts back what had moved, and leaves
+from there stays installed and recorded, so `mindweaver uninstall` still takes it
+out, but nothing offers it to `mindweaver install` any more. A move that fails puts back what had moved, and leaves
 `flayer.toml` as it was. To undo a migration that worked, put `flayer.toml.v2`
 in place of `flayer.toml` and move the artifacts back.
 
@@ -3030,11 +3043,11 @@ walking up from the project. In a project linked from a workspace beside
 it, which walking up never reaches, it carries nothing and says so in a
 `hint:`; `-W` names that workspace, as for any `mind` command.
 
-`flayer migrate -p tanukeys` does the same from the workspace, and `flayer
+`mindweaver migrate -p tanukeys` does the same from the workspace, and `mindweaver
 migrate --all-projects` does it for every project the workspace links that a
 `mind.toml` or a `settings.json` marks, each on its own: without `--yes` it
 lists every one and writes nothing, and with it one that cannot be moved is
-said and the others go ahead. `flayer migrate` alone says which of the three
+said and the others go ahead. `mindweaver migrate` alone says which of the three
 to ask for, [the TUI](#the-tui)'s header counts the projects still marked
 by either, naming the command, and [`status`](#what-each-project-has) gives
 each one a hint.
@@ -3045,7 +3058,7 @@ though, and a `.mind` that was committed stays tracked, so the command says
 how to stop that and leaves it to you:
 
 ```
-$ flayer migrate -p tanukeys --local --agents claude --yes
+$ mindweaver migrate -p tanukeys --local --agents claude --yes
 wrote .mind/settings.toml for tanukeys: agents claude, share local
 moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was
 wrote .mind/.gitignore, keeping .mind out of git

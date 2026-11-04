@@ -525,7 +525,7 @@ fn codex_warnings(project: &Path) -> Vec<Warning> {
 /// package linked below it, beside the package's own. So a folder above a
 /// project the workspace links is refused, a stale entry's included, since
 /// its project may only have moved for a moment. So is the workspace's own
-/// root, unless a project it links is there: `flayer init` and the
+/// root, unless a project it links is there: `mindweaver init` and the
 /// workspace's own artifacts put nothing in it ([`WeaverWorkspace::own`] is
 /// a holder at that root, not a project), while a project at the root is a
 /// project like any other, and its `AGENTS.md` its own (D-03).

@@ -39,7 +39,7 @@ function playwright(options: string[], env: Record<string, string>): Promise<num
   // the home and remove the folder after it. A termination sent to the
   // driver alone, as CI cancels a job, is passed on as that same SIGINT,
   // not as a SIGTERM: Playwright handles no SIGTERM, and dying of one would
-  // leave `flayer ui`, in a process group of its own, serving a folder the
+  // leave `mindweaver ui`, in a process group of its own, serving a folder the
   // driver then removes.
   const waiting = () => {}
   const relay = () => child.kill('SIGINT')
@@ -64,7 +64,7 @@ function refuse(message: string): never {
 /** The binaries' folder, as the Makefile names it, from this folder. */
 const bin = resolve(web, process.env.MINDFLAYER_E2E_BIN ?? '../../target/debug')
 if (!built(bin)) {
-  refuse(`no flayer and mind in ${bin} to test: \`make web/e2e\` builds them there, and E2E_BIN names another folder holding them`)
+  refuse(`no mindweaver and mind in ${bin} to test: \`make web/e2e\` builds them there, and E2E_BIN names another folder holding them`)
 }
 const temporary = tmpdir()
 const holder = marked(temporary)

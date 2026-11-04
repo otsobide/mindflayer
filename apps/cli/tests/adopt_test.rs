@@ -1,4 +1,4 @@
-//! `flayer adopt`: a skill somebody keeps in a project's agents' folders
+//! `mindweaver adopt`: a skill somebody keeps in a project's agents' folders
 //! brought into the workspace's library, its copies recorded as installed
 //! from there and left byte for byte as they were, and what is refused.
 
@@ -56,7 +56,7 @@ fn adopt_without_yes_says_what_it_would_do_and_writes_nothing() {
         format!(
             "would copy notes from alpha into the library, at {}\n\
              would record notes in alpha as installed from workspace, at .claude/skills/notes\n\
-             would record .agents/skills/notes missing, for `flayer update -p alpha` to put there\n\
+             would record .agents/skills/notes missing, for `mindweaver update -p alpha` to put there\n\
              would keep .claude/skills/notes out of git\n\
              nothing adopted: add --yes to go ahead\n",
             library(dir.path()).display()
@@ -87,7 +87,7 @@ fn adopt_copies_into_the_library_records_the_copies_and_leaves_the_project_as_it
         format!(
             "copied notes from alpha into the library, at {}\n\
              recorded notes in alpha as installed from workspace, at .claude/skills/notes\n\
-             recorded .agents/skills/notes missing: `flayer update -p alpha` puts it there\n\
+             recorded .agents/skills/notes missing: `mindweaver update -p alpha` puts it there\n\
              kept .claude/skills/notes out of git\n",
             library(dir.path()).display()
         )
@@ -285,7 +285,7 @@ fn a_local_project_no_git_work_tree_holds_is_told_nothing_keeps_its_copies_out()
 fn adopt_names_the_project_it_takes_from() {
     let dir = with_notes();
 
-    let error = WeaverCli::try_parse_from(["flayer", "adopt", "notes"]).unwrap_err();
+    let error = WeaverCli::try_parse_from(["mindweaver", "adopt", "notes"]).unwrap_err();
 
     assert_eq!(
         error.kind(),

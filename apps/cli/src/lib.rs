@@ -1,8 +1,8 @@
 //! Command line interface for Mindflayer, split the way the model is.
 //!
-//! `mind <cmd>` acts on the mind project you are standing in. `mind flayer
-//! <cmd>` acts on the flayer workspace above it, and the `flayer` binary is
-//! the same tree reached directly, so `flayer link x` and `mind flayer link x`
+//! `mind <cmd>` acts on the mind project you are standing in. `mind weaver
+//! <cmd>` acts on the flayer workspace above it, and the `mindweaver` binary is
+//! the same tree reached directly, so `mindweaver link x` and `mind weaver link x`
 //! are one command with two spellings.
 //!
 //! The parser, the work and the rendering all live in this library rather

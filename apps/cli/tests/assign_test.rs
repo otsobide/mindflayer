@@ -1,4 +1,4 @@
-//! `flayer install` and `flayer uninstall` given several projects, by `-p`
+//! `mindweaver install` and `mindweaver uninstall` given several projects, by `-p`
 //! once for each or by `--all-projects` (#49): each project's lines in the
 //! order asked, one that refuses said of it while the rest go ahead, and a
 //! refusal every project shares said once.
@@ -292,7 +292,7 @@ fn all_projects_and_a_project_are_not_asked_together() {
     let dir = workspace_with_three();
     for command in ["install", "uninstall"] {
         let line = line(
-            "flayer",
+            "mindweaver",
             &[command, "commit-style", "-p", "alpha", "--all-projects"],
             dir.path(),
         );

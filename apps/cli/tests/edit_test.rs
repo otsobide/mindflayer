@@ -11,7 +11,7 @@ use mindweaver_core::mother::{
 };
 
 /// Where an artifact is edited: a project's own, through `mind`, or the
-/// workspace's library, through `flayer`.
+/// workspace's library, through `mindweaver`.
 #[derive(Debug, Clone, Copy)]
 enum Level {
     Project,

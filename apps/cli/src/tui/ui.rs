@@ -72,7 +72,7 @@ fn nowhere(app: &App, frame: &mut Frame, area: Rect) {
         Scope::Workspace => (
             "No flayer workspace here",
             "A workspace keeps track of the mind projects you manage together.",
-            "flayer init",
+            "mindweaver init",
         ),
         Scope::Project => (
             "No mind project here",
@@ -217,7 +217,7 @@ fn older(workspace: &Workspace) -> Option<String> {
         (_, 0) => None,
         (Scope::Project, _) => Some(format!("marked by {files}: `mind migrate`")),
         (Scope::Workspace, count) => Some(format!(
-            "{} marked by {files}: `flayer migrate --all-projects`",
+            "{} marked by {files}: `mindweaver migrate --all-projects`",
             plural(count, "project")
         )),
     }
@@ -914,7 +914,7 @@ fn linking(app: &App, form: &LinkForm, frame: &mut Frame, area: Rect) {
             .map(|unlinked| {
                 let route = printable(&unlinked.route);
                 let padding = " ".repeat(width.saturating_sub(route.chars().count()));
-                // Why, as the minds screen and `flayer scan --suggest` say
+                // Why, as the minds screen and `mindweaver scan --suggest` say
                 // it, since the list is in their order.
                 let why = worth_linking(
                     &unlinked.route,
@@ -1155,7 +1155,7 @@ fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
 }
 
 /// Where the screen looked for what could be linked, as its texts name it:
-/// the workspace, or the folders `flayer minds` was given.
+/// the workspace, or the folders `mindweaver minds` was given.
 pub(crate) fn looked_under(workspace: &Workspace) -> String {
     if workspace.roots.is_empty() {
         return String::from("this workspace");
@@ -1270,7 +1270,7 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     // standing, which can name every agent file a repository holds, is cut
     // to what the pane leaves once the highlight, the box, the path and the
     // widest change any row could ask for have their room, so ticking one
-    // never moves the column. `flayer scan --suggest` says it whole.
+    // never moves the column. `mindweaver scan --suggest` says it whole.
     let offered = screen
         .rows
         .iter()

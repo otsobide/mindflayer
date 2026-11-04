@@ -1,7 +1,7 @@
 //! The TUI: every project a workspace manages, and a key for each command.
 //!
-//! `flayer` on its own opens it. What it changes, it changes by running a
-//! command line (`flayer link beta`, `mind -C beta add skill deploy '…'`),
+//! `mindweaver` on its own opens it. What it changes, it changes by running a
+//! command line (`mindweaver link beta`, `mind -C beta add skill deploy '…'`),
 //! parsed by the parsers the binaries use and run through the same functions,
 //! and those lines are printed when it closes. There is nothing the screen can
 //! do that a command cannot, and nothing a command says that the screen says
@@ -63,18 +63,18 @@ pub fn run(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
     }
     let app =
         App::new(directory.to_path_buf(), load(directory, lookup)?).with_lookup(lookup.clone());
-    open(app, "flayer")
+    open(app, "mindweaver")
 }
 
-/// Open the TUI straight onto the minds screen: what `flayer minds` does.
+/// Open the TUI straight onto the minds screen: what `mindweaver minds` does.
 pub fn run_minds(directory: &Path, roots: &[PathBuf], lookup: &Lookup) -> Result<Outcome, Failure> {
     if !io::stdout().is_terminal() {
         return Err(CliError::NotATerminal.into());
     }
-    open(minds(directory, roots, lookup)?, "flayer minds")
+    open(minds(directory, roots, lookup)?, "mindweaver minds")
 }
 
-/// The TUI `flayer minds` opens from `directory`: on the minds screen of the
+/// The TUI `mindweaver minds` opens from `directory`: on the minds screen of the
 /// workspace the TUI itself would open there, offering what is under
 /// `roots`, absolute, or under the workspace root when there are none.
 ///
@@ -99,7 +99,7 @@ pub fn minds(directory: &Path, roots: &[PathBuf], lookup: &Lookup) -> Result<App
 /// its own.
 ///
 /// A project a workspace manages opens in that workspace, on the project:
-/// the same screen `flayer` opens, since that is where the project's
+/// the same screen `mindweaver` opens, since that is where the project's
 /// neighbours and its installs are. One no workspace manages opens on its own.
 pub fn run_project(directory: &Path, lookup: &Lookup) -> Result<Outcome, Failure> {
     if !io::stdout().is_terminal() {
@@ -283,7 +283,7 @@ pub fn perform(task: &Task, app: &App) -> Performed {
             &base,
             app.workspace().is_some_and(|workspace| !workspace.made),
         ),
-        // Asked about rather than failed: `flayer link` would refuse it, and
+        // Asked about rather than failed: `mindweaver link` would refuse it, and
         // `mind init` is what would make it work.
         Task::Link { path } if needs_init(&base.join(path)) => {
             Performed::NeedsInit { path: path.clone() }
@@ -401,10 +401,10 @@ const INPUT_IN_A_SCREEN: &str =
 /// the default workspace too when nothing has made it yet (`unmade`), with
 /// nothing to install into.
 ///
-/// Opened there exactly rather than found by walking up from it, as `flayer
+/// Opened there exactly rather than found by walking up from it, as `mindweaver
 /// install` would: before the default is made there is no marker at `base`
 /// to stop the walk, which would carry on to any workspace above home. Built
-/// from the ledger as it is, as `flayer install` builds it, so opening the
+/// from the ledger as it is, as `mindweaver install` builds it, so opening the
 /// screen makes nothing and scrubs nothing: the first line applying it runs
 /// opens the ledger to write, as that command does from the shell.
 fn open_install(base: &Path, unmade: bool) -> Performed {
@@ -421,7 +421,7 @@ fn open_install(base: &Path, unmade: bool) -> Performed {
     match screen {
         Ok(screen) => Performed::Install(screen),
         Err(error) => Performed::Ran(vec![Done::failed(
-            String::from("flayer install"),
+            String::from("mindweaver install"),
             error.to_string(),
         )]),
     }
@@ -443,7 +443,7 @@ pub fn load(directory: &Path, lookup: &Lookup) -> Result<View, CliError> {
 }
 
 /// What [`load`] shows, with what could be linked looked for under `roots`,
-/// absolute, rather than under the workspace root: what `flayer minds DIR`
+/// absolute, rather than under the workspace root: what `mindweaver minds DIR`
 /// opens on.
 pub fn load_under(directory: &Path, lookup: &Lookup, roots: &[PathBuf]) -> Result<View, CliError> {
     Ok(match resolve(&lookup.inputs(directory, Intent::Read))? {
@@ -522,7 +522,7 @@ fn workspace_view(resolved: &Resolved, lookup: &Lookup, roots: &[PathBuf]) -> Wo
             .map(|project| member(project, workspace, lookup)),
     );
     // Spelled from the workspace root, the default, where the TUI runs its
-    // lines, and in the order `flayer scan --suggest` lists them, which core
+    // lines, and in the order `mindweaver scan --suggest` lists them, which core
     // ranks: the screens show it rather than sorting their own.
     let request = scan::Request {
         roots: roots.to_vec(),

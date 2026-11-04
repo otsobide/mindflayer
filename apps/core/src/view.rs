@@ -214,7 +214,7 @@ pub struct Library {
     /// Each project its registry links that holds a copy of one of its own,
     /// in the order of `artifacts`, then of the registry.
     pub holders: Vec<LibraryHolder>,
-    /// What `flayer add --template` can start from.
+    /// What `mindweaver add --template` can start from.
     pub templates: Vec<Template>,
     /// What could not be read in it and is no artifact's: a folder that
     /// cannot be listed, its templates.
@@ -223,7 +223,7 @@ pub struct Library {
 
 /// A project holding a copy of one of the workspace's own: one whose install
 /// the ledger tells came from it ([`install::from_the_library`]), the rule
-/// `flayer remove --everywhere` takes the copies it removes by.
+/// `mindweaver remove --everywhere` takes the copies it removes by.
 ///
 /// Told here rather than by a front end comparing a copy's
 /// [`origin`](Held::origin) with [`Library::origin`], which would be a
@@ -564,7 +564,7 @@ pub struct Unread {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LoadedWorkspace {
-    /// The entry as the marker spells it: what `flayer unload` is given.
+    /// The entry as the marker spells it: what `mindweaver unload` is given.
     pub entry: String,
     /// Where it points: what `mind unload` is given, from a project.
     #[serde(serialize_with = "paths::lossy")]
@@ -583,7 +583,7 @@ pub struct LoadedWorkspace {
     pub error: Option<Said>,
 }
 
-/// A workspace this machine knows, as `flayer workspaces` lists it, with
+/// A workspace this machine knows, as `mindweaver workspaces` lists it, with
 /// how the workspace a snapshot is of stands with it: whether it loads it,
 /// and whether it could.
 ///
@@ -602,13 +602,13 @@ pub struct KnownHere {
     #[cfg_attr(feature = "ts", ts(flatten))]
     pub workspace: KnownWorkspace,
     /// The entry this workspace loads it by, when it loads it, as
-    /// [`LoadedWorkspace::entry`] spells it: what `flayer unload` is given.
+    /// [`LoadedWorkspace::entry`] spells it: what `mindweaver unload` is given.
     /// The first, when it loads it by more than one spelling.
     pub loaded_as: Option<String>,
     /// Whether this workspace can load it: it opens, it is not this one,
     /// this one loads it by no spelling yet, and its path is text a command
     /// line can hold. What a front end offers to load, by its `path`, which
-    /// `flayer load` is given as it is.
+    /// `mindweaver load` is given as it is.
     pub loadable: bool,
 }
 
@@ -619,7 +619,7 @@ impl KnownHere {
             .iter()
             .find(|load| same_directory(&load.path, &known.path))
             .map(|load| load.entry.clone());
-        // `flayer load` of this one is refused (`loads_itself`), and of one
+        // `mindweaver load` of this one is refused (`loads_itself`), and of one
         // loaded already changes nothing; one that would not open is no
         // workspace to load. A path that is not UTF-8 is no word of a
         // command line, which the path policy refuses rather than spell it
@@ -1382,7 +1382,7 @@ fn directories(project: &MindProject, kinds: &[Kind]) -> Vec<Directory> {
 /// of the registry.
 ///
 /// Each of its own is held to its place in `own` rather than to what is
-/// offered, as `flayer remove --everywhere` holds it: one whose file no
+/// offered, as `mindweaver remove --everywhere` holds it: one whose file no
 /// longer reads is offered by nothing, and what was installed from it is a
 /// copy of it all the same. What cannot be read leaves a holder out and is
 /// said where it belongs, not again here: a ledger that does not open or

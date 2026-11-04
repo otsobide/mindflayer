@@ -1,5 +1,5 @@
 //! Removing one of the workspace's own artifacts from the workspace and from
-//! every project it links that has it: `flayer remove --everywhere` (#50).
+//! every project it links that has it: `mindweaver remove --everywhere` (#50).
 //!
 //! Removing the library copy alone leaves every copy installed from it
 //! behind, with a record that nothing offers any more: orphaned, as `status`
@@ -25,7 +25,7 @@
 //!
 //! [`plan`] says what removing it everywhere would do, writing nothing, the
 //! ledger read without being made, and [`apply`] does it. Each project's
-//! uninstall takes the workspace's lock for itself, as `flayer uninstall
+//! uninstall takes the workspace's lock for itself, as `mindweaver uninstall
 //! --all-projects` takes it ([`crate::assign`]): nothing ties one project's
 //! copies to another's, and the uninstall looks again under the lock at what
 //! the plan saw, so a copy edited between the two is still left.

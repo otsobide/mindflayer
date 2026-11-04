@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Switchable",
-  "description": "A workspace a front end that stays on one may switch to, as\n[`switchable`] lists it: the row `flayer workspaces` prints, with how it\nstands with the front end.\n\nBeside the row rather than in it, as [`crate::view::KnownHere`] stands\nbeside it: the row is the machine's list, the same whoever asks, and\nwhich one a front end was launched on is the front end's.",
+  "description": "A workspace a front end that stays on one may switch to, as\n[`switchable`] lists it: the row `mindweaver workspaces` prints, with how it\nstands with the front end.\n\nBeside the row rather than in it, as [`crate::view::KnownHere`] stands\nbeside it: the row is the machine's list, the same whoever asks, and\nwhich one a front end was launched on is the front end's.",
   "type": "object",
   "properties": {
     "default": {
@@ -38,7 +38,7 @@
       "$ref": "#/$defs/Reason"
     },
     "remembered": {
-      "description": "Whether the default workspace's `known` names it, which is what\n`flayer workspaces forget` takes out. False for the default itself,\nand for the one in use when nothing remembers it.",
+      "description": "Whether the default workspace's `known` names it, which is what\n`mindweaver workspaces forget` takes out. False for the default itself,\nand for the one in use when nothing remembers it.",
       "type": "boolean"
     },
     "stale": {

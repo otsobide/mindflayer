@@ -71,7 +71,7 @@ impl Selector {
     }
 }
 
-/// Run a reading command over one project: `mind`'s level, or `flayer -p`.
+/// Run a reading command over one project: `mind`'s level, or `mindweaver -p`.
 pub(crate) fn one_project<F>(
     project: MindProject,
     kinds: Vec<Kind>,
@@ -301,7 +301,7 @@ pub(crate) fn list_workspace(
         return if registered == 0 {
             (
                 format!(
-                    "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+                    "{} manages no projects yet\n  link one with `mindweaver link <path>`\n",
                     workspace.name()
                 ),
                 true,
@@ -310,7 +310,7 @@ pub(crate) fn list_workspace(
             (
                 format!(
                     "{} manages {}, none of which could be opened\n  \
-                     see the warnings, or drop a stale entry with `flayer unlink <path>`\n",
+                     see the warnings, or drop a stale entry with `mindweaver unlink <path>`\n",
                     workspace.name(),
                     plural(registered, "project"),
                 ),

@@ -1,5 +1,5 @@
 //! Bringing what was installed into projects up to date with where it came
-//! from, and putting back what has gone since: `flayer update` and `mind
+//! from, and putting back what has gone since: `mindweaver update` and `mind
 //! update` (D-04).
 //!
 //! Every installation the ledger records stands somewhere ([`Standing`]):
@@ -648,7 +648,7 @@ pub struct Updates {
     /// among them ([`State::asks_for_a_command`]): what a front end lists
     /// them by, each list counted.
     pub states: Vec<StateCount>,
-    /// Whether updating every project writes something: what `flayer update
+    /// Whether updating every project writes something: what `mindweaver update
     /// --all --yes` would, rather than leave and say.
     pub writes: bool,
     /// Each entry that opens no project, by why: whether it holds anything
@@ -703,7 +703,7 @@ pub struct Pending {
 impl Updates {
     /// What updating every project `workspace` links would do, against
     /// what its ledger records of them, every copy edited since left alone:
-    /// the dry run of `flayer update --all`, as a front end reads it.
+    /// the dry run of `mindweaver update --all`, as a front end reads it.
     ///
     /// Refused as a whole only when the ledger cannot be read; an entry
     /// that opens no project is said among the rest.

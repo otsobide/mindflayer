@@ -17,11 +17,11 @@ use crate::homes::variable;
 use crate::render::printable;
 use crate::{CliError, Failure, Lookup, Outcome};
 
-/// `flayer activate`: the code that activates the workspace `path` names, or
+/// `mindweaver activate`: the code that activates the workspace `path` names, or
 /// the one a command run from `directory` would use, for `shell`, or for the
 /// one `$SHELL` names.
 ///
-/// Nothing on stdout unless it succeeds, so that `eval "$(flayer activate
+/// Nothing on stdout unless it succeeds, so that `eval "$(mindweaver activate
 /// …)"` runs nothing when there is nothing to activate, and nothing written
 /// either way: the workspace is opened, or resolved as a read is, which
 /// never makes the default one.
@@ -43,7 +43,7 @@ pub(crate) fn activate_command(
     Ok(Outcome::plain(script))
 }
 
-/// `flayer which`: the workspace a command run from `directory` would use,
+/// `mindweaver which`: the workspace a command run from `directory` would use,
 /// and the rule that chose it, both as core's `resolve` answers them.
 ///
 /// Resolved as a read is, so it never makes the default workspace to say

@@ -2,8 +2,8 @@
 //! `templates`, at either level.
 //!
 //! Each takes the holder it acts on (a project, or the workspace's own), so
-//! `mind add` and `flayer add -p alpha` are one function given one project,
-//! and `flayer add` is the same function given the workspace. Each also takes
+//! `mind add` and `mindweaver add -p alpha` are one function given one project,
+//! and `mindweaver add` is the same function given the workspace. Each also takes
 //! the workspace the command resolved and hands it to core: its templates are
 //! among those `add` starts from, and core's lifecycle sees to its record of
 //! what it installed: kept through an edit, carried through a rename, and
@@ -104,8 +104,8 @@ pub(crate) fn edit_in(
     recorded(&mut outcome, finished.copy, |record| {
         (record == Record::Kept).then(|| {
             String::from(
-                "it was installed by `flayer install`, and stays so; edited, it is left alone by \
-                 `flayer install` and `flayer uninstall` unless they are forced",
+                "it was installed by `mindweaver install`, and stays so; edited, it is left alone by \
+                 `mindweaver install` and `mindweaver uninstall` unless they are forced",
             )
         })
     });
@@ -184,22 +184,24 @@ pub(crate) fn rename_in(
         renamed.target.path.display()
     ));
     let to = renamed.target.name.clone();
-    recorded(&mut outcome, renamed.copy, |record| match record {
+    recorded(&mut outcome, renamed.copy, |record| {
+        match record {
         Record::Moved { edited: true } => Some(String::from(
-            "it was installed by `flayer install`, and stays so under its new name; renamed, it \
-             is left alone by `flayer install` and `flayer uninstall` unless they are forced",
+            "it was installed by `mindweaver install`, and stays so under its new name; renamed, it \
+             is left alone by `mindweaver install` and `mindweaver uninstall` unless they are forced",
         )),
         // A rule's rename moves its file as it is, so nothing in it reads
         // as an edit, and the uninstall that put it there takes it out.
         Record::Moved { edited: false } => Some(String::from(
-            "it was installed by `flayer install`, and stays so under its new name; renamed, it \
-             still holds what was installed, and `flayer uninstall` takes it out",
+            "it was installed by `mindweaver install`, and stays so under its new name; renamed, it \
+             still holds what was installed, and `mindweaver uninstall` takes it out",
         )),
         Record::Dropped => Some(format!(
             "it had been installed, but `{to}` is installed already; renamed, it is yours, and \
-             `flayer install` leaves it alone"
+             `mindweaver install` leaves it alone"
         )),
         Record::Untouched | Record::Kept => None,
+    }
     });
     recorded(&mut outcome, renamed.stale, stale);
     Ok(scrubbed(&renamed.scrub).before(outcome))
@@ -233,14 +235,14 @@ pub(crate) fn remove_from(
     recorded(&mut outcome, removed.copy, |record| {
         (record == Record::Dropped).then(|| {
             String::from(
-                "it had been installed, and is uninstalled with it; `flayer install` can put it back",
+                "it had been installed, and is uninstalled with it; `mindweaver install` can put it back",
             )
         })
     });
     Ok(scrubbed(&removed.scrub).before(outcome))
 }
 
-/// `flayer remove` of one of the workspace's own, without `--everywhere`:
+/// `mindweaver remove` of one of the workspace's own, without `--everywhere`:
 /// removed as [`remove_from`] removes it, or said what would be, and beside
 /// it each project that has a copy installed from it, which nothing offers
 /// once it is gone, as core plans it ([`everywhere::plan`]): orphaned there,
@@ -302,7 +304,7 @@ fn orphaning(plan: &Plan, removed: bool) -> Vec<Warning> {
     let said = if removed {
         format!(
             "warning: {what} is still installed in {projects}, orphaned now that nothing offers \
-             it; `flayer uninstall --orphaned --all-projects` takes out what nothing offers"
+             it; `mindweaver uninstall --orphaned --all-projects` takes out what nothing offers"
         )
     } else {
         format!(
@@ -313,7 +315,7 @@ fn orphaning(plan: &Plan, removed: bool) -> Vec<Warning> {
     vec![said.into()]
 }
 
-/// `flayer remove --everywhere` without `--yes`: what removing `reference`,
+/// `mindweaver remove --everywhere` without `--yes`: what removing `reference`,
 /// one of the workspace's own, from every project it links and then from
 /// the workspace would do, as core plans it ([`everywhere::plan`]), nothing
 /// written. A line for each project's copy, saying how it stands, then one
@@ -358,7 +360,7 @@ pub(crate) fn would_remove_everywhere(
     Ok(outcome)
 }
 
-/// `flayer remove --everywhere --yes`: `reference`, one of the workspace's
+/// `mindweaver remove --everywhere --yes`: `reference`, one of the workspace's
 /// own, uninstalled from every project it links and then removed from the
 /// workspace, as core does it ([`everywhere::apply`]), handing it the
 /// agents' own folders, `homes`, as an uninstall does.
@@ -368,7 +370,7 @@ pub(crate) fn would_remove_everywhere(
 /// it was installed is offered by nothing from then on, which a note says
 /// beside it with the command that takes it out once somebody has looked.
 /// A copy whose uninstall failed is an error of its project, as among
-/// several in `flayer uninstall`, and the rest stand.
+/// several in `mindweaver uninstall`, and the rest stand.
 pub(crate) fn remove_everywhere(
     workspace: &WeaverWorkspace,
     reference: &str,
@@ -461,7 +463,7 @@ pub(crate) fn remove_everywhere(
             for from in orphaned {
                 outcome.stderr.push(
                     format!(
-                        "note: nothing offers {what} in {from} any more; `flayer uninstall -p \
+                        "note: nothing offers {what} in {from} any more; `mindweaver uninstall -p \
                          {from} {typed} --force` takes it out"
                     )
                     .into(),
@@ -610,7 +612,7 @@ fn edited(project: &MindProject, target: &Target, changed: bool) -> Outcome {
     }
 }
 
-/// Say what a change did to a record that `flayer install` put something
+/// Say what a change did to a record that `mindweaver install` put something
 /// into the project, when `why` has something to say of it.
 ///
 /// A record that could not be changed is a warning rather than an error, as
@@ -641,7 +643,7 @@ fn recorded(
 fn stale(record: Record) -> Option<String> {
     (record == Record::Dropped).then(|| {
         String::from(
-            "an old record said `flayer install` had put one of that name here; it is gone",
+            "an old record said `mindweaver install` had put one of that name here; it is gone",
         )
     })
 }

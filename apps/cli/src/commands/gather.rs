@@ -1,4 +1,4 @@
-//! `flayer gather`: collecting artifacts onto the workspace's shelf, and
+//! `mindweaver gather`: collecting artifacts onto the workspace's shelf, and
 //! listing everything that can be installed from elsewhere.
 
 use std::fmt::Write as _;
@@ -54,7 +54,7 @@ pub(crate) fn run_gather(
     }
 }
 
-/// `flayer gather list`: what can be installed from elsewhere, from a
+/// `mindweaver gather list`: what can be installed from elsewhere, from a
 /// ledger read without being made, with each offer kept in `found`, for
 /// `--json` to print in place of the text. A workspace that has gathered
 /// nothing has no database, and listing that is no reason to create one.
@@ -241,18 +241,18 @@ fn gathered(url: &str, report: &Report) -> Outcome {
 /// comes from, spelled as `--from` takes it.
 ///
 /// Empty, it says how to fill it, and suggests loading only when nothing is
-/// loaded yet; `flayer load` on its own lists what is.
+/// loaded yet; `mindweaver load` on its own lists what is.
 fn shelf_listing(shelf: &[Offer], nothing_loaded: bool) -> String {
     if shelf.is_empty() {
         return if nothing_loaded {
             String::from(
-                "nothing gathered yet\n  take some with `flayer gather git <url>`, \
-                 or offer a workspace's own with `flayer load <path>`\n",
+                "nothing gathered yet\n  take some with `mindweaver gather git <url>`, \
+                 or offer a workspace's own with `mindweaver load <path>`\n",
             )
         } else {
             String::from(
                 "nothing gathered yet, and the loaded workspaces offer nothing\n  \
-                 take some with `flayer gather git <url>`; `flayer load` lists what is loaded\n",
+                 take some with `mindweaver gather git <url>`; `mindweaver load` lists what is loaded\n",
             )
         };
     }

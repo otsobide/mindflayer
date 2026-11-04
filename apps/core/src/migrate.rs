@@ -133,7 +133,7 @@ pub enum Refusal {
         folder: PathBuf,
         with: PathBuf,
     },
-    /// A folder the marker names that `flayer init` would have refused:
+    /// A folder the marker names that `mindweaver init` would have refused:
     /// outside the workspace, or on the shelf or the cache.
     #[error("{0}, so what is in it is not the workspace's to move")]
     Misplaced(WorkspaceError),
@@ -289,7 +289,7 @@ impl MigrateError {
 /// listed and offered.
 ///
 /// A folder the marker names outside the workspace, or on the shelf or the
-/// cache, is refused rather than emptied: `flayer init` refuses to name one,
+/// cache, is refused rather than emptied: `mindweaver init` refuses to name one,
 /// but `open` reads a marker edited by hand to, and what is there is somebody
 /// else's, or gathering's. So is one reached through a link, which keeps
 /// what is in it somewhere else, on purpose.

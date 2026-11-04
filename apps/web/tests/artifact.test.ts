@@ -175,7 +175,7 @@ describe('one of the library\'s own', () => {
     const { page } = await render(at('rule', 'style/comments'), snapshot)
 
     expect(texts(page.get('[data-testid="no-holding"]'), 'code')).toEqual([
-      `$ flayer -W ${snapshot.workspace.path} install -p <PROJECT> rule:style/comments --from ${snapshot.library.origin}`
+      `$ mindweaver -W ${snapshot.workspace.path} install -p <PROJECT> rule:style/comments --from ${snapshot.library.origin}`
     ])
   })
 

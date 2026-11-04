@@ -398,8 +398,8 @@ fn a_loaded_skill_whose_folder_went_away_says_to_unload_it() {
     .unwrap_err();
 
     assert!(matches!(error, InstallError::Gone { .. }), "{error}");
-    // By its root, which `flayer unload` reads the same from anywhere.
-    let hint = format!("flayer unload {}", team.root().display());
+    // By its root, which `mindweaver unload` reads the same from anywhere.
+    let hint = format!("mindweaver unload {}", team.root().display());
     assert!(error.to_string().contains(&hint), "{error}");
 }
 
@@ -1034,7 +1034,7 @@ fn nothing_is_installed_into_the_folder_a_loaded_workspace_keeps_its_own_in() {
     .unwrap_err();
 
     assert!(matches!(error, InstallError::KeptByALoad { .. }), "{error}");
-    assert!(error.to_string().contains("flayer unload"), "{error}");
+    assert!(error.to_string().contains("mindweaver unload"), "{error}");
     assert!(!installed_at(&project, "lint").exists());
 }
 

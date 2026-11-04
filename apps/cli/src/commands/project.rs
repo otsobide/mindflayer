@@ -44,8 +44,8 @@ pub(crate) fn init_project(
     )))
 }
 
-/// `flayer init`: the directory made a flayer workspace, and remembered by
-/// the default one in `lookup`'s home, when that is made, so `flayer
+/// `mindweaver init`: the directory made a flayer workspace, and remembered by
+/// the default one in `lookup`'s home, when that is made, so `mindweaver
 /// workspaces` lists it.
 ///
 /// One already made is remembered too, and otherwise left as it was: what
@@ -131,7 +131,7 @@ pub(crate) fn renew_here(directory: &Path, lookup: &Lookup) -> Result<Outcome, F
     Ok(scrubbed(&renewed.scrub).before(outcome))
 }
 
-/// `flayer relink`: the entry for `old` pointed at `new`, where the project
+/// `mindweaver relink`: the entry for `old` pointed at `new`, where the project
 /// it was moved, with every record the workspace keeps of it.
 pub(crate) fn relink_project(
     directory: &Path,
@@ -209,7 +209,7 @@ pub(crate) fn unlink_here(directory: &Path, lookup: &Lookup) -> Result<Outcome, 
     Ok(Outcome::plain(unlinked(&removed)))
 }
 
-/// `flayer link`: every path given, registered with the workspace here.
+/// `mindweaver link`: every path given, registered with the workspace here.
 pub(crate) fn link_projects(
     directory: &Path,
     projects: &[PathBuf],
@@ -240,7 +240,7 @@ pub(crate) fn link_projects(
     Ok(Outcome::plain(text))
 }
 
-/// `flayer unlink`: every path given, dropped from the workspace here.
+/// `mindweaver unlink`: every path given, dropped from the workspace here.
 pub(crate) fn unlink_projects(
     directory: &Path,
     projects: &[PathBuf],
@@ -287,7 +287,7 @@ fn unlinked(removed: &[PathBuf]) -> String {
     })
 }
 
-/// `flayer scan`: every repository `request` asks for, under the workspace
+/// `mindweaver scan`: every repository `request` asks for, under the workspace
 /// here or the folders it names, the default workspace too before it is
 /// made, since what is under it does not wait for that; as JSON when
 /// `as_json`.
@@ -304,7 +304,7 @@ pub(crate) fn scan_workspace(
     scanned(&scan, warnings, request.order == Order::Suggested)
 }
 
-/// Why one found at `route` is worth linking, as `flayer scan --suggest`
+/// Why one found at `route` is worth linking, as `mindweaver scan --suggest`
 /// says it and the minds screen and the link form show it, in these words
 /// rather than their own: for one found moved, where from, since its reason
 /// is its id but what it wants is a relink, not a link beside the entry it
@@ -342,7 +342,7 @@ pub(crate) fn scan_warnings(scan: &Scan) -> Vec<String> {
 }
 
 /// What a scan could not read, and that it stopped early, each as a line
-/// on stderr says it, with its code: what `flayer scan` warns of, and what
+/// on stderr says it, with its code: what `mindweaver scan` warns of, and what
 /// the panel's scan is answered with beside what it found, in the same
 /// words.
 pub(crate) fn scan_warned(scan: &Scan) -> Vec<Warning> {
@@ -423,7 +423,7 @@ fn scanned(scan: &Scan, stderr: Vec<Warning>, suggested: bool) -> Outcome {
         let mut hints: Vec<String> = Vec::new();
         if scan.found.iter().any(|found| found.moved.is_some()) {
             hints.push(String::from(
-                "follow one that moved with `flayer relink <old> <new>`",
+                "follow one that moved with `mindweaver relink <old> <new>`",
             ));
         }
         // Before the link, which would leave the entry a project moved from
@@ -431,12 +431,12 @@ fn scanned(scan: &Scan, stderr: Vec<Warning>, suggested: bool) -> Outcome {
         if let [entry] = &scan.untraced[..] {
             let entry = printable(entry);
             hints.push(format!(
-                "follow one that moved from {entry} with `flayer relink {entry} <path>`"
+                "follow one that moved from {entry} with `mindweaver relink {entry} <path>`"
             ));
         } else if !scan.untraced.is_empty() {
             let entries: Vec<String> = scan.untraced.iter().map(|entry| printable(entry)).collect();
             hints.push(format!(
-                "follow one that moved from {} with `flayer relink <old> <path>`",
+                "follow one that moved from {} with `mindweaver relink <old> <path>`",
                 entries.join(" or ")
             ));
         }
@@ -445,7 +445,7 @@ fn scanned(scan: &Scan, stderr: Vec<Warning>, suggested: bool) -> Outcome {
             .iter()
             .any(|found| !found.linked && found.mind && found.moved.is_none())
         {
-            hints.push(String::from("link one with `flayer link <path>`"));
+            hints.push(String::from("link one with `mindweaver link <path>`"));
         }
         if scan.found.iter().any(|found| !found.linked && !found.mind) {
             hints.push(String::from(

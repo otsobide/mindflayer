@@ -1,4 +1,4 @@
-//! `flayer load` and `unload`: another workspace's own skills offered to this
+//! `mindweaver load` and `unload`: another workspace's own skills offered to this
 //! one's projects, read live from where it is, at both levels, and from the
 //! TUI.
 
@@ -257,7 +257,7 @@ fn an_empty_shelf_mentions_load_too() {
     let shelf = weaver(&target, &["gather", "list"]).unwrap();
 
     assert!(
-        shelf.stdout.contains("flayer load <path>"),
+        shelf.stdout.contains("mindweaver load <path>"),
         "{}",
         shelf.stdout
     );
@@ -284,7 +284,7 @@ fn mind_load_goes_into_the_workspace_above_the_project() {
 fn load_is_reachable_the_long_way_round_too() {
     let (_dir, target, _team) = target_and_team();
 
-    let nested = mind(&target, &["flayer", "load", "../team"]).unwrap();
+    let nested = mind(&target, &["weaver", "load", "../team"]).unwrap();
 
     assert!(nested.stdout.starts_with("loaded team as ../team"));
 }
@@ -301,7 +301,7 @@ fn capital_l_loads_a_workspace_from_the_tui() {
     press_key(&mut app, KeyCode::Char('L'));
     assert!(matches!(app.mode, Mode::Loading(_)), "{:?}", app.mode);
     type_text(&mut app, "../team");
-    assert!(tui_drawn(&app).contains("flayer load ../team"));
+    assert!(tui_drawn(&app).contains("mindweaver load ../team"));
     let task = press_and_run(&mut app, KeyCode::Enter);
 
     assert_eq!(
@@ -315,7 +315,7 @@ fn capital_l_loads_a_workspace_from_the_tui() {
     assert!(tui_drawn(&app).contains("1 loaded"));
     assert!(app
         .transcript()
-        .contains("$ flayer load ../team\nloaded team as ../team"));
+        .contains("$ mindweaver load ../team\nloaded team as ../team"));
 }
 
 #[test]
@@ -617,7 +617,7 @@ fn switching_to_a_loaded_copy_of_an_installed_skill_replaces_it() {
 
     assert_eq!(
         outcome.stdout,
-        "$ flayer install -p collapse --from load:../team skill:deploy\n\
+        "$ mindweaver install -p collapse --from load:../team skill:deploy\n\
          updated deploy in collapse, from load:../team\n"
     );
     for copy in copies(&target.join("collapse"), "deploy") {
@@ -651,10 +651,10 @@ fn a_loaded_skill_that_vanished_does_not_stop_the_rest_of_the_install_screen() {
     assert!(!outcome.ok);
     assert_eq!(
         outcome.stdout,
-        "$ flayer install -p collapse --from load:../team skill:deploy\n\
+        "$ mindweaver install -p collapse --from load:../team skill:deploy\n\
          error: nothing called `deploy` can be installed from load:../team: gather it, load a \
-         workspace that has it with `flayer load`, or add it to the workspace with `flayer add`\n\
-         $ flayer install -p collapse --from load:../team skill:review\n\
+         workspace that has it with `mindweaver load`, or add it to the workspace with `mindweaver add`\n\
+         $ mindweaver install -p collapse --from load:../team skill:review\n\
          installed review into collapse, from load:../team\n"
     );
 }
@@ -697,10 +697,10 @@ fn a_loaded_workspace_that_has_gone_is_said_once_by_the_install_line_and_not_aga
         Vec::new(),
     );
 
-    // Under the line that said it, as `flayer install -p` says it typed.
+    // Under the line that said it, as `mindweaver install -p` says it typed.
     assert!(
         outcome.stdout.starts_with(
-            "$ flayer install -p collapse --from workspace skill:review\n\
+            "$ mindweaver install -p collapse --from workspace skill:review\n\
              installed review into collapse, from workspace\n\
              warning: "
         ),
@@ -743,7 +743,7 @@ fn a_loaded_workspace_that_has_gone_is_the_screens_to_say_when_no_line_installs(
     assert_eq!(quit.stdout, "nothing applied\n");
     assert_eq!(
         removed.stdout,
-        "$ flayer uninstall -p collapse skill:review\nremoved review from collapse\n"
+        "$ mindweaver uninstall -p collapse skill:review\nremoved review from collapse\n"
     );
     for outcome in [quit, removed] {
         assert_eq!(said_gone(&outcome), 1, "{outcome:?}");

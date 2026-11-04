@@ -51,7 +51,7 @@ impl Lookup {
     /// `-W` given at all, even empty, is the whole answer, and the variable is
     /// not read: the order `--home` and `$MINDFLAYER_HOME` are taken in.
     /// What an empty value means is core's to say, and it says none, as the
-    /// variable's name is: it is what `flayer activate` sets.
+    /// variable's name is: it is what `mindweaver activate` sets.
     fn chosen(workspace: Option<&str>, variable: &dyn Fn(&str) -> Option<String>) -> Self {
         Self {
             flag: workspace.map(PathBuf::from),

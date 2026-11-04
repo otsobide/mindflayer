@@ -435,7 +435,7 @@ jobs:
         with:
           name: binaries
           path: |
-            target/${{ env.TARGET }}/release/flayer
+            target/${{ env.TARGET }}/release/mindweaver
             target/${{ env.TARGET }}/release/mind
           if-no-files-found: error
           retention-days: 7
@@ -497,7 +497,7 @@ jobs:
           path: ${{ runner.temp }}/binaries
 
       - name: Make the binaries executable
-        run: chmod +x "$RUNNER_TEMP/binaries/flayer" "$RUNNER_TEMP/binaries/mind"
+        run: chmod +x "$RUNNER_TEMP/binaries/mindweaver" "$RUNNER_TEMP/binaries/mind"
 
       - name: Run the panel end to end
         run: make web/e2e/run E2E_BIN="$RUNNER_TEMP/binaries"

@@ -392,7 +392,7 @@ fn every_image_in_docs_images_is_shown_somewhere() {
 fn a_heading_is_reached_by_the_anchor_github_gives_it() {
     let text = "# 🧠 Mindflayer\n\
                 ## The agents' own folders\n\
-                ### `flayer ui`\n\
+                ### `mindweaver ui`\n\
                 ## A repository that already has .claude/skills\n\
                 ## Changing one\n\
                 ## Changing one\n\
@@ -405,7 +405,7 @@ fn a_heading_is_reached_by_the_anchor_github_gives_it() {
             [
                 "-mindflayer",
                 "the-agents-own-folders",
-                "flayer-ui",
+                "mindweaver-ui",
                 "a-repository-that-already-has-claudeskills",
                 "changing-one",
                 "changing-one-1",

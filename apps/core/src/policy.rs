@@ -160,7 +160,7 @@ pub fn loaded(workspace: &WeaverWorkspace, entry: &str) -> Result<Loaded, Policy
 }
 
 /// `given`, a [`path`] some entry of `workspace`'s registry points at: how a
-/// command that takes linked projects by their paths, `flayer unlink` from
+/// command that takes linked projects by their paths, `mindweaver unlink` from
 /// the minds screen's marks, is given one.
 pub fn linked_path(workspace: &WeaverWorkspace, given: &str) -> Result<PathBuf, PolicyError> {
     let path = path(given)?;
@@ -198,7 +198,7 @@ pub fn loaded_path(workspace: &WeaverWorkspace, given: &str) -> Result<PathBuf, 
 /// followed through a link, so nothing but a listed workspace is reached,
 /// and `given` names nothing else for being another spelling of it. One
 /// listed that does not open is refused with why it does not, never made:
-/// a workspace is made by `flayer init`, and a list read a moment ago may
+/// a workspace is made by `mindweaver init`, and a list read a moment ago may
 /// name one that has gone since. The one in use is taken, a switch to it
 /// changing nothing, as a load of one loaded already changes nothing.
 pub fn switched(

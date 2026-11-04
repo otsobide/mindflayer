@@ -97,7 +97,7 @@ impl Row {
 
     /// Mindflayer installed it, and the place it came from offers something
     /// else by now: its box is held as any install's is, since the screen
-    /// marks what goes in and out, and `flayer update` brings it up to date.
+    /// marks what goes in and out, and `mindweaver update` brings it up to date.
     pub fn outdated(&self) -> bool {
         self.candidate.standing == Standing::Outdated
     }
@@ -397,9 +397,9 @@ impl Screen {
     /// change it plans the `Install` or `Uninstall` task that runs it.
     ///
     /// So the screen decides none of the batch's rules, only which boxes
-    /// are ticked: that each offer ticked is one `flayer install` line with
+    /// are ticked: that each offer ticked is one `mindweaver install` line with
     /// a `-p` for each project, always with `--from`, and each name unticked
-    /// one `flayer uninstall` line of the name, kind by kind; and that an
+    /// one `mindweaver uninstall` line of the name, kind by kind; and that an
     /// offer ticked in the place of another of its name replaces it rather
     /// than taking it out, the box the one ticked unticked
     /// ([`Row::superseded`]) asked away all the same, for core to see it is
@@ -673,7 +673,7 @@ fn toggle(target: &mut Target, cursor: usize) -> Option<String> {
     if row.edited() {
         return Some(format!(
             "{} in {} was changed since it was installed, so it is left alone; --force on \
-             `flayer install` or `flayer uninstall` reaches it",
+             `mindweaver install` or `mindweaver uninstall` reaches it",
             named(row.candidate.kind(), row.candidate.name()),
             target.name()
         ));

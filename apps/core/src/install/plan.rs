@@ -477,7 +477,7 @@ pub struct Plan {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Change {
-    /// `flayer install -p <project>... --from <from> <kind:name>`: always
+    /// `mindweaver install -p <project>... --from <from> <kind:name>`: always
     /// from where the box is, though a name offered from one place needs
     /// none, so the line installs what was ticked or nothing when run again
     /// after a second place starts to offer the name.
@@ -487,7 +487,7 @@ pub enum Change {
         name: ArtifactName,
         from: Origin,
     },
-    /// `flayer uninstall -p <project>... <kind:name>`: the name, whichever
+    /// `mindweaver uninstall -p <project>... <kind:name>`: the name, whichever
     /// offer its copy came from, as the command takes it.
     Uninstall {
         projects: Vec<String>,
@@ -567,8 +567,8 @@ impl Plan {
     ///   screen holds the box.
     ///
     /// Each offer's install is one change, with every project asking it, in
-    /// the order asked, and each name's uninstall another, as `flayer
-    /// install` and `flayer uninstall` take a `-p` a project: either way
+    /// the order asked, and each name's uninstall another, as `mindweaver
+    /// install` and `mindweaver uninstall` take a `-p` a project: either way
     /// round a matrix is marked, one artifact's boxes are one line. Kind by
     /// kind, in [`Kind::ALL`]'s order, each where the first box asking it
     /// is: an install at the box asked for, an uninstall at the first box

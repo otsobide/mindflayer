@@ -1,5 +1,5 @@
 //! What each project holds, where each thing in it came from, which agents
-//! read it, and whether it is all there: what `flayer status` reports.
+//! read it, and whether it is all there: what `mindweaver status` reports.
 //!
 //! Built from discovery and the ledger together, since neither answers
 //! alone. Discovery says what sits in the folders a project's agents read and
@@ -53,7 +53,7 @@ pub struct ProjectStatus {
     /// has no marker to read.
     pub name: Option<String>,
     /// The workspace's entry for it, as the marker spells it: what `-p` and
-    /// `flayer unlink` take. None for a project no workspace links.
+    /// `mindweaver unlink` take. None for a project no workspace links.
     pub entry: Option<String>,
     /// Where it is.
     #[serde(serialize_with = "paths::lossy")]
@@ -336,7 +336,7 @@ impl Status {
     /// Every project `workspace` links, against what its ledger records of
     /// them.
     ///
-    /// Only the linked ones, as `flayer list` reads them: a workspace reports
+    /// Only the linked ones, as `mindweaver list` reads them: a workspace reports
     /// on what it was told to manage, not on whatever sits below it. Its own
     /// artifacts are no project's, and nothing is installed into them.
     ///
@@ -466,7 +466,7 @@ impl ProjectStatus {
     /// copy discovery found, and every place the record matched to it names,
     /// found or not, so an install with a copy gone still says where it went.
     /// Kept beside the report rather than in it: the report's JSON is a
-    /// contract `flayer status --json` prints, and where each copy sits is
+    /// contract `mindweaver status --json` prints, and where each copy sits is
     /// more than a script reading it was promised.
     pub(crate) fn read_placed(
         project: &MindProject,

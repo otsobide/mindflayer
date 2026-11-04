@@ -5,7 +5,7 @@
  *
  * Taken, never drawn by hand, so they show the panel as it is: the demo
  * workspace (demo.ts) built with the binaries under test, served by their
- * `flayer ui`, and every page of the tour opened in Chromium at one size
+ * `mindweaver ui`, and every page of the tour opened in Chromium at one size
  * and written into docs/images. It runs as the end-to-end suite does
  * (environment.ts): no variable leading to a real workspace or agent home,
  * a temporary home holding only the default workspace the demo makes
@@ -141,7 +141,7 @@ async function drawn(page: Page): Promise<void> {
 const at: Places = (() => {
   const bin = resolve(web, process.env.MINDFLAYER_E2E_BIN ?? '../../target/debug')
   if (!built(bin)) {
-    refuse(`no flayer and mind in ${bin}: \`make docs/screenshots\` builds them there`)
+    refuse(`no mindweaver and mind in ${bin}: \`make docs/screenshots\` builds them there`)
   }
   const temporary = tmpdir()
   const holder = marked(temporary)
@@ -368,7 +368,7 @@ const TOUR: Shot[] = [
       await dialog.waitFor({ state: 'hidden' })
       await page.getByTestId('remove-said').waitFor()
       // The toast saying it ran would cover what it said: gone first.
-      await toastGone(page, 'flayer', `remove --everywhere skill:${REMOVED}`)
+      await toastGone(page, 'mindweaver', `remove --everywhere skill:${REMOVED}`)
       await page.getByTestId('remove-yes').scrollIntoViewIfNeeded()
     }
   },
@@ -384,7 +384,7 @@ const TOUR: Shot[] = [
       await dialog.waitFor({ state: 'hidden' })
       await page.getByTestId('load').getByTestId('offer').first().waitFor()
       // The toast saying it ran would cover what the page shows: gone first.
-      await toastGone(page, 'flayer', `load ${join(at.scratch, LOADED)}`)
+      await toastGone(page, 'mindweaver', `load ${join(at.scratch, LOADED)}`)
     }
   }
 ]

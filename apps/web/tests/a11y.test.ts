@@ -193,7 +193,7 @@ describe('authoring in the library', () => {
     expect(await violations()).toEqual([])
   })
 
-  it('passes axe adding one, with a name flayer add refuses judged', async () => {
+  it('passes axe adding one, with a name mindweaver add refuses judged', async () => {
     const { page } = await render('/new?kind=skill', answering(fixture('workspace'), [...answers(), ...drafts()]).transport)
 
     await page.get('input[data-testid="name"]').setValue('Deploy Docs')

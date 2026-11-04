@@ -1,6 +1,6 @@
-//! The workspaces this machine knows: remembered by `flayer init` in the
-//! default workspace, listed by `flayer workspaces`, and forgotten by
-//! `flayer workspaces forget`, each with a temporary home.
+//! The workspaces this machine knows: remembered by `mindweaver init` in the
+//! default workspace, listed by `mindweaver workspaces`, and forgotten by
+//! `mindweaver workspaces forget`, each with a temporary home.
 
 mod common;
 
@@ -178,7 +178,7 @@ fn mind_weaver_workspaces_is_the_same_list() {
     let essays = home.join("flayers/writing/essays");
 
     let weaver = weaver_at_home(&essays, &home, &["workspaces"]).unwrap();
-    let mind = mind_at_home(&essays, &home, &["flayer", "workspaces"]).unwrap();
+    let mind = mind_at_home(&essays, &home, &["weaver", "workspaces"]).unwrap();
 
     assert_eq!(mind, weaver);
 }
@@ -197,7 +197,7 @@ fn a_remembered_workspace_that_has_gone_is_shown_not_raised() {
             "* home     {}                  no projects; the default one\n  \
              writing  {}  1 project\n  \
              -        {}                 cannot be opened\n\
-             \n  `flayer workspaces forget <path>` forgets one that cannot be opened\n",
+             \n  `mindweaver workspaces forget <path>` forgets one that cannot be opened\n",
             home.display(),
             home.join("flayers/writing").display(),
             notes.display(),
@@ -248,7 +248,7 @@ fn one_in_use_that_nothing_remembers_is_listed_with_how_to_remember_it() {
         format!(
             "  home       {}       no projects; the default one\n\
              * elsewhere  {}  no projects; not remembered\n\
-             \n  `flayer init <path>` remembers the one in use, and changes nothing else in it\n",
+             \n  `mindweaver init <path>` remembers the one in use, and changes nothing else in it\n",
             home.display(),
             elsewhere.display(),
         )
@@ -272,13 +272,13 @@ fn listing_never_makes_the_default() {
             "* writing  {}  no projects; not remembered\n",
             writing.display()
         ),
-        "no `flayer init` hint while there is no default to remember it in"
+        "no `mindweaver init` hint while there is no default to remember it in"
     );
     assert_eq!(nowhere.stdout, "no workspaces known\n");
     assert_eq!(
         nowhere.stderr,
         [format!(
-            "hint: no workspace here or above, and the default one is not made yet; the first command that writes to it, such as `flayer link <path>`, makes it in {}",
+            "hint: no workspace here or above, and the default one is not made yet; the first command that writes to it, such as `mindweaver link <path>`, makes it in {}",
             home.join(WEAVER_DIR).display()
         )]
     );
@@ -303,7 +303,7 @@ fn nothing_is_known_with_no_default() {
     );
 }
 
-/// What `flayer workspaces --json` prints in `data`, field by field.
+/// What `mindweaver workspaces --json` prints in `data`, field by field.
 #[derive(Debug, serde::Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 struct Listed {
@@ -487,7 +487,7 @@ fn json_is_for_the_list_and_not_for_forget() {
     let dir = TempDir::new().unwrap();
 
     let line = line(
-        "flayer",
+        "mindweaver",
         &["workspaces", "--json", "forget", "notes"],
         dir.path(),
     );

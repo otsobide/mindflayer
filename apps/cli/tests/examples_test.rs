@@ -274,13 +274,13 @@ fn the_reference_walks_through_the_examples_as_the_commands_print_them() {
     };
     let blocks = [
         format!(
-            "$ flayer -W ~/src/mindflayer/examples list\n{}",
+            "$ mindweaver -W ~/src/mindflayer/examples list\n{}",
             as_written(&listed.stdout)
         ),
         format!(
-            "$ cd ~/Projects\n$ flayer load ~/src/mindflayer/examples\n{}\n\
-             $ flayer install -p collapse commit-style\n{}\
-             $ flayer install -p collapse git/commits\n{}",
+            "$ cd ~/Projects\n$ mindweaver load ~/src/mindflayer/examples\n{}\n\
+             $ mindweaver install -p collapse commit-style\n{}\
+             $ mindweaver install -p collapse git/commits\n{}",
             as_written(&loaded.stdout),
             as_written(&installed.stdout),
             as_written(&ruled.stdout)

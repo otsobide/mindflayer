@@ -426,7 +426,7 @@ pub trait LedgerStore: Debug + Send {
     /// holds. An id it last saw at another route moves here, unless that
     /// route is one of `stale`, the entries the workspace links that open
     /// no project any more: an id seen there is what finds that entry's
-    /// project once it has moved, and only `flayer relink` takes it from
+    /// project once it has moved, and only `mindweaver relink` takes it from
     /// there ([`relinked`](crate::ledger::Ledger::relinked)). Whatever id the ledger knew at the
     /// route goes, as the project there holds another now, and the records
     /// there are the new one's: they name copies in the directory it holds.

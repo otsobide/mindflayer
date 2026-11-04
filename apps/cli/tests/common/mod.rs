@@ -173,7 +173,7 @@ fn command(
 ) -> std::process::Command {
     let program = match binary {
         "mind" => env!("CARGO_BIN_EXE_mind"),
-        "flayer" => env!("CARGO_BIN_EXE_flayer"),
+        "mindweaver" => env!("CARGO_BIN_EXE_mindweaver"),
         _ => panic!("no binary called {binary}"),
     };
     let mut command = std::process::Command::new(program);
@@ -219,9 +219,9 @@ pub fn parsed_mind(dir: &Path, args: &[&str]) -> Cli {
     Cli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"))
 }
 
-/// What `flayer ...` parses into, through the second binary's parser.
+/// What `mindweaver ...` parses into, through the second binary's parser.
 pub fn parsed_weaver(dir: &Path, args: &[&str]) -> WeaverCli {
-    let line = line("flayer", args, dir);
+    let line = line("mindweaver", args, dir);
     WeaverCli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"))
 }
 
@@ -230,7 +230,7 @@ pub fn mind(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
     run(&parsed_mind(dir, args))
 }
 
-/// Run `flayer ...`.
+/// Run `mindweaver ...`.
 pub fn weaver(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
     run_weaver_cli(&parsed_weaver(dir, args))
 }
@@ -253,7 +253,7 @@ pub fn typed(dir: &Path, words: &[String]) -> Result<Outcome, Failure> {
         "mind" => {
             run(&Cli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}")))
         }
-        "flayer" => run_weaver_cli(
+        "mindweaver" => run_weaver_cli(
             &WeaverCli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}")),
         ),
         other => panic!("no binary called {other}"),
@@ -399,7 +399,7 @@ pub fn workspace_with_two_unlinked() -> TempDir {
     dir
 }
 
-/// Run `flayer ...` with `home` as the home directory.
+/// Run `mindweaver ...` with `home` as the home directory.
 pub fn weaver_at_home(dir: &Path, home: &Path, args: &[&str]) -> Result<Outcome, Failure> {
     let mut args: Vec<&str> = args.to_vec();
     let home = home.to_string_lossy().into_owned();

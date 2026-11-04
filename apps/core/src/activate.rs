@@ -1,4 +1,4 @@
-//! The shell code `flayer activate` prints: what activates a workspace in one
+//! The shell code `mindweaver activate` prints: what activates a workspace in one
 //! shell, as a Python virtualenv's `activate` script does, and the
 //! `flayer-deactivate` that undoes it.
 //!
@@ -127,7 +127,7 @@ pub fn expected() -> String {
 pub enum ActivateError {
     /// The default workspace before anything has made it: there is no
     /// directory to point the variable at that a command would accept.
-    #[error("{path}: the default workspace is not made yet, so there is nothing to activate; `flayer init` makes one")]
+    #[error("{path}: the default workspace is not made yet, so there is nothing to activate; `mindweaver init` makes one")]
     Unmade { path: PathBuf },
     /// A path a shell cannot be handed as text, which is what the code is.
     #[error("{path}: cannot be activated, since the path is not UTF-8")]
@@ -140,7 +140,7 @@ codes!(ActivateError {
 });
 
 /// The code that activates `workspace` in `shell`, for the shell to run:
-/// `eval "$(flayer activate)"` in bash and zsh.
+/// `eval "$(mindweaver activate)"` in bash and zsh.
 ///
 /// Refused rather than written for a workspace that is not on disk: the
 /// variable would name a directory every command then refuses.

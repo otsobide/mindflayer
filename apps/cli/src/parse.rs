@@ -1,4 +1,4 @@
-//! The command lines `mind` and `flayer` take, as clap types.
+//! The command lines `mind` and `mindweaver` take, as clap types.
 //!
 //! Only the grammar, apart from the work, so the whole surface reads in one
 //! place. The binaries parse with these types and so does every line the TUI
@@ -16,8 +16,8 @@ use mindweaver_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
 // `about` is spelled out rather than taken from the crate description, which
 // is one line for a package that ships two binaries and so can only be right
 // for one of them. `propagate_version` puts `--version` on the nested
-// subcommands too, so `mind flayer --version` answers instead of erroring
-// while `flayer --version` works.
+// subcommands too, so `mind weaver --version` answers instead of erroring
+// while `mindweaver --version` works.
 #[derive(Debug, Parser)]
 #[command(
     name = "mind",
@@ -385,23 +385,23 @@ pub enum Command {
     Tui,
 
     /// Open the control panel in a browser, over the workspace a command run
-    /// here would use: what `flayer ui` does.
+    /// here would use: what `mindweaver ui` does.
     #[cfg(feature = "ui")]
     Ui(UiOptions),
 
-    /// Act on the flayer workspace instead. Also reachable as `flayer <cmd>`.
+    /// Act on the flayer workspace instead. Also reachable as `mindweaver <cmd>`.
     ///
-    /// On its own it opens the TUI, as `flayer` on its own does.
-    Flayer {
+    /// On its own it opens the TUI, as `mindweaver` on its own does.
+    Weaver {
         #[command(subcommand)]
         command: Option<WeaverCommand>,
     },
 }
 
-/// The `flayer` binary: a shortcut into the workspace half of `mind`.
+/// The `mindweaver` binary: a shortcut into the workspace half of `mind`.
 #[derive(Debug, Parser)]
 #[command(
-    name = "flayer",
+    name = "mindweaver",
     version,
     propagate_version = true,
     about = "Manage the mind projects a flayer workspace orchestrates",
@@ -469,7 +469,7 @@ pub enum WeaverCommand {
 
     /// Print the shell code that activates a workspace for every command the
     /// shell runs, as a Python virtualenv's `activate` does:
-    /// `eval "$(flayer activate DIR)"`. `flayer-deactivate` undoes it.
+    /// `eval "$(mindweaver activate DIR)"`. `flayer-deactivate` undoes it.
     ///
     /// It writes nothing, and prints no code when there is nothing to
     /// activate, so a failed `eval` changes nothing either.
@@ -489,10 +489,10 @@ pub enum WeaverCommand {
     Which,
 
     /// List the flayer workspaces this machine knows: the default one, each
-    /// one `flayer init` has made or been run on since the default was made,
+    /// one `mindweaver init` has made or been run on since the default was made,
     /// and the one in use, marked with `*`.
     ///
-    /// `flayer workspaces forget <path>` takes one out of the list.
+    /// `mindweaver workspaces forget <path>` takes one out of the list.
     #[command(args_conflicts_with_subcommands = true)]
     Workspaces {
         #[command(subcommand)]
@@ -580,7 +580,7 @@ pub enum WeaverCommand {
         yes: bool,
     },
 
-    /// List the templates `flayer add --template` can start from.
+    /// List the templates `mindweaver add --template` can start from.
     Templates {
         /// A project this workspace manages, instead of the workspace itself.
         #[arg(short, long, value_name = "PROJECT")]
@@ -673,7 +673,7 @@ pub enum WeaverCommand {
     ///
     /// The directory must hold the id the workspace last saw where the
     /// project was, which only the project, or a copy of it, holds:
-    /// `flayer scan` names each one it finds as `moved`.
+    /// `mindweaver scan` names each one it finds as `moved`.
     Relink {
         /// The project's directory, as registered, which holds no project
         /// any more.
@@ -689,7 +689,7 @@ pub enum WeaverCommand {
     /// workspace's projects, read live from where they are.
     ///
     /// Into the workspace at or above here that is not one being loaded, or
-    /// else the default one in your home: so `flayer load .` from inside a
+    /// else the default one in your home: so `mindweaver load .` from inside a
     /// workspace full of skills and rules loads it into the one that manages
     /// you. On its own, it lists what this workspace loads and what each
     /// offers.
@@ -711,7 +711,7 @@ pub enum WeaverCommand {
     /// workspace, ticked where it is linked, to link and unlink in one pass.
     ///
     /// Given folders, it looks for what to link under those instead, as
-    /// `flayer scan` does, and still lists every project the workspace links.
+    /// `mindweaver scan` does, and still lists every project the workspace links.
     Minds {
         /// Each folder to look under, itself included [default: the
         /// workspace's root].
@@ -722,7 +722,7 @@ pub enum WeaverCommand {
     /// Look for projects and repositories to link: under this workspace, or
     /// under each folder given.
     ///
-    /// It links nothing, and prints each path as `flayer link` run from here
+    /// It links nothing, and prints each path as `mindweaver link` run from here
     /// takes it.
     Scan {
         /// Each folder to look under, itself included [default: the
@@ -849,7 +849,7 @@ pub enum WeaverCommand {
         #[arg(short, long, value_name = "PROJECT")]
         project: String,
 
-        /// Its name, as `flayer status` lists it `foreign`.
+        /// Its name, as `mindweaver status` lists it `foreign`.
         reference: String,
 
         /// Adopt it. Without this nothing is written, and the command says
@@ -864,7 +864,7 @@ pub enum WeaverCommand {
     /// Without --yes nothing changes, and the command says what would.
     #[command(
         subcommand_negates_reqs = true,
-        override_usage = "flayer agents -p <PROJECT> [OPTIONS] <AGENT>...\n       flayer agents -p <PROJECT> <add|remove> [OPTIONS] <AGENT>..."
+        override_usage = "mindweaver agents -p <PROJECT> [OPTIONS] <AGENT>...\n       mindweaver agents -p <PROJECT> <add|remove> [OPTIONS] <AGENT>..."
     )]
     Agents {
         /// The project, by name or path. Needed, and taken on either side of
@@ -897,7 +897,7 @@ pub enum WeaverCommand {
     ///
     /// Without --yes nothing changes, and the command says what would.
     #[command(
-        override_usage = "flayer targets -p <PROJECT> set [OPTIONS] <KIND> <DIR>...\n       flayer targets -p <PROJECT> reset [OPTIONS] <KIND>"
+        override_usage = "mindweaver targets -p <PROJECT> set [OPTIONS] <KIND> <DIR>...\n       mindweaver targets -p <PROJECT> reset [OPTIONS] <KIND>"
     )]
     Targets {
         /// The project, by name or path. Needed, and taken on either side of
@@ -953,7 +953,7 @@ pub enum WeaverCommand {
 
     /// Open the TUI: every managed project, and a key for each command.
     ///
-    /// What `flayer` does on its own. Everything it changes, it changes by
+    /// What `mindweaver` does on its own. Everything it changes, it changes by
     /// running one of these commands, and it prints them when it closes.
     Tui,
 

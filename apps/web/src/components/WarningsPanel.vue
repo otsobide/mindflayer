@@ -20,7 +20,7 @@ interface Group {
 
 // Every failure the snapshot collected, where it collected it: beside what
 // it is about, so each is listed under that, in the snapshot's order. A
-// stale entry's reason is among them, as `flayer list` says one beside the
+// stale entry's reason is among them, as `mindweaver list` says one beside the
 // rest. Nothing is weighed or counted here: the lists are core's.
 const groups = computed<Group[]>(() => {
   const { snapshot } = props

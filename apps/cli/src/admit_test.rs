@@ -190,7 +190,7 @@ fn each_project_an_install_names_is_named_by_its_folder() {
     assert_eq!(
         lines(&workspace, &install),
         [format!(
-            "flayer install -p {} -p {} --from=--yes skill:deploy",
+            "mindweaver install -p {} -p {} --from=--yes skill:deploy",
             text(&workspace.root().join("alpha")),
             text(&dir.path().join("beside"))
         )]
@@ -210,7 +210,7 @@ fn each_project_an_install_names_is_named_by_its_folder() {
             }
         ),
         [format!(
-            "flayer migrate -p {} --yes",
+            "mindweaver migrate -p {} --yes",
             text(&dir.path().join("beside"))
         )]
     );
@@ -233,7 +233,7 @@ fn an_entry_a_command_takes_goes_to_it_as_the_marker_spells_it() {
                 entry: String::from("../beside")
             }
         ),
-        ["flayer unlink ../beside"]
+        ["mindweaver unlink ../beside"]
     );
     assert_eq!(
         lines(
@@ -243,7 +243,7 @@ fn an_entry_a_command_takes_goes_to_it_as_the_marker_spells_it() {
                 new: new.clone(),
             }
         ),
-        [format!("flayer relink alpha {new}")]
+        [format!("mindweaver relink alpha {new}")]
     );
     assert_eq!(
         lines(
@@ -252,7 +252,7 @@ fn an_entry_a_command_takes_goes_to_it_as_the_marker_spells_it() {
                 entry: String::from("../library")
             }
         ),
-        ["flayer unload ../library"]
+        ["mindweaver unload ../library"]
     );
     assert_eq!(
         code(admitted(
@@ -290,7 +290,7 @@ fn a_folder_not_linked_yet_goes_to_the_command_as_given() {
         ),
         [
             format!("mind -C {fresh} init"),
-            format!("flayer link {fresh}")
+            format!("mindweaver link {fresh}")
         ]
     );
     assert_eq!(
@@ -300,7 +300,7 @@ fn a_folder_not_linked_yet_goes_to_the_command_as_given() {
                 path: fresh.clone()
             }
         ),
-        [format!("flayer load {fresh}")]
+        [format!("mindweaver load {fresh}")]
     );
 }
 
@@ -385,8 +385,8 @@ fn marks_on_folders_go_to_the_minds_screen_s_lines_as_given() {
         ),
         [
             format!("mind -C {fresh} init"),
-            format!("flayer link {other} {fresh}"),
-            format!("flayer unlink {beside}"),
+            format!("mindweaver link {other} {fresh}"),
+            format!("mindweaver unlink {beside}"),
         ]
     );
     let library = text(&dir.path().join("library"));
@@ -412,7 +412,7 @@ fn a_mark_to_unlink_or_unload_names_a_folder_an_entry_points_at() {
     };
     assert_eq!(
         lines(&workspace, &minds),
-        [format!("flayer unlink {beside}")]
+        [format!("mindweaver unlink {beside}")]
     );
     let wrong = Task::Minds {
         init: Vec::new(),

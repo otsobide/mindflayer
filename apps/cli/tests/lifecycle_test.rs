@@ -328,7 +328,7 @@ fn edit_takes_contents_or_an_editor_and_a_hash_only_with_contents() {
             clap::error::ErrorKind::MissingRequiredArgument,
         ),
     ] {
-        for binary in ["mind", "flayer"] {
+        for binary in ["mind", "weaver"] {
             let words = line(binary, args, dir.path());
             let parsed = match binary {
                 "mind" => Cli::try_parse_from(&words).map(drop),
@@ -431,7 +431,9 @@ fn a_removed_install_leaves_no_record_for_what_is_written_there_next() {
 
     let outcome = mind(&project, &["remove", "deploy", "--yes"]).unwrap();
     assert!(
-        outcome.stdout.contains("`flayer install` can put it back"),
+        outcome
+            .stdout
+            .contains("`mindweaver install` can put it back"),
         "{}",
         outcome.stdout
     );
@@ -456,8 +458,8 @@ fn an_installed_skill_that_is_renamed_stays_installed_under_its_new_name() {
 
     assert!(
         outcome.stdout.ends_with(
-            "  it was installed by `flayer install`, and stays so under its new name; renamed, \
-             it is left alone by `flayer install` and `flayer uninstall` unless they are forced\n"
+            "  it was installed by `mindweaver install`, and stays so under its new name; renamed, \
+             it is left alone by `mindweaver install` and `mindweaver uninstall` unless they are forced\n"
         ),
         "{}",
         outcome.stdout
@@ -490,8 +492,8 @@ fn an_installed_rule_that_is_renamed_still_holds_what_was_installed_and_says_so(
     // A rule's rename moves its file as it is, so nothing in it is an edit.
     assert!(
         outcome.stdout.ends_with(
-            "  it was installed by `flayer install`, and stays so under its new name; renamed, \
-             it still holds what was installed, and `flayer uninstall` takes it out\n"
+            "  it was installed by `mindweaver install`, and stays so under its new name; renamed, \
+             it still holds what was installed, and `mindweaver uninstall` takes it out\n"
         ),
         "{}",
         outcome.stdout
@@ -522,7 +524,9 @@ fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() 
 
     assert!(outcome.ok, "{:?}", outcome.stderr);
     assert!(
-        outcome.stdout.contains("`flayer install` can put it back"),
+        outcome
+            .stdout
+            .contains("`mindweaver install` can put it back"),
         "{}",
         outcome.stdout
     );
@@ -586,8 +590,8 @@ fn an_installed_skill_that_is_edited_stays_installed_and_reads_as_edited() {
 
     assert!(
         outcome.stdout.ends_with(
-            "  it was installed by `flayer install`, and stays so; edited, it is left alone by \
-             `flayer install` and `flayer uninstall` unless they are forced\n"
+            "  it was installed by `mindweaver install`, and stays so; edited, it is left alone by \
+             `mindweaver install` and `mindweaver uninstall` unless they are forced\n"
         ),
         "{}",
         outcome.stdout
@@ -651,8 +655,8 @@ fn an_installed_skill_whose_contents_are_replaced_stays_installed_and_reads_as_e
 
     assert_eq!(
         outcome.stdout,
-        "edited skill deploy: ok\n  it was installed by `flayer install`, and stays so; edited, \
-         it is left alone by `flayer install` and `flayer uninstall` unless they are forced\n"
+        "edited skill deploy: ok\n  it was installed by `mindweaver install`, and stays so; edited, \
+         it is left alone by `mindweaver install` and `mindweaver uninstall` unless they are forced\n"
     );
     let screen = screen_for(&workspace, &ledger);
     assert_eq!(

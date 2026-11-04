@@ -1,4 +1,4 @@
-//! Activation as shells run it: `eval "$(flayer activate …)"` in bash, and
+//! Activation as shells run it: `eval "$(mindweaver activate …)"` in bash, and
 //! in zsh where it is installed, on its own and beside an active Python
 //! virtualenv, activated in either order and deactivated in either order.
 //!
@@ -34,7 +34,7 @@ state() {
         "${PATH%%:*}" "$(defined deactivate)" "$(defined flayer-deactivate)"
 }
 activate_weaver() {
-    eval "$("$FLAYER" activate --shell "$SHELL_NAME" "$@")"
+    eval "$("$MINDWEAVER" activate --shell "$SHELL_NAME" "$@")"
 }
 "#;
 
@@ -100,7 +100,7 @@ fn run(shell: &Installed, dir: &Path, script: &str, variables: &[(&str, &Path)])
         .env_clear()
         .env("PATH", "/usr/bin:/bin")
         .env("HOME", home.path())
-        .env("FLAYER", env!("CARGO_BIN_EXE_flayer"))
+        .env("MINDWEAVER", env!("CARGO_BIN_EXE_mindweaver"))
         .env("SHELL_NAME", shell.name)
         .envs(
             variables
@@ -257,7 +257,7 @@ fn activating_sets_the_variable_and_the_prompt_and_deactivating_restores_both() 
             r#"state before
 activate_weaver "$WORKSPACE"
 state active
-"$FLAYER" list
+"$MINDWEAVER" list
 flayer-deactivate
 state after
 "#,

@@ -23,9 +23,9 @@ use tui::state::Step as TuiStep;
 
 #[test]
 fn weaver_on_its_own_is_the_tui_at_both_spellings() {
-    let bare = WeaverCli::try_parse_from(["flayer"]).unwrap();
-    let named = WeaverCli::try_parse_from(["flayer", "tui"]).unwrap();
-    let long = Cli::try_parse_from(["mind", "flayer"]).unwrap();
+    let bare = WeaverCli::try_parse_from(["mindweaver"]).unwrap();
+    let named = WeaverCli::try_parse_from(["mindweaver", "tui"]).unwrap();
+    let long = Cli::try_parse_from(["mind", "weaver"]).unwrap();
 
     assert!(bare.command.is_none());
     assert!(matches!(
@@ -34,7 +34,7 @@ fn weaver_on_its_own_is_the_tui_at_both_spellings() {
     ));
     assert!(matches!(
         long.command,
-        Some(mindweaver_cli::Command::Flayer { command: None })
+        Some(mindweaver_cli::Command::Weaver { command: None })
     ));
 }
 
@@ -68,7 +68,7 @@ fn without_a_workspace_the_tui_offers_to_create_one_here() {
     assert_eq!(task, Some(Task::InitWorkspace));
     assert!(dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG).is_file());
     assert!(matches!(app.view, View::Workspace(_)));
-    assert!(app.transcript().starts_with("$ flayer init\n"));
+    assert!(app.transcript().starts_with("$ mindweaver init\n"));
 }
 
 #[test]
@@ -106,7 +106,7 @@ fn a_repository_is_made_a_mind_project_only_when_that_is_confirmed() {
     press_key(&mut app, KeyCode::Char('l'));
     assert_eq!(press_key(&mut app, KeyCode::Enter), tui::state::Step::Stay);
     assert!(matches!(app.mode, Mode::Confirming(_)));
-    assert!(tui_drawn(&app).contains("mind -C gamma init && flayer link gamma"));
+    assert!(tui_drawn(&app).contains("mind -C gamma init && mindweaver link gamma"));
 
     // No: back to the form, and nothing written.
     press_key(&mut app, KeyCode::Char('n'));
@@ -133,7 +133,10 @@ fn a_repository_is_made_a_mind_project_only_when_that_is_confirmed() {
         transcript.contains("$ mind -C gamma init\n"),
         "{transcript}"
     );
-    assert!(transcript.contains("$ flayer link gamma\n"), "{transcript}");
+    assert!(
+        transcript.contains("$ mindweaver link gamma\n"),
+        "{transcript}"
+    );
 }
 
 #[test]
@@ -172,7 +175,7 @@ fn m_opens_the_minds_screen_with_the_linked_ones_ticked() {
         .iter()
         .map(|row| (row.path.as_str(), row.ticked))
         .collect();
-    // What is not linked first, as `flayer scan --suggest` lists it: a
+    // What is not linked first, as `mindweaver scan --suggest` lists it: a
     // project before a repository.
     assert_eq!(
         rows,
@@ -249,11 +252,11 @@ fn applying_the_minds_screen_links_and_unlinks_in_one_pass() {
     let transcript = app.transcript();
     assert!(transcript.contains("$ mind -C repo init\n"), "{transcript}");
     assert!(
-        transcript.contains("$ flayer link gamma repo\n"),
+        transcript.contains("$ mindweaver link gamma repo\n"),
         "{transcript}"
     );
     assert!(
-        transcript.contains("$ flayer unlink alpha\n"),
+        transcript.contains("$ mindweaver unlink alpha\n"),
         "{transcript}"
     );
 }
@@ -490,8 +493,8 @@ fn applying_an_untouched_minds_screen_asks_nothing() {
 
 #[test]
 fn weaver_minds_is_a_command_at_both_spellings() {
-    let direct = WeaverCli::try_parse_from(["flayer", "minds"]).unwrap();
-    let nested = Cli::try_parse_from(["mind", "flayer", "minds", "work"]).unwrap();
+    let direct = WeaverCli::try_parse_from(["mindweaver", "minds"]).unwrap();
+    let nested = Cli::try_parse_from(["mind", "weaver", "minds", "work"]).unwrap();
 
     assert!(matches!(
         direct.command,
@@ -499,7 +502,7 @@ fn weaver_minds_is_a_command_at_both_spellings() {
     ));
     assert!(matches!(
         nested.command,
-        Some(mindweaver_cli::Command::Flayer {
+        Some(mindweaver_cli::Command::Weaver {
             command: Some(mindweaver_cli::WeaverCommand::Minds { ref roots })
         }) if roots == &[PathBuf::from("work")]
     ));
@@ -507,7 +510,7 @@ fn weaver_minds_is_a_command_at_both_spellings() {
 
 /// `workspace_with_candidates`, and beside it `work`, a folder holding
 /// `acme/delta`, a mind project, and `plain`, a git repository: what
-/// `flayer minds <work>` offers.
+/// `mindweaver minds <work>` offers.
 fn candidates_and_a_folder_beside() -> (TempDir, TempDir) {
     let dir = workspace_with_candidates();
     let work = TempDir::new().unwrap();
@@ -554,7 +557,7 @@ fn weaver_minds_given_a_folder_that_is_not_there_says_so_beside_what_the_others_
 
     let plain = work.path().join("plain").display().to_string();
     assert_eq!(minds_rows(&app), vec![plain.as_str(), "alpha", "beta"]);
-    // In the words `flayer scan` warns with.
+    // In the words `mindweaver scan` warns with.
     let said = &app.workspace().unwrap().scan_warnings;
     assert_eq!(said.len(), 1, "{said:?}");
     assert!(
@@ -601,7 +604,7 @@ fn applying_the_minds_screen_given_a_folder_links_by_path_and_looks_there_again(
     assert!(WeaverWorkspace::open(dir.path()).unwrap().is_linked(&delta));
     let transcript = app.transcript();
     assert!(
-        transcript.contains(&format!("$ flayer link {spelled}\n")),
+        transcript.contains(&format!("$ mindweaver link {spelled}\n")),
         "{transcript}"
     );
     // Read again under the same folder: `plain` is still offered, and
@@ -774,7 +777,7 @@ fn u_on_the_workspaces_own_row_updates_every_project_it_links() {
         panic!("u runs a command");
     };
 
-    assert_eq!(task.describe(), "flayer update --all --yes");
+    assert_eq!(task.describe(), "mindweaver update --all --yes");
     assert!(
         tui_drawn(&app).contains("nothing to update in alpha and beta"),
         "{}",
@@ -839,7 +842,7 @@ fn a_stale_entry_the_scan_found_moved_is_relinked_where_it_went() {
     };
     assert_eq!(
         relink.commands(),
-        [["flayer", "relink", "alpha", "apps/alpha"]]
+        [["mindweaver", "relink", "alpha", "apps/alpha"]]
     );
     assert_eq!(task, Some(relink));
     assert!(registry(dir.path()).contains("\"apps/alpha\""));
@@ -862,7 +865,7 @@ fn m_on_a_stale_entry_whose_project_was_not_found_says_how_to_relink_it_by_hand(
     assert!(matches!(step, tui::state::Step::Stay));
     let said = &app.message.as_ref().unwrap().text;
     assert!(
-        said.contains("`flayer relink alpha <new>` follows it to where it went"),
+        said.contains("`mindweaver relink alpha <new>` follows it to where it went"),
         "{said}"
     );
 }
@@ -898,7 +901,7 @@ fn a_on_a_foreign_skill_adopts_it_into_the_library_once_asked() {
     };
     assert_eq!(
         adopt.commands(),
-        [["flayer", "adopt", "-p", "alpha", "--yes", "skill:notes"]]
+        [["mindweaver", "adopt", "-p", "alpha", "--yes", "skill:notes"]]
     );
     assert_eq!(task, Some(adopt));
     assert!(own_directory_for(dir.path(), Kind::Skill)
@@ -1020,7 +1023,7 @@ fn a_projects_rows_say_how_each_artifact_stands_and_which_agents_read_it() {
     press_key(&mut app, KeyCode::Up);
     let own = tui_drawn(&app);
 
-    // What `flayer status -p collapse` says, a row each: the state, then a
+    // What `mindweaver status -p collapse` says, a row each: the state, then a
     // badge in each agent's place where that agent reads it.
     for row in [
         "skill commit-style  current  CC CX OC  How commits are written",
@@ -1085,7 +1088,7 @@ fn a_stand_in_runner_is_handed_the_lines_a_task_is() {
 
     press_and_run(&mut app, KeyCode::Char('v'));
 
-    assert_eq!(*heard.lock().unwrap(), [["flayer", "validate"]]);
+    assert_eq!(*heard.lock().unwrap(), [["mindweaver", "validate"]]);
     let Mode::Reading(reader) = &app.mode else {
         panic!("{:?}", app.mode);
     };
@@ -1117,7 +1120,7 @@ fn gathering_in_the_tui_is_weaver_gather_git() {
     };
     assert!(reader.lines.iter().any(|(_, line)| line.contains("added")));
     assert_eq!(app.workspace().unwrap().shelf, 1);
-    assert!(app.transcript().contains("$ flayer gather git "));
+    assert!(app.transcript().contains("$ mindweaver gather git "));
 }
 
 #[test]
@@ -1142,7 +1145,7 @@ fn a_gather_runs_apart_with_its_progress_drawn_until_it_is_over() {
     });
     let drawn = tui_drawn(&app);
     assert!(
-        drawn.contains(&format!("flayer gather git {SLOW}")),
+        drawn.contains(&format!("mindweaver gather git {SLOW}")),
         "{drawn}"
     );
     assert!(drawn.contains("reading folders 0/3"), "{drawn}");
@@ -1164,9 +1167,9 @@ fn a_gather_runs_apart_with_its_progress_drawn_until_it_is_over() {
         panic!("{:?}", app.mode);
     };
     assert_eq!(reader.lines[0].1, "3 skills: 3 added");
-    assert!(app
-        .transcript()
-        .contains(&format!("$ flayer gather git {SLOW}\n3 skills: 3 added\n")));
+    assert!(app.transcript().contains(&format!(
+        "$ mindweaver gather git {SLOW}\n3 skills: 3 added\n"
+    )));
 }
 
 #[test]
@@ -1195,7 +1198,7 @@ fn esc_cancels_a_running_gather_and_the_form_says_so() {
         Some("cancelled, with nothing put on the shelf")
     );
     assert!(app.transcript().contains(&format!(
-        "$ flayer gather git {SLOW}\nerror: cancelled, with nothing put on the shelf\n"
+        "$ mindweaver gather git {SLOW}\nerror: cancelled, with nothing put on the shelf\n"
     )));
 }
 
@@ -1263,7 +1266,7 @@ fn the_working_boxes_are_drawn_on_a_terminal_narrower_than_they_are() {
     app.running.as_mut().unwrap().cancel();
     tui::wait(&mut app);
     // And the box a task that runs in place is drawn with.
-    app.busy = Some(format!("flayer gather git {SLOW}"));
+    app.busy = Some(format!("mindweaver gather git {SLOW}"));
     terminal.draw(|frame| tui::ui::draw(&app, frame)).unwrap();
 }
 
@@ -1280,11 +1283,11 @@ fn a_gather_refused_for_a_token_in_its_url_shows_the_token_neither_while_it_runs
     // What the box drawn over the screen says while it runs.
     assert_eq!(
         task.describe(),
-        "flayer gather git https://example.com/acme/skills"
+        "mindweaver gather git https://example.com/acme/skills"
     );
     let transcript = app.transcript();
     assert!(
-        transcript.starts_with("$ flayer gather git https://example.com/acme/skills\n"),
+        transcript.starts_with("$ mindweaver gather git https://example.com/acme/skills\n"),
         "{transcript}"
     );
     assert!(transcript.contains("is refused"), "{transcript}");
@@ -1336,7 +1339,7 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
     assert!(reader.lines.iter().any(|(_, line)| *line == said));
     assert_eq!(
         app.transcript(),
-        format!("$ flayer install -p collapse --from {origin} skill:deploy\n{said}\n")
+        format!("$ mindweaver install -p collapse --from {origin} skill:deploy\n{said}\n")
     );
 }
 
@@ -1369,7 +1372,7 @@ fn the_install_screen_inside_the_tui_turns_round_by_artifact_and_applies_the_sam
     assert_eq!(
         app.transcript(),
         format!(
-            "$ flayer install -p collapse -p tanukeys --from {origin} skill:deploy\n\
+            "$ mindweaver install -p collapse -p tanukeys --from {origin} skill:deploy\n\
              installed deploy into collapse, from {origin}\n\
              installed deploy into tanukeys, from {origin}\n"
         )
@@ -1416,7 +1419,7 @@ fn the_install_screen_inside_the_tui_installs_where_each_agent_of_a_v3_project_r
     let origin = shelf_origin(&workspace, &workspace.ledger_for_reading().unwrap());
     assert!(
         app.transcript().starts_with(&format!(
-            "$ flayer install -p alpha --from {origin} skill:deploy\n\
+            "$ mindweaver install -p alpha --from {origin} skill:deploy\n\
              installed deploy into alpha, from {origin}\n"
         )),
         "{}",
@@ -1468,7 +1471,7 @@ fn a_rule_ticked_on_the_install_screen_inside_the_tui_is_installed_from_there() 
         .contains("<!-- mindflayer:rule git/commits -->\n# Commit one coherent step at a time\n"));
     assert!(
         app.transcript().starts_with(
-            "$ flayer install -p collapse --from workspace rule:git/commits\n\
+            "$ mindweaver install -p collapse --from workspace rule:git/commits\n\
              installed rule git/commits into collapse, from workspace\n"
         ),
         "{}",
@@ -1489,7 +1492,7 @@ fn every_line_the_tui_runs_and_its_install_screen_keep_out_of_the_agents_folders
         },
         ..Lookup::default()
     };
-    let words: Vec<String> = ["flayer", "install", "-p", "collapse", "deploy"]
+    let words: Vec<String> = ["mindweaver", "install", "-p", "collapse", "deploy"]
         .iter()
         .map(|word| (*word).to_owned())
         .collect();
@@ -1552,7 +1555,7 @@ fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() 
     let transcript = app.transcript();
     assert!(
         transcript.starts_with(
-            "$ flayer install -p collapse --from https://example.com/acme/skills skill:deploy\n\
+            "$ mindweaver install -p collapse --from https://example.com/acme/skills skill:deploy\n\
              installed deploy into collapse, from https://example.com/acme/skills\n"
         ),
         "{transcript}"
@@ -1599,12 +1602,13 @@ fn a_line_of_the_install_screen_that_fails_does_not_keep_the_rest_from_running()
     }
     let transcript = app.transcript();
     assert!(
-        transcript.starts_with("$ flayer install -p collapse --from workspace skill:ours\nerror: "),
+        transcript
+            .starts_with("$ mindweaver install -p collapse --from workspace skill:ours\nerror: "),
         "{transcript}"
     );
     assert!(
         transcript.contains(&format!(
-            "$ flayer install -p collapse --from {origin} skill:deploy\n\
+            "$ mindweaver install -p collapse --from {origin} skill:deploy\n\
              installed deploy into collapse, from {origin}\n"
         )),
         "{transcript}"
@@ -1702,7 +1706,7 @@ fn words_of(line: &str) -> Vec<String> {
 #[test]
 fn a_line_as_the_transcript_shows_it_reads_back_into_its_words() {
     let words: Vec<String> = [
-        "flayer",
+        "mindweaver",
         "install",
         "--from",
         "it's #1",
@@ -1764,9 +1768,9 @@ fn the_lines_the_install_screen_ran_run_again_on_a_copy_leave_the_same_ledger_an
     assert_eq!(
         ran,
         [
-            &format!("flayer install -p collapse -p tanukeys --from {origin} skill:deploy"),
-            "flayer uninstall -p tanukeys skill:lint",
-            "flayer install -p collapse -p tanukeys --from workspace rule:git/commits",
+            &format!("mindweaver install -p collapse -p tanukeys --from {origin} skill:deploy"),
+            "mindweaver uninstall -p tanukeys skill:lint",
+            "mindweaver install -p collapse -p tanukeys --from workspace rule:git/commits",
         ],
         "{transcript}"
     );
@@ -1779,7 +1783,7 @@ fn the_lines_the_install_screen_ran_run_again_on_a_copy_leave_the_same_ledger_an
 
     for line in &ran {
         let words = words_of(line);
-        assert_eq!(words[0], "flayer", "{line}");
+        assert_eq!(words[0], "mindweaver", "{line}");
         let args: Vec<&str> = words[1..].iter().map(String::as_str).collect();
         let replayed = weaver(copy.path(), &args).unwrap();
         assert!(replayed.ok, "{line}: {replayed:?}");
@@ -2005,7 +2009,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
         for line in task.commands() {
             let parsed = match line[0].as_str() {
                 "mind" => Cli::try_parse_from(&line).err(),
-                "flayer" => WeaverCli::try_parse_from(&line).err(),
+                "mindweaver" => WeaverCli::try_parse_from(&line).err(),
                 other => panic!("{task:?} runs `{other}`"),
             };
             assert!(parsed.is_none(), "{line:?} does not parse: {parsed:?}");
@@ -2075,12 +2079,12 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
 
     assert_eq!(
         install.describe(),
-        "flayer install -p alpha -p ./-odd --from 'https://example.com/acme/skills#main' \
+        "mindweaver install -p alpha -p ./-odd --from 'https://example.com/acme/skills#main' \
          skill:deploy"
     );
     assert_eq!(
         uninstall.describe(),
-        "flayer uninstall -p ../collapse rule:git/commits"
+        "mindweaver uninstall -p ../collapse rule:git/commits"
     );
     assert!(install.writes() && uninstall.writes());
 
@@ -2157,14 +2161,14 @@ fn an_install_task_installs_into_every_project_it_names_and_an_uninstall_takes_i
     let transcript = app.transcript();
     assert!(
         transcript.starts_with(
-            "$ flayer install -p collapse -p tanukeys skill:deploy\n\
+            "$ mindweaver install -p collapse -p tanukeys skill:deploy\n\
              installed deploy into collapse, from "
         ),
         "{transcript}"
     );
     assert!(
         transcript.contains(
-            "$ flayer uninstall -p collapse -p tanukeys skill:deploy\n\
+            "$ mindweaver uninstall -p collapse -p tanukeys skill:deploy\n\
              removed deploy from collapse\n\
              removed deploy from tanukeys\n"
         ),
@@ -2351,7 +2355,7 @@ fn mind_calls_the_workspace_in_your_home_the_default_only_when_it_is_not_above()
     assert!(!default(&near));
 }
 
-/// The TUI `flayer` opens in `dir`, with nothing above it, where the default
+/// The TUI `mindweaver` opens in `dir`, with nothing above it, where the default
 /// workspace lives in `home`.
 fn tui_at_home(dir: &Path, home: &Path) -> App {
     let lookup = Lookup::at_home(Some(home));
@@ -2523,8 +2527,8 @@ fn the_first_change_from_the_tui_makes_the_default_workspace() {
     assert_eq!(
         app.transcript(),
         format!(
-            "$ flayer init\ninitialized flayer workspace `{}` in {}\n\
-             $ flayer link alpha\nlinked alpha as alpha\n",
+            "$ mindweaver init\ninitialized flayer workspace `{}` in {}\n\
+             $ mindweaver link alpha\nlinked alpha as alpha\n",
             home.path().file_name().unwrap().to_string_lossy(),
             home.path().join(WEAVER_DIR).display()
         )
@@ -2578,8 +2582,14 @@ fn a_gather_from_the_tui_runs_apart_after_making_the_default_workspace_where_it_
     // to the gather, the walk up from home would have found the workspace
     // above it.
     let transcript = app.transcript();
-    assert!(transcript.starts_with("$ flayer init\n"), "{transcript}");
-    assert!(transcript.contains("$ flayer gather git "), "{transcript}");
+    assert!(
+        transcript.starts_with("$ mindweaver init\n"),
+        "{transcript}"
+    );
+    assert!(
+        transcript.contains("$ mindweaver gather git "),
+        "{transcript}"
+    );
     let workspace = app.workspace().unwrap();
     assert!(workspace.made);
     assert_eq!(workspace.root, home);
@@ -2680,7 +2690,7 @@ fn the_workspaces_own_row_sits_above_its_projects() {
     let tui::state::Step::Run(task) = step else {
         panic!("{step:?}");
     };
-    assert_eq!(task.describe(), "flayer edit skill:commit-style");
+    assert_eq!(task.describe(), "mindweaver edit skill:commit-style");
 }
 
 #[test]
@@ -2695,11 +2705,11 @@ fn d_on_the_workspaces_own_offers_to_remove_it_everywhere_with_e() {
     let drawn = tui_drawn(&app);
     assert!(drawn.contains("Delete skill commit-style?"), "{drawn}");
     assert!(
-        drawn.contains("runs  flayer remove --yes skill:commit-style"),
+        drawn.contains("runs  mindweaver remove --yes skill:commit-style"),
         "{drawn}"
     );
     assert!(
-        drawn.contains("e     flayer remove --everywhere --yes skill:commit-style"),
+        drawn.contains("e     mindweaver remove --everywhere --yes skill:commit-style"),
         "{drawn}"
     );
     assert!(drawn.contains("e  everywhere"), "{drawn}");
@@ -2722,7 +2732,7 @@ fn d_on_the_workspaces_own_offers_to_remove_it_everywhere_with_e() {
         assert!(!copy.exists(), "{}", copy.display());
     }
     assert!(app.transcript().contains(
-        "$ flayer remove --everywhere --yes skill:commit-style\nremoved commit-style from alpha\n"
+        "$ mindweaver remove --everywhere --yes skill:commit-style\nremoved commit-style from alpha\n"
     ));
 }
 
@@ -2758,7 +2768,7 @@ fn adding_on_the_workspaces_row_is_weaver_add() {
         .is_file());
     assert!(app
         .transcript()
-        .contains("$ flayer add skill commit-style Shared\n"));
+        .contains("$ mindweaver add skill commit-style Shared\n"));
     assert_eq!(app.current_item().unwrap().name, "commit-style");
 }
 
@@ -2872,7 +2882,7 @@ fn mind_with_no_project_offers_to_make_one() {
 /// The URL the slow gather is asked for, which it never fetches.
 const SLOW: &str = "https://example.com/skills.git";
 
-/// A stand-in for `flayer gather git` that takes as long as the test wants:
+/// A stand-in for `mindweaver gather git` that takes as long as the test wants:
 /// it reports reading each of three folders, and goes on from one to the
 /// next only when `go` says so. A cancel stops it before it says it is done,
 /// as one stops a real gather before anything is placed.
@@ -3098,7 +3108,9 @@ fn the_header_flags_projects_a_mind_toml_marks_with_the_command_that_moves_them(
 
     let flagged = header(dir.path());
     assert!(
-        flagged.contains("  · 2 projects marked by mind.toml: `flayer migrate --all-projects`  · "),
+        flagged.contains(
+            "  · 2 projects marked by mind.toml: `mindweaver migrate --all-projects`  · "
+        ),
         "{flagged}"
     );
     // A project on its own is told what moves it from where it is.
@@ -3138,12 +3150,14 @@ fn the_header_flags_projects_a_settings_json_marks_as_it_flags_a_mind_toml() {
 
     let flagged = header(dir.path());
     assert!(
-        flagged
-            .contains("  · 1 project marked by settings.json: `flayer migrate --all-projects`  · "),
+        flagged.contains(
+            "  · 1 project marked by settings.json: `mindweaver migrate --all-projects`  · "
+        ),
         "{flagged}"
     );
 
-    // Both kinds, counted together and each named once.
+    // Both kinds, counted together and each named once, the line cut at the
+    // screen's edge.
     let old = dir.path().join("old");
     fs::create_dir(&old).unwrap();
     older_project(&old);
@@ -3152,7 +3166,7 @@ fn the_header_flags_projects_a_settings_json_marks_as_it_flags_a_mind_toml() {
     assert!(
         both.contains(
             "  · 2 projects marked by mind.toml or settings.json: \
-             `flayer migrate --all-projects`"
+             `mindweaver migrate --all-projects"
         ),
         "{both}"
     );
@@ -3177,7 +3191,7 @@ fn the_header_flags_projects_a_settings_json_marks_as_it_flags_a_mind_toml() {
 #[test]
 fn a_w_among_a_lines_words_is_typed_from_the_workspace_root() {
     let (_dir, outer, _hub, _collapse) = hub_beside_outer();
-    let words: Vec<String> = ["flayer", "-W", "../hub", "list"]
+    let words: Vec<String> = ["mindweaver", "-W", "../hub", "list"]
         .iter()
         .map(|word| (*word).to_owned())
         .collect();
@@ -3704,7 +3718,7 @@ fn w_lists_the_workspaces_this_machine_knows_with_the_one_on_screen_marked() {
     );
 
     let drawn = tui_drawn(&app);
-    assert!(drawn.contains(" flayer workspaces "), "{drawn}");
+    assert!(drawn.contains(" mindweaver workspaces "), "{drawn}");
     let default = format!(
         "  home     {}                  no projects; the default one",
         home.display()
@@ -3757,7 +3771,7 @@ fn the_keys_help_names_the_workspaces_list_and_its_command() {
         .iter()
         .position(|line| line.starts_with("  w      the workspaces this machine knows"))
         .unwrap_or_else(|| panic!("{lines:?}"));
-    assert_eq!(lines[at + 1].trim(), "flayer workspaces");
+    assert_eq!(lines[at + 1].trim(), "mindweaver workspaces");
 }
 
 /// A line that serves the panel would hold the screen until a Ctrl-C the
@@ -3770,7 +3784,7 @@ fn a_line_that_serves_the_panel_is_not_run_from_the_screen() {
     let dir = workspace_with_two();
 
     for said in [
-        &["flayer", "ui", "--no-open"][..],
+        &["mindweaver", "ui", "--no-open"][..],
         &["mind", "ui", "--no-open"],
     ] {
         let words: Vec<String> = said.iter().map(|word| (*word).to_owned()).collect();
@@ -3798,7 +3812,15 @@ fn a_line_that_reads_standard_input_is_not_run_from_the_screen() {
     let words =
         |said: &[&str]| -> Vec<String> { said.iter().map(|word| (*word).to_owned()).collect() };
 
-    let said = ["flayer", "edit", "-p", "alpha", "alpha", "--contents", "-"];
+    let said = [
+        "mindweaver",
+        "edit",
+        "-p",
+        "alpha",
+        "alpha",
+        "--contents",
+        "-",
+    ];
     let done = tui::execute(&words(&said), dir.path(), &Lookup::default(), &Watch::new());
 
     assert_eq!(
@@ -3813,7 +3835,7 @@ fn a_line_that_reads_standard_input_is_not_run_from_the_screen() {
     let rewritten = skill_file("alpha", "A skill, rewritten");
     fs::write(dir.path().join("draft.md"), &rewritten).unwrap();
     let said = [
-        "flayer",
+        "mindweaver",
         "edit",
         "-p",
         "alpha",

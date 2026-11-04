@@ -220,7 +220,7 @@ fn a_workspace_whose_projects_all_broke_does_not_claim_to_manage_none() {
         outcome.stdout
     );
     assert!(outcome.stdout.contains("none of which could be opened"));
-    assert!(outcome.stdout.contains("flayer unlink"));
+    assert!(outcome.stdout.contains("mindweaver unlink"));
     assert_eq!(outcome.stderr.len(), 2);
     assert!(!outcome.ok);
 }
@@ -260,10 +260,10 @@ fn unlink_reports_every_entry_it_removed() {
 
 #[test]
 fn both_spellings_answer_version_and_help() {
-    // `mind flayer --version` erroring while `flayer --version` worked was the
+    // `mind weaver --version` erroring while `mindweaver --version` worked was the
     // two spellings drifting, which is the one thing the shortcut must not do.
     for line in [
-        vec!["mind", "flayer", "--version"],
+        vec!["mind", "weaver", "--version"],
         vec!["mind", "--version"],
     ] {
         let error = Cli::try_parse_from(&line).unwrap_err();
@@ -274,7 +274,7 @@ fn both_spellings_answer_version_and_help() {
         );
     }
     assert_eq!(
-        WeaverCli::try_parse_from(["flayer", "--version"])
+        WeaverCli::try_parse_from(["mindweaver", "--version"])
             .unwrap_err()
             .kind(),
         clap::error::ErrorKind::DisplayVersion
@@ -286,7 +286,7 @@ fn each_binary_describes_itself_rather_than_the_crate() {
     let mind = Cli::try_parse_from(["mind", "--help"])
         .unwrap_err()
         .to_string();
-    let weaver = WeaverCli::try_parse_from(["flayer", "--help"])
+    let weaver = WeaverCli::try_parse_from(["mindweaver", "--help"])
         .unwrap_err()
         .to_string();
 

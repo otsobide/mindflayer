@@ -11,7 +11,7 @@ use tempfile::TempDir;
 
 mod common;
 
-/// A workspace keeping its own beside its projects, as `flayer init` made
+/// A workspace keeping its own beside its projects, as `mindweaver init` made
 /// every one before the library, holding a skill and a rule in a folder.
 fn beside() -> (TempDir, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
@@ -183,7 +183,7 @@ fn a_project_that_cannot_be_read_refuses_the_plan_only_where_it_could_hold_them(
 #[test]
 fn a_folder_holding_the_library_is_refused_by_the_plan() {
     let (dir, workspace) = beside();
-    // Allowed by `flayer init`, unlike the root, which is not inside the
+    // Allowed by `mindweaver init`, unlike the root, which is not inside the
     // workspace, or `.mindflayer`, which holds the shelf.
     let text =
         marker(&workspace).replace("skills = \"skills\"", "skills = \".mindflayer/library\"");
@@ -208,7 +208,7 @@ fn a_folder_outside_the_workspace_is_refused_and_left_as_it_is() {
     let dir = TempDir::new().unwrap();
     let root = dir.path().join("ws");
     let (workspace, _) = WeaverWorkspace::init_with(&root, &common::beside()).unwrap();
-    // Named by hand, as `flayer init` would refuse to.
+    // Named by hand, as `mindweaver init` would refuse to.
     let text = marker(&workspace).replace("skills = \"skills\"", "skills = \"../team/skills\"");
     fs::write(workspace.config_path(), text).unwrap();
     let theirs = dir.path().join("team/skills/shared");

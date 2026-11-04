@@ -15,7 +15,7 @@ const { busy } = runner
 
 /**
  * Load `known`, by the path the snapshot lists it by: the TUI's load form's
- * task for that path typed (`flayer load <path>`), offered only where core
+ * task for that path typed (`mindweaver load <path>`), offered only where core
  * says it can be loaded (`loadable`), so neither this workspace, which a
  * load refuses, nor one it loads already.
  */
@@ -25,7 +25,7 @@ function loadKnown(known: KnownHere) {
 
 /**
  * Stop offering what `load` offers, by the entry its marker spells it by:
- * the TUI's task for it picked in the load form (`flayer unload <entry>`),
+ * the TUI's task for it picked in the load form (`mindweaver unload <entry>`),
  * which the preview makes a question. What was installed from it stays.
  */
 function unload(load: LoadedWorkspace) {
@@ -44,7 +44,7 @@ function offered(snapshot: Snapshot, load: LoadedWorkspace): Offered[] {
 /**
  * How many projects `known` links, and how many of those open none, both
  * as core counts them, in figures as the page gives its other counts ("2 to
- * install"), not in `flayer workspaces`' words ("no projects; the default
+ * install"), not in `mindweaver workspaces`' words ("no projects; the default
  * one"), whose second half the badges beside it say.
  */
 function links(known: KnownHere): string {
@@ -242,7 +242,7 @@ function links(known: KnownHere): string {
               Workspaces this machine knows
             </h2>
             <p class="text-sm text-muted">
-              The default workspace, in your home, remembers each one <code class="font-mono">flayer init</code> makes once the default is made itself. Load one to offer its own here, or name any other by its path below.
+              The default workspace, in your home, remembers each one <code class="font-mono">mindweaver init</code> makes once the default is made itself. Load one to offer its own here, or name any other by its path below.
             </p>
           </div>
 
@@ -253,7 +253,7 @@ function links(known: KnownHere): string {
           >
             <!--
               Core lists none only while the default is not made and is the
-              one on screen: a workspace `flayer init` made before it is a
+              one on screen: a workspace `mindweaver init` made before it is a
               workspace still, which the default never remembered.
             -->
             <p

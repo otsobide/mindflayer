@@ -370,7 +370,7 @@ pub fn loaded_origin(entry: &str) -> Origin {
 /// `from` as `--from` should match it: when it is a path, typed relative to
 /// `base` (bare or after `load:`) to a workspace `workspace` loads, that
 /// workspace's origin; otherwise `from` as it is, and always for the word
-/// the workspace's own go by. So the path given to `flayer load` works as
+/// the workspace's own go by. So the path given to `mindweaver load` works as
 /// `--from` from wherever it was typed, not only spelled as the marker
 /// stores it.
 pub fn resolve_from(workspace: &WeaverWorkspace, base: &Path, from: &str) -> String {
@@ -631,7 +631,7 @@ pub fn loaded_offers(workspace: &WeaverWorkspace, kind: Kind) -> Vec<Offer> {
 /// filed under. Failures collected, not raised, like every discovery.
 ///
 /// Every kind, as [`survey`] offers every kind to install, so what a load
-/// is said to offer, in `flayer load`, `flayer gather list` and the TUI, is
+/// is said to offer, in `mindweaver load`, `mindweaver gather list` and the TUI, is
 /// what the command line and the install screen let somebody install.
 pub fn offered_by_loads(workspace: &WeaverWorkspace) -> Loads {
     from_loads(workspace, &Kind::ALL)
@@ -2571,7 +2571,7 @@ pub(crate) fn holds(copy: &Path, kind: Kind) -> bool {
 ///
 /// The route to where the workspace's own entry leads
 /// ([`WeaverWorkspace::spelling_of`]), not to however the caller spelled the
-/// project: `mind` run inside it and `flayer -p` must read and write one
+/// project: `mind` run inside it and `mindweaver -p` must read and write one
 /// record, whichever symlinks either went through.
 fn project_entry(workspace: &WeaverWorkspace, project: &MindProject) -> String {
     entry_for_root(workspace, project.root())
@@ -2625,7 +2625,7 @@ pub(crate) fn resolved(path: &Path) -> Option<PathBuf> {
 }
 
 /// The loaded workspace that keeps its own of `kind` in a folder `path` is
-/// in, or around, if one does (spelled as its root, which `flayer unload`
+/// in, or around, if one does (spelled as its root, which `mindweaver unload`
 /// accepts from anywhere).
 ///
 /// By the folder, not by what is in it yet: a project that is also a loaded
@@ -2705,7 +2705,7 @@ pub enum InstallError {
         path: PathBuf,
         workspace: PathBuf,
     },
-    #[error("{name}: {path} is not there any more, because the workspace loaded from {workspace} has changed; `flayer unload {workspace}` if it has gone")]
+    #[error("{name}: {path} is not there any more, because the workspace loaded from {workspace} has changed; `mindweaver unload {workspace}` if it has gone")]
     Gone {
         name: String,
         path: PathBuf,
@@ -2751,7 +2751,7 @@ pub enum InstallError {
     Artifact(#[from] ArtifactError),
     #[error("{from} and {to} are one inside the other, so installing one onto the other would delete it")]
     Overlaps { from: PathBuf, to: PathBuf },
-    #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindflayer neither installs nor removes there; `flayer unload {loaded}` first to manage it as a project")]
+    #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindflayer neither installs nor removes there; `mindweaver unload {loaded}` first to manage it as a project")]
     KeptByALoad { path: PathBuf, loaded: PathBuf },
     #[error("{path}: cannot be written: {source}")]
     Write {
@@ -2762,7 +2762,7 @@ pub enum InstallError {
         /// the write failed ([`InstallError::swept`]).
         swept: Vec<PathBuf>,
     },
-    #[error("nothing called `{name}` can be installed{}: gather it, load a workspace that has it with `flayer load`, or add it to the workspace with `flayer add`", from.as_deref().map(|from| format!(" from {from}")).unwrap_or_default())]
+    #[error("nothing called `{name}` can be installed{}: gather it, load a workspace that has it with `mindweaver load`, or add it to the workspace with `mindweaver add`", from.as_deref().map(|from| format!(" from {from}")).unwrap_or_default())]
     NotOffered { name: String, from: Option<String> },
     #[error("`{name}` is offered by more than one place ({}), so say which with --from", .origins.join(", "))]
     OfferedTwice { name: String, origins: Vec<Origin> },

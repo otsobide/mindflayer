@@ -1,5 +1,5 @@
 //! The API's guide, `docs/api.md`, held to what the server answers: the
-//! workspace it builds is built with the commands it shows, `flayer ui` is
+//! workspace it builds is built with the commands it shows, `mindweaver ui` is
 //! started as it shows, on port 0 with a temporary home and every agent
 //! home empty, and every `curl` line in it is sent over loopback with the
 //! client `ui_test` uses (`common::panel`). Each answer is held to the
@@ -422,18 +422,21 @@ fn workspace(home: &Path) -> String {
         path
     };
 
-    said("flayer init", weaver_at_home(&projects, home, &["init"]));
+    said(
+        "mindweaver init",
+        weaver_at_home(&projects, home, &["init"]),
+    );
     let api = repository("api");
     said(
         "git init --quiet api && mind -C api init",
         mind_at_home(&api, home, &["init"]),
     );
     said(
-        "flayer link api",
+        "mindweaver link api",
         weaver_at_home(&projects, home, &["link", "api"]),
     );
     said(
-        &format!("flayer add skill review '{REVIEW}'"),
+        &format!("mindweaver add skill review '{REVIEW}'"),
         weaver_at_home(&projects, home, &["add", "skill", "review", REVIEW]),
     );
     let web = repository("web");
@@ -633,7 +636,7 @@ fn every_example_in_the_api_s_guide_is_what_the_server_answers() {
     let file = home.join(TOKEN_FILE);
     fs::create_dir_all(file.parent().unwrap()).unwrap();
     let mut panel = serve_with(
-        "flayer",
+        "mindweaver",
         &projects,
         &home,
         &["--token-file", file.to_str().unwrap()],
@@ -668,7 +671,7 @@ fn every_example_in_the_api_s_guide_is_what_the_server_answers() {
     let expected = [
         pins.shown(&built),
         format!(
-            "$ flayer ui --no-open --token-file {at}\n{}\n{}",
+            "$ mindweaver ui --no-open --token-file {at}\n{}\n{}",
             pins.shown(&format!("http://{}/?token={}", panel.address, panel.token)),
             pins.shown(&said)
         ),

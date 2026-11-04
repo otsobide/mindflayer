@@ -54,7 +54,7 @@ fn a_name_holding_control_characters_still_round_trips() {
     assert_eq!(weaver.name, awkward);
 }
 
-/// What `flayer init PATH` reaches with a typed argument: a directory whose
+/// What `mindweaver init PATH` reaches with a typed argument: a directory whose
 /// name holds a control character is made a workspace that opens again.
 /// Unix only, as Windows takes no control character in a file name.
 #[cfg(unix)]

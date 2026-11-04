@@ -7,7 +7,7 @@
 //! its settings hold ([`ProjectId`]), random so that only a copy shares it,
 //! which the ledger keeps with the route it last saw it at (schema 5). A
 //! project found holding an id the ledger last saw at a stale entry is that
-//! entry's project, moved, and `flayer relink` follows it there with every
+//! entry's project, moved, and `mindweaver relink` follows it there with every
 //! record it had. A project copied with its `.mind` holds the same id as the
 //! one it was copied from, which no record can tell apart, so it is never
 //! taken for a move: `mind init --new-id` ([`new_id`]) gives it one of its
@@ -66,7 +66,7 @@ pub struct Relinked {
 ///   open ([`MindProject::is_vacant`]), whose id nobody can compare;
 /// - another project the workspace links holds `new`'s id: a copy too,
 ///   refused until one of the two is given an id of its own ([`new_id`]). A
-///   copy nobody linked is beyond what this reads; `flayer scan` names it,
+///   copy nobody linked is beyond what this reads; `mindweaver scan` names it,
 ///   and never offers a duplicate as a move;
 /// - the ledger last saw another id at `old`, or `new`'s at an entry other
 ///   than `old`, which is where `new` moved from, if anywhere;
@@ -333,7 +333,7 @@ pub fn new_id(
 /// `.mind`, which no record can tell from the project it was copied from.
 ///
 /// A failure collected wherever the projects holding it are read together
-/// (`flayer status`, `flayer scan`), naming every one, and never a move:
+/// (`mindweaver status`, `mindweaver scan`), naming every one, and never a move:
 /// which of them is the project the records were made for is nobody's to
 /// guess, so none is followed until all but one hold an id of their own
 /// ([`new_id`]).
@@ -404,7 +404,7 @@ pub enum RelinkError {
     /// was: one a `mind.toml` marks.
     #[error(
         "{path}: a {marker} marks it, which names it by no id, so nothing says it is the project \
-         another entry was; `flayer link` links it as one of its own"
+         another entry was; `mindweaver link` links it as one of its own"
     )]
     NoId {
         path: PathBuf,
@@ -412,7 +412,7 @@ pub enum RelinkError {
     },
     /// The directory a relink would point an entry at is linked already.
     #[error(
-        "{path}: the workspace links it already, as {}; `flayer unlink` that entry first",
+        "{path}: the workspace links it already, as {}; `mindweaver unlink` that entry first",
         crate::paths::to_config_string(entry).unwrap_or_else(|| entry.display().to_string())
     )]
     Linked { path: PathBuf, entry: PathBuf },
@@ -421,7 +421,7 @@ pub enum RelinkError {
     Copied(Duplicate),
     /// The entry still holds a project, so it has not moved.
     #[error(
-        "{path}: still holds a project, {name}, so it has not moved; `flayer link` links the \
+        "{path}: still holds a project, {name}, so it has not moved; `mindweaver link` links the \
          other as a project of its own"
     )]
     Present { path: PathBuf, name: String },
@@ -448,7 +448,7 @@ pub enum RelinkError {
     },
     /// The directory holds the project another entry was.
     #[error(
-        "{path}: holds project {id}, which the workspace last saw at {at}; `flayer relink {at} \
+        "{path}: holds project {id}, which the workspace last saw at {at}; `mindweaver relink {at} \
          {path}` follows it from there"
     )]
     Elsewhere {
@@ -459,7 +459,7 @@ pub enum RelinkError {
     /// The entry has records no id says whose they were.
     #[error(
         "{path}: the ledger records what was installed there but no id it was installed for, so \
-         nothing says which project it was; `flayer unlink` it and `flayer link` the other"
+         nothing says which project it was; `mindweaver unlink` it and `mindweaver link` the other"
     )]
     Unknown { path: PathBuf },
 }

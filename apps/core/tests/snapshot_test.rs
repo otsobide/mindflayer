@@ -1341,7 +1341,7 @@ fn holders(snapshot: &Snapshot) -> Vec<(Kind, &str, &str)> {
 }
 
 /// An install recorded before origins were kept names none, and is a copy
-/// of one of the library's own all the same, as `flayer remove
+/// of one of the library's own all the same, as `mindweaver remove
 /// --everywhere` takes it: its project holds a copy of it, though no word
 /// beside the copy says so, so no front end comparing origins could tell.
 #[test]

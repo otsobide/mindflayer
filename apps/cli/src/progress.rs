@@ -2,7 +2,7 @@
 //!
 //! Core says which step a gather is at ([`Progress`]); how that reads is the
 //! front end's to decide, and both of this crate's say it with [`said`]: the
-//! line `flayer gather` keeps rewriting on stderr, and the box the TUI draws
+//! line `mindweaver gather` keeps rewriting on stderr, and the box the TUI draws
 //! while a gather runs.
 
 use std::io::{self, IsTerminal as _, Write};

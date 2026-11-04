@@ -171,10 +171,10 @@ describe('a workspace that links nothing', () => {
 
     expect(page.find('[data-testid="table"]').exists()).toBe(false)
     expect(texts(page, '[data-testid="no-projects"] code')).toEqual([
-      '$ flayer init /home/you',
+      '$ mindweaver init /home/you',
       '$ mind init',
-      '$ flayer -W /home/you link <PATH>',
-      '$ flayer -W /home/you scan --suggest'
+      '$ mindweaver -W /home/you link <PATH>',
+      '$ mindweaver -W /home/you scan --suggest'
     ])
   })
 })

@@ -72,7 +72,7 @@ pub enum CliError {
     },
     #[error("{0} is not inside a mind project (run `mind init` to create one here)")]
     NotInProject(PathBuf),
-    #[error("{0} is not inside a flayer workspace (run `flayer init` to create one here)")]
+    #[error("{0} is not inside a flayer workspace (run `mindweaver init` to create one here)")]
     NotInWorkspace(PathBuf),
     #[error("no flayer workspace{} at or above {from} to {verb}, and no default one", if *named { " but the ones named" } else { "" })]
     NowhereToLoad {
@@ -134,9 +134,9 @@ pub enum CliError {
     Update(#[from] mindweaver_core::update::UpdateError),
     #[error("say which projects to update: -p <project> for each, or --all for every one the workspace links")]
     UpdateWhere,
-    #[error("say which project's agents to change (`flayer agents -p <project> <agent>...`); the workspace's own reach agents by being installed")]
+    #[error("say which project's agents to change (`mindweaver agents -p <project> <agent>...`); the workspace's own reach agents by being installed")]
     AgentsWhere,
-    #[error("say which project's targets to change (`flayer targets -p <project> set <kind> <dir>...`); the workspace's own reach agents by being installed")]
+    #[error("say which project's targets to change (`mindweaver targets -p <project> set <kind> <dir>...`); the workspace's own reach agents by being installed")]
     TargetsWhere,
     #[error("`{editor}` could not be started: {source}")]
     Editor {
@@ -164,7 +164,7 @@ pub enum CliError {
         #[source]
         source: io::Error,
     },
-    #[error("no flayer workspace above {0}; make one with `flayer init` in the directory that holds your projects")]
+    #[error("no flayer workspace above {0}; make one with `mindweaver init` in the directory that holds your projects")]
     NoWorkspaceAbove(PathBuf),
     #[error("{0}: not known, since there is no default workspace to remember it (--home or ${HOME_VARIABLE} names none)")]
     NoDefault(PathBuf),
@@ -180,9 +180,9 @@ pub enum CliError {
         wanted: String,
         matches: Vec<String>,
     },
-    #[error("say which projects to install into: -p <project> for each, or --all-projects for every one the workspace links; or run `flayer install` alone for the screen")]
+    #[error("say which projects to install into: -p <project> for each, or --all-projects for every one the workspace links; or run `mindweaver install` alone for the screen")]
     InstallWhere,
-    #[error("say which skill or rule to install (`flayer install -p <project> <name>`), or run `flayer install` alone for the screen")]
+    #[error("say which skill or rule to install (`mindweaver install -p <project> <name>`), or run `mindweaver install` alone for the screen")]
     InstallWhat,
     #[error("say which projects to take it out of: -p <project> for each, or --all-projects for every one the workspace links")]
     UninstallWhere,
@@ -196,7 +196,7 @@ pub enum CliError {
         #[source]
         source: io::Error,
     },
-    #[error("`flayer` on its own opens a screen, and this is not a terminal; `flayer --help` lists the commands")]
+    #[error("`mindweaver` on its own opens a screen, and this is not a terminal; `mindweaver --help` lists the commands")]
     NotATerminal,
     #[error("the screen could not be drawn: {source}")]
     Screen {
@@ -369,7 +369,7 @@ fn named_by(reason: &Reason) -> String {
 /// "; it manages alpha, beta", or what to do when it manages nothing.
 fn known_projects(known: &[String]) -> String {
     if known.is_empty() {
-        String::from("; it manages none yet: `flayer link <path>` adds one")
+        String::from("; it manages none yet: `mindweaver link <path>` adds one")
     } else {
         format!("; it manages {}", known.join(", "))
     }

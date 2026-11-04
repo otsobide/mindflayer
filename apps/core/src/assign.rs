@@ -1,6 +1,6 @@
 //! One skill or rule put into several projects at once, or taken back out of
-//! them: what vision point 2 calls assigning, and what `flayer install` and
-//! `flayer uninstall` do given `-p` more than once or `--all-projects` (#49).
+//! them: what vision point 2 calls assigning, and what `mindweaver install` and
+//! `mindweaver uninstall` do given `-p` more than once or `--all-projects` (#49).
 //! And what nothing offers any more taken out of them, whatever its name:
 //! `uninstall --orphaned` (#50).
 //!

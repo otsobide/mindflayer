@@ -1,4 +1,4 @@
-//! `flayer gather`: taking skills from a git repository onto the shelf.
+//! `mindweaver gather`: taking skills from a git repository onto the shelf.
 
 mod common;
 
@@ -218,7 +218,7 @@ fn an_empty_shelf_says_how_to_fill_it() {
 
     assert!(outcome.ok);
     assert!(outcome.stdout.starts_with("nothing gathered yet"));
-    assert!(outcome.stdout.contains("flayer gather git"));
+    assert!(outcome.stdout.contains("mindweaver gather git"));
 }
 
 #[test]
@@ -240,7 +240,7 @@ fn gathering_outside_a_workspace_says_what_to_run() {
     let failure = weaver(dir.path(), &["gather", "list"]).unwrap_err();
 
     assert!(matches!(*failure.error, CliError::NotInWorkspace(_)));
-    assert!(failure.error.to_string().contains("flayer init"));
+    assert!(failure.error.to_string().contains("mindweaver init"));
 }
 
 #[test]
@@ -251,7 +251,7 @@ fn gather_is_reachable_the_long_way_round_too() {
     let url = source.path().to_string_lossy().into_owned();
 
     let short = weaver(dir.path(), &["gather", "git", &url]).unwrap();
-    let long = mind(dir.path(), &["flayer", "gather", "list"]).unwrap();
+    let long = mind(dir.path(), &["weaver", "gather", "list"]).unwrap();
 
     assert!(short.ok);
     assert!(long.stdout.contains("deploy"), "{}", long.stdout);
@@ -321,7 +321,7 @@ fn a_cancelled_gather_says_so_and_leaves_the_shelf_as_it_was() {
 
     // The long way round as well, which is `mind`'s run path.
     let failure = run_watched(
-        &parsed_mind(dir.path(), &["flayer", "gather", "git", &url]),
+        &parsed_mind(dir.path(), &["weaver", "gather", "git", &url]),
         &watch,
     )
     .unwrap_err();

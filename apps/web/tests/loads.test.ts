@@ -73,7 +73,7 @@ describe('the workspaces it loads', () => {
     const { page } = await render('/loads', snapshot)
 
     expect(texts(page.get('[data-testid="no-loaded"]'), 'code')).toEqual([
-      `$ flayer -W ${snapshot.workspace.path} load <PATH>`
+      `$ mindweaver -W ${snapshot.workspace.path} load <PATH>`
     ])
   })
 
@@ -114,7 +114,7 @@ describe('the workspaces this machine knows', () => {
     expect(page.get('[data-testid="none-known"]').text()).toBe(
       'The default workspace is not made yet, so it remembers none: load one made before it by its path below.'
     )
-    expect(texts(page.get('[data-testid="no-known"]'), 'code')).toEqual([`$ flayer init ${snapshot.workspace.path}`])
+    expect(texts(page.get('[data-testid="no-known"]'), 'code')).toEqual([`$ mindweaver init ${snapshot.workspace.path}`])
     expect(page.find('[data-testid="load-form"]').exists()).toBe(true)
   })
 })

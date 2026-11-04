@@ -1,6 +1,6 @@
 //! Bringing a skill somebody keeps in a project's agents' folders into the
 //! workspace's library, and making the project's copies of it an
-//! installation from there: `flayer adopt` (#59).
+//! installation from there: `mindweaver adopt` (#59).
 //!
 //! Many repositories keep hand-written skills in `.claude/skills` or
 //! `.agents/skills` already. Mindflayer lists each as foreign, never its to
@@ -91,7 +91,7 @@ pub struct Copy {
     /// The agents it is for, as the install's target has them.
     pub agents: Vec<Agent>,
     /// Whether it is there. One that is not is recorded all the same, and so
-    /// reads as missing, for `flayer update` to put there from the library:
+    /// reads as missing, for `mindweaver update` to put there from the library:
     /// adopting writes nothing in the project.
     pub there: bool,
     /// What a local project does with it in git's exclude file, when it is

@@ -178,7 +178,7 @@ pub enum Marker {
 
 impl Marker {
     /// The newest version of this marker this build reads, and the one
-    /// `flayer init` and `mind init` write into a new one.
+    /// `mindweaver init` and `mind init` write into a new one.
     pub const fn version(self) -> u32 {
         match self {
             Marker::Project => MIND_FORMAT_VERSION,
@@ -1148,7 +1148,7 @@ pub struct WeaverConfig {
     /// The mind projects this workspace manages, relative to its root.
     #[serde(default)]
     pub projects: Vec<PathBuf>,
-    /// Other flayer workspaces whose own artifacts this one offers to its
+    /// Other mindweaver workspaces whose own artifacts this one offers to its
     /// projects, read live from where they are; relative to its root.
     #[serde(default)]
     pub loaded: Vec<PathBuf>,
@@ -2125,7 +2125,7 @@ impl WeaverWorkspace {
     /// it. A `mind` command spells its project the way the operating system
     /// reports the directory it runs in, through no symlink, while a
     /// workspace named with `-W` keeps the spelling it was given, `/tmp` on
-    /// a Mac say; the route between those two is not the one `flayer -p`
+    /// a Mac say; the route between those two is not the one `mindweaver -p`
     /// takes from the entry, and a record written under one would not be
     /// found under the other. A spelling that already matches as written is
     /// kept, so nothing that matched before is named differently now.
@@ -2240,8 +2240,8 @@ fn explained(key: &str) -> Option<&'static str> {
     (key == KNOWN_KEY).then_some(
         "\n\
          # `known` lists the other flayer workspaces on this machine, which\n\
-         # `flayer workspaces` shows. While this is the default workspace,\n\
-         # `flayer init` adds each one it makes; `flayer workspaces forget <path>`\n\
+         # `mindweaver workspaces` shows. While this is the default workspace,\n\
+         # `mindweaver init` adds each one it makes; `mindweaver workspaces forget <path>`\n\
          # takes one out.\n",
     )
 }
@@ -2783,7 +2783,7 @@ fn weaver_template(name: &str, directories: &Directories) -> String {
          # is added to it.\n\
          #\n\
          # `loaded` lists other flayer workspaces whose own skills its projects\n\
-         # can install too, read from there each time: `flayer load <path>`.\n\
+         # can install too, read from there each time: `mindweaver load <path>`.\n\
          version = {WEAVER_FORMAT_VERSION}\n\
          name = {}\n\
          projects = []\n\
@@ -2971,7 +2971,7 @@ fn gathered_overlap(directory: &Path) -> Option<PathBuf> {
 /// optional even though the common case never needs it.
 ///
 /// A basic string takes no control character as it is but a tab, so every
-/// other one is escaped: a name holding an ESC or a CR, which `flayer init
+/// other one is escaped: a name holding an ESC or a CR, which `mindweaver init
 /// PATH` takes as typed, would otherwise be written into a marker that no
 /// command, `init` again included, could read. The C1 controls are allowed
 /// as they are, and escaped all the same, since `char::is_control` is the

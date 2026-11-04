@@ -83,7 +83,7 @@ impl Standing {
     /// which has gone. Its box opens empty, for marking it to put every copy
     /// back, which a `git clean -dX` in a local project makes the common way
     /// back; held, it could only be marked to be taken out. One with a copy
-    /// left is taken out with `flayer uninstall`.
+    /// left is taken out with `mindweaver uninstall`.
     pub fn present(self) -> bool {
         !matches!(self, Standing::Absent | Standing::Missing)
     }

@@ -13,7 +13,7 @@
 //! A choice that does not open as a workspace is an error, and never a
 //! reason to carry on down the list: carrying on would act on a workspace
 //! nobody chose, and say nothing about it. Nor is a chosen workspace ever
-//! made for the occasion; that is `flayer init`'s to do.
+//! made for the occasion; that is `mindweaver init`'s to do.
 //!
 //! The front end reads the environment and hands over what it says, as it
 //! hands over home: core never reads it, which is what lets a test pin every
@@ -408,7 +408,7 @@ fn chosen<'a>(inputs: &Inputs<'a>) -> Option<(Reason, &'a Path)> {
 
 /// Open a workspace somebody named, by its root or by its `.mindflayer`:
 /// what `-W` and the activation name, and what a command taking a workspace
-/// as its own argument names, as `flayer activate DIR` does, so that every
+/// as its own argument names, as `mindweaver activate DIR` does, so that every
 /// way of naming one takes the same spellings.
 ///
 /// The folder is taken as well as the root because it is what a person

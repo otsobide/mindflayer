@@ -149,7 +149,7 @@ fn applying_installs_what_was_marked_and_reports_it() {
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse --from {origin} skill:deploy\n\
+            "$ mindweaver install -p collapse --from {origin} skill:deploy\n\
              installed deploy into collapse, from {origin}\n"
         )
     );
@@ -193,7 +193,7 @@ fn unmarking_an_installed_skill_removes_it() {
 
     assert_eq!(
         outcome.stdout,
-        "$ flayer uninstall -p collapse skill:deploy\nremoved deploy from collapse\n"
+        "$ mindweaver uninstall -p collapse skill:deploy\nremoved deploy from collapse\n"
     );
     for copy in copies(&dir.path().join("collapse"), "deploy") {
         assert!(!copy.exists(), "{}", copy.display());
@@ -282,7 +282,7 @@ fn a_skill_offered_changed_since_it_was_installed_is_marked_outdated_and_stays_t
 
     let drawn = rendered(&screen);
     assert!(
-        drawn.contains("[x] commit-style  (outdated; flayer update refreshes it)"),
+        drawn.contains("[x] commit-style  (outdated; mindweaver update refreshes it)"),
         "{drawn}"
     );
     assert_eq!(screen.counts(), (0, 0));
@@ -426,7 +426,7 @@ fn a_mark_on_one_address_gathered_at_two_branches_installs_the_one_ticked() {
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse --from {url} skill:deploy\n\
+            "$ mindweaver install -p collapse --from {url} skill:deploy\n\
              installed deploy into collapse, from {url}\n"
         )
     );
@@ -561,7 +561,11 @@ fn a_workspace_with_no_projects_says_so_instead_of_opening_a_screen() {
         "{}",
         outcome.stdout
     );
-    assert!(outcome.stdout.contains("flayer link"), "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.contains("mindweaver link"),
+        "{}",
+        outcome.stdout
+    );
 }
 
 #[test]
@@ -581,7 +585,7 @@ fn install_outside_a_workspace_says_what_to_run() {
     let failure = weaver(dir.path(), &["install"]).unwrap_err();
 
     assert!(matches!(*failure.error, CliError::NotInWorkspace(_)));
-    assert!(failure.error.to_string().contains("flayer init"));
+    assert!(failure.error.to_string().contains("mindweaver init"));
 }
 
 #[test]
@@ -697,7 +701,7 @@ fn a_route_no_skill_can_be_called_says_nothing_of_the_folders_for_skills() {
     assert_eq!(
         refused.error.to_string(),
         "nothing called `git/commits` can be installed: gather it, load a workspace that has it \
-         with `flayer load`, or add it to the workspace with `flayer add`"
+         with `mindweaver load`, or add it to the workspace with `mindweaver add`"
     );
     assert_eq!(refused.warnings, Vec::<String>::new());
 }
@@ -755,7 +759,7 @@ fn the_screen_says_each_target_no_install_may_use_with_each_line_that_installs_t
     );
     let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
-    // A line each, as `flayer install` says it of each install it is given.
+    // A line each, as `mindweaver install` says it of each install it is given.
     let said: Vec<&str> = outcome
         .stdout
         .lines()
@@ -843,7 +847,7 @@ fn the_screen_installs_into_every_folder_a_project_marked_by_its_settings_has_ag
     let outcome = install_screen::apply(&workspace, &reopened, &Lookup::default());
     assert_eq!(
         outcome.stdout,
-        "$ flayer uninstall -p alpha skill:deploy\nremoved deploy from alpha\n"
+        "$ mindweaver uninstall -p alpha skill:deploy\nremoved deploy from alpha\n"
     );
     assert!(!root.join(".claude/skills/deploy").exists());
     assert!(!root.join(".agents/skills/deploy").exists());
@@ -918,7 +922,7 @@ fn opening_the_screen_scrubs_nothing_and_applying_scrubs_first_and_says_so_witho
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse --from https://example.com/acme/skills skill:deploy\n\
+            "$ mindweaver install -p collapse --from https://example.com/acme/skills skill:deploy\n\
              installed deploy into collapse, from https://example.com/acme/skills\n\
              {SCRUBBED}\n"
         )
@@ -980,7 +984,7 @@ fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kep
     assert!(
         outcome
             .stdout
-            .starts_with("$ flayer install -p collapse --from https://example.com/acme/skills"),
+            .starts_with("$ mindweaver install -p collapse --from https://example.com/acme/skills"),
         "{}",
         outcome.stdout
     );
@@ -1022,11 +1026,11 @@ fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() 
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse --from https://example.com/acme/skills skill:lint\n\
+            "$ mindweaver install -p collapse --from https://example.com/acme/skills skill:lint\n\
              {SCRUBBED}\n\
              error: nothing called `lint` can be installed from https://example.com/acme/skills: \
-             gather it, load a workspace that has it with `flayer load`, or add it to the \
-             workspace with `flayer add`\n"
+             gather it, load a workspace that has it with `mindweaver load`, or add it to the \
+             workspace with `mindweaver add`\n"
         )
     );
     for copy in copies(&dir.path().join("collapse"), "lint") {
@@ -1195,7 +1199,7 @@ fn a_rule_ticked_on_the_screen_is_installed_and_unticked_is_taken_out() {
 
     assert_eq!(
         outcome.stdout,
-        "$ flayer install -p collapse --from workspace rule:git/commits\n\
+        "$ mindweaver install -p collapse --from workspace rule:git/commits\n\
          installed rule git/commits into collapse, from workspace\n"
     );
     assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
@@ -1213,7 +1217,7 @@ fn a_rule_ticked_on_the_screen_is_installed_and_unticked_is_taken_out() {
 
     assert_eq!(
         outcome.stdout,
-        "$ flayer uninstall -p collapse rule:git/commits\n\
+        "$ mindweaver uninstall -p collapse rule:git/commits\n\
          removed rule git/commits from collapse\n"
     );
     assert!(!collapse.join("AGENTS.md").exists());
@@ -1247,7 +1251,7 @@ fn a_skill_and_a_rule_of_one_name_each_keep_a_box_of_their_own() {
     assert!(lines[0].ends_with(" skill:deploy"), "{}", outcome.stdout);
     assert_eq!(
         lines[1],
-        "$ flayer install -p collapse --from workspace rule:deploy"
+        "$ mindweaver install -p collapse --from workspace rule:deploy"
     );
     assert!(outcome
         .stdout
@@ -1269,7 +1273,7 @@ fn a_project_offered_no_rules_is_told_where_rules_come_from() {
         "{drawn}"
     );
     assert!(
-        drawn.contains("loaded; `flayer load <path>` or `flayer add rule` first"),
+        drawn.contains("loaded; `mindweaver load <path>` or `mindweaver add rule` first"),
         "{drawn}"
     );
     assert_eq!(screen.focus, Focus::Projects);
@@ -1301,7 +1305,7 @@ fn a_rule_reaching_claude_alone_is_said_when_applied() {
     // `collapse: ` to say whose it is.
     assert_eq!(
         outcome.stdout,
-        "$ flayer install -p collapse --from workspace rule:style/comments\n\
+        "$ mindweaver install -p collapse --from workspace rule:style/comments\n\
          installed rule style/comments into collapse, from workspace\n\
          warning: rule `style/comments` states `paths`, so it reaches claude only: codex and \
          opencode read no .claude/rules\n"
@@ -1343,10 +1347,10 @@ fn what_is_true_of_a_projects_rules_as_a_whole_is_said_by_each_line_that_renders
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse --from workspace rule:git/commits\n\
+            "$ mindweaver install -p collapse --from workspace rule:git/commits\n\
              installed rule git/commits into collapse, from workspace\n\
              {tracked}\n\
-             $ flayer install -p collapse --from workspace rule:review/tone\n\
+             $ mindweaver install -p collapse --from workspace rule:review/tone\n\
              installed rule review/tone into collapse, from workspace\n\
              {tracked}\n"
         )
@@ -1364,7 +1368,7 @@ fn what_is_true_of_a_projects_rules_as_a_whole_is_said_by_each_line_that_renders
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer uninstall -p collapse rule:git/commits\n\
+            "$ mindweaver uninstall -p collapse rule:git/commits\n\
              removed rule git/commits from collapse\n\
              {tracked}\n"
         )
@@ -1446,7 +1450,7 @@ fn ticking_projects_for_one_artifact_marks_each_projects_box_and_applies_as_one_
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse -p tanukeys --from {origin} skill:deploy\n\
+            "$ mindweaver install -p collapse -p tanukeys --from {origin} skill:deploy\n\
              installed deploy into collapse, from {origin}\n\
              installed deploy into tanukeys, from {origin}\n"
         )
@@ -1487,7 +1491,7 @@ fn unticking_a_project_for_one_artifact_takes_it_out_of_that_project_alone() {
     let outcome = install_screen::apply(&workspace, &again, &Lookup::default());
     assert_eq!(
         outcome.stdout,
-        "$ flayer uninstall -p collapse skill:deploy\nremoved deploy from collapse\n"
+        "$ mindweaver uninstall -p collapse skill:deploy\nremoved deploy from collapse\n"
     );
     assert!(copies(&dir.path().join("collapse"), "deploy")
         .iter()
@@ -1609,5 +1613,5 @@ fn turned_round_with_nothing_offered_says_where_it_comes_from() {
         screen.message.as_deref(),
         Some("no rules to install: none of the workspace's own, and none loaded")
     );
-    assert!(rendered(&screen).contains("`flayer add rule` first"));
+    assert!(rendered(&screen).contains("`mindweaver add rule` first"));
 }

@@ -1,4 +1,4 @@
-//! `mind migrate`, `flayer migrate -p` and `flayer migrate --all-projects`:
+//! `mind migrate`, `mindweaver migrate -p` and `mindweaver migrate --all-projects`:
 //! moving a project an older Mindflayer made from its `mind.toml` to a
 //! `settings.toml`, and what is installed into it to where its agents read,
 //! or from its `settings.json` to a `settings.toml` saying the same.
@@ -320,7 +320,7 @@ fn weaver_migrate_naming_nothing_says_what_there_is_to_migrate() {
         &["migrate", "-p", "alpha", "--local", "--shared"],
     ] {
         assert!(
-            WeaverCli::try_parse_from(line("flayer", refused, dir.path())).is_err(),
+            WeaverCli::try_parse_from(line("mindweaver", refused, dir.path())).is_err(),
             "{refused:?}"
         );
     }

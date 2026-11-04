@@ -118,7 +118,7 @@ pub(crate) fn change_here(
     result
 }
 
-/// `flayer agents -p`, `flayer share -p` and `flayer targets -p`: the change
+/// `mindweaver agents -p`, `mindweaver share -p` and `mindweaver targets -p`: the change
 /// to one project the workspace manages, carrying what its ledger records
 /// along.
 pub(crate) fn change_of(
@@ -136,7 +136,7 @@ const NOTHING: &str = "nothing to change";
 
 /// The change, planned without `yes` and made with it, laid out.
 ///
-/// The dry run is a report, and exits as one, as `flayer migrate`'s does:
+/// The dry run is a report, and exits as one, as `mindweaver migrate`'s does:
 /// what it gives is a line for each thing that would change, to read before
 /// saying yes. Made, a copy left out of a folder an agent the project now
 /// names reads, over somebody's skill or for want of one to copy, is a

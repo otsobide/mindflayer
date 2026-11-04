@@ -4,7 +4,7 @@
 //!
 //! What is known, in which order, and which one is in use are core's
 //! (`known::known`, fed by `resolve`); what is decided here is only how the
-//! list reads. `flayer init` is what remembers one, in `project`.
+//! list reads. `mindweaver init` is what remembers one, in `project`.
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -16,7 +16,7 @@ use super::{reading, typed};
 use crate::render::{as_stored, json, plural, printable, table};
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
-/// `flayer workspaces`: every workspace the default one in `lookup`'s home
+/// `mindweaver workspaces`: every workspace the default one in `lookup`'s home
 /// knows, with the one a command run from `directory` would use marked, as
 /// JSON when `as_json`.
 ///
@@ -46,7 +46,7 @@ pub(crate) fn workspaces_command(
     }
 }
 
-/// `flayer workspaces forget`: every entry the default workspace in
+/// `mindweaver workspaces forget`: every entry the default workspace in
 /// `lookup`'s home keeps for the workspace at `path`, typed from
 /// `directory` as `unlink`'s paths are, taken out, each said.
 ///
@@ -99,7 +99,7 @@ fn listing(known: &Known, stderr: Vec<Warning>) -> Outcome {
         }
 
         // Only while there is a default to remember it in: before that,
-        // `flayer init` would remember nothing either.
+        // `mindweaver init` would remember nothing either.
         let default = known
             .workspaces
             .iter()
@@ -115,11 +115,11 @@ fn listing(known: &Known, stderr: Vec<Warning>) -> Outcome {
         let mut hints = Vec::new();
         if default && unremembered {
             hints.push(
-                "`flayer init <path>` remembers the one in use, and changes nothing else in it",
+                "`mindweaver init <path>` remembers the one in use, and changes nothing else in it",
             );
         }
         if gone {
-            hints.push("`flayer workspaces forget <path>` forgets one that cannot be opened");
+            hints.push("`mindweaver workspaces forget <path>` forgets one that cannot be opened");
         }
         if !hints.is_empty() {
             stdout.push('\n');

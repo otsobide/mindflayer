@@ -1,4 +1,4 @@
-//! Installing rules from the command line: `mind install` and `flayer
+//! Installing rules from the command line: `mind install` and `mindweaver
 //! install -p` take a rule's route, bare or after `rule:`, and `uninstall`
 //! takes it back out, in a project that keeps what is installed to itself
 //! and in one that shares it with the team.
@@ -7,7 +7,7 @@ mod common;
 
 use common::*;
 
-/// What `flayer add rule` writes for the workspace's own `git/commits`.
+/// What `mindweaver add rule` writes for the workspace's own `git/commits`.
 const COMMITS: &str = "# Commit one coherent step at a time\n";
 
 /// The block a project marked by its settings is given for it alone.

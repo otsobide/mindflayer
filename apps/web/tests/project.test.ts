@@ -111,8 +111,8 @@ describe('a project\'s page', () => {
     const { page } = await render('/project?entry=docs', snapshot)
 
     expect(texts(page.get('[data-testid="kind-rule"]'), 'code')).toEqual([
-      `$ flayer -W ${workspace} install -p docs rule:<NAME>`,
-      `$ flayer -W ${workspace} add -p docs rule <NAME> <DESCRIPTION>`
+      `$ mindweaver -W ${workspace} install -p docs rule:<NAME>`,
+      `$ mindweaver -W ${workspace} add -p docs rule <NAME> <DESCRIPTION>`
     ])
   })
 
@@ -126,8 +126,8 @@ describe('a project\'s page', () => {
     const { page } = await render('/project?entry=../out/docs', snapshot)
 
     expect(texts(page.get('[data-testid="kind-rule"]'), 'code')).toEqual([
-      `$ flayer -W ${workspace} install -p ../out/docs rule:<NAME>`,
-      `$ flayer -W ${workspace} add -p ../out/docs rule <NAME> <DESCRIPTION>`
+      `$ mindweaver -W ${workspace} install -p ../out/docs rule:<NAME>`,
+      `$ mindweaver -W ${workspace} add -p ../out/docs rule <NAME> <DESCRIPTION>`
     ])
   })
 
@@ -140,8 +140,8 @@ describe('a project\'s page', () => {
     const stale = page.get('[data-testid="stale"]')
     expect(stale.text()).toContain(project(snapshot, 'gone').stale!.message)
     expect(texts(stale, 'code')).toEqual([
-      `$ flayer -W ${workspace} relink gone <PATH>`,
-      `$ flayer -W ${workspace} unlink gone`
+      `$ mindweaver -W ${workspace} relink gone <PATH>`,
+      `$ mindweaver -W ${workspace} unlink gone`
     ])
     expect(page.find('[data-testid="kind-skill"]').exists()).toBe(false)
   })

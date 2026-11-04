@@ -93,7 +93,7 @@
           "$ref": "#/$defs/FolderIs"
         },
         "linked": {
-          "description": "Whether the workspace links it, by the path an entry leads to, as\n`flayer link` would tell.",
+          "description": "Whether the workspace links it, by the path an entry leads to, as\n`mindweaver link` would tell.",
           "type": "boolean"
         },
         "name": {

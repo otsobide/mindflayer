@@ -271,7 +271,7 @@ fn assigning(home: &Path) -> PathBuf {
 }
 
 /// `home`, beside what [`assigning`] built in it, made the default
-/// workspace, and what it knows, each remembered by a `flayer init` run on
+/// workspace, and what it knows, each remembered by a `mindweaver init` run on
 /// it, which leaves one made already as it was: `Assign`, `team`, which
 /// `Assign` loads, `kit`, a workspace of its own nothing loads, and `old`,
 /// gone since. So the panel's page of loads has one of each a known
@@ -1374,8 +1374,8 @@ fn added_skill(name: &str, description: &str, template: Option<&str>) -> Value {
 /// add, one that would be written, from nothing and from `full`, one whose
 /// name is refused and one whose name is taken.
 ///
-/// Beside them (`validated.json`), what `flayer validate` says of the
-/// library once `review` holds the draft it warns of, written with `flayer
+/// Beside them (`validated.json`), what `mindweaver validate` says of the
+/// library once `review` holds the draft it warns of, written with `mindweaver
 /// edit --contents`: what the panel's verdict is held to, word for word.
 #[test]
 fn write_what_judging_drafts_in_the_library_is_answered_with() {

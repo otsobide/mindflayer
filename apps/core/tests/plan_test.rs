@@ -541,7 +541,7 @@ fn an_offer_its_origin_does_not_make_is_locked_as_not_offered() {
     assert_eq!(
         plan.locked[0].why.message,
         "nothing called `deploy` can be installed from load:../elsewhere: gather it, load a \
-         workspace that has it with `flayer load`, or add it to the workspace with `flayer add`"
+         workspace that has it with `mindweaver load`, or add it to the workspace with `mindweaver add`"
     );
 }
 

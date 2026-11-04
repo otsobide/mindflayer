@@ -3,7 +3,7 @@ import type { Suggestion } from "./Suggestion";
 import type { Warning } from "./Warning";
 
 /**
- * What a scan the panel asked for found ([`Query::Scan`]): what `flayer
+ * What a scan the panel asked for found ([`Query::Scan`]): what `mindweaver
  * scan --suggest --json` prints, each directory with what the panel needs
  * to offer it, and what the command warns of beside it.
  *
@@ -24,14 +24,14 @@ roots: Array<string>,
  */
 depth: number, 
 /**
- * Every directory it found, in the order `flayer scan --suggest` ranks
+ * Every directory it found, in the order `mindweaver scan --suggest` ranks
  * them: what is not linked first, most worth linking first, then what
  * is.
  */
 found: Array<Suggestion>, 
 /**
  * Each entry where no project is any more whose id the ledger never
- * learned, as the scan spells it: what `flayer relink <entry> <path>`
+ * learned, as the scan spells it: what `mindweaver relink <entry> <path>`
  * follows, which only somebody who knows where it went can type.
  */
 untraced: Array<string>, 
@@ -41,7 +41,7 @@ untraced: Array<string>,
  */
 truncated: boolean, 
 /**
- * What it could not read, and that it stopped early, as `flayer scan`
+ * What it could not read, and that it stopped early, as `mindweaver scan`
  * warns of them, each with its code.
  */
 warnings: Array<Warning>, };

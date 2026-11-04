@@ -1,4 +1,4 @@
-//! The two levels: `mind` for one project, `flayer` for the workspace and
+//! The two levels: `mind` for one project, `mindweaver` for the workspace and
 //! what it owns itself.
 
 mod common;
@@ -221,7 +221,7 @@ fn weaver_init_says_in_the_marker_that_its_own_go_in_its_library() {
              # is added to it.\n\
              #\n\
              # `loaded` lists other flayer workspaces whose own skills its projects\n\
-             # can install too, read from there each time: `flayer load <path>`.\n\
+             # can install too, read from there each time: `mindweaver load <path>`.\n\
              version = 2\n\
              name = \"{name}\"\n\
              projects = []\n\
@@ -249,22 +249,23 @@ fn weaver_is_a_shortcut_for_mind_weaver() {
     ] {
         let direct = weaver(dir.path(), &args).unwrap();
         let nested = {
-            let mut nested = vec!["flayer"];
+            let mut nested = vec!["weaver"];
             nested.extend(args.iter().copied());
             mind(dir.path(), &nested).unwrap()
         };
         assert_eq!(
             direct, nested,
-            "`flayer {args:?}` differs from `mind flayer`"
+            "`mindweaver {args:?}` differs from `mind weaver`"
         );
     }
 }
 
 #[test]
 fn mind_init_no_longer_takes_a_kind() {
-    // The old surface was `mind init flayer`; that lives at `flayer init` now,
-    // and leaving both spellings alive would be two ways to do one thing.
-    assert!(Cli::try_parse_from(["mind", "init", "flayer"]).is_err());
+    // The old surface named the level, as `mind init weaver` would; that lives
+    // at `mindweaver init` now, and leaving both spellings alive would be two
+    // ways to do one thing.
+    assert!(Cli::try_parse_from(["mind", "init", "weaver"]).is_err());
     assert!(Cli::try_parse_from(["mind", "init", "mind"]).is_err());
 }
 
@@ -313,7 +314,7 @@ fn each_level_names_the_command_that_creates_what_is_missing() {
     assert!(matches!(*project.error, CliError::NotInProject(_)));
     assert!(project.error.to_string().contains("mind init"));
     assert!(matches!(*workspace.error, CliError::NotInWorkspace(_)));
-    assert!(workspace.error.to_string().contains("flayer init"));
+    assert!(workspace.error.to_string().contains("mindweaver init"));
 }
 
 #[test]
@@ -376,7 +377,7 @@ fn a_workspace_can_be_told_where_to_keep_its_own() {
 
 #[test]
 fn a_workspace_that_keeps_its_own_beside_its_projects_still_does() {
-    // The marker as `flayer init` wrote it before the library, word for word.
+    // The marker as `mindweaver init` wrote it before the library, word for word.
     let dir = TempDir::new().unwrap();
     let marker = "# Mindflayer workspace.\n\
          #\n\
@@ -389,7 +390,7 @@ fn a_workspace_that_keeps_its_own_beside_its_projects_still_does() {
          # own. They are made the first time something is added to them.\n\
          #\n\
          # `loaded` lists other flayer workspaces whose own skills its projects\n\
-         # can install too, read from there each time: `flayer load <path>`.\n\
+         # can install too, read from there each time: `mindweaver load <path>`.\n\
          version = 2\n\
          name = \"projects\"\n\
          projects = []\n\
@@ -699,7 +700,7 @@ fn a_copy_changed_since_it_was_installed_is_written_over_only_with_force() {
 #[test]
 fn force_is_for_one_install_and_not_for_the_screen() {
     let dir = workspace_with_own();
-    let line = line("flayer", &["install", "--force"], dir.path());
+    let line = line("mindweaver", &["install", "--force"], dir.path());
 
     let refused = WeaverCli::try_parse_from(&line).unwrap_err();
 

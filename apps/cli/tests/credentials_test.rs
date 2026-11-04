@@ -76,12 +76,12 @@ fn no_way_of_typing_a_credential_into_a_url_to_gather_is_said_or_kept() {
             "{args:?}"
         );
         assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
-        let mind_args: Vec<&str> = std::iter::once("flayer").chain(args.clone()).collect();
+        let mind_args: Vec<&str> = std::iter::once("weaver").chain(args.clone()).collect();
         let long_way = mind(dir.path(), &mind_args);
         assert_eq!(
             said(&long_way),
             said(&Err(failure)),
-            "`mind flayer` is `flayer`"
+            "`mind weaver` is `mindweaver`"
         );
         holds_no_secret(&OlderBuildMother::kept(dir.path()), &url, "the workspace");
     }
@@ -142,8 +142,8 @@ fn the_binaries_say_no_credential_typed_into_a_url_to_gather() {
 
     for url in UrlMother::every_credentialed() {
         for (binary, args) in [
-            ("flayer", vec!["gather", "git", url.typed.as_str()]),
-            ("mind", vec!["flayer", "gather", "git", url.typed.as_str()]),
+            ("mindweaver", vec!["gather", "git", url.typed.as_str()]),
+            ("mind", vec!["weaver", "gather", "git", url.typed.as_str()]),
         ] {
             let ran = spawn(binary, dir.path(), &args, &[]);
 
@@ -200,14 +200,14 @@ fn an_origin_typed_with_a_credential_is_said_without_it() {
             );
             let in_the_project = mind(&alpha, &["install", "deploy", "--from", &from.typed]);
 
-            for (level, result) in [("flayer", at_the_workspace), ("mind", in_the_project)] {
+            for (level, result) in [("mindweaver", at_the_workspace), ("mind", in_the_project)] {
                 let failure = result.unwrap_err();
                 assert_eq!(
                     failure.error.to_string(),
                     format!(
                         "nothing called `deploy` can be installed from {}: gather it, load a \
-                         workspace that has it with `flayer load`, or add it to the workspace \
-                         with `flayer add`",
+                         workspace that has it with `mindweaver load`, or add it to the workspace \
+                         with `mindweaver add`",
                         from.clean
                     ),
                     "{level} install --from {:?}",
@@ -239,7 +239,7 @@ fn readings(dir: &Path) -> Vec<(String, Result<Outcome, Failure>)> {
         &["validate"],
         &["validate", "--json"],
     ] {
-        read.push((format!("flayer {args:?}"), weaver(dir, args)));
+        read.push((format!("mindweaver {args:?}"), weaver(dir, args)));
     }
     for args in [
         &["list", "--json"][..],

@@ -45,7 +45,7 @@
 //!   the boxes ticked amount to is core's to say ([`Query::Plan`]), and
 //!   nothing runs until its tasks are sent back.
 //! - **What an update would do is only read** ([`Query::Updates`]): the
-//!   dry run of `flayer update --all`, core's, naming nothing a browser
+//!   dry run of `mindweaver update --all`, core's, naming nothing a browser
 //!   sent; an update runs only as the task the panel sends for it.
 //! - **A draft is only judged** ([`Query::Validate`]): what core says of an
 //!   artifact a form or the editor is about to send, by the checks the
@@ -151,7 +151,7 @@ pub enum Query {
         reference: String,
         file: String,
     },
-    /// What could be linked under `roots`, `depth` levels down, as `flayer
+    /// What could be linked under `roots`, `depth` levels down, as `mindweaver
     /// scan --suggest` finds it ([`Scanned`]): each root an absolute,
     /// normalized path outside every `.mindflayer` ([`policy::path`]), as a
     /// folder to link is, which is only read; none is the workspace's root,
@@ -191,7 +191,7 @@ pub enum Query {
     /// What updating every project the workspace links would do ([`Updates`]):
     /// each installation an update says something of, how it stands, what
     /// an update does with it, and why it leaves one it leaves, every copy
-    /// edited since left alone, as `flayer update --all` says without
+    /// edited since left alone, as `mindweaver update --all` says without
     /// `--yes`.
     ///
     /// A query of its own, asked for by the page of updates, rather than a
@@ -244,7 +244,7 @@ pub enum Draft {
     Edit { reference: String, text: String },
 }
 
-/// What a scan the panel asked for found ([`Query::Scan`]): what `flayer
+/// What a scan the panel asked for found ([`Query::Scan`]): what `mindweaver
 /// scan --suggest --json` prints, each directory with what the panel needs
 /// to offer it, and what the command warns of beside it.
 ///
@@ -262,18 +262,18 @@ pub struct Scanned {
     pub roots: Vec<String>,
     /// How many levels below each root it looked.
     pub depth: usize,
-    /// Every directory it found, in the order `flayer scan --suggest` ranks
+    /// Every directory it found, in the order `mindweaver scan --suggest` ranks
     /// them: what is not linked first, most worth linking first, then what
     /// is.
     pub found: Vec<Suggestion>,
     /// Each entry where no project is any more whose id the ledger never
-    /// learned, as the scan spells it: what `flayer relink <entry> <path>`
+    /// learned, as the scan spells it: what `mindweaver relink <entry> <path>`
     /// follows, which only somebody who knows where it went can type.
     pub untraced: Vec<String>,
     /// Whether it stopped at core's bound before looking everywhere, which
     /// `warnings` says too.
     pub truncated: bool,
-    /// What it could not read, and that it stopped early, as `flayer scan`
+    /// What it could not read, and that it stopped early, as `mindweaver scan`
     /// warns of them, each with its code.
     pub warnings: Vec<Warning>,
 }
@@ -283,9 +283,9 @@ pub struct Scanned {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Suggestion {
-    /// What `flayer scan --json` prints of it.
+    /// What `mindweaver scan --json` prints of it.
     pub found: Found,
-    /// Why it is worth linking, in the words `flayer scan --suggest` and the
+    /// Why it is worth linking, in the words `mindweaver scan --suggest` and the
     /// minds screen say it in ([`worth_linking`]); none for one linked.
     pub why: Option<String>,
     /// What marking it asks for ([`MindsChange::of_found`]): linking it, or
@@ -295,7 +295,7 @@ pub struct Suggestion {
     pub offers: Option<MindsChange>,
     /// The entry it moved from, as the marker spells it, which a relink
     /// names: matched by core's `scan::moved_from`, as the minds screen
-    /// matches it, since the scan spells `moved` as `flayer link` would
+    /// matches it, since the scan spells `moved` as `mindweaver link` would
     /// take it. None when it did not move.
     pub moved_from: Option<String>,
 }
@@ -521,7 +521,7 @@ impl PanelBackend {
     }
 
     /// Every line run so far for a task that changes something, with what
-    /// each said, as a shell session would show it: what `flayer ui` prints
+    /// each said, as a shell session would show it: what `mindweaver ui` prints
     /// once it stops, as the TUI prints its own when it closes, so what the
     /// panel did outlives the server and can be done again without it.
     ///
@@ -608,7 +608,7 @@ impl PanelBackend {
         // and the transcript keeps, says which workspace each reached, and
         // reaches it pasted anywhere. All but those before it is made: `-W`
         // refuses a folder with no marker, so the default is named by the
-        // lines after the `flayer init` that makes it, and a read of it
+        // lines after the `mindweaver init` that makes it, and a read of it
         // before then by none, as the TUI's lines find it. And all of a
         // workspace whose root no word of a line can hold, not UTF-8: its
         // lines run against it all the same, through the lookup, which
@@ -812,7 +812,7 @@ impl Backend for PanelBackend {
 
     /// Each line as a shell would read it, and what the panel has somebody
     /// confirm first, both of the one plan: so what the panel asks about is
-    /// the lines it shows, a `flayer init` in front of them counted.
+    /// the lines it shows, a `mindweaver init` in front of them counted.
     fn preview(&self, task: &Task) -> Result<Preview, Refusal> {
         let plan = self.plan(task, &self.pin())?;
         let confirm = cautioned(&plan.lines)

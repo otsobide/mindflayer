@@ -1831,7 +1831,7 @@ fn a_record_is_kept_under_the_workspaces_spelling_of_a_project_whatever_the_syml
     // A workspace named with `-W` keeps the spelling it was given, and `mind`
     // spells its project the way the operating system does, through no
     // symlink: `/tmp` is one on every Mac. Either way round, the record is
-    // the one `flayer -p` reads, under the entry the workspace stores.
+    // the one `mindweaver -p` reads, under the entry the workspace stores.
     let dir = TempDir::new().unwrap();
     let real = dir.path().join("real");
     fs::create_dir_all(real.join("collapse")).unwrap();

@@ -1,4 +1,4 @@
-//! `flayer update` and `mind update`: what Mindflayer installed into
+//! `mindweaver update` and `mind update`: what Mindflayer installed into
 //! projects brought up to date with where it came from, and the copies that
 //! have gone put back. Core's [`update`] decides everything, what is
 //! written, left or said; here it is laid out, as what would happen without
@@ -18,7 +18,7 @@ use crate::{CliError, Failure, Outcome, Warning};
 /// What a dry run that would write something ends with.
 const UNCHANGED: &str = "nothing changed: add --yes to go ahead\n";
 
-/// `flayer update -p`, `flayer update --all` and `mind update`: `projects`,
+/// `mindweaver update -p`, `mindweaver update --all` and `mind update`: `projects`,
 /// each one `workspace` links, brought up to date, or, without `yes`, what
 /// that would do. `typed` names the installations to update, as a command
 /// line names them, every one when it names none; `force` writes over a

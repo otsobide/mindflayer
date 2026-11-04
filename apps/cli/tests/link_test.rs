@@ -1,4 +1,4 @@
-//! `flayer link` and `unlink`, and the workspace in your home that they fall
+//! `mindweaver link` and `unlink`, and the workspace in your home that they fall
 //! back to.
 
 mod common;
@@ -35,7 +35,7 @@ fn a_fresh_workspace_says_it_manages_nothing_yet() {
 
     assert!(outcome.ok);
     assert!(outcome.stdout.contains("manages no projects yet"));
-    assert!(outcome.stdout.contains("flayer link"));
+    assert!(outcome.stdout.contains("mindweaver link"));
 }
 
 #[test]
@@ -241,8 +241,8 @@ fn unlink_takes_several_and_refuses_all_for_one_unknown() {
 
 #[test]
 fn link_and_unlink_need_at_least_one_path() {
-    assert!(WeaverCli::try_parse_from(["flayer", "link"]).is_err());
-    assert!(WeaverCli::try_parse_from(["flayer", "unlink"]).is_err());
+    assert!(WeaverCli::try_parse_from(["mindweaver", "link"]).is_err());
+    assert!(WeaverCli::try_parse_from(["mindweaver", "unlink"]).is_err());
 }
 
 // ---------------------------------------------------------------------------

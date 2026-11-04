@@ -12,7 +12,7 @@ use mindweaver_core::mother::{ArtifactNameMother, SkillMother};
 use serde_json::Value;
 
 /// Where an artifact is added: a project's own, through `mind`, or the
-/// workspace's library, through `flayer`.
+/// workspace's library, through `mindweaver`.
 #[derive(Debug, Clone, Copy)]
 enum Level {
     Project,

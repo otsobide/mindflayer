@@ -259,7 +259,7 @@ fn boxed(entry: &Row, label: String) -> Vec<Span<'static>> {
             Style::default().fg(Color::DarkGray),
         )),
         None if entry.outdated() => spans.push(Span::styled(
-            "  (outdated; flayer update refreshes it)",
+            "  (outdated; mindweaver update refreshes it)",
             Style::default().fg(Color::Yellow),
         )),
         None => {}
@@ -361,8 +361,10 @@ fn plural(kind: Kind) -> &'static str {
 fn first(kind: Kind) -> String {
     // Matched on the kind, so a third one has to say what brings it.
     let commands = match kind {
-        Kind::Skill => "`flayer gather git <url>`, `flayer load <path>` or `flayer add skill`",
-        Kind::Rule => "`flayer load <path>` or `flayer add rule`",
+        Kind::Skill => {
+            "`mindweaver gather git <url>`, `mindweaver load <path>` or `mindweaver add skill`"
+        }
+        Kind::Rule => "`mindweaver load <path>` or `mindweaver add rule`",
     };
     format!("{}; {commands} first", nothing(kind))
 }

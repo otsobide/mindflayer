@@ -151,7 +151,7 @@ refuses.
 | User skills are `<config dir>/skills`. | verified, in part | The debug log lists `user=/mnt/agent-probe/home/.claude/skills`. The run set `CLAUDE_CONFIG_DIR` to `$HOME/.claude`, so it cannot tell which of the two moves the folder; the [docs](https://code.claude.com/docs/en/env-vars) say `CLAUDE_CONFIG_DIR`. |
 | Managed skills are read from `/etc/claude-code/.claude/skills` on Linux. | verified | The debug log lists `managed=/etc/claude-code/.claude/skills`. Mindflayer never writes there. |
 | Project skills are also read from every folder above the start directory up to the repository root, and from a nested `.claude/skills` once Claude touches a file below it. | docs-only | [skills](https://code.claude.com/docs/en/skills). Not relied on: Mindflayer installs at the project root. |
-| One name at several scopes resolves managed, then personal, then project. | docs-only | [skills](https://code.claude.com/docs/en/skills). Fallback: Mindflayer installs at project scope only ([D-22](architecture.md#d-22-user-scope-installs-come-later)), and `flayer doctor` (#96) reports a project skill a user-scope one shadows. |
+| One name at several scopes resolves managed, then personal, then project. | docs-only | [skills](https://code.claude.com/docs/en/skills). Fallback: Mindflayer installs at project scope only ([D-22](architecture.md#d-22-user-scope-installs-come-later)), and `mindweaver doctor` (#96) reports a project skill a user-scope one shadows. |
 | A skill folder holding `.claude-plugin/plugin.json` loads as a plugin, with its hooks and MCP servers. | docs-only | [skills](https://code.claude.com/docs/en/skills). Fallback: #34 drops that folder whatever Claude would do with it. |
 | A linked worktree with no `.claude/skills` of its own loads the main checkout's. | docs-only | [worktrees](https://code.claude.com/docs/en/worktrees). A caveat of D-02; nothing relies on it. |
 | Before 2.1.280, a `manifest.json` in `~/.claude/skills` moved the skills it listed to `.trash`. | docs-only | [skills](https://code.claude.com/docs/en/skills), [changelog](https://code.claude.com/docs/en/changelog). Fallback: Mindflayer never writes in `~/.claude/skills` (D-22). |
@@ -518,7 +518,7 @@ developers.openai.com/codex to learn.chatgpt.com.
 | `/etc/codex/skills` (admin) and bundled system skills are read too. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Not used. |
 | `<project>/.codex/skills` (trusted projects only) and `$CODEX_HOME/skills` (deprecated) are still read. | docs-only | Source, [host_roots.rs](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs). Never targeted ([D-07](architecture.md#d-07-one-copy-per-agent-folder)). |
 | `.agents/skills` is probed with no trust check. | docs-only | Source, [host_roots.rs](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs). Fallback: were it gated, skills would reach Codex only in trusted projects, and the agents left unreached are reported (D-02). |
-| Two skills with one name are both shown, not merged. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Fallback: D-07's copies are identical; `flayer doctor` (#96) reports shadowing. |
+| Two skills with one name are both shown, not merged. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Fallback: D-07's copies are identical; `mindweaver doctor` (#96) reports shadowing. |
 | Symlinked skill folders are followed. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Not relied on: installs are copies. |
 | Ignored files are read: discovery checks the disk and does no gitignore filtering. | docs-only | Source search only, [host_roots.rs](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs). Fallback: shared mode (D-02), where installed copies are plain files in the tree. |
 | A `name` over 64 characters or an empty `description` rejects the skill. | docs-only | Source, [parser.rs](https://github.com/openai/codex/blob/main/codex-rs/skills/src/parser.rs). Fallback: Mindflayer holds names to 64 characters and requires a description when it writes. |
@@ -577,7 +577,7 @@ opencode.ai/v2/docs) ([releases](https://github.com/anomalyco/opencode/releases)
 
 ## What says an agent works in a project
 
-`flayer scan --suggest` ranks a git repository holding something an agent
+`mindweaver scan --suggest` ranks a git repository holding something an agent
 reads at its root above one holding nothing (#58), by name alone:
 `Agent::reads_at_root` in `apps/core/src/agent.rs`. Each name is the folder
 of a place the tables above say the agent reads a kind from, an instruction

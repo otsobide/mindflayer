@@ -360,7 +360,7 @@ fn a_refused_command_is_named_in_what_the_refusal_says() {
         Refusal {
             code: "opens_editor",
             message: String::from(
-                "`flayer edit skill:x` opens an editor, which needs a terminal to draw on"
+                "`mindweaver edit skill:x` opens an editor, which needs a terminal to draw on"
             ),
             grounds: Grounds::Unfit,
         }
@@ -395,7 +395,7 @@ fn a_task_cannot_carry_a_directory_a_home_a_workspace_or_an_agent_home() {
         assert_eq!(
             backend.preview(&task(sent)).map(|preview| preview.lines),
             Ok(vec![format!(
-                "flayer -W {} gather list",
+                "mindweaver -W {} gather list",
                 dir.path().display()
             )])
         );
@@ -470,7 +470,7 @@ fn a_line_that_fails_says_so_with_its_code() {
     assert_eq!(keys, ["command", "error", "ok", "stderr", "stdout"]);
 }
 
-/// What `flayer ui` prints once it stops: every line of a task that changed
+/// What `mindweaver ui` prints once it stops: every line of a task that changed
 /// something, failed ones included, with what each said, as the TUI's
 /// transcript lays it out; a read changed nothing, and is left out. Kept by
 /// a clone, as `ui` keeps one while the server holds the backend.
@@ -848,8 +848,8 @@ fn the_default_workspace_is_made_by_the_first_change_and_said_first() {
     assert_eq!(
         backend.preview(&task(link.clone())).unwrap().lines,
         [
-            String::from("flayer init"),
-            format!("flayer -W {} link {}", home.display(), fresh.display())
+            String::from("mindweaver init"),
+            format!("mindweaver -W {} link {}", home.display(), fresh.display())
         ]
     );
     assert!(!home.join(WEAVER_DIR).exists(), "a preview made it");
@@ -861,7 +861,7 @@ fn the_default_workspace_is_made_by_the_first_change_and_said_first() {
     assert!(workspace.is_linked(&fresh));
 }
 
-/// Its own making is one `flayer init`, not a second in front of it.
+/// Its own making is one `mindweaver init`, not a second in front of it.
 #[test]
 fn the_default_workspace_asked_to_be_made_is_made_by_one_line() {
     let dir = TempDir::new().unwrap();
@@ -872,7 +872,7 @@ fn the_default_workspace_asked_to_be_made_is_made_by_one_line() {
 
     assert_eq!(
         backend.preview(&task(init.clone())).unwrap().lines,
-        [String::from("flayer init")]
+        [String::from("mindweaver init")]
     );
     let outcome: Outcome = backend.run(task(init)).unwrap();
 
@@ -984,7 +984,7 @@ fn a_preview_says_what_its_lines_take_away_for_the_panel_to_confirm() {
             }),
             json!([]),
         ),
-        // Its `mind init`, its `flayer link` and its `flayer unlink`.
+        // Its `mind init`, its `mindweaver link` and its `mindweaver unlink`.
         (
             json!({
                 "type": "minds",
@@ -1005,7 +1005,7 @@ fn a_preview_says_what_its_lines_take_away_for_the_panel_to_confirm() {
     }
 }
 
-/// Counted among the lines the panel shows, the `flayer init` that makes
+/// Counted among the lines the panel shows, the `mindweaver init` that makes
 /// the default workspace first among them.
 #[test]
 fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
@@ -1028,8 +1028,8 @@ fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
     assert_eq!(
         preview.lines,
         [
-            String::from("flayer init"),
-            format!("flayer -W {} remove --yes skill:deploy", home.display())
+            String::from("mindweaver init"),
+            format!("mindweaver -W {} remove --yes skill:deploy", home.display())
         ]
     );
     assert_eq!(preview.confirm.len(), 1, "{preview:?}");
@@ -1037,7 +1037,7 @@ fn what_to_confirm_counts_the_line_that_makes_the_default_workspace() {
     assert!(!home.join(WEAVER_DIR).exists(), "a preview made it");
 }
 
-/// What a scan the panel asks for is answered with: what `flayer scan
+/// What a scan the panel asks for is answered with: what `mindweaver scan
 /// --suggest --json` finds, each directory as it prints it and in its
 /// order, the words the command says why in, and what marking each asks
 /// for; nothing for one linked.
@@ -1140,7 +1140,7 @@ fn a_scan_walks_only_folders_the_policy_allows_and_writes_nothing() {
 }
 
 /// A folder named that is not there is a warning with its code beside an
-/// answer, as `flayer scan` warns of it, never an empty answer passed off as
+/// answer, as `mindweaver scan` warns of it, never an empty answer passed off as
 /// complete.
 #[test]
 fn a_scan_says_what_it_could_not_read_as_weaver_scan_warns_of_it() {
@@ -1472,7 +1472,7 @@ fn a_scan_names_the_entry_a_moved_project_left_for_its_relink() {
     assert_eq!(
         backend.preview(&relink).unwrap().lines,
         [format!(
-            "flayer -W {} relink collapse {}",
+            "mindweaver -W {} relink collapse {}",
             projects.display(),
             moved.to_str().unwrap()
         )]
@@ -1543,7 +1543,7 @@ fn the_panels_link_batch_is_the_minds_screens_for_the_same_selection() {
         [
             format!("mind -W {named} -C {} init", under(work.path(), &["plain"])),
             format!(
-                "flayer -W {named} link {} {}",
+                "mindweaver -W {named} link {} {}",
                 under(work.path(), &["acme", "delta"]),
                 under(work.path(), &["plain"])
             ),
@@ -1644,7 +1644,7 @@ fn inside_the_workspace_the_panels_link_batch_is_the_minds_screens_folder_for_fo
 
 /// Under the folder it returns: `home`, made the default workspace, then
 /// beside it `Projects`, linking `alpha`, and `team`, with a skill of its
-/// own, each made by a `flayer init` that remembers it there. Its second
+/// own, each made by a `mindweaver init` that remembers it there. Its second
 /// value is `home`, its third `Projects`.
 fn knowing() -> (TempDir, PathBuf, PathBuf) {
     let dir = TempDir::new().unwrap();
@@ -1723,7 +1723,10 @@ fn loading_and_unloading_from_the_panel_are_the_tuis_tasks_for_the_same_workspac
 
     assert_eq!(screened, load);
     assert_eq!(previewed.lines, lines(&screened));
-    assert_eq!(previewed.lines, [format!("flayer -W {named} load {path}")]);
+    assert_eq!(
+        previewed.lines,
+        [format!("mindweaver -W {named} load {path}")]
+    );
     assert!(previewed.confirm.is_empty(), "{:?}", previewed.confirm);
     let loaded = registry(&root);
     assert!(loaded.contains("loaded = [\"../team\"]"), "{loaded}");
@@ -1891,12 +1894,12 @@ fn a_plan_is_answered_with_the_tasks_that_carry_it_out_and_changes_nothing() {
         backend.preview(&batch).unwrap().lines,
         [
             format!(
-                "flayer -W {} install -p {} --from load:../team skill:deploy",
+                "mindweaver -W {} install -p {} --from load:../team skill:deploy",
                 home.display(),
                 under(&home, &["beta"])
             ),
             format!(
-                "flayer -W {} uninstall -p {} skill:deploy",
+                "mindweaver -W {} uninstall -p {} skill:deploy",
                 home.display(),
                 under(&home, &["alpha"])
             ),
@@ -2138,7 +2141,7 @@ fn recorded(home: &Path) -> Vec<String> {
 
 /// What the panel applies is what its lines do typed into a shell: the same
 /// boxes planned in two workspaces made alike, the batch applied in one and
-/// its previewed lines run as `flayer` commands in the other, leave the same
+/// its previewed lines run as `mindweaver` commands in the other, leave the same
 /// copies and the same ledger, every hash and every action logged alike.
 #[test]
 fn applying_a_batch_leaves_the_ledger_as_running_its_lines_in_the_cli() {
@@ -2175,7 +2178,7 @@ fn applying_a_batch_leaves_the_ledger_as_running_its_lines_in_the_cli() {
         // with nothing a shell would quote.
         assert!(!line.contains(['\'', '"', '\\']), "{line}");
         let words: Vec<&str> = line.split_whitespace().collect();
-        assert_eq!(words[0], "flayer", "{line}");
+        assert_eq!(words[0], "mindweaver", "{line}");
         let ran = weaver(&typed, &words[1..]).unwrap();
         assert!(ran.ok, "{line}: {ran:?}");
     }
@@ -2384,7 +2387,7 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
     for (sent, line, confirm) in [
         (
             json!({"type": "update", "holder": {"type": "workspace"}, "reference": null, "force": false}),
-            format!("flayer -W {named} update --all --yes"),
+            format!("mindweaver -W {named} update --all --yes"),
             Vec::new(),
         ),
         (
@@ -2404,17 +2407,17 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
         ),
         (
             json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old", "force": false}),
-            format!("flayer -W {named} uninstall -p {beta} skill:old"),
+            format!("mindweaver -W {named} uninstall -p {beta} skill:old"),
             vec!["uninstalls"],
         ),
         (
             json!({"type": "uninstall", "projects": ["beta"], "kind": "skill", "name": "old", "force": true}),
-            format!("flayer -W {named} uninstall -p {beta} --force skill:old"),
+            format!("mindweaver -W {named} uninstall -p {beta} --force skill:old"),
             vec!["uninstalls", "forces"],
         ),
         (
             json!({"type": "uninstall_orphaned", "holder": {"type": "workspace"}}),
-            format!("flayer -W {named} uninstall --all-projects --orphaned"),
+            format!("mindweaver -W {named} uninstall --all-projects --orphaned"),
             vec!["uninstalls"],
         ),
         (
@@ -2422,7 +2425,7 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
                 "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
                 "name": "lint", "everywhere": true, "yes": false,
             }),
-            format!("flayer -W {named} remove --everywhere skill:lint"),
+            format!("mindweaver -W {named} remove --everywhere skill:lint"),
             Vec::new(),
         ),
         (
@@ -2430,7 +2433,7 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
                 "type": "remove", "holder": {"type": "workspace"}, "kind": "skill",
                 "name": "lint", "everywhere": true, "yes": true,
             }),
-            format!("flayer -W {named} remove --everywhere --yes skill:lint"),
+            format!("mindweaver -W {named} remove --everywhere --yes skill:lint"),
             vec!["removes", "uninstalls"],
         ),
     ] {
@@ -2446,7 +2449,7 @@ fn each_change_the_pages_of_updates_and_of_the_library_send_is_the_line_the_cli_
     }
 }
 
-/// Updating every project from the panel leaves what `flayer update --all
+/// Updating every project from the panel leaves what `mindweaver update --all
 /// --yes` leaves, in two workspaces made alike: the outdated copy and the
 /// one gone written from the library, the edited one left as it was, and
 /// the edit said by the code an install refuses it with.
@@ -2706,7 +2709,7 @@ fn a_save_writes_the_text_through_edit_contents_and_takes_its_file_away_after() 
     assert_eq!(
         ran.runs[0].command,
         format!(
-            "flayer -W {} edit --contents {route} --if-unchanged {} skill:deploy",
+            "mindweaver -W {} edit --contents {route} --if-unchanged {} skill:deploy",
             root.display(),
             mindweaver_core::hash::bytes(read.as_bytes())
         )
@@ -2810,7 +2813,7 @@ fn switch(sent: Value) -> Switch {
 }
 
 /// The backend over `root`, launched there, at `home`, with `root` found
-/// above where it starts, as `flayer ui` run in it finds it.
+/// above where it starts, as `mindweaver ui` run in it finds it.
 fn launched_knowing(home: &Path, root: &Path) -> Checked {
     Checked(PanelBackend::launch(root, &Lookup::at_home(Some(home))).unwrap())
 }
@@ -2889,7 +2892,7 @@ fn a_switch_to_a_known_workspace_is_what_every_query_preview_and_run_acts_on() {
     let validate = json!({"type": "validate", "holder": {"type": "workspace"}});
     assert_eq!(
         backend.preview(&task(validate.clone())).unwrap().lines,
-        [format!("flayer -W {} validate", team.display())]
+        [format!("mindweaver -W {} validate", team.display())]
     );
     let add = json!({
         "type": "add", "holder": {"type": "workspace"}, "kind": "skill",
@@ -2915,7 +2918,7 @@ fn a_switch_to_a_known_workspace_is_what_every_query_preview_and_run_acts_on() {
     assert_eq!(snapshot_of(&backend), (path(&root), json!("above")));
     assert_eq!(
         backend.preview(&task(validate)).unwrap().lines,
-        [format!("flayer -W {} validate", root.display())]
+        [format!("mindweaver -W {} validate", root.display())]
     );
 }
 
@@ -2970,7 +2973,7 @@ fn a_switch_to_a_path_outside_the_list_is_refused_and_nothing_is_switched() {
             .preview(&task(json!({"type": "shelf"})))
             .unwrap()
             .lines,
-        [format!("flayer -W {} gather list", root.display())]
+        [format!("mindweaver -W {} gather list", root.display())]
     );
     assert_eq!(files(dir.path()), before);
 }
@@ -3039,12 +3042,15 @@ fn a_workspace_whose_root_is_not_text_runs_its_lines_naming_none() {
         backend
             .preview(&task(add.clone()))
             .map(|preview| preview.lines),
-        Ok(vec![String::from("flayer add skill deploy 'Ship it'")])
+        Ok(vec![String::from("mindweaver add skill deploy 'Ship it'")])
     );
     let outcome = backend.run(task(add)).unwrap();
 
     assert!(outcome.ok, "{outcome:?}");
-    assert_eq!(outcome.runs[0].command, "flayer add skill deploy 'Ship it'");
+    assert_eq!(
+        outcome.runs[0].command,
+        "mindweaver add skill deploy 'Ship it'"
+    );
     assert!(root
         .join(".mindflayer/library/skills/deploy/SKILL.md")
         .is_file());

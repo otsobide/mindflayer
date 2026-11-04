@@ -89,16 +89,16 @@ describe('the HTTP transport', () => {
   })
 
   it('previews a task without running it', async () => {
-    const sent = serve(() => json(200, { lines: ['flayer install demo -p app'], confirm: [] }))
+    const sent = serve(() => json(200, { lines: ['mindweaver install demo -p app'], confirm: [] }))
 
     const preview = await httpTransport().send(INSTALL, 'preview')
 
     expect(sent.map(request => request.url)).toEqual(['/api/v1/tasks/preview'])
-    expect(preview).toEqual({ lines: ['flayer install demo -p app'], confirm: [] })
+    expect(preview).toEqual({ lines: ['mindweaver install demo -p app'], confirm: [] })
   })
 
   it('asks for the transcript with a GET, the cookie and no body', async () => {
-    const ran = [{ lines: ['flayer link /work/blog'], outcome: { ok: true, runs: [] } }]
+    const ran = [{ lines: ['mindweaver link /work/blog'], outcome: { ok: true, runs: [] } }]
     const sent = serve(() => json(200, ran))
 
     const transcript = await httpTransport().transcript()
@@ -122,12 +122,12 @@ describe('the HTTP transport', () => {
 
   it('runs a task and answers with its lines and outcome', async () => {
     const outcome = { ok: true, runs: [] }
-    const sent = serve(() => json(200, { lines: ['flayer install demo -p app'], outcome }))
+    const sent = serve(() => json(200, { lines: ['mindweaver install demo -p app'], outcome }))
 
     const run = await httpTransport().send(INSTALL, 'run')
 
     expect(sent.map(request => request.url)).toEqual(['/api/v1/tasks'])
-    expect(run).toEqual({ lines: ['flayer install demo -p app'], outcome })
+    expect(run).toEqual({ lines: ['mindweaver install demo -p app'], outcome })
   })
 
   it('says what the server refused, from its error body, with the code beside it', async () => {
@@ -154,7 +154,7 @@ describe('the HTTP transport', () => {
     const refused = await httpTransport().query({ type: 'snapshot' }).catch((error: unknown) => error) as TransportError
 
     expect(refused.unauthorized).toBe(true)
-    expect(refused.message).toBe('this browser does not hold the launch token: open the link `flayer ui` printed')
+    expect(refused.message).toBe('this browser does not hold the launch token: open the link `mindweaver ui` printed')
     expect(refused.code).toBe('token_required')
   })
 
@@ -189,7 +189,7 @@ describe('the HTTP transport', () => {
     expect(refused).toBeInstanceOf(TransportError)
     expect(refused).toMatchObject({
       status: 0,
-      message: 'the server stopped before it finished answering: is `flayer ui` still running?'
+      message: 'the server stopped before it finished answering: is `mindweaver ui` still running?'
     })
   })
 

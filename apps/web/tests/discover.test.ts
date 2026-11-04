@@ -81,7 +81,7 @@ describe('the page of what could be linked', () => {
     expect(texts(page, '[data-testid="suggestion"] label')).toEqual(['blog', 'drafts', 'notes', 'scratch'])
     expect(texts(page, '[data-testid="moved-row"] [data-testid="why"]')).toEqual(['moved: old -> archive/old'])
     expect(texts(page, '[data-testid="linked-route"]')).toEqual(['api', 'docs', 'legacy', 'web'])
-    expect(texts(page, '[data-testid="untraced"] code')).toEqual([`$ flayer -W ${ROOT} relink gone <PATH>`])
+    expect(texts(page, '[data-testid="untraced"] code')).toEqual([`$ mindweaver -W ${ROOT} relink gone <PATH>`])
     expect(page.get('[data-testid="scanned"]').text()).toContain(`${ROOT} to depth 3`)
   })
 
@@ -155,7 +155,7 @@ describe('the page of what could be linked', () => {
     expect(page.get('[data-testid="scan-refused"]').text()).toContain('not_found')
   })
 
-  it('says what the scan could not read, with each code, as flayer scan warns of it', async () => {
+  it('says what the scan could not read, with each code, as mindweaver scan warns of it', async () => {
     const answered = scans()
     const answer = answered[0]!.answer as Scanned
     answer.warnings = [{ text: '/home/you/wrok: cannot be listed: No such file or directory (os error 2)', code: 'scan_folder_unlisted' }]

@@ -95,7 +95,7 @@ pub fn listed(project: &Path, key: &str) -> Result<Option<Listing>, ExcludeError
 /// project at `from` into the group headed `to_key`, naming the same paths
 /// in the project at `to`: for a project whose id changed
 /// (`mind init --new-id`), which keeps its place and takes a new key, and
-/// for one that moved (`flayer relink`), which keeps its key and takes a new
+/// for one that moved (`mindweaver relink`), which keeps its key and takes a new
 /// place, in the same work tree or another.
 ///
 /// A line is the project's when it names a path below the project's own

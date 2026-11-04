@@ -102,9 +102,9 @@ describe('live updates', () => {
     await render('/', transport)
     const before = asked(queries, 'snapshot')
 
-    await tell({ type: 'command_started', lines: ['flayer link beta'] })
+    await tell({ type: 'command_started', lines: ['mindweaver link beta'] })
     expect(asked(queries, 'snapshot')).toBe(before)
-    await tell({ type: 'command_finished', lines: ['flayer link beta'] })
+    await tell({ type: 'command_finished', lines: ['mindweaver link beta'] })
     expect(asked(queries, 'snapshot')).toBe(before + 1)
     await tell({ type: 'resync', switches: 0 })
     expect(asked(queries, 'snapshot')).toBe(before + 2)
@@ -140,7 +140,7 @@ describe('live updates', () => {
 
     for (const event of [
       { type: 'changed', scopes: [workspace] },
-      { type: 'command_finished', lines: ['flayer link beta'] },
+      { type: 'command_finished', lines: ['mindweaver link beta'] },
       { type: 'resync', switches: 0 }
     ] as LiveEvent[]) {
       for (const key of [['snapshot'], files, scan]) {
@@ -161,8 +161,8 @@ describe('live updates', () => {
 
     for (const [event, expected] of [
       [{ type: 'changed', scopes: [workspace] }, false],
-      [{ type: 'command_started', lines: ['flayer link beta'] }, false],
-      [{ type: 'command_finished', lines: ['flayer link beta'] }, true],
+      [{ type: 'command_started', lines: ['mindweaver link beta'] }, false],
+      [{ type: 'command_finished', lines: ['mindweaver link beta'] }, true],
       [{ type: 'resync', switches: 0 }, true]
     ] as [LiveEvent, boolean][]) {
       client.setQueryData(['transcript'], [])
@@ -215,8 +215,8 @@ describe('a workspace the server cannot watch all of', () => {
   })
 })
 
-/** What a run of `flayer link /work/blog` is answered with. */
-const RAN = { lines: ['flayer link /work/blog'], outcome: { ok: true, runs: [] } }
+/** What a run of `mindweaver link /work/blog` is answered with. */
+const RAN = { lines: ['mindweaver link /work/blog'], outcome: { ok: true, runs: [] } }
 
 describe('a run the panel sends', () => {
   it('is over once the stream tells it finished, a finish of other lines aside', async () => {
@@ -232,7 +232,7 @@ describe('a run the panel sends', () => {
     })
     await flushPromises()
     expect(over).toBe(false)
-    await tell({ type: 'command_finished', lines: ['flayer link /work/other'] })
+    await tell({ type: 'command_finished', lines: ['mindweaver link /work/other'] })
     expect(over).toBe(false)
     expect(client.getQueryState(['snapshot'])?.isInvalidated).toBe(true)
     client.setQueryData(['snapshot'], {})

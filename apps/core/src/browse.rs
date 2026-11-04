@@ -108,7 +108,7 @@ pub struct Folder {
     /// What it is.
     pub is: Is,
     /// Whether the workspace links it, by the path an entry leads to, as
-    /// `flayer link` would tell.
+    /// `mindweaver link` would tell.
     pub linked: bool,
     /// Whether it is a link to a folder rather than a folder: listed and
     /// opened as one all the same.

@@ -1,7 +1,7 @@
 //! The commands that put one skill or rule into projects and take it back
 //! out: `install` and `uninstall`, at either level, into one project or, at
 //! the workspace's, into each of several at once; and `uninstall --orphaned`,
-//! which takes out whatever nothing offers any more. The screen `flayer
+//! which takes out whatever nothing offers any more. The screen `mindweaver
 //! install` opens on its own is [`crate::install`].
 
 use std::path::Path;

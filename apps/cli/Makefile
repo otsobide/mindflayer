@@ -4,7 +4,7 @@
 # Without the panel first, so a build that leaves out the default-on `ui`
 # feature is seen to build, and the binaries left in target/ are the default
 # build's: cargo puts those back even when nothing of them needs building.
-build: ## Build mindweaver-cli (binaries: mind, flayer), first without the panel
+build: ## Build mindweaver-cli (binaries: mind, mindweaver), first without the panel
 	cargo build -p mindweaver-cli --no-default-features
 	cargo build -p mindweaver-cli
 
@@ -29,7 +29,7 @@ release/check: ## Check the release for TARGET serves the panel from the binary 
 ifndef TARGET
 	$(error TARGET is required, e.g. make release/check TARGET=x86_64-unknown-linux-gnu)
 endif
-	../../scripts/serves-panel.sh ../../target/$(TARGET)/release/flayer
+	../../scripts/serves-panel.sh ../../target/$(TARGET)/release/mindweaver
 
 # Then the unit tests without the panel, among them the one only that build
 # compiles, that `ui` is no command there. Not the suites: compiling each

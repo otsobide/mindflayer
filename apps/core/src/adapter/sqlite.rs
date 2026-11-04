@@ -2034,7 +2034,7 @@ CREATE TABLE created_files (
 /// place nothing is at. `projects` keeps the id ([`ProjectId`]) the ledger
 /// last saw at each route, one id a route and one route an id, so a project
 /// found somewhere else holding an id the ledger last saw at a stale entry
-/// is that entry's project, moved, and `flayer relink` takes its records
+/// is that entry's project, moved, and `mindweaver relink` takes its records
 /// along ([`Ledger::relinked`](crate::ledger::Ledger::relinked)). `installations.project_id` says which id
 /// each record was made for, the route's when it was written, emptied when
 /// the ledger stops knowing that id and moved with it.

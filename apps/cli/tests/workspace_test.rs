@@ -1,6 +1,6 @@
 //! Which workspace a command uses: the one `-W` names, then the one
 //! `$MINDFLAYER_WORKSPACE` activates, then the one above, then the default;
-//! and `flayer which`, which says which one and why.
+//! and `mindweaver which`, which says which one and why.
 //!
 //! What the environment says can only be set for a binary of its own, so
 //! those tests spawn one (`common::spawn`); the rest run in process.
@@ -130,7 +130,7 @@ fn an_activated_workspace_wins_over_the_one_above() {
     let hub = spelled(&fixture.hub);
 
     let listed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["list"],
         &[("MINDFLAYER_WORKSPACE", &hub)],
@@ -146,7 +146,7 @@ fn an_empty_mindflayer_workspace_counts_as_unset() {
     let fixture = fixture();
 
     let listed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["list"],
         &[("MINDFLAYER_WORKSPACE", "")],
@@ -162,7 +162,7 @@ fn a_workspace_named_empty_keeps_the_activated_one_out() {
     let hub = spelled(&fixture.hub);
 
     let listed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["list", "-W", ""],
         &[("MINDFLAYER_WORKSPACE", &hub)],
@@ -180,7 +180,7 @@ fn a_named_workspace_wins_over_the_activated_one() {
     let listed = spawn(
         "mind",
         &fixture.collapse,
-        &["flayer", "list", "-W", &outer],
+        &["weaver", "list", "-W", &outer],
         &[("MINDFLAYER_WORKSPACE", &hub)],
     );
 
@@ -194,7 +194,7 @@ fn activating_a_directory_that_is_no_workspace_is_refused() {
     let gone = fixture.outer.join("gone");
 
     let listed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["list"],
         &[("MINDFLAYER_WORKSPACE", &spelled(&gone))],
@@ -251,7 +251,9 @@ fn installing_from_an_activated_workspace_not_above_records_and_disowns() {
 
     assert!(removed.ok, "{}", removed.stderr);
     assert!(
-        removed.stdout.contains("`flayer install` can put it back"),
+        removed
+            .stdout
+            .contains("`mindweaver install` can put it back"),
         "{}",
         removed.stdout
     );
@@ -286,7 +288,7 @@ fn a_change_to_a_project_is_refused_when_the_named_workspace_will_not_open() {
 }
 
 // ---------------------------------------------------------------------------
-// flayer which: the workspace a command would use, and why
+// mindweaver which: the workspace a command would use, and why
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -310,7 +312,7 @@ fn which_says_an_activated_workspace_is_used_because_it_was_activated() {
     let fixture = fixture();
 
     let printed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["which"],
         &[("MINDFLAYER_WORKSPACE", &spelled(&fixture.hub))],
@@ -407,7 +409,7 @@ fn which_says_why_an_activated_workspace_cannot_be_used() {
     let gone = fixture.outer.join("gone");
 
     let printed = spawn(
-        "flayer",
+        "mindweaver",
         &fixture.alpha,
         &["which"],
         &[("MINDFLAYER_WORKSPACE", &spelled(&gone))],

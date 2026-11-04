@@ -23,7 +23,7 @@ watch(() => props.name, (name) => {
 })
 
 /**
- * `flayer rename`, shown before it runs, as every task is; once it ran,
+ * `mindweaver rename`, shown before it runs, as every task is; once it ran,
  * the page of the name it has now, since this one names a name it no
  * longer has.
  */
@@ -51,7 +51,7 @@ async function rename() {
       Rename it
     </h2>
     <p class="text-sm text-muted">
-      Its folder or file and the name it declares change together, as <code class="font-mono text-xs">flayer rename</code> changes them:
+      Its folder or file and the name it declares change together, as <code class="font-mono text-xs">mindweaver rename</code> changes them:
       the line is shown before it runs, and says why when it will not.
     </p>
     <div class="flex w-full flex-wrap items-end gap-2">

@@ -107,7 +107,7 @@ describe('the library', () => {
     const { page } = await render('/library?kind=rule', snapshot)
 
     expect(texts(page.get('[data-testid="empty"]'), 'code')).toEqual([
-      `$ flayer -W ${snapshot.workspace.path} add rule <NAME> <DESCRIPTION>`
+      `$ mindweaver -W ${snapshot.workspace.path} add rule <NAME> <DESCRIPTION>`
     ])
   })
 
@@ -117,8 +117,8 @@ describe('the library', () => {
     const { page } = await render('/library', snapshot)
 
     expect(texts(page.get('[data-testid="empty"]'), 'code')).toEqual([
-      `$ flayer init ${snapshot.workspace.path}`,
-      `$ flayer -W ${snapshot.workspace.path} add skill <NAME> <DESCRIPTION>`
+      `$ mindweaver init ${snapshot.workspace.path}`,
+      `$ mindweaver -W ${snapshot.workspace.path} add skill <NAME> <DESCRIPTION>`
     ])
   })
 

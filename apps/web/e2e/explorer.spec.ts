@@ -33,7 +33,7 @@ test('a project walked to in the explorer is the folder the Link form previews',
 
   await page.getByTestId('link').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${at.workspace} link ${api}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ mindweaver -W ${at.workspace} link ${api}`])
   await dialog.getByTestId('cancel').click()
   await expect(dialog).toBeHidden()
 })

@@ -25,7 +25,7 @@ watch(() => props.entry, () => {
 })
 
 /**
- * The dry run, `flayer migrate -p` without `--yes`: a task like any other,
+ * The dry run, `mindweaver migrate -p` without `--yes`: a task like any other,
  * shown before it runs, which writes nothing and says what would move.
  */
 async function look() {

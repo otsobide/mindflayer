@@ -1,4 +1,4 @@
-//! The flayer workspaces this machine knows: a `known` array in the default
+//! The mindweaver workspaces this machine knows: a `known` array in the default
 //! workspace's marker, the one in home, so switching between several flayers
 //! has somewhere to read them from.
 //!
@@ -11,13 +11,13 @@
 //! it from that person, and would have to be made to hold it.
 //!
 //! Never made for the occasion. A default workspace nothing has made yet
-//! remembers nothing, and `flayer init` making one to remember another in
+//! remembers nothing, and `mindweaver init` making one to remember another in
 //! would write a marker into somebody's home for a list nobody has asked to
 //! read: the rule every read follows ([`crate::resolve::Intent::Read`]).
 //! The default workspace is never in its own list either. It is listed for
 //! being the default, whatever `known` says.
 //!
-//! What remembers is `flayer init`, of each workspace it makes and of one
+//! What remembers is `mindweaver init`, of each workspace it makes and of one
 //! already there, which it otherwise leaves as it was: so a workspace made
 //! before the default one, or by a build from before this list, is one
 //! idempotent command from being known. Activating one remembers nothing,
@@ -36,7 +36,7 @@ use crate::workspace::{
     WEAVER_DIR,
 };
 
-/// Every workspace this machine knows, as `flayer workspaces` lists them.
+/// Every workspace this machine knows, as `mindweaver workspaces` lists them.
 ///
 /// What it serializes to is a contract, as a status report's is: each field
 /// by its name.
@@ -64,7 +64,7 @@ pub struct KnownWorkspace {
     /// whatever its own `known` says.
     pub default: bool,
     /// Whether the default workspace's `known` names it, which is what
-    /// `flayer workspaces forget` takes out. False for the default itself,
+    /// `mindweaver workspaces forget` takes out. False for the default itself,
     /// and for the one in use when nothing remembers it.
     pub remembered: bool,
     /// The one in use where the list was asked for, as `resolve` chose it.
@@ -211,7 +211,7 @@ pub struct Launch<'a> {
 }
 
 /// A workspace a front end that stays on one may switch to, as
-/// [`switchable`] lists it: the row `flayer workspaces` prints, with how it
+/// [`switchable`] lists it: the row `mindweaver workspaces` prints, with how it
 /// stands with the front end.
 ///
 /// Beside the row rather than in it, as [`crate::view::KnownHere`] stands
@@ -329,7 +329,7 @@ fn made_default(home: Option<&Path>) -> Result<Option<WeaverWorkspace>, Workspac
     WeaverWorkspace::open(&home).map(Some)
 }
 
-/// Remember `workspace` in the default workspace at `home`: what `flayer
+/// Remember `workspace` in the default workspace at `home`: what `mindweaver
 /// init` does with each workspace it makes, or finds already made.
 ///
 /// `None` when nothing is written: there is no default (`home` is `None`),

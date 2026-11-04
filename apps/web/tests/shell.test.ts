@@ -35,7 +35,7 @@ const LAUNCH = 'http://127.0.0.1:41001/'
 const NEXT_LAUNCH = 'http://127.0.0.1:41002/'
 
 /**
- * Open the page at another address, as the next `flayer ui` would. A browser
+ * Open the page at another address, as the next `mindweaver ui` would. A browser
  * keeps localStorage per origin, so a new port opens on an empty one; happy-dom
  * keeps one for every address, so it is emptied here.
  */

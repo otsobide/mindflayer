@@ -66,7 +66,7 @@ async function unlink(entry: string) {
 
 /**
  * Adopt somebody's `held` from the project at `entry` into the library,
- * `flayer adopt`, shown before it runs as every task is: what core will
+ * `mindweaver adopt`, shown before it runs as every task is: what core will
  * not adopt, a rule or a skill an install could not have written, it
  * refuses when the line runs, in its words.
  */

@@ -1,4 +1,4 @@
-//! `flayer update` and `mind update`: what Mindflayer installed brought up
+//! `mindweaver update` and `mind update`: what Mindflayer installed brought up
 //! to date with where it came from, the copies that have gone put back, an
 //! edited copy left alone and said, and an orphan said without failing.
 
@@ -290,7 +290,7 @@ fn mind_update_is_weaver_update_p_of_its_project() {
 
     let here = mind(&dir.path().join("beta"), &["update"]).unwrap();
     let named = weaver(dir.path(), &["update", "-p", "beta"]).unwrap();
-    let through_mind = mind(dir.path(), &["flayer", "update", "-p", "beta"]).unwrap();
+    let through_mind = mind(dir.path(), &["weaver", "update", "-p", "beta"]).unwrap();
 
     assert_eq!(
         here.stdout,
@@ -307,7 +307,7 @@ fn weaver_update_needs_projects_and_takes_all_or_names_not_both() {
 
     let nowhere = weaver(dir.path(), &["update"]).unwrap_err();
     let both = WeaverCli::try_parse_from(line(
-        "flayer",
+        "mindweaver",
         &["update", "-p", "alpha", "--all"],
         dir.path(),
     ));

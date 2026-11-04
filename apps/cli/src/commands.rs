@@ -91,7 +91,7 @@ pub fn run_watched(cli: &Cli, watch: &Watch) -> Result<Outcome, Failure> {
 pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
     match cli.command.as_ref().unwrap_or(&Command::Tui) {
-        Command::Flayer { command } => run_weaver(
+        Command::Weaver { command } => run_weaver(
             command.as_ref().unwrap_or(&WeaverCommand::Tui),
             &directory,
             lookup,
@@ -272,12 +272,12 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
     }
 }
 
-/// Run `flayer`, which is the same as running `mind flayer`.
+/// Run `mindweaver`, which is the same as running `mind weaver`.
 pub fn run_weaver_cli(cli: &WeaverCli) -> Result<Outcome, Failure> {
     run_weaver_cli_watched(cli, &Watch::new())
 }
 
-/// Run `flayer` with a gather's progress and cancel going through `watch`,
+/// Run `mindweaver` with a gather's progress and cancel going through `watch`,
 /// as [`run_watched`] does for `mind`.
 pub fn run_weaver_cli_watched(cli: &WeaverCli, watch: &Watch) -> Result<Outcome, Failure> {
     run_weaver_with(
@@ -291,7 +291,7 @@ pub fn run_weaver_cli_watched(cli: &WeaverCli, watch: &Watch) -> Result<Outcome,
     )
 }
 
-/// [`run_with`], for `flayer`.
+/// [`run_with`], for `mindweaver`.
 pub(crate) fn run_weaver_with(
     cli: &WeaverCli,
     lookup: &Lookup,
@@ -370,7 +370,7 @@ pub(crate) fn run_line(
                 }
             },
         },
-        Some("flayer") => match WeaverCli::try_parse_from(words) {
+        Some("mindweaver") => match WeaverCli::try_parse_from(words) {
             Err(error) => unparsed(error.to_string()),
             Ok(cli) => match Refusal::of_weaver(cli.command.as_ref()).filter(|r| refuses(*r)) {
                 Some(refusal) => Ran::Refused(refusal),
@@ -382,11 +382,11 @@ pub(crate) fn run_line(
                 }
             },
         },
-        _ => unparsed(String::from("not a `mind` or `flayer` command")),
+        _ => unparsed(String::from("not a `mind` or `mindweaver` command")),
     }
 }
 
-/// The workspace half, shared by `mind flayer <cmd>` and `flayer <cmd>`.
+/// The workspace half, shared by `mind weaver <cmd>` and `mindweaver <cmd>`.
 ///
 /// Every command that changes an artifact acts on the workspace's own unless
 /// `-p` names one of its projects, and is the same function `mind` runs for
@@ -520,7 +520,7 @@ fn run_weaver(
         }
 
         // Each folder taken from here as `link` takes a path, and each path
-        // found spelled as `flayer link` run here would take it, so a line of
+        // found spelled as `mindweaver link` run here would take it, so a line of
         // the report is a line to type.
         WeaverCommand::Scan {
             roots,
@@ -907,7 +907,7 @@ fn reading(
 fn unmade_hint(workspace: &WeaverWorkspace) -> String {
     format!(
         "hint: no workspace here or above, and the default one is not made yet; \
-         the first command that writes to it, such as `flayer link <path>`, makes it in {}",
+         the first command that writes to it, such as `mindweaver link <path>`, makes it in {}",
         workspace.weaver_dir().display()
     )
 }
@@ -946,7 +946,7 @@ fn all_or_nothing(mut refused: Vec<CliError>) -> Option<Failure> {
 ///
 /// Only the registered ones. A workspace manages what it was told to manage,
 /// so a project that happens to sit inside it is not in scope until it is
-/// linked; otherwise `flayer list` would answer a different question
+/// linked; otherwise `mindweaver list` would answer a different question
 /// depending on which directory it was run from.
 fn managed(workspace: &WeaverWorkspace) -> (Vec<MindProject>, Vec<Warning>) {
     let (projects, failures) = workspace.projects();
@@ -967,7 +967,7 @@ fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<WeaverWorkspa
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
 }
 
-/// `flayer remove` without `--everywhere`: of one of the workspace's own,
+/// `mindweaver remove` without `--everywhere`: of one of the workspace's own,
 /// with what it leaves orphaned said beside it, or of `project`'s, a
 /// project the workspace links, whose own nothing installed anywhere.
 fn removed_from(
@@ -1003,7 +1003,7 @@ fn named_projects(
 }
 
 /// Run an install or uninstall of one artifact, `assign`, on the workspace
-/// it is for: as a read when it is given every project (`all`), as `flayer
+/// it is for: as a read when it is given every project (`all`), as `mindweaver
 /// update --all` is, and as a write when it names them.
 ///
 /// Every project of a default workspace nothing has made yet is none, so
@@ -1028,7 +1028,7 @@ fn assigning(
 
 /// What a command given every project the workspace links says when it
 /// links none it could open: that nothing was `done`, and why, with each
-/// entry that would not open, `unread`, beside it, as `flayer update --all`
+/// entry that would not open, `unread`, beside it, as `mindweaver update --all`
 /// says it. Not a failure while every entry opens, since nothing asked of
 /// it went wrong.
 fn none_linked(done: &str, unread: Vec<Warning>) -> Outcome {

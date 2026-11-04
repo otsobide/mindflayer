@@ -1,4 +1,4 @@
-//! `flayer migrate --library`: a workspace made before its library, moved
+//! `mindweaver migrate --library`: a workspace made before its library, moved
 //! into it when asked, and said first when not.
 
 mod common;
@@ -15,7 +15,7 @@ fn at(root: &Path, parts: &[&str]) -> String {
         .to_string()
 }
 
-/// A workspace keeping its own beside its projects, as `flayer init` made
+/// A workspace keeping its own beside its projects, as `mindweaver init` made
 /// every one before the library, with a skill and a rule of its own.
 fn beside(root: &Path) {
     weaver(root, &["init", "--skills", "skills", "--rules", "rules"]).unwrap();
@@ -109,7 +109,7 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
     let home_path = home.path();
-    // Made as `flayer init` made the one in a home before the library, and
+    // Made as `mindweaver init` made the one in a home before the library, and
     // used from outside it, as the default.
     weaver(
         home_path,
@@ -276,7 +276,7 @@ fn mind_weaver_migrate_is_the_same_command() {
     let dir = TempDir::new().unwrap();
     beside(dir.path());
 
-    let long = mind(dir.path(), &["flayer", "migrate", "--library"]).unwrap();
+    let long = mind(dir.path(), &["weaver", "migrate", "--library"]).unwrap();
     let short = weaver(dir.path(), &["migrate", "--library"]).unwrap();
 
     assert_eq!(long, short);

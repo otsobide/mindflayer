@@ -50,7 +50,7 @@ pub struct Request {
     pub roots: Vec<PathBuf>,
     /// How many levels below each root to look; none judges the roots alone.
     pub depth: usize,
-    /// Where each route is spelled from: the directory `flayer link` would be
+    /// Where each route is spelled from: the directory `mindweaver link` would be
     /// run in with it. None means the workspace root, where the TUI runs its
     /// lines.
     pub from: Option<PathBuf>,
@@ -72,7 +72,7 @@ impl Default for Request {
 
 /// How a scan orders what it found.
 ///
-/// Here rather than in each front end, so `flayer scan --suggest` and the
+/// Here rather than in each front end, so `mindweaver scan --suggest` and the
 /// minds screen list one order: a screen that sorted its own rows could
 /// rank them differently from the command it says it shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -98,7 +98,7 @@ pub struct Found {
     /// Where it is.
     #[serde(serialize_with = "paths::lossy")]
     pub path: PathBuf,
-    /// What `flayer link` would be given for it, run where the request
+    /// What `mindweaver link` would be given for it, run where the request
     /// spells routes from: the route from there, `/` separated, when it is
     /// inside, and its path otherwise.
     pub route: String,
@@ -114,7 +114,7 @@ pub struct Found {
     pub linked: bool,
     /// The entry it moved from, when it is not linked and holds the id the
     /// workspace's ledger last saw at an entry where no project is any more
-    /// ([`MindProject::is_vacant`]): spelled as `route` is, so `flayer
+    /// ([`MindProject::is_vacant`]): spelled as `route` is, so `mindweaver
     /// relink <moved> <route>` run there follows it. None otherwise, and for
     /// an id another directory holds too, which is a copy rather than a
     /// move.
@@ -199,7 +199,7 @@ pub struct Scan {
     /// Each entry where no project is any more whose id the ledger never
     /// learned, as it learns them only when it is written, so nothing found
     /// can be told to be its project, moved: spelled as `route` is, for the
-    /// `flayer relink <untraced> <route>` that follows it, which only
+    /// `mindweaver relink <untraced> <route>` that follows it, which only
     /// somebody who knows where it went can type. In the order the marker
     /// lists them, and only when something found and not linked holds an id
     /// that no entry was matched to, which it could be; empty otherwise.
@@ -362,7 +362,7 @@ pub fn scan(workspace: &WeaverWorkspace, request: &Request) -> Scan {
 /// route ([`crate::ledger::Ledger::known_projects`]): a project found and not
 /// linked, holding an id last seen at an entry where no project is any more,
 /// is that entry's project. Only an entry nothing marks
-/// ([`MindProject::is_vacant`]), not every one `flayer status` calls stale:
+/// ([`MindProject::is_vacant`]), not every one `mindweaver status` calls stale:
 /// one whose marker is there and would not open still holds its project,
 /// whose id nothing read, so a copy of it would pass for it moved; and one
 /// that opens holding another id holds another project, which the ledger
@@ -374,7 +374,7 @@ pub fn scan(workspace: &WeaverWorkspace, request: &Request) -> Scan {
 /// A stale entry whose id the ledger never learned is said too (`untraced`)
 /// while something found is left unmatched: a project linked and moved
 /// before anything wrote the ledger is found by nobody, and the entry is
-/// what `flayer relink` would be given for it, where `flayer link` would
+/// what `mindweaver relink` would be given for it, where `mindweaver link` would
 /// leave two entries for one project.
 fn follow(workspace: &WeaverWorkspace, from: &Path, scan: &mut Scan) {
     let members = workspace.members();
@@ -468,7 +468,7 @@ fn agent_files() -> Vec<PathBuf> {
 /// `failures` when its marker would not open.
 ///
 /// A project whose marker would not open is listed all the same: its marker
-/// still says it is one, and `flayer link`, refusing it, says why again.
+/// still says it is one, and `mindweaver link`, refusing it, says why again.
 fn judge(
     workspace: &WeaverWorkspace,
     directory: &Path,
@@ -520,7 +520,7 @@ fn judge(
     })
 }
 
-/// What `flayer link` run in `from` would be given for `directory`: the
+/// What `mindweaver link` run in `from` would be given for `directory`: the
 /// route from there when it is inside, and its path otherwise.
 ///
 /// Not a route that climbs out with `..`, which reads right from one

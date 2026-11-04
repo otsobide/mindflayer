@@ -384,7 +384,7 @@ pub enum ReapplyError {
     /// A project naming no agent has nowhere to put what is installed, so
     /// carrying it along would take every copy out: an uninstall's to do,
     /// asked for by name, not a side of changing the agents.
-    #[error("{project} would name no agent, and what is installed into it would reach none, so its last agent is not removed; `flayer uninstall` takes out what it has")]
+    #[error("{project} would name no agent, and what is installed into it would reach none, so its last agent is not removed; `mindweaver uninstall` takes out what it has")]
     NoAgent { project: String },
     /// Installing a kind in no folder at all would take every copy of it out
     /// of the project, an uninstall's to do; sending it back to the folders

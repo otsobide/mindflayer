@@ -21,7 +21,7 @@ fn made(home: &Path) -> bool {
 fn hint(home: &Path) -> String {
     format!(
         "hint: no workspace here or above, and the default one is not made yet; \
-         the first command that writes to it, such as `flayer link <path>`, makes it in {}",
+         the first command that writes to it, such as `mindweaver link <path>`, makes it in {}",
         home.join(WEAVER_DIR).display()
     )
 }
@@ -40,7 +40,7 @@ fn weaver_list_reads_the_default_workspace_without_making_it() {
     assert_eq!(
         outcome.stdout,
         format!(
-            "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+            "{} manages no projects yet\n  link one with `mindweaver link <path>`\n",
             name(home.path())
         )
     );
@@ -123,7 +123,7 @@ fn weaver_scan_reads_the_default_workspace_without_making_it() {
     let outcome = weaver_at_home(elsewhere.path(), home.path(), &["scan"]).unwrap();
 
     // What is under it does not wait for it to be made. Spelled by its path,
-    // since it is not under where the command ran: `flayer link code/api`
+    // since it is not under where the command ran: `mindweaver link code/api`
     // typed there would miss it.
     let api = home.path().join("code/api");
     assert!(
@@ -195,7 +195,7 @@ fn weaver_load_on_its_own_reads_the_default_workspace_without_making_it() {
     assert_eq!(
         outcome.stdout,
         format!(
-            "nothing loaded\n  offer another workspace's own with `flayer load <path>`\n  \
+            "nothing loaded\n  offer another workspace's own with `mindweaver load <path>`\n  \
              in the workspace at {}, the default one\n",
             home.path().display()
         )
@@ -214,7 +214,7 @@ fn weaver_install_on_its_own_reads_the_default_workspace_without_making_it() {
     assert_eq!(
         outcome.stdout,
         format!(
-            "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+            "{} manages no projects yet\n  link one with `mindweaver link <path>`\n",
             name(home.path())
         )
     );

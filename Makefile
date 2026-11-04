@@ -153,13 +153,14 @@ clean: ## Remove build artifacts
 # `make cli/build` with Rust alone, since `make build` builds the panel first
 # and needs Node and pnpm.
 #
-# Both binaries, not just `mind`: `flayer` is a second entry point into the
+# Both binaries, not just `mind`: `mindweaver` is a second entry point into the
 # same crate, and half an install is worse than none.
 #
-# `mf` is a short name for `flayer` (the one that manages minds, so `mf init`
+# `mw` is a short name for `mindweaver` (the one that manages minds, so `mw init`
 # makes a workspace), linked beside the two: a symlink rather than a third
 # binary, so it cannot be a different version of the same one. Only a link,
-# never a cargo `[[bin]]`: `mf` is METAFONT wherever TeX is installed, and a
+# never a cargo `[[bin]]`: a two-letter name is easily some other tool's, as
+# `mf`, the one this was before, is METAFONT wherever TeX is installed, and a
 # link is something you asked for on your own machine.
 #
 # "dev" is not in APPS, so these do not collide with the <app>/<target> pattern
@@ -167,20 +168,20 @@ clean: ## Remove build artifacts
 # its binaries.
 # ---------------------------------------------------------------------------
 BINDIR ?= $(HOME)/.cargo/bin
-BINS := mind flayer
+BINS := mind mindweaver
 # alias:binary pairs, linked by dev/link and removed by dev/unlink.
-ALIASES := mf:flayer
+ALIASES := mw:mindweaver
 
 # The panel first, as for a release, where Node and pnpm run: the copies
 # embed it as they compile. Elsewhere a warning says what they embed instead
 # (`make web/build/if-node`).
 .PHONY: install
-install: ## Install `mind` and `flayer` as copies in cargo's bin directory, the panel built first where Node is
+install: ## Install `mind` and `mindweaver` as copies in cargo's bin directory, the panel built first where Node is
 	$(MAKE) -C apps/web build/if-node
 	cargo install --path apps/cli --locked
 
 .PHONY: dev/link
-dev/link: ## Build, then symlink `mind`, `flayer` and `mf` into BINDIR
+dev/link: ## Build, then symlink `mind`, `mindweaver` and `mw` into BINDIR
 	cargo build -p mindweaver-cli
 	@mkdir -p "$(BINDIR)"
 	@for bin in $(BINS); do \

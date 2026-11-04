@@ -13,12 +13,12 @@ adding a directory rather than reshaping the tree:
 ```
 apps/core    mindweaver-core     projects, workspaces, artifacts.
                                  No I/O beyond files, and git when gathering.
-apps/cli     mindweaver-cli      the `mind` and `flayer` binaries, the TUI,
+apps/cli     mindweaver-cli      the `mind` and `mindweaver` binaries, the TUI,
                                  and the panel's backend. Parsing and
                                  rendering only; all of it goes through one
                                  parser.
 apps/server  mindweaver-server   the local server behind the web panel, which
-                                 `flayer ui` runs. Transport only: it moves
+                                 `mindweaver ui` runs. Transport only: it moves
                                  JSON between the browser and a front end,
                                  and holds no rules.
 apps/web     mindweaver-web      the web panel the server embeds: Vue and
@@ -44,7 +44,7 @@ make lint              # no em dash in a tracked file, then clippy
 make run ARGS="list"   # run the CLI without installing it
 
 make core/test         # one app: make <app>/<target>
-make cli/run ARGS="flayer list"
+make cli/run ARGS="mindweaver list"
 ```
 
 Tests live in their own files, named for what they test and ending in
@@ -57,7 +57,7 @@ and `--workspace ""`, and the few that run the binaries clear
 own. Nor do they touch your agents' folders, which no command reads yet, and
 the commands they run themselves give every agent-home option empty. The server's suites never leave 127.0.0.1, and run
 against a fake front end rather than the CLI. The CLI's `ui` suite starts
-`flayer ui` on 127.0.0.1 with `--no-open`, so no test opens a browser.
+`mindweaver ui` on 127.0.0.1 with `--no-open`, so no test opens a browser.
 `docs_test.rs` holds the README and every page here to their relative
 links: a file one names has to be there, an anchor has to be a heading's,
 and every image in `docs/images` has to be shown by some page.
@@ -107,7 +107,7 @@ them:
 
 ```bash
 make dev/link BINDIR=~/.local/bin
-make dev/link BINDIR=.          # `./mind`, `./flayer` and `./mf`, right here
+make dev/link BINDIR=.          # `./mind`, `./mindweaver` and `./mw`, right here
 ```
 
 The repository root is a fine answer if you would rather not put a
@@ -197,15 +197,15 @@ itself, as CI checks on every run.
 
 `make web/e2e` tests the whole chain in a browser: it builds the panel and
 the debug binaries, builds a workspace in your system's temporary folder by
-running `flayer` and `mind`, serves it with `flayer ui`, and drives the
+running `mindweaver` and `mind`, serves it with `mindweaver ui`, and drives the
 panel in Chromium and WebKit with Playwright. The overview, each project's
-page and each artifact's page have to show what `flayer list --json`
+page and each artifact's page have to show what `mindweaver list --json`
 prints, a project linked or unlinked from the panel has to leave
-`flayer.toml` byte for byte as `flayer link` or `flayer unlink` leaves a copy
+`flayer.toml` byte for byte as `mindweaver link` or `mindweaver unlink` leaves a copy
 of the workspace, an unlink has to ask first and run nothing when told no, a
 request from another origin has to be refused, and no page may log a
 violation of the server's content security policy. A test that changes
-something does it to a workspace and a `flayer ui` of its own, so no other
+something does it to a workspace and a `mindweaver ui` of its own, so no other
 test sees the change. Nothing it runs can
 reach your workspaces or your agents' folders: Playwright runs without
 `$MINDFLAYER_WORKSPACE`, `$MINDFLAYER_HOME`, `$CLAUDE_CONFIG_DIR`,
@@ -218,7 +218,7 @@ knows the one it loads, and fails unless that home too is as it was made
 once its server has stopped. Its specs are
 `apps/web/e2e/<area>.spec.ts`, and `make test` leaves them out, since they
 need the browsers and binaries built with the panel. `ARGS` go to
-`playwright test`, and `E2E_BIN` names another folder holding a `flayer` and
+`playwright test`, and `E2E_BIN` names another folder holding a `mindweaver` and
 a `mind` to drive, relative to `apps/web`:
 
 ```bash
@@ -235,7 +235,7 @@ leave WebKit to CI's `e2e (web)`, which drives the release `build (cli)`
 built.
 
 `make web/dev` serves the panel on `http://127.0.0.1:5173` and reloads it as
-you edit. It passes `/api`, and the launch link, on to `flayer ui --dev`,
+you edit. It passes `/api`, and the launch link, on to `mindweaver ui --dev`,
 run beside it, which listens on port 7878, where the dev server's proxy
 looks, takes requests from the dev server's pages, and prints and opens a
 link to the dev server: the token is traded for its cookie where the panel
@@ -265,11 +265,11 @@ GPL-3.0-only can take in.
 The README tours the panel in pictures, and none is taken by hand. `make
 docs/screenshots` builds the panel and the debug binaries, as `make web/e2e`
 does, then runs `apps/web/e2e/screenshots.ts`: it builds a demo workspace by
-running `git`, `flayer` and `mind` (`e2e/demo.ts`: six projects, a library,
+running `git`, `mindweaver` and `mind` (`e2e/demo.ts`: six projects, a library,
 a shelf gathered from a repository beside them, three installs behind
 where they came from, two repositories nobody linked, and a second
 workspace, which the tour loads last), serves it with
-`flayer ui`, and opens each page of the tour in Chromium, in a 1440 by 900
+`mindweaver ui`, and opens each page of the tour in Chromium, in a 1440 by 900
 viewport at a device scale of 1.25, with dates in US English and UTC
 whatever your machine's language and time zone, writing each into
 `docs/images`. It runs as the browser suite does, with no variable that

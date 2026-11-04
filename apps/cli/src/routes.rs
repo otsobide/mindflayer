@@ -126,7 +126,7 @@ pub fn table() -> Vec<Route<Query>> {
         ),
         get(
             "/scan",
-            "What could be linked under the folders named, as `flayer scan --suggest` finds \
+            "What could be linked under the folders named, as `mindweaver scan --suggest` finds \
              and ranks it",
             vec![
                 Parameter::optional(
@@ -171,7 +171,7 @@ pub fn table() -> Vec<Route<Query>> {
         ),
         get(
             "/updates",
-            "What updating every project the workspace links would do, as `flayer update \
+            "What updating every project the workspace links would do, as `mindweaver update \
              --all` says it without `--yes`",
             Vec::new(),
             "Updates",

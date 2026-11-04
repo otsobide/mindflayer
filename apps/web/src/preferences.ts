@@ -14,7 +14,7 @@ function name(key: string): string {
  * What this browser chose, kept in cookies: the colour mode, and the
  * sidebar's size and whether it is collapsed.
  *
- * Not localStorage, which is kept per origin: each `flayer ui` takes a port
+ * Not localStorage, which is kept per origin: each `mindweaver ui` takes a port
  * of its own, so every launch would open on an empty one and forget what the
  * last was told. A cookie is kept per host, whatever the port (the reason the
  * server names its own `mf_<port>`), so a choice made under one launch is

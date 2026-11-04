@@ -1,4 +1,4 @@
-//! `flayer relink` and `mind init --new-id`: following a project that moved
+//! `mindweaver relink` and `mind init --new-id`: following a project that moved
 //! by the id it holds, and giving a copy made with its `.mind` one of its own.
 
 mod common;
@@ -58,7 +58,7 @@ fn a_suggestion_says_a_moved_project_moved_as_a_scan_does() {
         "\
 apps/collapse  not linked  moved: collapse -> apps/collapse
 
-  follow one that moved with `flayer relink <old> <new>`
+  follow one that moved with `mindweaver relink <old> <new>`
 "
     );
     assert!(scan.ok, "{:?}", scan.stderr);
@@ -80,7 +80,7 @@ fn a_moved_project_is_stale_then_found_moved_and_relinked_with_every_install_cur
         "\
 apps/collapse  not linked  moved: collapse -> apps/collapse
 
-  follow one that moved with `flayer relink <old> <new>`
+  follow one that moved with `mindweaver relink <old> <new>`
 "
     );
     assert!(scan.ok, "{:?}", scan.stderr);
@@ -126,8 +126,8 @@ fn a_project_moved_before_the_workspace_learned_its_id_is_pointed_at_relink_not_
         "\
 apps/collapse  not linked  mind project
 
-  follow one that moved from collapse with `flayer relink collapse <path>`
-  link one with `flayer link <path>`
+  follow one that moved from collapse with `mindweaver relink collapse <path>`
+  link one with `mindweaver link <path>`
 "
     );
     assert!(scan.ok, "{:?}", scan.stderr);
@@ -171,7 +171,7 @@ fn a_copy_made_with_its_mind_is_a_duplicate_and_never_a_move() {
 collapse  linked
 copy      not linked  mind project
 
-  link one with `flayer link <path>`
+  link one with `mindweaver link <path>`
 "
     );
     assert_eq!(

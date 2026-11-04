@@ -329,7 +329,7 @@ fn marker(workspace: &WeaverWorkspace) -> String {
     fs::read_to_string(workspace.config_path()).unwrap()
 }
 
-/// How each artifact of the project at `entry` stands, as `flayer status`
+/// How each artifact of the project at `entry` stands, as `mindweaver status`
 /// reports it.
 fn states(workspace: &WeaverWorkspace, entry: &str) -> Vec<(String, String)> {
     let (status, failures) = mindweaver_core::Status::of_workspace(workspace);

@@ -1,4 +1,4 @@
-//! `flayer <cmd>`, the shortcut for `mind flayer <cmd>`.
+//! `mindweaver <cmd>`, the shortcut for `mind weaver <cmd>`.
 //!
 //! A second entry point into the same parser rather than a wrapper that
 //! re-executes `mind`: there is one implementation of every workspace command,

@@ -1,4 +1,4 @@
-//! `flayer migrate` and `mind migrate`: bringing what an older Mindflayer
+//! `mindweaver migrate` and `mind migrate`: bringing what an older Mindflayer
 //! made into the layout a new one has. `--library` moves a workspace's own
 //! into its library; `mind migrate`, `-p` and `--all-projects` move a
 //! project from its `mind.toml` or its `settings.json` to a
@@ -17,7 +17,7 @@ use super::install::{cleared, shown};
 use super::settings::{agents, moved, not_copied, outside_note};
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
-/// `flayer migrate --library`: what moving the workspace's own into its
+/// `mindweaver migrate --library`: what moving the workspace's own into its
 /// library would do, or, with `yes`, doing it.
 ///
 /// The dry run is a report, and exits as one, where `remove`'s is a
@@ -223,7 +223,7 @@ pub(crate) fn migrate_here(
     }
 }
 
-/// `flayer migrate -p`: one project the workspace links moved to a
+/// `mindweaver migrate -p`: one project the workspace links moved to a
 /// `settings.toml`, carrying what its ledger records along.
 pub(crate) fn migrate_one(
     workspace: &WeaverWorkspace,
@@ -237,7 +237,7 @@ pub(crate) fn migrate_one(
     }
 }
 
-/// `flayer migrate --all-projects`: every project the workspace links that
+/// `mindweaver migrate --all-projects`: every project the workspace links that
 /// a `mind.toml` or a `settings.json` marks, moved to a `settings.toml` one
 /// at a time.
 ///
@@ -323,7 +323,7 @@ enum Stopped {
 
 impl Stopped {
     /// As a command given one project fails: every refusal at once, the
-    /// first as the error, as `flayer migrate --library` says them.
+    /// first as the error, as `mindweaver migrate --library` says them.
     fn failure(self) -> Failure {
         match self {
             // Never without a reason, so the second is not reached.
@@ -361,7 +361,7 @@ impl Stopped {
 /// One project's move, planned without `yes` and made with it, laid out;
 /// `None` when its `settings.toml` marks it already.
 ///
-/// The dry run is a report, as `flayer migrate --library`'s is: a line for
+/// The dry run is a report, as `mindweaver migrate --library`'s is: a line for
 /// each thing that would change, to read before saying yes. Made, a copy
 /// left out of a folder an agent the project names reads is a warning, as
 /// it is for `mind agents`.

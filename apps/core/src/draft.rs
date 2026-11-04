@@ -13,7 +13,7 @@
 //! - **What `validate` would say of it** once written: the artifact read
 //!   from what it would hold, as discovery reads one from the disk, and
 //!   judged by [`Artifact::validate`], so each issue's message is word for
-//!   word what `flayer validate` prints of it then. Nothing, when what
+//!   word what `mindweaver validate` prints of it then. Nothing, when what
 //!   would be written cannot be told: `add` refusing before it builds
 //!   anything, or a skill whose front matter does not read, which the
 //!   refusal says.

@@ -33,7 +33,7 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'webkit', use: { ...devices['Desktop Safari'] } }
   ],
-  // `flayer ui` as a person starts it, on a port the system picks, so a run
+  // `mindweaver ui` as a person starts it, on a port the system picks, so a run
   // never meets another on a fixed one. The link it prints first is the only
   // way to know which, so it is read with a regex, whose named groups
   // Playwright puts in the environment every worker starts with, upper
@@ -41,10 +41,10 @@ export default defineConfig({
   // link is never printed: the token stays out of the log, as the server
   // keeps it out of its own.
   webServer: {
-    name: 'flayer ui',
+    name: 'mindweaver ui',
     // `exec`, so the shell Playwright starts it through gives its place to
     // the server, and the Ctrl-C below reaches the server alone.
-    command: `exec ${[binary(at.bin, 'flayer'), ...ui(at)].map(quoted).join(' ')}`,
+    command: `exec ${[binary(at.bin, 'mindweaver'), ...ui(at)].map(quoted).join(' ')}`,
     // From the fixture, so not even the process's own folder is in the
     // repository, which sits under the developer's home.
     cwd: at.workspace,
