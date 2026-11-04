@@ -20,7 +20,8 @@
 #
 # The MCP runs (#18, claude-mcp and the three after it) ask the model for
 # nothing but OK, with no tool at all. What loaded is read from the init
-# message's mcp_servers, which lists each server with its status, and from
+# message's mcp_servers, which lists each server with its status once Claude
+# has waited for it to connect (MCP_CONNECTION_NONBLOCKING=0), and from
 # what the stand-in servers of mcp.sh wrote down: whether Claude started
 # each, and what it made of every ${VAR} on the way.
 
@@ -505,7 +506,11 @@ claude_mcp_ask() {
 	mcp_assert_clean_home
 	assert_ancestry "$repo"
 	mcp_assert_ancestry "$repo" "$repo/.mcp.json"
-	claude_env=("${mcp_env[@]}")
+	# Claude 2.1.318 connects MCP servers without waiting unless this says
+	# otherwise, and lists one still connecting as pending in the init
+	# message, which a verdict would read as a server that did not load.
+	# Claude sets the same itself where it needs its servers connected first.
+	claude_env=(MCP_CONNECTION_NONBLOCKING=0 "${mcp_env[@]}")
 	claude_ask "$run" "$repo" "$claude_mcp_prompt" "${claude_mcp_options[@]}"
 	claude_env=()
 	claude_hooks
