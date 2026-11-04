@@ -108,7 +108,7 @@ pub enum Condition {
     /// A change sent with the cookie without `X-Mindweaver: 1`
     /// ([`PANEL_HEADER`](crate::guard::PANEL_HEADER)), which the panel's own
     /// requests carry. Its code spells the header as Mindflayer named it,
-    /// `X-Mindweaver`, as it was given, since a code once given is never
+    /// `X-Mindflayer`, as it was given, since a code once given is never
     /// renamed (D-26).
     PanelHeaderRequired,
     /// A body not sent as `application/json`: refused by the guard on a
