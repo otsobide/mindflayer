@@ -147,6 +147,16 @@ impl WorkspaceLock {
     }
 }
 
+impl WorkspaceLock {
+    /// Say that the folder holding the lock is `dir` now, for one renamed
+    /// while it is held, as a workspace moved to Mindweaver's names is: the
+    /// lock is on the file, wherever its folder went, and the holder's id is
+    /// taken away from where it is once the lock is let go.
+    pub(crate) fn moved(&mut self, dir: &Path) {
+        self.holder = dir.join(HOLDER_FILE);
+    }
+}
+
 impl Drop for WorkspaceLock {
     fn drop(&mut self) {
         if let Some(file) = &self.file {

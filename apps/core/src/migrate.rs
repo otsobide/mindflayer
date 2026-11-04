@@ -21,7 +21,11 @@
 //! date: [`project_plan`] and [`project`] move it from its `mind.toml` to a
 //! `settings.toml`, and what is installed into it to where its agents read,
 //! or from its `settings.json` to a `settings.toml` saying the same.
+//!
+//! And a workspace a Mindflayer build made is moved to Mindweaver's names,
+//! with what it wrote into its projects: [`names_plan`] and [`names()`].
 
+mod names;
 mod project;
 
 use std::fs;
@@ -30,7 +34,9 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::agents_md::AgentsMdError;
 use crate::catalog::{Catalog, DiscoveryFailure};
+use crate::claude_md::ClaudeMdError;
 use crate::code::codes;
 use crate::exclude::ExcludeError;
 use crate::install::InstallError;
@@ -42,6 +48,10 @@ use crate::workspace::{
     misplaced_own, Directories, MindProject, WeaverWorkspace, WorkspaceError, MIND_CONFIG,
 };
 
+pub use names::{
+    names, names_plan, CarriedRule, Left as LeftWhy, LeftRule, NamesFailure, NamesMigrated,
+    NamesPlan, ProjectNames, Renamed, Repointed,
+};
 pub use project::{
     carries_installs, project, project_plan, ProjectFailure, ProjectMigrated, ProjectPlan, Stranded,
 };
@@ -155,6 +165,30 @@ pub enum Refusal {
     /// one, or take from there.
     #[error("{0}")]
     Install(InstallError),
+    /// The ledger of a workspace to be moved to Mindweaver's names has its
+    /// log beside it: open in another process, which would go on writing
+    /// to a file of the old name, or left by one that stopped, holding
+    /// writes the file does not yet.
+    #[error(
+        "{path}: the ledger's log, kept by a process that has it open or left by one that \
+         stopped, so the ledger is not moved: close the panel or the TUI that has it open, or \
+         run any command that reads it, and migrate again"
+    )]
+    LedgerOpen { path: PathBuf },
+    /// A project a workspace to be moved to Mindweaver's names links whose
+    /// marker cannot be read: which of its files it wrote cannot be told.
+    #[error("{0}, so what Mindflayer wrote in it cannot be moved")]
+    Unopened(WorkspaceError),
+    /// The block of a project's `AGENTS.md` that cannot be read as one.
+    #[error("{0}, so its markers cannot be moved")]
+    AgentsMd(AgentsMdError),
+    /// The import of a project's `CLAUDE.md` that cannot be read as one.
+    #[error("{0}, so its markers cannot be moved")]
+    ClaudeMd(ClaudeMdError),
+    /// The block of the exclude file git reads for a project that cannot
+    /// be read as one.
+    #[error("{0}, so its markers cannot be moved")]
+    Excluded(ExcludeError),
 }
 
 codes!(Refusal {
@@ -164,12 +198,17 @@ codes!(Refusal {
     Self::Linked { .. } => "migrate_folder_linked",
     Self::Tangled { .. } => "migrate_folder_tangled",
     Self::NoAgent { .. } => "migrate_no_agent",
+    Self::LedgerOpen { .. } => "migrate_ledger_open",
 } carried {
     Self::Misplaced(error) => error,
     Self::Unlisted(error) => error,
     Self::Unreadable(error) => error,
     Self::Authored(error) => error,
     Self::Install(error) => error,
+    Self::Unopened(error) => error,
+    Self::AgentsMd(error) => error,
+    Self::ClaudeMd(error) => error,
+    Self::Excluded(error) => error,
 });
 
 /// What [`library`] did.
@@ -229,6 +268,16 @@ pub enum MigrateError {
         failure: Box<ProjectFailure>,
         stranded: Vec<Stranded>,
     },
+    /// A step of moving a workspace to Mindweaver's names failed, and what
+    /// it had done was put back, but for what `stranded` names
+    /// ([`MigrateError::left_behind_names`]).
+    #[error("{failure}; nothing was moved")]
+    Names {
+        /// Boxed, for the reason `Marker`'s source is.
+        #[source]
+        failure: Box<NamesFailure>,
+        stranded: Vec<PathBuf>,
+    },
 }
 
 codes!(MigrateError {
@@ -242,6 +291,7 @@ codes!(MigrateError {
     Self::Exclude(error) => error,
     Self::Marker { source, .. } => source,
     Self::Project { failure, .. } => failure,
+    Self::Names { failure, .. } => failure,
 });
 
 impl MigrateError {
@@ -262,6 +312,16 @@ impl MigrateError {
     pub fn left_behind(&self) -> &[Stranded] {
         match self {
             MigrateError::Project { stranded, .. } => stranded,
+            _ => &[],
+        }
+    }
+
+    /// What a move to Mindweaver's names that failed could not put back as
+    /// it was, for a front end to say: each a file or a folder left under
+    /// its new name, or the ledger, whose records name the new places.
+    pub fn left_behind_names(&self) -> &[PathBuf] {
+        match self {
+            MigrateError::Names { stranded, .. } => stranded,
             _ => &[],
         }
     }
