@@ -25,6 +25,9 @@ codex_default_model=gpt-6-luna
 codex_prompt='This is an automated configuration probe. Do not call any tool and do not run any command. Reply with exactly one line and nothing else: OK'
 
 codex_prepare() {
+	# Every run is an MCP one, and each bounds what it asks with timeout.
+	namespace_tool python3 "for the MCP checks' stand-in server"
+	namespace_tool timeout
 	local bin=${PROBE_CODEX_BIN:-}
 	if [[ -z $bin ]]; then
 		bin=$(command -v codex) || die "no codex on PATH (or set PROBE_CODEX_BIN)"

@@ -63,6 +63,11 @@ claude_prepare() {
 	install -m 600 -- "$login" "$run/home/.claude/.credentials.json"
 	claude_login_hash=$(sha256sum <"$run/home/.claude/.credentials.json")
 
+	# Before any paid call, rather than at the first MCP run, inside.
+	if any_selected claude-mcp claude-mcp-untyped claude-mcp-comment claude-mcp-comma; then
+		namespace_tool python3 "for the MCP checks' stand-in server"
+	fi
+
 	expose+=("$bin")
 	namespace_env+=(PROBE_CLAUDE_BIN "$bin")
 	say "claude: $version at $bin"

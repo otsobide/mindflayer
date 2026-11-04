@@ -21,6 +21,9 @@ opencode_v2_runs=(opencode-mcp-v2 opencode-mcp-v1-shape opencode-mcp-service)
 opencode_v1=1.19.4
 
 opencode_prepare() {
+	# Every run is an MCP one, and each bounds what it asks with timeout.
+	namespace_tool python3 "for the MCP checks' stand-in server"
+	namespace_tool timeout
 	if any_selected "${opencode_v2_runs[@]}"; then
 		local bin
 		bin=$(opencode_native "${PROBE_OPENCODE_BIN:-$(command -v opencode || true)}") || exit 2
