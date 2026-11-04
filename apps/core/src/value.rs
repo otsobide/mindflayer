@@ -336,8 +336,9 @@ impl Redacted {
 
 text_value! {
     /// Where an installed artifact came from, spelled as `--from` takes it:
-    /// `library`, a loaded workspace's path, or a source's address with its
-    /// branch after a `#` ([`crate::install::Offer::origin`]).
+    /// `workspace` for the workspace's own, `load:` and the entry of a
+    /// workspace it loads, or a source's address with its branch after a `#`
+    /// ([`crate::install::Offer::origin`]).
     ///
     /// Named apart, and held to no rule: it is compared with what a front
     /// end was given and with what the ledger recorded, both as written.

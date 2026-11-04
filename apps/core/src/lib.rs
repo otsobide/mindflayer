@@ -43,6 +43,8 @@ pub mod lifecycle;
 mod lines;
 pub mod lock;
 pub mod migrate;
+#[cfg(any(test, feature = "mother"))]
+pub mod mother;
 pub mod paths;
 pub mod policy;
 pub mod port;
