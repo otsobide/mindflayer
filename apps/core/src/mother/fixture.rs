@@ -16,6 +16,7 @@ use tempfile::TempDir;
 use crate::agent::Agent;
 use crate::agents_md::AgentsMd;
 use crate::claude_md::ClaudeMd;
+use crate::exclude::ExcludeFile;
 use crate::gather::{self, Request};
 use crate::ledger::Ledger;
 use crate::mother::artifact::SkillMother;
@@ -72,9 +73,10 @@ impl MindflayerMother {
     }
 
     /// Leave what core rendered into the project at `root` as such a build
-    /// rendered it: the block of its `AGENTS.md` and the import in its
-    /// `CLAUDE.md` or `.claude/CLAUDE.md` under that build's markers, every
-    /// other byte as core wrote it.
+    /// rendered it: the block of its `AGENTS.md`, the import in its
+    /// `CLAUDE.md` or `.claude/CLAUDE.md` and the block of the exclude file
+    /// git reads for it under that build's markers, every other byte as core
+    /// wrote it.
     ///
     /// Moved back by core's own parsers rather than spelled here, so what a
     /// test reads is what such a build wrote, line endings and all.
@@ -93,6 +95,15 @@ impl MindflayerMother {
             let mut file = ClaudeMd::parse(&bytes).expect("read the import");
             if file.renamed(Names::Mindflayer) {
                 fs::write(&claude, file.to_bytes()).expect("write the import back");
+            }
+        }
+        let excluding = crate::exclude::locate(root).expect("find the exclude file");
+        if let Some(location) = excluding {
+            if let Ok(bytes) = fs::read(&location.file) {
+                let mut file = ExcludeFile::parse(&bytes).expect("read the exclude block");
+                if file.renamed(Names::Mindflayer) {
+                    fs::write(&location.file, file.to_bytes()).expect("write the block back");
+                }
             }
         }
     }

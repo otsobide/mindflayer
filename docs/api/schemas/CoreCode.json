@@ -134,6 +134,7 @@
     "exclude_block_unclosed",
     "exclude_block_unopened",
     "exclude_block_reopened",
+    "exclude_markers_mixed",
     "exclude_group_repeated",
     "front_matter_missing",
     "front_matter_unterminated",

@@ -281,3 +281,23 @@ fn a_mindflayer_mother_leaves_a_projects_blocks_under_the_old_markers() {
         "<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n"
     );
 }
+
+#[test]
+fn a_mindflayer_mother_leaves_a_projects_exclude_block_under_the_old_markers() {
+    let dir = tempfile::TempDir::new().unwrap();
+    gix::init(dir.path()).unwrap();
+    crate::exclude::add(
+        dir.path(),
+        "app",
+        &[crate::exclude::Entry::file("AGENTS.md")],
+    )
+    .unwrap();
+
+    MindflayerMother::rendered_into(dir.path());
+
+    let text = fs::read_to_string(dir.path().join(".git/info/exclude")).unwrap();
+    assert!(
+        text.ends_with("# mindflayer:begin\n# project app\n/AGENTS.md\n# mindflayer:end\n"),
+        "{text}"
+    );
+}

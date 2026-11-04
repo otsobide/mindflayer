@@ -1711,8 +1711,8 @@ fn a_local_install_keeps_every_copy_out_of_git_and_its_uninstall_takes_them_back
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
         format!(
-            "{before}# mindflayer:begin\n# project {id}\n/.agents/skills/deploy/\n\
-             /.claude/skills/deploy/\n# mindflayer:end\n"
+            "{before}# mindweaver:begin\n# project {id}\n/.agents/skills/deploy/\n\
+             /.claude/skills/deploy/\n# mindweaver:end\n"
         )
     );
     assert!(ignored(&project, ".agents/skills/deploy"));
@@ -1777,8 +1777,8 @@ fn a_local_install_keeps_no_copy_git_tracks_out_of_git() {
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
         format!(
-            "{before}# mindflayer:begin\n# project {id}\n/.agents/skills/commit-style/\n\
-             /.claude/skills/commit-style/\n# mindflayer:end\n"
+            "{before}# mindweaver:begin\n# project {id}\n/.agents/skills/commit-style/\n\
+             /.claude/skills/commit-style/\n# mindweaver:end\n"
         )
     );
     assert!(!ignored(&project, ".claude/skills/deploy"));
@@ -1828,7 +1828,7 @@ fn a_local_install_outside_git_says_nothing_keeps_its_copies_out() {
 fn an_exclude_block_that_cannot_be_read_refuses_the_install_with_nothing_written() {
     let (_dir, workspace, project, ledger) = local_v3(Share::Local, true);
     let file = exclude_file(&project);
-    fs::write(&file, "# mindflayer:begin\n/mine/\n").unwrap();
+    fs::write(&file, "# mindweaver:begin\n/mine/\n").unwrap();
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
 
@@ -1858,7 +1858,7 @@ fn an_exclude_block_that_cannot_be_read_refuses_the_install_with_nothing_written
         .is_none());
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
-        "# mindflayer:begin\n/mine/\n"
+        "# mindweaver:begin\n/mine/\n"
     );
 }
 

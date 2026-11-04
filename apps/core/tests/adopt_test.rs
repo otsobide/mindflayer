@@ -378,7 +378,7 @@ fn a_plan_refuses_an_exclude_block_the_adoption_could_not_edit() {
     let (_dir, workspace, project) = given(Share::Local);
     let file = project.root().join(".git/info/exclude");
     fs::create_dir_all(file.parent().unwrap()).unwrap();
-    fs::write(&file, "# mindflayer:begin\n# project .\n").unwrap();
+    fs::write(&file, "# mindweaver:begin\n# project .\n").unwrap();
 
     let refused = plan(&workspace, &project, "notes").unwrap_err();
 

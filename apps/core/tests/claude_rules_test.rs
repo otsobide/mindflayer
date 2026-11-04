@@ -632,8 +632,8 @@ fn a_local_project_keeps_its_rule_files_out_of_git_and_takes_them_back_in() {
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
         format!(
-            "{before}# mindflayer:begin\n# project {id}\n/app/.claude/rules/mindflayer/a.md\n\
-             /app/.claude/rules/mindflayer/git/no-force-push.md\n# mindflayer:end\n"
+            "{before}# mindweaver:begin\n# project {id}\n/app/.claude/rules/mindflayer/a.md\n\
+             /app/.claude/rules/mindflayer/git/no-force-push.md\n# mindweaver:end\n"
         )
     );
     assert!(fixture.ignored("a"));
@@ -697,7 +697,7 @@ fn a_local_project_outside_git_is_told_nothing_keeps_its_files_out() {
 fn an_exclude_block_that_cannot_be_read_refuses_the_render_with_nothing_written() {
     let fixture = fixture_with(Share::Local, true);
     let file = fixture.exclude_file();
-    fs::write(&file, "# mindflayer:begin\n/mine/\n").unwrap();
+    fs::write(&file, "# mindweaver:begin\n/mine/\n").unwrap();
     let rule = fixture.rule("a", "Rule a.\n");
 
     let refused = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap_err();
@@ -710,7 +710,7 @@ fn an_exclude_block_that_cannot_be_read_refuses_the_render_with_nothing_written(
     assert!(!fixture.folder().exists());
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
-        "# mindflayer:begin\n/mine/\n"
+        "# mindweaver:begin\n/mine/\n"
     );
 }
 
@@ -743,8 +743,8 @@ fn a_file_that_fails_to_land_takes_its_exclude_entry_back_out() {
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
         format!(
-            "{before}# mindflayer:begin\n# project {id}\n\
-             /app/.claude/rules/mindflayer/review/tone.md\n# mindflayer:end\n"
+            "{before}# mindweaver:begin\n# project {id}\n\
+             /app/.claude/rules/mindflayer/review/tone.md\n# mindweaver:end\n"
         )
     );
 }
