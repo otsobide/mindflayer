@@ -67,15 +67,6 @@ cargo test -p mindflayer-cli --test tui_test          # one area
 cargo test -p mindflayer-core --lib workspace         # one module's unit tests
 ```
 
-The Rust suites also run by layer, with no Node, as the
-`unit-and-integration` workflow runs them on Linux:
-
-```bash
-make test/unit         # every crate's src/<module>_test.rs
-make test/values       # the value objects and their mothers, TypeScript and JSON Schema included
-make test/integration  # every crate's tests/<area>_test.rs
-```
-
 What a test needs is built by an object mother rather than by hand:
 `mindflayer_core::mother` has one for each value object
 (`ContentHashMother`, `RedactedMother`, `OriginMother`, `ArtifactNameMother`,

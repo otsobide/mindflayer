@@ -31,9 +31,6 @@ lists everything.
 
 ```bash
 make test                 # every suite, the panel's first: needs Node 24 and pnpm
-make test/unit            # every crate's unit tests (src/<module>_test.rs), Rust only
-make test/values          # the value objects and their mothers, with their TypeScript and JSON Schema
-make test/integration     # every crate's integration suites (tests/<area>_test.rs), Rust only
 make fmt/check            # CI runs this first
 make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets, with the ts feature too
 make run ARGS="flayer list"
@@ -1513,8 +1510,13 @@ These are easy to break from a single file without noticing.
   `feature/*`, `hotfix/*` or `release/*` (or `main`, for a back-merge). PRs
   into `main` come only from `dev`. PRs are merged with merge commits.
 - CI runs `fmt and clippy`, then `test (core)`, then `test (cli)`, `test
-  (server)`, `test (web)` and `types drift (web)`, and builds each app after
-  its tests pass. `test (web)` sets up Node, as only `e2e (web)` does
+  (server)`, `test (web)` and `types drift (web)`, one workflow
+  (`test-and-build`) whose tests are split by app alone, never by layer:
+  an app's unit tests, value objects and integration suites run in its
+  `test (<app>)`. It builds each app after its tests pass, in debug and then,
+  once that passes, its release, the optimized build (`make core/release`,
+  `make server/release`, `make cli/release`), in the same `build (<app>)`
+  job. `test (web)` sets up Node, as only `e2e (web)` does
   besides on Linux: it lints, type-checks, tests and builds the panel, and
   uploads the build.
   `build (cli)` waits for it, embeds that build in a release, then removes
@@ -1527,12 +1529,6 @@ These are easy to break from a single file without noticing.
   only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
   the compatibility pass (#154) puts them back on pushes to `dev`/`main` and
   PRs from `dev`, `main` or `release/*`.
-- `.github/workflows/unit-and-integration.yml` runs the Rust suites by layer
-  on Linux, each through its root target: `unit (rust)` (`make test/unit`)
-  and `value objects (rust)` (`make test/values`), then `integration (rust)`
-  (`make test/integration`, with zsh installed for the shells suite). A
-  workflow of its own so a failure names the layer that broke, and so no
-  check the rulesets require changes name; its checks are not required.
 - The rulesets for `dev` and `main` require every check that runs on every
   pull request: `fmt and clippy`, `test (core)`, `test (cli)`, `test
   (server)`, `test (web)`, `types drift (web)`, `build (core)`, `build

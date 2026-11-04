@@ -7122,6 +7122,19 @@ CI gives the panel jobs of its own:
 The rulesets for `dev` and `main` require every check that runs on every
 pull request, the panel's three among them; AGENTS.md lists them by name.
 
+The tests are split by app and by nothing else. A crate's unit tests, its
+value objects and its integration suites run in its one `test (<app>)`,
+as `make <app>/test` runs them: a workflow of jobs by layer (`unit`,
+`value objects`, `integration`) ran beside it for a while, and ran the
+same tests a second time on every push, compiling each crate twice to
+say by a check's name which layer broke, which the failing test's path
+says already. Each `build (<app>)` then builds its app in debug and, as a
+step after it, the release (`make core/release`, `make server/release`,
+the CLI's `make cli/release`): the optimized build is the one that ships,
+so it is built on every run rather than first when a release is cut, and
+after the debug build, which fails sooner and cheaper. A step rather than a
+job of its own, so no check name changes and the rulesets stay as they are.
+
 `make install` and `make cli/release` build the panel first through `make
 web/build/if-node`. Where Node and pnpm run it is `make web/build`, and a
 build that fails fails them. Where either is missing, a warning says what
@@ -11081,11 +11094,12 @@ an open question below.
 - **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, and with
   SIGTERM, sent by `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
   Ctrl-C (`tokio::signal::windows::ctrl_c`), which no test sends yet (#154).
-- **A release compiled from nothing on every run.** `build (cli)` builds the
-  release profile from scratch each time: every job shares one cargo cache
-  key, saved by the first job to finish, which builds no release. A key of
-  its own would keep the release's dependencies, at the price of a second
-  target folder in a cache GitHub caps per repository.
+- **A release compiled from nothing on every run.** `build (core)`, `build
+  (cli)` and `build (server)` each build the release profile from scratch
+  every time: every job shares one cargo cache key, saved by the first job
+  to finish, which builds no release. A key of their own would keep the
+  release's dependencies, at the price of a second target folder in a cache
+  GitHub caps per repository.
 - **The release check on one platform.** `make cli/release/check` runs on
   Linux only: its script needs bash 4.4 and SIGINT, and the macOS and
   Windows jobs build no release. The compatibility pass (#154) could take it
