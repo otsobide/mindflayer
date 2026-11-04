@@ -12,9 +12,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mindweaver_core::gather::{self, Request};
-use mindweaver_core::install::{self, Standing};
+use mindweaver_core::install::{self, Edits, Standing};
 use mindweaver_core::migrate::{self, LeftWhy, MigrateError, Refusal};
 use mindweaver_core::mother::{GitRepositoryMother, MindflayerMother};
+use mindweaver_core::update;
 use mindweaver_core::{
     Agent, AgentHomes, Directories, Kind, MindProject, Names, Share, WeaverWorkspace,
 };
@@ -330,6 +331,91 @@ fn a_rule_file_changed_since_it_was_written_is_left_where_it_is_with_its_record(
     assert_eq!(fixture.text(&edited), "Mine now.\n");
     assert!(!fixture.app(".claude/rules/mindweaver/rust.md").exists());
     assert_eq!(fixture.standing(&workspace, "rust"), Standing::Edited);
+    assert!(fixture
+        .exclude()
+        .contains("/app/.claude/rules/mindflayer/rust.md"));
+}
+
+#[test]
+fn a_rule_file_not_there_has_its_record_pointed_at_the_new_folder_for_an_update_to_fill() {
+    let fixture = fixture();
+    let old = fixture.app(".claude/rules/mindflayer/rust.md");
+    fs::remove_file(&old).unwrap();
+    let mut workspace = fixture.workspace.clone();
+
+    let plan = migrate::names_plan(&workspace).unwrap();
+    assert!(plan.refusals.is_empty(), "{:?}", plan.refusals);
+    assert!(plan.projects[0].rules.is_empty());
+    assert!(plan.projects[0].left.is_empty());
+    assert_eq!(plan.projects[0].absent.len(), 1);
+    assert_eq!(plan.projects[0].absent[0].route, "rust");
+    let new = fixture.app(".claude/rules/mindweaver/rust.md");
+    assert_eq!(plan.projects[0].absent[0].to, new);
+
+    migrate::names(&mut workspace).unwrap();
+
+    assert!(!new.exists());
+    assert!(!fixture.app(".claude/rules/mindflayer").exists());
+    assert_eq!(fixture.standing(&workspace, "rust"), Standing::Missing);
+    let exclude = fixture.exclude();
+    assert!(
+        exclude.contains("/app/.claude/rules/mindweaver/rust.md"),
+        "{exclude}"
+    );
+    assert!(!exclude.contains("mindflayer"), "{exclude}");
+
+    update::apply(
+        &workspace,
+        std::slice::from_ref(&fixture.project),
+        &[],
+        Edits::Kept,
+        &AgentHomes::default(),
+    )
+    .unwrap();
+
+    assert_eq!(fixture.text(&new), scoped("Return errors."));
+    assert!(!fixture.app(".claude/rules/mindflayer").exists());
+    assert_eq!(fixture.standing(&workspace, "rust"), Standing::Current);
+    assert!(!fixture.exclude().contains("mindflayer"));
+}
+
+#[test]
+fn a_rule_file_not_there_whose_new_place_is_taken_refuses_the_whole_move() {
+    let fixture = fixture();
+    fs::remove_file(fixture.app(".claude/rules/mindflayer/rust.md")).unwrap();
+    let there = fixture.app(".claude/rules/mindweaver/rust.md");
+    fs::create_dir_all(there.parent().unwrap()).unwrap();
+    fs::write(&there, "Somebody's.\n").unwrap();
+    let before = fixture.files();
+    let mut workspace = fixture.workspace.clone();
+
+    let refused = migrate::names(&mut workspace).unwrap_err();
+
+    assert!(
+        matches!(&refused, MigrateError::Refused(refusals) if matches!(&refusals[..], [Refusal::Taken { to, .. }] if *to == there)),
+        "{refused:?}"
+    );
+    assert_eq!(fixture.files(), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_in_a_rule_file_s_place_is_left_where_it_is_with_its_record() {
+    let fixture = fixture();
+    let old = fixture.app(".claude/rules/mindflayer/rust.md");
+    fs::remove_file(&old).unwrap();
+    std::os::unix::fs::symlink("elsewhere.md", &old).unwrap();
+    let mut workspace = fixture.workspace.clone();
+
+    let plan = migrate::names_plan(&workspace).unwrap();
+    assert!(plan.projects[0].rules.is_empty());
+    assert!(plan.projects[0].absent.is_empty());
+    assert_eq!(plan.projects[0].left[0].why, LeftWhy::Unlike);
+
+    migrate::names(&mut workspace).unwrap();
+
+    assert!(fs::symlink_metadata(&old).unwrap().file_type().is_symlink());
+    assert!(!fixture.app(".claude/rules/mindweaver/rust.md").exists());
     assert!(fixture
         .exclude()
         .contains("/app/.claude/rules/mindflayer/rust.md"));

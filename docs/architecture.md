@@ -9904,7 +9904,10 @@ artifact. A plan first, a dry run without `--yes`, as `migrate::library`
 and `migrate::project` have it, and under the workspace's lock: each
 project's blocks spelled the new way and each rule file it recorded
 carried to the new folder with its record and its exclude line (one
-changed since left where it is, its record naming it there), then the
+changed since left where it is, its record naming it there, and one not
+there pointed at the new folder all the same, since left naming the old
+one it would be written there again by the update that puts it back), then
+the
 ledger's shelf paths, the marker's folders inside the old one, the marker,
 the ledger and every copy kept of either renamed, and the folder last. A
 name taken where anything would go, a block that cannot be read, a project

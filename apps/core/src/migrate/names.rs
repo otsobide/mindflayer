@@ -13,11 +13,14 @@
 //! new way, the block of the exclude file git reads for it too, and each of
 //! Claude's rule files the ledger records in `.claude/rules/mindflayer` is
 //! carried to `.claude/rules/mindweaver`, its record and its exclude line
-//! with it.
+//! with it; one that is not there has its record and its line pointed
+//! there all the same, so the update that puts it back puts it under the
+//! new name.
 //!
 //! Only what Mindweaver wrote moves, and only as it wrote it: a rule file
-//! changed since, or not there, is left where it is, its record naming it
-//! there, which a render finds; one nothing records is never looked at. A
+//! changed since, or something else in its place, is left where it is, its
+//! record naming it there, which a render finds; one nothing records is
+//! never looked at. A
 //! name already taken where something would go refuses the whole move, and
 //! so does a block that cannot be read, a project whose marker cannot, and
 //! a ledger another process has open, whose log a rename would leave
@@ -113,6 +116,13 @@ pub struct ProjectNames {
     /// Each of Claude's rule files carried to `.claude/rules/mindweaver`,
     /// its record with it.
     pub rules: Vec<CarriedRule>,
+    /// Each one the ledger records in `.claude/rules/mindflayer` that is not
+    /// there: nothing is moved, and its record and its exclude line are
+    /// pointed at `.claude/rules/mindweaver`, as a carried one's are, so
+    /// the update that puts it back puts it there. Left pointing at the old
+    /// folder, it would be written there again under a workspace moved to
+    /// the new names.
+    pub absent: Vec<CarriedRule>,
     /// Each one left in `.claude/rules/mindflayer`, its record naming it
     /// there, which a render finds as it does any recorded file.
     pub left: Vec<LeftRule>,
@@ -144,8 +154,10 @@ pub enum Left {
     /// It holds something else than what was written: somebody's edit,
     /// which a move would carry as Mindweaver's.
     Edited,
-    /// Nothing is there, or nothing a file of Mindweaver's would be.
-    Missing,
+    /// Something other than a file it can read is in its place, a link or
+    /// a folder: nothing a file of Mindweaver's would be, so somebody's,
+    /// which a render leaves as it is too.
+    Unlike,
 }
 
 /// What [`names`] did.
@@ -351,6 +363,7 @@ fn carry_out(
             let carried: Vec<&CarriedRule> = names
                 .rules
                 .iter()
+                .chain(&names.absent)
                 .filter(|carried| carried.route == record.name.as_str())
                 .collect();
             if carried.is_empty() {
@@ -395,6 +408,19 @@ fn carry_out(
             .join(claude_rules::folder_under(Names::Mindflayer));
         for carried in &names.rules {
             prune(&top, carried.from.parent());
+        }
+        // A folder an absent file left empty goes too, as a render's does,
+        // so the old name is not left on the disk with nothing in it.
+        for absent in &names.absent {
+            let Some(folder) = absent.from.parent().filter(|folder| folder.is_dir()) else {
+                continue;
+            };
+            prune(&top, Some(folder));
+            if !is_there(folder) {
+                done.0.push(Step::Pruned {
+                    folder: folder.to_path_buf(),
+                });
+            }
         }
         for file in &names.blocks {
             respell_block(&names.root, file, done)?;
@@ -471,6 +497,8 @@ enum Step {
         to: PathBuf,
         top: PathBuf,
     },
+    /// Empty folders taken away from `folder` up, made again to put back.
+    Pruned { folder: PathBuf },
     /// An installation's targets, as they were.
     Retargeted {
         entry: String,
@@ -510,6 +538,11 @@ impl Done {
                         stranded.push(to);
                     } else {
                         prune(&top, to.parent());
+                    }
+                }
+                Step::Pruned { folder } => {
+                    if fs::create_dir_all(&folder).is_err() {
+                        stranded.push(folder);
                     }
                 }
                 Step::Retargeted {
@@ -696,14 +729,16 @@ fn project_names(
             }
             let from = root.join(&target.path);
             let to = root.join(claude_rules::file_under(Names::Mindweaver, &record.name));
-            let held = fs::symlink_metadata(&from)
-                .ok()
+            let found = fs::symlink_metadata(&from).ok();
+            let held = found
+                .as_ref()
                 .filter(|found| found.is_file())
                 .and_then(|_| fs::read(&from).ok());
-            let why = match (&held, &target.content_hash) {
-                (Some(bytes), Some(written)) if hash::bytes(bytes) == *written => None,
-                (Some(_), _) => Some(Left::Edited),
-                (None, _) => Some(Left::Missing),
+            let why = match (&found, &held, &target.content_hash) {
+                (_, Some(bytes), Some(written)) if hash::bytes(bytes) == *written => None,
+                (_, Some(_), _) => Some(Left::Edited),
+                (Some(_), None, _) => Some(Left::Unlike),
+                (None, None, _) => None,
             };
             if let Some(why) = why {
                 names.left.push(LeftRule {
@@ -719,11 +754,16 @@ fn project_names(
                     to: to.clone(),
                 });
             }
-            names.rules.push(CarriedRule {
+            let carried = CarriedRule {
                 route: record.name.to_string(),
                 from,
                 to,
-            });
+            };
+            if found.is_some() {
+                names.rules.push(carried);
+            } else {
+                names.absent.push(carried);
+            }
         }
     }
     if !names.rules.is_empty() {

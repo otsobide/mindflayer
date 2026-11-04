@@ -255,6 +255,38 @@ fn migrate_names_with_yes_moves_it_all_and_a_second_run_has_nothing_to_move() {
 }
 
 #[test]
+fn a_rule_file_not_there_is_put_back_under_the_new_name_once_the_workspace_moved() {
+    let dir = installed();
+    let root = dir.path();
+    std::fs::remove_file(root.join("app/.claude/rules/mindflayer/rust.md")).unwrap();
+
+    let planned = weaver(root, &["migrate", "--names"]).unwrap();
+    assert!(
+        planned.stdout.contains(&format!(
+            "would point the record of rule `rust` at {}/app/.claude/rules/mindweaver/rust.md: \
+             its file is not there, so nothing moves, and an update puts it back there\n",
+            root.display()
+        )),
+        "{}",
+        planned.stdout
+    );
+    weaver(root, &["migrate", "--names", "--yes"]).unwrap();
+    let updated = weaver(root, &["update", "-p", "app", "--yes"]).unwrap();
+
+    assert!(
+        updated
+            .stdout
+            .contains("put back rule rust in app at .claude/rules/mindweaver/rust.md, from"),
+        "{}",
+        updated.stdout
+    );
+    assert!(root.join("app/.claude/rules/mindweaver/rust.md").is_file());
+    assert!(!root.join("app/.claude/rules/mindflayer").exists());
+    let exclude = std::fs::read_to_string(root.join(".git/info/exclude")).unwrap();
+    assert!(!exclude.contains("mindflayer"), "{exclude}");
+}
+
+#[test]
 fn mind_migrate_names_moves_the_workspace_the_project_uses() {
     let dir = installed();
     let root = dir.path();

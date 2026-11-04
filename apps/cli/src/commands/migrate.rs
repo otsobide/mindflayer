@@ -213,10 +213,20 @@ fn project_names(text: &mut String, project: &ProjectNames, done: bool) {
             carried.to.display()
         );
     }
+    for absent in &project.absent {
+        let _ = writeln!(
+            text,
+            "{} the record of rule `{}` at {}: its file is not there, so nothing moves, and an \
+             update puts it back there",
+            would("pointed", "would point"),
+            absent.route,
+            absent.to.display()
+        );
+    }
     for left in &project.left {
         let why = match left.why {
             LeftWhy::Edited => "changed since Mindweaver wrote it, so it is somebody's",
-            LeftWhy::Missing => "not there, so there is nothing to move",
+            LeftWhy::Unlike => "not a file Mindweaver could have written, so it is somebody's",
         };
         let _ = writeln!(
             text,

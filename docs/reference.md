@@ -3012,7 +3012,9 @@ its blocks are spelled `mindweaver:`, every other byte kept, and each rule
 file the database records in `.claude/rules/mindflayer` moves to
 `.claude/rules/mindweaver`, its record and its line in the exclude file
 with it; one you changed since is left where it is, its record naming it
-there, and the line says so. What was installed stays current, and a
+there, and the line says so, while one that is not there has its record
+and its line pointed at the new folder, so `mindweaver update` puts it
+back there. What was installed stays current, and a
 second run has nothing to do:
 
 ```
