@@ -9136,10 +9136,11 @@ one machine at a time.
 ## Decisions
 
 The roadmap in [#15](https://github.com/otsobide/mindflayer/issues/15) rests on
-twenty-five decisions: twenty-two validated by the owner on 2026-10-26,
+twenty-six decisions: twenty-two validated by the owner on 2026-10-26,
 [D-24](#d-24-the-local-server-is-a-versioned-http-api) on 2026-11-03 with the
 milestone it opens, [D-25](#d-25-core-is-values-and-ports), asked for by the
-owner on the same day, and [D-20](#d-20-opencode-subagents-pending), still
+owner on the same day, [D-26](#d-26-the-product-is-mindweaver), asked for on
+2026-11-04, and [D-20](#d-20-opencode-subagents-pending), still
 pending. They are written down
 here so that the PRs carrying them out do not reopen them: a change that
 disagrees with one starts by changing the decision, here, with the owner. Each
@@ -9780,6 +9781,60 @@ second crate for each adapter, which would split one engine's rules from
 the code that keeps them for no reader that needs the split yet. Still to
 carry out: the values not named yet (a project's name, a registry entry),
 an open question below.
+
+### D-26: The product is Mindweaver
+
+Asked for by the owner on 2026-11-04, to keep clear of intellectual
+property that is not ours: "Mind Flayer" is a name from a published game.
+The product is Mindweaver, and so is everything named after it: the crates
+`mindweaver-core`, `mindweaver-cli` and `mindweaver-server`
+(`mindweaver_core`...), the panel's package `mindweaver-web`, the second
+binary `mindweaver` (`apps/cli/src/bin/mindweaver.rs`), and `mind weaver
+<cmd>`, the same as `mindweaver <cmd>`. What was a flayer workspace is a
+weaver workspace, and every identifier, test name and comment built from
+the old name follows it: `WeaverWorkspace`, `WeaverCli`, `WeaverCommand`,
+`WeaverConfig`, `run_weaver_with`, `WEAVER_FORMAT_VERSION`. `mind` keeps
+its name, and so does a mind project and its `.mind`. The binary is
+`mindweaver` rather than `weaver`, which OpenTelemetry's CLI already is on
+many PATHs; the concept and the `mind` subcommand are the short `weaver`,
+and so are the prefix an activated prompt shows, `(weaver:<name>)`, and the
+alias `make dev/link` makes, `mw`, as `mf` was.
+
+In two steps, so that no change of a name and of a file a user has go out
+together. #228 renamed the product, the code and the commands, and changed
+nothing on the disk or on the wire: the names Mindflayer writes outside its
+own code stayed byte for byte, each held in the one constant that names it
+where the code does (`WEAVER_DIR` for `.mindflayer/`, `WEAVER_CONFIG` for
+`flayer.toml`, `LEDGER_FILE` for `mindflayer.db` and its backups, the
+markers of the blocks in `AGENTS.md` and in git's exclude file, Claude's
+rules folder `.claude/rules/mindflayer/`, the staging suffix, the variables
+`MINDFLAYER_WORKSPACE` and `MINDFLAYER_HOME`, the shell function
+`flayer-deactivate`, the panel's header `X-Mindflayer` and the cookie
+`mf_<port>`). #229 renames those, reading the old ones and moving them only
+when asked, as every format change does ([formats are
+versioned](#formats-are-versioned)). The GitHub repository is renamed,
+otsobide/mindflayer to otsobide/mindweaver, once the code says Mindweaver:
+the owner's step, not an issue's. Rejected: one change for both, which
+would have moved every user's workspace in the same PR as every
+identifier; and `weaver` for the binary. Unblocks #228 and #229.
+
+Carrying it out, #228 kept a few more names as they were, each for #229 to
+decide: the codes `path_in_mindflayer` and `x_mindflayer_required`, since a
+code once given is never renamed ([a code for what went
+wrong](#a-code-for-what-went-wrong)), though the variants that give them
+are `PolicyError::InWeaverDir` and `Condition::PanelHeaderRequired`; the
+`.gitignore` a local project's `.mind` is given (`MIND_IGNORE`), whose text
+says the old name and is matched byte for byte before it is removed; the
+prefix of the panel's own cookies, `mindflayer-`, which keeps a browser's
+colour mode and sidebar; and what an older build wrote that the tests read
+back as it was, the ledger dumps and the markers under
+`apps/core/tests/fixtures` and the version 2 `mind.toml` that only tests
+still write. A new marker's comments name the new product and commands,
+which changes no format. The agent probe is renamed on #18's branch, which
+was changing it at the same time (open questions). `make install` and `make dev/link`
+leave a `flayer` or an `mf` an older build put on the PATH where it is,
+the user's to remove ([the reference](reference.md#getting-started) says
+how).
 
 ## Open questions
 
@@ -11110,3 +11165,18 @@ an open question below.
   same lockfile, on whatever Node the image has, rather than embed the one
   `test (web)` tested; a variable telling `make web/build/if-node` to take
   `dist/` as it is would settle it, at the price of a knob only CI turns.
+- **The agent probe still says Mindflayer.** `scripts/agent-probe/`
+  runs the binaries by their old names and its words name the product
+  ([D-26](#d-26-the-product-is-mindweaver)): #228 left it as it was, since
+  #18 was changing the same scripts on a branch of its own, and its rename
+  is done there, once #18 has landed or as it lands. Nothing runs it in CI or
+  `make test`, so nothing fails meanwhile.
+- **The names written outside the code, until #229.** A workspace's
+  folder, its marker and ledger, the blocks' markers, Claude's rules
+  folder, the variables, `flayer-deactivate`, the panel's header and its
+  cookies still say Mindflayer ([D-26](#d-26-the-product-is-mindweaver)).
+  #229 is to read the old names beside the new and move a user's files only
+  when asked, as `migrate` moves a format; whether the two codes that spell
+  the old name (`path_in_mindflayer`, `x_mindflayer_required`) are given
+  new ones beside them, never taking the old ones' place, is its to
+  decide.

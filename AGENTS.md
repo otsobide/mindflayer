@@ -1002,6 +1002,21 @@ These are easy to break from a single file without noticing.
     What no SQL can know is handed to the step rather than read by it:
     schema 5 is told each linked project's id (`Ledger::open_knowing`, from
     `WeaverWorkspace::known`).
+- **What is written outside the code keeps the old name, in one constant
+  each.** Mindweaver was Mindflayer (D-26, in `docs/architecture.md`), and
+  what a build writes on the disk or sends on the wire is still spelled the
+  old way until #229 moves it, reading the old: `WEAVER_DIR` (`.mindflayer`),
+  `WEAVER_CONFIG` (`flayer.toml`), `LEDGER_FILE` (`mindflayer.db`, its
+  backups beside it), the blocks' markers (`agents_md::BEGIN`, `END`,
+  `RULE`, `exclude::BEGIN`, `END`), Claude's rules folder
+  (`claude_rules`), the staging suffix (`copy`), `MIND_IGNORE`,
+  `activate::WORKSPACE_VARIABLE` and `DEACTIVATE`, the CLI's
+  `homes::HOME_VARIABLE`, the server's `guard::PANEL_HEADER` and
+  `auth::COOKIE_PREFIX`, and the panel's cookie prefix
+  (`src/preferences.ts`). Code that uses one, a message included, names it
+  through its constant, never by its spelling; a doc comment, a doc and a
+  test may spell it. The codes `path_in_mindflayer` and
+  `x_mindflayer_required` stay as they are, as every code does.
 - **A project is found again by its id, never by a guess.** The ledger
   keeps the id it last saw at each route (`projects`), learned from the
   projects themselves every time it is opened to write (`Ledger::knew`),

@@ -2931,6 +2931,18 @@ A newer Mindweaver reads what an older one wrote exactly as it was written. It
 changes a marker only when you tell it to, and the database only after
 copying it aside ([what a workspace keeps](#what-a-workspace-keeps)).
 
+### From Mindflayer
+
+Mindweaver was called Mindflayer, and its second command `flayer`: what
+was `flayer <cmd>` is `mindweaver <cmd>`, what was `mind flayer <cmd>` is
+`mind weaver <cmd>`, and a flayer workspace is a weaver workspace. A script
+that runs `flayer` needs the new name; nothing a workspace or a project
+holds does. Its `.mindflayer`, its `flayer.toml` and its database, a
+project's blocks and Claude's rules folder, `$MINDFLAYER_WORKSPACE`,
+`$MINDFLAYER_HOME` and `flayer-deactivate` keep their names for now, and
+are read as they were written. The binaries an older build installed are
+yours to remove: [getting started](#getting-started) says how.
+
 ### A workspace made before the library
 
 `mindweaver init` used to keep a workspace's own skills and rules in `skills/` and
