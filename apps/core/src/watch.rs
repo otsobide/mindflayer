@@ -20,7 +20,7 @@
 //!   Watching the nearest folder above it that is there, for its being
 //!   made, is the watcher's, since it is the same for any path.
 //! - **Nothing a read changes.** The ledger is named by its file, never by
-//!   its folder: SQLite makes `mindflayer.db-wal` and `mindflayer.db-shm`
+//!   its folder: SQLite makes `mindweaver.db-wal` and `mindweaver.db-shm`
 //!   beside it to read it and takes them away after, so a watch on the
 //!   folder would wake for every snapshot it set off, without end. A write
 //!   reaches the file itself when its log is checkpointed, at the latest as
@@ -32,7 +32,7 @@
 //! - **Asked again after every change.** A skill installed is a new folder
 //!   to watch, and a project linked a set of them, so a front end asks for
 //!   the list again once something on it changed rather than keep one the
-//!   disk has moved past; `flayer.toml` changing, a project linked or
+//!   disk has moved past; `weaver.toml` changing, a project linked or
 //!   unlinked, is one such change.
 
 use std::path::{Path, PathBuf};
@@ -41,11 +41,10 @@ use crate::agent::Agent;
 use crate::catalog::Catalog;
 use crate::claude_rules;
 use crate::kind::Kind;
+use crate::names::Names;
 use crate::paths;
 use crate::template;
-use crate::workspace::{
-    MarkerFile, MindProject, WeaverWorkspace, MIND_DIR, WEAVER_CONFIG, WEAVER_DIR,
-};
+use crate::workspace::{MarkerFile, MindProject, WeaverWorkspace, MIND_DIR};
 
 /// One path to watch, and what a change to it is a change to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -101,11 +100,11 @@ pub fn watched(workspace: &WeaverWorkspace, home: Option<&Path>) -> Vec<Watched>
                 list.folders(&at_home, &source.own());
             }
             // What would bring it back.
-            Err(_) => list.add(&at_home, marker_of_workspace(&loaded.root)),
+            Err(_) => list.workspace_markers(&at_home, &loaded.root),
         }
     }
     if let Some(home) = home {
-        list.add(&at_home, marker_of_workspace(home));
+        list.workspace_markers(&at_home, home);
     }
 
     for member in workspace.members() {
@@ -117,11 +116,6 @@ pub fn watched(workspace: &WeaverWorkspace, home: Option<&Path>) -> Vec<Watched>
         }
     }
     list.0
-}
-
-/// Where a workspace at `root` keeps its marker.
-fn marker_of_workspace(root: &Path) -> PathBuf {
-    root.join(WEAVER_DIR).join(WEAVER_CONFIG)
 }
 
 /// The list being put together, each path once for each scope.
@@ -136,6 +130,20 @@ impl List {
         };
         if !self.0.contains(&watched) {
             self.0.push(watched);
+        }
+    }
+
+    /// Each file a workspace's marker can be in, under `root`: the one
+    /// Mindweaver writes and the one a Mindflayer build wrote, either of
+    /// which makes it a workspace, and a move from the one to the other
+    /// changes.
+    fn workspace_markers(&mut self, scope: &Scope, root: &Path) {
+        for names in Names::ALL {
+            self.add(
+                scope,
+                root.join(names.workspace_dir())
+                    .join(names.workspace_config()),
+            );
         }
     }
 

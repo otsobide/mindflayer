@@ -46,7 +46,7 @@ pub struct Cli {
 
     // A string rather than a path for the reason `home` is one: empty is an
     // answer, and a path cannot spell it.
-    /// The workspace to use, by its directory or its `.mindflayer`, wherever
+    /// The workspace to use, by its directory or its `.mindweaver`, wherever
     /// you are [default: $MINDFLAYER_WORKSPACE, then the one at or above
     /// here, then the default one; empty to name none and ignore
     /// $MINDFLAYER_WORKSPACE].
@@ -153,7 +153,7 @@ pub enum Command {
         description: String,
 
         /// Start from a template instead: `full`, or one of yours in
-        /// `.mind/templates` or the workspace's `.mindflayer/templates`.
+        /// `.mind/templates` or the workspace's `.mindweaver/templates`.
         #[arg(long, value_name = "NAME")]
         template: Option<String>,
     },
@@ -252,7 +252,7 @@ pub enum Command {
     /// above this project, read live from where they are; on its own, list
     /// what it loads.
     Load {
-        /// Each workspace's directory, the one holding `.mindflayer`
+        /// Each workspace's directory, the one holding `.mindweaver`
         /// [default: list the loaded ones].
         #[arg(value_name = "WORKSPACE")]
         workspaces: Vec<PathBuf>,
@@ -427,7 +427,7 @@ pub struct WeaverCli {
 
     // A string rather than a path for the reason `home` is one: empty is an
     // answer, and a path cannot spell it.
-    /// The workspace to use, by its directory or its `.mindflayer`, wherever
+    /// The workspace to use, by its directory or its `.mindweaver`, wherever
     /// you are [default: $MINDFLAYER_WORKSPACE, then the one at or above
     /// here, then the default one; empty to name none and ignore
     /// $MINDFLAYER_WORKSPACE].
@@ -451,18 +451,18 @@ pub enum WeaverCommand {
         path: Option<PathBuf>,
 
         /// Where the workspace keeps its own skills [default:
-        /// `.mindflayer/library/skills`].
+        /// `.mindweaver/library/skills`].
         ///
         /// Relative to the workspace. They are the ones it shares with every
         /// project it manages, kept by default in its library, where no
         /// agent looks. Any folder inside the workspace will do except the
         /// shelf and the cache, a folder inside them, or one holding them,
-        /// such as `.mindflayer` itself.
+        /// such as `.mindweaver` itself.
         #[arg(long, value_name = "DIR")]
         skills: Option<PathBuf>,
 
         /// Where the workspace keeps its own rules [default:
-        /// `.mindflayer/library/rules`].
+        /// `.mindweaver/library/rules`].
         #[arg(long, value_name = "DIR")]
         rules: Option<PathBuf>,
     },
@@ -474,7 +474,7 @@ pub enum WeaverCommand {
     /// It writes nothing, and prints no code when there is nothing to
     /// activate, so a failed `eval` changes nothing either.
     Activate {
-        /// The workspace, by its directory or its `.mindflayer` [default: the
+        /// The workspace, by its directory or its `.mindweaver` [default: the
         /// one a command run here would use].
         #[arg(value_name = "DIR")]
         path: Option<PathBuf>,
@@ -522,7 +522,7 @@ pub enum WeaverCommand {
         description: String,
 
         /// Start from a template instead: `full`, or one in
-        /// `.mindflayer/templates` or the project's `.mind/templates`.
+        /// `.mindweaver/templates` or the project's `.mind/templates`.
         #[arg(long, value_name = "NAME")]
         template: Option<String>,
     },
@@ -694,7 +694,7 @@ pub enum WeaverCommand {
     /// you. On its own, it lists what this workspace loads and what each
     /// offers.
     Load {
-        /// Each workspace's directory, the one holding `.mindflayer`
+        /// Each workspace's directory, the one holding `.mindweaver`
         /// [default: list the loaded ones].
         #[arg(value_name = "WORKSPACE")]
         workspaces: Vec<PathBuf>,
@@ -926,8 +926,8 @@ pub enum WeaverCommand {
     ))]
     Migrate {
         /// Move the workspace's own skills and rules from the folders its
-        /// flayer.toml names into its library, `.mindflayer/library`, and
-        /// point flayer.toml there, keeping it as it was beside it.
+        /// marker names into its library, `.mindweaver/library`, and point
+        /// the marker there, keeping it as it was beside it.
         #[arg(long, conflicts_with_all = ["agents", "local", "shared"])]
         library: bool,
 
@@ -1061,7 +1061,7 @@ pub enum WorkspacesCommand {
     /// Stop knowing a workspace: every entry the default workspace keeps for
     /// it, however it is spelled.
     Forget {
-        /// The workspace's directory, the one holding `.mindflayer`. It need
+        /// The workspace's directory, the one holding `.mindweaver`. It need
         /// not still exist.
         #[arg(value_name = "PATH")]
         path: PathBuf,

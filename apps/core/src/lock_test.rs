@@ -3,7 +3,7 @@
 //! The lock is the operating system's, taken on a file a writer opens for
 //! itself, so two acquisitions in one process keep each other out as two
 //! processes would: each test here plays both writers on one temporary
-//! `.mindflayer`.
+//! `.mindweaver`.
 
 use super::*;
 
@@ -13,7 +13,7 @@ use tempfile::TempDir;
 
 use crate::mother::random;
 
-/// A `.mindflayer` of its own, as a workspace holds one.
+/// A `.mindweaver` of its own, as a workspace holds one.
 fn folder() -> TempDir {
     TempDir::new().expect("make a temporary folder")
 }
@@ -195,14 +195,14 @@ fn no_holder_file_names_no_holder() {
 #[test]
 fn a_busy_workspace_says_which_process_holds_it_and_how_long_it_waited() {
     let error = LockError::Busy {
-        path: PathBuf::from("/w/.mindflayer/lock"),
+        path: PathBuf::from("/w/.mindweaver/lock"),
         pid: Some(4242),
         waited: Duration::from_secs(10),
     };
 
     assert_eq!(
         error.to_string(),
-        "/w/.mindflayer/lock: workspace busy: waited 10s for process 4242 to finish \
+        "/w/.mindweaver/lock: workspace busy: waited 10s for process 4242 to finish \
          writing to it; try again once it has"
     );
 }
@@ -210,14 +210,14 @@ fn a_busy_workspace_says_which_process_holds_it_and_how_long_it_waited() {
 #[test]
 fn a_busy_workspace_whose_holder_is_unknown_says_another_process_holds_it() {
     let error = LockError::Busy {
-        path: PathBuf::from("/w/.mindflayer/lock"),
+        path: PathBuf::from("/w/.mindweaver/lock"),
         pid: None,
         waited: Duration::from_millis(1500),
     };
 
     assert_eq!(
         error.to_string(),
-        "/w/.mindflayer/lock: workspace busy: waited 1.5s for another process to finish \
+        "/w/.mindweaver/lock: workspace busy: waited 1.5s for another process to finish \
          writing to it; try again once it has"
     );
 }
@@ -254,7 +254,7 @@ fn a_lock_in_a_folder_that_is_not_there_cannot_be_opened() {
 
 #[test]
 fn every_lock_error_names_the_lock_file() {
-    let path = PathBuf::from(format!("/{}/.mindflayer/lock", random::word()));
+    let path = PathBuf::from(format!("/{}/.mindweaver/lock", random::word()));
     let errors = [
         LockError::Busy {
             path: path.clone(),

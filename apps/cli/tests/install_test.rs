@@ -575,7 +575,7 @@ fn opening_the_screen_makes_no_ledger() {
 
     weaver(dir.path(), &["install"]).unwrap();
 
-    assert!(!dir.path().join(WEAVER_DIR).join("mindflayer.db").exists());
+    assert!(!dir.path().join(WEAVER_DIR).join("mindweaver.db").exists());
 }
 
 #[test]
@@ -1009,7 +1009,7 @@ fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() 
     gathered_twice(&workspace)
         .execute(
             "INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
-                 SELECT 'skill', 'lint', id, '.mindflayer/skills/older/lint', 0
+                 SELECT 'skill', 'lint', id, '.mindweaver/skills/older/lint', 0
                    FROM sources WHERE directory = 'older'",
             [],
         )

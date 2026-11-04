@@ -43,7 +43,7 @@ impl Kind {
     /// ([`Directories::default_for`](crate::workspace::Directories::default_for)),
     /// in a workspace's library for its own
     /// ([`Directories::library_for`](crate::workspace::Directories::library_for)),
-    /// and inside `.mindflayer` on a workspace's shelf. A marker's
+    /// and inside `.mindweaver` on a workspace's shelf. A marker's
     /// `[directories]` is keyed by it, which is how a project or a workspace
     /// puts the folder somewhere else.
     ///

@@ -30,7 +30,7 @@ use clap::Parser as _;
 use mindweaver_core::install::Change;
 use mindweaver_core::url::redacted;
 use mindweaver_core::{
-    codes, hash, Agent, Kind, Share, WeaverWorkspace, DEFAULT_SUBDIRECTORY, QUALIFIER,
+    codes, hash, Agent, Kind, Names, Share, WeaverWorkspace, DEFAULT_SUBDIRECTORY, QUALIFIER,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -523,6 +523,19 @@ impl Task {
     /// exception, a read that builds the screen `mindweaver install` opens rather
     /// than a line run, and a refresh changes nothing.
     pub fn commands(&self) -> Vec<Vec<String>> {
+        self.commands_saving_in(&WeaverWorkspace::scratch_route_under(Names::Mindweaver))
+    }
+
+    /// [`commands`](Self::commands), as they run in `workspace`: a save's
+    /// line names the scratch folder of the workspace it runs in
+    /// ([`WeaverWorkspace::scratch_route`]), which one a Mindflayer build
+    /// made keeps in its `.mindflayer`, where the text for it is put.
+    pub fn commands_in(&self, workspace: &WeaverWorkspace) -> Vec<Vec<String>> {
+        self.commands_saving_in(&workspace.scratch_route())
+    }
+
+    /// The lines, a save's text read from the scratch folder at `scratch`.
+    fn commands_saving_in(&self, scratch: &str) -> Vec<Vec<String>> {
         match self {
             Task::InitWorkspace => vec![words(&["mindweaver", "init"], &[])],
             Task::InitProject => vec![words(&["mind", "init"], &[])],
@@ -571,7 +584,10 @@ impl Task {
                         picking(&["mindweaver", "edit"], std::slice::from_ref(entry))
                     }
                 };
-                head.extend(option("--contents", &scratch_route(text)));
+                head.extend(option(
+                    "--contents",
+                    &format!("{scratch}/{}", scratch_name(text)),
+                ));
                 head.extend(option("--if-unchanged", hash));
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]
@@ -1290,23 +1306,25 @@ pub fn naming(line: &[String], root: &str) -> Vec<String> {
 }
 
 /// Where a save's `text` is put for its line to read, as a route from the
-/// workspace's root, `/` separated: the file [`scratch_name`] names, in the
-/// workspace's scratch folder as core spells its route
-/// ([`WeaverWorkspace::scratch_route`]), so the file a front end writes
-/// there ([`WeaverWorkspace::scratch_dir`]) is the one the line reads.
+/// root of a workspace made now, `/` separated: the file [`scratch_name`]
+/// names, in the workspace's scratch folder as core spells its route
+/// ([`WeaverWorkspace::scratch_route_under`]), so the file a front end
+/// writes there ([`WeaverWorkspace::scratch_dir`]) is the one the line
+/// reads. One a Mindflayer build made keeps its scratch folder in its own
+/// `.mindflayer` ([`Task::commands_in`]).
 ///
 /// By what it holds rather than by a name drawn for the run, so the line a
 /// preview shows is the line that runs, a preview and a run being two
 /// requests; and no two saves of different text are named alike, while two
 /// of the same text hold the same bytes. A file an interrupted run left
 /// under the name is the same text, which a front end may take as it is.
-/// In `.mindflayer`, where the line runs from and no agent looks, rather
+/// In `.mindweaver`, where the line runs from and no agent looks, rather
 /// than in the system's temporary folder, where another user could read
 /// what is about to be written.
 pub fn scratch_route(text: &str) -> String {
     format!(
         "{}/{}",
-        WeaverWorkspace::scratch_route(),
+        WeaverWorkspace::scratch_route_under(Names::Mindweaver),
         scratch_name(text)
     )
 }

@@ -1,5 +1,6 @@
 //! Mothers of what lives on the disk: a workspace, a project, a git
-//! repository to gather from, and a workspace with a shelf already filled.
+//! repository to gather from, a workspace with a shelf already filled, and
+//! what a Mindflayer build left under its own names.
 //!
 //! Each lives in a temporary folder the caller holds, and goes when it is
 //! dropped, so no test reads or writes outside the folder it was given. The
@@ -17,6 +18,7 @@ use crate::gather::{self, Request};
 use crate::ledger::Ledger;
 use crate::mother::artifact::SkillMother;
 use crate::mother::random;
+use crate::names::Names;
 use crate::settings::Share;
 use crate::workspace::{Directories, MindProject, WeaverWorkspace};
 
@@ -36,6 +38,35 @@ impl WorkspaceMother {
     pub fn create(root: &Path) -> WeaverWorkspace {
         fs::create_dir_all(root).expect("make the workspace's folder");
         WeaverWorkspace::init(root).expect("make a workspace").0
+    }
+}
+
+/// Makes what a Mindflayer build left on the disk, under the names it wrote
+/// before #229 (D-26), for a test of reading them and of moving them.
+///
+/// Through core's own writers, told those names, rather than files spelled
+/// here: what a test reads back is what such a build wrote, comments and
+/// all, and stays so when the format moves on. No command can be told them,
+/// so nothing but a mother makes a workspace under the old names.
+pub struct MindflayerMother;
+
+impl MindflayerMother {
+    /// A workspace such a build made in a temporary folder, in its
+    /// `.mindflayer`, with nothing linked, loaded or gathered.
+    pub fn empty() -> (TempDir, WeaverWorkspace) {
+        let dir = TempDir::new().expect("make a temporary folder");
+        let workspace = Self::create(dir.path());
+        (dir, workspace)
+    }
+
+    /// A workspace such a build made in `root`: `.mindflayer/flayer.toml`,
+    /// keeping its own in `.mindflayer/library`, its ledger made as
+    /// `mindflayer.db` the first time it is opened.
+    pub fn create(root: &Path) -> WeaverWorkspace {
+        fs::create_dir_all(root).expect("make the workspace's folder");
+        WeaverWorkspace::init_under(root, &Directories::default(), Names::Mindflayer)
+            .expect("make a workspace under Mindflayer's names")
+            .0
     }
 }
 

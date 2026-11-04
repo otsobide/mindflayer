@@ -461,7 +461,7 @@ fn two_entries_for_one_project_report_it_once() {
     let (dir, mut workspace) = workspace();
     let alpha = marked(&dir, &mut workspace, "alpha", &Agent::ALL);
     put(&alpha, "skills", "review");
-    let marker = dir.path().join(".mindflayer/flayer.toml");
+    let marker = dir.path().join(".mindweaver/weaver.toml");
     let text = fs::read_to_string(&marker).unwrap();
     fs::write(&marker, text.replace("\"alpha\"", "\"alpha\", \"./alpha\"")).unwrap();
     let workspace = WeaverWorkspace::open(dir.path()).unwrap();

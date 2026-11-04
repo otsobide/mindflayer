@@ -1,5 +1,5 @@
 //! The [`LedgerStore`] a build keeps a workspace's records in: SQLite, in
-//! `.mindflayer/mindflayer.db`, every query and every step of its schema.
+//! `.mindweaver/mindweaver.db`, every query and every step of its schema.
 //!
 //! What it stores, and the promises it keeps of it (a URL kept redacted, a
 //! write whole or not at all, a schema refused when it is newer than this
@@ -85,7 +85,7 @@ impl Sqlite {
         // for each other at all: a reader goes on reading the ledger as the
         // last write left it while the next is made. It needs every process
         // using the file on one machine, sharing memory through
-        // `mindflayer.db-shm`, so a workspace on a network filesystem used
+        // `mindweaver.db-shm`, so a workspace on a network filesystem used
         // from two machines at once is beyond it, as it is beyond the
         // workspace lock.
         //
@@ -153,7 +153,7 @@ impl Sqlite {
     /// A ledger that keeps a write-ahead log, read where the log's files
     /// cannot be made, as a file nobody is changing.
     ///
-    /// SQLite makes `mindflayer.db-wal` and `mindflayer.db-shm` to read a
+    /// SQLite makes `mindweaver.db-wal` and `mindweaver.db-shm` to read a
     /// ledger that keeps its log, and takes them away when the last
     /// connection closes. So in a folder this process may read and not write
     /// (a sandboxed agent's view of the workspace, a read-only mount,
@@ -1654,7 +1654,7 @@ struct Row {
 }
 
 /// Where a ledger at `path` is copied before a schema step takes it on from
-/// `version`: beside it, as `mindflayer.db.v2.bak` for version 2.
+/// `version`: beside it, as `mindweaver.db.v2.bak` for version 2.
 ///
 /// Named after the version it holds rather than numbered or dated, so which
 /// build reads a copy is in its name, and a ledger brought forward by several
@@ -1807,7 +1807,7 @@ fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
 /// A URL as a readable directory name.
 ///
 /// The scheme, any credentials and a trailing `.git` carry nothing a person
-/// browsing `.mindflayer/skills/` wants to read, and anything that is not a
+/// browsing `.mindweaver/skills/` wants to read, and anything that is not a
 /// plain character becomes a hyphen, so the result is a name every filesystem
 /// accepts and nobody has to quote.
 fn slug(url: &str) -> String {

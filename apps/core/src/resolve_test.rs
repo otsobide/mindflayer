@@ -6,6 +6,8 @@ use std::fs;
 use tempfile::TempDir;
 
 use super::*;
+use crate::mother::MindflayerMother;
+use crate::workspace::{WEAVER_CONFIG, WEAVER_DIR};
 
 /// Four workspaces in one temporary directory, none of them above another:
 /// `named` and `activated` to be chosen, `outer` with `start` somewhere
@@ -580,4 +582,112 @@ fn a_reason_serializes_as_the_rule_that_chose_the_workspace() {
     .unwrap();
 
     assert_eq!(serialized, r#"["explicit","activated","above","home"]"#);
+}
+
+/// No marker under either names in `home`, nor anything above `start`: the
+/// default as it would be resolved from a folder holding nothing.
+fn defaulting<'a>(start: &'a Path, home: &'a Path, intent: Intent) -> Inputs<'a> {
+    Inputs {
+        flag: None,
+        activated: None,
+        start,
+        home: Some(home),
+        intent,
+    }
+}
+
+#[test]
+fn a_workspace_a_mindflayer_build_made_is_found_walking_up() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().join("old");
+    MindflayerMother::create(&root);
+    let start = root.join("deep");
+    fs::create_dir_all(&start).unwrap();
+    let elsewhere = TempDir::new().unwrap();
+
+    let resolved = resolve(&defaulting(&start, elsewhere.path(), Intent::Write))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(resolved.reason, Reason::Above);
+    assert_eq!(resolved.workspace.root(), root);
+    assert_eq!(resolved.workspace.names(), Names::Mindflayer);
+    assert!(!root.join(WEAVER_DIR).exists());
+}
+
+#[test]
+fn the_default_is_the_old_workspace_in_home_while_no_new_one_is_there() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    MindflayerMother::create(&home);
+    let elsewhere = TempDir::new().unwrap();
+
+    for intent in [Intent::Read, Intent::Write] {
+        let resolved = resolve(&defaulting(elsewhere.path(), &home, intent))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(resolved.reason, Reason::Home);
+        assert_eq!(resolved.workspace.names(), Names::Mindflayer);
+        assert!(resolved.workspace.is_made());
+        // A write never makes a new workspace beside the old one.
+        assert!(!home.join(WEAVER_DIR).exists(), "{intent:?}");
+    }
+}
+
+#[test]
+fn the_new_workspace_in_home_is_the_default_when_both_are_there() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    MindflayerMother::create(&home);
+    fs::create_dir_all(home.join(WEAVER_DIR)).unwrap();
+    fs::copy(
+        home.join(".mindflayer/flayer.toml"),
+        home.join(WEAVER_DIR).join(WEAVER_CONFIG),
+    )
+    .unwrap();
+    let elsewhere = TempDir::new().unwrap();
+
+    let resolved = resolve(&defaulting(elsewhere.path(), &home, Intent::Read))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(resolved.workspace.names(), Names::Mindweaver);
+    assert_eq!(
+        resolved.workspace.leftover(),
+        Some(home.join(".mindflayer").as_path())
+    );
+}
+
+#[test]
+fn with_neither_in_home_a_write_makes_the_new_one_and_a_read_makes_none() {
+    let dir = TempDir::new().unwrap();
+    let home = dir.path().join("you");
+    let elsewhere = TempDir::new().unwrap();
+
+    let read = resolve(&defaulting(elsewhere.path(), &home, Intent::Read))
+        .unwrap()
+        .unwrap();
+    assert_eq!(read.workspace.names(), Names::Mindweaver);
+    assert!(!home.exists());
+
+    let written = resolve(&defaulting(elsewhere.path(), &home, Intent::Write))
+        .unwrap()
+        .unwrap();
+    assert_eq!(written.workspace.names(), Names::Mindweaver);
+    assert!(home.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file());
+    assert!(!home.join(".mindflayer").exists());
+}
+
+#[test]
+fn an_old_workspace_is_named_by_its_root_or_its_mindflayer_folder() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().join("old");
+    MindflayerMother::create(&root);
+
+    for spelled in [root.clone(), root.join(".mindflayer")] {
+        let workspace = named(&spelled).unwrap();
+        assert_eq!(workspace.root(), root, "{spelled:?}");
+        assert_eq!(workspace.names(), Names::Mindflayer);
+    }
 }

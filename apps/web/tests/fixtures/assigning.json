@@ -220,7 +220,7 @@
       "path": "/home/you/old",
       "projects": 0,
       "remembered": true,
-      "stale": "/home/you/old: not a weaver workspace (no .mindflayer/flayer.toml)",
+      "stale": "/home/you/old: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)",
       "stale_projects": 0
     }
   ],
@@ -235,7 +235,7 @@
         "state": null,
         "summary": "Ship the service",
         "targets": [
-          ".mindflayer/library/skills/deploy"
+          ".mindweaver/library/skills/deploy"
         ],
         "unread": null
       },
@@ -248,7 +248,7 @@
         "state": null,
         "summary": "Read a change before it lands",
         "targets": [
-          ".mindflayer/library/skills/review"
+          ".mindweaver/library/skills/review"
         ],
         "unread": null
       },
@@ -261,7 +261,7 @@
         "state": null,
         "summary": "Write commit messages that say why",
         "targets": [
-          ".mindflayer/library/rules/git/commits.md"
+          ".mindweaver/library/rules/git/commits.md"
         ],
         "unread": null
       }
@@ -269,11 +269,11 @@
     "directories": [
       {
         "kind": "skill",
-        "path": ".mindflayer/library/skills"
+        "path": ".mindweaver/library/skills"
       },
       {
         "kind": "rule",
-        "path": ".mindflayer/library/rules"
+        "path": ".mindweaver/library/rules"
       }
     ],
     "failures": [],
@@ -866,7 +866,7 @@
       "kind": "skill",
       "name": "format",
       "origin": "https://github.com/acme/skills",
-      "path": ".mindflayer/skills/github.com-acme-skills/format",
+      "path": ".mindweaver/skills/github.com-acme-skills/format",
       "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
       "source": {
         "directory": "github.com-acme-skills",
@@ -883,7 +883,7 @@
       "kind": "skill",
       "name": "triage",
       "origin": "https://github.com/acme/skills",
-      "path": ".mindflayer/skills/github.com-acme-skills/triage",
+      "path": ".mindweaver/skills/github.com-acme-skills/triage",
       "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
       "source": {
         "directory": "github.com-acme-skills",

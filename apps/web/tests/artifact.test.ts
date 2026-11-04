@@ -117,7 +117,7 @@ describe('one of the library\'s own', () => {
       path: 'secrets',
       folder: false,
       size: null,
-      refused: { code: 'contents_outside', message: '/home/you/Projects/.mindflayer/library/skills/review/secrets leads to /home/you/.ssh, outside /home/you/Projects/.mindflayer/library/skills, so it is not read' }
+      refused: { code: 'contents_outside', message: '/home/you/Projects/.mindweaver/library/skills/review/secrets leads to /home/you/.ssh, outside /home/you/Projects/.mindweaver/library/skills, so it is not read' }
     })
 
     const { page } = await render(at('skill', 'review'), answering(fixture('workspace'), answered).transport)

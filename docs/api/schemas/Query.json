@@ -112,7 +112,7 @@
       ]
     },
     {
-      "description": "What could be linked under `roots`, `depth` levels down, as `mindweaver\nscan --suggest` finds it ([`Scanned`]): each root an absolute,\nnormalized path outside every `.mindflayer` ([`policy::path`]), as a\nfolder to link is, which is only read; none is the workspace's root,\nand no depth core's own (`scan::DEFAULT_DEPTH`), as for the command.\n\nA query of its own, asked for only when somebody asks, rather than a\npart of the snapshot: a scan walks the disk far past what a snapshot\nreads, and a live update reads the snapshot again on every change.",
+      "description": "What could be linked under `roots`, `depth` levels down, as `mindweaver\nscan --suggest` finds it ([`Scanned`]): each root an absolute,\nnormalized path outside every `.mindweaver` ([`policy::path`]), as a\nfolder to link is, which is only read; none is the workspace's root,\nand no depth core's own (`scan::DEFAULT_DEPTH`), as for the command.\n\nA query of its own, asked for only when somebody asks, rather than a\npart of the snapshot: a scan walks the disk far past what a snapshot\nreads, and a live update reads the snapshot again on every change.",
       "type": "object",
       "properties": {
         "depth": {
@@ -141,7 +141,7 @@
       ]
     },
     {
-      "description": "The folders directly inside `path`, for the panel's explorer to pick\none from ([`Folders`]): an absolute, normalized path outside every\n`.mindflayer` ([`policy::path`]), as a folder to link or a root to\nscan is, held to it before anything is read; none is the workspace's\nroot. Hidden folders only when `hidden` asks for them. Answered with\nthe launch's home beside them, for a way back to it.\n\nA read of one folder, asked for each time the explorer opens one,\nand no task: choosing a folder only fills a field, and the line it\ngoes to is previewed and run as a typed one is. No command line has\none, since a terminal has `ls` and completion.",
+      "description": "The folders directly inside `path`, for the panel's explorer to pick\none from ([`Folders`]): an absolute, normalized path outside every\n`.mindweaver` ([`policy::path`]), as a folder to link or a root to\nscan is, held to it before anything is read; none is the workspace's\nroot. Hidden folders only when `hidden` asks for them. Answered with\nthe launch's home beside them, for a way back to it.\n\nA read of one folder, asked for each time the explorer opens one,\nand no task: choosing a folder only fills a field, and the line it\ngoes to is previewed and run as a typed one is. No command line has\none, since a terminal has `ls` and completion.",
       "type": "object",
       "properties": {
         "hidden": {

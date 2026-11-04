@@ -146,7 +146,7 @@ const at: Places = (() => {
   const temporary = tmpdir()
   const holder = marked(temporary)
   if (holder) {
-    refuse(`the temporary folder ${temporary} is inside ${holder}, which holds a .mind or a .mindflayer a command run from the demo could reach`)
+    refuse(`the temporary folder ${temporary} is inside ${holder}, which holds a .mind, a .mindweaver or a .mindflayer a command run from the demo could reach`)
   }
   if (!existsSync(chromium.executablePath())) {
     refuse('no Chromium of Playwright\'s to take them in: `make web/e2e/browsers BROWSERS=chromium` downloads it, into node_modules')

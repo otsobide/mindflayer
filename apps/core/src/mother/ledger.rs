@@ -52,7 +52,7 @@ impl GatheredMother {
     pub fn create(kind: Kind, name: ArtifactName, source: Source) -> Gathered {
         Gathered {
             kind,
-            path: format!(".mindflayer/{}/{}/{name}", kind.slug(), source.directory),
+            path: format!(".mindweaver/{}/{}/{name}", kind.slug(), source.directory),
             name,
             summary: random::chance().then(|| random::text(30)),
             revision: source.revision.clone(),

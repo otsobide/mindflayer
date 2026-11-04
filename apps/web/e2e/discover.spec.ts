@@ -11,7 +11,7 @@ import { expect, test } from './panel.ts'
 
 /** The marker of the workspace at `root`, as bytes. */
 function marker(root: string): Buffer {
-  return readFileSync(join(root, '.mindflayer', 'flayer.toml'))
+  return readFileSync(join(root, '.mindweaver', 'weaver.toml'))
 }
 
 test('a suggestion the scan finds is linked from the panel and appears in the projects table', async ({ page, own }) => {

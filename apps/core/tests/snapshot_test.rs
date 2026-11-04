@@ -153,7 +153,7 @@ fn fixture() -> Fixture {
         .unwrap();
     let revision = "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3";
     ledger.saw_source(source.id, Some(revision)).unwrap();
-    let shelf = format!(".mindflayer/skills/{}/lint", source.directory);
+    let shelf = format!(".mindweaver/skills/{}/lint", source.directory);
     common::write_files(
         &hub.join(&shelf),
         &[("SKILL.md", &skill("lint", "Tidy it"))],
@@ -397,11 +397,11 @@ const EXPECTED: &str = r#"{
     "directories": [
       {
         "kind": "skill",
-        "path": ".mindflayer/library/skills"
+        "path": ".mindweaver/library/skills"
       },
       {
         "kind": "rule",
-        "path": ".mindflayer/library/rules"
+        "path": ".mindweaver/library/rules"
       }
     ],
     "artifacts": [
@@ -413,7 +413,7 @@ const EXPECTED: &str = r#"{
         "agents": [],
         "origin": null,
         "targets": [
-          ".mindflayer/library/skills/review"
+          ".mindweaver/library/skills/review"
         ],
         "issues": [],
         "unread": null
@@ -426,7 +426,7 @@ const EXPECTED: &str = r#"{
         "agents": [],
         "origin": null,
         "targets": [
-          ".mindflayer/library/rules/commits.md"
+          ".mindweaver/library/rules/commits.md"
         ],
         "issues": [],
         "unread": null
@@ -677,7 +677,7 @@ const EXPECTED: &str = r#"{
     {
       "kind": "skill",
       "name": "lint",
-      "path": ".mindflayer/skills/github.com-acme-skills/lint",
+      "path": ".mindweaver/skills/github.com-acme-skills/lint",
       "summary": "Tidy it",
       "revision": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3",
       "gathered_at": 1790000000,
@@ -1141,7 +1141,7 @@ fn a_file_that_does_not_read_breaks_its_project_over_an_edited_copy() {
 #[test]
 fn the_summary_counts_each_directory_once_however_many_entries_spell_it() {
     let fixture = fixture();
-    let marker = fixture.hub.join(WEAVER_DIR).join("flayer.toml");
+    let marker = fixture.hub.join(WEAVER_DIR).join("weaver.toml");
     let text = fs::read_to_string(&marker).unwrap();
     assert!(text.contains("\"gone\""), "{text}");
     fs::write(&marker, text.replacen("\"gone\"", "\"gone\", \"./api\"", 1)).unwrap();
@@ -1237,7 +1237,7 @@ fn a_workspace_loaded_by_another_spelling_is_said_to_be_loaded_by_the_first() {
     WeaverWorkspace::init(&home).unwrap();
     let team = fixture.dir.path().join("team");
     known::remember(Some(&home), &WeaverWorkspace::open(&team).unwrap()).unwrap();
-    let marker = fixture.hub.join(WEAVER_DIR).join("flayer.toml");
+    let marker = fixture.hub.join(WEAVER_DIR).join("weaver.toml");
     let text = fs::read_to_string(&marker).unwrap();
     fs::write(
         &marker,
@@ -1301,7 +1301,7 @@ fn every_origin_a_snapshot_lists_names_its_offer_to_from() {
 #[test]
 fn a_second_spelling_of_a_load_lists_the_origin_its_offers_go_by() {
     let fixture = fixture();
-    let marker = fixture.hub.join(WEAVER_DIR).join("flayer.toml");
+    let marker = fixture.hub.join(WEAVER_DIR).join("weaver.toml");
     let text = fs::read_to_string(&marker).unwrap();
     assert!(text.contains("\"../team\""), "{text}");
     fs::write(

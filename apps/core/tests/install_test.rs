@@ -1975,13 +1975,13 @@ fn each_offer_serializes_its_place_what_it_holds_and_its_origin() {
         kind: Kind::Skill,
         name: "deploy".into(),
         summary: Some(String::from("Ship it")),
-        path: std::path::PathBuf::from("/work/.mindflayer/skills/deploy"),
+        path: std::path::PathBuf::from("/work/.mindweaver/skills/deploy"),
     };
     let loaded = install::Offer::Loaded {
         kind: Kind::Rule,
         name: "git/no-force".into(),
         summary: None,
-        path: std::path::PathBuf::from("/team/.mindflayer/rules/git/no-force.md"),
+        path: std::path::PathBuf::from("/team/.mindweaver/rules/git/no-force.md"),
         entry: String::from("../team"),
         workspace: String::from("team"),
     };
@@ -1990,14 +1990,14 @@ fn each_offer_serializes_its_place_what_it_holds_and_its_origin() {
         serde_json::to_string(&workspace).unwrap(),
         concat!(
             r#"{"place":"workspace","kind":"skill","name":"deploy","summary":"Ship it","#,
-            r#""path":"/work/.mindflayer/skills/deploy","origin":"workspace"}"#,
+            r#""path":"/work/.mindweaver/skills/deploy","origin":"workspace"}"#,
         )
     );
     assert_eq!(
         serde_json::to_string(&loaded).unwrap(),
         concat!(
             r#"{"place":"loaded","kind":"rule","name":"git/no-force","summary":null,"#,
-            r#""path":"/team/.mindflayer/rules/git/no-force.md","entry":"../team","#,
+            r#""path":"/team/.mindweaver/rules/git/no-force.md","entry":"../team","#,
             r#""workspace":"team","origin":"load:../team"}"#,
         )
     );
@@ -2013,7 +2013,7 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
         offer: install::Offer::Shelf(gather::Gathered {
             kind: Kind::Skill,
             name: "review".into(),
-            path: String::from(".mindflayer/skills/github.com-acme-skills/review"),
+            path: String::from(".mindweaver/skills/github.com-acme-skills/review"),
             summary: Some(String::from("Review a change")),
             revision: Some("4f9c2a7".into()),
             gathered_at: 1_790_000_000,
@@ -2039,7 +2039,7 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
         serialized,
         concat!(
             r#"{"offer":{"place":"shelf","kind":"skill","name":"review","#,
-            r#""path":".mindflayer/skills/github.com-acme-skills/review","#,
+            r#""path":".mindweaver/skills/github.com-acme-skills/review","#,
             r#""summary":"Review a change","revision":"4f9c2a7","gathered_at":1790000000,"#,
             r#""source":{"kind":"git","url":"https://github.com/acme/skills.git","#,
             r#""reference":"main","subdirectory":"skills","revision":"4f9c2a7","#,

@@ -28,7 +28,7 @@ function box(page: Page, name: string, origin: string) {
 
 /** The marker of the workspace `at` names, as it is on disk. */
 function marker(at: Places): string {
-  return readFileSync(join(at.workspace, '.mindflayer', 'flayer.toml'), 'utf8')
+  return readFileSync(join(at.workspace, '.mindweaver', 'weaver.toml'), 'utf8')
 }
 
 test('a workspace this machine knows, loaded from the panel, offers its skill on the matrix, and unloaded, offers it no more, as its lines do in the CLI', async ({ page, own }) => {

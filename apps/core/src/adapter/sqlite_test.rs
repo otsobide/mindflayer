@@ -286,7 +286,7 @@ fn a_row_an_older_build_wrote_with_credentials_is_read_back_without_them() {
             "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
                  VALUES (1, 'git', 'https://me:hunter2@h/a', NULL, 'skills', 'h-a', 0, 0);
              INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
-                 VALUES ('skill', 'deploy', 1, '.mindflayer/skills/h-a/deploy', 0);
+                 VALUES ('skill', 'deploy', 1, '.mindweaver/skills/h-a/deploy', 0);
              INSERT INTO actions (at, action, target, outcome, detail)
                  VALUES (0, 'gather', 'https://me:hunter2@h/a', 'ok', 'from https://me:hunter2@h/a');",
         )
@@ -309,7 +309,7 @@ fn ledger_with_a_token_in_it() -> (tempfile::TempDir, Sqlite) {
             "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
                  VALUES (1, 'git', 'https://me:hunter2@h/a', NULL, 'skills', 'h-a', 0, 0);
              INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
-                 VALUES ('skill', 'deploy', 1, '.mindflayer/skills/h-a/deploy', 0);
+                 VALUES ('skill', 'deploy', 1, '.mindweaver/skills/h-a/deploy', 0);
              INSERT INTO actions (at, action, target, outcome, detail)
                  VALUES (0, 'gather', 'https://me:hunter2@h/a', 'ok', '1 added');",
         )
@@ -421,11 +421,11 @@ fn merging_keeps_the_fresher_rows_artifacts_and_lets_the_others_go_with_its_row(
         .execute_batch(
             "UPDATE sources SET reference = 'main' WHERE id = 1;
              INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
-                 VALUES ('skill', 'only-here', 1, '.mindflayer/skills/h-a/only-here', 0);
+                 VALUES ('skill', 'only-here', 1, '.mindweaver/skills/h-a/only-here', 0);
              INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
                  VALUES (2, 'git', 'https://h/a', 'main', 'skills', 'h-a-2', 10, 10);
              INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
-                 VALUES ('skill', 'deploy', 2, '.mindflayer/skills/h-a-2/deploy', 10);
+                 VALUES ('skill', 'deploy', 2, '.mindweaver/skills/h-a-2/deploy', 10);
              INSERT INTO installations (project, kind, name, source_id, installed_at)
                  VALUES ('../p', 'skill', 'only-here', 1, 0);",
         )
@@ -440,7 +440,7 @@ fn merging_keeps_the_fresher_rows_artifacts_and_lets_the_others_go_with_its_row(
         .iter()
         .map(|g| (g.name.as_str(), g.source.id, g.path.as_str()))
         .collect();
-    assert_eq!(names, [("deploy", 2, ".mindflayer/skills/h-a-2/deploy")]);
+    assert_eq!(names, [("deploy", 2, ".mindweaver/skills/h-a-2/deploy")]);
     assert_eq!(gone.map(|source| source.directory).as_deref(), Some("h-a"));
     // An installation is about the place, which is the kept row now.
     assert!(stored(&ledger, "installations").contains("|only-here|2|"));
@@ -522,7 +522,7 @@ fn scrubbing_the_log_rewrites_only_the_entries_with_credentials_and_counts_them(
 #[test]
 fn opening_only_an_existing_ledger_makes_nothing_when_there_is_none() {
     let dir = tempfile::TempDir::new().unwrap();
-    let folder = dir.path().join(".mindflayer");
+    let folder = dir.path().join(".mindweaver");
     let path = folder.join(LEDGER_FILE);
 
     assert!(Sqlite::open_existing(&path).unwrap().is_none());
@@ -620,7 +620,7 @@ fn an_older_ledger_is_copied_aside_before_it_is_migrated() {
 
     Sqlite::open(&path).unwrap();
 
-    let backup = dir.path().join("mindflayer.db.v1.bak");
+    let backup = dir.path().join("mindweaver.db.v1.bak");
     assert_eq!(backup_path(&path, 1), backup);
     // Opened raw: opening it as a ledger would migrate the copy too.
     assert_eq!(version_of(&backup), 1);
@@ -696,14 +696,14 @@ fn what_an_earlier_attempt_left_beside_the_ledger_is_replaced() {
     version_1_at(&path);
     let backup = backup_path(&path, 1);
     std::fs::write(&backup, "an older copy").unwrap();
-    std::fs::write(dir.path().join("mindflayer.db.v1.bak.tmp"), "half a copy").unwrap();
-    std::fs::write(dir.path().join("mindflayer.db.v1.bak.tmp-journal"), "junk").unwrap();
+    std::fs::write(dir.path().join("mindweaver.db.v1.bak.tmp"), "half a copy").unwrap();
+    std::fs::write(dir.path().join("mindweaver.db.v1.bak.tmp-journal"), "junk").unwrap();
 
     Sqlite::open(&path).unwrap();
 
     assert_eq!(version_of(&backup), 1);
-    assert!(!dir.path().join("mindflayer.db.v1.bak.tmp").exists());
-    assert!(!dir.path().join("mindflayer.db.v1.bak.tmp-journal").exists());
+    assert!(!dir.path().join("mindweaver.db.v1.bak.tmp").exists());
+    assert!(!dir.path().join("mindweaver.db.v1.bak.tmp-journal").exists());
 }
 
 #[test]
@@ -756,7 +756,7 @@ fn the_copy_is_no_more_readable_than_the_ledger_before_anything_is_in_it() {
     let path = dir.path().join(LEDGER_FILE);
     version_1_at(&path);
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
-    let temporary = dir.path().join("mindflayer.db.v1.bak.tmp");
+    let temporary = dir.path().join("mindweaver.db.v1.bak.tmp");
 
     create_like(&temporary, &path).unwrap();
 
@@ -1860,7 +1860,7 @@ fn gathered_from(url: &str) -> Gathered {
     Gathered {
         kind: Kind::Skill,
         name: "deploy".into(),
-        path: String::from(".mindflayer/skills/github.com-acme-skills/deploy"),
+        path: String::from(".mindweaver/skills/github.com-acme-skills/deploy"),
         summary: Some(String::from("Ship it")),
         revision: Some(Revision::from("4f9c2a7")),
         gathered_at: 1_790_000_000,
@@ -1888,7 +1888,7 @@ fn a_gathered_artifact_serializes_every_field_and_its_source() {
         serialized,
         concat!(
             r#"{"kind":"skill","name":"deploy","#,
-            r#""path":".mindflayer/skills/github.com-acme-skills/deploy","#,
+            r#""path":".mindweaver/skills/github.com-acme-skills/deploy","#,
             r#""summary":"Ship it","revision":"4f9c2a7","gathered_at":1790000000,"#,
             r#""source":{"kind":"git","url":"https://github.com/acme/skills.git","#,
             r#""reference":"main","subdirectory":"skills","revision":"4f9c2a7","#,

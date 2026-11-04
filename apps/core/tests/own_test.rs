@@ -27,8 +27,8 @@ fn a_new_workspace_says_where_its_own_artifacts_go_and_makes_nothing_yet() {
     assert!(
         marker.ends_with(
             "[directories]\n\
-             skills = \".mindflayer/library/skills\"\n\
-             rules = \".mindflayer/library/rules\"\n"
+             skills = \".mindweaver/library/skills\"\n\
+             rules = \".mindweaver/library/rules\"\n"
         ),
         "{marker}"
     );
@@ -36,14 +36,14 @@ fn a_new_workspace_says_where_its_own_artifacts_go_and_makes_nothing_yet() {
     // repositories it manages.
     assert_eq!(
         workspace.own().directory_for(Kind::Skill).unwrap(),
-        dir.path().join(".mindflayer/library/skills")
+        dir.path().join(".mindweaver/library/skills")
     );
     assert_eq!(
         workspace.own().directory_for(Kind::Rule).unwrap(),
-        dir.path().join(".mindflayer/library/rules")
+        dir.path().join(".mindweaver/library/rules")
     );
     // And made by the first artifact added, as anywhere else.
-    assert!(!dir.path().join(".mindflayer/library").exists());
+    assert!(!dir.path().join(".mindweaver/library").exists());
     assert!(!dir.path().join("skills").exists());
     assert!(!dir.path().join("rules").exists());
 }
@@ -70,7 +70,7 @@ fn a_kind_the_marker_does_not_name_is_kept_in_the_library() {
     for kind in Kind::ALL {
         assert_eq!(
             none.own().directory_for(kind).unwrap(),
-            dir.path().join(".mindflayer/library").join(kind.folder())
+            dir.path().join(".mindweaver/library").join(kind.folder())
         );
     }
     assert_eq!(
@@ -79,7 +79,7 @@ fn a_kind_the_marker_does_not_name_is_kept_in_the_library() {
     );
     assert_eq!(
         one.own().directory_for(Kind::Rule).unwrap(),
-        dir.path().join(".mindflayer/library/rules")
+        dir.path().join(".mindweaver/library/rules")
     );
 }
 
@@ -99,7 +99,7 @@ fn a_workspace_told_to_keep_its_own_beside_its_projects_still_does() {
     assert!(dir.path().join("skills/commits/SKILL.md").is_file());
     assert!(dir.path().join("rules/git/no-force-push.md").is_file());
     assert_eq!(Catalog::discover(&[own]).artifacts().len(), 2);
-    assert!(!dir.path().join(".mindflayer/library").exists());
+    assert!(!dir.path().join(".mindweaver/library").exists());
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn a_workspace_can_be_told_where_to_keep_them_as_long_as_it_is_inside() {
         "{error}"
     );
     assert!(
-        !outside.path().join(".mindflayer").exists(),
+        !outside.path().join(".mindweaver").exists(),
         "refused before anything was made"
     );
 }
@@ -135,15 +135,18 @@ fn a_workspace_can_be_told_where_to_keep_them_as_long_as_it_is_inside() {
 #[test]
 fn a_workspace_directory_overlapping_what_is_reserved_for_gathering_is_refused() {
     // The shelf of either kind, somewhere inside it, the cache, and
-    // `.mindflayer` itself, which holds both. Case aside: on macOS and
-    // Windows `.Mindflayer/Skills` is the shelf.
+    // `.mindweaver` itself, which holds both. Case aside: on macOS and
+    // Windows `.Mindweaver/Skills` is the shelf.
     for (directory, gathered) in [
-        (".mindflayer/skills", ".mindflayer/skills"),
-        (".mindflayer/rules", ".mindflayer/rules"),
-        (".mindflayer/skills/mine", ".mindflayer/skills"),
-        ("./.mindflayer/cache", ".mindflayer/cache"),
-        (".mindflayer", ".mindflayer/skills"),
-        (".Mindflayer/Skills", ".mindflayer/skills"),
+        (".mindweaver/skills", ".mindweaver/skills"),
+        (".mindweaver/rules", ".mindweaver/rules"),
+        (".mindweaver/skills/mine", ".mindweaver/skills"),
+        ("./.mindweaver/cache", ".mindweaver/cache"),
+        (".mindweaver", ".mindweaver/skills"),
+        (".Mindweaver/Skills", ".mindweaver/skills"),
+        // And under the names a Mindflayer build made it under, which the
+        // workspace takes once it is moved.
+        (".mindflayer/cache", ".mindflayer/cache"),
     ] {
         let dir = TempDir::new().unwrap();
 
@@ -163,7 +166,7 @@ fn a_workspace_directory_overlapping_what_is_reserved_for_gathering_is_refused()
             _ => panic!("{directory}: {error}"),
         }
         assert!(
-            !dir.path().join(".mindflayer").exists(),
+            !dir.path().join(".mindweaver").exists(),
             "{directory}: refused before anything was made"
         );
     }
@@ -175,13 +178,13 @@ fn a_workspace_directory_elsewhere_in_mindweaver_is_allowed() {
 
     let (workspace, _) = WeaverWorkspace::init_with(
         dir.path(),
-        &Directories::default().with(Kind::Skill, ".mindflayer/mine/skills"),
+        &Directories::default().with(Kind::Skill, ".mindweaver/mine/skills"),
     )
     .unwrap();
 
     assert_eq!(
         workspace.own().directory_for(Kind::Skill).unwrap(),
-        dir.path().join(".mindflayer/mine/skills")
+        dir.path().join(".mindweaver/mine/skills")
     );
 }
 
@@ -199,7 +202,7 @@ fn a_workspace_holds_its_own_the_way_a_project_does() {
     .unwrap();
     create(&own, Kind::Rule, "git/no-force-push", "Never force-push").unwrap();
 
-    let library = dir.path().join(".mindflayer/library");
+    let library = dir.path().join(".mindweaver/library");
     assert!(library.join("skills/commit-style/SKILL.md").is_file());
     assert!(library.join("rules/git/no-force-push.md").is_file());
     let catalog = Catalog::discover(std::slice::from_ref(&own));
@@ -221,13 +224,13 @@ fn a_workspace_holds_its_own_the_way_a_project_does() {
         .map(|entry| entry.unwrap().file_name())
         .collect();
     top.sort();
-    assert_eq!(top, [".mindflayer"]);
+    assert_eq!(top, [".mindweaver"]);
 }
 
 #[test]
 fn the_workspace_templates_serve_its_own_artifacts_too() {
     let (dir, workspace) = workspace();
-    let template = dir.path().join(".mindflayer/templates/runbook/SKILL.md");
+    let template = dir.path().join(".mindweaver/templates/runbook/SKILL.md");
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n").unwrap();
 

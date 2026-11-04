@@ -8,7 +8,7 @@ use tempfile::TempDir;
 
 use super::*;
 use crate::known;
-use crate::workspace::MindProject;
+use crate::workspace::{MindProject, WEAVER_DIR};
 
 /// A workspace linking `alpha` under it and `beside` next to it, and loading
 /// `library`, a workspace next to it too.
@@ -96,6 +96,31 @@ fn a_path_inside_a_mindweaver_is_refused() {
     ] {
         assert_eq!(code(path(&given)), "path_in_mindflayer", "{given:?}");
     }
+}
+
+/// A Mindflayer build's `.mindflayer` is a workspace's own folder too,
+/// refused under the code it always was, which says the folder it is in.
+#[test]
+fn a_path_inside_a_mindflayer_a_mindflayer_build_made_is_refused() {
+    let dir = TempDir::new().unwrap();
+    let old = crate::mother::MindflayerMother::create(&dir.path().join("old"));
+
+    for given in [
+        spelled_under(&old.weaver_dir(), &["library", "skills"]),
+        spelled_under(dir.path(), &["elsewhere", ".mindflayer"]),
+    ] {
+        let refused = path(&given).expect_err("it was taken");
+        assert_eq!(refused.code(), "path_in_mindflayer", "{given:?}");
+        assert!(
+            refused.to_string().contains("inside a `.mindflayer`"),
+            "{refused}"
+        );
+    }
+    let refused = path(&spelled_under(dir.path(), &[WEAVER_DIR])).unwrap_err();
+    assert!(
+        refused.to_string().contains("inside a `.mindweaver`"),
+        "{refused}"
+    );
 }
 
 #[cfg(unix)]
@@ -275,9 +300,9 @@ fn a_path_no_list_holds_is_refused_whatever_it_leads_to() {
     let other = [
         // A workspace, but none this machine knows.
         unknown.root().to_str().unwrap().to_owned(),
-        // Listed ones, spelled otherwise: through `.mindflayer`, with a
+        // Listed ones, spelled otherwise: through `.mindweaver`, with a
         // trailing separator, or with a `.` part.
-        format!("{writing}{SEPARATOR}.mindflayer"),
+        format!("{writing}{SEPARATOR}.mindweaver"),
         format!("{writing}{SEPARATOR}"),
         spelled_under(dir.path(), &[".", "writing"]),
         String::from("writing"),

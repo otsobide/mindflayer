@@ -112,7 +112,7 @@ fn activating_a_directory_that_is_no_workspace_is_refused_and_writes_nothing() {
     assert_eq!(
         failure.error.to_string(),
         format!(
-            "{}: not a weaver workspace (no .mindflayer/flayer.toml)",
+            "{}: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)",
             dir.path().join("plain").display()
         )
     );

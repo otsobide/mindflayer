@@ -33,7 +33,7 @@ fn target() -> Target {
     Target {
         kind: Kind::Skill,
         name: ArtifactName::from("deploy"),
-        path: PathBuf::from("/w/.mindflayer/skills/deploy"),
+        path: PathBuf::from("/w/.mindweaver/skills/deploy"),
         artifact: None,
     }
 }
@@ -93,7 +93,7 @@ fn removing_everywhere_has_no_code_of_its_own_and_says_what_it_carries() {
         typed: String::from("deploy"),
     });
     let ledger = EverywhereError::from(LedgerError::Unmade {
-        path: PathBuf::from("/w/.mindflayer/mindflayer.db"),
+        path: PathBuf::from("/w/.mindweaver/mindweaver.db"),
     });
 
     assert_eq!(lifecycle.code(), "not_found");

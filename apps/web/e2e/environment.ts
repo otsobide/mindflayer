@@ -49,7 +49,7 @@ export interface Places {
    * empty, and held to stay that way (run.ts).
    */
   home: string
-  /** The fixture workspace, holding `.mindflayer` and the projects it links. */
+  /** The fixture workspace, holding `.mindweaver` and the projects it links. */
   workspace: string
   /** The folder holding the `mindweaver` and `mind` under test. */
   bin: string
@@ -85,15 +85,22 @@ export function given(): Places {
 }
 
 /**
- * The folder above `folder`, itself included, that holds a `.mind` or a
- * `.mindflayer`, if one does: resolving walks up the tree before it looks
- * at a home, so a workspace built under such a folder could reach it.
- * Here rather than in the driver, so that whatever else builds a workspace
- * in the temporary folder refuses the same.
+ * What makes a folder a project or a workspace to a command walking up the
+ * tree: a `.mind`, a `.mindweaver`, or the `.mindflayer` a Mindflayer build
+ * made a workspace in, which resolving still finds.
+ */
+const MARKS = ['.mind', '.mindweaver', '.mindflayer']
+
+/**
+ * The folder above `folder`, itself included, that holds any of `MARKS`, if
+ * one does: resolving walks up the tree before it looks at a home, so a
+ * workspace built under such a folder could reach it. Here rather than in
+ * the driver, so that whatever else builds a workspace in the temporary
+ * folder refuses the same.
  */
 export function marked(folder: string): string | undefined {
   for (let at = folder; ; at = dirname(at)) {
-    if (existsSync(join(at, '.mind')) || existsSync(join(at, '.mindflayer'))) {
+    if (MARKS.some(mark => existsSync(join(at, mark)))) {
       return at
     }
     if (dirname(at) === at) {

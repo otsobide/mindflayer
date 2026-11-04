@@ -963,7 +963,7 @@ fn enter_on_an_artifact_shows_it_as_mind_show_does() {
 #[test]
 fn a_ledger_that_will_not_open_is_said_on_each_projects_rows() {
     let dir = workspace_with_two();
-    let ledger = dir.path().join(WEAVER_DIR).join("mindflayer.db");
+    let ledger = dir.path().join(WEAVER_DIR).join("mindweaver.db");
     fs::write(&ledger, "not a database\n").unwrap();
     let mut app = tui_in(dir.path());
 
@@ -1644,7 +1644,7 @@ fn disk(root: &Path) -> std::collections::BTreeMap<String, Option<Vec<u8>>> {
                 .unwrap()
                 .to_string_lossy()
                 .replace('\\', "/");
-            let kept = [".mindflayer/mindflayer.db", ".mindflayer/lock"];
+            let kept = [".mindweaver/mindweaver.db", ".mindweaver/lock"];
             if kept.iter().any(|kept| route.starts_with(kept)) {
                 continue;
             }
@@ -2302,7 +2302,7 @@ fn the_add_form_offers_what_the_workspace_in_your_home_has_to_a_project_elsewher
     fs::create_dir(&project).unwrap();
     mind(&project, &["init"]).unwrap();
     weaver_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();
-    let template = home.path().join(".mindflayer/templates/runbook/SKILL.md");
+    let template = home.path().join(".mindweaver/templates/runbook/SKILL.md");
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nFrom home.\n").unwrap();
     let mut app = App::opened_on(
@@ -3230,7 +3230,7 @@ fn a_project_linked_from_beside_runs_its_lines_against_the_workspace_on_screen()
 #[test]
 fn a_project_linked_from_beside_is_offered_the_screens_templates() {
     let (_dir, _outer, hub, collapse) = hub_beside_outer();
-    let template = hub.join(".mindflayer/templates/runbook/SKILL.md");
+    let template = hub.join(".mindweaver/templates/runbook/SKILL.md");
     fs::create_dir_all(template.parent().unwrap()).unwrap();
     fs::write(&template, "---\n---\n\n# {{name}}\n\nThe hub's runbook.\n").unwrap();
     let mut app = tui_in(&hub);

@@ -109,7 +109,7 @@ fn naming_a_directory_that_is_no_workspace_is_refused_and_makes_nothing() {
     assert_eq!(
         failure.error.to_string(),
         format!(
-            "-W names a workspace that cannot be used: {}: not a weaver workspace (no .mindflayer/flayer.toml)",
+            "-W names a workspace that cannot be used: {}: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)",
             plain.display()
         )
     );
@@ -420,7 +420,7 @@ fn which_says_why_an_activated_workspace_cannot_be_used() {
     assert_eq!(
         printed.stderr,
         format!(
-            "error: $MINDFLAYER_WORKSPACE names a workspace that cannot be used: {}: not a weaver workspace (no .mindflayer/flayer.toml)\n",
+            "error: $MINDFLAYER_WORKSPACE names a workspace that cannot be used: {}: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)\n",
             gone.display()
         )
     );

@@ -326,7 +326,7 @@ impl Drop for ReadOnly {
 fn a_ledger_keeping_a_log_is_read_where_its_folder_cannot_be_written() {
     let dir = TempDir::new().unwrap();
     // Named with what SQLite would read as part of a URI's syntax.
-    let folder = dir.path().join("odd #1, 50%?").join(".mindflayer");
+    let folder = dir.path().join("odd #1, 50%?").join(".mindweaver");
     let path = folder.join(LEDGER_FILE);
     {
         let ledger = Ledger::open(&path).unwrap();
@@ -588,7 +588,7 @@ fn a_migration_waits_for_the_writer_before_it() {
 
     assert!(dir
         .path()
-        .join(".mindflayer/library/skills/deploy/SKILL.md")
+        .join(".mindweaver/library/skills/deploy/SKILL.md")
         .is_file());
 }
 
@@ -606,7 +606,7 @@ fn a_migration_plans_again_once_it_holds_the_workspace() {
     let migrated = writer.join().unwrap();
 
     assert_eq!(migrated.plan.moves.len(), 2);
-    let library = dir.path().join(".mindflayer/library/skills");
+    let library = dir.path().join(".mindweaver/library/skills");
     assert!(library.join("deploy/SKILL.md").is_file());
     assert!(library.join("review/SKILL.md").is_file());
 }

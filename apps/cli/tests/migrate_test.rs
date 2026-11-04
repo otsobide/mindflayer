@@ -61,7 +61,7 @@ fn the_dry_run_says_what_would_move_and_moves_nothing() {
         format!(
             "{}keeping it as it is in {}\nnothing moved: add --yes to go ahead\n",
             report(dir.path(), "would move", "would point"),
-            at(dir.path(), &[WEAVER_DIR, "flayer.toml.v2"]),
+            at(dir.path(), &[WEAVER_DIR, "weaver.toml.v2"]),
         )
     );
     assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
@@ -70,7 +70,7 @@ fn the_dry_run_says_what_would_move_and_moves_nothing() {
         fs::read_to_string(dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG)).unwrap(),
         marker
     );
-    assert!(!dir.path().join(WEAVER_DIR).join("flayer.toml.v2").exists());
+    assert!(!dir.path().join(WEAVER_DIR).join("weaver.toml.v2").exists());
 }
 
 #[test]
@@ -88,7 +88,7 @@ fn migrating_moves_them_and_a_second_run_has_nothing_to_move() {
         format!(
             "{}kept as it was in {}\n",
             report(dir.path(), "moved", "pointed"),
-            at(dir.path(), &[WEAVER_DIR, "flayer.toml.v2"]),
+            at(dir.path(), &[WEAVER_DIR, "weaver.toml.v2"]),
         )
     );
     let nothing = "nothing to move: the workspace keeps its own in its library already\n";
@@ -139,7 +139,7 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
         migrated.stdout
     );
     assert!(home_path
-        .join(".mindflayer/library/skills/x/SKILL.md")
+        .join(".mindweaver/library/skills/x/SKILL.md")
         .is_file());
     assert!(!home_path.join("skills").exists());
     // Recorded, from the workspace, in every folder alpha's agents read; and
@@ -158,7 +158,7 @@ fn a_home_workspace_migrates_and_what_it_installed_stays_current() {
 fn a_destination_already_there_refuses_the_dry_run_and_the_migration() {
     let dir = TempDir::new().unwrap();
     beside(dir.path());
-    let taken = dir.path().join(".mindflayer/library/skills/commit-style");
+    let taken = dir.path().join(".mindweaver/library/skills/commit-style");
     fs::create_dir_all(&taken).unwrap();
 
     let dry = weaver(dir.path(), &["migrate", "--library"]).unwrap_err();

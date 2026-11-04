@@ -463,8 +463,8 @@ fn a_folder_is_tracked_when_the_index_names_a_file_inside_it() {
     let app = project(repo.path(), "packages/app");
     project(&app, ".mind");
     fs::write(app.join(".mind/mind.toml"), "version = 2\n").unwrap();
-    project(&app, ".mindflayer");
-    fs::write(app.join(".mindflayer/flayer.toml"), "version = 2\n").unwrap();
+    project(&app, ".mindweaver");
+    fs::write(app.join(".mindweaver/weaver.toml"), "version = 2\n").unwrap();
     let web = project(repo.path(), "packages/web");
     project(&web, ".mindy");
     fs::write(web.join(".mindy/notes"), "Mine").unwrap();

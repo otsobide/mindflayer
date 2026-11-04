@@ -12,7 +12,7 @@ import { expect, test } from './panel.ts'
 
 /** The marker of the workspace at `root`, as bytes. */
 function marker(root: string): Buffer {
-  return readFileSync(join(root, '.mindflayer', 'flayer.toml'))
+  return readFileSync(join(root, '.mindweaver', 'weaver.toml'))
 }
 
 /** Whether two markers hold the same bytes, with both as text for a failure to show. */
@@ -20,7 +20,7 @@ function same(panel: Buffer, cli: Buffer): void {
   expect(panel.equals(cli), `the panel left:\n${panel.toString('utf8')}\nthe CLI left:\n${cli.toString('utf8')}`).toBe(true)
 }
 
-test('a project linked from the panel leaves flayer.toml as mindweaver link leaves it', async ({ page, own }) => {
+test('a project linked from the panel leaves weaver.toml as mindweaver link leaves it', async ({ page, own }) => {
   const notes = join(own.at.workspace, 'notes')
   await own.open('/projects')
 
@@ -40,7 +40,7 @@ test('a project linked from the panel leaves flayer.toml as mindweaver link leav
   await expect(page.getByTestId('transcript').getByTestId('line')).toHaveText([`$ mindweaver -W ${own.at.workspace} link ${notes}`])
 })
 
-test('a project is unlinked from the panel only once confirmed, leaving flayer.toml as mindweaver unlink leaves it', async ({ page, own }) => {
+test('a project is unlinked from the panel only once confirmed, leaving weaver.toml as mindweaver unlink leaves it', async ({ page, own }) => {
   const before = marker(own.at.workspace)
   await own.open(`/project?${new URLSearchParams({ entry: 'drafts' })}`)
 

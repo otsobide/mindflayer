@@ -47,7 +47,7 @@ fn init_again_remembers_a_workspace_made_before_the_default_and_nothing_more() {
     fs::create_dir(&home).unwrap();
     weaver_at_home(dir.path(), &home, &["init", "writing"]).unwrap();
     weaver_at_home(&home, &home, &["init"]).unwrap();
-    let marker = fs::read_to_string(dir.path().join("writing/.mindflayer/flayer.toml")).unwrap();
+    let marker = fs::read_to_string(dir.path().join("writing/.mindweaver/weaver.toml")).unwrap();
 
     let first = weaver_at_home(dir.path(), &home, &["init", "writing"]).unwrap();
     let second = weaver_at_home(dir.path(), &home, &["init", "writing"]).unwrap();
@@ -63,7 +63,7 @@ fn init_again_remembers_a_workspace_made_before_the_default_and_nothing_more() {
     assert_eq!(second.stdout, already, "already known says nothing more");
     assert_eq!(known_in(&home), [PathBuf::from("../writing")]);
     assert_eq!(
-        fs::read_to_string(dir.path().join("writing/.mindflayer/flayer.toml")).unwrap(),
+        fs::read_to_string(dir.path().join("writing/.mindweaver/weaver.toml")).unwrap(),
         marker,
         "the workspace itself is left as it was"
     );
@@ -206,7 +206,7 @@ fn a_remembered_workspace_that_has_gone_is_shown_not_raised() {
     assert_eq!(
         outcome.stderr,
         [format!(
-            "warning: {}: not a weaver workspace (no .mindflayer/flayer.toml)",
+            "warning: {}: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)",
             notes.display()
         )]
     );
@@ -334,7 +334,7 @@ fn json_prints_the_list_in_the_envelope_with_its_warnings() {
 
     let (listed, warnings): (Listed, _) = enveloped(&outcome);
     let gone = format!(
-        "{}: not a weaver workspace (no .mindflayer/flayer.toml)",
+        "{}: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)",
         notes.display()
     );
     assert_eq!(

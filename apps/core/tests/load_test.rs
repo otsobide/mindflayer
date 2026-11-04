@@ -575,7 +575,7 @@ fn a_loaded_workspace_inside_the_folder_it_would_install_into_is_not_deleted() {
 
     assert!(matches!(error, InstallError::Overlaps { .. }), "{error}");
     assert!(
-        nested.join(".mindflayer").join("flayer.toml").is_file(),
+        nested.join(".mindweaver").join("weaver.toml").is_file(),
         "left whole"
     );
     assert!(inner

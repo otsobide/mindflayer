@@ -13,6 +13,7 @@ use super::*;
 use crate::artifact::{name_issues, strict_issues, ValidationIssue};
 use crate::frontmatter;
 use crate::kind::Kind;
+use crate::names::Names;
 use crate::rule::RuleManifest;
 use crate::settings::Settings;
 use crate::skill::SkillManifest;
@@ -219,6 +220,21 @@ fn the_fixture_mothers_make_a_workspace_a_project_and_a_repository() {
     let opened = gix::open(repository.path()).unwrap();
     assert!(opened.head_id().is_ok());
     assert!(repository.path().join("skills/deploy/SKILL.md").is_file());
+}
+
+#[test]
+fn a_mindflayer_mother_makes_a_workspace_under_the_old_names() {
+    let (dir, workspace) = MindflayerMother::empty();
+
+    assert!(dir.path().join(".mindflayer/flayer.toml").is_file());
+    assert!(!dir.path().join(".mindweaver").exists());
+    let opened = WeaverWorkspace::open(dir.path()).unwrap();
+    assert_eq!(opened.names(), Names::Mindflayer);
+    assert_eq!(opened, workspace);
+    assert_eq!(
+        workspace.ledger_path(),
+        dir.path().join(".mindflayer/mindflayer.db")
+    );
 }
 
 #[test]

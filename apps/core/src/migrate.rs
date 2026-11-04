@@ -6,7 +6,7 @@
 //! It is read exactly as it was written, so nothing moves them but being
 //! asked to (D-05). [`library_plan`] says what asking would do, and
 //! [`library`] does it: each of the workspace's own artifacts moved into
-//! `.mindflayer/library/<kind>`, and the marker's `[directories]` pointed
+//! `.mindweaver/library/<kind>`, and the marker's `[directories]` pointed
 //! there, with a copy of the marker as it was kept beside it.
 //!
 //! The ledger is not opened. An installation of one of the workspace's own
@@ -36,10 +36,10 @@ use crate::exclude::ExcludeError;
 use crate::install::InstallError;
 use crate::kind::Kind;
 use crate::ledger::LedgerError;
+use crate::names::Names;
 use crate::paths;
 use crate::workspace::{
     misplaced_own, Directories, MindProject, WeaverWorkspace, WorkspaceError, MIND_CONFIG,
-    WEAVER_CONFIG,
 };
 
 pub use project::{
@@ -60,7 +60,7 @@ pub struct Plan {
     pub left: Vec<Left>,
     /// Why it cannot go ahead. Nothing is moved while there is any.
     pub refusals: Vec<Refusal>,
-    /// Where the marker is kept as it was: `flayer.toml.v<version>`, beside it.
+    /// Where the marker is kept as it was: `weaver.toml.v<version>`, beside it.
     pub backup: PathBuf,
 }
 
@@ -121,7 +121,7 @@ pub enum Refusal {
     /// The folder a kind is kept in, or one above it inside the workspace, is
     /// a link: what is in it lives wherever that leads, a dotfiles repository
     /// say, and a rename would take it out of there.
-    #[error("{folder}: a link to {target}, so moving the workspace's {kind}s would take them out of wherever it leads; move them yourself, or point {WEAVER_CONFIG} at the library")]
+    #[error("{folder}: a link to {target}, so moving the workspace's {kind}s would take them out of wherever it leads; move them yourself, or point the workspace's marker at the library")]
     Linked {
         kind: Kind,
         folder: PathBuf,
@@ -303,7 +303,11 @@ pub fn library_plan(workspace: &WeaverWorkspace) -> Plan {
         .into_iter()
         .filter_map(|kind| {
             let from = paths::normalize(&own.directory_for(kind)?);
-            let to = paths::normalize(&workspace.root().join(Directories::library_for(kind)));
+            let to = paths::normalize(
+                &workspace
+                    .root()
+                    .join(Directories::library_under(workspace.names(), kind)),
+            );
             (from != to).then_some(Repoint { kind, from, to })
         })
         .collect();
@@ -332,7 +336,10 @@ pub fn library_plan(workspace: &WeaverWorkspace) -> Plan {
             .config()
             .directories
             .get(repoint.kind)
-            .map_or_else(|| Directories::library_for(repoint.kind), Path::to_path_buf);
+            .map_or_else(
+                || Directories::library_under(workspace.names(), repoint.kind),
+                Path::to_path_buf,
+            );
         if let Some(error) = misplaced_own(repoint.kind, &route) {
             plan.refusals.push(Refusal::Misplaced(error));
             continue;
@@ -451,8 +458,9 @@ pub fn library(workspace: &mut WeaverWorkspace) -> Result<Migrated, MigrateError
         }
         moved.push(one.clone());
     }
+    let names = current.names();
     if let Err(source) =
-        current.edit_marker_held(|document| point_at_library(document, &plan.kinds))
+        current.edit_marker_held(|document| point_at_library(document, &plan.kinds, names))
     {
         let stranded = put_back(&moved);
         let _ = fs::remove_file(&plan.backup);
@@ -469,16 +477,18 @@ pub fn library(workspace: &mut WeaverWorkspace) -> Result<Migrated, MigrateError
 }
 
 /// Where `workspace`'s marker is kept before a migration rewrites it: beside
-/// it, named after the version of the marker it holds, `flayer.toml.v2`.
+/// it, named after the version of the marker it holds, `weaver.toml.v2`.
 ///
 /// After its version, as the ledger's copy is, so which build reads it is in
 /// its name. Put back in place of the rewritten marker, it names the old
 /// folders again, though what was moved stays in the library until it is
 /// moved back.
 pub fn backup_path(workspace: &WeaverWorkspace) -> PathBuf {
-    workspace
-        .weaver_dir()
-        .join(format!("{WEAVER_CONFIG}.v{}", workspace.config().version))
+    workspace.weaver_dir().join(format!(
+        "{}.v{}",
+        workspace.names().workspace_config(),
+        workspace.config().version
+    ))
 }
 
 /// Every project whose artifacts can sit among the workspace's own, and the
@@ -678,6 +688,7 @@ fn put_back(moved: &[Move]) -> Vec<Move> {
 fn point_at_library(
     document: &mut toml_edit::DocumentMut,
     kinds: &[Repoint],
+    names: Names,
 ) -> Result<(), String> {
     let table = document
         .entry("directories")
@@ -685,7 +696,7 @@ fn point_at_library(
         .as_table_like_mut()
         .ok_or_else(|| String::from("`directories` is not a table"))?;
     for repoint in kinds {
-        let library = Directories::library_for(repoint.kind);
+        let library = Directories::library_under(names, repoint.kind);
         let library = paths::to_config_string(&library).unwrap_or_default();
         match table
             .get_mut(repoint.kind.folder())

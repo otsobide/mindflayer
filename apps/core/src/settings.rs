@@ -10,10 +10,10 @@
 //! good and the name it is shown by (D-09).
 //! These describe the files physically in the project, and several
 //! workspaces may link one project, so they live in the project rather than
-//! in any one workspace's `flayer.toml`, where two workspaces could disagree
+//! in any one workspace's `weaver.toml`, where two workspaces could disagree
 //! about one project's files.
 //!
-//! TOML, as `flayer.toml` is, the owner's choice (D-06, amended): both
+//! TOML, as `weaver.toml` is, the owner's choice (D-06, amended): both
 //! markers are written from a template whose comments say what each key
 //! does, and edited through toml_edit, which keeps every byte an edit does
 //! not touch, those comments included. JSON, which the settings were
@@ -140,7 +140,7 @@ impl Settings {
     }
 
     /// The text of a new `settings.toml` holding these, written from a
-    /// template rather than serialized, as `flayer.toml` is: its comments say
+    /// template rather than serialized, as `weaver.toml` is: its comments say
     /// what each key does, in the file somebody opens to change one, and an
     /// edit keeps them ([`MindProject::change_settings`]). Version
     /// [`SETTINGS_TOML_VERSION`] whatever these say, the one version that
@@ -435,7 +435,7 @@ pub(crate) fn parse(path: &Path, text: &str) -> Result<Settings, WorkspaceError>
 }
 
 /// `text`, the `settings.toml` at `path` holding `before`, changed to hold
-/// `wanted` through toml_edit, as `flayer.toml` is edited, with every byte
+/// `wanted` through toml_edit, as `weaver.toml` is edited, with every byte
 /// that is not a changed value as it was.
 ///
 /// Only the keys whose values differ are touched, `directories` and

@@ -36,13 +36,13 @@ repository, `web`, made a project and not linked yet:
 ```console
 $ cd /home/you/Projects
 $ mindweaver init
-initialized weaver workspace `Projects` in /home/you/Projects/.mindflayer
+initialized weaver workspace `Projects` in /home/you/Projects/.mindweaver
 $ git init --quiet api && mind -C api init
 initialized mind project `api` in /home/you/Projects/api/.mind
 $ mindweaver link api
 linked api as api
 $ mindweaver add skill review 'Read a change before it lands'
-created skill review at /home/you/Projects/.mindflayer/library/skills/review/SKILL.md
+created skill review at /home/you/Projects/.mindweaver/library/skills/review/SKILL.md
 $ git init --quiet web && mind -C web init
 initialized mind project `web` in /home/you/Projects/web/.mind
 ```
@@ -51,7 +51,7 @@ Your own answers differ from these where they name something of your
 machine's: the server's port, here `40185`, is the one the system picked,
 the token is made new at every launch, the paths are your own, and each
 project's id is the one `mind init` gave it at random. They are of a home
-with no default workspace yet: where yours has one (`~/.mindflayer`),
+with no default workspace yet: where yours has one (`~/.mindweaver`),
 `mindweaver init` also says the default remembered the new workspace, and
 `/workspaces` and the snapshot's `known` list the default beside it, the
 new one with `"remembered": true`. The rest is the same for the same
@@ -224,7 +224,7 @@ $ curl -s -H "Authorization: Bearer $token" "$api/library" | jq .artifacts
     "state": null,
     "summary": "Read a change before it lands",
     "targets": [
-      ".mindflayer/library/skills/review"
+      ".mindweaver/library/skills/review"
     ],
     "unread": null
   }
@@ -361,7 +361,8 @@ $ curl -s -H "Authorization: Bearer $token" "$api/folders?path=/home/you/Project
 ```
 
 A path the API takes is absolute and normalized, and never inside a
-`.mindflayer`: any other is refused, there or not, with the code of why.
+`.mindweaver`, nor the `.mindflayer` of a workspace a Mindflayer build
+made: any other is refused, there or not, with the code of why.
 
 ### Updates and workspaces
 

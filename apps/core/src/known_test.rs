@@ -13,6 +13,7 @@ use tempfile::TempDir;
 
 use crate::mother::random;
 use crate::mother::{ProjectMother, UrlMother, WorkspaceMother};
+use crate::workspace::WEAVER_DIR;
 
 #[test]
 fn no_home_is_no_default() {
@@ -99,7 +100,7 @@ fn a_workspace_that_would_not_open_is_listed_with_why_and_nothing_counted() {
 fn why_a_workspace_would_not_open_is_said_without_any_credential_it_quotes() {
     for typed in UrlMother::every_credentialed() {
         let error = WorkspaceError::Malformed {
-            path: PathBuf::from("/w/.mindflayer/flayer.toml"),
+            path: PathBuf::from("/w/.mindweaver/weaver.toml"),
             detail: format!("unknown source {}", typed.typed),
         };
 

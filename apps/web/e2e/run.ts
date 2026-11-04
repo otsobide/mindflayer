@@ -15,9 +15,9 @@
  * as it was made. Then it removes the folder.
  *
  * Under the system's temporary folder, and refused there when any folder
- * above it holds a `.mind` or a `.mindflayer`: resolving walks up the tree
- * before it looks at a home, so a fixture inside somebody's project or
- * workspace could reach theirs.
+ * above it holds a `.mind`, a `.mindweaver` or a `.mindflayer`: resolving
+ * walks up the tree before it looks at a home, so a fixture inside
+ * somebody's project or workspace could reach theirs.
  */
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
@@ -69,7 +69,7 @@ if (!built(bin)) {
 const temporary = tmpdir()
 const holder = marked(temporary)
 if (holder) {
-  refuse(`the temporary folder ${temporary} is inside ${holder}, which holds a .mind or a .mindflayer a command run from the fixture could reach: point TMPDIR elsewhere`)
+  refuse(`the temporary folder ${temporary} is inside ${holder}, which holds a .mind, a .mindweaver or a .mindflayer a command run from the fixture could reach: point TMPDIR elsewhere`)
 }
 
 const at: Places = places(mkdtempSync(join(temporary, 'mindweaver-e2e-')), bin)

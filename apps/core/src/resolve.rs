@@ -2,7 +2,7 @@
 //! no two of them can come to different answers (D-08).
 //!
 //! In order: the workspace the command line names (`-W`), then the one
-//! activated for the shell (`$MINDFLAYER_WORKSPACE`), then the first one
+//! activated for the shell (`$MINDWEAVER_WORKSPACE`), then the first one
 //! found walking up from where the command starts, then the default one in
 //! home. The first two were chosen on purpose, so they win over where
 //! somebody happens to be standing, as an activated Python virtualenv does.
@@ -26,11 +26,9 @@ use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::code::codes;
+use crate::names::Names;
 use crate::paths;
-use crate::workspace::{
-    absolute, same_directory, MindProject, WeaverWorkspace, WorkspaceError, WEAVER_CONFIG,
-    WEAVER_DIR,
-};
+use crate::workspace::{absolute, same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// What a command means to do with the workspace it is given, which decides
 /// whether the default one may be made for it.
@@ -117,7 +115,8 @@ impl fmt::Display for Reason {
 /// what, and the only question left about a value is whether it was given.
 #[derive(Debug, Clone, Copy)]
 pub struct Inputs<'a> {
-    /// The workspace the command line names: its root, or its `.mindflayer`.
+    /// The workspace the command line names: its root, or its `.mindweaver`
+    /// (a `.mindflayer`, for one a Mindflayer build made).
     ///
     /// Given empty, it names none, and switches the activated one off too.
     /// That is what lets a test pin it, the way `--home=` pins home: a test
@@ -211,9 +210,11 @@ pub fn resolve_except(
 
     let start = absolute(inputs.start)?;
     let skipped = |root: &Path| except.iter().any(|path| same_directory(root, path));
-    let above = start.ancestors().find(|candidate| {
-        candidate.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file() && !skipped(candidate)
-    });
+    // Under either names, so a workspace a Mindflayer build made is found
+    // as it was before, and never passed over for one further up.
+    let above = start
+        .ancestors()
+        .find(|candidate| WeaverWorkspace::is_marked(candidate) && !skipped(candidate));
     if let Some(root) = above {
         return Ok(Some(Resolved {
             workspace: WeaverWorkspace::open(root)?,
@@ -233,11 +234,14 @@ pub fn resolve_except(
             Intent::Read => Ok(None),
         };
     }
+    // The default in home under whichever names it is there by, the new
+    // before the old: `~/.mindflayer` stays the default until it is moved,
+    // and a write never makes a `~/.mindweaver` beside it, which `init`
+    // takes it for. Only where neither is there does a write make the new
+    // one and a read fall back to it unmade.
     let workspace = match inputs.intent {
         Intent::Write => WeaverWorkspace::init(home)?.0,
-        Intent::Read if home.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file() => {
-            WeaverWorkspace::open(home)?
-        }
+        Intent::Read if WeaverWorkspace::is_marked(home) => WeaverWorkspace::open(home)?,
         Intent::Read => WeaverWorkspace::unmade(home)?,
     };
     Ok(Some(Resolved {
@@ -406,7 +410,8 @@ fn chosen<'a>(inputs: &Inputs<'a>) -> Option<(Reason, &'a Path)> {
     }
 }
 
-/// Open a workspace somebody named, by its root or by its `.mindflayer`:
+/// Open a workspace somebody named, by its root or by its `.mindweaver`, or
+/// the `.mindflayer` of one a Mindflayer build made:
 /// what `-W` and the activation name, and what a command taking a workspace
 /// as its own argument names, as `mindweaver activate DIR` does, so that every
 /// way of naming one takes the same spellings.
@@ -414,13 +419,15 @@ fn chosen<'a>(inputs: &Inputs<'a>) -> Option<(Reason, &'a Path)> {
 /// The folder is taken as well as the root because it is what a person
 /// pointing at a workspace is often looking at, and it is the folder that
 /// makes the directory a workspace. A root that holds a marker of its own is
-/// a root, even when it happens to be called `.mindflayer` itself. Never
+/// a root, even when it happens to be called `.mindweaver` itself. Never
 /// made for the occasion, for the reason a chosen workspace never is.
 pub fn named(path: &Path) -> Result<WeaverWorkspace, WorkspaceError> {
     let path = absolute(path)?;
-    let holds_marker = path.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file();
+    let folder = Names::ALL
+        .into_iter()
+        .any(|names| path.file_name() == Some(names.workspace_dir().as_ref()));
     let root = match path.parent() {
-        Some(parent) if !holds_marker && path.file_name() == Some(WEAVER_DIR.as_ref()) => parent,
+        Some(parent) if folder && !WeaverWorkspace::is_marked(&path) => parent,
         _ => &path,
     };
     WeaverWorkspace::open(root)

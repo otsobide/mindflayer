@@ -1589,15 +1589,19 @@ fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_
     );
     let named = &mindweaver_core::hash::bytes(text.as_bytes())[..16];
     assert_eq!(scratch_name(text), format!("edit-{named}.md"));
-    assert_eq!(
-        route,
-        format!(
-            "{}/{}",
-            WeaverWorkspace::scratch_route(),
-            scratch_name(text)
-        )
-    );
+    assert_eq!(route, format!(".mindweaver/tmp/{}", scratch_name(text)));
     assert_ne!(scratch_route("another text"), route);
+    // In a workspace a Mindflayer build made, its own scratch folder.
+    let (_dir, old) = mindweaver_core::mother::MindflayerMother::empty();
+    assert_eq!(
+        own.commands_in(&old),
+        [[
+            &["mindweaver", "edit", "--contents"][..],
+            &[format!(".mindflayer/tmp/{}", scratch_name(text)).as_str()],
+            &edit[2..]
+        ]
+        .concat()]
+    );
     for task in [own, alpha] {
         assert!(task.writes(), "{task:?}");
         assert_eq!(task.refusal(), None, "{task:?}");

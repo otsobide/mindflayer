@@ -31,10 +31,7 @@ use serde::Serialize;
 use crate::paths;
 use crate::resolve::Reason;
 use crate::value::Redacted;
-use crate::workspace::{
-    absolute, same_directory, Registration, WeaverWorkspace, WorkspaceError, WEAVER_CONFIG,
-    WEAVER_DIR,
-};
+use crate::workspace::{absolute, same_directory, Registration, WeaverWorkspace, WorkspaceError};
 
 /// Every workspace this machine knows, as `mindweaver workspaces` lists them.
 ///
@@ -323,7 +320,7 @@ fn made_default(home: Option<&Path>) -> Result<Option<WeaverWorkspace>, Workspac
         return Ok(None);
     };
     let home = absolute(home)?;
-    if !home.join(WEAVER_DIR).join(WEAVER_CONFIG).is_file() {
+    if !WeaverWorkspace::is_marked(&home) {
         return Ok(None);
     }
     WeaverWorkspace::open(&home).map(Some)

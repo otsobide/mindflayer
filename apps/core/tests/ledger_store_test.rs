@@ -1528,7 +1528,7 @@ fn a_gathered_artifact_reads_back_with_its_source(store: Store) {
     let revision = RevisionMother::random();
     store.saw_source(from.id, Some(revision.as_str())).unwrap();
     let name = ArtifactNameMother::random();
-    let path = format!(".mindflayer/skills/{}/{name}", from.directory);
+    let path = format!(".mindweaver/skills/{}/{name}", from.directory);
     let summary = random::chance().then(|| random::text(30));
 
     store
