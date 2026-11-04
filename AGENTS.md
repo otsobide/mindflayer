@@ -275,7 +275,7 @@ under `apps/` with its own `Makefile`:
   API's OpenAPI document, what is HTTP of each route of both tables
   (`paths`), each type a route names asked of the front end (`Describe`,
   `Carried`, `Way`).
-- `apps/web` (`mindflayer-web`): the web panel, in Vue and Nuxt UI on Vite,
+- `apps/web` (`mindweaver-web`): the web panel, in Vue and Nuxt UI on Vite,
   with pnpm. `src/main.ts` mounts what `src/panel.ts` installs (router,
   Pinia, Vue Query, Nuxt UI, the transport), which the shell test installs
   too. `src/api/transport.ts` is the `Transport` interface and `useTransport`,

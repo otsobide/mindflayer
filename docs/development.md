@@ -21,7 +21,7 @@ apps/server  mindweaver-server   the local server behind the web panel, which
                                  `flayer ui` runs. Transport only: it moves
                                  JSON between the browser and a front end,
                                  and holds no rules.
-apps/web     mindflayer-web      the web panel the server embeds: Vue and
+apps/web     mindweaver-web      the web panel the server embeds: Vue and
                                  Nuxt UI, built with Vite. It asks through
                                  the server and draws; no rules here either.
 ```

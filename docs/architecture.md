@@ -13,7 +13,7 @@ tree.
 apps/core    mindweaver-core     the engine
 apps/cli     mindweaver-cli      the `mind` and `flayer` binaries
 apps/server  mindweaver-server   the local server behind the web panel
-apps/web     mindflayer-web      the web panel, in Vue
+apps/web     mindweaver-web      the web panel, in Vue
 ```
 
 The layout exists because there would be more than two, and the server and
