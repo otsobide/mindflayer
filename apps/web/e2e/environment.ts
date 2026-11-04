@@ -12,11 +12,14 @@ import { dirname, join, relative } from 'node:path'
 /**
  * The variables that lead a command to a real workspace or a real agent
  * home, as the CLI's own tests name them (`common::CLEARED`): an activated
- * workspace, the default one's home, and the agents' folders. The driver
+ * workspace, the default one's home, each under the name a Mindflayer build
+ * read it by too, and the agents' folders. The driver
  * starts Playwright without them, so neither the server nor any command a
  * spec runs, nor a worker, ever sees them.
  */
 export const CLEARED = [
+  'MINDWEAVER_HOME',
+  'MINDWEAVER_WORKSPACE',
   'MINDFLAYER_HOME',
   'MINDFLAYER_WORKSPACE',
   'CLAUDE_CONFIG_DIR',
@@ -163,7 +166,7 @@ export function environment(at: Places): Record<string, string> {
  * The options every line names its home, its workspace and the agent homes
  * by: `--home` the temporary one, `--workspace` the fixture, or, before
  * there is one to name, empty, which names none and ignores
- * `$MINDFLAYER_WORKSPACE` too, and every agent home empty. Named on every
+ * `$MINDWEAVER_WORKSPACE` too, and every agent home empty. Named on every
  * line even though `-C` is under the temporary folder: resolving walks up
  * from there, and only a line that names its workspace cannot be led to
  * another.

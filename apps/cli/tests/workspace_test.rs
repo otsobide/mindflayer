@@ -1,5 +1,5 @@
 //! Which workspace a command uses: the one `-W` names, then the one
-//! `$MINDFLAYER_WORKSPACE` activates, then the one above, then the default;
+//! `$MINDWEAVER_WORKSPACE` activates, then the one above, then the default;
 //! and `mindweaver which`, which says which one and why.
 //!
 //! What the environment says can only be set for a binary of its own, so
@@ -133,7 +133,7 @@ fn an_activated_workspace_wins_over_the_one_above() {
         "mindweaver",
         &fixture.alpha,
         &["list"],
-        &[("MINDFLAYER_WORKSPACE", &hub)],
+        &[("MINDWEAVER_WORKSPACE", &hub)],
     );
 
     assert!(listed.ok, "{}", listed.stderr);
@@ -149,7 +149,7 @@ fn an_empty_workspace_variable_counts_as_unset() {
         "mindweaver",
         &fixture.alpha,
         &["list"],
-        &[("MINDFLAYER_WORKSPACE", "")],
+        &[("MINDWEAVER_WORKSPACE", "")],
     );
 
     assert!(listed.ok, "{}", listed.stderr);
@@ -165,7 +165,7 @@ fn a_workspace_named_empty_keeps_the_activated_one_out() {
         "mindweaver",
         &fixture.alpha,
         &["list", "-W", ""],
-        &[("MINDFLAYER_WORKSPACE", &hub)],
+        &[("MINDWEAVER_WORKSPACE", &hub)],
     );
 
     assert!(listed.ok, "{}", listed.stderr);
@@ -181,7 +181,7 @@ fn a_named_workspace_wins_over_the_activated_one() {
         "mind",
         &fixture.collapse,
         &["weaver", "list", "-W", &outer],
-        &[("MINDFLAYER_WORKSPACE", &hub)],
+        &[("MINDWEAVER_WORKSPACE", &hub)],
     );
 
     assert!(listed.ok, "{}", listed.stderr);
@@ -197,14 +197,14 @@ fn activating_a_directory_that_is_no_workspace_is_refused() {
         "mindweaver",
         &fixture.alpha,
         &["list"],
-        &[("MINDFLAYER_WORKSPACE", &spelled(&gone))],
+        &[("MINDWEAVER_WORKSPACE", &spelled(&gone))],
     );
 
     assert!(!listed.ok);
     assert!(
         listed
             .stderr
-            .contains("$MINDFLAYER_WORKSPACE names a workspace that cannot be used"),
+            .contains("$MINDWEAVER_WORKSPACE names a workspace that cannot be used"),
         "{}",
         listed.stderr
     );
@@ -218,7 +218,7 @@ fn installing_from_an_activated_workspace_not_above_records_and_disowns() {
     let fixture = fixture();
     weaver(&fixture.hub, &["link", "../collapse"]).unwrap();
     let hub = spelled(&fixture.hub);
-    let activated = [("MINDFLAYER_WORKSPACE", hub.as_str())];
+    let activated = [("MINDWEAVER_WORKSPACE", hub.as_str())];
     let recorded = || {
         WeaverWorkspace::open(&fixture.hub)
             .unwrap()
@@ -315,14 +315,14 @@ fn which_says_an_activated_workspace_is_used_because_it_was_activated() {
         "mindweaver",
         &fixture.alpha,
         &["which"],
-        &[("MINDFLAYER_WORKSPACE", &spelled(&fixture.hub))],
+        &[("MINDWEAVER_WORKSPACE", &spelled(&fixture.hub))],
     );
 
     assert!(printed.ok, "{}", printed.stderr);
     assert_eq!(
         printed.stdout,
         format!(
-            "hub at {}, activated by $MINDFLAYER_WORKSPACE\n",
+            "hub at {}, activated by $MINDWEAVER_WORKSPACE\n",
             fixture.hub.display()
         )
     );
@@ -412,7 +412,7 @@ fn which_says_why_an_activated_workspace_cannot_be_used() {
         "mindweaver",
         &fixture.alpha,
         &["which"],
-        &[("MINDFLAYER_WORKSPACE", &spelled(&gone))],
+        &[("MINDWEAVER_WORKSPACE", &spelled(&gone))],
     );
 
     assert!(!printed.ok);
@@ -420,7 +420,7 @@ fn which_says_why_an_activated_workspace_cannot_be_used() {
     assert_eq!(
         printed.stderr,
         format!(
-            "error: $MINDFLAYER_WORKSPACE names a workspace that cannot be used: {}: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)\n",
+            "error: $MINDWEAVER_WORKSPACE names a workspace that cannot be used: {}: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)\n",
             gone.display()
         )
     );

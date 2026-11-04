@@ -93,3 +93,74 @@ fn init_where_a_mindflayer_build_made_a_workspace_makes_nothing_new() {
     );
     assert!(!made_new(dir.path()));
 }
+
+#[test]
+fn a_workspace_a_mindflayer_build_s_activate_set_is_taken_and_said() {
+    let dir = TempDir::new().unwrap();
+    let hub = dir.path().join("hub");
+    weaver(dir.path(), &["init", "hub"]).unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let spelled = hub.to_string_lossy().into_owned();
+
+    let which = spawn(
+        "mindweaver",
+        elsewhere.path(),
+        &["which"],
+        &[("MINDFLAYER_WORKSPACE", &spelled)],
+    );
+
+    assert!(which.ok, "{}", which.stderr);
+    assert_eq!(
+        which.stdout,
+        format!(
+            "hub at {}, activated by $MINDFLAYER_WORKSPACE\n",
+            hub.display()
+        )
+    );
+    assert!(
+        which.stderr.starts_with(
+            "note: $MINDFLAYER_WORKSPACE is Mindflayer's name for $MINDWEAVER_WORKSPACE"
+        ),
+        "{}",
+        which.stderr
+    );
+    // The new name, set, is the one read, and nothing is said.
+    let both = spawn(
+        "mindweaver",
+        elsewhere.path(),
+        &["which"],
+        &[
+            ("MINDFLAYER_WORKSPACE", "/nowhere"),
+            ("MINDWEAVER_WORKSPACE", &spelled),
+        ],
+    );
+    assert!(both.ok, "{}", both.stderr);
+    assert!(!both.stderr.contains("note:"), "{}", both.stderr);
+}
+
+#[test]
+fn a_home_a_mindflayer_build_read_from_its_variable_is_taken_and_said() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    MindflayerMother::create(home.path());
+    let spelled = home.path().to_string_lossy().into_owned();
+
+    let which = spawn(
+        "mindweaver",
+        elsewhere.path(),
+        &["which"],
+        &[("MINDFLAYER_HOME", &spelled)],
+    );
+
+    assert!(which.ok, "{}", which.stderr);
+    assert!(which.stdout.contains("the default one"), "{}", which.stdout);
+    assert!(
+        which.stderr.contains(
+            "note: $MINDFLAYER_HOME is Mindflayer's name for $MINDWEAVER_HOME, which is not set, \
+             so it is taken; set MINDWEAVER_HOME in its place"
+        ),
+        "{}",
+        which.stderr
+    );
+    assert!(!made_new(home.path()));
+}

@@ -140,3 +140,24 @@ impl OlderBuildMother {
         kept
     }
 }
+
+/// Makes what a Mindflayer build printed for a shell: its activation, under
+/// the names it set (D-26).
+pub struct MindflayerShellMother;
+
+impl MindflayerShellMother {
+    /// The bash or zsh code such a build printed where this one prints
+    /// `code`: the same code, setting `$MINDFLAYER_WORKSPACE` and defining
+    /// `flayer-deactivate`, and with no older activation of its own to undo
+    /// first. Made from this build's code rather than spelled here, so it
+    /// is what that build printed, the prompt and the virtualenv's handling
+    /// included.
+    pub fn activation(code: &str) -> String {
+        let undo_older =
+            "if typeset -f flayer-deactivate >/dev/null 2>&1; then\n    flayer-deactivate\nfi\n";
+        code.strip_prefix(undo_older)
+            .expect("the code undoes an older activation first")
+            .replace("MINDWEAVER_WORKSPACE", "MINDFLAYER_WORKSPACE")
+            .replace("mindweaver-deactivate", "flayer-deactivate")
+    }
+}

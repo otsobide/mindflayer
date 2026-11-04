@@ -73,15 +73,37 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
 /// A parameter beside the parsed line rather than a field of it, because it
 /// is not something a person types: the line stays exactly what was typed.
 pub fn run_watched(cli: &Cli, watch: &Watch) -> Result<Outcome, Failure> {
-    run_with(
-        cli,
-        &Lookup::given(
-            cli.home.as_deref(),
-            cli.workspace.as_deref(),
-            &cli.agent_homes,
-        ),
-        watch,
-    )
+    let lookup = Lookup::given(
+        cli.home.as_deref(),
+        cli.workspace.as_deref(),
+        &cli.agent_homes,
+    );
+    looked_up(run_with(cli, &lookup, watch), &lookup)
+}
+
+/// `result`, what a line typed in a shell came to, with what deciding where
+/// to look had to say put first: each variable taken under the name a
+/// Mindflayer build read ([`Lookup::older`]).
+///
+/// Said by the two entry points a shell reaches alone, since that is where
+/// the environment was read: a line the TUI or the panel runs reads none,
+/// so its own launch says it once. A note, which reaches no envelope and
+/// fails nothing, as a hint does.
+fn looked_up(mut result: Result<Outcome, Failure>, lookup: &Lookup) -> Result<Outcome, Failure> {
+    let said: Vec<Warning> = lookup
+        .older
+        .iter()
+        .map(|older| Warning::from(older.note()))
+        .collect();
+    match &mut result {
+        Ok(outcome) => {
+            outcome.stderr.splice(0..0, said);
+        }
+        Err(failure) => {
+            failure.warnings.splice(0..0, said);
+        }
+    }
+    result
 }
 
 /// Run `mind` with where to look for a workspace already decided: what
@@ -280,15 +302,12 @@ pub fn run_weaver_cli(cli: &WeaverCli) -> Result<Outcome, Failure> {
 /// Run `mindweaver` with a gather's progress and cancel going through `watch`,
 /// as [`run_watched`] does for `mind`.
 pub fn run_weaver_cli_watched(cli: &WeaverCli, watch: &Watch) -> Result<Outcome, Failure> {
-    run_weaver_with(
-        cli,
-        &Lookup::given(
-            cli.home.as_deref(),
-            cli.workspace.as_deref(),
-            &cli.agent_homes,
-        ),
-        watch,
-    )
+    let lookup = Lookup::given(
+        cli.home.as_deref(),
+        cli.workspace.as_deref(),
+        &cli.agent_homes,
+    );
+    looked_up(run_weaver_with(cli, &lookup, watch), &lookup)
 }
 
 /// [`run_with`], for `mindweaver`.

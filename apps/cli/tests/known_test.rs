@@ -458,7 +458,7 @@ fn forgetting_with_no_default_is_refused() {
     assert_eq!(
         failure.error.to_string(),
         format!(
-            "{}: not known, since there is no default workspace to remember it (--home or $MINDFLAYER_HOME names none)",
+            "{}: not known, since there is no default workspace to remember it (--home or $MINDWEAVER_HOME names none)",
             dir.path().join("notes").display()
         )
     );

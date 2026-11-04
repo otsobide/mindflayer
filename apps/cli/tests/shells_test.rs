@@ -5,10 +5,10 @@
 //! Each script runs in a shell of its own that reads no startup file, with
 //! an environment holding nothing but a PATH, a temporary HOME and what the
 //! test sets: nothing here reads or changes anybody's own shell, and no
-//! `MINDFLAYER_*` variable of the shell running the tests gets in. A shell
-//! that is not installed is skipped, and so is a virtualenv when there is no
-//! python3 to make one; each says so on stderr, except on CI, where it fails
-//! instead (see [`skipped`]).
+//! `MINDWEAVER_*` or `MINDFLAYER_*` variable of the shell running the tests
+//! gets in. A shell that is not installed is skipped, and so is a virtualenv
+//! when there is no python3 to make one; each says so on stderr, except on
+//! CI, where it fails instead (see [`skipped`]).
 //!
 //! Linux only for now, where the shells are the ones the code is written
 //! for; fish and PowerShell are asserted as text, in core.
@@ -29,9 +29,9 @@ defined() {
     if typeset -f "$1" >/dev/null 2>&1; then printf yes; else printf no; fi
 }
 state() {
-    printf '%s: prompt=[%s] workspace=[%s] virtualenv=[%s] path=[%s] deactivate=%s flayer-deactivate=%s\n' \
-        "$1" "${PS1-}" "${MINDFLAYER_WORKSPACE-unset}" "${VIRTUAL_ENV-unset}" \
-        "${PATH%%:*}" "$(defined deactivate)" "$(defined flayer-deactivate)"
+    printf '%s: prompt=[%s] workspace=[%s] virtualenv=[%s] path=[%s] deactivate=%s mindweaver-deactivate=%s\n' \
+        "$1" "${PS1-}" "${MINDWEAVER_WORKSPACE-unset}" "${VIRTUAL_ENV-unset}" \
+        "${PATH%%:*}" "$(defined deactivate)" "$(defined mindweaver-deactivate)"
 }
 activate_weaver() {
     eval "$("$MINDWEAVER" activate --shell "$SHELL_NAME" "$@")"
@@ -193,7 +193,7 @@ fn line(
     let shown =
         |path: Option<&Path>| path.map_or(String::from("unset"), |path| path.display().to_string());
     format!(
-        "{label}: prompt=[{prompt}] workspace=[{}] virtualenv=[{}] path=[{}] deactivate={} flayer-deactivate={}\n",
+        "{label}: prompt=[{prompt}] workspace=[{}] virtualenv=[{}] path=[{}] deactivate={} mindweaver-deactivate={}\n",
         shown(workspace),
         shown(venv),
         venv.map_or(String::from("/usr/bin"), |venv| venv.join("bin").display().to_string()),
@@ -258,7 +258,7 @@ fn activating_sets_the_variable_and_the_prompt_and_deactivating_restores_both() 
 activate_weaver "$WORKSPACE"
 state active
 "$MINDWEAVER" list
-flayer-deactivate
+mindweaver-deactivate
 state after
 "#,
             &[("WORKSPACE", &fixture.workspace)],
@@ -288,12 +288,12 @@ fn a_workspace_variable_set_before_activating_is_put_back_and_still_exported() {
         let printed = run(
             &shell,
             fixture.dir.path(),
-            r#"export MINDFLAYER_WORKSPACE=/somewhere/else
+            r#"export MINDWEAVER_WORKSPACE=/somewhere/else
 activate_weaver "$WORKSPACE"
 state active
-flayer-deactivate
+mindweaver-deactivate
 state after
-/bin/sh -c 'printf "exported: %s\n" "${MINDFLAYER_WORKSPACE-unset}"'
+/bin/sh -c 'printf "exported: %s\n" "${MINDWEAVER_WORKSPACE-unset}"'
 "#,
             &[("WORKSPACE", &fixture.workspace)],
         );
@@ -323,7 +323,7 @@ fn activating_another_workspace_takes_the_first_one_out_before_putting_it_in() {
             r#"activate_weaver "$WORKSPACE"
 activate_weaver "$OTHER"
 state swapped
-flayer-deactivate
+mindweaver-deactivate
 state after
 "#,
             &[("WORKSPACE", &fixture.workspace), ("OTHER", &fixture.other)],
@@ -363,8 +363,8 @@ fn beside_a_virtualenv_activated_first_each_deactivate_undoes_only_its_own() {
             r#". "$VENV/bin/activate"
 activate_weaver "$WORKSPACE"
 state both
-flayer-deactivate
-state flayer-deactivated
+mindweaver-deactivate
+state mindweaver-deactivated
 deactivate
 state both-deactivated
 "#,
@@ -377,7 +377,7 @@ state both-deactivated
 activate_weaver "$WORKSPACE"
 deactivate
 state virtualenv-deactivated
-flayer-deactivate
+mindweaver-deactivate
 state both-deactivated
 "#,
             &variables,
@@ -387,7 +387,7 @@ state both-deactivated
             ours_first,
             [
                 line("both", both, ws, active, true),
-                line("flayer-deactivated", "(venv) $ ", None, active, false),
+                line("mindweaver-deactivated", "(venv) $ ", None, active, false),
                 line("both-deactivated", "$ ", None, None, false),
             ]
             .concat(),
@@ -428,8 +428,8 @@ fn beside_a_virtualenv_activated_second_each_deactivate_undoes_only_its_own() {
             r#"activate_weaver "$WORKSPACE"
 . "$VENV/bin/activate"
 state both
-flayer-deactivate
-state flayer-deactivated
+mindweaver-deactivate
+state mindweaver-deactivated
 deactivate
 state both-deactivated
 "#,
@@ -442,7 +442,7 @@ state both-deactivated
 . "$VENV/bin/activate"
 deactivate
 state virtualenv-deactivated
-flayer-deactivate
+mindweaver-deactivate
 state both-deactivated
 "#,
             &variables,
@@ -452,7 +452,7 @@ state both-deactivated
             ours_first,
             [
                 line("both", both, ws, active, true),
-                line("flayer-deactivated", "(venv) $ ", None, active, false),
+                line("mindweaver-deactivated", "(venv) $ ", None, active, false),
                 line("both-deactivated", "$ ", None, None, false),
             ]
             .concat(),
@@ -488,8 +488,8 @@ fn code_in_a_workspaces_path_or_name_is_never_run() {
         dir.path(),
         r#"activate_weaver "$WORKSPACE"
 printf 'drawn: %s\n' "${PS1@P}"
-printf 'workspace: %s\n' "$MINDFLAYER_WORKSPACE"
-flayer-deactivate
+printf 'workspace: %s\n' "$MINDWEAVER_WORKSPACE"
+mindweaver-deactivate
 "#,
         &[("WORKSPACE", &workspace)],
     );
@@ -503,4 +503,65 @@ flayer-deactivate
     );
     assert!(!dir.path().join("pwned").exists());
     assert!(!dir.path().join("pwned-too").exists());
+}
+
+/// A shell a Mindflayer build activated keeps its workspace: every command
+/// takes `$MINDFLAYER_WORKSPACE` while `$MINDWEAVER_WORKSPACE` is not set,
+/// and says so. Activating again undoes the old activation by the
+/// `flayer-deactivate` it defined, its prompt's prefix with it, before the
+/// new one is made.
+#[test]
+fn a_shell_a_mindflayer_build_activated_keeps_its_workspace_until_activated_again() {
+    let fixture = fixture();
+    for shell in shells() {
+        let code = weaver(
+            fixture.dir.path(),
+            &["activate", NAME, "--shell", shell.name],
+        )
+        .unwrap()
+        .stdout;
+        let older = fixture.dir.path().join(format!("older.{}", shell.name));
+        fs::write(
+            &older,
+            common::mother::MindflayerShellMother::activation(&code),
+        )
+        .unwrap();
+
+        let printed = run(
+            &shell,
+            fixture.dir.path(),
+            r#". "$OLDER"
+printf 'older: %s\n' "${MINDFLAYER_WORKSPACE-unset}"
+"$MINDWEAVER" which 2>&1
+eval "$("$MINDWEAVER" activate --shell "$SHELL_NAME" "$WORKSPACE" 2>/dev/null)"
+printf 'older: %s %s\n' "${MINDFLAYER_WORKSPACE-unset}" "$(defined flayer-deactivate)"
+state active
+mindweaver-deactivate
+state after
+"#,
+            &[("WORKSPACE", &fixture.workspace), ("OLDER", &older)],
+        );
+
+        assert_eq!(
+            printed,
+            [
+                format!("older: {}\n", fixture.workspace.display()),
+                format!(
+                    "{NAME} at {}, activated by $MINDFLAYER_WORKSPACE\n",
+                    fixture.workspace.display()
+                ),
+                String::from(
+                    "note: $MINDFLAYER_WORKSPACE is Mindflayer's name for $MINDWEAVER_WORKSPACE, \
+                     which is not set, so it is taken; `eval \"$(mindweaver activate \
+                     \"$MINDFLAYER_WORKSPACE\")\"` activates it again under the new one\n"
+                ),
+                String::from("older: unset no\n"),
+                alone("active", ACTIVE, Some(&fixture.workspace), true),
+                alone("after", "$ ", None, false),
+            ]
+            .concat(),
+            "{}",
+            shell.name
+        );
+    }
 }

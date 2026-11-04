@@ -82,7 +82,7 @@ fn both_binaries_document_the_workspace_option_and_its_fallbacks() {
             .take(4)
             .collect();
         assert!(described.contains("-W"), "{line:?}:\n{text}");
-        assert!(described.contains("$MINDFLAYER_WORKSPACE"), "{described}");
+        assert!(described.contains("$MINDWEAVER_WORKSPACE"), "{described}");
         assert!(described.contains("empty"), "{described}");
     }
 }

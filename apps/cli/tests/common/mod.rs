@@ -87,8 +87,12 @@ fn gives(args: &[&str], option: &str) -> bool {
 
 /// Every variable that would send a spawned binary outside the fixture: to
 /// the real home, a workspace the developer's shell activated, or the real
-/// agent folders.
-pub const CLEARED: [&str; 5] = [
+/// agent folders. Under Mindweaver's names and Mindflayer's, which a binary
+/// still reads while the new ones are not set, so a shell an older build
+/// activated reaches no test either.
+pub const CLEARED: [&str; 7] = [
+    "MINDWEAVER_HOME",
+    "MINDWEAVER_WORKSPACE",
     "MINDFLAYER_HOME",
     "MINDFLAYER_WORKSPACE",
     "CLAUDE_CONFIG_DIR",

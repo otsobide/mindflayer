@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use mindweaver_core::activate::{self, Shell, WORKSPACE_VARIABLE};
+use mindweaver_core::activate::{self, Shell};
 use mindweaver_core::resolve::{self, resolve, Intent, Reason, Resolved};
 
 use super::{reading, typed, workspace_to_read};
@@ -56,7 +56,7 @@ pub(crate) fn which_command(directory: &Path, lookup: &Lookup) -> Result<Outcome
         .ok_or_else(|| CliError::NotInWorkspace(directory.to_path_buf()))?;
     let why = match reason {
         Reason::Explicit => String::from("named by -W"),
-        Reason::Activated => format!("activated by ${WORKSPACE_VARIABLE}"),
+        Reason::Activated => format!("activated by ${}", lookup.activated_by()),
         Reason::Above => format!(
             "found walking up from {}",
             typed(directory, Path::new(""))?.display()

@@ -40,16 +40,16 @@ pub struct Cli {
     pub directory: Option<PathBuf>,
 
     /// Where the default workspace lives, used when none is found above
-    /// [default: $MINDFLAYER_HOME, then your home directory; empty for none].
+    /// [default: $MINDWEAVER_HOME, then your home directory; empty for none].
     #[arg(long = "home", value_name = "DIR", global = true)]
     pub home: Option<String>,
 
     // A string rather than a path for the reason `home` is one: empty is an
     // answer, and a path cannot spell it.
     /// The workspace to use, by its directory or its `.mindweaver`, wherever
-    /// you are [default: $MINDFLAYER_WORKSPACE, then the one at or above
+    /// you are [default: $MINDWEAVER_WORKSPACE, then the one at or above
     /// here, then the default one; empty to name none and ignore
-    /// $MINDFLAYER_WORKSPACE].
+    /// $MINDWEAVER_WORKSPACE].
     #[arg(short = 'W', long = "workspace", value_name = "DIR", global = true)]
     pub workspace: Option<String>,
 
@@ -421,16 +421,16 @@ pub struct WeaverCli {
     pub directory: Option<PathBuf>,
 
     /// Where the default workspace lives, used when none is found above
-    /// [default: $MINDFLAYER_HOME, then your home directory; empty for none].
+    /// [default: $MINDWEAVER_HOME, then your home directory; empty for none].
     #[arg(long = "home", value_name = "DIR", global = true)]
     pub home: Option<String>,
 
     // A string rather than a path for the reason `home` is one: empty is an
     // answer, and a path cannot spell it.
     /// The workspace to use, by its directory or its `.mindweaver`, wherever
-    /// you are [default: $MINDFLAYER_WORKSPACE, then the one at or above
+    /// you are [default: $MINDWEAVER_WORKSPACE, then the one at or above
     /// here, then the default one; empty to name none and ignore
-    /// $MINDFLAYER_WORKSPACE].
+    /// $MINDWEAVER_WORKSPACE].
     #[arg(short = 'W', long = "workspace", value_name = "DIR", global = true)]
     pub workspace: Option<String>,
 
@@ -469,7 +469,7 @@ pub enum WeaverCommand {
 
     /// Print the shell code that activates a workspace for every command the
     /// shell runs, as a Python virtualenv's `activate` does:
-    /// `eval "$(mindweaver activate DIR)"`. `flayer-deactivate` undoes it.
+    /// `eval "$(mindweaver activate DIR)"`. `mindweaver-deactivate` undoes it.
     ///
     /// It writes nothing, and prints no code when there is nothing to
     /// activate, so a failed `eval` changes nothing either.
