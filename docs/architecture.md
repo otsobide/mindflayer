@@ -9489,6 +9489,47 @@ since `codex mcp add` writes only Codex's user config, never a project's, and
 re-serializes every entry there, though they may return for user scope (D-22).
 Unblocks #18, #86, #89, #93 and #94.
 
+Checking it, #18 adds MCP checks to `scripts/agent-probe`, which the owner
+runs by hand, so every result is pending until then ([docs/agents.md, MCP
+servers](agents.md#mcp-servers)). What each result bears on, and what it
+would change:
+
+- **An approved `.mcp.json` entry with a `type` loads in Claude**
+  (`claude-mcp`). Against it, #90's shape is wrong and #90 waits for the
+  shape Claude does load.
+- **An http entry with no `type`** (`claude-mcp-untyped`, recorded). #90
+  writes `type` whatever comes of it. Should the entry cost the file its
+  other servers, #90 refuses to add one to a file holding such an entry, as
+  its own would not load either, and #96 reports it.
+- **A comment or a trailing comma in `.mcp.json`** (`claude-mcp-comment`,
+  `claude-mcp-comma`, recorded). `config_entry` reads a file as strict JSON
+  or as JSONC, as its caller says. Should Claude refuse the file whole, #90
+  reads `.mcp.json` as strict JSON, so one holding either is refused, saying
+  why, rather than given an entry Claude will never load. Should Claude read
+  it, #90 may read it as JSONC and keep both, as it keeps every other byte.
+- **A trusted project's `.codex/config.toml` loads, an untrusted one's does
+  not** (`codex-mcp-trusted`, `codex-mcp-untrusted`). Were an untrusted
+  project's servers started, #91's trust warning would go. Were a trusted
+  one's not, Codex cannot be reached at project scope, and this decision
+  comes back for Codex, with D-22's user scope. #94 counts a server
+  installed into an untrusted project as reaching no Codex, as #91 warns,
+  and the list asked with no trust entry says whether such a project is
+  warned of too.
+- **A server of the same name in the user's `config.toml`**
+  (`codex-mcp-collision`, recorded). This settles #91's open choice: if the
+  whole configuration is refused, the session with it, or the other
+  servers lost, #91 refuses a name a lower layer holds, as it plans; if one
+  layer wins or the name is dropped alone, it warns instead.
+- **V2's `mcp.servers` loads in V2 and in 1.19.4, and V1's `mcp.<name>` in
+  V2** (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`).
+  Were 1.19.4 not to read V2's shape, D-12's minimal V2 entry would miss V1,
+  and #92 would write V1's shape, which V2 reads too. Were V2 not to read
+  V1's, #92 would never write it, even into a file that already uses it.
+- **Each agent loads its servers from the file the target table will name**
+  (every run). #93's MCP targets are `.mcp.json`, `.codex/config.toml` and
+  the file #92 picks; one found elsewhere moves that agent's target, one
+  line in the table.
+
 ### D-11: MCP secrets are environment references
 
 A secret is written as a reference in each agent's own syntax (Claude `${VAR}`;
@@ -9504,6 +9545,37 @@ Claude and Codex cannot match; and, for now, a `mind mcp run` wrapper reading
 the OS keychain, which may come later as an opt-in but makes every teammate
 depend on the binary and does not cover remote headers. Unblocks #18, #86, #87,
 #90, #91 and #92.
+
+Checking it, #18's checks put a reference in every place a renderer would,
+naming a variable with a value of its own, and read what a stand-in server
+was started with or sent ([docs/agents.md, MCP
+servers](agents.md#mcp-servers)). Every result is pending the owner's run.
+What each would change, should it come out against what is expected:
+
+- **Claude expands `${VAR}` in `args`, `env`, `url` and `headers`, also
+  inside a longer value** (`claude-mcp`). A place where it does not becomes
+  one #87's report says Claude cannot express a secret in, and #90 refuses
+  a secret there.
+- **Codex passes `${VAR}` on as written, in `args`, `env` and `url`**
+  (`codex-mcp-trusted`). This is why Codex cannot express a secret argument
+  or a secret inside a URL. Were Codex to expand one after all, #87 would
+  drop that shape from Codex's list, and #91 would write the reference.
+- **`env_vars`, `env_http_headers` and `bearer_token_env_var` fill a value
+  from a variable** (`codex-mcp-trusted`). One that does not leaves its
+  shape inexpressible in Codex: #87 lists it and #91 refuses it, where it
+  meant to write it. Whether Codex passes a server the variables it names
+  only is recorded beside them, for #91's `env_vars`.
+- **OpenCode expands `{env:}` in the command, the environment, the URL and
+  the headers, in both lines** (`opencode-mcp-v2`, `opencode-mcp-v1-shape`,
+  `opencode-mcp-1-19`). A place where it does not is one #87 marks for
+  OpenCode and #92 refuses.
+- **Through V2's background server too** (`opencode-mcp-service`). Were the
+  server to fill `{env:}` from an environment of its own rather than from
+  the one it was started from, a reference would hold in V2 only once its
+  variable reached that server (V2 has `opencode service set env`), and
+  "works without Mindflayer running" would need saying again for V2: #92
+  would warn of it, and #96 would check the server's variables. That change
+  is the owner's, here.
 
 ### D-12: OpenCode gets the V2 MCP shape
 
@@ -10753,15 +10825,22 @@ an open question below.
   that is the `AGENTS.md` through a link, Claude reads the block through
   both, and whether it loads the one file twice is not recorded.
 - **Codex and OpenCode on their binaries.** #17 ran only Claude Code, so
-  every Codex and OpenCode fact in [docs/agents.md](agents.md) is docs-only,
-  each with a fallback. Its checks 2 (OpenCode given the same skill in both
-  folders) and 5 (Codex and project trust), and the Codex and OpenCode halves
-  of 1 and 4, are what a `codex.sh` and an `opencode.sh` beside the probe
-  would run. #34 relies on them already, writing `.agents/skills` for both
+  every Codex and OpenCode fact about skills and rules in
+  [docs/agents.md](agents.md) is docs-only, each with a fallback. Its checks
+  2 (OpenCode given the same skill in both folders) and 5 (Codex and project
+  trust), and the Codex and OpenCode halves of 1 and 4, are what `codex.sh`
+  and `opencode.sh` beside the probe would run beside the MCP checks they
+  hold now (#18). #34 relies on them already, writing `.agents/skills` for both
   and trusting OpenCode with identical copies in two folders, and #42 will.
   The [target table](#agents-and-where-each-kind-reaches-them)'s
   `.agents/skills` for Codex and OpenCode rests on them too; were one to read
   elsewhere, its arm in `standard` is the one line to change.
+- **The MCP facts are pending.** #18 wrote the MCP checks and did not run
+  them: they make paid calls on the owner's account, so the owner runs them
+  ([docs/agents.md](agents.md#mcp-servers)). Until then, what #87 and #90 to
+  #94 build on is docs-only or read from the installed packages, and D-10
+  and D-11 say what each result would change. The checks run OpenCode's V2
+  as installed, 2.2.5 at the time of writing, where #18 named 2.1.x.
 - **Folders an agent reads and is sent nothing in.** A project marked by its
   settings is read in its agents' targets and in its authored folder, not in
   every folder they read ([read where its agents
