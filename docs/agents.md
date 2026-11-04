@@ -681,9 +681,13 @@ Beyond what #17 needs:
   `tools/list`, *initialized* one that saw only the first, *none* one that
   saw neither or never started. Where an agent says what it loaded without a
   model's help, that is kept and held too: Claude's init message, whose
-  `mcp_servers` gives each server a status; OpenCode's `opencode mcp list`,
-  which connects to each server and calls no model; and Codex's `codex mcp
-  list --json`, which lists the configuration, kept as a record only.
+  `mcp_servers` gives each server a status, written once Claude has waited
+  for every server to connect, since each run sets
+  `MCP_CONNECTION_NONBLOCKING=0` (2.1.318 connects without waiting
+  otherwise, and lists a server still connecting as `pending`); OpenCode's
+  `opencode mcp list`, which connects to each server and calls no model; and
+  Codex's `codex mcp list --json`, which lists the configuration, kept as a
+  record only.
 - **Nothing from the model.** Claude and Codex are asked for `OK` alone, and
   each run is held to calling no tool: Claude with `--tools ''
   --max-turns 1`, Codex with the sandbox read-only.
@@ -996,8 +1000,10 @@ packages, and a run that disagrees fails or records it.
 
 - Claude Code 2.1.318: approvals count from the user settings in a `-p`
   run; the init message lists `.mcp.json` servers in `mcp_servers` with a
-  status, and waits for them to connect, or the status says `pending` and
-  the stand-in still has the last word; `--tools ''` turns every tool off.
+  status; `MCP_CONNECTION_NONBLOCKING=0` has it wait for each to connect
+  before it is written, as the binary reads the variable and sets it so
+  itself where it needs its servers connected first; `--tools ''` turns
+  every tool off.
 - Codex 0.166.0: `codex exec` takes `--json`, `--skip-git-repo-check`,
   `--sandbox read-only`, `--model` and `-c`, as its help says; `codex mcp
   list --json` exists ("Output the configured servers as JSON"); the
@@ -1026,9 +1032,9 @@ runs](#the-claude-code-runs) are recorded above.
 - **Logins:** pending.
 - **Environment:** as #17's, plus `PROBE_CODEX_BIN`, `PROBE_CODEX_MODEL`,
   `PROBE_OPENCODE_BIN` and `PROBE_OPENCODE_V1_BIN`; for each agent's command
-  the five `PROBE_MCP_*` values above, and for OpenCode's
-  `PROBE_MCP_PYTHON`, `OPENCODE_DISABLE_AUTOUPDATE=1` and
-  `OPENCODE_DISABLE_MODELS_FETCH=1`.
+  the five `PROBE_MCP_*` values above, for Claude's
+  `MCP_CONNECTION_NONBLOCKING=0`, and for OpenCode's `PROBE_MCP_PYTHON`,
+  `OPENCODE_DISABLE_AUTOUPDATE=1` and `OPENCODE_DISABLE_MODELS_FETCH=1`.
 - **The real home, before and after:** pending.
 
 ## What says an agent works in a project
