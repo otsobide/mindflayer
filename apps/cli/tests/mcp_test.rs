@@ -237,3 +237,27 @@ fn a_project_mind_init_makes_lists_nothing_of_an_unrelated_mcp_folder() {
         )
     );
 }
+
+#[test]
+fn the_targets_of_servers_are_spoken_of_as_settings_since_none_is_installed() {
+    let dir = TempDir::new().unwrap();
+    new_project(dir.path());
+    let name = dir.path().file_name().unwrap().to_str().unwrap().to_owned();
+
+    let reset = mind(dir.path(), &["targets", "reset", "mcp"]).unwrap();
+    let set = mind(dir.path(), &["targets", "set", "mcp", ".x"]).unwrap_err();
+
+    assert!(reset.ok, "{:?}", reset.stderr);
+    assert_eq!(
+        reset.stdout,
+        format!(
+            "nothing to change: {name} names no folder for its MCP servers already, and none \
+             is installed into a project yet\n"
+        )
+    );
+    assert_eq!(
+        set.error.to_string(),
+        ".x: cannot be where a project's MCP servers are installed, because MCP servers are \
+         not installed into a project as folders yet"
+    );
+}

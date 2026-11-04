@@ -8,6 +8,7 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use mindweaver_core::install;
 use mindweaver_core::reapply::{self, Change, Ignore, Plan, Retarget, Why};
 use mindweaver_core::{
     paths, Agent, AgentHomes, Excluded, Kind, MindProject, Settings, Share, WeaverWorkspace,
@@ -249,14 +250,28 @@ fn nothing(project: &MindProject, change: &Change, plan: &Plan) -> String {
                 ""
             }
         ),
-        Change::Targets { kind, folders } => match folders {
-            Some(_) => format!(
+        // Of the settings alone for a kind no install writes yet (MCP
+        // servers): saying it goes where its agents read would say that one
+        // is installed at all.
+        Change::Targets { kind, folders } => match (folders, install::installs(*kind)) {
+            (Some(_), true) => format!(
                 "{NOTHING}: {name} installs {} in {} already\n",
                 kind.plural(),
                 targets(&plan.after, *kind)
             ),
-            None => format!(
+            (None, true) => format!(
                 "{NOTHING}: {name} installs {} where its agents read already\n",
+                kind.plural()
+            ),
+            (Some(_), false) => format!(
+                "{NOTHING}: {name} names {} for its {} already, \
+                 though none is installed into a project yet\n",
+                targets(&plan.after, *kind),
+                kind.plural()
+            ),
+            (None, false) => format!(
+                "{NOTHING}: {name} names no folder for its {} already, \
+                 and none is installed into a project yet\n",
                 kind.plural()
             ),
         },
