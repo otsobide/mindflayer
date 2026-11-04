@@ -691,7 +691,11 @@ Beyond what #17 needs:
   scope in the temp home (`~/.mcp.json`, OpenCode's user `opencode.json`,
   `opencode.jsonc` or `config.json`, or a server at user or local scope in
   Claude's `.claude.json`), and no MCP config file above a scenario but the
-  ones it wrote.
+  ones it wrote. The one thing an agent puts at user scope of its own accord
+  is taken out after each of its commands, so that the next run's guard
+  holds: the system skills Codex 0.166 carries and writes to
+  `$CODEX_HOME/skills/.system` when it starts, with their marker. Only those
+  names go, and anything else in that folder is still refused.
 - **Verdicts.** `ok` or `MISMATCH` against the expected result in the tables
   below. A `record` line is a result the issue asks to find out rather than
   confirm, with nothing expected of it, and is never a mismatch.
