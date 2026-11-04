@@ -17,6 +17,16 @@
 # Each run is also held to the tools it was meant to call and the turns that
 # take: an answer the model put together by reading AGENTS.md would say
 # nothing about what Claude loaded.
+#
+# The MCP runs (#18, claude-mcp and the three after it) ask the model for
+# nothing but OK, with no tool at all. What loaded is read from the init
+# message's mcp_servers, which lists each server with its status, and from
+# what the stand-in servers of mcp.sh wrote down: whether Claude started
+# each, and what it made of every ${VAR} on the way.
+
+# Variables a run sets for claude alone, beside the two every run gets: the
+# MCP runs' references point at them.
+claude_env=()
 
 claude_prepare() {
 	local bin=${PROBE_CLAUDE_BIN:-}
@@ -78,7 +88,8 @@ claude_touch_prompt='This is an automated configuration probe. Call the Read too
 # Every run, in order; claude-<name> is done by claude_<name>, git-symlink by
 # claude_git_symlink. PROBE_ONLY picks some of them (see probe.sh).
 claude_runs=(git-symlink claude-excluded claude-touch claude-import
-	claude-parent claude-local claude-user-memory)
+	claude-parent claude-local claude-user-memory
+	claude-mcp claude-mcp-untyped claude-mcp-comment claude-mcp-comma)
 
 claude_checks() {
 	say ""
@@ -92,24 +103,17 @@ claude_checks() {
 	done
 }
 
+# claude_hooks [settings]: the temp home's user settings, the
+# InstructionsLoaded hook every run has and whatever a run adds to it, given
+# as a JSON object (claude_approve). Written whole each time, so what one run
+# added never reaches the next.
 claude_hooks() {
+	local extra=${1:-'{}'}
 	mkdir -p -- "$HOME/.claude"
-	cat >"$HOME/.claude/settings.json" <<EOF
-{
-  "hooks": {
-    "InstructionsLoaded": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "{ cat; echo; } >> \"$results/\$PROBE_SCENARIO.loaded.jsonl\""
-          }
-        ]
-      }
-    ]
-  }
-}
-EOF
+	jq -n --argjson extra "$extra" \
+		--arg command "{ cat; echo; } >> \"$results/\$PROBE_SCENARIO.loaded.jsonl\"" \
+		'$extra + {hooks: {InstructionsLoaded: [{hooks: [{type: "command", command: $command}]}]}}' \
+		>"$HOME/.claude/settings.json"
 }
 
 # claude_ask <run> <dir> <prompt> [claude options...]
@@ -127,7 +131,9 @@ claude_ask() {
 	say "== $name"
 	{
 		printf 'cd %q\n' "$dir"
-		printf 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 claude'
+		printf 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1'
+		((${#claude_env[@]} == 0)) || printf ' %q' "${claude_env[@]}"
+		printf ' claude'
 		printf ' %q' "${args[@]}"
 		printf '\n'
 	} | tee "$results/$name.command" | sed 's/^/  $ /'
@@ -135,9 +141,9 @@ claude_ask() {
 	local status=0
 	# Non-essential traffic (telemetry, error reports, the updater) is off:
 	# the run needs the API and nothing else.
-	(cd "$dir" && PROBE_SCENARIO=$name CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
-		"$PROBE_CLAUDE_BIN" "${args[@]}") </dev/null >"$results/$name.json" 2>"$results/$name.stderr" ||
-		status=$?
+	(cd "$dir" && env PROBE_SCENARIO="$name" CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+		"${claude_env[@]}" "$PROBE_CLAUDE_BIN" "${args[@]}") </dev/null >"$results/$name.json" \
+		2>"$results/$name.stderr" || status=$?
 
 	local messages='if type == "array" then .[] else . end'
 	jq -r "$messages | select(.type == \"result\") | .result // empty" \
@@ -151,6 +157,9 @@ claude_ask() {
 		"$results/$name.json" >"$results/$name.tools" 2>/dev/null || true
 	jq -r "$messages | select(.type == \"result\") | .num_turns // empty" \
 		"$results/$name.json" >"$results/$name.turns" 2>/dev/null || true
+	jq -r "[$messages | select(.type == \"system\" and .subtype == \"init\")][0]
+		| (.mcp_servers // [])[] | \"\(.name) \(.status)\"" \
+		"$results/$name.json" >"$results/$name.mcp" 2>/dev/null || true
 	local facts
 	facts=$(jq -r "$messages | select(.type == \"result\")
 		| \"exit $status, \(.num_turns) turn(s), \(.total_cost_usd) USD, models \(.modelUsage // {} | keys | join(\",\"))\"" \
@@ -164,13 +173,15 @@ claude_ask() {
 	sed 's/^/    /' "$results/$name.answer"
 	say "  skills in the init message: $(tr '\n' ' ' <"$results/$name.skills")"
 	say "  tools called: $(tr '\n' ' ' <"$results/$name.tools")"
+	say "  MCP servers in the init message: $(paste -sd, - <"$results/$name.mcp")"
 	say "  InstructionsLoaded:"
 	jq -r 'select(.file_path != null)
 		| "    \(.load_reason) \(.memory_type) \(.file_path)"' \
 		"$results/$name.loaded.jsonl" 2>/dev/null || true
-	# The debug log is kept only for its lines about instruction files and
-	# skills; the rest is about the session and the account.
-	grep -aiE 'claude\.md|claude\.local\.md|agents\.md|rules|skill|memory|instruction' \
+	# The debug log is kept only for its lines about instruction files,
+	# skills and the probe's MCP servers; the rest is about the session and
+	# the account.
+	grep -aiE 'claude\.md|claude\.local\.md|agents\.md|rules|skill|memory|instruction|probe-|\.mcp\.json|mcpServers' \
 		-- "$results/$name.debug" >"$results/$name.debug.txt" 2>/dev/null || true
 	rm -f -- "$results/$name.debug"
 }
@@ -443,4 +454,148 @@ claude_user_memory() {
 	expect_native $run 1 "$repo/AGENTS.md" '#44: the debug log records the native read'
 	expect_token $run seen PROBE-AGENTS-BLOCK-5 'check 4: the text in a marked block reaches the model'
 	expect_token $run unseen PROBE-AGENTS-MARKER-5 "check 4: the block's markers, HTML comments, do not"
+}
+
+# The MCP checks (#18): a project's .mcp.json, approved by name in the temp
+# home's user settings. Claude 2.1.318 counts an approval in the project's
+# own .claude/settings.local.json only in a workspace trusted explicitly,
+# which a -p run's never is, and says to put it in ~/.claude/settings.json
+# instead. The same settings keep claude.ai's connectors out, which a
+# logged-in Claude would otherwise fetch and connect beside the project's
+# servers, and list in the init message among them.
+claude_mcp_prompt='This is an automated configuration probe. Do not call any tool. Reply with exactly one line and nothing else: OK'
+claude_mcp_options=(--tools '' --max-turns 1)
+
+# claude_approve <server>...: user settings approving those .mcp.json servers.
+claude_approve() {
+	local names
+	names=$(printf '%s\n' "$@" | jq -R . | jq -sc .)
+	claude_hooks "{\"enabledMcpjsonServers\": $names, \"disableClaudeAiConnectors\": true}"
+}
+
+# claude_mcp_status <run> <server>: its status in the init message, or absent.
+claude_mcp_status() {
+	local got
+	got=$(awk -v server="$2" '$1 == server { sub(/^[^ ]+ /, ""); print; exit }' \
+		"$results/$1.mcp" 2>/dev/null || true)
+	printf '%s\n' "${got:-absent}"
+}
+
+# claude_mcp_stdio <run> <server> [arguments...]: a stdio entry with its type,
+# and a reference in its environment the stand-in records.
+claude_mcp_stdio() {
+	jq -nc --arg python "$mcp_python" --argjson args "$(mcp_stdio_json "$@")" \
+		'{type: "stdio", command: $python, args: $args, env: {PROBE_MCP_ENV: "${PROBE_MCP_ENV_SOURCE}"}}'
+}
+
+# claude_mcp_ask <run> <repo> <approved server>...: the run itself, once the
+# scenario has written its .mcp.json, then the http stand-in stopped and the
+# user settings put back as every other run has them.
+claude_mcp_ask() {
+	local run=$1 repo=$2
+	shift 2
+	mcp_keep "$run" "$repo" .mcp.json
+	claude_approve "$@"
+	assert_clean_home
+	mcp_assert_clean_home
+	assert_ancestry "$repo"
+	mcp_assert_ancestry "$repo" "$repo/.mcp.json"
+	claude_env=("${mcp_env[@]}")
+	claude_ask "$run" "$repo" "$claude_mcp_prompt" "${claude_mcp_options[@]}"
+	claude_env=()
+	claude_hooks
+	mcp_http_stop
+	say "  approved in the user settings: $*"
+	expect_calls "$run" none 1 'the answer comes from what Claude loaded, not a tool'
+}
+
+# D-10 and D-11: entries with an explicit type, as #90 writes them, and a
+# reference in each place Claude is to expand one: an argument and the
+# environment of a stdio server, the URL and two headers of an http one, one
+# of them a reference inside a longer value. A third entry, left unapproved,
+# shows what approval does.
+claude_mcp() {
+	local run=claude-mcp repo=$stage/claude-mcp
+	mcp_need_python
+	new_repo "$repo"
+	mcp_http_start "$run"
+	jq -n --argjson stdio "$(claude_mcp_stdio "$run" probe-stdio --arg '${PROBE_MCP_ARG}')" \
+		--argjson unapproved "$(claude_mcp_stdio "$run" probe-unapproved)" \
+		--arg url "http://127.0.0.1:$mcp_port/probe-http/\${PROBE_MCP_URL_PART}" \
+		'{mcpServers: {
+			"probe-stdio": $stdio,
+			"probe-http": {type: "http", url: $url, headers: {
+				"X-Probe-Header": "${PROBE_MCP_HEADER}",
+				Authorization: "Bearer ${PROBE_MCP_TOKEN}"}},
+			"probe-unapproved": $unapproved}}' >"$repo/.mcp.json"
+	claude_mcp_ask "$run" "$repo" probe-stdio probe-http
+	local stdio=$results/$run.probe-stdio.jsonl http=$results/$run.http.jsonl
+	mcp_report "$run" "$stdio"
+	mcp_report "$run" "$http" /probe-http/
+	mcp_report "$run" "$results/$run.probe-unapproved.jsonl"
+	verdict $run connected "$(claude_mcp_status $run probe-stdio)" 'probe-stdio in init' 'D-10: an approved stdio entry with a type loads'
+	verdict $run loaded "$(mcp_handshake "$stdio")" 'probe-stdio stand-in' 'D-10: the stand-in saw initialize and tools/list'
+	verdict $run probe-arg-value "$(mcp_arg "$stdio")" 'stdio argument' 'D-11: ${VAR} in args is expanded'
+	verdict $run probe-env-value "$(mcp_env_of "$stdio" PROBE_MCP_ENV)" 'stdio env' 'D-11: ${VAR} in env is expanded'
+	verdict $run connected "$(claude_mcp_status $run probe-http)" 'probe-http in init' 'D-10: an approved http entry with a type loads'
+	verdict $run loaded "$(mcp_handshake "$http" /probe-http/)" 'probe-http stand-in' 'D-10: the stand-in saw initialize and tools/list'
+	verdict $run /probe-http/probe-url-value "$(mcp_http_path "$http" /probe-http/)" 'http path' 'D-11: ${VAR} in url is expanded'
+	verdict $run probe-header-value "$(mcp_http_header "$http" /probe-http/ x-probe-header)" 'header X-Probe-Header' 'D-11: ${VAR} in headers is expanded'
+	verdict $run 'Bearer probe-token-value' "$(mcp_http_header "$http" /probe-http/ authorization)" 'header Authorization' 'D-11: and inside a longer value'
+	verdict $run none "$(mcp_handshake "$results/$run.probe-unapproved.jsonl")" 'probe-unapproved stand-in' 'an entry nobody approved is not started'
+	observe $run 'probe-unapproved in init' "$(claude_mcp_status $run probe-unapproved)" 'what -p says of an entry not approved'
+}
+
+# #90: an http entry with no type, beside a stdio entry with one. Recorded,
+# not asserted: whether Claude reads it as http, refuses it alone, or drops
+# the whole file with it, which would take the stdio entry along.
+claude_mcp_untyped() {
+	local run=claude-mcp-untyped repo=$stage/claude-mcp-untyped
+	mcp_need_python
+	new_repo "$repo"
+	mcp_http_start "$run"
+	jq -n --argjson stdio "$(claude_mcp_stdio "$run" probe-stdio)" \
+		--arg url "http://127.0.0.1:$mcp_port/probe-untyped/" \
+		'{mcpServers: {"probe-stdio": $stdio, "probe-untyped": {url: $url}}}' >"$repo/.mcp.json"
+	claude_mcp_ask "$run" "$repo" probe-stdio probe-untyped
+	local stdio=$results/$run.probe-stdio.jsonl http=$results/$run.http.jsonl
+	mcp_report "$run" "$stdio"
+	mcp_report "$run" "$http" /probe-untyped/
+	observe $run 'probe-untyped in init' "$(claude_mcp_status $run probe-untyped)" '#90: what Claude makes of an http entry with no type'
+	observe $run 'probe-untyped stand-in' "$(mcp_handshake "$http" /probe-untyped/)" '#90: whether its url was reached anyway'
+	observe $run 'probe-stdio in init' "$(claude_mcp_status $run probe-stdio)" '#90: whether it costs the file its other servers'
+	observe $run 'probe-stdio stand-in' "$(mcp_handshake "$stdio")" '#90: the same, as the stand-in saw it'
+}
+
+# claude_mcp_text <run> <text> <what it shows>: a run whose .mcp.json is that
+# text, STDIO standing for a stdio entry with a type, approved: what Claude
+# does with a file strict JSON refuses (#90, which writes strict JSON and must
+# know what a file somebody else wrote does to the entries in it).
+claude_mcp_text() {
+	local run=$1 repo=$stage/$1 stdio
+	mcp_need_python
+	new_repo "$repo"
+	stdio=$(claude_mcp_stdio "$run" probe-stdio)
+	printf '%s\n' "${2//STDIO/"$stdio"}" >"$repo/.mcp.json"
+	claude_mcp_ask "$run" "$repo" probe-stdio
+	mcp_report "$run" "$results/$run.probe-stdio.jsonl"
+	observe $run 'probe-stdio in init' "$(claude_mcp_status $run probe-stdio)" "#90: $3"
+	observe $run 'probe-stdio stand-in' "$(mcp_handshake "$results/$run.probe-stdio.jsonl")" '#90: the same, as the stand-in saw it'
+}
+
+claude_mcp_comment() {
+	claude_mcp_text claude-mcp-comment '{
+  // A comment, which JSON does not allow and JSONC does.
+  "mcpServers": {
+    "probe-stdio": STDIO
+  }
+}' 'whether a comment breaks the whole file'
+}
+
+claude_mcp_comma() {
+	claude_mcp_text claude-mcp-comma '{
+  "mcpServers": {
+    "probe-stdio": STDIO,
+  }
+}' 'whether a trailing comma breaks the whole file'
 }
