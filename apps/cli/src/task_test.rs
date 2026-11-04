@@ -1598,3 +1598,136 @@ fn a_save_is_edit_given_its_text_in_the_workspaces_scratch_file_and_the_hash_it_
         assert_eq!(task.cautions(), [], "{task:?}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Values nobody chose
+// ---------------------------------------------------------------------------
+
+/// `count` values drawn anew each run from core's mothers, where [`hostile`]
+/// draws the same ones from a fixed seed: text of any script, spaces, quotes
+/// and an `=` among it, led by the shape of an option as often as not, so a
+/// run tries what no seed reached.
+///
+/// None is empty, `.` or the default folder of a gather, each of which a
+/// line spells otherwise on purpose (the project at the root, a folder left
+/// unsaid); and none holds `://`, which with an `@` after it is a URL's
+/// credential, taken out of a line where it is shown.
+fn drawn(count: usize) -> Vec<String> {
+    use mindflayer_core::mother::random;
+
+    const LEADS: [&str; 10] = [
+        "", "", "", "-", "--", "-p", "--yes", "--from=", "-C ", "--=",
+    ];
+    let mut values = Vec::new();
+    while values.len() < count {
+        let value = format!(
+            "{}{}",
+            random::pick(&LEADS),
+            random::text(random::between(1, 20))
+        );
+        let special = value.is_empty() || value == "." || value == DEFAULT_SUBDIRECTORY;
+        if !special && !value.contains("://") {
+            values.push(value);
+        }
+    }
+    values
+}
+
+#[test]
+fn values_drawn_at_random_reach_their_command_as_given() {
+    let mut parsers = Parsers::new();
+    let plain: Vec<Vec<Read>> = every(GIVEN)
+        .iter()
+        .map(|task| {
+            task.commands()
+                .iter()
+                .map(|line| parsers.read(line))
+                .collect()
+        })
+        .collect();
+    for value in drawn(60) {
+        for (task, expected) in every(&value).iter().zip(&plain) {
+            let lines = task.commands();
+            assert_eq!(lines.len(), expected.len(), "{task:?}");
+            for (line, read) in lines.iter().zip(expected) {
+                assert_eq!(
+                    parsers.read(line),
+                    holding(read, &value),
+                    "{line:?} does not hold {value:?} where a plain value was"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_line_holding_values_drawn_at_random_is_shown_as_the_words_it_runs() {
+    for value in drawn(60) {
+        for task in every(&value) {
+            for line in task.commands() {
+                let shown = shell(&line);
+
+                assert_eq!(words_of(&shown), line, "{value:?}: {shown}");
+            }
+        }
+    }
+}
+
+/// The tasks that carry a URL to a line: a gather's address, and an
+/// install's origin, which names a source by its address.
+fn carrying(url: &str) -> Vec<Task> {
+    vec![
+        Task::Gather {
+            url: url.to_owned(),
+            folder: String::from(DEFAULT_SUBDIRECTORY),
+            reference: None,
+        },
+        Task::Gather {
+            url: url.to_owned(),
+            folder: String::from("rules"),
+            reference: Some(String::from("main")),
+        },
+        Task::Install {
+            projects: vec![String::from("alpha")],
+            kind: Kind::Skill,
+            name: String::from("deploy"),
+            from: Some(url.to_owned()),
+        },
+    ]
+}
+
+/// The words run as typed, so a URL with a credential in it reaches the
+/// command, which refuses it, rather than being fetched without one; what
+/// is shown of them is the line without it, and pasted into a shell runs
+/// that line, for every way a credential is typed and words quoting one.
+#[test]
+fn a_line_carrying_a_credential_runs_it_as_typed_and_is_shown_without_it() {
+    use mindflayer_core::mother::UrlMother;
+
+    for url in UrlMother::every_credentialed() {
+        for url in [UrlMother::quoted(&url), url] {
+            for task in carrying(&url.typed) {
+                let lines = task.commands();
+                let line = &lines[0];
+                assert!(line.contains(&url.typed), "{line:?} lost {:?}", url.typed);
+
+                let shown = shell(line);
+                let described = task.describe();
+
+                for said in [&shown, &described] {
+                    assert!(
+                        !said.contains(&url.secret),
+                        "{:?} is shown with its secret: {said}",
+                        url.typed
+                    );
+                }
+                let without: Vec<String> = line
+                    .iter()
+                    .map(|word| word.replace(&url.typed, &url.clean))
+                    .collect();
+                assert_eq!(words_of(&shown), without, "{:?}: {shown}", url.typed);
+                assert_eq!(described, shown, "{task:?}");
+            }
+        }
+    }
+}
