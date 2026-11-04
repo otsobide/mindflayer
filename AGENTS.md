@@ -33,7 +33,7 @@ lists everything.
 make test                 # every suite, the panel's first: needs Node 24 and pnpm
 make fmt/check            # CI runs this first
 make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets, with the ts feature too
-make run ARGS="mindweaver list"
+make run ARGS="weaver list"
 make core/test            # one app: make <app>/<target>
 ```
 

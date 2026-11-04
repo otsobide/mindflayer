@@ -44,7 +44,7 @@ make lint              # no em dash in a tracked file, then clippy
 make run ARGS="list"   # run the CLI without installing it
 
 make core/test         # one app: make <app>/<target>
-make cli/run ARGS="mindweaver list"
+make cli/run ARGS="weaver list"
 ```
 
 Tests live in their own files, named for what they test and ending in
