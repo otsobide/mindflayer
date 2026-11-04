@@ -142,7 +142,7 @@ fn an_activated_workspace_wins_over_the_one_above() {
 }
 
 #[test]
-fn an_empty_mindweaver_workspace_counts_as_unset() {
+fn an_empty_workspace_variable_counts_as_unset() {
     let fixture = fixture();
 
     let listed = spawn(
