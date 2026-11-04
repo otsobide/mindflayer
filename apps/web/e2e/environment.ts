@@ -37,8 +37,8 @@ export const NO_AGENT_HOMES = [
 ] as const
 
 /** The variables the driver hands the config and the workers. */
-const SCRATCH = 'MINDFLAYER_E2E_SCRATCH'
-const BIN = 'MINDFLAYER_E2E_BIN'
+const SCRATCH = 'MINDWEAVER_E2E_SCRATCH'
+const BIN = 'MINDWEAVER_E2E_BIN'
 
 /** Where a run keeps what it builds, and what it runs. */
 export interface Places {

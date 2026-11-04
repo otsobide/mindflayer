@@ -261,7 +261,7 @@ fn the_reference_walks_through_the_examples_as_the_commands_print_them() {
     }
 
     // This machine's paths, written the reference's way: the clone in
-    // ~/src/mindflayer and the workspace in ~/Projects, in the home of `you`.
+    // ~/src/mindweaver and the workspace in ~/Projects, in the home of `you`.
     // The entry is read back rather than worked out, since where no route
     // from the workspace reaches the clone, another drive say, it is absolute.
     let workspace = WeaverWorkspace::open(&projects).unwrap();
@@ -269,16 +269,16 @@ fn the_reference_walks_through_the_examples_as_the_commands_print_them() {
     let root = projects.display().to_string();
     let as_written = |stdout: &str| {
         stdout
-            .replace(&entry, "../src/mindflayer/examples")
+            .replace(&entry, "../src/mindweaver/examples")
             .replace(&root, "/home/you/Projects")
     };
     let blocks = [
         format!(
-            "$ mindweaver -W ~/src/mindflayer/examples list\n{}",
+            "$ mindweaver -W ~/src/mindweaver/examples list\n{}",
             as_written(&listed.stdout)
         ),
         format!(
-            "$ cd ~/Projects\n$ mindweaver load ~/src/mindflayer/examples\n{}\n\
+            "$ cd ~/Projects\n$ mindweaver load ~/src/mindweaver/examples\n{}\n\
              $ mindweaver install -p collapse commit-style\n{}\
              $ mindweaver install -p collapse git/commits\n{}",
             as_written(&loaded.stdout),

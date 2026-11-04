@@ -629,7 +629,7 @@ fn a_share_mode_is_read_back_from_its_name_and_no_other_spelling() {
 /// holds in: its library, its shelf and its cache; and the route a line run
 /// from the root names it by leads there.
 #[test]
-fn a_workspaces_scratch_folder_is_its_own_inside_mindflayer() {
+fn a_workspaces_scratch_folder_is_its_own_inside_mindweaver() {
     let dir = tempfile::TempDir::new().unwrap();
     let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
 

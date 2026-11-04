@@ -1089,7 +1089,7 @@ fn a_project_an_older_marker_marks_is_said_to_migrate_and_no_other() {
 
 /// An edited copy asks for attention, a forced update or an uninstall,
 /// and so does what `validate` only warns of; somebody's copy asks for
-/// nothing, since it is never Mindflayer's to change.
+/// nothing, since it is never Mindweaver's to change.
 #[test]
 fn an_edited_copy_asks_for_attention_and_somebody_s_asks_for_nothing() {
     let fixture = fixture();

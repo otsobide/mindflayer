@@ -315,7 +315,7 @@ pub enum Left {
     /// Offered from each of these places, and recorded before origins were
     /// kept, with no copy left that tells which.
     #[error(
-        "{kind} `{name}` in {project} is offered by {}, and was installed before Mindflayer \
+        "{kind} `{name}` in {project} is offered by {}, and was installed before Mindweaver \
          kept where from, so an update leaves it as it is; `install --from` says which",
         .origins.join(", ")
     )]

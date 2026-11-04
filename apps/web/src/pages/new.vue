@@ -141,7 +141,7 @@ async function add() {
           class="text-muted"
           data-testid="no-kind"
         >
-          This build of Mindflayer knows no kind called <code class="font-mono">{{ asked }}</code>.
+          This build of Mindweaver knows no kind called <code class="font-mono">{{ asked }}</code>.
         </p>
 
         <div

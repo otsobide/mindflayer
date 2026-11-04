@@ -286,7 +286,7 @@ describe('migrating a project an older marker marks', () => {
     const { sent, transport } = commanding(snapshot)
     const { page } = await render('/project?entry=legacy', transport)
 
-    expect(page.get('[data-testid="migrate"] h2').text()).toBe('Marked by .mind/mind.toml, which an older Mindflayer wrote')
+    expect(page.get('[data-testid="migrate"] h2').text()).toBe('Marked by .mind/mind.toml, which an older Mindweaver wrote')
     expect(page.find('[data-testid="migrate-yes"]').exists()).toBe(false)
     await page.get('[data-testid="migrate-dry"]').trigger('click')
     await flushPromises()

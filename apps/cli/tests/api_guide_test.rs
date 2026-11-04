@@ -58,7 +58,7 @@ const IDS: [(&str, &str); 2] = [
 ];
 
 /// Where the guide has `ui` write the token file, from the home.
-const TOKEN_FILE: &str = ".local/state/mindflayer.json";
+const TOKEN_FILE: &str = ".local/state/mindweaver.json";
 
 /// The description the skill of the workspace's own is given.
 const REVIEW: &str = "Read a change before it lands";

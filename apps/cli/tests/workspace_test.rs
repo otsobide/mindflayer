@@ -12,7 +12,7 @@ use common::*;
 /// Under one directory, none above another: `outer`, a workspace with a
 /// skill of its own and `alpha` linked under it; `hub`, a workspace with a
 /// skill of its own; and `collapse`, a project under neither, made as an
-/// older Mindflayer made it, so a copy installed there is in the folder it
+/// older Mindweaver made it, so a copy installed there is in the folder it
 /// authors in, where a change from the project reaches it.
 struct Fixture {
     _dir: TempDir,
@@ -78,7 +78,7 @@ fn a_project_links_into_the_workspace_named_for_it() {
 }
 
 #[test]
-fn a_workspace_is_named_by_its_mindflayer_folder_as_well() {
+fn a_workspace_is_named_by_its_mindweaver_folder_as_well() {
     let fixture = fixture();
     let folder = spelled(&fixture.hub.join(WEAVER_DIR));
 
@@ -142,7 +142,7 @@ fn an_activated_workspace_wins_over_the_one_above() {
 }
 
 #[test]
-fn an_empty_mindflayer_workspace_counts_as_unset() {
+fn an_empty_mindweaver_workspace_counts_as_unset() {
     let fixture = fixture();
 
     let listed = spawn(

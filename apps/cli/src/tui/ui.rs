@@ -101,7 +101,7 @@ fn nowhere(app: &App, frame: &mut Frame, area: Rect) {
     let height = u16::try_from(text.len() + wrapped + 1).unwrap_or(u16::MAX);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(" mindflayer ");
+        .title(" mindweaver ");
     let box_ = centred(area, WIDTH, height);
     frame.render_widget(
         Paragraph::new(text).block(block).wrap(Wrap { trim: false }),
@@ -171,7 +171,7 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
     };
     let mut spans = vec![
         Span::styled(
-            " mindflayer ",
+            " mindweaver ",
             Style::default()
                 .fg(Color::Black)
                 .bg(Color::Cyan)
@@ -193,7 +193,7 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-/// What the header says of projects an older Mindflayer made, marked by a
+/// What the header says of projects an older Mindweaver made, marked by a
 /// `mind.toml` or a `settings.json`, with the command that moves them to a
 /// `settings.toml`: until then a `mind.toml`'s installs reach only the
 /// folder it names, neither one's settings can be changed, and nothing else
@@ -536,11 +536,11 @@ fn item_row<'a>(item: &'a Item, agents: &[Agent], width: usize, room: usize) -> 
     ListItem::new(lines)
 }
 
-/// What a state looks like: green for what Mindflayer installed whole and
+/// What a state looks like: green for what Mindweaver installed whole and
 /// current, yellow for one an update brings up to date or puts back, cyan
 /// for one somebody edited, which nothing writes over unless forced, red for
 /// one nothing offers any more, and magenta for somebody's, which no key of
-/// Mindflayer's changes.
+/// Mindweaver's changes.
 fn state_style(state: State) -> Style {
     match state {
         State::Current => Style::default().fg(Color::Green),

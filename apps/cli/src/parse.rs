@@ -231,7 +231,7 @@ pub enum Command {
         json: bool,
     },
 
-    /// Say what this project holds: whether what Mindflayer installed is
+    /// Say what this project holds: whether what Mindweaver installed is
     /// current, outdated, edited, missing or orphaned, what is somebody's
     /// and what is the project's own, which agents read each, and where
     /// what was installed came from.
@@ -283,7 +283,7 @@ pub enum Command {
         force: bool,
     },
 
-    /// Take a skill or a rule Mindflayer installed back out of this project.
+    /// Take a skill or a rule Mindweaver installed back out of this project.
     Uninstall {
         /// Its name, or `kind:name` when one name is both.
         #[arg(required_unless_present = "orphaned")]
@@ -300,7 +300,7 @@ pub enum Command {
         force: bool,
     },
 
-    /// Bring what Mindflayer installed into this project up to date with
+    /// Bring what Mindweaver installed into this project up to date with
     /// where it came from, and put back the copies that have gone.
     ///
     /// A copy changed since it was installed is left alone, with every
@@ -365,7 +365,7 @@ pub enum Command {
         change: TargetsChange,
     },
 
-    /// Bring this project, made by an older Mindflayer and marked by a
+    /// Bring this project, made by an older Mindweaver and marked by a
     /// mind.toml, to a settings.toml, and what is installed into it to where
     /// its agents read; or one marked by a settings.json to a settings.toml
     /// saying the same.
@@ -639,7 +639,7 @@ pub enum WeaverCommand {
         json: bool,
     },
 
-    /// Say what every managed project holds: whether what Mindflayer
+    /// Say what every managed project holds: whether what Mindweaver
     /// installed is current, outdated, edited, missing or orphaned, what is
     /// somebody's and what is the project's own, which agents read each,
     /// and where what was installed came from.
@@ -781,7 +781,7 @@ pub enum WeaverCommand {
         force: bool,
     },
 
-    /// Take a skill or a rule Mindflayer installed back out of projects.
+    /// Take a skill or a rule Mindweaver installed back out of projects.
     Uninstall {
         /// A project to take it out of, by name or path; once for each.
         #[arg(short = 'p', long = "project", value_name = "PROJECT")]
@@ -806,7 +806,7 @@ pub enum WeaverCommand {
         force: bool,
     },
 
-    /// Bring what Mindflayer installed into projects up to date with where
+    /// Bring what Mindweaver installed into projects up to date with where
     /// it came from, and put back the copies that have gone, as `mind
     /// update` does in one.
     ///
@@ -909,7 +909,7 @@ pub enum WeaverCommand {
         change: TargetsChange,
     },
 
-    /// Bring a workspace made by an older Mindflayer, or the projects it
+    /// Bring a workspace made by an older Mindweaver, or the projects it
     /// links, into the layout a new one has.
     ///
     /// Without --yes nothing changes, and the command says what would.
@@ -998,7 +998,7 @@ pub struct UiOptions {
     /// there, taken away when the panel stops unless it was changed. With
     /// --no-open, the way to serve the API to scripts with no browser.
     //
-    // A path somebody names rather than one of Mindflayer's own, in its
+    // A path somebody names rather than one of Mindweaver's own, in its
     // home say: several panels may be served at once, each with a token of
     // its own, and only whoever starts one knows which script it is for.
     #[arg(long, value_name = "PATH")]

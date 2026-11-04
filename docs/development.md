@@ -1,7 +1,7 @@
-# Developing Mindflayer
+# Developing Mindweaver
 
 How the repository is laid out, how to build and test it, and how to work on
-the panel. The [README](../README.md) is where using Mindflayer starts, and
+the panel. The [README](../README.md) is where using Mindweaver starts, and
 [the reference](reference.md) has every command; [architecture.md](architecture.md)
 says why each part is the way it is.
 
@@ -28,7 +28,7 @@ apps/web     mindweaver-web      the web panel the server embeds: Vue and
 
 See [architecture.md](architecture.md) for why the split is where it
 is. `examples/` sits beside `apps/` and is not an app: it is the workspace
-[to try Mindflayer with](reference.md#try-it-with-the-examples).
+[to try Mindweaver with](reference.md#try-it-with-the-examples).
 
 ## Development
 
@@ -279,8 +279,8 @@ demo made it at the end, and every command naming its home
 and every agent home. The project's page is taken in dark as well, for the
 README's `<picture>`; the rest of the tour is light.
 
-The demo is built in `mindflayer-demo` under the system's temporary folder,
-`/tmp/mindflayer-demo` on Linux, always the same place, since every page
+The demo is built in `mindweaver-demo` under the system's temporary folder,
+`/tmp/mindweaver-demo` on Linux, always the same place, since every page
 shows its paths. A run refuses that folder when something other than an earlier
 run of its own is there, and removes it when it is done. Before it writes
 an image, it reads the page for a path under a home (other than

@@ -5,7 +5,7 @@
 //! Each script runs in a shell of its own that reads no startup file, with
 //! an environment holding nothing but a PATH, a temporary HOME and what the
 //! test sets: nothing here reads or changes anybody's own shell, and no
-//! `MINDFLAYER_*` variable of the shell running the tests gets in. A shell
+//! `MINDWEAVER_*` variable of the shell running the tests gets in. A shell
 //! that is not installed is skipped, and so is a virtualenv when there is no
 //! python3 to make one; each says so on stderr, except on CI, where it fails
 //! instead (see [`skipped`]).

@@ -13,7 +13,7 @@ use mindweaver_core::agents_md::{
 use mindweaver_core::{AgentHomes, Artifact, MindProject, WeaverWorkspace};
 use tempfile::TempDir;
 
-/// What a team's `AGENTS.md` holds before Mindflayer writes in it.
+/// What a team's `AGENTS.md` holds before Mindweaver writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
 
 /// No agent's own folder, as a front end hands over when a test pins them.
@@ -214,7 +214,7 @@ fn a_crlf_file_keeps_crlf_through_a_render_a_second_one_and_a_removal() {
 }
 
 #[test]
-fn removing_the_last_rule_takes_away_a_file_mindflayer_made() {
+fn removing_the_last_rule_takes_away_a_file_mindweaver_made() {
     let fixture = fixture();
     let rule = fixture.rule("a", "Rule a.\n");
     assert!(fixture.render(&[&rule], false).unwrap().created());
@@ -226,7 +226,7 @@ fn removing_the_last_rule_takes_away_a_file_mindflayer_made() {
 }
 
 #[test]
-fn a_file_mindflayer_made_stays_once_somebody_wrote_in_it() {
+fn a_file_mindweaver_made_stays_once_somebody_wrote_in_it() {
     let fixture = fixture();
     let rule = fixture.rule("a", "Rule a.\n");
     fixture.render(&[&rule], false).unwrap();
@@ -240,7 +240,7 @@ fn a_file_mindflayer_made_stays_once_somebody_wrote_in_it() {
 }
 
 #[test]
-fn a_file_mindflayer_did_not_make_stays_when_the_block_was_all_it_held() {
+fn a_file_mindweaver_did_not_make_stays_when_the_block_was_all_it_held() {
     let fixture = fixture();
     let rule = fixture.rule("a", "Rule a.\n");
     fixture.render(&[&rule], false).unwrap();
@@ -252,7 +252,7 @@ fn a_file_mindflayer_did_not_make_stays_when_the_block_was_all_it_held() {
 
 #[cfg(unix)]
 #[test]
-fn a_link_in_place_of_a_file_mindflayer_made_is_emptied_not_taken_away() {
+fn a_link_in_place_of_a_file_mindweaver_made_is_emptied_not_taken_away() {
     let fixture = fixture();
     let target = fixture.project.root().join("NOTES.md");
     fs::write(&target, "").unwrap();

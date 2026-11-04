@@ -1563,7 +1563,7 @@ fn the_install_screen_scrubs_the_ledger_when_it_applies_and_not_when_it_opens() 
     assert!(
         transcript.contains(
             "note: https://example.com/acme/skills: the user name, password or token an older \
-             Mindflayer stored in this URL is taken out"
+             Mindweaver stored in this URL is taken out"
         ),
         "{transcript}"
     );
@@ -2974,7 +2974,7 @@ fn settle_until(app: &mut App, until: impl Fn(&App) -> bool) {
 
 /// Under one directory: `outer`, a workspace, and `hub` beside it, which
 /// links `collapse`, a project under neither, and has installed its own
-/// `hub-skill` there. The project is made as an older Mindflayer made it,
+/// `hub-skill` there. The project is made as an older Mindweaver made it,
 /// so the copy is in the folder it authors in, where a line run on it
 /// reaches it and drops the record of the workspace it consulted.
 fn hub_beside_outer() -> (TempDir, PathBuf, PathBuf, PathBuf) {
@@ -3053,7 +3053,7 @@ fn the_header_says_why_the_workspace_on_screen_is_the_one_shown() {
     });
 
     let header = |drawn: &str| drawn.lines().next().unwrap_or_default().to_owned();
-    // The hub links collapse, which an older Mindflayer made, so what the
+    // The hub links collapse, which an older Mindweaver made, so what the
     // header says of that comes between the hub's name and why it is shown.
     assert!(
         header(&found).contains("outer  · found above · "),

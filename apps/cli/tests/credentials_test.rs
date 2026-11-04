@@ -252,7 +252,7 @@ fn readings(dir: &Path) -> Vec<(String, Result<Outcome, Failure>)> {
     read
 }
 
-/// What a Mindflayer from before the refusal stored is redacted on its way
+/// What a Mindweaver from before the refusal stored is redacted on its way
 /// out of every read, whichever form it was typed in, and a read leaves it
 /// where it is, as a read writes nothing.
 #[test]
@@ -306,7 +306,7 @@ fn a_command_that_writes_takes_out_every_form_of_credential_an_older_build_store
                 .stderr
                 .iter()
                 .any(|line| line.text.starts_with(&format!(
-                    "note: {}: the user name, password or token an older Mindflayer stored",
+                    "note: {}: the user name, password or token an older Mindweaver stored",
                     url.clean
                 ))),
             "{:?}: {:?}",

@@ -247,7 +247,7 @@ fn boxed(entry: &Row, label: String) -> Vec<Span<'static>> {
             spans.push(Span::styled("  - remove", Style::default().fg(Color::Red)));
         }
         None if entry.foreign() => spans.push(Span::styled(
-            "  (not installed by mindflayer)",
+            "  (not installed by mindweaver)",
             Style::default().fg(Color::DarkGray),
         )),
         None if entry.edited() => spans.push(Span::styled(
@@ -328,7 +328,7 @@ fn confirm(screen: &Screen, frame: &mut Frame, area: Rect) {
         Line::from(format!("Install {install}, remove {remove}?")),
         Line::from(""),
         Line::from(Span::styled(
-            "removals take what Mindflayer installed back out",
+            "removals take what Mindweaver installed back out",
             Style::default().fg(Color::Red),
         )),
         Line::from(""),

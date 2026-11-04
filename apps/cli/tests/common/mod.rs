@@ -600,7 +600,7 @@ pub fn shelved(projects: &[&str], skills: &[&str]) -> (TempDir, WeaverWorkspace,
     shelved_with(projects, skills, new_project)
 }
 
-/// [`shelved`], each project made the way an older Mindflayer made it
+/// [`shelved`], each project made the way an older Mindweaver made it
 /// ([`older_project`]).
 pub fn shelved_older(projects: &[&str], skills: &[&str]) -> (TempDir, WeaverWorkspace, Ledger) {
     shelved_with(projects, skills, older_project)

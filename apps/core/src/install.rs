@@ -4,7 +4,7 @@
 //! Three places offer what can be installed: the workspace's own artifacts,
 //! the own artifacts of every workspace it loads (read where they are), and
 //! the shelf gathering fills. This is the other half. It writes into a mind
-//! project, the only thing in Mindflayer that does, and the rule it works by
+//! project, the only thing in Mindweaver that does, and the rule it works by
 //! is that **it only manages what it installed**. An artifact somebody wrote by
 //! hand is neither overwritten nor deleted, whatever a caller asks for, and it
 //! is told so rather than being obeyed quietly. Which of the two a file is, is
@@ -68,7 +68,7 @@ pub enum Edits {
     /// Left as they are, and the whole change refused.
     #[default]
     Kept,
-    /// Written over or taken out as any copy Mindflayer installed.
+    /// Written over or taken out as any copy Mindweaver installed.
     Forced,
 }
 
@@ -1767,7 +1767,7 @@ pub(crate) fn in_agent_home(
 /// copies are the team's to commit, and for one a `mind.toml` marks, since a
 /// project from before settings was committed by design.
 ///
-/// Asked by whatever else Mindflayer writes into a project, as Claude's rule
+/// Asked by whatever else Mindweaver writes into a project, as Claude's rule
 /// files ([`crate::claude_rules`]), so all of it is kept out of git alike.
 pub(crate) fn local(project: &MindProject) -> Option<&str> {
     project
@@ -1794,7 +1794,7 @@ pub(crate) fn entries(project: &MindProject, copies: &[PathBuf]) -> Vec<exclude:
 /// every file added to it later from `git status`, where a teammate would
 /// never see it to commit: one a team committed, or one a project that was
 /// shared kept when it turned local.
-/// Mindflayer runs no git command and leaves the index as it is, so such a
+/// Mindweaver runs no git command and leaves the index as it is, so such a
 /// copy stays the team's in git, written over by an update as a tracked
 /// file is, for the change to show. An index that cannot be read takes
 /// nothing for tracked: the exclude edit that follows reads the same
@@ -1863,8 +1863,8 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
 /// Take one artifact back out of a project: every copy its installation
 /// recorded, wherever the project would install it now.
 ///
-/// Only if the ledger says Mindflayer put it there, and only the copies it
-/// says Mindflayer wrote: a folder of that name in a target the record does
+/// Only if the ledger says Mindweaver put it there, and only the copies it
+/// says Mindweaver wrote: a folder of that name in a target the record does
 /// not name is somebody's, and stays. Anything else is reported and left
 /// where it is.
 ///
@@ -1905,7 +1905,7 @@ pub fn uninstall_with(
     // reason `install` holds it: an install of the same name at the same
     // moment comes wholly before this or wholly after it. Between the copies
     // going and their record going, it would leave a copy with no record,
-    // which Mindflayer would never touch again.
+    // which Mindweaver would never touch again.
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
     let entry = project_entry(workspace, project);
     let Some(record) = ledger.installation(&entry, kind, name)? else {
@@ -1988,7 +1988,7 @@ pub fn uninstall_with(
 /// it would go.
 ///
 /// A rule in a project marked by its settings is somebody's in its block or
-/// in Claude's folder of Mindflayer's rules ([`rules`]), as its uninstall
+/// in Claude's folder of Mindweaver's rules ([`rules`]), as its uninstall
 /// tells.
 pub(crate) fn somebodys(
     workspace: &WeaverWorkspace,
@@ -2052,7 +2052,7 @@ pub(crate) fn recorded_copy(
     Ok(project.root().join(path))
 }
 
-/// Drop the record that Mindflayer installed `name` into `project`, when it
+/// Drop the record that Mindweaver installed `name` into `project`, when it
 /// names a copy at `at`, saying whether there was one.
 ///
 /// For when what is in the project stops being a copy that was installed:
@@ -2156,7 +2156,7 @@ pub(crate) fn disown(
 /// ([`Ledger::renamed_copy`]), saying what became of it.
 ///
 /// For a rename of an installed copy: it is what was installed, renamed, so
-/// it stays Mindflayer's, as an edit leaves a copy, told by the hash of what
+/// it stays Mindweaver's, as an edit leaves a copy, told by the hash of what
 /// was written (D-04), and never left out of a listing of what the project
 /// was given. A skill's rename rewrites the `name` line of its manifest, an
 /// edit in all but name, so it reads as edited: never written over or
@@ -2261,7 +2261,7 @@ pub(crate) struct Carry {
     /// say; nothing when there was no ledger to open.
     pub scrub: Scrub,
     /// Why the exclude block of a local project does not say what is
-    /// Mindflayer's now, when it could not be edited.
+    /// Mindweaver's now, when it could not be edited.
     pub unexcluded: Option<InstallError>,
 }
 
@@ -2337,7 +2337,7 @@ pub enum Installed {
     /// Something of that name is already in one of the targets, at `path`,
     /// and is not ours to replace, so nothing was written in any of them.
     Foreign { name: ArtifactName, path: PathBuf },
-    /// A copy Mindflayer installed was changed since, at each of `paths`,
+    /// A copy Mindweaver installed was changed since, at each of `paths`,
     /// and the install was not forced, so nothing was written in any target.
     Edited {
         name: ArtifactName,
@@ -2468,7 +2468,7 @@ pub enum Refused {
     /// Something of that name is in a target, and the ledger records none
     /// of it.
     Foreign,
-    /// A copy Mindflayer installed was changed since, and the change was not
+    /// A copy Mindweaver installed was changed since, and the change was not
     /// forced.
     Edited,
     /// Nothing of that name is installed to take out: an uninstall's only.
@@ -2482,7 +2482,7 @@ codes!(Refused {
 });
 
 /// How `name` stands in `project`, which installs into `targets`, given
-/// every copy the ledger records Mindflayer writing there (`recorded`, as
+/// every copy the ledger records Mindweaver writing there (`recorded`, as
 /// [`Ledger::copies`] spells them), and the record of its installation with
 /// every offer of `kind`, when there is one.
 ///
@@ -2528,7 +2528,7 @@ fn standing(
 /// By the copy's path, as a listing marks installed copies
 /// (`Catalog::with_records`), not by its name: an installation of a name
 /// into one folder does not make what somebody keeps under that name in
-/// another folder Mindflayer's to write over.
+/// another folder Mindweaver's to write over.
 fn unrecorded(root: &Path, kind: Kind, copies: &[PathBuf], recorded: &[String]) -> Option<PathBuf> {
     copies
         .iter()
@@ -2629,7 +2629,7 @@ pub(crate) fn resolved(path: &Path) -> Option<PathBuf> {
 /// accepts from anywhere).
 ///
 /// By the folder, not by what is in it yet: a project that is also a loaded
-/// workspace keeping both in one folder has nothing in it Mindflayer may
+/// workspace keeping both in one folder has nothing in it Mindweaver may
 /// write or remove, from the first install on; otherwise an install today
 /// is the loaded workspace's own tomorrow, and can never be updated again.
 pub(crate) fn kept_by_a_load(
@@ -2730,7 +2730,7 @@ pub enum InstallError {
     NotRecorded { file: PathBuf, route: String },
     #[error("{file}: the section of rule `{route}` was changed since it was rendered and cannot be read back, so the project's rules are not rendered: put it right by hand, or install the rule again with --force")]
     Unread { file: PathBuf, route: String },
-    #[error("{file}: holds rule `{route}` in Mindflayer's block, which cannot be edited ({why}), so the rule is not uninstalled: share the project or set edit_tracked, or take its section out by hand")]
+    #[error("{file}: holds rule `{route}` in Mindweaver's block, which cannot be edited ({why}), so the rule is not uninstalled: share the project or set edit_tracked, or take its section out by hand")]
     Withheld {
         file: PathBuf,
         route: String,
@@ -2751,7 +2751,7 @@ pub enum InstallError {
     Artifact(#[from] ArtifactError),
     #[error("{from} and {to} are one inside the other, so installing one onto the other would delete it")]
     Overlaps { from: PathBuf, to: PathBuf },
-    #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindflayer neither installs nor removes there; `mindweaver unload {loaded}` first to manage it as a project")]
+    #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindweaver neither installs nor removes there; `mindweaver unload {loaded}` first to manage it as a project")]
     KeptByALoad { path: PathBuf, loaded: PathBuf },
     #[error("{path}: cannot be written: {source}")]
     Write {
@@ -2790,7 +2790,7 @@ pub enum InstallError {
         #[source]
         source: ExcludeError,
     },
-    #[error("{path} is inside {home}, which {reader} reads for every project, so nothing was installed: Mindflayer installs into one project at a time")]
+    #[error("{path} is inside {home}, which {reader} reads for every project, so nothing was installed: Mindweaver installs into one project at a time")]
     UserScope {
         path: PathBuf,
         home: PathBuf,

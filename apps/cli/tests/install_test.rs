@@ -257,7 +257,7 @@ fn a_skill_written_by_hand_is_shown_but_not_touched() {
     let mut screen = screen_for(&workspace, &ledger);
     let drawn = rendered(&screen);
     assert!(drawn.contains("[x] deploy"), "shown as present:\n{drawn}");
-    assert!(drawn.contains("not installed by mindflayer"), "{drawn}");
+    assert!(drawn.contains("not installed by mindweaver"), "{drawn}");
 
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
 
@@ -871,13 +871,13 @@ fn a_skill_somebody_keeps_in_one_agents_folder_is_left_alone_from_the_screen() {
     screen.cursor = listed(&screen, "alpha");
 
     let drawn = rendered(&screen);
-    assert!(drawn.contains("not installed by mindflayer"), "{drawn}");
+    assert!(drawn.contains("not installed by mindweaver"), "{drawn}");
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
     assert_eq!(screen.counts(), (0, 0));
     assert!(!root.join(".agents/skills/deploy").exists());
 }
 
-/// Put a token into the URL of every source on the shelf, the way a Mindflayer
+/// Put a token into the URL of every source on the shelf, the way a Mindweaver
 /// from before the refusal stored one.
 fn token_in_the_shelf(workspace: &WeaverWorkspace) {
     rusqlite::Connection::open(workspace.ledger_path())
@@ -890,7 +890,7 @@ fn token_in_the_shelf(workspace: &WeaverWorkspace) {
 }
 
 const SCRUBBED: &str = "note: https://example.com/acme/skills: the user name, password or \
-     token an older Mindflayer stored in this URL is taken out; gathering it again needs a git \
+     token an older Mindweaver stored in this URL is taken out; gathering it again needs a git \
      credential helper that has it";
 
 /// How many sources still hold a credential in the file, which a read hands
@@ -999,7 +999,7 @@ fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kep
             .installations("collapse", Kind::Skill)
             .unwrap(),
         ["deploy"],
-        "recorded, so Mindflayer still counts the copy as its own"
+        "recorded, so Mindweaver still counts the copy as its own"
     );
 }
 
@@ -1129,7 +1129,7 @@ fn nothing_is_installed_into_a_folder_an_agent_reads_for_every_project() {
         failure.error.to_string(),
         format!(
             "{} is inside {}, which Claude Code reads for every project, so nothing was \
-             installed: Mindflayer installs into one project at a time",
+             installed: Mindweaver installs into one project at a time",
             claude.join("skills").join("deploy").display(),
             claude.display()
         )
@@ -1546,7 +1546,7 @@ fn turned_round_somebodys_copy_is_held_and_says_why() {
     assert_eq!(screen.counts(), (0, 0), "the box did not move");
     let drawn = rendered(&screen);
     assert!(
-        drawn.contains("[x] tanukeys  (not installed by mindflayer)"),
+        drawn.contains("[x] tanukeys  (not installed by mindweaver)"),
         "{drawn}"
     );
     assert!(drawn.contains("left alone"), "and it says why:\n{drawn}");

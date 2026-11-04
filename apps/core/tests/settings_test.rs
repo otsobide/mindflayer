@@ -457,7 +457,7 @@ fn a_target_outside_the_project_inside_mind_or_absolute_is_passed_over_and_said(
     assert!(
         said[1]
             .to_string()
-            .contains("because it is inside .mind, which holds Mindflayer's own files"),
+            .contains("because it is inside .mind, which holds Mindweaver's own files"),
         "{}",
         said[1]
     );

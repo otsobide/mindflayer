@@ -222,7 +222,7 @@ dev/watch: ## Rebuild on every change, so the dev/link symlink is always current
 
 .PHONY: help
 help: ## Show this help
-	@echo "Mindflayer make targets:"
+	@echo "Mindweaver make targets:"
 	@grep -hE '^[a-zA-Z0-9_/-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 	@printf "  \033[36m%-12s\033[0m %s\n" "<app>/<t>" "run target <t> in an app (apps: $(APPS))"

@@ -4,7 +4,7 @@
 //! wrote: once for a skill's installation, since every copy is staged from
 //! one tree, and once a copy for a rule's, whose section in `AGENTS.md` and
 //! file for Claude hold different bytes. A copy that still holds that hash
-//! is untouched, and Mindflayer may write over it or take it out; one that
+//! is untouched, and Mindweaver may write over it or take it out; one that
 //! holds anything else was edited, somebody's work from then on, refused to
 //! every install and uninstall but one that is forced. Neither is told by
 //! the copy alone, nor by the offer alone: an edited copy can match what is
@@ -57,7 +57,7 @@ pub enum Standing {
     Missing,
     /// The place it came from no longer offers it.
     Orphaned,
-    /// The project holds something by that name that Mindflayer did not put
+    /// The project holds something by that name that Mindweaver did not put
     /// there. It is somebody's work, so it is left alone in both directions.
     Foreign,
 }
@@ -88,7 +88,7 @@ impl Standing {
         !matches!(self, Standing::Absent | Standing::Missing)
     }
 
-    /// Whether Mindflayer may write over it or remove it without being
+    /// Whether Mindweaver may write over it or remove it without being
     /// forced: never over somebody's, nor over a copy somebody edited.
     pub fn ours(self) -> bool {
         self.refused().is_none()
@@ -220,7 +220,7 @@ impl Surveyed {
 ///
 /// A route the record holds that is no folder of the project named after
 /// the skill is never looked at ([`recorded_copy`]), and counts as missing:
-/// nothing of Mindflayer's can be found there.
+/// nothing of Mindweaver's can be found there.
 pub(crate) fn skill_copies(
     workspace: &WeaverWorkspace,
     project: &MindProject,

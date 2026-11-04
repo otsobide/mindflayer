@@ -125,7 +125,7 @@ fn a_default_that_cannot_remember_is_a_warning_after_the_init() {
     assert_eq!(
         outcome.stderr,
         [format!(
-            "warning: the default workspace could not remember it: {}: written by a newer Mindflayer (workspace marker version 99, this one reads 2)",
+            "warning: the default workspace could not remember it: {}: written by a newer Mindweaver (workspace marker version 99, this one reads 2)",
             path.display()
         )]
     );

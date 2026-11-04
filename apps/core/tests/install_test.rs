@@ -696,7 +696,7 @@ fn a_record_naming_a_copy_outside_the_project_is_refused_rather_than_removed() {
 }
 
 // ---------------------------------------------------------------------------
-// What was not installed by Mindflayer is not Mindflayer's to touch
+// What was not installed by Mindweaver is not Mindweaver's to touch
 // ---------------------------------------------------------------------------
 
 /// A skill somebody wrote by hand, of a name the shelf also offers.
@@ -1024,7 +1024,7 @@ fn what_agents_read_past_does_not_stop_an_install() {
 
     assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
     // Line endings are the gathering checkout's (CRLF under autocrlf on
-    // Windows), not Mindflayer's, so they are left out of the comparison.
+    // Windows), not Mindweaver's, so they are left out of the comparison.
     let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
     assert_eq!(copied.replace("\r\n", "\n"), manifest, "copied as written");
 }
@@ -1926,7 +1926,7 @@ fn a_project_at_the_users_home_is_refused_an_install_into_its_agents_own_folders
     assert!(
         refused
             .to_string()
-            .contains("Mindflayer installs into one project at a time"),
+            .contains("Mindweaver installs into one project at a time"),
         "{refused}"
     );
     assert!(!home.join(".agents").exists() && !home.join(".claude").exists());

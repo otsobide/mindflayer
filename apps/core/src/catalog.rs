@@ -63,7 +63,7 @@ impl Catalog {
     /// What a change to a project's own artifacts looks in
     /// ([`crate::lifecycle::find`]): never a copy in an agent's folder the
     /// project does not author in, which is foreign or an install's, and no
-    /// edit, rename or removal of the project's own is Mindflayer's to make
+    /// edit, rename or removal of the project's own is Mindweaver's to make
     /// there. Each copy is its own artifact, as in every project before
     /// settings, so two of one name are two things to choose between. The
     /// same as [`discover_kinds`](Self::discover_kinds) for a project a
@@ -291,7 +291,7 @@ impl Catalog {
         catalog
     }
 
-    /// The same catalog, with every copy `ledger` records Mindflayer putting
+    /// The same catalog, with every copy `ledger` records Mindweaver putting
     /// into a project `workspace` links marked as installed
     /// ([`Provenance::Installed`](crate::Provenance::Installed)).
     ///

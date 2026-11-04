@@ -1,4 +1,4 @@
-//! Command line interface for Mindflayer, split the way the model is.
+//! Command line interface for Mindweaver, split the way the model is.
 //!
 //! `mind <cmd>` acts on the mind project you are standing in. `mind weaver
 //! <cmd>` acts on the weaver workspace above it, and the `mindweaver` binary is

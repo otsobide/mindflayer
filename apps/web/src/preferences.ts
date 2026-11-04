@@ -1,6 +1,11 @@
 import { setSSRHandler, type StorageLike } from '@vueuse/core'
 
-/** Every cookie a choice is kept in is named with this, apart from other programs' on 127.0.0.1. */
+/**
+ * Every cookie a choice is kept in is named with this, apart from other
+ * programs' on 127.0.0.1. Still the product's old name: a browser keeps the
+ * choices made by it, and a new one would forget them, so it moves with the
+ * other names written outside the code (#229).
+ */
 const PREFIX = 'mindflayer-'
 
 /** A year, counted again each time the choice is made. */

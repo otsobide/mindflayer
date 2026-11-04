@@ -12,12 +12,12 @@
 //! which the library copy is.
 //!
 //! D-04 says which copies go. One nobody has changed since it was installed
-//! is Mindflayer's to take out, whether it is current, outdated, missing a
+//! is Mindweaver's to take out, whether it is current, outdated, missing a
 //! copy or orphaned already. One changed since is somebody's work: left,
 //! every copy of it, as an uninstall leaves it unforced, and orphaned from
 //! then on, for `uninstall --orphaned --force` to take out once somebody has
 //! looked. Somebody's own of that name, which nothing records, is never
-//! Mindflayer's to take out, and is said so it is not mistaken for a copy.
+//! Mindweaver's to take out, and is said so it is not mistaken for a copy.
 //!
 //! Only the projects the workspace links: a project linked by another
 //! workspace, or by none, keeps what was installed there, as the ledger
@@ -90,7 +90,7 @@ pub struct ProjectCopy {
 /// What removing an artifact everywhere does with one project's copy.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Step {
-    /// Mindflayer's, and unchanged since it was installed: current,
+    /// Mindweaver's, and unchanged since it was installed: current,
     /// outdated, missing a copy, whose others go and whose record goes with
     /// them, or orphaned already. Uninstalled, every copy the ledger records.
     Uninstall,
@@ -99,7 +99,7 @@ pub enum Step {
     /// orphaned once the library copy is gone.
     Leave(Vec<PathBuf>),
     /// Somebody's own of that name, at this path, which nothing records, so
-    /// nothing of Mindflayer's: left, and said.
+    /// nothing of Mindweaver's: left, and said.
     Somebodys(PathBuf),
 }
 

@@ -37,7 +37,7 @@ export default defineConfig({
   // never meets another on a fixed one. The link it prints first is the only
   // way to know which, so it is read with a regex, whose named groups
   // Playwright puts in the environment every worker starts with, upper
-  // case: MINDFLAYER_E2E_URL and MINDFLAYER_E2E_TOKEN (e2e/panel.ts). The
+  // case: MINDWEAVER_E2E_URL and MINDWEAVER_E2E_TOKEN (e2e/panel.ts). The
   // link is never printed: the token stays out of the log, as the server
   // keeps it out of its own.
   webServer: {
@@ -51,7 +51,7 @@ export default defineConfig({
     // Over this process's environment, which the driver cleared of every
     // variable leading to a real workspace or agent home.
     env: { HOME: at.home, USERPROFILE: at.home },
-    wait: { stdout: /^(?<mindflayer_e2e_url>http:\/\/127\.0\.0\.1:\d+)\/\?token=(?<mindflayer_e2e_token>[0-9a-f]+)$/m },
+    wait: { stdout: /^(?<mindweaver_e2e_url>http:\/\/127\.0\.0\.1:\d+)\/\?token=(?<mindweaver_e2e_token>[0-9a-f]+)$/m },
     stdout: 'ignore',
     stderr: 'pipe',
     timeout: 60_000,

@@ -156,7 +156,7 @@ fn an_empty_activated_workspace_counts_as_none() {
 }
 
 #[test]
-fn a_workspace_is_named_by_its_root_or_by_its_mindflayer_folder() {
+fn a_workspace_is_named_by_its_root_or_by_its_mindweaver_folder() {
     let fixture = fixture();
     let folder = fixture.named.join(WEAVER_DIR);
     let inputs = Inputs {

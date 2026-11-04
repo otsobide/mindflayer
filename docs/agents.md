@@ -2,12 +2,12 @@
 
 This is the reference for where Claude Code, Codex and OpenCode look for
 skills and rules, at project and user scope, and what each does with
-duplicates and ignored files. Mindflayer's agent adapters build on it: the
+duplicates and ignored files. Mindweaver's agent adapters build on it: the
 target table (#28), installing into several folders (#34), the managed block
 in `AGENTS.md` (#42), Claude's rule files (#43), the predicate that decides
 how Claude reaches the block (#44) and the names a suggestion ranks a
 repository by (#58). [docs/architecture.md](architecture.md)
-says what Mindflayer does with these facts and why; this page says what the
+says what Mindweaver does with these facts and why; this page says what the
 agents do.
 
 **Last verified: 2026-10-26, on Claude Code 2.1.309.** Codex and OpenCode were
@@ -19,8 +19,8 @@ Each fact carries one of two marks:
   one of the two runs recorded under
   [the Claude Code runs](#the-claude-code-runs).
 - **docs-only**: taken from the agent's documentation or, where that is
-  silent, from its source code, and not run here. Each one Mindflayer relies
-  on names a fallback: what Mindflayer does, or what still holds, if the
+  silent, from its source code, and not run here. Each one Mindweaver relies
+  on names a fallback: what Mindweaver does, or what still holds, if the
   binary turns out to disagree.
 
 ## What the decisions rest on
@@ -38,7 +38,7 @@ Each fact carries one of two marks:
   rules reach every agent through `AGENTS.md`: **holds for Claude Code.** It
   read `AGENTS.md` when no `CLAUDE.md` or `CLAUDE.local.md` was in its start
   directory or above, and did not when a `CLAUDE.md` sat above the git root or
-  a `CLAUDE.local.md` beside it. Rule text inside Mindflayer's marked block
+  a `CLAUDE.local.md` beside it. Rule text inside Mindweaver's marked block
   reached the model, whether `AGENTS.md` was read natively or imported, and
   the markers, HTML comments, were stripped. A `CLAUDE.md` holding
   `@AGENTS.md` between markers loaded it once. The user memory file did not
@@ -149,25 +149,25 @@ refuses.
 | A relative symlink `.claude/skills/<n>` -> `../../.agents/skills/<n>`, excluded, loads once. | verified | `claude-excluded`: listed once in the init message; the debug log says `Loaded 2 unique skills (... project: 2 ...)`. |
 | A skill's description reaches the model at start; its body does not until it is invoked. | verified | The `-BODY` tokens never appeared. |
 | User skills are `<config dir>/skills`. | verified, in part | The debug log lists `user=/mnt/agent-probe/home/.claude/skills`. The run set `CLAUDE_CONFIG_DIR` to `$HOME/.claude`, so it cannot tell which of the two moves the folder; the [docs](https://code.claude.com/docs/en/env-vars) say `CLAUDE_CONFIG_DIR`. |
-| Managed skills are read from `/etc/claude-code/.claude/skills` on Linux. | verified | The debug log lists `managed=/etc/claude-code/.claude/skills`. Mindflayer never writes there. |
-| Project skills are also read from every folder above the start directory up to the repository root, and from a nested `.claude/skills` once Claude touches a file below it. | docs-only | [skills](https://code.claude.com/docs/en/skills). Not relied on: Mindflayer installs at the project root. |
-| One name at several scopes resolves managed, then personal, then project. | docs-only | [skills](https://code.claude.com/docs/en/skills). Fallback: Mindflayer installs at project scope only ([D-22](architecture.md#d-22-user-scope-installs-come-later)), and `mindweaver doctor` (#96) reports a project skill a user-scope one shadows. |
+| Managed skills are read from `/etc/claude-code/.claude/skills` on Linux. | verified | The debug log lists `managed=/etc/claude-code/.claude/skills`. Mindweaver never writes there. |
+| Project skills are also read from every folder above the start directory up to the repository root, and from a nested `.claude/skills` once Claude touches a file below it. | docs-only | [skills](https://code.claude.com/docs/en/skills). Not relied on: Mindweaver installs at the project root. |
+| One name at several scopes resolves managed, then personal, then project. | docs-only | [skills](https://code.claude.com/docs/en/skills). Fallback: Mindweaver installs at project scope only ([D-22](architecture.md#d-22-user-scope-installs-come-later)), and `mindweaver doctor` (#96) reports a project skill a user-scope one shadows. |
 | A skill folder holding `.claude-plugin/plugin.json` loads as a plugin, with its hooks and MCP servers. | docs-only | [skills](https://code.claude.com/docs/en/skills). Fallback: #34 drops that folder whatever Claude would do with it. |
 | A linked worktree with no `.claude/skills` of its own loads the main checkout's. | docs-only | [worktrees](https://code.claude.com/docs/en/worktrees). A caveat of D-02; nothing relies on it. |
-| Before 2.1.280, a `manifest.json` in `~/.claude/skills` moved the skills it listed to `.trash`. | docs-only | [skills](https://code.claude.com/docs/en/skills), [changelog](https://code.claude.com/docs/en/changelog). Fallback: Mindflayer never writes in `~/.claude/skills` (D-22). |
+| Before 2.1.280, a `manifest.json` in `~/.claude/skills` moved the skills it listed to `.trash`. | docs-only | [skills](https://code.claude.com/docs/en/skills), [changelog](https://code.claude.com/docs/en/changelog). Fallback: Mindweaver never writes in `~/.claude/skills` (D-22). |
 
 ### Rules and instruction files
 
 | Fact | Mark | Evidence, or source and fallback |
 |---|---|---|
 | `CLAUDE.md` is read from the start directory and every folder above it, past the git root. | verified | `claude-parent`. |
-| `AGENTS.md` is read natively only when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` exists in the start directory or above. | verified, in part | `claude-excluded` and `claude-user-memory` (read), `claude-parent` and `claude-local` (not read). No run placed a `.claude/CLAUDE.md`, but the debug log shows the check looking for all three names. Fallback for that one: #44 counts it. Were Claude not to, an `@../AGENTS.md` import there, Mindflayer's or somebody's, would be redundant rather than a second read, since an import never loads the file twice ([memory](https://code.claude.com/docs/en/memory)). But where `.claude/CLAUDE.md` is the only file that stops Claude and it gives the fallback, tracked by git in a local project, reached through a link, or one of which git cannot say whether it tracks it (`Fallback::Tracked`, `Linked`, `Untold`), Claude would read `AGENTS.md` natively as well as every rule in its rules folder, so each rule about every file twice. A `claude-local` run with a `.claude/CLAUDE.md` in place of the `CLAUDE.local.md` would settle it. |
+| `AGENTS.md` is read natively only when no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` exists in the start directory or above. | verified, in part | `claude-excluded` and `claude-user-memory` (read), `claude-parent` and `claude-local` (not read). No run placed a `.claude/CLAUDE.md`, but the debug log shows the check looking for all three names. Fallback for that one: #44 counts it. Were Claude not to, an `@../AGENTS.md` import there, Mindweaver's or somebody's, would be redundant rather than a second read, since an import never loads the file twice ([memory](https://code.claude.com/docs/en/memory)). But where `.claude/CLAUDE.md` is the only file that stops Claude and it gives the fallback, tracked by git in a local project, reached through a link, or one of which git cannot say whether it tracks it (`Fallback::Tracked`, `Linked`, `Untold`), Claude would read `AGENTS.md` natively as well as every rule in its rules folder, so each rule about every file twice. A `claude-local` run with a `.claude/CLAUDE.md` in place of the `CLAUDE.local.md` would settle it. |
 | That check is made by a built-in plugin, `cc-plugin-agents-md@builtin`. | verified | Listed in the init message's plugins; the debug log's lines come from it. The [memory](https://code.claude.com/docs/en/memory) docs' "Project instructions" setting lives under that plugin's ID. |
 | That check most likely stops below `/`: a `CLAUDE.md` at `/` itself does not count. | verified, in part | Debug: `found 0 of 4 directories` for the `CLAUDE.md` names from a start directory four levels below `/` (`claude-excluded`, and `claude-user-memory` in run 1), `found 0 of 5 directories` from one five levels below (`claude-user-memory`, run 2). Each count is one short of the directories up to and including `/`; no run could put a file at `/` to show it outright. #44's walk stops below `/` to match, which a unit test holds to these counts. Fallback: were Claude to count `/`, a `CLAUDE.md` there with none nearer would keep the rules about every file from Claude, since #44 would take the block for read; only an administrator can put one there. |
 | An `AGENTS.md` excluded through `info/exclude` is read. | verified | `claude-excluded`. |
 | Native reading looks for `AGENTS.md` and `.claude/AGENTS.md` in every folder from the start directory up, and reads each one it finds. | verified, in part | The debug log shows the search: `AGENTS.md, .claude/AGENTS.md found 1 of 4 directories`. No run had more than one, so reading each is docs-only ([memory](https://code.claude.com/docs/en/memory)). Fallback: #42 leaves no block of rules in an `AGENTS.md` above a linked project, or in a workspace's root where no linked project is, which Claude would otherwise read in every project below. |
-| `AGENTS.local.md`, `AGENTS.override.md` and anything under `.agents/` are never read as instructions. | docs-only | [memory](https://code.claude.com/docs/en/memory). Fallback: Mindflayer writes none of them; the `AGENTS.override.md` warning (#42) is about Codex. |
-| A `CLAUDE.md` holding `@AGENTS.md` loads `AGENTS.md` once, also when that line sits between Mindflayer's markers. | verified | `claude-import`, both runs; in run 2 the line sat between markers, as #44 writes it. Each time one `include` record in the hook, no native read in the debug log, and the token counted once. |
+| `AGENTS.local.md`, `AGENTS.override.md` and anything under `.agents/` are never read as instructions. | docs-only | [memory](https://code.claude.com/docs/en/memory). Fallback: Mindweaver writes none of them; the `AGENTS.override.md` warning (#42) is about Codex. |
+| A `CLAUDE.md` holding `@AGENTS.md` loads `AGENTS.md` once, also when that line sits between Mindweaver's markers. | verified | `claude-import`, both runs; in run 2 the line sat between markers, as #44 writes it. Each time one `include` record in the hook, no native read in the debug log, and the token counted once. |
 | An `@` import's relative path is taken from the file that holds it, not from the start directory, so `.claude/CLAUDE.md` brings in the project's `AGENTS.md` as `@../AGENTS.md`. | docs-only | [memory](https://code.claude.com/docs/en/memory). Fallback: #44 imports into `.claude/CLAUDE.md` only when the project's own `CLAUDE.md` is not there or may not be edited. Were the path taken from the start directory, that import would name the `AGENTS.md` one folder above the project, and the block would miss Claude; a `claude-import` run with the line in `.claude/CLAUDE.md` would settle it. |
 | `CLAUDE.md` and `.claude/CLAUDE.md` in one folder are both read. | docs-only | [memory](https://code.claude.com/docs/en/memory) names both places for a project's instructions. Fallback: as for the row above, #44 imports into `.claude/CLAUDE.md` only when `CLAUDE.md` cannot take the import, and an import already in either file stays where it is. |
 | Import parsing skips Markdown code spans and fenced code blocks, and a path ends at the first space, so `@AGENTS.md` alone on a line is an import anywhere but in a fence. A `CLAUDE.local.md` is treated as a `CLAUDE.md` is. | docs-only | [memory](https://code.claude.com/docs/en/memory). Fallback: #44 takes such a line somebody wrote in `CLAUDE.md`, `.claude/CLAUDE.md` (as `@../AGENTS.md`) or `CLAUDE.local.md` for how Claude reaches the block, and writes no import. Were Claude not to follow one it counts, the rules about every file would miss Claude, so it counts only a line of its own, outside a fence and outside an HTML comment over several lines, whose imports no run tried. A `claude-import` run with the line in `CLAUDE.local.md`, and one with it in a fence, would settle it. |
@@ -177,21 +177,21 @@ refuses.
 | `AGENTS.md` read natively fires no `InstructionsLoaded` hook. | verified | `claude-excluded`: `AGENTS.md` reached the model and the hook recorded only the rule. The debug log's `AGENTS.md loaded: <path>` is the record instead. |
 | After Claude reads a file in a subfolder, the `AGENTS.md` check also looks in that subfolder. | verified | `claude-touch`, debug: `found 0 of 1 directories` right after reading `src/lib.rs`. |
 | `.claude/rules/**/*.md` is searched recursively. | verified | The rules sat two folders down, in `.claude/rules/mindflayer/probe/`. |
-| User rules are `~/.claude/rules/**/*.md`, loaded before project rules. | docs-only | [memory](https://code.claude.com/docs/en/memory). Whether `CLAUDE_CONFIG_DIR` moves the folder, as it moves user skills, is not documented. Fallback: Mindflayer writes rules at project scope only ([D-22](architecture.md#d-22-user-scope-installs-come-later)), so a user rule is read beside them, and the run's temp home had none. |
+| User rules are `~/.claude/rules/**/*.md`, loaded before project rules. | docs-only | [memory](https://code.claude.com/docs/en/memory). Whether `CLAUDE_CONFIG_DIR` moves the folder, as it moves user skills, is not documented. Fallback: Mindweaver writes rules at project scope only ([D-22](architecture.md#d-22-user-scope-installs-come-later)), so a user rule is read beside them, and the run's temp home had none. |
 | A rule without `paths:`, excluded, loads at session start. | verified | `claude-excluded`: hook `session_start`. |
 | A rule with `paths:`, excluded, does not load at start, and loads when Claude reads a matching file. | verified | `claude-excluded` (absent), then `claude-touch`: hook `path_glob_match`, triggered by `src/lib.rs`, globs `["src/**/*.rs"]`. |
 | Front matter is stripped before a rule is injected, and `paths` is the only key read. | docs-only | [memory](https://code.claude.com/docs/en/memory). Fallback: harmless either way; #43 keeps the front matter in the file. |
 | Block-level HTML comments are stripped before injection, and the text between two comment lines is kept. So #42's block reaches Claude without its markers. | verified | Run 2, `claude-excluded` (native), `claude-import` (imported) and `claude-user-memory` (native): the token inside the rule's marker never reached the model, and the rule text below it did. The [memory](https://code.claude.com/docs/en/memory) docs say the same. |
 | `AGENTS.md` is read natively since 2.1.277 (2.1.281 on Bedrock, Vertex, Foundry, gateways and with telemetry off). | docs-only | [changelog](https://code.claude.com/docs/en/changelog). The run had non-essential traffic off and read it on 2.1.309. Fallback: the import (#44) covers older versions when a `CLAUDE.md` exists; an older Claude in a project without one is documented, not handled. |
 | The "Project instructions" setting can switch native `AGENTS.md` reading off or on beside `CLAUDE.md`. | docs-only | [memory](https://code.claude.com/docs/en/memory). Out of #44's scope, which assumes the default. |
-| How an empty `CLAUDE_CONFIG_DIR` is read. | docs-only | The [docs](https://code.claude.com/docs/en/env-vars) are silent, and no run tried one. Fallback: Mindflayer reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--claude-config-dir` names it outright. An [open question](architecture.md#open-questions). |
+| How an empty `CLAUDE_CONFIG_DIR` is read. | docs-only | The [docs](https://code.claude.com/docs/en/env-vars) are silent, and no run tried one. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--claude-config-dir` names it outright. An [open question](architecture.md#open-questions). |
 
 ### The Claude Code runs
 
 Two runs, the same day, with the same binary on the same host. Run 1 did
 every scenario. Run 2 came after review and did again only the three whose
 files changed, with `PROBE_ONLY='claude-excluded claude-import
-claude-user-memory'`: `claude-excluded` and `claude-import` with Mindflayer's
+claude-user-memory'`: `claude-excluded` and `claude-import` with Mindweaver's
 marked block in `AGENTS.md`, and `claude-user-memory` with its repository
 moved under the temp home. `claude-touch`, `claude-parent` and `claude-local`
 stand from run 1; their kept files meet every verdict added since (the tools
@@ -278,7 +278,7 @@ message listed besides the probe ones are Claude's own (`deep-research`,
 `dataviz`, `update-config`, ...).
 
 In run 2, an `AGENTS.md` that should reach the model holds such a line and
-then Mindflayer's block with one rule, as #42 will render it, with a token of
+then Mindweaver's block with one rule, as #42 will render it, with a token of
 its own inside the rule's marker (`<n>` is the scenario's number):
 
 ```
@@ -308,7 +308,7 @@ AGENTS.md                                    PROBE-AGENTS-MD-1, and in run 2 the
 src/lib.rs                                   PROBE-FILE-1, in a comment
 ```
 
-with this block appended to `.git/info/exclude`, as Mindflayer's local mode
+with this block appended to `.git/info/exclude`, as Mindweaver's local mode
 writes one:
 
 ```
@@ -514,28 +514,28 @@ developers.openai.com/codex to learn.chatgpt.com.
 | Fact | Mark | Source, and the fallback |
 |---|---|---|
 | Project skills are `.agents/skills/<name>/SKILL.md` in every folder from the start directory up to the repository root. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Fallback: the target table (#28, `TargetTable::standard` in `apps/core/src/agent.rs`) is one table in core, so moving Codex's target is a one-line change; a `codex.sh` check before #34 ships settles it. |
-| User skills are `$HOME/.agents/skills`, taken from the OS home, not from `CODEX_HOME`. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills); source, [host_roots.rs](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs). Fallback: Mindflayer does not install at user scope (D-22); `--agents-dir` points checks at it. |
+| User skills are `$HOME/.agents/skills`, taken from the OS home, not from `CODEX_HOME`. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills); source, [host_roots.rs](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs). Fallback: Mindweaver does not install at user scope (D-22); `--agents-dir` points checks at it. |
 | `/etc/codex/skills` (admin) and bundled system skills are read too. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Not used. |
 | `<project>/.codex/skills` (trusted projects only) and `$CODEX_HOME/skills` (deprecated) are still read. | docs-only | Source, [host_roots.rs](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs). Never targeted ([D-07](architecture.md#d-07-one-copy-per-agent-folder)). |
 | `.agents/skills` is probed with no trust check. | docs-only | Source, [host_roots.rs](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs). Fallback: were it gated, skills would reach Codex only in trusted projects, and the agents left unreached are reported (D-02). |
 | Two skills with one name are both shown, not merged. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Fallback: D-07's copies are identical; `mindweaver doctor` (#96) reports shadowing. |
 | Symlinked skill folders are followed. | docs-only | [build-skills](https://learn.chatgpt.com/docs/build-skills). Not relied on: installs are copies. |
 | Ignored files are read: discovery checks the disk and does no gitignore filtering. | docs-only | Source search only, [host_roots.rs](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs). Fallback: shared mode (D-02), where installed copies are plain files in the tree. |
-| A `name` over 64 characters or an empty `description` rejects the skill. | docs-only | Source, [parser.rs](https://github.com/openai/codex/blob/main/codex-rs/skills/src/parser.rs). Fallback: Mindflayer holds names to 64 characters and requires a description when it writes. |
+| A `name` over 64 characters or an empty `description` rejects the skill. | docs-only | Source, [parser.rs](https://github.com/openai/codex/blob/main/codex-rs/skills/src/parser.rs). Fallback: Mindweaver holds names to 64 characters and requires a description when it writes. |
 
 ### Rules
 
 | Fact | Mark | Source, and the fallback |
 |---|---|---|
 | Project `AGENTS.md` is read from the project root (the git root, by `project_root_markers`) down to the start directory, at most one file per folder (`AGENTS.override.md`, then `AGENTS.md`, then `project_doc_fallback_filenames`), concatenated root first. Without a project root, only the start directory. | docs-only | [agents-md](https://learn.chatgpt.com/docs/agent-configuration/agents-md). Fallback: #42 warns when an `AGENTS.override.md` hides the file and when there is no git root above. |
-| The global file is `$CODEX_HOME/AGENTS.override.md`, else `$CODEX_HOME/AGENTS.md`. | docs-only | [agents-md](https://learn.chatgpt.com/docs/agent-configuration/agents-md). Not written by Mindflayer. |
+| The global file is `$CODEX_HOME/AGENTS.override.md`, else `$CODEX_HOME/AGENTS.md`. | docs-only | [agents-md](https://learn.chatgpt.com/docs/agent-configuration/agents-md). Not written by Mindweaver. |
 | The project chain shares a 32 KiB budget (`project_doc_max_bytes`) and a file past it is truncated; the global file is not counted. | docs-only | Source, [agents_md.rs](https://github.com/openai/codex/blob/main/codex-rs/core/src/agents_md.rs). Fallback: #42 warns as the chain nears the budget; counting the global file too would only warn earlier. |
 | There is no `@`-import. | docs-only | [agents-md](https://learn.chatgpt.com/docs/agent-configuration/agents-md). Why D-03 writes rule text into `AGENTS.md` itself. |
 | `.claude/rules` is not read: the instruction files are the `AGENTS.md` chain above, and Codex's own "rules" are Starlark command policy under `rules/`, not instructions. | docs-only | [agents-md](https://learn.chatgpt.com/docs/agent-configuration/agents-md), [rules](https://learn.chatgpt.com/docs/agent-configuration/rules). Fallback: #43 warns that a path-scoped rule reaches Claude only; were Codex to read it after all, the warning would be too cautious, never wrong about Claude. |
 | A project marked `trust_level = "untrusted"` skips project `AGENTS.md`; one with no trust entry still reads it. | docs-only | Source, [agents_md.rs](https://github.com/openai/codex/blob/main/codex-rs/core/src/agents_md.rs), [config_toml.rs](https://github.com/openai/codex/blob/main/codex-rs/config/src/config_toml.rs). Check 5 was not run. Fallback: a check that reads Codex's config (#96) can say a project is distrusted. |
 | An ignored `AGENTS.md` is read. | docs-only | Source search only. Fallback: shared mode, or `edit_tracked` for a tracked `AGENTS.md`, which no exclude touches. |
 | `CODEX_HOME` moves `~/.codex`. | docs-only | [config-reference](https://learn.chatgpt.com/docs/config-file/config-reference). Fallback: `--codex-home` names the folder outright. |
-| How an empty `CODEX_HOME` is read. | docs-only | The docs are silent. The source requires a set `CODEX_HOME` to name an existing folder ([home-dir](https://github.com/openai/codex/blob/main/codex-rs/utils/home-dir/src/lib.rs)), so an empty one may be refused rather than taken for unset; not run. Fallback: Mindflayer reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--codex-home` names it outright. An [open question](architecture.md#open-questions). |
+| How an empty `CODEX_HOME` is read. | docs-only | The docs are silent. The source requires a set `CODEX_HOME` to name an existing folder ([home-dir](https://github.com/openai/codex/blob/main/codex-rs/utils/home-dir/src/lib.rs)), so an empty one may be refused rather than taken for unset; not run. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--codex-home` names it outright. An [open question](architecture.md#open-questions). |
 
 ## OpenCode
 
@@ -550,8 +550,8 @@ opencode.ai/v2/docs) ([releases](https://github.com/anomalyco/opencode/releases)
 | Fact | Mark | Source, and the fallback |
 |---|---|---|
 | V1 reads `.opencode/skills`, `.claude/skills` and `.agents/skills` from the start directory up to the git worktree, plus `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills` and config `skills.paths`/`skills.urls`. | docs-only | [V1 skills](https://opencode.ai/docs/skills/); source, [skill/index.ts](https://github.com/anomalyco/opencode/blob/v1.19.4/packages/opencode/src/skill/index.ts). Fallback: it reads both folders D-07 fills, so either copy reaches it. |
-| V1 finds skills with a recursive `skills/**/SKILL.md` glob that includes hidden folders. | docs-only | Source, [skill/index.ts](https://github.com/anomalyco/opencode/blob/v1.19.4/packages/opencode/src/skill/index.ts). Fallback: Mindflayer stages in `.mind/tmp`, never inside a skills folder. |
-| V1 keys a skill by its front matter `name`, and 1.19.4 does not enforce the documented name rules. | docs-only | Source, [skill/index.ts](https://github.com/anomalyco/opencode/blob/v1.19.4/packages/opencode/src/skill/index.ts). Fallback: Mindflayer requires the name to match the folder, so V1 and V2 see one ID. |
+| V1 finds skills with a recursive `skills/**/SKILL.md` glob that includes hidden folders. | docs-only | Source, [skill/index.ts](https://github.com/anomalyco/opencode/blob/v1.19.4/packages/opencode/src/skill/index.ts). Fallback: Mindweaver stages in `.mind/tmp`, never inside a skills folder. |
+| V1 keys a skill by its front matter `name`, and 1.19.4 does not enforce the documented name rules. | docs-only | Source, [skill/index.ts](https://github.com/anomalyco/opencode/blob/v1.19.4/packages/opencode/src/skill/index.ts). Fallback: Mindweaver requires the name to match the folder, so V1 and V2 see one ID. |
 | V1 given one name twice logs `duplicate skill name`, and the winner is whichever copy finishes parsing last. | docs-only | Source, [skill/index.ts](https://github.com/anomalyco/opencode/blob/v1.19.4/packages/opencode/src/skill/index.ts). Check 2 was not run. Fallback: D-07 writes both copies identically in one staged step, so either winner is the same skill. |
 | `OPENCODE_DISABLE_CLAUDE_CODE` or `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` turns `.claude/skills` off in V1. | docs-only | [V1 rules](https://opencode.ai/docs/rules/). Fallback: the `.agents/skills` copy still reaches it. |
 | V2 reads `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`, `.opencode/skills`, `.claude/skills` and `.agents/skills` from the start directory up to the project root, plus `skills` config entries. A skill's ID is its folder name. Later sources win: built-in, `.claude/skills`, `.agents/skills`, `~/.config/opencode/skills`, project `.opencode/skills`, config; within a group the global folder comes first, then the farthest ancestor down. Hidden folders and `node_modules` are skipped, six levels deep at most. | docs-only | [V2 skills](https://opencode.ai/v2/docs/skills/). Fallback: the copies are identical, so which wins does not matter. `~/.agents/skills` beating a project's `.claude/skills` is why doctor reports shadowing (D-22). |
@@ -572,8 +572,8 @@ opencode.ai/v2/docs) ([releases](https://github.com/anomalyco/opencode/releases)
 | Fact | Mark | Source, and the fallback |
 |---|---|---|
 | `OPENCODE_CONFIG_DIR` adds a folder loaded after `~/.config/opencode` and the project's `.opencode`; it does not replace `~/.config/opencode`. | docs-only | [config](https://opencode.ai/docs/config/). Fallback: still an [open question](architecture.md#open-questions); `AgentHomes` takes both folders when a check first reads OpenCode's. |
-| Whether `$XDG_CONFIG_HOME` moves `~/.config/opencode`. | docs-only | The [config](https://opencode.ai/docs/config/) docs name `~/.config/opencode` and are silent on `$XDG_CONFIG_HOME`; not run. Fallback: Mindflayer takes `~/.config/opencode` whatever `$XDG_CONFIG_HOME` says, so if OpenCode follows it, a check reads the wrong folder while it is set; `--opencode-config-dir` names the right one outright. An [open question](architecture.md#open-questions). |
-| How an empty `OPENCODE_CONFIG_DIR` is read. | docs-only | The [config](https://opencode.ai/docs/config/) docs are silent; not run. Fallback: Mindflayer reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--opencode-config-dir` names it outright. An [open question](architecture.md#open-questions). |
+| Whether `$XDG_CONFIG_HOME` moves `~/.config/opencode`. | docs-only | The [config](https://opencode.ai/docs/config/) docs name `~/.config/opencode` and are silent on `$XDG_CONFIG_HOME`; not run. Fallback: Mindweaver takes `~/.config/opencode` whatever `$XDG_CONFIG_HOME` says, so if OpenCode follows it, a check reads the wrong folder while it is set; `--opencode-config-dir` names the right one outright. An [open question](architecture.md#open-questions). |
+| How an empty `OPENCODE_CONFIG_DIR` is read. | docs-only | The [config](https://opencode.ai/docs/config/) docs are silent; not run. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDFLAYER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--opencode-config-dir` names it outright. An [open question](architecture.md#open-questions). |
 
 ## What says an agent works in a project
 
@@ -629,7 +629,7 @@ carries its fallback in the tables above.
 | #44 | A `CLAUDE.md` above the git root counts. | verified |
 | #44 | A `CLAUDE.md` at `/` itself does not count, and the predicate's walk stops below `/` to match. | verified in part: read from the debug log's directory counts, not tried |
 | #44 | The user memory file does not count, also for a project under the home. | verified |
-| #44 | `@AGENTS.md` in a `CLAUDE.md`, between Mindflayer's markers, loads it once. | verified |
+| #44 | `@AGENTS.md` in a `CLAUDE.md`, between Mindweaver's markers, loads it once. | verified |
 | #44 | `@../AGENTS.md` in `.claude/CLAUDE.md` loads the project's `AGENTS.md`, and both files are read. | docs-only |
 | #44 | An `@AGENTS.md` line of its own, outside a fence, is followed in any of Claude's files, `CLAUDE.local.md` included. | verified in `CLAUDE.md` outside the markers; docs-only for the fence and `CLAUDE.local.md` |
 | #44 | A `CLAUDE.local.md` alone stops `AGENTS.md` being read. | verified |

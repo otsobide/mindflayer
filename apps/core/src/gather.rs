@@ -316,7 +316,7 @@ impl Scrub {
     }
 }
 
-/// Take out the credentials a Mindflayer from before they were refused
+/// Take out the credentials a Mindweaver from before they were refused
 /// stored: in the URLs of sources, in the action log, and in the clones it
 /// made from those URLs.
 ///

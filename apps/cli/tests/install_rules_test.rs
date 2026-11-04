@@ -14,7 +14,7 @@ const COMMITS: &str = "# Commit one coherent step at a time\n";
 const BLOCK: &str = "<!-- mindflayer:begin -->\n<!-- mindflayer:rule git/commits -->\n\
                      # Commit one coherent step at a time\n<!-- mindflayer:end -->\n";
 
-/// What a team's `AGENTS.md` might hold before Mindflayer writes in it.
+/// What a team's `AGENTS.md` might hold before Mindweaver writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
 
 /// A rule about Rust files only.
@@ -276,7 +276,7 @@ fn a_section_somebody_else_wrote_is_neither_written_over_nor_taken_out() {
     assert_eq!(
         installed.stderr,
         [
-            "warning: alpha already has a rule review/tone at AGENTS.md that Mindflayer did not \
+            "warning: alpha already has a rule review/tone at AGENTS.md that Mindweaver did not \
           put there, so it was left alone"
         ]
     );
@@ -285,7 +285,7 @@ fn a_section_somebody_else_wrote_is_neither_written_over_nor_taken_out() {
     assert_eq!(
         removed.stderr,
         [
-            "warning: rule review/tone at AGENTS.md in alpha was not installed by Mindflayer, so \
+            "warning: rule review/tone at AGENTS.md in alpha was not installed by Mindweaver, so \
           it was left alone"
         ]
     );

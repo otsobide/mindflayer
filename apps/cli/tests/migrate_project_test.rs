@@ -1,5 +1,5 @@
 //! `mind migrate`, `mindweaver migrate -p` and `mindweaver migrate --all-projects`:
-//! moving a project an older Mindflayer made from its `mind.toml` to a
+//! moving a project an older Mindweaver made from its `mind.toml` to a
 //! `settings.toml`, and what is installed into it to where its agents read,
 //! or from its `settings.json` to a `settings.toml` saying the same.
 
@@ -203,7 +203,7 @@ fn a_copy_edited_since_it_was_installed_is_left_where_it_is_and_said() {
         done.stdout,
         "wrote .mind/settings.toml for collapse: agents claude,codex,opencode, share shared\n\
          moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n\
-         left skills/deploy where it is, no longer Mindflayer's: it was changed since it was \
+         left skills/deploy where it is, no longer Mindweaver's: it was changed since it was \
          installed\n"
     );
     assert_eq!(

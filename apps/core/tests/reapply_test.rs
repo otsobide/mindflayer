@@ -385,7 +385,7 @@ fn removing_the_last_agent_is_refused() {
 }
 
 #[test]
-fn an_edited_copy_in_a_dropped_folder_is_left_and_stops_being_mindflayers() {
+fn an_edited_copy_in_a_dropped_folder_is_left_and_stops_being_mindweavers() {
     let (_dir, workspace, project) = installed(&Agent::ALL, Share::Local);
     let edited = claudes(&project, "deploy").join("SKILL.md");
     fs::write(&edited, skill("deploy", "Ship it, my way")).unwrap();

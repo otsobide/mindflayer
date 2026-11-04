@@ -166,7 +166,7 @@ fn install_said(
             stdout: String::new(),
             stderr: vec![Warning {
                 text: format!(
-                    "warning: {into} already has a {} at {} that Mindflayer did not put there, so it was left alone",
+                    "warning: {into} already has a {} at {} that Mindweaver did not put there, so it was left alone",
                     named(kind, &name),
                     shown(project, &path)
                 ),
@@ -210,7 +210,7 @@ fn install_said(
             outcome.stderr.push(
                 format!(
                     "warning: {into}: the exclude file still keeps out of git a file that is no \
-                     longer Mindflayer's: {reason}"
+                     longer Mindweaver's: {reason}"
                 )
                 .into(),
             );
@@ -441,7 +441,7 @@ pub(crate) fn shown(project: &MindProject, path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-/// Take what `typed` names, a skill or a rule Mindflayer installed, back out
+/// Take what `typed` names, a skill or a rule Mindweaver installed, back out
 /// of each of `projects`, handing core the agents' own folders, `homes`, as
 /// an install does, through core's batch ([`assign::uninstall`]). `force`
 /// takes out a copy edited since it was installed, which core otherwise
@@ -599,7 +599,7 @@ fn uninstall_said(
             stdout: String::new(),
             stderr: vec![Warning {
                 text: format!(
-                    "warning: {} at {} in {from} was not installed by Mindflayer, so it was left alone",
+                    "warning: {} at {} in {from} was not installed by Mindweaver, so it was left alone",
                     named(kind, &name),
                     shown(project, &path)
                 ),

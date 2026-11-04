@@ -144,7 +144,7 @@ fn resetting_moves_the_copies_back_and_leaves_somebodys_where_it_is_said() {
          copied deploy to .agents/skills/deploy, for codex and opencode, kept out of git\n\
          copied deploy to .claude/skills/deploy, for claude, kept out of git\n\
          removed deploy from .skills/deploy\n\
-         left .skills/notes where it is: Mindflayer did not install it\n"
+         left .skills/notes where it is: Mindweaver did not install it\n"
     );
     assert!(done.stderr.is_empty(), "{:?}", done.stderr);
     assert!(done.ok);
@@ -173,7 +173,7 @@ fn somebodys_skill_at_a_new_target_is_left_and_warned_about() {
     let dry = mind(&root, &["targets", "set", "skills", ".skills"]).unwrap();
     assert!(
         dry.stdout.contains(
-            "would leave .skills/deploy as it is: Mindflayer did not put it there, so deploy \
+            "would leave .skills/deploy as it is: Mindweaver did not put it there, so deploy \
              would not be copied there\n"
         ),
         "{}",
@@ -185,7 +185,7 @@ fn somebodys_skill_at_a_new_target_is_left_and_warned_about() {
     // Said by the code an install refused over somebody's copy is said by.
     assert!(done.stderr.iter().any(|line| {
         *line
-            == "warning: collapse already has a deploy at .skills/deploy that Mindflayer did not \
+            == "warning: collapse already has a deploy at .skills/deploy that Mindweaver did not \
                 put there, so it was left alone, and deploy was not copied there"
             && line.code == Some("foreign")
     }));
@@ -286,7 +286,7 @@ fn an_agent_pointed_at_the_target_by_a_link_reads_it() {
 
 #[cfg(unix)]
 #[test]
-fn resetting_with_the_links_still_there_keeps_the_copy_mindflayers() {
+fn resetting_with_the_links_still_there_keeps_the_copy_mindweavers() {
     let (dir, root) = installed();
     mind(&root, &["targets", "set", "skills", ".skills", "-y"]).unwrap();
     link_the_agents_to_skills(&root);

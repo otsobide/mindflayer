@@ -209,7 +209,7 @@ fn a_skill_that_breaks_the_rules_is_gathered_with_a_warning() {
     );
     // What is ignored is not rewritten: the shelf holds the file as written.
     // Line endings are left out of the comparison because the checkout, not
-    // Mindflayer, decides them: on Windows git's autocrlf turns them into CRLF.
+    // Mindweaver, decides them: on Windows git's autocrlf turns them into CRLF.
     let copied = fs::read_to_string(shelf.join("nested").join("SKILL.md")).unwrap();
     let copied = copied.replace("\r\n", "\n");
     assert!(copied.contains("  owner:\n    team: ops\n"), "{copied}");
@@ -716,7 +716,7 @@ fn a_password_cut_by_a_slash_is_refused_too_and_kept_nowhere() {
     assert!(!workspace.cache_dir().exists());
 }
 
-/// Leave in `workspace` what a Mindflayer from before the refusal left after
+/// Leave in `workspace` what a Mindweaver from before the refusal left after
 /// gathering from `url` with a token in it: the URL in the source the clone
 /// in `directory` belongs to, in the log, and in that clone's config and
 /// reflog.

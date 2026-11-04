@@ -1,7 +1,7 @@
 /*
  * The README's screenshots, which `make docs/screenshots` takes:
  *
- *   MINDFLAYER_E2E_BIN=../../target/debug node e2e/screenshots.ts
+ *   MINDWEAVER_E2E_BIN=../../target/debug node e2e/screenshots.ts
  *
  * Taken, never drawn by hand, so they show the panel as it is: the demo
  * workspace (demo.ts) built with the binaries under test, served by their
@@ -63,7 +63,7 @@ const ZONE = 'UTC'
 const BUDGET = 300 * 1024
 
 /** What says this folder is the demo's, so a run left behind may be removed. */
-const OURS = '.mindflayer-screenshots'
+const OURS = '.mindweaver-screenshots'
 
 /** Say what stopped the run, and stop. */
 function refuse(message: string): never {
@@ -139,7 +139,7 @@ async function drawn(page: Page): Promise<void> {
 }
 
 const at: Places = (() => {
-  const bin = resolve(web, process.env.MINDFLAYER_E2E_BIN ?? '../../target/debug')
+  const bin = resolve(web, process.env.MINDWEAVER_E2E_BIN ?? '../../target/debug')
   if (!built(bin)) {
     refuse(`no mindweaver and mind in ${bin}: \`make docs/screenshots\` builds them there`)
   }
@@ -151,7 +151,7 @@ const at: Places = (() => {
   if (!existsSync(chromium.executablePath())) {
     refuse('no Chromium of Playwright\'s to take them in: `make web/e2e/browsers BROWSERS=chromium` downloads it, into node_modules')
   }
-  const scratch = join(temporary, 'mindflayer-demo')
+  const scratch = join(temporary, 'mindweaver-demo')
   return { scratch, home: join(scratch, 'home'), workspace: join(scratch, WORKSPACE), bin }
 })()
 

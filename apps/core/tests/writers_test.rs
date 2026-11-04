@@ -283,7 +283,7 @@ fn a_ledger_opened_to_read_keeps_the_journal_it_had() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join(LEDGER_FILE);
     drop(Ledger::open(&path).unwrap());
-    // A ledger an older Mindflayer made, before it kept a log.
+    // A ledger an older Mindweaver made, before it kept a log.
     rusqlite::Connection::open(&path)
         .unwrap()
         .query_row("PRAGMA journal_mode = DELETE", [], |row| {
@@ -451,7 +451,7 @@ fn an_install_looks_again_at_the_copy_once_it_holds_the_workspace() {
         &AgentHomes::default(),
     )
     .unwrap();
-    // Surveyed while the copy was Mindflayer's, as the install screen
+    // Surveyed while the copy was Mindweaver's, as the install screen
     // surveys when it is built.
     let stale =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();

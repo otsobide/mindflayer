@@ -76,7 +76,7 @@ pub fn document() -> Value {
     let document = json!({
         "openapi": OPENAPI,
         "info": {
-            "title": "Mindflayer",
+            "title": "Mindweaver",
             "version": version,
             "description": about,
             "license": {"name": "GPL-3.0-only", "identifier": "GPL-3.0-only"},

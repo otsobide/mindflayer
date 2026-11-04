@@ -1174,7 +1174,7 @@ impl App {
     /// `A`: the foreign skill under the cursor brought into the workspace's
     /// library, and its copies recorded as installed from there, once
     /// somebody says yes, as `mindweaver adopt` does. Only on a row `status`
-    /// calls foreign: what Mindflayer installed is its own already, what the
+    /// calls foreign: what Mindweaver installed is its own already, what the
     /// project authors is the project's, and a rule is never adopted. Core
     /// refuses the rest, a name the library holds or copies that differ,
     /// which the line's error says.

@@ -1,4 +1,4 @@
-//! `mindweaver migrate` and `mind migrate`: bringing what an older Mindflayer
+//! `mindweaver migrate` and `mind migrate`: bringing what an older Mindweaver
 //! made into the layout a new one has. `--library` moves a workspace's own
 //! into its library; `mind migrate`, `-p` and `--all-projects` move a
 //! project from its `mind.toml` or its `settings.json` to a
@@ -463,7 +463,7 @@ fn project_report(project: &MindProject, plan: &ProjectPlan, done: bool) -> Stri
     for path in &plan.foreign {
         let _ = writeln!(
             text,
-            "{} {} where it is: Mindflayer did not install it",
+            "{} {} where it is: Mindweaver did not install it",
             would("left", "would leave"),
             shown(project, path)
         );
@@ -482,7 +482,7 @@ fn project_report(project: &MindProject, plan: &ProjectPlan, done: bool) -> Stri
 /// What a project's move says on stderr beside its lines: that nothing
 /// keeps a local project's copies out of git outside a work tree, and how
 /// to stop git tracking a `.mind` that a local project's `.gitignore` keeps
-/// none of out, which no ignore rule does and Mindflayer runs no git to do.
+/// none of out, which no ignore rule does and Mindweaver runs no git to do.
 fn beside(project: &MindProject, plan: &ProjectPlan) -> Vec<Warning> {
     let mut said: Vec<Warning> = outside_note(project, plan.outside).into_iter().collect();
     if plan.tracked {

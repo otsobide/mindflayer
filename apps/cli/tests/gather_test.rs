@@ -342,7 +342,7 @@ fn a_cancelled_gather_says_so_and_leaves_the_shelf_as_it_was() {
 // credentials an older build stored
 // ---------------------------------------------------------------------------
 
-/// Leave in the workspace at `dir` what a Mindflayer from before the refusal
+/// Leave in the workspace at `dir` what a Mindweaver from before the refusal
 /// left after gathering its one source from `url`: the URL in the source, in
 /// the log, and in the clone's config and reflog.
 fn left_by_an_older_build(dir: &Path, url: &str) {
@@ -437,9 +437,9 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
         gathered.stderr,
         [
             "note: https://example.com/acme/skills: the user name, password or token an older \
-             Mindflayer stored in this URL is taken out; gathering it again needs a git \
+             Mindweaver stored in this URL is taken out; gathering it again needs a git \
              credential helper that has it",
-            "note: 1 action log entry: the user name, password or token an older Mindflayer \
+            "note: 1 action log entry: the user name, password or token an older Mindweaver \
              stored in a URL in it is taken out",
         ]
     );

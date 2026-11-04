@@ -298,7 +298,7 @@ fn a_row_an_older_build_wrote_with_credentials_is_read_back_without_them() {
     assert_eq!(history[0].detail.as_deref(), Some("from https://h/a"));
 }
 
-/// A ledger on disk, as a Mindflayer from before the redaction left it: one
+/// A ledger on disk, as a Mindweaver from before the redaction left it: one
 /// source gathered with a token in its URL, and the log of that gather.
 fn ledger_with_a_token_in_it() -> (tempfile::TempDir, Sqlite) {
     let dir = tempfile::TempDir::new().unwrap();
@@ -930,7 +930,7 @@ fn a_render_keeps_the_time_an_installation_was_first_recorded_at() {
 }
 
 #[test]
-fn whether_mindflayer_made_a_file_is_kept_per_project_until_it_is_forgotten() {
+fn whether_mindweaver_made_a_file_is_kept_per_project_until_it_is_forgotten() {
     let ledger = Sqlite::in_memory().unwrap();
     assert!(!ledger.created("collapse", "AGENTS.md").unwrap());
 
@@ -1980,7 +1980,7 @@ fn every_source_is_listed_in_url_order_without_credentials() {
     ledger
         .source_for(SourceKind::Git, "https://h/a", None, "skills")
         .unwrap();
-    // What a Mindflayer from before the refusal could have stored.
+    // What a Mindweaver from before the refusal could have stored.
     ledger
         .connection
         .execute(

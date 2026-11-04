@@ -190,7 +190,7 @@ every_store![
     a_render_of_nothing_forgets_every_installation_of_its_kind,
     a_render_notes_each_file_it_made_and_forgets_each_it_did_not,
     a_render_that_cannot_be_recorded_leaves_the_last_render_whole,
-    whether_mindflayer_made_a_file_is_kept_per_project_and_path,
+    whether_mindweaver_made_a_file_is_kept_per_project_and_path,
     a_source_is_registered_once_and_found_by_its_coordinate,
     every_coordinate_is_a_source_of_its_own_with_a_folder_of_its_own,
     a_source_remembers_the_revision_it_was_last_gathered_at,
@@ -1299,7 +1299,7 @@ fn a_render_that_cannot_be_recorded_leaves_the_last_render_whole(mut store: Stor
     assert!(store.created("collapse", "AGENTS.md").unwrap());
 }
 
-fn whether_mindflayer_made_a_file_is_kept_per_project_and_path(mut store: Store) {
+fn whether_mindweaver_made_a_file_is_kept_per_project_and_path(mut store: Store) {
     let [here, there] = <[String; 2]>::try_from(RouteMother::distinct(2)).unwrap();
     store.set_created(&here, "AGENTS.md", true).unwrap();
     store.set_created(&here, "AGENTS.md", true).unwrap();

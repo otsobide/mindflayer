@@ -41,7 +41,7 @@ fn remember_records_a_workspace_as_a_route_from_home_and_says_what_known_is() {
         text.contains("# `known` lists the other weaver workspaces on this machine"),
         "{text}"
     );
-    assert!(text.contains("# Mindflayer workspace."), "comments kept");
+    assert!(text.contains("# Mindweaver workspace."), "comments kept");
     assert_eq!(
         WeaverWorkspace::open(&home).unwrap().config().known,
         [PathBuf::from("weavers/writing")]

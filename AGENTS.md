@@ -2,7 +2,7 @@
 
 Guidance for coding agents working in this repository.
 
-Mindflayer manages the skills and rules coding agents read, the way git manages
+Mindweaver manages the skills and rules coding agents read, the way git manages
 code. A **mind project** (`.mind/settings.toml`) holds artifacts beside its
 code; a **weaver workspace** (`.mindflayer/flayer.toml`) links mind projects,
 holds artifacts of its own, gathers skills from git onto a shelf and installs
@@ -121,7 +121,7 @@ web/e2e` writes `apps/web/dist`, as `make web/build` does.
 
 `make docs/screenshots` takes the README's images into `docs/images` with the
 same harness: `apps/web/e2e/screenshots.ts` builds the demo workspace
-(`e2e/demo.ts`) in `mindflayer-demo` under the system's temporary folder, a
+(`e2e/demo.ts`) in `mindweaver-demo` under the system's temporary folder, a
 fixed place so the paths the images show stay put, serves it with
 `mindweaver ui`, and takes each page of the tour in Playwright's Chromium (`make
 web/e2e/browsers BROWSERS=chromium`). It fails on a page showing a path
@@ -358,7 +358,7 @@ under `apps/` with its own `Makefile`:
   `screenshots.ts` takes the images of it (`make docs/screenshots`).
 
 Beside them, `examples/` is content and not an app: a weaver workspace whose
-own two skills and two rules anyone can `mindweaver load` to try Mindflayer
+own two skills and two rules anyone can `mindweaver load` to try Mindweaver
 without gathering. `apps/cli/tests/examples_test.rs` holds every example to
 `validate` with no warning and finds the "Try it with the examples" output
 of the reference, `docs/reference.md`, in what the commands print, so
@@ -632,7 +632,7 @@ These are easy to break from a single file without noticing.
     `settings.json` it replaces as `.mind/tmp/<name>.v<version>`, never runs
     git (it says `git rm -r --cached .mind` instead), and puts back every
     step it took when a later one fails.
-  - A file somebody else owns is edited only inside Mindflayer's marked
+  - A file somebody else owns is edited only inside Mindweaver's marked
     blocks or, in an agent's config file, which can carry no marks, one entry
     at a time (next bullet). Every byte outside them is kept, and a malformed
     block is refused, not repaired. The blocks:
@@ -650,7 +650,7 @@ These are easy to break from a single file without noticing.
     relinked project's lines, and a copy's given a new id, are carried to its
     new place or key (`exclude::carry`), never left as a stale group. A team's
     `.gitignore` and `core.excludesFile` are never edited; the `.gitignore`s
-    Mindflayer writes are `.mind/tmp`'s and a local project's `.mind`'s own
+    Mindweaver writes are `.mind/tmp`'s and a local project's `.mind`'s own
     (`MIND_IGNORE`), each inside a folder it owns, made with `create_new`,
     and the second is removed, when the project turns shared, only while it
     still holds `MIND_IGNORE`. And `<!-- mindflayer:begin -->` and
@@ -664,7 +664,7 @@ These are easy to break from a single file without noticing.
     made with `create_new`, and only then said to be created; one that is
     there goes through `replace_bytes`, written through a link only to a
     file inside the project; and the file is taken away only when
-    Mindflayer made it, as the ledger notes (`created_files`), and nothing
+    Mindweaver made it, as the ledger notes (`created_files`), and nothing
     else is left in it. No block
     is left in a workspace's root, unless a project it links is there, nor
     in a folder above a project it links, whose agents would read it too,
@@ -675,13 +675,13 @@ These are easy to break from a single file without noticing.
     render is handed what the ledger records of them
     (`claude_rules::Recorded`: each file's route and its `hash::bytes`),
     each file it may make recorded before it is made (`install::rules`), and
-    a file is Mindflayer's only while it holds exactly that: only such a
+    a file is Mindweaver's only while it holds exactly that: only such a
     file is replaced or taken away. A file nothing
     recorded, even one holding the rule, or one changed since, is left
     exactly as it is and said, and so is a link at a rule's place. A new
     file is made with `create_new`; one replaced goes through
     `replace_bytes_unresolved`, whose temporary ends in `.tmp`, which
-    Claude never loads; emptied folders go up to and including `mindflayer`
+    Claude never loads; emptied folders go up to and including `mindweaver`
     and no further. A render asked for a rule is refused wherever the block
     is (`agents_md::misplaced`), and both renderers ask
     `RuleManifest::is_scoped` which rules are about some files only.
@@ -725,7 +725,7 @@ These are easy to break from a single file without noticing.
     never put an `AGENTS.md`, a `CLAUDE.md` or a kind's folder in the
     workspace's directory; they live in `.mindflayer`. An install into a
     project at the workspace's root is that project's (D-03).
-- **Mindflayer only manages what it installed.** The ledger's record of an
+- **Mindweaver only manages what it installed.** The ledger's record of an
   install (one installation, a target for each copy it wrote, its origin and
   the `hash::tree` of what it wrote, that hash's one definition) is what
   allows overwriting and deleting. An install writes a copy in every target
@@ -1337,7 +1337,7 @@ These are easy to break from a single file without noticing.
   `mind init` (`common::new_project`), so a local install keeps its copies out
   of git rather than saying on stderr that nothing does, and where an install
   puts its copies is asked of core (`common::copies`). A test about what a
-  project an older Mindflayer made does, a copy installed in the folder it
+  project an older Mindweaver made does, a copy installed in the folder it
   authors in, makes one with `common::older_project`, and one about a
   project a `settings.json` marks with `common::json_project`, which writes
   the file as a version 3 `mind init` did. What git would list is
@@ -1347,7 +1347,7 @@ These are easy to break from a single file without noticing.
   have none above it (`claude_md_test.rs`'s `clean`).
 - Tests that run a shell (`apps/cli/tests/shells_test.rs`, Linux only) start
   it with no startup file and an environment holding only a `PATH`, a
-  temporary `HOME` and what the test sets, so no `MINDFLAYER_*` variable or
+  temporary `HOME` and what the test sets, so no `MINDWEAVER_*` variable or
   real shell configuration gets in. A shell, or a python3 to make a
   virtualenv with, that is not installed is skipped and said on stderr,
   except under `$CI`, where it fails the test: the `test (cli)` job
@@ -1545,7 +1545,7 @@ These are easy to break from a single file without noticing.
   "Open questions". A change to what the API answers, a route added among
   them, updates `docs/api.md` too, whose answers `api_guide_test` holds to
   the server's. Literal output belongs in the reference, never in the
-  README, which says what Mindflayer is and tours the panel in a few
+  README, which says what Mindweaver is and tours the panel in a few
   screens. A change to what the panel shows, a page, a view or its look,
   runs `make docs/screenshots`, and its PR carries the images it wrote; a
   change to what the README says of the panel goes with it.

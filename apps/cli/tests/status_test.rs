@@ -8,7 +8,7 @@ use serde::Deserialize;
 
 /// Under one directory: `Projects`, a workspace with a skill of its own,
 /// `commit-style`, linking `collapse`, marked by its settings, and `legacy`,
-/// marked by the `mind.toml` an older Mindflayer wrote; and `team`, a
+/// marked by the `mind.toml` an older Mindweaver wrote; and `team`, a
 /// workspace beside it with `deploy`, which `Projects` loads.
 ///
 /// `commit-style` is installed into both projects and `deploy` into
@@ -62,7 +62,7 @@ review        authored  -
 ";
 
 /// What a report says of `legacy`, which the `mind.toml` an older
-/// Mindflayer wrote marks.
+/// Mindweaver wrote marks.
 const LEGACY: &str =
     "hint: legacy is marked by a mind.toml, which `mind migrate` moves to a settings.toml";
 
@@ -101,7 +101,7 @@ fn mind_status_says_of_its_project_what_weaver_status_p_does() {
 }
 
 #[test]
-fn a_project_an_older_mindflayer_made_reaches_no_agent_it_names() {
+fn a_project_an_older_mindweaver_made_reaches_no_agent_it_names() {
     let (_dir, projects) = workspace_with_everything();
 
     let outcome = weaver(&projects, &["status", "-p", "legacy"]).unwrap();
@@ -306,7 +306,7 @@ fn a_ledger_that_will_not_open_is_a_warning_beside_the_report() {
     let text = weaver(&projects, &["status", "-p", "collapse"]).unwrap();
     let outcome = weaver(&projects, &["status", "--json"]).unwrap();
 
-    // Nothing reads as installed, so nothing reads as Mindflayer's to change.
+    // Nothing reads as installed, so nothing reads as Mindweaver's to change.
     assert_eq!(
         text.stdout,
         "\

@@ -72,7 +72,7 @@ pub struct Relinked {
 ///   than `old`, which is where `new` moved from, if anywhere;
 /// - the ledger records something at `old` but no id, as it records a
 ///   project's installs from before ids were kept: nothing says they were
-///   `new`'s project's, and handing them to it would let Mindflayer write
+///   `new`'s project's, and handing them to it would let Mindweaver write
 ///   over or delete what sits at the paths they name.
 ///
 /// A workspace whose ledger knows nothing of `old`, or has none, has no

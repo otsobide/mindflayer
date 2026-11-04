@@ -3,7 +3,7 @@
 `mindweaver ui` serves the control panel, and under `/api/v1` an HTTP API for
 scripts and tools on this machine. The panel is its first client, and asks
 the server nothing a script cannot: what a project holds, what an install
-would do, and every change Mindflayer makes, previewed and then run as the
+would do, and every change Mindweaver makes, previewed and then run as the
 command line it is.
 
 This guide walks through it with `curl` on a small workspace. Every answer
@@ -67,7 +67,7 @@ curl prints each answer on one line.
 writes where it is served and its token to a file:
 
 ```console
-$ mindweaver ui --no-open --token-file /home/you/.local/state/mindflayer.json
+$ mindweaver ui --no-open --token-file /home/you/.local/state/mindweaver.json
 http://127.0.0.1:40185/?token=bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513
 note: serving the workspace at /home/you/Projects on 127.0.0.1:40185 until Ctrl-C
 ```
@@ -83,14 +83,14 @@ another terminal, or a script that did not start the server, read where
 it is, and the token, from the file:
 
 ```console
-$ cat /home/you/.local/state/mindflayer.json
+$ cat /home/you/.local/state/mindweaver.json
 {
   "version": 1,
   "api": "http://127.0.0.1:40185/api/v1",
   "token": "bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513"
 }
-$ api=$(jq -r .api /home/you/.local/state/mindflayer.json)
-$ token=$(jq -r .token /home/you/.local/state/mindflayer.json)
+$ api=$(jq -r .api /home/you/.local/state/mindweaver.json)
+$ token=$(jq -r .token /home/you/.local/state/mindweaver.json)
 ```
 
 `version` is how the file is laid out, `api` where every route is served,
@@ -103,7 +103,7 @@ up when the server stops without one, as it does when the file is refused:
 
 ```sh
 log=$(mktemp)
-mindweaver ui --no-open --token-file /home/you/.local/state/mindflayer.json > "$log" &
+mindweaver ui --no-open --token-file /home/you/.local/state/mindweaver.json > "$log" &
 pid=$!
 while [ ! -s "$log" ] && kill -0 "$pid" 2>/dev/null; do sleep 0.1; done
 [ -s "$log" ] || exit 1
@@ -658,10 +658,10 @@ What the server finds itself has a code of its own:
 | 413 | `body_too_large` | a body larger than the server reads |
 | 415 | `json_required` | a body not sent as `application/json` |
 | 422 | `invalid_body` | JSON that is not what the route reads |
-| 500 | `backend_failed` | Mindflayer failed while it answered |
+| 500 | `backend_failed` | Mindweaver failed while it answered |
 | 500 | `writer_stopped` | the thread that runs tasks has stopped |
 
-Everything else is Mindflayer's own refusal, by the code of the rule it
+Everything else is Mindweaver's own refusal, by the code of the rule it
 breaks, from the list a command's `--json` takes its codes from: a 404 for
 a read naming what is not there
 (`not_registered` for an entry, `not_found` for an artifact,

@@ -178,7 +178,7 @@ removed skill commit-style from {}
         .join("tanukeys/.claude/skills/commit-style/SKILL.md");
     assert!(fs::read_to_string(theirs).unwrap().contains("Mine"));
 
-    // The edited copy is still Mindflayer's install, and the note's command
+    // The edited copy is still Mindweaver's install, and the note's command
     // takes it out.
     let status = weaver(dir.path(), &["status", "-p", "collapse"]).unwrap();
     assert!(

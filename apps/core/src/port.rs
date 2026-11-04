@@ -237,14 +237,14 @@ pub trait LedgerStore: Debug + Send {
     ///
     /// Its targets are replaced as a whole rather than added to: they are the
     /// copies this install wrote, and a target an earlier install had and this
-    /// one did not is no longer Mindflayer's to overwrite or delete. All of it
+    /// one did not is no longer Mindweaver's to overwrite or delete. All of it
     /// or none, so a record never names some of an install's copies.
     fn installed(&self, project: &str, installation: &InstallRecord) -> Result<(), LedgerError>;
 
     /// Record what a render of a project's `kind` leaves it: each of
     /// `records` with its hash and copies in place of what was recorded of
     /// it, every other installation of `kind` in the project forgotten, and
-    /// for each of `files`, a route from the project, whether Mindflayer made
+    /// for each of `files`, a route from the project, whether Mindweaver made
     /// it ([`set_created`](Self::set_created)).
     ///
     /// For a kind the project is given as one render of all of it, as its
@@ -298,7 +298,7 @@ pub trait LedgerStore: Debug + Send {
     /// called `to_name` now, at `to_path`, saying what became of its record.
     ///
     /// For a rename that reached one copy: it is what was installed, renamed,
-    /// and stays Mindflayer's to tell apart (D-04), as an edit does, from
+    /// and stays Mindweaver's to tell apart (D-04), as an edit does, from
     /// where it came, with the hash of what was written. An installation it
     /// was the last copy of takes the new name whole, keeping when it was
     /// installed; one that records others keeps them under the old name,
@@ -359,7 +359,7 @@ pub trait LedgerStore: Debug + Send {
         log: &[(Action, String)],
     ) -> Result<(), LedgerError>;
 
-    /// The names this ledger says Mindflayer put into a project.
+    /// The names this ledger says Mindweaver put into a project.
     ///
     /// What separates an artifact this tool installed from one somebody wrote
     /// by hand, which is what stops an uninstall from deleting the second.
@@ -373,28 +373,28 @@ pub trait LedgerStore: Debug + Send {
     /// once rather than once a name.
     fn records(&self, project: &str, kind: Kind) -> Result<Vec<InstallRecord>, LedgerError>;
 
-    /// Every copy this ledger says Mindflayer wrote into a project for
+    /// Every copy this ledger says Mindweaver wrote into a project for
     /// `kind`, whichever installation wrote it, by path relative to the
     /// project, `/` separated, in path order, each once: the rules of a
     /// project share its `AGENTS.md`, a section each.
     ///
     /// By copy rather than by name, for a listing that has to say which of
-    /// the folders holding a skill hold Mindflayer's copy: a name alone
+    /// the folders holding a skill hold Mindweaver's copy: a name alone
     /// would claim a copy somebody keeps in one agent's folder because
-    /// Mindflayer installed one of that name into another's. One query
+    /// Mindweaver installed one of that name into another's. One query
     /// rather than one per installation, since a listing asks it of every
     /// project.
     fn copies(&self, project: &str, kind: Kind) -> Result<Vec<String>, LedgerError>;
 
-    /// Whether Mindflayer made the file at `path`, a route from the project,
+    /// Whether Mindweaver made the file at `path`, a route from the project,
     /// rather than wrote into one that was there: what a render was told
     /// when it made it ([`crate::agents_md::Written::Created`]), kept until
-    /// the file stops being Mindflayer's.
+    /// the file stops being Mindweaver's.
     fn created(&self, project: &str, path: &str) -> Result<bool, LedgerError>;
 
-    /// Record whether Mindflayer made the file at `path`, a route from the
+    /// Record whether Mindweaver made the file at `path`, a route from the
     /// project: kept when it did, forgotten when it did not or the file has
-    /// stopped being Mindflayer's. A file noted twice keeps the time it was
+    /// stopped being Mindweaver's. A file noted twice keeps the time it was
     /// first noted.
     fn set_created(&self, project: &str, path: &str, created: bool) -> Result<(), LedgerError>;
 
@@ -411,7 +411,7 @@ pub trait LedgerStore: Debug + Send {
     fn known_projects(&self) -> Result<Vec<(ProjectId, String)>, LedgerError>;
 
     /// Whether anything is recorded of the project at `route`: an
-    /// installation, or a file Mindflayer made there. What a project the
+    /// installation, or a file Mindweaver made there. What a project the
     /// ledger knows no id of has to hold nothing of for its entry to be
     /// handed to another directory ([`relinked`](crate::ledger::Ledger::relinked)), since nothing
     /// says which project those records were of.
@@ -451,7 +451,7 @@ pub trait LedgerStore: Debug + Send {
     ) -> Result<Option<usize>, LedgerError>;
 
     /// The sources whose stored URL still carries credentials, which only a
-    /// Mindflayer from before they were refused could have stored.
+    /// Mindweaver from before they were refused could have stored.
     ///
     /// Each is handed back with the URL [`scrub_source`](Self::scrub_source) will give it,
     /// never the one it has: nothing the ledger returns carries a credential.

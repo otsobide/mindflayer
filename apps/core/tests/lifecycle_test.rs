@@ -276,7 +276,7 @@ fn renaming_a_skill_moves_its_folder_and_rewrites_nothing_but_its_name() {
 #[test]
 fn renaming_keeps_every_key_it_does_not_model_byte_for_byte() {
     // Claude Code's own keys, and metadata no agent should have written
-    // nested, all pass through: they are somebody's, not Mindflayer's.
+    // nested, all pass through: they are somebody's, not Mindweaver's.
     const AGENT_KEYS: &str = "---\nname: deploy\ndescription: Ship it\ndisable-model-invocation: true\npaths:\n  - 'src/**'\nallowed-tools: Bash(git add *) Read\ncompatibility: Requires git\nmetadata:\n  author: acme\n  owner:\n    team: ops\n---\n\nRun the pipeline.\n";
     let (dir, project) = project();
     write(dir.path(), "skills/deploy/SKILL.md", AGENT_KEYS);
@@ -306,7 +306,7 @@ fn renaming_refuses_a_name_that_breaks_the_rules() {
 #[test]
 fn renaming_refuses_a_skill_whose_description_breaks_the_rules() {
     // A rename writes only the name, but what it leaves behind is a skill
-    // Mindflayer wrote, and an agent skips one with an empty description.
+    // Mindweaver wrote, and an agent skips one with an empty description.
     let (dir, project) = project();
     write(
         dir.path(),
@@ -908,7 +908,7 @@ fn installed(names: &[&str]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) 
     (dir, workspace, project, ledger)
 }
 
-/// The skills `ledger` says Mindflayer installed into `collapse`.
+/// The skills `ledger` says Mindweaver installed into `collapse`.
 fn records(ledger: &Ledger) -> Vec<String> {
     ledger.installations("collapse", Kind::Skill).unwrap()
 }
@@ -1016,7 +1016,7 @@ fn what_a_project_authors_beside_its_agents_copies_leaves_their_record_alone() {
         lifecycle::remove(Some(&workspace), &project, &find(&project, "ship").unwrap()).unwrap();
     assert_eq!(removed.copy.unwrap(), Record::Untouched);
 
-    // The copies installed for its agents are still Mindflayer's to manage.
+    // The copies installed for its agents are still Mindweaver's to manage.
     assert_eq!(records(&ledger), ["deploy"]);
     assert_eq!(
         standing(&workspace, &ledger, &project, "deploy"),
@@ -1054,7 +1054,7 @@ fn removing_the_copy_in_a_folder_the_project_authors_in_leaves_the_others_instal
 
     assert_eq!(removed.copy.unwrap(), Record::Dropped);
     assert!(!reached.exists());
-    // The copy nobody touched is still Mindflayer's, and so still out of git;
+    // The copy nobody touched is still Mindweaver's, and so still out of git;
     // the place the change emptied is not.
     let record = ledger
         .installation("collapse", Kind::Skill, "deploy")
@@ -1502,7 +1502,7 @@ fn a_change_asks_only_a_workspace_that_manages_the_project_and_creates_no_ledger
 fn a_record_that_cannot_be_dropped_is_reported_and_the_change_stands() {
     let (dir, workspace, project, _ledger) = installed(&["deploy"]);
     fs::remove_dir_all(dir.path().join("collapse/skills/deploy")).unwrap();
-    // A ledger a newer Mindflayer wrote is refused, so nothing in it can be
+    // A ledger a newer Mindweaver wrote is refused, so nothing in it can be
     // changed from here.
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()
@@ -1758,7 +1758,7 @@ fn a_rename_tells_once_of_a_clone_neither_of_its_scrubs_could_rewrite() {
 }
 
 #[test]
-fn changing_something_mindflayer_did_not_install_touches_no_record() {
+fn changing_something_mindweaver_did_not_install_touches_no_record() {
     let (_dir, workspace, project, ledger) = installed(&["deploy"]);
     create(&workspace.own(), Kind::Skill, "notes", "The workspace's").unwrap();
     create(&project, Kind::Skill, "notes", "Mine").unwrap();

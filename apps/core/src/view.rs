@@ -14,7 +14,7 @@
 //!   opened only through [`WeaverWorkspace::ledger_for_reading`], the
 //!   default workspace is never made for it, and no scrub runs. A ledger
 //!   from an older schema is migrated, as every open migrates it, which is
-//!   upkeep of Mindflayer's own file rather than a change.
+//!   upkeep of Mindweaver's own file rather than a change.
 //! - **No scan.** What could be linked comes from [`crate::scan`], a query
 //!   of its own run when somebody asks, since a walk of the disk is no price
 //!   to pay for every live update of a screen.
@@ -501,7 +501,7 @@ impl Health {
     ///
     /// Something that does not read is said over something to do, since
     /// what to do cannot be told of a file nobody can read. A copy that is
-    /// somebody's (`foreign`) asks for nothing: it is never Mindflayer's to
+    /// somebody's (`foreign`) asks for nothing: it is never Mindweaver's to
     /// change, and only an install of its name, which refuses, meets it.
     fn of(project: &Project, unreadable: bool) -> Health {
         let broken = unreadable

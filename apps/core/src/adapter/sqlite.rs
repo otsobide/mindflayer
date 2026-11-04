@@ -68,7 +68,7 @@ impl Sqlite {
         // as a writer waits for the workspace, rather than failing with
         // "database is locked": the CLI, the TUI and the server can each have
         // the ledger open. rusqlite waits five seconds of its own accord, but
-        // as a library's default; set here, the wait is Mindflayer's.
+        // as a library's default; set here, the wait is Mindweaver's.
         connection
             .busy_timeout(crate::lock::WAIT)
             .map_err(|source| LedgerError::Open {
@@ -320,7 +320,7 @@ impl Sqlite {
     ///
     /// So that a step that turns out wrong, or a build that misreads what it
     /// wrote, leaves the file it started from to go back to: the copy opens at
-    /// the old version, and an older Mindflayer reads it as it always did. One
+    /// the old version, and an older Mindweaver reads it as it always did. One
     /// copy per version, replaced if an earlier attempt at the same step left
     /// one, since both are of the same file at the same version and the newer
     /// is the one the step is about to change. Nothing is migrated unless the
@@ -1144,12 +1144,12 @@ impl LedgerStore for Sqlite {
             )
             .optional()
             .map(|found| found.is_some())
-            .map_err(|source| self.failed("reading which files Mindflayer made", source))
+            .map_err(|source| self.failed("reading which files Mindweaver made", source))
     }
 
     fn set_created(&self, project: &str, path: &str, created: bool) -> Result<(), LedgerError> {
         set_created_in(&self.connection, self.now(), project, path, created)
-            .map_err(|source| self.failed("noting which files Mindflayer made", source))
+            .map_err(|source| self.failed("noting which files Mindweaver made", source))
     }
 
     fn project_at(&self, route: &str) -> Result<Option<ProjectId>, LedgerError> {
@@ -2005,10 +2005,10 @@ UPDATE installations
 /// every one of them holds the tree the installation's `content_hash` names,
 /// which is why version 3 kept one hash an installation.
 ///
-/// `created_files` names each file Mindflayer made in a project, by its
+/// `created_files` names each file Mindweaver made in a project, by its
 /// route from the project, rather than wrote into: an `AGENTS.md` that was
 /// not there until a rule was installed. The block is taken out of a file
-/// with the last rule, and only a file Mindflayer made goes with it, so
+/// with the last rule, and only a file Mindweaver made goes with it, so
 /// whether it made the file is kept until then. A table of its own rather
 /// than a column of an installation's, since one file serves every rule of
 /// the project, and outlives each of them but the last.

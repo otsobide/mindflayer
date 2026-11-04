@@ -268,7 +268,7 @@ fn report(
     outcome
 }
 
-/// What is said of each project an older Mindflayer's marker marks, a
+/// What is said of each project an older Mindweaver's marker marks, a
 /// `mind.toml` or a `settings.json`, as the TUI's header says it: nothing in
 /// the table tells a `settings.json` from a `settings.toml`, which name the
 /// same agents, though its settings can be changed only once `mind migrate`

@@ -85,7 +85,7 @@ gix = { version = "0.87", default-features = false, features = ["dirwalk"] }
 # Core with its object mothers (`mindweaver_core::mother`), which the suites
 # build what a command acts on with, as core's own do.
 mindweaver-core = { path = "../core", features = ["mother"] }
-# To leave in a workspace's database what an older Mindflayer would have, which
+# To leave in a workspace's database what an older Mindweaver would have, which
 # nothing this one writes can, for the suites that check it is scrubbed. The
 # same version and features as core's, so it is one build of SQLite.
 rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }

@@ -59,7 +59,7 @@ fn load_records_the_workspace_as_a_route_and_keeps_the_comments() {
     assert_eq!(registration, Registration::Added);
     let text = marker(&target);
     assert!(text.contains("loaded = [\"../team\"]"), "{text}");
-    assert!(text.contains("# Mindflayer workspace."), "comments kept");
+    assert!(text.contains("# Mindweaver workspace."), "comments kept");
     assert!(target.is_loaded(team.root()));
 }
 

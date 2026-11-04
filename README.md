@@ -1,9 +1,9 @@
-# 🧠 Mindflayer
+# 🧠 Mindweaver
 
-**Your coding agents read skills and rules. Mindflayer keeps them in order.**
+**Your coding agents read skills and rules. Mindweaver keeps them in order.**
 
 Claude Code, Codex and OpenCode each look for skills and rules in folders of
-their own, project by project. Mindflayer keeps one library of them for all
+their own, project by project. Mindweaver keeps one library of them for all
 your projects, puts each where the agents working in a project read it, tells
 you which copies have fallen behind, and never touches anything it did not
 write. Think of it as git for what your agents know.
@@ -26,17 +26,17 @@ browser, `mindweaver ui`, which this page tours.
   of skills gathered from git repositories.
 - **Installing** copies a skill or a rule from either into a project, into
   each folder its agents read, and remembers what it wrote: that is what lets
-  Mindflayer update it or take it out later, and leave everything else alone.
+  Mindweaver update it or take it out later, and leave everything else alone.
 
 ## Install
 
-Mindflayer is young, and development targets **Linux** for now: macOS and
+Mindweaver is young, and development targets **Linux** for now: macOS and
 Windows are tested only on request. It installs from source, with a recent
 stable Rust, and Node 24 with pnpm to build the panel:
 
 ```bash
 git clone https://github.com/otsobide/mindflayer
-cd mindflayer
+cd mindweaver
 make install
 ```
 
@@ -96,7 +96,7 @@ and where its copies are, and the page warns of what some agent never reads.
 Below, toggles change the project's agents and how it shares, and carry what
 is installed to where the agents now read. A skill somebody keeps by hand in
 an agent's folder, which reads as `foreign`, can be adopted into the library
-from its row, after which Mindflayer manages it like anything it installed.
+from its row, after which Mindweaver manages it like anything it installed.
 
 ### The library
 
@@ -280,13 +280,13 @@ workspace of two skills and two rules: `mindweaver load <your clone>/examples`
 offers them to yours.
 
 [The reference](docs/reference.md) has every command with what it prints,
-the formats Mindflayer reads and writes, `--json`, the TUI, and upgrading
-from an older Mindflayer.
+the formats Mindweaver reads and writes, `--json`, the TUI, and upgrading
+from an older Mindweaver.
 
 ## Learn more
 
 - [The reference](docs/reference.md): every command, with what it prints.
-- [Developing Mindflayer](docs/development.md): building it, testing it, and
+- [Developing Mindweaver](docs/development.md): building it, testing it, and
   working on the panel.
 - [Architecture](docs/architecture.md): why each part is the way it is, and
   the decisions behind it.

@@ -28,7 +28,7 @@ fn workspace_with_three() -> TempDir {
 }
 
 /// Somebody's own `commit-style`, written into `project` where Codex and
-/// OpenCode read it, before Mindflayer put anything there.
+/// OpenCode read it, before Mindweaver put anything there.
 fn somebodys(project: &Path) -> PathBuf {
     let copy = project.join(".agents/skills/commit-style");
     fs::create_dir_all(&copy).unwrap();
@@ -71,7 +71,7 @@ installed commit-style into gamma, from workspace
         outcome.stderr,
         [
             "warning: beta already has a commit-style at .agents/skills/commit-style that \
-             Mindflayer did not put there, so it was left alone"
+             Mindweaver did not put there, so it was left alone"
         ]
     );
     assert!(!outcome.ok, "one of the three was left alone");
@@ -392,7 +392,7 @@ fn uninstalling_from_several_leaves_somebodys_copy_alone_and_says_so() {
         outcome.stderr,
         [
             "warning: commit-style at .agents/skills/commit-style in beta was not installed by \
-             Mindflayer, so it was left alone"
+             Mindweaver, so it was left alone"
         ]
     );
     assert!(!outcome.ok);
@@ -420,8 +420,8 @@ fn a_refusal_over_somebodys_copy_carries_the_code_foreign() {
             .stderr
             .iter()
             .filter(|line| {
-                line.text.contains("Mindflayer did not put there")
-                    || line.text.contains("was not installed by Mindflayer")
+                line.text.contains("Mindweaver did not put there")
+                    || line.text.contains("was not installed by Mindweaver")
             })
             .collect();
         assert_eq!(foreign.len(), 1, "{refused:?}");

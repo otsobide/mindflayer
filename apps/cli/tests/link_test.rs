@@ -23,7 +23,7 @@ fn link_registers_a_project_and_says_how_it_was_stored() {
     assert_eq!(outcome.stdout, "linked alpha as alpha\n");
     let config = fs::read_to_string(dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG)).unwrap();
     assert!(config.contains("projects = [\"alpha\"]"), "{config}");
-    assert!(config.contains("# Mindflayer workspace."), "comments kept");
+    assert!(config.contains("# Mindweaver workspace."), "comments kept");
 }
 
 #[test]

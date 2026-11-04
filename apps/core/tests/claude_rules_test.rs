@@ -1,5 +1,5 @@
 //! Rendering a project's rules into Claude's rules folder: a file a rule,
-//! kept as written, Mindflayer's own told by what was recorded, and what is
+//! kept as written, Mindweaver's own told by what was recorded, and what is
 //! refused.
 
 mod common;
@@ -242,7 +242,7 @@ fn removing_the_last_rule_removes_the_file_and_the_empty_folder() {
     assert_eq!(written(&removed), [("git/no-force-push", Written::Removed)]);
     assert_eq!(removed.recorded(), []);
     assert!(!fixture.folder().exists());
-    // Not past Mindflayer's own folder, which may be somebody's.
+    // Not past Mindweaver's own folder, which may be somebody's.
     assert!(fixture.project.root().join(".claude/rules").is_dir());
 }
 
@@ -356,7 +356,7 @@ fn a_file_somebody_put_where_a_rule_goes_is_left_and_said() {
     );
     assert_eq!(fs::read_to_string(fixture.file("a")).unwrap(), "Theirs.\n");
 
-    // Even one holding the rule byte for byte is not taken for Mindflayer's,
+    // Even one holding the rule byte for byte is not taken for Mindweaver's,
     // or it would go with the rule.
     fs::write(fixture.file("a"), "Rule a.\n").unwrap();
     let same = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap();
@@ -380,7 +380,7 @@ fn a_file_changed_since_it_was_written_is_neither_written_over_nor_taken_away() 
 
     for rendered in [&changed, &removed] {
         assert_eq!(written(rendered), [("a", Written::Edited)]);
-        // Kept as recorded, so it is still the edited copy of Mindflayer's.
+        // Kept as recorded, so it is still the edited copy of Mindweaver's.
         assert_eq!(rendered.recorded(), first.recorded());
         assert_eq!(
             rendered.warnings,
@@ -431,7 +431,7 @@ fn a_recorded_file_somebody_deleted_is_written_again_or_forgotten() {
 }
 
 #[test]
-fn the_last_rules_folder_somebody_deleted_takes_mindflayers_folder_with_it() {
+fn the_last_rules_folder_somebody_deleted_takes_mindweavers_folder_with_it() {
     let fixture = fixture();
     let rule = fixture.rule("deep/b", "Rule b.\n");
     let first = fixture.render(&[&rule], Mode::Fallback, &[]).unwrap();

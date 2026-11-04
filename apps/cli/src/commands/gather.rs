@@ -132,7 +132,7 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
         .iter()
         .map(|source| {
             format!(
-                "note: {}: the user name, password or token an older Mindflayer stored in this \
+                "note: {}: the user name, password or token an older Mindweaver stored in this \
                  URL is taken out; gathering it again needs a git credential helper that has it",
                 source.url
             )
@@ -143,7 +143,7 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
         0 => {}
         1 => notes.push(
             String::from(
-                "note: 1 action log entry: the user name, password or token an older Mindflayer \
+                "note: 1 action log entry: the user name, password or token an older Mindweaver \
                  stored in a URL in it is taken out",
             )
             .into(),
@@ -151,7 +151,7 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
         entries => notes.push(
             format!(
                 "note: {entries} action log entries: the user names, passwords or tokens an \
-                 older Mindflayer stored in URLs in them are taken out"
+                 older Mindweaver stored in URLs in them are taken out"
             )
             .into(),
         ),

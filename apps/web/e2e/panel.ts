@@ -26,8 +26,8 @@ export interface Served {
  * worker.
  */
 function served(): Served {
-  const origin = process.env.MINDFLAYER_E2E_URL
-  const token = process.env.MINDFLAYER_E2E_TOKEN
+  const origin = process.env.MINDWEAVER_E2E_URL
+  const token = process.env.MINDWEAVER_E2E_TOKEN
   if (!origin || !token) {
     throw new Error('no server said where it listens: run the suite with `make web/e2e`')
   }

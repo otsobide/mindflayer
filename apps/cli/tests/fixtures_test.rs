@@ -409,7 +409,7 @@ fn install(root: &Path, entry: &str, names: &[&str]) {
 ///   holding nothing an agent reads, neither a project yet;
 /// - `old`, linked with `review` installed, which records its id, for
 ///   [`moved`] to move;
-/// - `legacy`, linked, which a `mind.toml` marks, as an older Mindflayer
+/// - `legacy`, linked, which a `mind.toml` marks, as an older Mindweaver
 ///   made a project.
 fn candidates(root: &Path) {
     for name in ["blog", "drafts"] {

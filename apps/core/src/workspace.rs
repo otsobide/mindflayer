@@ -1,4 +1,4 @@
-//! The two levels Mindflayer works at.
+//! The two levels Mindweaver works at.
 //!
 //! A **mind project** is a directory carrying a `.mind`, the way a repository
 //! carries a `.git`: its marker says which agents work in it, and it authors
@@ -156,6 +156,11 @@ const SCRATCH: [&str; 2] = [WEAVER_DIR, SCRATCH_DIR];
 /// The `.gitignore` a local project's `.mind` is given: `*`, which keeps out
 /// of git everything in the folder, this file included, as a Python venv
 /// ignores itself.
+///
+/// It still says the product's old name: a project turning shared loses the
+/// file only while it holds exactly this, so new words would leave every
+/// one an older build wrote where it is. Reading both is #229's, with the
+/// other names written on the disk.
 pub const MIND_IGNORE: &str = "\
 # Mindflayer keeps this project's settings here, for this checkout alone.
 # Nothing in this folder is meant to be committed.
@@ -300,7 +305,7 @@ pub struct MindConfig {
 /// spelling the CLI already accepts, so there is no second table to keep in
 /// step. A key this build does not recognise is carried along rather than
 /// rejected, for the reason unknown front matter keys are: the format grows,
-/// and a project configured by a newer Mindflayer is still a project.
+/// and a project configured by a newer Mindweaver is still a project.
 ///
 /// What a kind left out means is the marker's to say, by its version. In a
 /// `mind.toml` it is the default beside the code, so an empty table, what a
@@ -504,7 +509,7 @@ pub enum Misplaced {
     /// climbing out with `..`, or `.`. What is installed is one project's,
     /// and a copy anywhere else is no project's, or another's.
     Outside,
-    /// It is inside `.mind`, Mindflayer's own folder, which no agent reads
+    /// It is inside `.mind`, Mindweaver's own folder, which no agent reads
     /// and a local project keeps out of git.
     InsideMind,
     /// It is inside a `.mindflayer`, a workspace's own folder, which no
@@ -525,7 +530,7 @@ impl Misplaced {
         match self {
             Misplaced::Outside => String::from("it is not inside the project"),
             Misplaced::InsideMind => format!(
-                "it is inside {MIND_DIR}, which holds Mindflayer's own files and no agent reads"
+                "it is inside {MIND_DIR}, which holds Mindweaver's own files and no agent reads"
             ),
             Misplaced::InsideWorkspace => format!(
                 "it is inside {WEAVER_DIR}, which holds a workspace's own files and no agent reads"
@@ -552,7 +557,7 @@ pub struct MindProject {
 impl MindProject {
     /// Create `.mind` and the folders its artifacts live in, under `root`,
     /// with every kind in its default place, marked by a `mind.toml` at
-    /// [`MIND_TOML_VERSION`]: the project an older Mindflayer made.
+    /// [`MIND_TOML_VERSION`]: the project an older Mindweaver made.
     ///
     /// No front end makes one since `mind init` writes settings
     /// ([`init_asked`](Self::init_asked)). It stays for what has to
@@ -1330,7 +1335,7 @@ impl WeaverWorkspace {
     ///
     /// The workspace's own, as `.mind/tmp` is a project's, and named alike:
     /// inside `.mindflayer`, where no agent looks and a workspace keeps what
-    /// is Mindflayer's, never in the system's temporary folder, where
+    /// is Mindweaver's, never in the system's temporary folder, where
     /// another user could read what is about to be written. Not a project's
     /// `.mind/tmp`, even for a project's artifact: a cloned repository can
     /// bring that folder, or a link in its place, with it.
@@ -1473,7 +1478,7 @@ impl WeaverWorkspace {
     /// making a file to say so.
     ///
     /// Never for a write. What is recorded in the stand-in is gone when it is
-    /// dropped, and a copy installed without its record is one Mindflayer
+    /// dropped, and a copy installed without its record is one Mindweaver
     /// would afterwards refuse to touch; a write opens
     /// [`ledger_to_write`](Self::ledger_to_write).
     ///
@@ -2347,7 +2352,7 @@ pub enum WorkspaceError {
         #[source]
         source: io::Error,
     },
-    #[error("{path}: not valid Mindflayer configuration: {source}")]
+    #[error("{path}: not valid Mindweaver configuration: {source}")]
     Parse {
         path: PathBuf,
         #[source]
@@ -2356,7 +2361,7 @@ pub enum WorkspaceError {
     /// A marker that is not what its format says, for a reason no parser
     /// gives: a project's settings, which are read a key at a time, or a
     /// version the file it is in does not hold.
-    #[error("{path}: not valid Mindflayer configuration: {detail}")]
+    #[error("{path}: not valid Mindweaver configuration: {detail}")]
     Malformed { path: PathBuf, detail: String },
     #[error(
         "{path}: not a mind project (no {MIND_DIR}/{SETTINGS_FILE}, {MIND_DIR}/{SETTINGS_JSON_FILE} \
@@ -2365,7 +2370,7 @@ pub enum WorkspaceError {
     NotAProject { path: PathBuf },
     #[error("{path}: not a weaver workspace (no {WEAVER_DIR}/{WEAVER_CONFIG})")]
     NotAWorkspace { path: PathBuf },
-    #[error("{path}: written by a newer Mindflayer ({marker} version {found}, this one reads {supported})", supported = .marker.version())]
+    #[error("{path}: written by a newer Mindweaver ({marker} version {found}, this one reads {supported})", supported = .marker.version())]
     Version {
         path: PathBuf,
         marker: Marker,
@@ -2387,7 +2392,7 @@ pub enum WorkspaceError {
     OutsideProject { path: PathBuf, kind: Kind },
     #[error(
         "{path}: cannot hold a project's {kind}s, \
-         because it is inside {MIND_DIR}, which holds Mindflayer's own files \
+         because it is inside {MIND_DIR}, which holds Mindweaver's own files \
          and is kept out of git unless the project is shared"
     )]
     InsideMind { path: PathBuf, kind: Kind },
@@ -2733,7 +2738,7 @@ pub(crate) fn absolute(path: &Path) -> Result<PathBuf, WorkspaceError> {
 fn directory_name(root: &Path) -> String {
     root.file_name()
         .and_then(|name| name.to_str())
-        .unwrap_or("mindflayer")
+        .unwrap_or("mindweaver")
         .to_owned()
 }
 
@@ -2743,6 +2748,10 @@ fn directory_name(root: &Path) -> String {
 /// Every kind's directory is spelled out even when it is the default, so the
 /// answer to "where do this project's skills go" is in the file rather than in
 /// a function somebody has to go and read.
+///
+/// The `mind.toml` a version 2 build wrote, byte for byte, its old name for
+/// the product included: only tests of such a project write one now, and
+/// what they hold is what those builds left on the disk.
 fn mind_template(name: &str, directories: &Directories) -> String {
     let configured = directory_lines(directories.resolved());
 
@@ -2770,7 +2779,7 @@ fn mind_template(name: &str, directories: &Directories) -> String {
 
 fn weaver_template(name: &str, directories: &Directories) -> String {
     format!(
-        "# Mindflayer workspace.\n\
+        "# Mindweaver workspace.\n\
          #\n\
          # It orchestrates the mind projects listed below, so their skills can be\n\
          # managed together. Paths are relative to this file's grandparent, the\n\
@@ -2835,7 +2844,7 @@ fn stays_inside(directory: &Path) -> bool {
 /// settings say it authors `kind`s: it leads out of the project
 /// ([`stays_inside`]), or into its `.mind`.
 ///
-/// `.mind` is Mindflayer's: the marker, the templates, the stage an install
+/// `.mind` is Mindweaver's: the marker, the templates, the stage an install
 /// builds in. A local project's keeps itself out of git, so a folder there
 /// would hide what the project wrote from the team without a word, where the
 /// point of authoring beside the code (D-06) is that it is committed with it.

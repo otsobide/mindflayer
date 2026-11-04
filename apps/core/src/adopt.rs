@@ -3,7 +3,7 @@
 //! installation from there: `mindweaver adopt` (#59).
 //!
 //! Many repositories keep hand-written skills in `.claude/skills` or
-//! `.agents/skills` already. Mindflayer lists each as foreign, never its to
+//! `.agents/skills` already. Mindweaver lists each as foreign, never its to
 //! change, so nothing it does reaches one: no update, and no copy for an
 //! agent that reads the other folder. Adopting one, when asked and never by
 //! itself, copies it into the library and records the project's copies as
@@ -139,7 +139,7 @@ pub enum AdoptError {
         name: String,
         folders: String,
     },
-    #[error("skill `{name}` is installed in {project} already, from {origin}, so it is Mindflayer's to update or uninstall, not to adopt")]
+    #[error("skill `{name}` is installed in {project} already, from {origin}, so it is Mindweaver's to update or uninstall, not to adopt")]
     Installed {
         project: String,
         name: String,
@@ -147,7 +147,7 @@ pub enum AdoptError {
     },
     #[error("{path} is {project}'s own, in the folder it authors skills in, so it is not adopted: only somebody's skill in an agent's folder is")]
     Authored { project: String, path: PathBuf },
-    #[error("{path} is inside {home}, which {reader} reads for every project, so it is not adopted: Mindflayer manages one project at a time")]
+    #[error("{path} is inside {home}, which {reader} reads for every project, so it is not adopted: Mindweaver manages one project at a time")]
     UserScope {
         path: PathBuf,
         home: PathBuf,

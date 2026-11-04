@@ -583,7 +583,7 @@ fn a_ledger_too_new_says_which_schema_it_holds_and_which_this_build_reads() {
     assert_eq!(
         error.to_string(),
         format!(
-            "/w/.mindflayer/mindflayer.db: written by a newer Mindflayer \
+            "/w/.mindflayer/mindflayer.db: written by a newer Mindweaver \
              (schema version {found}, this one reads {SCHEMA_VERSION})"
         )
     );

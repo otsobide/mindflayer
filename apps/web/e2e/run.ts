@@ -1,7 +1,7 @@
 /*
  * The end-to-end suite's driver, which `make web/e2e` runs with Node:
  *
- *   MINDFLAYER_E2E_BIN=../../target/debug node e2e/run.ts [playwright test options]
+ *   MINDWEAVER_E2E_BIN=../../target/debug node e2e/run.ts [playwright test options]
  *
  * It does what Playwright's own setup cannot do in the order it needs. The
  * fixture workspace has to be there before the server starts, and Playwright
@@ -62,7 +62,7 @@ function refuse(message: string): never {
 }
 
 /** The binaries' folder, as the Makefile names it, from this folder. */
-const bin = resolve(web, process.env.MINDFLAYER_E2E_BIN ?? '../../target/debug')
+const bin = resolve(web, process.env.MINDWEAVER_E2E_BIN ?? '../../target/debug')
 if (!built(bin)) {
   refuse(`no mindweaver and mind in ${bin} to test: \`make web/e2e\` builds them there, and E2E_BIN names another folder holding them`)
 }
@@ -72,7 +72,7 @@ if (holder) {
   refuse(`the temporary folder ${temporary} is inside ${holder}, which holds a .mind or a .mindflayer a command run from the fixture could reach: point TMPDIR elsewhere`)
 }
 
-const at: Places = places(mkdtempSync(join(temporary, 'mindflayer-e2e-')), bin)
+const at: Places = places(mkdtempSync(join(temporary, 'mindweaver-e2e-')), bin)
 let status = 1
 try {
   mkdirSync(at.home)

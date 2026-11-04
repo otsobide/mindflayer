@@ -102,7 +102,7 @@ fn an_empty_mind_directory_is_not_a_project() {
 }
 
 #[test]
-fn a_marker_from_a_newer_mindflayer_is_refused() {
+fn a_marker_from_a_newer_mindweaver_is_refused() {
     let dir = TempDir::new().unwrap();
     MindProject::init(dir.path()).unwrap();
     fs::write(
@@ -356,7 +356,7 @@ fn unlink_removes_only_the_entry_it_was_given() {
         workspace.config().projects,
         vec![std::path::PathBuf::from("beta")]
     );
-    assert!(config_text(&workspace).contains("# Mindflayer workspace."));
+    assert!(config_text(&workspace).contains("# Mindweaver workspace."));
 }
 
 #[test]

@@ -500,7 +500,7 @@ fn an_entry_whose_marker_would_not_open_has_not_moved_and_a_copy_is_never_its_mo
     assert!(
         refused
             .to_string()
-            .contains("written by a newer Mindflayer"),
+            .contains("written by a newer Mindweaver"),
         "{refused}"
     );
     assert_eq!(marker(&workspace), before);

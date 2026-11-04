@@ -74,7 +74,7 @@ impl Target {
     }
 }
 
-/// What a change did to the ledger's record that Mindflayer installed what
+/// What a change did to the ledger's record that Mindweaver installed what
 /// is under one name.
 ///
 /// That record is what gives an install leave to overwrite and an uninstall
@@ -120,7 +120,7 @@ pub struct Added {
     /// A record of an install under the same name. Nothing was there for the
     /// new artifact to be written over, so the copy it was about had gone,
     /// and left in place the record would make somebody's new work look like
-    /// something Mindflayer put there.
+    /// something Mindweaver put there.
     pub stale: Result<Record, InstallError>,
     /// What opening the ledger to see to that record scrubbed out of it.
     pub scrub: Scrub,
@@ -189,7 +189,7 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
 
     // Only a name made of plain folder names is turned into a place: one with
     // `..` in it would otherwise be a way out of the project. Not the naming
-    // rules, which are for what Mindflayer writes: a folder from before they
+    // rules, which are for what Mindweaver writes: a folder from before they
     // were tightened, or one somebody made by hand, is exactly what has to be
     // found to be fixed or removed.
     let name = reference.name();
@@ -420,7 +420,7 @@ pub fn finish_edit(
 /// writes the text itself. `workspace` is the one consulted, as for [`add`].
 ///
 /// Held to the rules every write is held to before a byte is written. A
-/// skill's must be one Mindflayer would write ([`artifact::strict_issues`]):
+/// skill's must be one Mindweaver would write ([`artifact::strict_issues`]):
 /// front matter that reads, a name and a description that pass, and the
 /// name its folder has. A different name is refused rather than written,
 /// since a name changed there and not in the folder is a skill no agent
@@ -589,7 +589,7 @@ fn library(workspace: Option<&WeaverWorkspace>, kind: Kind, directory: &Path) ->
     })
 }
 
-/// Refuse `contents` for `target` unless they are what Mindflayer would
+/// Refuse `contents` for `target` unless they are what Mindweaver would
 /// write there: text, and for a skill a manifest that reads, names its
 /// folder and passes the strict rules; for a rule, one that says something
 /// with front matter that reads whole.
@@ -742,7 +742,7 @@ pub struct Renamed {
     pub copy: Result<Record, InstallError>,
     /// A record under the new name, from an install that is no longer there:
     /// stale, and left in place it would make what was just renamed look like
-    /// something Mindflayer put there.
+    /// something Mindweaver put there.
     pub stale: Result<Record, InstallError>,
     /// What opening the ledger to see to both records scrubbed out of it,
     /// once: the second opening finds only what the first could not take out,
@@ -827,7 +827,7 @@ fn rename_skill(
         });
     };
     // Held to the strict rules as it will be, the rules `add` and `install`
-    // hold a skill to: what is left behind is a skill Mindflayer wrote, if
+    // hold a skill to: what is left behind is a skill Mindweaver wrote, if
     // only its name, and one an agent would skip is not left behind. Judged as
     // renamed, because its name and folder are what a rename fixes.
     if let Some(manifest) = artifact.manifest() {
@@ -1117,7 +1117,7 @@ pub enum LifecycleError {
     /// A skill's contents given whole that name it other than its folder.
     #[error("the contents given for `{name}` call it `{to}`: a skill's name is its folder's too, so it is changed with `mind rename`, which moves both, and nothing was written")]
     NameChanged { name: String, to: String },
-    /// Contents given whole that break a rule Mindflayer holds a write to.
+    /// Contents given whole that break a rule Mindweaver holds a write to.
     #[error("the contents given for `{name}` break a rule, so nothing was written: {}", issue_list(.issues))]
     ContentsUnfit {
         name: String,

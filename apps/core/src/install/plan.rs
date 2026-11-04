@@ -15,7 +15,7 @@
 //!   changes go kind by kind, each where the first box asking it is.
 //! - **What cannot be planned** ([`Conflict`], [`Locked`]): two offers of one
 //!   name asked of one project, which has one folder of that name, and a
-//!   change to a copy that is not Mindflayer's to change, held back by the
+//!   change to a copy that is not Mindweaver's to change, held back by the
 //!   code the command would refuse it with ([`Standing::refused`]).
 //!
 //! What it plans is what the command lines run, never more: each change is
@@ -461,7 +461,7 @@ pub struct Plan {
     pub changes: Vec<Change>,
     /// Boxes that cannot all be as asked, and so are not planned at all.
     pub conflicts: Vec<Conflict>,
-    /// Boxes whose change is not Mindflayer's to make, or cannot be asked of
+    /// Boxes whose change is not Mindweaver's to make, or cannot be asked of
     /// the project at all.
     pub locked: Vec<Locked>,
 }
@@ -795,7 +795,7 @@ fn held_back(refused: Refused, name: &str, project: &str) -> Said {
     // Matched on the refusal, so another has to say how it is said here.
     let message = match refused {
         Refused::Foreign => format!(
-            "`{name}` is in {project}, and Mindflayer did not put it there, so it is left alone"
+            "`{name}` is in {project}, and Mindweaver did not put it there, so it is left alone"
         ),
         Refused::Edited => format!(
             "`{name}` in {project} was changed since it was installed, so it is left alone unless a change to it is forced"

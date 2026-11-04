@@ -194,7 +194,7 @@ describe('the HTTP transport', () => {
   })
 
   it('refuses a success that is not JSON rather than answer nothing', async () => {
-    serve(() => new Response('<!doctype html><title>Mindflayer</title>', { status: 200 }))
+    serve(() => new Response('<!doctype html><title>Mindweaver</title>', { status: 200 }))
 
     const refused = await httpTransport().send(INSTALL, 'run').catch((error: unknown) => error)
 

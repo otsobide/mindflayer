@@ -156,7 +156,7 @@ e2e: build ## Build the panel and the debug binaries, then run the end-to-end su
 
 # ARGS go to `playwright test`: a spec, `-g <title>`, `--debug`, `--ui`.
 e2e/run: $(INSTALLED) ## Run the end-to-end suite on the mindweaver and mind in E2E_BIN, in BROWSERS
-	MINDFLAYER_E2E_BIN='$(E2E_BIN)' node e2e/run.ts $(addprefix --project=,$(BROWSERS)) $(ARGS)
+	MINDWEAVER_E2E_BIN='$(E2E_BIN)' node e2e/run.ts $(addprefix --project=,$(BROWSERS)) $(ARGS)
 
 # The README's screenshots, in ../../docs/images: the demo workspace
 # e2e/demo.ts builds with the commands, served by the binaries' `mindweaver ui`
@@ -171,7 +171,7 @@ screenshots: build ## Build the panel and the debug binaries, then take the READ
 	$(MAKE) screenshots/run
 
 screenshots/run: $(INSTALLED) ## Take the README's screenshots with the mindweaver and mind in E2E_BIN
-	MINDFLAYER_E2E_BIN='$(E2E_BIN)' node e2e/screenshots.ts
+	MINDWEAVER_E2E_BIN='$(E2E_BIN)' node e2e/screenshots.ts
 
 clean: ## Remove the built panel, what the end-to-end suite wrote and the tools' caches, keeping node_modules
 	rm -rf dist test-results playwright-report node_modules/.cache node_modules/.vite node_modules/.tmp

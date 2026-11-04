@@ -67,7 +67,7 @@ fn mind_init_writes_settings_kept_out_of_git_and_empty_folders_that_git_does_not
     let written = fs::read_to_string(marker.join(SETTINGS_FILE)).unwrap();
     assert!(
         written.starts_with(
-            "# Mindflayer mind project: what Mindflayer needs to know about the project\n"
+            "# Mindweaver mind project: what Mindweaver needs to know about the project\n"
         ),
         "{written}"
     );
@@ -208,7 +208,7 @@ fn weaver_init_says_in_the_marker_that_its_own_go_in_its_library() {
     assert_eq!(
         registry(dir.path()),
         format!(
-            "# Mindflayer workspace.\n\
+            "# Mindweaver workspace.\n\
              #\n\
              # It orchestrates the mind projects listed below, so their skills can be\n\
              # managed together. Paths are relative to this file's grandparent, the\n\
@@ -379,7 +379,7 @@ fn a_workspace_can_be_told_where_to_keep_its_own() {
 fn a_workspace_that_keeps_its_own_beside_its_projects_still_does() {
     // The marker as `mindweaver init` wrote it before the library, word for word.
     let dir = TempDir::new().unwrap();
-    let marker = "# Mindflayer workspace.\n\
+    let marker = "# Mindweaver workspace.\n\
          #\n\
          # It orchestrates the mind projects listed below, so their skills can be\n\
          # managed together. Paths are relative to this file's grandparent, the\n\

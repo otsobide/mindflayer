@@ -60,7 +60,7 @@ fn activate_prints_the_code_for_the_workspace_it_is_given() {
 }
 
 #[test]
-fn a_workspace_is_activated_by_its_mindflayer_folder_too() {
+fn a_workspace_is_activated_by_its_mindweaver_folder_too() {
     let dir = weavers();
     let folder = format!("writing/{WEAVER_DIR}");
 

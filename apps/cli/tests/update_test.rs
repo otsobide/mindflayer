@@ -1,4 +1,4 @@
-//! `mindweaver update` and `mind update`: what Mindflayer installed brought up
+//! `mindweaver update` and `mind update`: what Mindweaver installed brought up
 //! to date with where it came from, the copies that have gone put back, an
 //! edited copy left alone and said, and an orphan said without failing.
 

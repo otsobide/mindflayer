@@ -38,7 +38,7 @@ fn names() -> Vec<String> {
     drawn.into_iter().collect()
 }
 
-/// Every file under `root` but those in `.mind`, which is Mindflayer's own,
+/// Every file under `root` but those in `.mind`, which is Mindweaver's own,
 /// with what it holds: what a project's people see of it.
 fn files(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     let mut found = BTreeMap::new();

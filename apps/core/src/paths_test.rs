@@ -47,7 +47,7 @@ fn a_child_is_reached_without_climbing() {
 #[test]
 fn a_sibling_is_reached_by_climbing_once() {
     assert_eq!(
-        relative_to(Path::new("/work/collapse"), Path::new("/work/mindflayer")),
+        relative_to(Path::new("/work/collapse"), Path::new("/work/mindweaver")),
         Some(p("../collapse"))
     );
 }
@@ -89,7 +89,7 @@ fn a_route_round_trips_back_to_its_target() {
     // back does.
     let cases = [
         ("/work/collapse", "/work"),
-        ("/work/collapse", "/work/mindflayer"),
+        ("/work/collapse", "/work/mindweaver"),
         ("/other/deep/thing", "/work/a/b"),
         ("/work", "/work"),
     ];

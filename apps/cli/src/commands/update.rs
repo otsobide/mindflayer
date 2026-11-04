@@ -1,4 +1,4 @@
-//! `mindweaver update` and `mind update`: what Mindflayer installed into
+//! `mindweaver update` and `mind update`: what Mindweaver installed into
 //! projects brought up to date with where it came from, and the copies that
 //! have gone put back. Core's [`update`] decides everything, what is
 //! written, left or said; here it is laid out, as what would happen without
@@ -180,7 +180,7 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
                 outcome.stderr.push(
                     format!(
                         "warning: {} in {into} is offered by {}, and was installed before \
-                         Mindflayer kept where from, so it {} left as it is; `install --from` \
+                         Mindweaver kept where from, so it {} left as it is; `install --from` \
                          says which",
                         named(update.kind, &update.name),
                         listed(
@@ -241,7 +241,7 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
                 outcome.stderr.push(
                     format!(
                         "warning: {into}: the exclude file still keeps out of git a file that is \
-                         no longer Mindflayer's: {reason}"
+                         no longer Mindweaver's: {reason}"
                     )
                     .into(),
                 );
@@ -323,7 +323,7 @@ fn installed(
         Installed::Foreign { path, .. } => {
             outcome.stderr.push(Warning {
                 text: format!(
-                    "warning: {into} already has a {what} at {} that Mindflayer did not put \
+                    "warning: {into} already has a {what} at {} that Mindweaver did not put \
                      there, so it was left alone",
                     at(root, path)
                 ),

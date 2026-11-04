@@ -83,26 +83,26 @@ impl Row {
         }
     }
 
-    /// An artifact of this name is in the project and Mindflayer did not put
+    /// An artifact of this name is in the project and Mindweaver did not put
     /// it there, so it is neither replaced nor deleted.
     pub fn foreign(&self) -> bool {
         self.candidate.standing == Standing::Foreign
     }
 
-    /// Mindflayer installed it, and a copy was changed since, so the screen,
+    /// Mindweaver installed it, and a copy was changed since, so the screen,
     /// which never forces, neither replaces nor deletes it.
     pub fn edited(&self) -> bool {
         self.candidate.standing == Standing::Edited
     }
 
-    /// Mindflayer installed it, and the place it came from offers something
+    /// Mindweaver installed it, and the place it came from offers something
     /// else by now: its box is held as any install's is, since the screen
     /// marks what goes in and out, and `mindweaver update` brings it up to date.
     pub fn outdated(&self) -> bool {
         self.candidate.standing == Standing::Outdated
     }
 
-    /// Mindflayer installed it, and a copy has gone since: its box opens
+    /// Mindweaver installed it, and a copy has gone since: its box opens
     /// empty, as core says ([`Standing::present`]), and marking it puts every
     /// copy back.
     pub fn missing(&self) -> bool {
@@ -663,7 +663,7 @@ fn toggle(target: &mut Target, cursor: usize) -> Option<String> {
 
     if row.foreign() {
         return Some(format!(
-            "{} is already in {} and Mindflayer did not put it there, so it is left alone",
+            "{} is already in {} and Mindweaver did not put it there, so it is left alone",
             named(row.candidate.kind(), row.candidate.name()),
             target.name()
         ));

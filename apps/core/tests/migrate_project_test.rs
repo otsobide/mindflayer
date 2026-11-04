@@ -1,4 +1,4 @@
-//! Moving a project an older Mindflayer made from its `mind.toml` to a
+//! Moving a project an older Mindweaver made from its `mind.toml` to a
 //! `settings.toml`, and what is installed into it to where its agents read,
 //! or from its `settings.json` to a `settings.toml` saying the same.
 
@@ -599,7 +599,7 @@ fn a_second_migration_finds_nothing_to_do_and_writes_nothing() {
 fn a_moved_project_has_nothing_to_plan_even_when_the_ledger_cannot_be_read() {
     let (_dir, workspace, project) = older(&["deploy"], &Directories::default());
     migrated(&workspace, &project, &Agent::ALL, Share::Shared);
-    // A ledger a newer Mindflayer wrote is refused: a dry run says what the
+    // A ledger a newer Mindweaver wrote is refused: a dry run says what the
     // real one will, which never opens it for a project with nothing to move.
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()

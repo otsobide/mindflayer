@@ -224,7 +224,7 @@ fn weaver_install_on_its_own_reads_the_default_workspace_without_making_it() {
 }
 
 #[test]
-fn the_workspace_in_home_keeps_its_own_inside_its_mindflayer() {
+fn the_workspace_in_home_keeps_its_own_inside_its_mindweaver() {
     let (home, elsewhere) = unmade_home();
 
     let skill = weaver_at_home(

@@ -534,7 +534,7 @@ fn removing_an_install_scrubs_the_ledger_it_drops_the_record_from_and_says_so() 
         outcome.stderr,
         [
             "note: https://example.com/acme/skills: the user name, password or token an older \
-             Mindflayer stored in this URL is taken out; gathering it again needs a git \
+             Mindweaver stored in this URL is taken out; gathering it again needs a git \
              credential helper that has it"
         ]
     );
@@ -682,7 +682,7 @@ fn linked_from_beside(make: fn(&Path)) -> (TempDir, PathBuf, PathBuf) {
 }
 
 /// `linked_from_beside`, with the workspace's own `deploy` installed into
-/// the project, one an older Mindflayer made, so the copy is in the folder
+/// the project, one an older Mindweaver made, so the copy is in the folder
 /// it authors in, where a change from the workspace reaches it.
 fn installed_from_beside() -> (TempDir, PathBuf, PathBuf) {
     let (dir, hub, project) = linked_from_beside(older_project);
@@ -730,7 +730,7 @@ fn mind_keeps_the_record_of_the_workspace_in_your_home_when_that_manages_the_pro
     let elsewhere = TempDir::new().unwrap();
     let project = elsewhere.path().join("collapse");
     fs::create_dir(&project).unwrap();
-    // Made as an older Mindflayer made it, so the copy installed is in the
+    // Made as an older Mindweaver made it, so the copy installed is in the
     // folder it authors in, where `mind edit` reaches it.
     older_project(&project);
     weaver_at_home(elsewhere.path(), home.path(), &["link", "collapse"]).unwrap();

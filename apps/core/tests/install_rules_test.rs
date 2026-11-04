@@ -453,7 +453,7 @@ fn a_route_that_is_no_name_is_neither_installed_nor_removed() {
     assert!(!install::is_installable_name(Kind::Rule, "Git Notes"));
 }
 
-/// What a team's `AGENTS.md` might hold before Mindflayer writes in it.
+/// What a team's `AGENTS.md` might hold before Mindweaver writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
 
 /// A rule about Rust files only.
@@ -762,7 +762,7 @@ fn an_agents_md_the_user_wrote_stays_once_the_last_rule_is_taken_out() {
 }
 
 #[test]
-fn an_agents_md_mindflayer_made_goes_with_the_last_rule_and_is_kept_out_of_git_meanwhile() {
+fn an_agents_md_mindweaver_made_goes_with_the_last_rule_and_is_kept_out_of_git_meanwhile() {
     let fixture = fixture(Share::Local, &Agent::ALL);
     fixture.rule("git/no-force-push", NO_FORCE_PUSH);
 
@@ -783,7 +783,7 @@ fn an_agents_md_mindflayer_made_goes_with_the_last_rule_and_is_kept_out_of_git_m
 }
 
 #[test]
-fn an_agents_md_mindflayer_made_and_somebody_wrote_in_stays_and_is_theirs() {
+fn an_agents_md_mindweaver_made_and_somebody_wrote_in_stays_and_is_theirs() {
     let fixture = fixture(Share::Local, &Agent::ALL);
     fixture.rule("git/no-force-push", NO_FORCE_PUSH);
     fixture.install("git/no-force-push");
@@ -894,7 +894,7 @@ fn a_tracked_agents_md_in_a_local_project_with_edit_tracked_takes_the_block() {
     let rendered = done.rendered.unwrap();
     assert_eq!(rendered.block.unwrap().written, agents_md::Written::Changed);
     assert!(rendered.warnings.is_empty(), "{:?}", rendered.warnings);
-    // The team's file, which git tracks: never Mindflayer's, never kept out.
+    // The team's file, which git tracks: never Mindweaver's, never kept out.
     assert!(!fixture.ledger.created("app", "AGENTS.md").unwrap());
     assert_eq!(rendered.excluded, None);
     assert!(!fixture.ignored("AGENTS.md"));

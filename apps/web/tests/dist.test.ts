@@ -46,7 +46,7 @@ beforeAll(() => {
     ...Object.fromEntries(
       Object.entries(process.env).filter(([name]) => name !== 'NODE_ENV' && !name.startsWith('VITEST'))
     ),
-    MINDFLAYER_PANEL_DTS: 'off'
+    MINDWEAVER_PANEL_DTS: 'off'
   }
   execFileSync(
     process.execPath,

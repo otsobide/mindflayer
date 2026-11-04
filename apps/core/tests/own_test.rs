@@ -170,7 +170,7 @@ fn a_workspace_directory_overlapping_what_is_reserved_for_gathering_is_refused()
 }
 
 #[test]
-fn a_workspace_directory_elsewhere_in_mindflayer_is_allowed() {
+fn a_workspace_directory_elsewhere_in_mindweaver_is_allowed() {
     let dir = TempDir::new().unwrap();
 
     let (workspace, _) = WeaverWorkspace::init_with(

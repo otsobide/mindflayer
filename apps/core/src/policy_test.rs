@@ -84,7 +84,7 @@ fn a_path_not_spelled_as_its_folder_is_refused() {
 }
 
 #[test]
-fn a_path_inside_a_mindflayer_is_refused() {
+fn a_path_inside_a_mindweaver_is_refused() {
     let (dir, workspace) = fixture();
     let weaver = workspace.weaver_dir();
 
@@ -100,7 +100,7 @@ fn a_path_inside_a_mindflayer_is_refused() {
 
 #[cfg(unix)]
 #[test]
-fn a_path_that_leads_into_a_mindflayer_through_a_link_is_refused() {
+fn a_path_that_leads_into_a_mindweaver_through_a_link_is_refused() {
     let (dir, workspace) = fixture();
     let link = dir.path().join("innocent");
     std::os::unix::fs::symlink(workspace.weaver_dir(), &link).unwrap();
@@ -112,7 +112,7 @@ fn a_path_that_leads_into_a_mindflayer_through_a_link_is_refused() {
 /// through the link, inside the workspace's own.
 #[cfg(unix)]
 #[test]
-fn a_new_folder_under_a_link_into_a_mindflayer_is_refused() {
+fn a_new_folder_under_a_link_into_a_mindweaver_is_refused() {
     let (dir, workspace) = fixture();
     let link = dir.path().join("innocent");
     std::os::unix::fs::symlink(workspace.weaver_dir(), &link).unwrap();

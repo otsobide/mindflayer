@@ -1089,7 +1089,7 @@ pub enum Caution {
     Removes,
     /// `uninstall`, every form of it, and `mindweaver remove --everywhere
     /// --yes`, which uninstalls from every project first.
-    #[error("takes copies Mindflayer installed out of projects")]
+    #[error("takes copies Mindweaver installed out of projects")]
     Uninstalls,
     /// `unlink`, at either level.
     #[error("makes the workspace forget a project, though nothing on disk is deleted")]

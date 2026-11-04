@@ -1,7 +1,7 @@
 //! Starting points for `mind add`: a skill folder or a rule file to begin
 //! from, instead of the least that passes `validate`.
 //!
-//! Templates are Mindflayer's, not the agents', so they live inside the
+//! Templates are Mindweaver's, not the agents', so they live inside the
 //! markers rather than beside the code: `.mind/templates/` for one project,
 //! `.mindflayer/templates/` for every project a workspace manages. A skill
 //! template is a folder holding a `SKILL.md` and whatever else the skill
@@ -28,7 +28,7 @@ pub const TEMPLATES_DIR: &str = "templates";
 /// Where a template comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Origin {
-    /// Shipped with Mindflayer.
+    /// Shipped with Mindweaver.
     BuiltIn,
     /// A skill folder or a rule file on disk.
     Path(PathBuf),
@@ -66,7 +66,7 @@ pub struct Template {
 /// One file a built-in template writes: its route, and what it holds.
 type File = (&'static str, &'static str);
 
-/// The templates that ship with Mindflayer, as the files each one writes.
+/// The templates that ship with Mindweaver, as the files each one writes.
 ///
 /// `full` is the shape the skill format sets aside room for: a manifest with
 /// sections to fill in, a `scripts/` folder for what the skill runs and a

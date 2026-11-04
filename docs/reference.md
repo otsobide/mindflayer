@@ -1,6 +1,6 @@
 # Reference
 
-Mindflayer manages what your coding agents read, the way git manages code: a
+Mindweaver manages what your coding agents read, the way git manages code: a
 project carries a `.mind` directory beside its **skills** and **rules**, and
 a workspace above it carries a `.mindflayer` that orchestrates several such
 projects at once.
@@ -11,9 +11,9 @@ One shared Rust engine (`mindweaver-core`) behind every front end: the CLI
 The layout leaves room for a desktop app later without moving the engine.
 
 This page is all of it, in detail: every command with what it prints, the
-formats Mindflayer reads and writes, the TUI, the panel and upgrading. The
+formats Mindweaver reads and writes, the TUI, the panel and upgrading. The
 [README](../README.md) is the short tour; [development.md](development.md)
-is for working on Mindflayer itself, and [architecture.md](architecture.md)
+is for working on Mindweaver itself, and [architecture.md](architecture.md)
 says why each part is the way it is.
 
 ## Contents
@@ -90,7 +90,7 @@ $ mindweaver add skill commit-style "How every repo here writes commits"
 created skill commit-style at /home/you/.mindflayer/library/skills/commit-style/SKILL.md
 ```
 
-One an older Mindflayer made keeps them in `~/skills` and `~/rules` until you
+One an older Mindweaver made keeps them in `~/skills` and `~/rules` until you
 [move them into its library](#upgrading).
 
 `--home DIR`, or `$MINDFLAYER_HOME`, puts the default somewhere other than your
@@ -214,7 +214,7 @@ weaver workspace `Projects` already initialized in /home/you/Projects/.mindflaye
 ```
 
 Each one says how many projects it links, and how many of those are stale. A
-weaver made before the workspace in your home was, or by an older Mindflayer,
+weaver made before the workspace in your home was, or by an older Mindweaver,
 is not on the list until `mindweaver init` runs on it again, which changes nothing
 else in it; the one in use is listed all the same, marked as not remembered.
 Activating a weaver does not remember it, since activating writes nothing. One
@@ -228,7 +228,7 @@ forgot weavers/writing
 ```
 
 The list is a `known` array in `~/.mindflayer/flayer.toml`, which you can read
-and edit by hand, and which an older Mindflayer reads past and keeps. Listing
+and edit by hand, and which an older Mindweaver reads past and keeps. Listing
 never makes the workspace in your home; until something does, it knows no
 weaver, and with `--home ""` there is none to know them. `--json` prints the
 list in the envelope every reading command's `--json` shares, and `w` shows it
@@ -251,17 +251,17 @@ about every file, and reaches Claude Code, Codex and OpenCode alike, through a
 marked block in the project's `AGENTS.md`, the one file all three read. Claude
 reads `AGENTS.md` only where no `CLAUDE.md` or `CLAUDE.local.md` is in the
 project or above it, so where the project's own `CLAUDE.md` is in the way,
-and does not import `AGENTS.md` already, Mindflayer adds an `@AGENTS.md` line
+and does not import `AGENTS.md` already, Mindweaver adds an `@AGENTS.md` line
 to it, between markers, and takes it out with the last rule; where it may not
 edit one (a `CLAUDE.md` above the project, a `CLAUDE.local.md`, or one git
 tracks in a local project), Claude gets the rule as a rule file of its own
-instead, so it reads each rule once. Mindflayer never creates a `CLAUDE.md`.
+instead, so it reads each rule once. Mindweaver never creates a `CLAUDE.md`.
 A rule that states `paths` is about those files only, and only Claude Code
 honours that: it goes to Claude alone, as
 `.claude/rules/mindflayer/<name>.md`, which Claude loads once it reads a file
 the patterns match, and never into `AGENTS.md`, where every agent would read
 it for every file. Codex and OpenCode read no `.claude/rules`, so a
-path-scoped rule does not reach them, and Mindflayer says so for each one it
+path-scoped rule does not reach them, and Mindweaver says so for each one it
 writes. A rule goes there when it is [installed](#installing-into-a-project),
 as a skill does.
 
@@ -351,10 +351,10 @@ changes nothing, so it is safe in a script.
 `examples/` in this repository is a workspace of its own, holding two skills
 and two rules written to be used as they are, so there is something to
 install before you have gathered anything. With the repository cloned in
-`~/src/mindflayer`, [name it](#choosing-a-workspace) to see what it holds:
+`~/src/mindweaver`, [name it](#choosing-a-workspace) to see what it holds:
 
 ```
-$ mindweaver -W ~/src/mindflayer/examples list
+$ mindweaver -W ~/src/mindweaver/examples list
 skill  code-review     Reviews a change for bugs, safety, tests and scope, most severe first.…
 skill  commit-style    Writes commit messages as "area: imperative summary". Use when writing,…
 rule   git/commits     Commit one coherent step at a time
@@ -366,23 +366,23 @@ projects, and install from it:
 
 ```
 $ cd ~/Projects
-$ mindweaver load ~/src/mindflayer/examples
-loaded examples as ../src/mindflayer/examples: 2 skills and 2 rules to install
+$ mindweaver load ~/src/mindweaver/examples
+loaded examples as ../src/mindweaver/examples: 2 skills and 2 rules to install
   into the workspace at /home/you/Projects
 
 $ mindweaver install -p collapse commit-style
-installed commit-style into collapse, from load:../src/mindflayer/examples
+installed commit-style into collapse, from load:../src/mindweaver/examples
 $ mindweaver install -p collapse git/commits
-installed rule git/commits into collapse, from load:../src/mindflayer/examples
+installed rule git/commits into collapse, from load:../src/mindweaver/examples
 ```
 
 `collapse/.claude/skills/commit-style` now holds the skill and the
 `references/examples.md` it carries, for Claude Code, and
 `collapse/.agents/skills/commit-style` the same for Codex and OpenCode.
-`collapse/AGENTS.md` holds the rule, in a block of Mindflayer's that all
+`collapse/AGENTS.md` holds the rule, in a block of Mindweaver's that all
 three read, and all of it is kept out of git. `style/comments` installs the
 same way, but it states which files it is about, so it goes to Claude Code
-alone, and the install says so. `mindweaver -W ~/src/mindflayer/examples
+alone, and the install says so. `mindweaver -W ~/src/mindweaver/examples
 validate` says all four are ok.
 
 ## Commands
@@ -421,7 +421,7 @@ mind install <NAME> [--from ORIGIN] [--force]
                            # loaded workspace's, or the shelf's; --force
                            # writes over a copy changed since it was installed
 mind uninstall <NAME>|--orphaned [--force]
-                           # take one Mindflayer installed back out, or every
+                           # take one Mindweaver installed back out, or every
                            # one nothing offers any more
 mind update [NAME...] [--force] [--yes]
                            # bring what was installed up to date with where
@@ -438,7 +438,7 @@ mind targets reset <KIND> [--yes]
                            # install a kind in folders of the project's own,
                            # or back where its agents read; the same again
 mind migrate [--agents AGENTS] [--local|--shared] [--yes]
-                           # move a project an older Mindflayer made to a
+                           # move a project an older Mindweaver made to a
                            # settings.toml, and its installs where its
                            # agents read
 
@@ -718,7 +718,7 @@ of those facts were checked on the real binaries, is recorded in
 [agents.md](agents.md).
 
 OpenCode itself reads `$OPENCODE_CONFIG_DIR` on top of `~/.config/opencode`
-rather than in its place, by its own documentation. Mindflayer takes one
+rather than in its place, by its own documentation. Mindweaver takes one
 folder for each agent for now, the first the table gives; whether a check has
 to read both of OpenCode's is still open.
 
@@ -817,7 +817,7 @@ error: `pdf--forms` cannot be installed: `pdf--forms` is not usable as a name: i
 
 A private repository is fetched with whatever your git credential helpers
 already know, or, over ssh, with the keys ssh already uses (your ssh-agent's,
-or one in `~/.ssh`). Mindflayer itself never stops to ask for a username or a
+or one in `~/.ssh`). Mindweaver itself never stops to ask for a username or a
 password, so a source that needs one nobody has fails, and says what to set
 up:
 
@@ -853,7 +853,7 @@ two apart. That includes the https URLs Bitbucket and Azure DevOps hand out
 (`https://<user>@bitbucket.org/...`); gather those without the user name, and
 let the credential helper supply it.
 
-A workspace an older Mindflayer gathered into with a token in a URL is cleaned
+A workspace an older Mindweaver gathered into with a token in a URL is cleaned
 up by the next command that writes to it: a gather, an install or an
 uninstall, or an `add`, `edit`, `rename` or `remove` in a project it manages.
 The token is taken out of `mindflayer.db` and out of the clone in
@@ -863,8 +863,8 @@ it:
 ```
 $ mindweaver install -p collapse deploy
 installed deploy into collapse, from https://github.com/acme/private-skills
-note: https://github.com/acme/private-skills: the user name, password or token an older Mindflayer stored in this URL is taken out; gathering it again needs a git credential helper that has it
-note: 2 action log entries: the user names, passwords or tokens an older Mindflayer stored in URLs in them are taken out
+note: https://github.com/acme/private-skills: the user name, password or token an older Mindweaver stored in this URL is taken out; gathering it again needs a git credential helper that has it
+note: 2 action log entries: the user names, passwords or tokens an older Mindweaver stored in URLs in them are taken out
 ```
 
 The install screen does it when you apply what you marked, not when it opens.
@@ -884,10 +884,10 @@ the token and leaves the file as it is.
                   its own, unless flayer.toml says otherwise
   mindflayer.db   what was gathered and from where, what was installed where,
                   and every action taken; a URL goes in without credentials,
-                  and one an older Mindflayer stored is taken out by the next
+                  and one an older Mindweaver stored is taken out by the next
                   command that writes
   mindflayer.db.v2.bak
-                  the database as it was before this version of Mindflayer
+                  the database as it was before this version of Mindweaver
                   updated it, if it did
   lock            held by a command while it changes the workspace
   cache/<source>/ the clone, kept so a gather can be looked at afterwards
@@ -895,17 +895,17 @@ the token and leaves the file as it is.
   templates/      templates for every project it manages, if you add any
 ```
 
-`mindflayer.db` is SQLite, and it is the one thing Mindflayer writes that is
+`mindflayer.db` is SQLite, and it is the one thing Mindweaver writes that is
 not meant to be read by hand: it answers questions a file cannot, like which
 of two identically named skills came from which repository, at which revision.
 The first gather, install or uninstall makes it; a command that only reads
 never does.
-When a new version of Mindflayer changes how the database is laid out, the
+When a new version of Mindweaver changes how the database is laid out, the
 first command to open it updates it, after copying it aside as
 `mindflayer.db.v<old version>.bak`. The copy is never removed for you, and it
-is the way back: an older Mindflayer refuses the updated database, and reads
+is the way back: an older Mindweaver refuses the updated database, and reads
 the copy put back in its place. It is the database as it was, so a token an
-older Mindflayer stored in a URL stays in the copy after the next command that
+older Mindweaver stored in a URL stays in the copy after the next command that
 writes takes it out of `mindflayer.db`.
 Timestamps are Unix seconds, so `datetime(at, 'unixepoch')` renders them:
 
@@ -942,7 +942,7 @@ where that project already holds it:
 
 ```
 ┌ Projects ──────────┐┏ Skills in collapse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-│> collapse  (1)     │┃  [x] commit-style  (not installed by mindflayer) ┃
+│> collapse  (1)     │┃  [x] commit-style  (not installed by mindweaver) ┃
 │  tanukeys          │┃      How this repo writes commits  [acme/skills] ┃
 │                    │┃> [x] deploy  + install                           ┃
 │                    │┃      Ship the service to staging  [acme/skills]  ┃
@@ -965,9 +965,9 @@ session when it closes, so a session with the screen in it can be run again
 without it:
 
 ```
-$ mindweaver install -p collapse -p tanukeys --from load:../src/mindflayer/examples skill:commit-style
-installed commit-style into collapse, from load:../src/mindflayer/examples
-installed commit-style into tanukeys, from load:../src/mindflayer/examples
+$ mindweaver install -p collapse -p tanukeys --from load:../src/mindweaver/examples skill:commit-style
+installed commit-style into collapse, from load:../src/mindweaver/examples
+installed commit-style into tanukeys, from load:../src/mindweaver/examples
 $ mindweaver uninstall -p collapse rule:git/commits
 removed rule git/commits from collapse
 ```
@@ -1011,18 +1011,18 @@ where Claude needs it there ([the two kinds](#the-two-kinds)), and unticking
 it takes it back out of both. With one exception, which is the rule the whole
 command works by:
 
-> Mindflayer only manages what it installed.
+> Mindweaver only manages what it installed.
 
-A skill already where an install would put it, that Mindflayer did not put
-there, is shown ticked and marked `(not installed by mindflayer)`. It cannot be
+A skill already where an install would put it, that Mindweaver did not put
+there, is shown ticked and marked `(not installed by mindweaver)`. It cannot be
 unticked and it is never overwritten or deleted: somebody wrote it. The ledger
 is what knows the difference. One in any of the folders an install would write
 refuses the whole install, and the others are left alone too, so the agents
 never read two different skills of one name. So is a rule whose section in
-`AGENTS.md` Mindflayer did not write there: another workspace linking the
+`AGENTS.md` Mindweaver did not write there: another workspace linking the
 project did, or a hand that copied a marker.
 
-What Mindflayer installed and somebody changed since is held the same way:
+What Mindweaver installed and somebody changed since is held the same way:
 shown ticked and marked `(changed since it was installed)`, and neither
 written over nor deleted from the screen, since the change is somebody's
 work too. The ledger keeps a hash of what each install wrote, which is how
@@ -1077,10 +1077,10 @@ others go ahead:
 ```
 $ mindweaver install commit-style --all-projects
 installed commit-style into collapse, from workspace
-warning: tanukeys already has a commit-style at skills/commit-style that Mindflayer did not put there, so it was left alone
+warning: tanukeys already has a commit-style at skills/commit-style that Mindweaver did not put there, so it was left alone
 $ mindweaver uninstall commit-style --all-projects
 removed commit-style from collapse
-warning: commit-style at skills/commit-style in tanukeys was not installed by Mindflayer, so it was left alone
+warning: commit-style at skills/commit-style in tanukeys was not installed by Mindweaver, so it was left alone
 ```
 
 An uninstall from several passes over a project that has nothing of that
@@ -1100,7 +1100,7 @@ $ mind install commit-style --force
 updated commit-style in collapse, from workspace
 ```
 
-Forcing reaches only what Mindflayer installed: somebody's skill that it did
+Forcing reaches only what Mindweaver installed: somebody's skill that it did
 not put there stays out of reach whatever is asked.
 
 A rule's line says it is one, since a route reads like a path. One about some
@@ -1197,41 +1197,41 @@ like a skill that cannot be read or a loaded workspace that has gone.
 ## What each project has
 
 `mindweaver status` says what every project the workspace manages holds: whether
-Mindflayer put each thing there, which agents read it, and where it came from.
+Mindweaver put each thing there, which agents read it, and where it came from.
 With [the examples loaded](#try-it-with-the-examples), and installed from
 there, `commit-style` and `code-review` into `collapse` and `commit-style` into
-`tanukeys`, a project an older Mindflayer made:
+`tanukeys`, a project an older Mindweaver made:
 
 ```
 $ cd ~/Projects
 $ mindweaver status
-collapse  code-review   missing   codex,opencode         load:../src/mindflayer/examples
-collapse  commit-style  current   claude,codex,opencode  load:../src/mindflayer/examples
+collapse  code-review   missing   codex,opencode         load:../src/mindweaver/examples
+collapse  commit-style  current   claude,codex,opencode  load:../src/mindweaver/examples
 collapse  deploy        authored  -
 collapse  notes         foreign   claude,opencode
-tanukeys  commit-style  current   -                      load:../src/mindflayer/examples
+tanukeys  commit-style  current   -                      load:../src/mindweaver/examples
 hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 ```
 
-Each artifact is in one of seven states, the first five for what Mindflayer
+Each artifact is in one of seven states, the first five for what Mindweaver
 installed:
 
 | State | Means |
 |---|---|
-| `current` | Mindflayer put every copy there, every one is still there as it was put, and where it came from offers the same. |
+| `current` | Mindweaver put every copy there, every one is still there as it was put, and where it came from offers the same. |
 | `outdated` | the same, but where it came from offers something newer: [`update`](#keeping-projects-up-to-date) brings it up to date. |
-| `edited` | a copy it put there holds something else now, edited by hand or with `mind edit`, or a skill renamed with `mind rename`; still Mindflayer's install, but no install or update writes over it and no uninstall takes it out without `--force`. |
+| `edited` | a copy it put there holds something else now, edited by hand or with `mind edit`, or a skill renamed with `mind rename`; still Mindweaver's install, but no install or update writes over it and no uninstall takes it out without `--force`. |
 | `missing` | a copy it put there is gone, deleted by hand or by a `git clean`, or no longer reads; `update` puts every copy back. Here Claude's copy of `code-review` was deleted. |
 | `orphaned` | where it came from no longer offers it, deleted from the library or from a workspace that stopped being loaded; nothing can bring it up to date or put a copy back, so it stays as it is until it is uninstalled, by name or with every other one by `uninstall --orphaned`. |
-| `foreign` | somebody else's, in a folder an agent reads; Mindflayer never overwrites or deletes it. Here `notes`, kept in `.claude/skills` by hand. |
+| `foreign` | somebody else's, in a folder an agent reads; Mindweaver never overwrites or deletes it. Here `notes`, kept in `.claude/skills` by hand. |
 | `authored` | the project's own, in a folder it authors in, such as `skills/`. |
 
 Then the agents that read a copy of it, as `--agents` names them: `-` for
 none, as for `deploy`, which `collapse` keeps in `skills/`, a folder no agent
-reads, and for everything in a project whose `.mind` an older Mindflayer
+reads, and for everything in a project whose `.mind` an older Mindweaver
 made, which names no agents. Last, where what was installed came
 from, as `--from` takes it: `workspace`, `load:<path>` or a shelf source's
-address. A project an older Mindflayer made, marked by a `mind.toml` or a
+address. A project an older Mindweaver made, marked by a `mind.toml` or a
 `settings.json`, gets a hint after the report naming [`mind
 migrate`](#a-project-made-before-settings), which moves it to a
 `settings.toml`; the exit status stays the report's. `mind status` says the
@@ -1290,7 +1290,7 @@ $ mindweaver status -p tanukeys --json
             "name": "commit-style",
             "state": "current",
             "agents": [],
-            "origin": "load:../src/mindflayer/examples"
+            "origin": "load:../src/mindweaver/examples"
           }
         ]
       }
@@ -1424,8 +1424,8 @@ $ mindweaver relink collapse apps/collapse
 relinked collapse as apps/collapse, from collapse
   2 installs kept with it
 $ mindweaver status
-skill  commit-style  current  claude,codex,opencode  load:../src/mindflayer/examples
-rule   git/commits   current  claude,codex,opencode  load:../src/mindflayer/examples
+skill  commit-style  current  claude,codex,opencode  load:../src/mindweaver/examples
+rule   git/commits   current  claude,codex,opencode  load:../src/mindweaver/examples
 ```
 
 The entry is rewritten where it stands in `flayer.toml`, comments and all,
@@ -1482,30 +1482,30 @@ shelf once a gather brings something newer) leaves every project it went into
 behind it, and `status` says `outdated`. `mindweaver update` brings them up to
 date from where each was installed from, every copy at once, and puts back
 any copy that has gone, kept out of git again in a local project: one deleted
-by hand, or an `AGENTS.md` Mindflayer made, which `git clean -X` takes. A
+by hand, or an `AGENTS.md` Mindweaver made, which `git clean -X` takes. A
 `git clean -dX` takes a local project's `.mind` along with its copies, so run
 `mind init` there again first, with the agents and share mode it had, and the
 update puts every copy back. Without `--yes` it says what it would do. Say a
-pull of `~/src/mindflayer` has changed the examples' `commit-style`, and
+pull of `~/src/mindweaver` has changed the examples' `commit-style`, and
 somebody has written into `tanukeys`'s copy of it, with the rest as
 [above](#what-each-project-has):
 
 ```
 $ mindweaver status
-collapse  code-review   missing   codex,opencode         load:../src/mindflayer/examples
-collapse  commit-style  outdated  claude,codex,opencode  load:../src/mindflayer/examples
+collapse  code-review   missing   codex,opencode         load:../src/mindweaver/examples
+collapse  commit-style  outdated  claude,codex,opencode  load:../src/mindweaver/examples
 collapse  deploy        authored  -
 collapse  notes         foreign   claude,opencode
-tanukeys  commit-style  edited    -                      load:../src/mindflayer/examples
+tanukeys  commit-style  edited    -                      load:../src/mindweaver/examples
 hint: tanukeys is marked by a mind.toml, which `mind migrate` moves to a settings.toml
 $ mindweaver update --all
-would put back code-review in collapse at .claude/skills/code-review, from load:../src/mindflayer/examples
-would update commit-style in collapse, from load:../src/mindflayer/examples
+would put back code-review in collapse at .claude/skills/code-review, from load:../src/mindweaver/examples
+would update commit-style in collapse, from load:../src/mindweaver/examples
 nothing changed: add --yes to go ahead
 warning: commit-style in tanukeys was changed since it was installed, at skills/commit-style, so it would be left alone; --force writes over it
 $ mindweaver update --all --yes
-put back code-review in collapse at .claude/skills/code-review, from load:../src/mindflayer/examples
-updated commit-style in collapse, from load:../src/mindflayer/examples
+put back code-review in collapse at .claude/skills/code-review, from load:../src/mindweaver/examples
+updated commit-style in collapse, from load:../src/mindweaver/examples
 warning: commit-style in tanukeys was changed since it was installed, at skills/commit-style, so it was left alone; --force writes over it
 ```
 
@@ -1515,7 +1515,7 @@ of one skill. `--force` writes over it, saying where the change was:
 
 ```
 $ mindweaver update -p tanukeys --force --yes
-updated commit-style in tanukeys, writing over the change at skills/commit-style, from load:../src/mindflayer/examples
+updated commit-style in tanukeys, writing over the change at skills/commit-style, from load:../src/mindweaver/examples
 ```
 
 `-p` names a project, once for each, and `--all` every one the workspace
@@ -1530,13 +1530,13 @@ nothing to update it from, so it is said and left as it is, never a failure,
 until it is uninstalled:
 
 ```
-$ mindweaver unload ~/src/mindflayer/examples
-unloaded ../src/mindflayer/examples
+$ mindweaver unload ~/src/mindweaver/examples
+unloaded ../src/mindweaver/examples
   from the workspace at /home/you/Projects
 $ cd collapse && mind update
 nothing to update in collapse
-note: code-review in collapse is no longer offered by load:../src/mindflayer/examples, so it would be left as it is; uninstalling it takes it out
-note: commit-style in collapse is no longer offered by load:../src/mindflayer/examples, so it would be left as it is; uninstalling it takes it out
+note: code-review in collapse is no longer offered by load:../src/mindweaver/examples, so it would be left as it is; uninstalling it takes it out
+note: commit-style in collapse is no longer offered by load:../src/mindweaver/examples, so it would be left as it is; uninstalling it takes it out
 ```
 
 An update copies what the shelf holds now: what a gathered source offers
@@ -1545,7 +1545,7 @@ moves when it is gathered again.
 ## A repository that already has .claude/skills
 
 Many repositories keep skills written by hand in `.claude/skills` or
-`.agents/skills`, committed with the code. Mindflayer lists each as
+`.agents/skills`, committed with the code. Mindweaver lists each as
 `foreign`, somebody else's, and never touches it: no update reaches it, and
 an agent that reads the other folder never gets it. `mindweaver adopt` brings
 one into the workspace's library, when you ask and never on its own, and
@@ -1595,7 +1595,7 @@ the library holds already, saying both paths; copies in `.claude/skills`
 and `.agents/skills` that differ, since which is the skill cannot be told; a
 skill an install would refuse, its name not matching its folder or its
 description empty or too long; one holding a link, or a `.claude-plugin`
-folder at its top, which no install copies; one Mindflayer installed
+folder at its top, which no install copies; one Mindweaver installed
 already, or the project's own, in the folder it authors in; and a rule. If
 its `SKILL.md` says where `gh skill` got it, under `metadata` keys starting
 `github-`, the dry run and the adoption show it in a line under the
@@ -1643,7 +1643,7 @@ the first one is added.
 A project holds what is in its own folders, because that is what its agents
 read, so the workspace's skills and rules reach a project by being installed
 into it (`mind install`, `mindweaver install`, or the install screen) and are
-managed there like anything else Mindflayer installed. Every command that
+managed there like anything else Mindweaver installed. Every command that
 changes an artifact works on the workspace's own the same way it works on a
 project's: `mindweaver edit`, `mindweaver rename`, `mindweaver remove`, and `-p <project>`
 for one of its projects instead.
@@ -1681,9 +1681,9 @@ note: nothing offers commit-style in tanukeys any more; `mindweaver uninstall -p
 
 A copy that is current, outdated or missing one of its copies is
 uninstalled. An edited one is left, every copy of it, as an uninstall leaves
-it unforced: it is somebody's work, still Mindflayer's install, and offered
+it unforced: it is somebody's work, still Mindweaver's install, and offered
 by nothing once the library copy is gone. Somebody's own skill of that name,
-which Mindflayer never installed, is left too, and said as `foreign`. Only
+which Mindweaver never installed, is left too, and said as `foreign`. Only
 the projects the workspace links are looked at. A rule goes the same way,
 out of every project's `AGENTS.md`, and `d` on the `◆` row of [the
 TUI](#the-tui) asks with a second yes, `e`, for everywhere.
@@ -1715,7 +1715,7 @@ on the first row, marked `◆`, then every project it manages, and on the right
 what the one under the cursor holds.
 
 ```
- mindflayer  Projects  · found above · 3 on the shelf  · /home/you/Projects
+ mindweaver  Projects  · found above · 3 on the shelf  · /home/you/Projects
 ┏ Projects (3) ━━━━━━━━━━━━━━━━┓┌ collapse ──────────────────────────────────────────────────────────────┐
 ┃  ◆ Projects  2               ┃│>   skill commit-style       current  CC CX OC  How this repo writes com│
 ┃> collapse  2                 ┃│    rule  git/no-force-push  authored           Never force-push a share│
@@ -1769,7 +1769,7 @@ rather than on the one the project would find by itself. `mindweaver -W <dir>` o
 workspace it names, and every line it runs uses that one; so does an
 activated workspace. The header says which it is showing and why: `named
 with -W`, `activated`, `found above`, or `default workspace`. It also counts
-the projects an older Mindflayer made, still marked by a `mind.toml` or a
+the projects an older Mindweaver made, still marked by a `mind.toml` or a
 `settings.json`, and names the command that moves them, `mindweaver migrate
 --all-projects`, or `mind migrate` for a project on its own
 ([upgrading](#a-project-made-before-settings)).
@@ -1875,7 +1875,7 @@ said opens, every warning, note and error under the line that said it, with
 its code. The panel links projects, from the folder you type or browse to
 above the projects table or from what **Discover** finds, relinks one
 that moved, unlinks one from its page, changes a project's agents and
-share mode, migrates a project an older Mindflayer made, installs and
+share mode, migrates a project an older Mindweaver made, installs and
 uninstalls skills and rules from **Assign**, brings what is installed up to date and
 takes out what nothing offers from **Updates**, removes one of the
 library's own everywhere, its dry run first, edits, adds and renames the
@@ -1955,7 +1955,7 @@ asks first, and says that the workspace only forgets the project: nothing on
 disk is deleted. A row that reads `foreign`, somebody's own in a folder an
 agent reads, offers **Adopt**, `mindweaver adopt -p <project> --yes
 <kind:name>` ([a repository that already has .claude/skills](#a-repository-that-already-has-claudeskills)), shown before it runs;
-what Mindflayer will not adopt, a rule or a skill an install could not have
+what Mindweaver will not adopt, a rule or a skill an install could not have
 written, the line refuses, saying why.
 
 Below what it holds, **Agents and sharing** are the project's settings as
@@ -1965,7 +1965,7 @@ the lines they amount to, shown first, `mind agents --yes` naming the agents
 ticked, those the project names already keeping their order, then `mind
 share --yes`, each only when what it sets changes, as the TUI's toggles do;
 what is installed is carried to where the agents now read. A project an
-older Mindflayer made, marked by a `mind.toml` or a `settings.json`, has no
+older Mindweaver made, marked by a `mind.toml` or a `settings.json`, has no
 toggles until it moves to a `settings.toml`, and offers that move instead
 ([a project made before settings](#a-project-made-before-settings)): **See
 what migrating does** runs the dry run, `mindweaver migrate -p <project>`, and
@@ -2249,10 +2249,10 @@ the file named, as well as to the link. A script that did not start the
 panel reads them there rather than from what `mindweaver ui` printed:
 
 ```
-$ mindweaver ui --no-open --token-file /home/you/.local/state/mindflayer.json
+$ mindweaver ui --no-open --token-file /home/you/.local/state/mindweaver.json
 http://127.0.0.1:40185/?token=bf6934705762815d0a708aceb59cb5f9f4fd65466d0f726e0b7a8d3749053513
 note: serving the workspace at /home/you/Projects on 127.0.0.1:40185 until Ctrl-C
-$ cat /home/you/.local/state/mindflayer.json
+$ cat /home/you/.local/state/mindweaver.json
 {
   "version": 1,
   "api": "http://127.0.0.1:40185/api/v1",
@@ -2261,7 +2261,7 @@ $ cat /home/you/.local/state/mindflayer.json
 ```
 
 ```sh
-file=/home/you/.local/state/mindflayer.json
+file=/home/you/.local/state/mindweaver.json
 curl -H "Authorization: Bearer $(jq -r .token "$file")" "$(jq -r .api "$file")/snapshot"
 ```
 
@@ -2313,7 +2313,7 @@ takes a structure is a POST that changes nothing:
   run.
 - `POST /api/v1/validate` with `{"holder": {"type": "workspace"}, "draft":
   {"type": "add", "kind": "skill", "name": "deploy", "description": "Ship
-  a release", "template": null}}`: what Mindflayer says of an artifact
+  a release", "template": null}}`: what Mindweaver says of an artifact
   about to be written, with nothing written.
 
 Every change is a task, the command lines it is, as the panel's are: `POST
@@ -2368,13 +2368,13 @@ Its status says which kind of thing went wrong, and the code which one:
 | 403 | `same_origin_required` | a change sent with the panel's cookie from anywhere but its page |
 | 403 | `x_mindflayer_required` | a change sent with the panel's cookie without `X-Mindflayer: 1` |
 | 404 | `unknown_route` | a path no route names, `/api` without its version among them |
-| 404 | Mindflayer's | a read naming what is not there: `not_registered` for an entry, `not_found` for an artifact, `contents_missing` for a file, `browse_missing` for a folder |
+| 404 | Mindweaver's | a read naming what is not there: `not_registered` for an entry, `not_found` for an artifact, `contents_missing` for a file, `browse_missing` for a folder |
 | 405 | `method_not_allowed` | a method the route does not take (with `Allow`) |
 | 413 | `body_too_large` | a body larger than the server reads |
 | 415 | `json_required` | a body not sent as `application/json` |
 | 422 | `invalid_body` | JSON that is not what the route reads |
-| 422 | Mindflayer's | what Mindflayer will not do, by the code of its rule: `path_relative` for a path that is not absolute, `opens_editor` for a task that needs a terminal |
-| 500 | `backend_failed` | Mindflayer failed while it answered |
+| 422 | Mindweaver's | what Mindweaver will not do, by the code of its rule: `path_relative` for a path that is not absolute, `opens_editor` for a task that needs a terminal |
+| 500 | `backend_failed` | Mindweaver failed while it answered |
 | 500 | `writer_stopped` | the thread that runs tasks has stopped |
 
 A task, a switch, a plan or a draft that names what is not there, an entry
@@ -2426,7 +2426,7 @@ themselves sit beside the code, because these are files the **agents** read
 and an agent does not know what a `.mind` is. `mind init` writes it:
 
 ```toml
-# Mindflayer mind project: what Mindflayer needs to know about the project
+# Mindweaver mind project: what Mindweaver needs to know about the project
 # this .mind is in, and nothing else. No agent reads it.
 #
 # `name` is what the project is shown as, and `agents` the agents that work
@@ -2469,8 +2469,8 @@ moves. A project that installs somewhere other than where its agents read
 says where in `targets` too ([installing somewhere
 else](#installing-somewhere-else)). Edit it by hand if you like:
 `mind agents`, `mind share` and `mind targets` change only the keys they set,
-and keep your comments, your layout and any key Mindflayer does not know.
-Point the directories wherever the agents already look, and Mindflayer
+and keep your comments, your layout and any key Mindweaver does not know.
+Point the directories wherever the agents already look, and Mindweaver
 follows:
 
 ```bash
@@ -2500,9 +2500,9 @@ with it. `mind init --shared` writes no `.gitignore` and sets `share` to
 `shared`, for a team that commits its `.mind`, and what is installed into the
 project with it, so that every clone gets the same.
 
-A project an older Mindflayer made is marked by `.mind/mind.toml` instead,
+A project an older Mindweaver made is marked by `.mind/mind.toml` instead,
 which names the same folders in a table and was committed with the project,
-or by `.mind/settings.json`, which holds these same keys in JSON. Mindflayer
+or by `.mind/settings.json`, which holds these same keys in JSON. Mindweaver
 still reads either the way it was written, and `mind init` leaves it as it
 is. When a project holds more than one, it reads `settings.toml`, then
 `settings.json`, then `mind.toml`. `mind migrate` moves it to a
@@ -2510,17 +2510,17 @@ is. When a project holds more than one, it reads `settings.toml`, then
 ([upgrading](#a-project-made-before-settings)).
 
 A project is listed from the folders its agents read as well (one an older
-Mindflayer made, from the one folder its `mind.toml` names):
+Mindweaver made, from the one folder its `mind.toml` names):
 `.claude/skills` for Claude, `.agents/skills` for Codex and OpenCode. A skill
 there is listed once, whoever put it there, and once with the project's own of
 that name, which it reads as; when it sits in both folders with different
 contents `list` and `validate` warn, since the agents would not all load the
-same skill. Mindflayer changes only what sits in the folders the project
+same skill. Mindweaver changes only what sits in the folders the project
 authors in, so `mind edit`, `rename` and `remove` reach the project's own copy
 and leave a skill in an agent's folder alone.
 
 What is installed into a project goes where its agents read, never into the
-folder it authors in (one an older Mindflayer made takes it in that folder):
+folder it authors in (one an older Mindweaver made takes it in that folder):
 one copy in `.claude/skills` for Claude, one in
 `.agents/skills` that Codex and OpenCode share, the same bytes, put in place
 together or not at all, and recorded as one installation. A local project
@@ -2548,13 +2548,13 @@ servers included. And a project at your home is refused an install, since its
 
 A rule goes into the block in the project's `AGENTS.md` instead ([the two
 kinds](#the-two-kinds)), rendered there with every other rule the project
-has. An `AGENTS.md` Mindflayer makes for it is kept out of git by the same
+has. An `AGENTS.md` Mindweaver makes for it is kept out of git by the same
 block in a local project, and goes with the last rule; one that was there is
 yours, and keeps everything outside the block. A local project writes into
 one git tracks only with `edit_tracked` (`mind share local --edit-tracked`):
 without it, Claude gets each rule from a file of its own in
 `.claude/rules/mindflayer`, and the install warns that Codex and OpenCode read
-none of them. A project an older Mindflayer made is given a copy of the rule
+none of them. A project an older Mindweaver made is given a copy of the rule
 in the folder its `mind.toml` names, filed by its route.
 
 ### Changing its agents, or how it shares
@@ -2575,12 +2575,12 @@ copied commit-style to .agents/skills/commit-style, for codex, kept out of git
 $ mind agents remove claude --yes
 set agents to codex in collapse, where they were claude,codex
 removed commit-style from .claude/skills/commit-style
-left .claude/skills/notes where it is: Mindflayer did not install it
+left .claude/skills/notes where it is: Mindweaver did not install it
 ```
 
 Every installation is brought to where the agents the project names now
 read: a folder a new agent reads gets a copy of one already there, the same
-bytes, and a folder no agent it names reads any more loses Mindflayer's
+bytes, and a folder no agent it names reads any more loses Mindweaver's
 copy. Only a copy nobody has changed since it was installed is taken out:
 one that was edited is left where it is and becomes yours, and somebody
 else's skill is never touched, wherever it is. One where a new copy would go
@@ -2588,7 +2588,7 @@ is left alone with a warning, since that agent then reads it rather than
 what was installed; one in a folder no agent reads any more is left and
 said, as `notes` is above. Running the same command again changes nothing
 once it is done. A project has to name at least one agent, so removing the
-last is refused, and so is a project an older Mindflayer made, marked by a
+last is refused, and so is a project an older Mindweaver made, marked by a
 `mind.toml` or a `settings.json`, which `mind migrate` moves to a
 `settings.toml` first. Its rules follow later, at the next install or
 uninstall of one, which renders every rule the project has for the agents
@@ -2605,7 +2605,7 @@ stopped keeping /.agents/skills/commit-style/ out of git
 ```
 
 Turning shared removes `.mind/.gitignore`, if it is still the one
-Mindflayer wrote, and the project's whole group in `.git/info/exclude`, so
+Mindweaver wrote, and the project's whole group in `.git/info/exclude`, so
 the settings and the copies are the team's to commit; turning local writes
 both back, an entry for each copy installed that git does not track: one the
 team committed stays in git. `mindweaver agents -p collapse ...` and
@@ -2642,7 +2642,7 @@ and name as many folders as you give it, each relative to the project. A
 folder that leads out of the project, an absolute one, or one inside `.mind`
 or `.git` is refused, and one written there by hand is given no copy and said
 by `status`, by an install and in the TUI. Copies move as they do for [a
-change of agents](#changing-its-agents-or-how-it-shares): only Mindflayer's
+change of agents](#changing-its-agents-or-how-it-shares): only Mindweaver's
 untouched ones, never over somebody's, and a dry run first.
 
 No agent reads `.skills` until it is pointed there, so `status` warns until
@@ -2659,7 +2659,7 @@ $ mind status
 commit-style  current  claude,codex,opencode  workspace
 ```
 
-Every Mindflayer that reads a `settings.toml` reads `targets` too, so
+Every Mindweaver that reads a `settings.toml` reads `targets` too, so
 setting them changes no version: a build from before them finds no project
 in a `settings.toml` at all, rather than installing into the standard
 folders behind your back. `mind targets reset` sends the kind back to where
@@ -2672,7 +2672,7 @@ set the targets of skills to the folders its agents read in collapse, where they
 copied commit-style to .agents/skills/commit-style, for codex and opencode, kept out of git
 copied commit-style to .claude/skills/commit-style, for claude, kept out of git
 removed commit-style from .skills/commit-style
-left .skills/notes where it is: Mindflayer did not install it
+left .skills/notes where it is: Mindweaver did not install it
 ```
 
 `mindweaver targets -p collapse ...` does the same from the workspace, and `T` in
@@ -2714,7 +2714,7 @@ Anything else in the front matter (an agent's own keys, like Claude Code's
 `compatibility` that is not a string: `validate` says it is ignored, and it
 stays in the file.
 
-The name and the description are the rules Mindflayer will not break when it
+The name and the description are the rules Mindweaver will not break when it
 writes a skill, because agents skip a skill that does: `mind add`, `rename` and
 `install` refuse one that breaks either. Everything else is reported by
 `validate`, and gathering is lenient about all of it.
@@ -2814,7 +2814,7 @@ applies; a skill cannot be filed in a folder; and nothing already there is
 written over, not even a folder that is not a skill. The description is one
 line, because the rest belongs in the file.
 
-A skill made this way is its author's, not Mindflayer's: `mindweaver install`
+A skill made this way is its author's, not Mindweaver's: `mindweaver install`
 treats it like anything else it did not put there, and never overwrites or
 removes it.
 
@@ -2824,7 +2824,7 @@ removes it.
 mind add skill deploy "Ship the service" --template full
 ```
 
-`full` ships with Mindflayer: a manifest with sections to fill in, and the
+`full` ships with Mindweaver: a manifest with sections to fill in, and the
 `scripts/` and `references/` folders the skill format sets aside. Your own go in
 `.mind/templates/` for one project, or in the workspace's
 `.mindflayer/templates/` for every project it manages: a folder holding a
@@ -2894,8 +2894,8 @@ What `mindweaver install` put in an agent's folder is not changed from the
 project: `edit`, `rename` and `remove` refuse a skill found only where its
 agents read, which `mind uninstall` takes out. Where a copy sits in a folder
 the project writes in too (one whose `--skills` is an agent's folder, or a
-project an older Mindflayer made, whose one folder takes the copy), the
-change reaches it. Edited or renamed, it stays Mindflayer's install, and
+project an older Mindweaver made, whose one folder takes the copy), the
+change reaches it. Edited or renamed, it stays Mindweaver's install, and
 [`status`](#what-each-project-has) says it is edited: no install writes over
 it and no uninstall takes it out unless forced. A rule renamed in a project
 a `mind.toml` marks is moved as it is, so it still holds what was installed,
@@ -2927,7 +2927,7 @@ own (an [open question](architecture.md#open-questions)).
 
 ## Upgrading
 
-A newer Mindflayer reads what an older one wrote exactly as it was written. It
+A newer Mindweaver reads what an older one wrote exactly as it was written. It
 changes a marker only when you tell it to, and the database only after
 copying it aside ([what a workspace keeps](#what-a-workspace-keeps)).
 
@@ -2996,7 +2996,7 @@ in place of `flayer.toml` and move the artifacts back.
 
 ### A project made before settings
 
-A project an older Mindflayer made is marked by `.mind/mind.toml`, which
+A project an older Mindweaver made is marked by `.mind/mind.toml`, which
 names the folders it authors in and nothing else: no agents, so whatever was
 installed into it went into its `skills/` beside its own, and no share mode,
 since its `.mind` was committed by design. It keeps working that way until
@@ -3071,14 +3071,14 @@ A project is moved whole or not at all: one that something stops part way,
 a folder that cannot be written, say, has what was done put back, and is
 still marked by its `mind.toml`. Nothing is moved while there is a reason
 not to, every reason said at once: a `mind.toml.v2` an earlier migration
-kept, or a project from the first Mindflayer that keeps its skills inside
+kept, or a project from the first Mindweaver that keeps its skills inside
 `.mind`, where settings cannot name them. Move them out and name their
 folder in `mind.toml`, and such a project moves. Nor while the workspace
 that installed into it cannot be read, since what it records is what says
 which copies to carry.
 
 A project a `.mind/settings.json` marks has its settings already, in the
-JSON Mindflayer wrote them in before TOML. It is read as it was written,
+JSON Mindweaver wrote them in before TOML. It is read as it was written,
 installs go where its agents read, and nothing changes its settings until it
 moves: `mind agents`, `mind share` and `mind targets` point at
 `mind migrate`, which writes the same settings as a `settings.toml` and
@@ -3097,5 +3097,5 @@ moved .mind/settings.json to .mind/tmp/settings.json.v3, as it was
 No copy moves, since the agents, the share mode and the folders are the
 ones the file named, so the workspace's records are not needed for it.
 `--agents`, `--local` and `--shared` are what a `mind.toml` is given, and a
-key Mindflayer does not know stays in the copy kept. A `settings.json.v3` an
+key Mindweaver does not know stays in the copy kept. A `settings.json.v3` an
 earlier migration kept refuses the move, as a `mind.toml.v2` does.

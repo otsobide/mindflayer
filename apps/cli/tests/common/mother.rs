@@ -61,7 +61,7 @@ impl ValueMother {
     }
 }
 
-/// Makes a workspace hold what a Mindflayer from before a URL's credentials
+/// Makes a workspace hold what a Mindweaver from before a URL's credentials
 /// were refused left in it.
 pub struct OlderBuildMother;
 

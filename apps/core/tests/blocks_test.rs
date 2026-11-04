@@ -1,4 +1,4 @@
-//! The blocks Mindflayer keeps in files somebody else owns, git's
+//! The blocks Mindweaver keeps in files somebody else owns, git's
 //! `info/exclude` ([`ExcludeFile`]) and a project's `AGENTS.md`
 //! ([`AgentsMd`]), held as properties over files nobody wrote by hand.
 //!

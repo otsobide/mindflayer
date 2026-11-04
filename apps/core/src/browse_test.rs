@@ -92,7 +92,7 @@ fn hidden_folders_are_left_out_and_counted_unless_asked_for() {
 
 #[cfg(unix)]
 #[test]
-fn a_mindflayer_is_never_listed_nor_a_link_into_one() {
+fn a_mindweaver_is_never_listed_nor_a_link_into_one() {
     use std::os::unix::fs::symlink;
 
     let (dir, workspace) = fixture();

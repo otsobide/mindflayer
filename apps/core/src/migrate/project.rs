@@ -1,4 +1,4 @@
-//! Bringing a project an older Mindflayer made, marked by a `mind.toml` or a
+//! Bringing a project an older Mindweaver made, marked by a `mind.toml` or a
 //! `settings.json`, to the `settings.toml` a new one has, and what is
 //! installed into it to where its agents read.
 //!
@@ -70,7 +70,7 @@ pub struct ProjectPlan {
     pub backup: PathBuf,
     /// Whether the installations a workspace records were read: false when
     /// no workspace given links the project, whose copies are then left
-    /// where they are, since nothing says which of them are Mindflayer's.
+    /// where they are, since nothing says which of them are Mindweaver's.
     pub recorded: bool,
     /// The `.gitignore` that keeps a local project's `.mind` out of git
     /// (D-01), written when the project is to be local and has none.
@@ -82,7 +82,7 @@ pub struct ProjectPlan {
     /// where it is, its author's.
     pub authored: Vec<PathBuf>,
     /// What sits in a folder the project's agents are sent copies to that
-    /// Mindflayer did not put there, but for one an installation's copy
+    /// Mindweaver did not put there, but for one an installation's copy
     /// would have gone to, which its installation says: left, and said,
     /// since the project is listed from those folders from now on.
     pub foreign: Vec<PathBuf>,
@@ -99,7 +99,7 @@ pub struct ProjectPlan {
     /// Whether git tracks something in `.mind` of a project that is to be
     /// local, whose `.gitignore` then keeps none of it out
     /// ([`exclude::tracks`]): for a front end to say how to stop that, which
-    /// is not Mindflayer's to do.
+    /// is not Mindweaver's to do.
     pub tracked: bool,
     /// Why it cannot go ahead. Nothing is written while there is any.
     pub refusals: Vec<Refusal>,
@@ -641,7 +641,7 @@ impl<'a> Undo<'a> {
 }
 
 /// `workspace`, when it is made and links `project`: the one whose records
-/// say what in the project is Mindflayer's.
+/// say what in the project is Mindweaver's.
 pub(super) fn linking<'a>(
     workspace: Option<&'a WeaverWorkspace>,
     project: &MindProject,

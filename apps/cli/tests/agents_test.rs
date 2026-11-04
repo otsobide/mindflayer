@@ -115,7 +115,7 @@ fn removing_claude_takes_out_its_copies_and_says_what_somebody_left_there() {
         done.stdout,
         "set agents to codex,opencode in collapse, where they were claude,codex,opencode\n\
          removed deploy from .claude/skills/deploy\n\
-         left .claude/skills/notes where it is: Mindflayer did not install it\n"
+         left .claude/skills/notes where it is: Mindweaver did not install it\n"
     );
     assert!(done.ok, "{:?}", done.stderr);
     assert!(!claudes(&root, "deploy").exists());
@@ -235,7 +235,7 @@ fn somebodys_skill_where_a_copy_would_go_is_left_and_warned_about() {
     let dry = mind(&root, &["agents", "add", "codex"]).unwrap();
     assert!(
         dry.stdout.contains(
-            "would leave .agents/skills/deploy as it is: Mindflayer did not put it there, \
+            "would leave .agents/skills/deploy as it is: Mindweaver did not put it there, \
              so deploy would not be copied there\n"
         ),
         "{}",
@@ -250,7 +250,7 @@ fn somebodys_skill_where_a_copy_would_go_is_left_and_warned_about() {
     assert_eq!(
         done.stderr,
         [
-            "warning: collapse already has a deploy at .agents/skills/deploy that Mindflayer did \
+            "warning: collapse already has a deploy at .agents/skills/deploy that Mindweaver did \
           not put there, so it was left alone, and deploy was not copied there"
         ]
     );
