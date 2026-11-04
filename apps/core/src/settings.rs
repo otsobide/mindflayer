@@ -44,6 +44,8 @@ use crate::agent::Agent;
 use crate::config_entry::{self, Format, Value};
 use crate::kind::Kind;
 use crate::paths;
+/// Where it was first declared, kept so every path that names it still does.
+pub use crate::value::ProjectId;
 use crate::workspace::{
     check_version, toml_string, Directories, Marker, MarkerFile, WorkspaceError, MIND_DIR,
     SETTINGS_TOML_VERSION, SETTINGS_VERSION, TARGETS_VERSION,
@@ -337,87 +339,6 @@ impl Targets {
             .chain(other)
             .map(|(key, folders)| (key.as_str(), folders.as_slice()))
             .collect()
-    }
-}
-
-/// A project's id: 128 random bits, written as 32 lowercase hexadecimal
-/// digits.
-///
-/// What names a project when its name and its path are no use: both change,
-/// a name by hand and a path when the repository moves, and several
-/// workspaces may know one project by different routes. Random rather than
-/// derived from either, so that a copy of a project made with `cp -r` is the
-/// only way two projects share one.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-// Derived, though serde's is written by hand: ts-rs says a struct around
-// one value as that value, the `string` serde writes.
-#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-pub struct ProjectId(String);
-
-impl ProjectId {
-    /// The number of hexadecimal digits an id is written with.
-    pub const LEN: usize = 32;
-
-    /// A new id, drawn from the operating system through `std`'s hasher keys
-    /// as a stage's name is (`copy::random`), rather than from a dependency
-    /// kept for it.
-    pub fn generate() -> Self {
-        ProjectId(format!(
-            "{:016x}{:016x}",
-            crate::copy::random(),
-            crate::copy::random()
-        ))
-    }
-
-    /// The id as written, when `text` is one: exactly [`LEN`](Self::LEN)
-    /// lowercase hexadecimal digits, one spelling for one id.
-    pub fn parse(text: &str) -> Option<Self> {
-        let digits = text.len() == Self::LEN
-            && text
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
-        digits.then(|| ProjectId(text.to_owned()))
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-/// As its text, the one spelling settings hold it in and an exclude group
-/// names it by, rather than as a struct around it.
-impl Serialize for ProjectId {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.0)
-    }
-}
-
-/// As the text serde writes it, which only an id's own spelling matches:
-/// written by hand, as the serializer is, rather than derived, which says
-/// any string.
-#[cfg(feature = "schema")]
-impl schemars::JsonSchema for ProjectId {
-    fn schema_name() -> std::borrow::Cow<'static, str> {
-        "ProjectId".into()
-    }
-
-    fn schema_id() -> std::borrow::Cow<'static, str> {
-        concat!(module_path!(), "::ProjectId").into()
-    }
-
-    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        crate::schema::schema(serde_json::json!({
-            "description": "A project's id: 128 random bits, written as 32 lowercase \
-                            hexadecimal digits.",
-            "type": "string",
-            "pattern": format!("^[0-9a-f]{{{}}}$", ProjectId::LEN),
-        }))
-    }
-}
-
-impl fmt::Display for ProjectId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
     }
 }
 

@@ -207,3 +207,7 @@ fn holder(pid: Option<u32>) -> String {
         None => String::from("another process"),
     }
 }
+
+#[cfg(test)]
+#[path = "lock_test.rs"]
+mod tests;

@@ -260,3 +260,7 @@ fn plan_with(
         unread,
     })
 }
+
+#[cfg(test)]
+#[path = "everywhere_test.rs"]
+mod tests;

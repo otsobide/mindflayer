@@ -11,20 +11,20 @@
 //! lets two repositories both offer `commit-style`; [`crate::ledger`] is what
 //! remembers which is which.
 
-mod credentials;
-pub mod git;
 mod watch;
 
 use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::ser::{SerializeStruct, Serializer};
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::adapter::gix::Gix;
 use crate::artifact::{Artifact, ArtifactError, ValidationIssue};
 use crate::code::codes;
 use crate::copy::{self, Change};
@@ -32,7 +32,9 @@ use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
 use crate::lock::LockError;
 use crate::paths;
+use crate::port::{GitError, Remote};
 use crate::url::{carries_credentials, redacted};
+use crate::value::{ArtifactName, Redacted, Revision};
 use crate::workspace::FlayerWorkspace;
 
 pub use watch::{Progress, Watch};
@@ -110,6 +112,9 @@ pub struct Request {
     /// builds requests in one place and runs them in another hands over both
     /// together.
     pub watch: Watch,
+    /// What fetches the source: [`Gix`] unless another [`Remote`] is handed
+    /// over ([`through`](Self::through)), as a test hands a fake.
+    pub remote: Arc<dyn Remote>,
 }
 
 impl Request {
@@ -123,6 +128,7 @@ impl Request {
             subdirectory: DEFAULT_SUBDIRECTORY.to_owned(),
             kind: Kind::Skill,
             watch: Watch::new(),
+            remote: Arc::new(Gix),
         }
     }
 
@@ -146,13 +152,20 @@ impl Request {
         self.watch = watch;
         self
     }
+
+    /// Fetch through `remote` rather than [`Gix`]: the port a gather's one
+    /// step outside core goes through, everything after it the same.
+    pub fn through(mut self, remote: Arc<dyn Remote>) -> Self {
+        self.remote = remote;
+        self
+    }
 }
 
 /// One artifact that reached the workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Harvested {
     /// The name it declares, which is what it will be asked for by.
-    pub name: String,
+    pub name: ArtifactName,
     /// The folder it came from inside the source, which is the folder it kept.
     pub directory: String,
     /// The one line a listing shows.
@@ -172,7 +185,7 @@ pub struct Harvested {
 #[derive(Debug, Default, Serialize)]
 pub struct Report {
     /// The revision that was gathered from, when there was one.
-    pub revision: Option<String>,
+    pub revision: Option<Revision>,
     /// The folder under `.mindflayer/<kind>/` this source owns.
     pub directory: String,
     pub added: Vec<Harvested>,
@@ -326,10 +339,14 @@ impl Scrub {
 /// an artifact opening the ledger to drop a record does not wait behind a
 /// gather to do it. The sources are looked for again once it is held, since
 /// a scrub kept waiting may find that another has done its work.
+///
+/// Each clone is scrubbed through `remote`, the adapter that knows which of
+/// its files name the URL it was made from.
 pub(crate) fn scrub(
     workspace: &FlayerWorkspace,
     ledger: &Ledger,
     wait: Duration,
+    remote: &dyn Remote,
 ) -> Result<Scrub, LedgerError> {
     let mut scrub = Scrub::default();
     let _lock = if ledger.tainted_sources()?.is_empty() {
@@ -340,7 +357,7 @@ pub(crate) fn scrub(
     for source in ledger.tainted_sources()? {
         // The clone first and the row after it: a row rewritten first would
         // no longer say that its clone still needs the same.
-        if let Err(error) = git::scrub(&workspace.cache_dir().join(&source.directory)) {
+        if let Err(error) = remote.scrub(&workspace.cache_dir().join(&source.directory)) {
             scrub.failures.push(ScrubFailure {
                 url: source.url.clone(),
                 source: error,
@@ -409,9 +426,9 @@ codes!(Leftover => "source_leftover");
 #[error("{url}: its clone still holds the credentials it was gathered with: {source}")]
 pub struct ScrubFailure {
     /// The source's URL, without them.
-    pub url: String,
+    pub url: Redacted,
     #[source]
-    pub source: git::GitError,
+    pub source: GitError,
 }
 
 codes!(ScrubFailure => "clone_unscrubbed");
@@ -427,9 +444,22 @@ fn harvest(
     // line is already where `ps` and the shell history show it, and every
     // report names the URL. A git credential helper, or the front end once
     // #110 lands, keeps it off the command line altogether.
-    if carries_credentials(request.source.url()) {
+    //
+    // So is a URL typed where the branch or the folder goes, which the
+    // ledger keeps as that branch or folder, word for word, and an error
+    // repeats: it is somebody's credential all the same.
+    let typed = [
+        Some(request.source.url()),
+        request.source.reference(),
+        Some(request.subdirectory.as_str()),
+    ];
+    if let Some(carrying) = typed
+        .into_iter()
+        .flatten()
+        .find(|text| carries_credentials(text))
+    {
         return Err(GatherError::CredentialsInUrl {
-            url: redacted(request.source.url()).into_owned(),
+            url: redacted(carrying).into_owned(),
         });
     }
 
@@ -494,9 +524,11 @@ fn take(
     let cache = workspace.cache_dir().join(&source.directory);
     watch.report(Progress::Connecting);
     let clone = match &request.source {
-        Source::Git { url, reference } => git::clone(url, reference.as_deref(), &cache, watch)
+        Source::Git { url, reference } => request
+            .remote
+            .fetch(url, reference.as_deref(), &cache, watch)
             .map_err(|error| match error {
-                git::GitError::Cancelled => GatherError::Cancelled,
+                GitError::Cancelled => GatherError::Cancelled,
                 error => error.into(),
             })?,
     };
@@ -724,7 +756,7 @@ impl fmt::Display for Warning {
 #[derive(Debug, Error)]
 pub enum GatherError {
     #[error(transparent)]
-    Git(#[from] git::GitError),
+    Git(#[from] GitError),
     #[error(transparent)]
     Ledger(#[from] LedgerError),
     #[error(transparent)]
@@ -736,7 +768,8 @@ pub enum GatherError {
     /// The URL carries a password or token, or a user name where a token can
     /// stand in for one, which the message names as a user name: calling it a
     /// password would send somebody looking for one that is not there. `url` is shown without it, which is the URL to
-    /// gather instead. A provider the front end supplies (#110) will be a
+    /// gather instead. A URL typed as the branch or the folder is refused
+    /// the same way, and is the one `url` names. A provider the front end supplies (#110) will be a
     /// second way to give the credential.
     #[error(
         "{url}: a password, a token or, over http(s), a user name in the URL is refused, because \
@@ -773,3 +806,7 @@ codes!(GatherError {
 /// Re-exported here because the shelf and its record are one feature: a caller
 /// that gathers is the caller that lists.
 pub use ledger::Gathered;
+
+#[cfg(test)]
+#[path = "gather_test.rs"]
+mod tests;

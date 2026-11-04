@@ -16,6 +16,7 @@ use crate::install;
 use crate::kind::{Kind, Layout};
 use crate::ledger::{Ledger, LedgerError};
 use crate::paths;
+use crate::value::ContentHash;
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject};
 
 /// The artifacts discovered across some mind projects, and what went wrong.
@@ -155,7 +156,7 @@ impl Catalog {
         let mut gathered = Vec::new();
         let mut named: BTreeMap<String, Vec<Artifact>> = BTreeMap::new();
         for copy in copies {
-            named.entry(copy.name().to_owned()).or_default().push(copy);
+            named.entry(copy.name().to_string()).or_default().push(copy);
         }
         for (name, mut copies) in named {
             copies.sort_by(|a, b| {
@@ -215,7 +216,7 @@ impl Catalog {
         &mut self,
         name: &str,
         first: &Path,
-        hashed: &mut Option<Option<String>>,
+        hashed: &mut Option<Option<ContentHash>>,
         other: &Path,
     ) -> bool {
         if same_directory(first, other) {
@@ -297,7 +298,7 @@ impl Catalog {
     /// What makes a skill in a folder a project authors in its own or an
     /// install's, and one in an agent's folder an install's or somebody
     /// else's: the ledger, by the path of each copy it records
-    /// ([`Ledger::copies`]), not by name, so an install of one name into one
+    /// ([`Ledger::copies`](crate::port::LedgerStore::copies)), not by name, so an install of one name into one
     /// folder does not claim what somebody keeps under that name in another.
     /// Apart from discovery, which reads files and nothing else: a listing
     /// that says nothing of who put what where opens no ledger, and one that
@@ -656,7 +657,8 @@ impl Reference {
 
     /// Whether this names that artifact.
     fn matches(&self, artifact: &Artifact) -> bool {
-        artifact.name() == self.name && self.kind.is_none_or(|kind| kind == artifact.kind())
+        artifact.name().as_str() == self.name
+            && self.kind.is_none_or(|kind| kind == artifact.kind())
     }
 }
 
@@ -899,3 +901,7 @@ fn is_hidden(path: &Path) -> bool {
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.starts_with('.'))
 }
+
+#[cfg(test)]
+#[path = "catalog_test.rs"]
+mod tests;

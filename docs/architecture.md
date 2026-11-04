@@ -161,8 +161,9 @@ rewritten, and a new one is its author's to watch.
 
 `mindflayer-core` knows what a mind project is, what a flayer workspace is, and
 what each kind of artifact is. It reads and writes files, and the only other
-I/O it does is fetching a repository through `gix` when asked to gather. It has
-no idea a terminal exists.
+I/O it does is fetching a repository when asked to gather, through a port whose
+adapter is `gix`, and reading the clock ([values, ports and
+adapters](#values-ports-and-adapters)). It has no idea a terminal exists.
 
 `mindflayer-cli` parses a command line, asks core for values, and renders them.
 It holds no rules about artifacts: not the name limits, not the front matter
@@ -234,6 +235,121 @@ and asks core what a command acts on, the one thing every family needs: which
 workspace is core's `resolve` to decide (see [which workspace a command
 uses](#which-workspace-a-command-uses)), and which of its projects `-p` names
 is `FlayerWorkspace::pick`.
+
+## Values, ports and adapters
+
+Core is written hexagonally, at the owner's request
+([D-25](#d-25-core-is-values-and-ports)): the rules in the middle, built of
+value objects, depend on nothing outside them; what they need from outside
+is a port; and an adapter on the edge implements each port with a library:
+`gix` for a source, SQLite for the ledger, the system's clock for the time.
+The front ends are the other side's adapters, so a new store or a new
+interaction module is written against what is there, and no rule changes
+for it.
+
+**Values.** `value` holds the value objects every record, report and view
+core builds is an aggregate of, each a type holding one text that can be
+made only the way its rule allows:
+
+- **Held to a rule**: `ContentHash`, which only the recipes in `hash` make
+  (and `ContentHash::parse`, from a digest somebody hands over, and the
+  ledger, as it holds one); `ProjectId`, generated or parsed; and
+  `Redacted`, a URL or words that may quote one, made only through
+  `Redacted::new`, which takes every credential out. A function handed one
+  need not check it again: the rule is the type.
+- **Named apart**: `ArtifactName`, `Origin` and `Revision`, which hold any
+  text, since core reads leniently ([strict when writing, lenient when
+  reading](#strict-when-writing-lenient-when-reading)) and a name on the
+  disk that breaks a rule is listed all the same, but each a type of its
+  own so that one is never handed where another is meant. `Origin` writes
+  itself out redacted whatever built it, since a source's address is part
+  of it.
+
+A `String` for each was what core had, and it said nothing of what it held:
+a hash could be passed where a name was meant, and a URL still carrying a
+token stored where only one without may go, with only a reviewer to notice.
+Each value reads as its text (`Deref` to `str`, comparisons with text
+either way round, `Display` and `Debug` as the text), so code that only
+reads one reads it as it read the `String`, and goes out as that text: serde
+writes a string, ts-rs says `string` (a hand-written `TS` impl, since a
+derive even with `ts(as)` names the type and exports a file of its own) and
+schemars says what it says of a `String`, inline. So turning a field into
+one changes nothing the JSON, the panel's types or the API's schemas say,
+which the drift checks hold, and nothing a `--json` reader was promised.
+`ProjectId` is the one exception, kept as it was published, with a
+TypeScript type and a pattern of its own. What is still a `String` is what
+no value names yet: a project's name and a registry entry, a path inside a
+project, an error's fields. Those join `value` as a rule is found for them,
+the same way.
+
+**Ports.** `port` holds what core needs of the world beyond its files, each
+a trait in core's own words: a `Remote` fetches a source into the cache and
+scrubs a clone of what a credential left in it, a `LedgerStore` keeps a
+workspace's records (its sources and what each supplied, every installation
+and its copies, the projects it knew, the action log), and a `Clock` tells
+the time the ledger stamps by. A port speaks only core's types: what an adapter's
+library says is turned into those at the edge (an error into text, a commit
+into a `Revision`), never carried through, which would tie core's public API
+to the library's version and let a rule lean on how one library works. So
+`GitError` and the clone a fetch answers with (`port::Cloned`) are the
+port's, since they carry only text, and `LedgerError` carries what a store
+said boxed (`Box<dyn Error + Send + Sync>`), so it names no store's type;
+the SQLite adapter, which alone knows what it put there, looks inside it
+with a `downcast_ref` where it has to tell one failure from another.
+
+**Adapters.** `adapter` implements them: `adapter::gix::Gix`, which clones
+with `gix` and asks the credential helpers through the callback that never
+prompts ([a gather never prompts for a credential
+itself](#d-16-credentials-come-from-the-front-end-never-from-a-prompt));
+`adapter::sqlite::Sqlite`, every query, every schema step and the backup
+before one ([why the ledger is SQLite](#why-the-ledger-is-sqlite)); and
+`SystemClock`. Each is the default its port is given wherever nothing else
+is handed over, the seam [D-14](#d-14-core-owns-http-behind-a-seam) chose
+for HTTP: a gather's `Request` fetches through the remote it is handed
+(`Request::through`), `Gix` unless another is, and the ledger stamps by the
+clock it is given (`Ledger::with_clock`), the system's unless another is,
+and keeps its records in the store it is handed (`Ledger::new`), SQLite
+unless another is: every other constructor opens a `Sqlite`. A
+test's fake is one more adapter: `port_test.rs` gathers through a remote
+that writes files and has no git at all, and stamps the ledger by a clock
+that does not move, and what each comes to is what it comes to through the
+real ones. The scrub `ledger_to_write` runs goes through `Gix` whatever a
+gather is handed, since what it repairs is what an older build's gix clones
+kept.
+
+**What is not behind a port.** The files are not. What core promises of
+them is how they are written (`create_new`, a temporary renamed into place,
+a link never followed out of its holder, a lock held while a writer
+changes the workspace), and those promises are made of the operating
+system's own calls: an adapter that only seemed to keep them is the failure
+a filesystem port would invite, and every test already runs on real
+temporary folders. Reading what git keeps of a project, where its common
+folder is and whether its index tracks a copy (`exclude`), is the same: it
+reads files git wrote, through `gix` with every system and user setting
+left out, and nothing of it reaches out of the machine.
+
+**The ledger, a facade over its store.** Every caller holds a
+`ledger::Ledger`, as it did when that was SQLite itself, and asks it in
+core's words; none writes SQL. It holds a `Box<dyn LedgerStore>` and hands
+each call to it through `Deref`, so the methods are declared once, on the
+port, and no caller changed when they moved there. The two things a trait
+object cannot carry stay on the facade: the constructors, which open the
+SQLite store, and `relinked`, whose write is of any type, run by the
+store as an erased one (`LedgerStore::relinked_by`, a write that says
+whether to keep what it moved). The store's own tests are the adapter's
+(`adapter/sqlite_test.rs`), since they reach its connection to make a row
+an older build wrote; what any store must do is held by the suites that run
+core through the facade.
+
+**The driving side.** A front end drives core through its functions, and
+every change through the command lines every front end runs
+(`commands::run_line`, [every change is a command
+line](#every-change-is-a-command-line)), which is already a port: the TUI,
+the panel's backend and the CLI itself are its adapters. A new interaction
+module, an MCP server or a desktop shell, is one more: it builds the same
+`Task` and runs its lines, as [D-18](#d-18-the-panel-writes-by-running-commands)
+and [D-24](#d-24-the-local-server-is-a-versioned-http-api) keep every
+writer doing, and gains every rule with no change to one.
 
 ## The kinds, and how a kind is described
 
@@ -1555,8 +1671,8 @@ type derives `Serialize` from the start:
   (`install::Cell`, which the panel sends, and so reads too, refusing a
   field it does not name), and what a selection amounts to
   (`install::Plan`, its `Change`, `Conflict` and `Locked`), each name by
-  the field, a kind by its slug, an origin, a cell's or an install's,
-  through `url::serialize_redacted`, and why a box clashes or is locked as a
+  the field, a kind by its slug, an origin, a cell's or an install's, as a
+  `value::Origin`, written redacted, and why a box clashes or is locked as a
   `code::Said`. The panel is answered with the backend's `Planned`, each
   change the task that runs it, so a `Change` is tagged as a task is, its
   type beside its fields.
@@ -1567,7 +1683,7 @@ type derives `Serialize` from the start:
   and the candidates it writes from, none a reader is given. What an update
   does is a word (`update::Does`, by its slug, said in TypeScript from the
   serializer's own function), a copy a route from its project, an origin
-  through `url::serialize_redacted_option`, and why one is left a
+  as a `value::Origin`, and why one is left a
   `code::Said` of `update::Left`.
 - **Judged for the panel by #82**: what core says of a draft before a
   command writes it (`draft::Judged`), each issue a `ValidationIssue` as
@@ -1620,11 +1736,17 @@ What each says is held to the rule above, and three more things:
   shape for, and only the two are meant to leave core. A member whose entry
   opens no project says why as `error`, which is what a status report's
   `stale` says, with the code beside it.
-- **A URL goes out only through `url::redacted`**, where it is written
-  (`url::serialize_redacted`) rather than trusted to where it came from. The
-  ledger hands back no URL with a credential in it, but a request is built
-  before a URL that carries one is refused, and a test builds a source with
-  one to prove that neither the source nor an offer's origin prints it.
+- **A URL goes out only through `url::redacted`**, and is held as a value
+  that says so ([values, ports and adapters](#values-ports-and-adapters)):
+  a source's URL, the action log's words and every `Said`'s message are a
+  `value::Redacted`, which nothing makes from a text that keeps a
+  credential, and an origin is a `value::Origin`, which writes itself out
+  redacted whatever built it. A `String` redacted where it is written, the
+  way this was first kept (`url::serialize_redacted`, on each field), left
+  every new field to remember it. The ledger hands back no URL with a
+  credential in it, but a request is built before a URL that carries one
+  is refused, and a test builds a source with one to prove that neither the
+  source nor an offer's origin prints it.
 
 What a failure collected beside a report says stays out of the report, as a
 scan's does: a gather's `failures` and `warnings` are a front end's
@@ -2254,11 +2376,16 @@ it: a token on the command line is already where `ps` and the shell history
 show it, and refusing is what points at a git credential helper, which keeps
 it off the command line altogether, as the front-end provider of
 [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) will.
-Behind that refusal the rest holds whichever caller is writing. The ledger
+So is such a URL typed where the branch or the folder goes: the ledger keeps
+a source's branch and folder word for word, since neither is a URL, and a
+`GitError` would quote the branch, so a token typed there, found by the
+suite that tries every credentialed form in every place a gather takes text,
+was stored and printed until it was refused alike. Behind that refusal the rest holds whichever caller is writing. The ledger
 redacts every URL on the way in and again on the way out, so nothing it hands
 back carries a credential, scrubbed yet or not. Every `GitError` redacts the
-URL and what `gix` said. A clone is scrubbed as soon as it is made
-(`git::scrub`): `gix` writes the URL into the remote's entry in `.git/config`
+URL and what `gix` said. A clone is scrubbed as soon as it is made (the gix
+adapter's `Remote::scrub`, [values, ports and
+adapters](#values-ports-and-adapters)): `gix` writes the URL into the remote's entry in `.git/config`
 and into every reflog as `clone: from <url>`, and those files are rewritten
 through the same function. A clone a gather makes now has nothing to take out,
 and finding that costs a few small reads. A `--from` typed with credentials
@@ -2376,7 +2503,8 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
-The schema has had five versions, each a block in `Ledger::migrate` and a
+The schema has had five versions, each a block in the SQLite store's
+migration (`adapter::sqlite::Sqlite::migrate`) and a
 constant beside it:
 
 1. `sources`, `artifacts` and `actions`: what was gathered, from where, and
@@ -2408,7 +2536,7 @@ An older ledger is migrated step by step, so one made two versions ago ends
 where one made today begins, and two rules hold for every step:
 
 - **The file is copied aside first.** Before the first step, the ledger is
-  copied beside itself as `mindflayer.db.v<old>.bak` (`Ledger::back_up`), and
+  copied beside itself as `mindflayer.db.v<old>.bak` (`Sqlite::back_up`), and
   nothing is migrated unless the copy is whole and opens at the old version.
   A step that turns out wrong then leaves the file it started from: the copy
   opens at the old version, and the build that wrote it reads it as it
@@ -6994,6 +7122,19 @@ CI gives the panel jobs of its own:
 The rulesets for `dev` and `main` require every check that runs on every
 pull request, the panel's three among them; AGENTS.md lists them by name.
 
+The tests are split by app and by nothing else. A crate's unit tests, its
+value objects and its integration suites run in its one `test (<app>)`,
+as `make <app>/test` runs them: a workflow of jobs by layer (`unit`,
+`value objects`, `integration`) ran beside it for a while, and ran the
+same tests a second time on every push, compiling each crate twice to
+say by a check's name which layer broke, which the failing test's path
+says already. Each `build (<app>)` then builds its app in debug and, as a
+step after it, the release (`make core/release`, `make server/release`,
+the CLI's `make cli/release`): the optimized build is the one that ships,
+so it is built on every run rather than first when a release is cut, and
+after the debug build, which fails sooner and cheaper. A step rather than a
+job of its own, so no check name changes and the rulesets stay as they are.
+
 `make install` and `make cli/release` build the panel first through `make
 web/build/if-node`. Where Node and pnpm run it is `make web/build`, and a
 build that fails fails them. Where either is missing, a warning says what
@@ -7364,7 +7505,7 @@ schema and no other, so declining would leave the file unreadable rather than
 untouched; that step is upkeep of Mindflayer's own file, not a change anybody
 asked for. Every migration copies the database aside before its first step
 ([Why the ledger is SQLite](#why-the-ledger-is-sqlite)), and a read migrates
-through the same `Ledger::migrate`, so it leaves that copy too: the first
+through the same migration (`Sqlite::migrate`), so it leaves that copy too: the first
 `flayer gather list` after an upgrade puts `mindflayer.db.v2.bak` beside a
 ledger version 2 wrote.
 
@@ -8914,7 +9055,7 @@ other, and none of them makes a reader wait for the workspace.
   ([open questions](#open-questions)).
 - **Opening the ledger takes no lock**, though it is when a ledger is made or
   migrated. A migration is one transaction that reads the version again once
-  it holds SQLite's write lock (`Ledger::migrate`), so two processes opening
+  it holds SQLite's write lock (`Sqlite::migrate`), so two processes opening
   one an older build left take turns there and the second finds nothing to
   do (a read's migration included, which the workspace's lock could not keep
   apart, since readers never take it). Taking that lock as well made every
@@ -8995,9 +9136,10 @@ one machine at a time.
 ## Decisions
 
 The roadmap in [#15](https://github.com/otsobide/mindflayer/issues/15) rests on
-twenty-four decisions: twenty-two validated by the owner on 2026-10-26,
+twenty-five decisions: twenty-two validated by the owner on 2026-10-26,
 [D-24](#d-24-the-local-server-is-a-versioned-http-api) on 2026-11-03 with the
-milestone it opens, and [D-20](#d-20-opencode-subagents-pending), still
+milestone it opens, [D-25](#d-25-core-is-values-and-ports), asked for by the
+owner on the same day, and [D-20](#d-20-opencode-subagents-pending), still
 pending. They are written down
 here so that the PRs carrying them out do not reopen them: a change that
 disagrees with one starts by changing the decision, here, with the owner. Each
@@ -9618,7 +9760,43 @@ the server and holds to what it answers ([the API's guide runs its
 examples](#the-apis-guide-runs-its-examples)). The guide says no MCP front
 end is there, and nothing more: none is started until the owner says so.
 
+### D-25: Core is values and ports
+
+Asked for by the owner on 2026-11-03: every entity core builds is an
+aggregate of value objects, and core is hexagonal, so that infrastructure
+can change, and interaction modules be added, with the least change to the
+rules. Carried out on the branch that asked for it ([values, ports and
+adapters](#values-ports-and-adapters)): `value` holds a hash, a redacted
+text, an origin, an artifact's name, a revision and a project's id, each
+going out as the text it is, so no contract moves; `port` holds a `Remote`,
+a `LedgerStore` and a `Clock`, and `adapter` holds `gix`, SQLite and the
+system clock as their defaults, injected as
+[D-14](#d-14-core-owns-http-behind-a-seam) injects HTTP, the ledger a
+facade over its store so no caller changed. The driving side is the command line every front end already runs,
+so a new front end stays one more driver of it
+([D-18](#d-18-the-panel-writes-by-running-commands)). Rejected: a port over
+the filesystem, whose promises are the operating system's own calls, and a
+second crate for each adapter, which would split one engine's rules from
+the code that keeps them for no reader that needs the split yet. Still to
+carry out: the values not named yet (a project's name, a registry entry),
+an open question below.
+
 ## Open questions
+
+- **The ledger's port is shaped by the store it came from.** `LedgerStore`
+  is the SQLite store's public methods as they were
+  ([values, ports and adapters](#values-ports-and-adapters)), so a second
+  store implements what only SQLite's past needs: `tainted_sources`,
+  `scrub_source` and `scrub_log` repair rows an older build wrote with a
+  credential in them, which a store made today never holds, and `path`
+  names a file a store kept elsewhere may not have. Splitting the repairs
+  off into a port of their own waits for a second store to say which of
+  them it can answer, rather than guessing now.
+- **Values not named yet.** A project's name, a registry entry and a path
+  inside a project are still `String`s, and so are an error's fields, as
+  the read types that hold them were. Each joins `value` when a rule is
+  found that it holds, as `ProjectId` did; one with no rule of its own, a
+  name named apart, joins when a mix-up between two of them is found.
 
 - **A known workspace that has gone is offered nothing.** The page of
   loads and the header's switcher list it, with why it does not open, and
@@ -10916,11 +11094,12 @@ end is there, and nothing more: none is started until the owner says so.
 - **Ctrl-C off Unix.** `ui_test` stops the panel with SIGINT, and with
   SIGTERM, sent by `kill`, so it runs on Unix only. On Windows `ui` listens for the console's
   Ctrl-C (`tokio::signal::windows::ctrl_c`), which no test sends yet (#154).
-- **A release compiled from nothing on every run.** `build (cli)` builds the
-  release profile from scratch each time: every job shares one cargo cache
-  key, saved by the first job to finish, which builds no release. A key of
-  its own would keep the release's dependencies, at the price of a second
-  target folder in a cache GitHub caps per repository.
+- **A release compiled from nothing on every run.** `build (core)`, `build
+  (cli)` and `build (server)` each build the release profile from scratch
+  every time: every job shares one cargo cache key, saved by the first job
+  to finish, which builds no release. A key of their own would keep the
+  release's dependencies, at the price of a second target folder in a cache
+  GitHub caps per repository.
 - **The release check on one platform.** `make cli/release/check` runs on
   Linux only: its script needs bash 4.4 and SIGINT, and the macOS and
   Windows jobs build no release. The compatibility pass (#154) could take it

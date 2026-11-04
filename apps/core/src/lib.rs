@@ -12,6 +12,7 @@
 //! types return, so the two can never disagree about what a skill is.
 
 pub mod activate;
+pub mod adapter;
 pub mod adopt;
 pub mod agent;
 pub mod agents_md;
@@ -42,8 +43,11 @@ pub mod lifecycle;
 mod lines;
 pub mod lock;
 pub mod migrate;
+#[cfg(any(test, feature = "mother"))]
+pub mod mother;
 pub mod paths;
 pub mod policy;
+pub mod port;
 pub mod reading;
 pub mod reapply;
 pub mod relink;
@@ -60,6 +64,7 @@ pub mod template;
 pub mod typescript;
 pub mod update;
 pub mod url;
+pub mod value;
 pub mod view;
 pub mod watch;
 pub mod workspace;
@@ -78,6 +83,7 @@ pub use known::{Known, KnownWorkspace};
 pub use ledger::{Ledger, LedgerError, SourceKind, LEDGER_FILE};
 pub use lifecycle::{LifecycleError, Target};
 pub use lock::{LockError, WorkspaceLock};
+pub use port::{Clock, Remote};
 pub use reapply::{Change, ReapplyError};
 pub use resolve::{resolve, resolve_except, Inputs, Intent, Reason, ResolveError, Resolved};
 pub use rule::{Lenient, RuleManifest};

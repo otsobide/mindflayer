@@ -927,7 +927,7 @@ fn a_source_to_gather_from_serializes_without_the_credentials_its_url_carries() 
 #[test]
 fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnings() {
     let harvested = |name: &str| gather::Harvested {
-        name: name.to_owned(),
+        name: name.to_owned().into(),
         directory: name.to_owned(),
         summary: Some(format!("About {name}")),
         path: std::path::PathBuf::from(format!(
@@ -935,7 +935,7 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
         )),
     };
     let report = gather::Report {
-        revision: Some(String::from("4f9c2a7")),
+        revision: Some("4f9c2a7".into()),
         directory: String::from("github.com-acme-skills"),
         added: vec![harvested("deploy")],
         updated: Vec::new(),

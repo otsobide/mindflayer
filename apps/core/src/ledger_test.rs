@@ -1,1998 +1,732 @@
 //! Unit tests for `ledger.rs`, kept beside it rather than inside it.
+//!
+//! The words the ledger writes (a source's kind, an action, an outcome) are
+//! in every database a build has made, and what its read types serialize to
+//! is what `--json` and the panel print: both are contracts a rename of a
+//! variant or a field would break without a compiler noticing. So each is
+//! pinned here word for word, over values the mothers draw.
 
 use super::*;
 
+use std::io;
+
+use serde_json::Value;
+
+use crate::mother::random;
+use crate::mother::{
+    ArtifactNameMother, EntryMother, GatheredMother, InstallRecordMother, OriginMother,
+    ProjectIdMother, RedactedMother, RevisionMother, SourceMother, UrlMother,
+};
+
+const DRAWS: usize = 200;
+
+/// Every kind of source, by a match with no wildcard, so a new one does not
+/// compile until it is listed here and its slug pinned below.
+fn every_source_kind() -> Vec<SourceKind> {
+    let listed = |kind: SourceKind| match kind {
+        SourceKind::Git => kind,
+    };
+    vec![listed(SourceKind::Git)]
+}
+
+/// Every action, as [`every_source_kind`] lists the kinds.
+fn every_action() -> Vec<Action> {
+    let listed = |action: Action| match action {
+        Action::Gather | Action::Install | Action::Uninstall | Action::Relink | Action::Adopt => {
+            action
+        }
+    };
+    [
+        Action::Gather,
+        Action::Install,
+        Action::Uninstall,
+        Action::Relink,
+        Action::Adopt,
+    ]
+    .into_iter()
+    .map(listed)
+    .collect()
+}
+
+fn json<T: Serialize + ?Sized>(value: &T) -> String {
+    serde_json::to_string(value).expect("a read type serializes")
+}
+
+/// The names of an object's fields, in the order they are written.
+///
+/// Read off the text rather than a `Value`, whose map sorts its keys, since
+/// the order a report's fields come in is what a person reading it sees.
+fn keys(text: &str) -> Vec<String> {
+    let value: Value = serde_json::from_str(text).expect("serialized JSON parses");
+    let object = value.as_object().expect("a record serializes as an object");
+    let mut keys: Vec<(usize, String)> = object
+        .keys()
+        .map(|key| {
+            let quoted = format!("{}:", json(key));
+            let at = text.find(&quoted).expect("every key is in the text");
+            (at, key.clone())
+        })
+        .collect();
+    keys.sort();
+    keys.into_iter().map(|(_, key)| key).collect()
+}
+
+/// What a source must serialize to, written out field by field from what it
+/// holds, never through its own serializer.
+fn source_as_json(source: &Source) -> String {
+    format!(
+        r#"{{"kind":{},"url":{},"reference":{},"subdirectory":{},"revision":{},"directory":{}}}"#,
+        json(source.kind.slug()),
+        json(source.url.as_str()),
+        json(&source.reference),
+        json(&source.subdirectory),
+        json(&source.revision.as_ref().map(|revision| revision.as_str())),
+        json(&source.directory),
+    )
+}
+
+fn lock_busy(path: &str) -> crate::lock::LockError {
+    crate::lock::LockError::Busy {
+        path: PathBuf::from(path),
+        pid: Some(4242),
+        waited: crate::lock::WAIT,
+    }
+}
+
+fn lock_unopened(path: &str) -> crate::lock::LockError {
+    crate::lock::LockError::Open {
+        path: PathBuf::from(path),
+        source: io::Error::other("denied"),
+    }
+}
+
+/// One of each variant with a code of its own, beside the code it gives.
+fn every_own_error(path: &str) -> Vec<(LedgerError, &'static str)> {
+    let path = PathBuf::from(path);
+    vec![
+        (
+            LedgerError::Create {
+                path: path.clone(),
+                source: io::Error::other("no room"),
+            },
+            "ledger_create_failed",
+        ),
+        (
+            LedgerError::Open {
+                path: path.clone(),
+                source: Box::new(io::Error::other("not a database")),
+            },
+            "ledger_open_failed",
+        ),
+        (
+            LedgerError::Version {
+                path: path.clone(),
+                found: SCHEMA_VERSION + 1,
+            },
+            "ledger_too_new",
+        ),
+        (
+            LedgerError::Backup {
+                path: path.clone(),
+                backup: path.with_extension("db.v1.bak"),
+                source: io::Error::other("read-only"),
+            },
+            "ledger_backup_failed",
+        ),
+        (LedgerError::Unmade { path: path.clone() }, "ledger_unmade"),
+        (
+            LedgerError::Query {
+                path,
+                doing: String::from("recording an installation"),
+                source: Box::new(io::Error::other("disk I/O error")),
+            },
+            "ledger_query_failed",
+        ),
+    ]
+}
+
 #[test]
-fn a_url_becomes_a_readable_directory_name() {
+fn every_source_kind_is_parsed_back_from_its_slug() {
+    for kind in every_source_kind() {
+        assert_eq!(SourceKind::parse(kind.slug()), Some(kind), "{kind:?}");
+    }
+}
+
+/// The slug is in every database a build has written: renaming one would
+/// leave each row an older build wrote naming a kind no build reads.
+#[test]
+fn a_git_source_is_written_as_git() {
+    assert_eq!(SourceKind::Git.slug(), "git");
+}
+
+#[test]
+fn a_source_kind_serializes_as_its_slug_and_nothing_else() {
+    for kind in every_source_kind() {
+        assert_eq!(json(&kind), json(kind.slug()), "{kind:?}");
+    }
+}
+
+/// Parsed as written, with no folding: a row holding another spelling was
+/// written by no build, and is skipped rather than read as a git source.
+#[test]
+fn a_slug_spelled_any_other_way_is_no_source_kind() {
+    for slug in [
+        "", "Git", "GIT", " git", "git ", "git\n", "github", "svn", "hg",
+    ] {
+        assert_eq!(SourceKind::parse(slug), None, "{slug:?}");
+    }
+}
+
+#[test]
+fn text_nobody_chose_is_no_source_kind_unless_it_is_a_slug() {
+    let slugs: Vec<&str> = every_source_kind()
+        .into_iter()
+        .map(SourceKind::slug)
+        .collect();
+    for _ in 0..DRAWS {
+        let text = random::pick(&[random::text(8), random::word()]);
+
+        assert_eq!(
+            SourceKind::parse(&text).is_some(),
+            slugs.contains(&text.as_str()),
+            "{text:?}"
+        );
+    }
+}
+
+/// What the action log has said of every action since it was kept: a front
+/// end filters the history by these words.
+#[test]
+fn each_action_is_written_as_the_word_the_log_has_always_held() {
+    let written: Vec<(Action, &str)> = every_action()
+        .into_iter()
+        .map(|action| (action, action.slug()))
+        .collect();
+
     assert_eq!(
-        slug("https://github.com/acme/skills.git"),
-        "github.com-acme-skills"
+        written,
+        vec![
+            (Action::Gather, "gather"),
+            (Action::Install, "install"),
+            (Action::Uninstall, "uninstall"),
+            (Action::Relink, "relink"),
+            (Action::Adopt, "adopt"),
+        ]
     );
+}
+
+#[test]
+fn no_two_actions_are_written_alike() {
+    let mut slugs: Vec<&str> = every_action().into_iter().map(Action::slug).collect();
+    slugs.sort_unstable();
+    slugs.dedup();
+
+    assert_eq!(slugs.len(), every_action().len(), "{slugs:?}");
+}
+
+#[test]
+fn an_outcome_is_written_as_ok_or_failed() {
+    let listed = |outcome: Outcome| match outcome {
+        Outcome::Ok => "ok",
+        Outcome::Failed => "failed",
+    };
+    for outcome in [Outcome::Ok, Outcome::Failed] {
+        assert_eq!(outcome.slug(), listed(outcome), "{outcome:?}");
+    }
+}
+
+#[test]
+fn a_source_asked_for_at_no_branch_comes_from_its_url_alone() {
+    for url in UrlMother::every_clean() {
+        let source = SourceMother::create(&url, None);
+
+        assert_eq!(source.origin(), OriginMother::source(&url, None), "{url}");
+        assert_eq!(source.origin().as_str(), url, "{url}");
+    }
+}
+
+#[test]
+fn a_source_asked_for_at_a_branch_comes_from_its_url_and_the_branch_after_a_hash() {
+    for _ in 0..DRAWS {
+        let (url, branch) = (UrlMother::clean(), random::word());
+        let source = SourceMother::create(&url, Some(&branch));
+
+        assert_eq!(
+            source.origin().as_str(),
+            format!("{url}#{branch}"),
+            "{url} at {branch}"
+        );
+        assert_eq!(
+            source.origin(),
+            OriginMother::source(&url, Some(&branch)),
+            "{url} at {branch}"
+        );
+    }
+}
+
+/// The branch is put after the `#` as it was asked for, a slash or a dot
+/// in it included, since a tag or a branch in folders is spelled so.
+#[test]
+fn a_branch_with_slashes_and_dots_is_kept_whole_in_the_origin() {
+    let url = UrlMother::https();
+    for branch in ["release/1.2", "v2.0.0", "feature/a-b/c"] {
+        let source = SourceMother::create(&url, Some(branch));
+
+        assert_eq!(source.origin().as_str(), format!("{url}#{branch}"));
+    }
+}
+
+/// An origin is spelled from the redacted URL the source holds, so neither
+/// what `--from` is offered nor what an install records repeats a
+/// credential the URL was typed with.
+#[test]
+fn the_origin_of_a_source_typed_with_a_credential_holds_none() {
+    for typed in UrlMother::every_credentialed() {
+        let branch = random::chance().then(random::word);
+        let source = SourceMother::create(&typed.typed, branch.as_deref());
+        let origin = source.origin();
+
+        assert!(!origin.contains(&typed.secret), "{typed:?} gave {origin}");
+        assert_eq!(
+            origin,
+            OriginMother::source(&typed.clean, branch.as_deref()),
+            "{typed:?}"
+        );
+    }
+}
+
+/// A source's origin is what an install of one of its own records, so it
+/// says the same of the source as the URL serialized beside it.
+#[test]
+fn the_origin_of_a_source_begins_with_the_url_it_serializes() {
+    for _ in 0..DRAWS {
+        let source = SourceMother::random();
+        let serialized: Value = serde_json::from_str(&json(&source)).unwrap();
+        let url = serialized["url"].as_str().unwrap().to_owned();
+
+        assert!(
+            source.origin().starts_with(&url),
+            "{source:?} serialized {url}"
+        );
+    }
+}
+
+#[test]
+fn a_source_serializes_each_field_by_its_name_in_the_order_it_is_declared() {
+    for _ in 0..DRAWS {
+        let source = SourceMother::random();
+
+        assert_eq!(json(&source), source_as_json(&source), "{source:?}");
+    }
+}
+
+#[test]
+fn a_source_serializes_exactly_these_fields() {
+    let source = SourceMother::random();
+
     assert_eq!(
-        slug("git@github.com:acme/skills.git"),
-        "github.com-acme-skills"
+        keys(&json(&source)),
+        [
+            "kind",
+            "url",
+            "reference",
+            "subdirectory",
+            "revision",
+            "directory"
+        ],
+        "{source:?}"
     );
-    assert_eq!(slug("https://user:token@host/x"), "host-x");
-    assert_eq!(slug("///"), "source");
+}
+
+/// The row id is the ledger's, numbered as rows were written: two sources
+/// that differ in nothing else are the same place to whoever reads them.
+#[test]
+fn a_source_s_row_id_is_never_serialized() {
+    for _ in 0..DRAWS {
+        let source = SourceMother::random();
+        let renumbered = Source {
+            id: source.id + random::between(1, 1000) as i64,
+            ..source.clone()
+        };
+
+        assert_eq!(json(&source), json(&renumbered), "{source:?}");
+        assert!(!keys(&json(&source)).contains(&String::from("id")));
+    }
 }
 
 #[test]
-fn registering_the_same_source_twice_returns_the_same_row() {
-    let ledger = Ledger::in_memory().unwrap();
-    let first = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
-        .unwrap();
-    let again = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
-        .unwrap();
-    assert_eq!(first, again);
+fn a_source_that_was_never_gathered_says_so_with_nulls() {
+    let source = Source {
+        reference: None,
+        revision: None,
+        ..SourceMother::random()
+    };
+    let serialized: Value = serde_json::from_str(&json(&source)).unwrap();
+
+    assert_eq!(serialized["reference"], Value::Null, "{source:?}");
+    assert_eq!(serialized["revision"], Value::Null, "{source:?}");
 }
 
 #[test]
-fn two_urls_with_one_readable_name_get_separate_directories() {
-    let ledger = Ledger::in_memory().unwrap();
-    // Both reduce to `h-a`, and both hold files, so they cannot share one.
-    let first = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
-        .unwrap();
-    let second = ledger
-        .source_for(SourceKind::Git, "ssh://h/a", None, "skills")
-        .unwrap();
-    assert_eq!(first.directory, "h-a");
-    assert_eq!(second.directory, "h-a-2");
+fn a_source_typed_with_any_credential_serializes_its_url_without_it() {
+    for typed in UrlMother::every_credentialed() {
+        let source = SourceMother::create(&typed.typed, None);
+        let serialized = json(&source);
+
+        assert!(!serialized.contains(&typed.secret), "{serialized}");
+        assert!(
+            serialized.contains(&format!(r#""url":{}"#, json(&typed.clean))),
+            "{typed:?} gave {serialized}"
+        );
+    }
 }
 
 #[test]
-fn a_forgotten_source_frees_its_directory_and_takes_its_artifacts() {
-    let ledger = Ledger::in_memory().unwrap();
-    let source = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
-        .unwrap();
-    ledger
-        .record(
-            &source,
+fn a_gathered_artifact_serializes_each_field_by_its_name_its_source_nested() {
+    for _ in 0..DRAWS {
+        let kind = random::pick(&Kind::ALL);
+        let gathered =
+            GatheredMother::create(kind, ArtifactNameMother::random(), SourceMother::random());
+        let expected = format!(
+            r#"{{"kind":{},"name":{},"path":{},"summary":{},"revision":{},"gathered_at":{},"source":{}}}"#,
+            json(kind.slug()),
+            json(gathered.name.as_str()),
+            json(&gathered.path),
+            json(&gathered.summary),
+            json(&gathered.revision.as_ref().map(|revision| revision.as_str())),
+            gathered.gathered_at,
+            source_as_json(&gathered.source),
+        );
+
+        assert_eq!(json(&gathered), expected, "{gathered:?}");
+    }
+}
+
+#[test]
+fn a_gathered_artifact_serializes_exactly_these_fields() {
+    let gathered = GatheredMother::random();
+
+    assert_eq!(
+        keys(&json(&gathered)),
+        [
+            "kind",
+            "name",
+            "path",
+            "summary",
+            "revision",
+            "gathered_at",
+            "source"
+        ],
+        "{gathered:?}"
+    );
+}
+
+/// A summary is read from somebody's front matter, so it may hold any
+/// character: it reaches the JSON escaped and comes back as it was.
+#[test]
+fn a_gathered_summary_of_any_text_reads_back_as_it_was() {
+    for _ in 0..DRAWS {
+        let summary = random::text(40);
+        let gathered = Gathered {
+            summary: Some(summary.clone()),
+            ..GatheredMother::random()
+        };
+        let serialized: Value = serde_json::from_str(&json(&gathered)).unwrap();
+
+        assert_eq!(
+            serialized["summary"],
+            Value::from(summary.clone()),
+            "{summary:?}"
+        );
+    }
+}
+
+#[test]
+fn a_gathered_artifact_from_a_source_typed_with_a_credential_serializes_none() {
+    for typed in UrlMother::every_credentialed() {
+        let gathered = GatheredMother::create(
             Kind::Skill,
-            "deploy",
-            "skills/h-a/deploy",
-            None,
-            None,
+            ArtifactNameMother::random(),
+            SourceMother::create(&typed.typed, Some("main")),
+        );
+        let serialized = json(&gathered);
+
+        assert!(!serialized.contains(&typed.secret), "{serialized}");
+    }
+}
+
+#[test]
+fn an_entry_serializes_each_field_by_its_name_in_the_order_it_is_declared() {
+    for _ in 0..DRAWS {
+        let entry = EntryMother::random();
+        let expected = format!(
+            r#"{{"at":{},"action":{},"target":{},"outcome":{},"detail":{}}}"#,
+            entry.at,
+            json(&entry.action),
+            json(&entry.target.as_ref().map(|target| target.as_str())),
+            json(&entry.outcome),
+            json(&entry.detail.as_ref().map(|detail| detail.as_str())),
+        );
+
+        assert_eq!(json(&entry), expected, "{entry:?}");
+    }
+}
+
+#[test]
+fn an_entry_serializes_exactly_these_fields() {
+    assert_eq!(
+        keys(&json(&EntryMother::random())),
+        ["at", "action", "target", "outcome", "detail"]
+    );
+}
+
+#[test]
+fn an_entry_about_nothing_that_said_nothing_serializes_nulls() {
+    let entry = Entry {
+        target: None,
+        detail: None,
+        ..EntryMother::random()
+    };
+    let serialized: Value = serde_json::from_str(&json(&entry)).unwrap();
+
+    assert_eq!(serialized["target"], Value::Null);
+    assert_eq!(serialized["detail"], Value::Null);
+}
+
+/// A failed gather's entry names its URL and quotes it in what went wrong:
+/// whatever built the entry, neither field prints the credential.
+#[test]
+fn an_entry_quoting_a_credentialed_url_anywhere_serializes_none() {
+    for typed in UrlMother::every_credentialed() {
+        let quoted = UrlMother::quoted(&typed);
+        let entry = Entry {
+            target: Some(RedactedMother::create(&typed.typed)),
+            detail: Some(RedactedMother::create(&quoted.typed)),
+            ..EntryMother::random()
+        };
+        let serialized: Value = serde_json::from_str(&json(&entry)).unwrap();
+
+        assert!(!json(&entry).contains(&typed.secret), "{entry:?}");
+        assert_eq!(serialized["target"], Value::from(typed.clean.clone()));
+        assert_eq!(serialized["detail"], Value::from(quoted.clean.clone()));
+    }
+}
+
+#[test]
+fn each_ledger_error_of_its_own_gives_its_own_code() {
+    for (error, code) in every_own_error("/w/.mindflayer/mindflayer.db") {
+        assert_eq!(error.code(), code, "{error:?}");
+    }
+}
+
+#[test]
+fn the_codes_a_ledger_error_gives_of_its_own_are_listed_in_order() {
+    let given: Vec<&str> = every_own_error("/w/.mindflayer/mindflayer.db")
+        .into_iter()
+        .map(|(_, code)| code)
+        .collect();
+
+    assert_eq!(LedgerError::CODES, given.as_slice());
+}
+
+/// A busy workspace met while opening the ledger to write is the lock's
+/// condition, and says the lock's code, which the panel already knows, and
+/// is no code of the ledger's own.
+#[test]
+fn a_ledger_error_carrying_the_lock_s_gives_the_lock_s_code() {
+    for lock in [
+        lock_busy("/w/.mindflayer/lock"),
+        lock_unopened("/w/.mindflayer/lock"),
+    ] {
+        let code = lock.code();
+        let error = LedgerError::from(lock);
+
+        assert_eq!(error.code(), code, "{error:?}");
+        assert!(!LedgerError::CODES.contains(&code), "{code}");
+    }
+}
+
+#[test]
+fn a_ledger_error_carrying_the_lock_s_says_what_the_lock_says() {
+    let lock = lock_busy("/w/.mindflayer/lock");
+    let said = lock.to_string();
+
+    assert_eq!(LedgerError::Lock(lock).to_string(), said);
+}
+
+#[test]
+fn every_ledger_error_names_the_file_it_is_about() {
+    for _ in 0..20 {
+        let path = format!("/{}/.mindflayer/{LEDGER_FILE}", random::word());
+        for (error, _) in every_own_error(&path) {
+            assert_eq!(error.path(), Path::new(&path), "{error:?}");
+            assert!(error.to_string().starts_with(&path), "{error}");
+        }
+    }
+}
+
+#[test]
+fn a_ledger_error_carrying_the_lock_s_names_the_lock_file() {
+    let error = LedgerError::Lock(lock_unopened("/w/.mindflayer/lock"));
+
+    assert_eq!(error.path(), Path::new("/w/.mindflayer/lock"));
+}
+
+#[test]
+fn a_ledger_too_new_says_which_schema_it_holds_and_which_this_build_reads() {
+    let found = SCHEMA_VERSION + random::between(1, 50) as u32;
+    let error = LedgerError::Version {
+        path: PathBuf::from("/w/.mindflayer/mindflayer.db"),
+        found,
+    };
+
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "/w/.mindflayer/mindflayer.db: written by a newer Mindflayer \
+             (schema version {found}, this one reads {SCHEMA_VERSION})"
         )
-        .unwrap();
+    );
+}
 
-    assert!(ledger.forget_source(source.id).unwrap());
-    assert!(!ledger.forget_source(source.id).unwrap(), "already gone");
+#[test]
+fn a_failed_query_says_what_it_was_doing_and_what_the_store_said() {
+    let error = LedgerError::Query {
+        path: PathBuf::from(":memory:"),
+        doing: String::from("recording an installation"),
+        source: Box::new(io::Error::other("disk I/O error")),
+    };
 
-    assert!(ledger.gathered().unwrap().is_empty());
+    assert_eq!(
+        error.to_string(),
+        ":memory:: recording an installation failed: disk I/O error"
+    );
+}
+
+#[test]
+fn an_unmade_ledger_says_no_workspace_is_there_to_write_to() {
+    let error = LedgerError::Unmade {
+        path: PathBuf::from("/w/.mindflayer/mindflayer.db"),
+    };
+
+    assert_eq!(
+        error.to_string(),
+        "/w/.mindflayer/mindflayer.db: no workspace has been made here yet, \
+         so there is no ledger to write to"
+    );
+}
+
+#[test]
+fn a_ledger_in_memory_is_kept_nowhere_and_says_so() {
+    let ledger = Ledger::in_memory().unwrap();
+
+    assert_eq!(ledger.path(), Path::new(":memory:"));
+}
+
+/// A store handed over is the one every question reaches, through the
+/// facade's `Deref`, as the SQLite one opened by the facade itself is.
+#[test]
+fn a_ledger_over_a_store_handed_to_it_asks_that_store() {
+    let ledger = Ledger::new(Box::new(Sqlite::in_memory().unwrap()));
+    let record = InstallRecordMother::random();
+
+    ledger.installed("app", &record).unwrap();
+
     assert_eq!(
         ledger
-            .source(SourceKind::Git, "https://h/a", None, "skills")
+            .installation("app", record.kind, &record.name)
+            .unwrap()
+            .map(|found| found.name),
+        Some(record.name.clone())
+    );
+    assert_eq!(ledger.path(), Path::new(":memory:"));
+}
+
+#[test]
+fn a_ledger_debugs_as_the_store_it_holds() {
+    let ledger = Ledger::in_memory().unwrap();
+
+    assert!(
+        format!("{ledger:?}").starts_with("Ledger(Sqlite"),
+        "{ledger:?}"
+    );
+}
+
+#[test]
+fn a_relink_whose_write_succeeds_hands_back_what_it_wrote_and_every_installation_moved() {
+    let ledger = Ledger::in_memory().unwrap();
+    let id = ProjectIdMother::random();
+    let count = random::between(0, 5);
+    for _ in 0..count {
+        ledger
+            .installed("old", &InstallRecordMother::random())
+            .unwrap();
+    }
+    let names = ledger.installations("old", Kind::Skill).unwrap();
+
+    let moved = ledger
+        .relinked("old", "new", &id, || Ok::<_, io::Error>(count * 10))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(moved, (count * 10, names.len()), "{names:?}");
+    assert_eq!(ledger.installations("new", Kind::Skill).unwrap(), names);
+    assert!(ledger.installations("old", Kind::Skill).unwrap().is_empty());
+    assert_eq!(ledger.project_at("new").unwrap(), Some(id));
+}
+
+#[test]
+fn a_relink_whose_write_fails_hands_back_its_error_and_moves_no_record() {
+    let ledger = Ledger::in_memory().unwrap();
+    let id = ProjectIdMother::random();
+    let record = InstallRecordMother::random();
+    ledger.installed("old", &record).unwrap();
+    let logged = ledger.history(100).unwrap().len();
+
+    let refused = ledger
+        .relinked("old", "new", &id, || Err::<(), _>(String::from("refused")))
+        .unwrap();
+
+    assert_eq!(refused, Err(String::from("refused")));
+    assert!(ledger
+        .installation("old", record.kind, &record.name)
+        .unwrap()
+        .is_some());
+    assert_eq!(
+        ledger
+            .installation("new", record.kind, &record.name)
             .unwrap(),
         None
     );
-    // The name it had is free for the next source to reduce to it.
-    let next = ledger
-        .source_for(SourceKind::Git, "ssh://h/a", None, "skills")
-        .unwrap();
-    assert_eq!(next.directory, "h-a");
-}
-
-#[test]
-fn a_reference_is_part_of_what_makes_a_source() {
-    let ledger = Ledger::in_memory().unwrap();
-    let main = ledger
-        .source_for(SourceKind::Git, "https://h/a", Some("main"), "skills")
-        .unwrap();
-    let next = ledger
-        .source_for(SourceKind::Git, "https://h/a", Some("next"), "skills")
-        .unwrap();
-    assert_ne!(main.id, next.id);
-}
-
-/// Two sources of one address are told apart by their branch, so the
-/// origin `--from` takes names the branch too, and only when one was asked
-/// for: the address alone is the remote's HEAD.
-#[test]
-fn a_sources_origin_is_its_address_with_the_branch_asked_for() {
-    let ledger = Ledger::in_memory().unwrap();
-    let head = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
-        .unwrap();
-    let main = ledger
-        .source_for(SourceKind::Git, "https://h/a", Some("main"), "skills")
-        .unwrap();
-
-    assert_eq!(head.origin(), "https://h/a");
-    assert_eq!(main.origin(), "https://h/a#main");
-}
-
-#[test]
-fn one_name_from_two_sources_is_two_rows() {
-    let ledger = Ledger::in_memory().unwrap();
-    let a = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
-        .unwrap();
-    let b = ledger
-        .source_for(SourceKind::Git, "https://h/b", None, "skills")
-        .unwrap();
-    ledger
-        .record(&a, Kind::Skill, "deploy", "p/a", Some("From a"), Some("1"))
-        .unwrap();
-    ledger
-        .record(&b, Kind::Skill, "deploy", "p/b", Some("From b"), Some("2"))
-        .unwrap();
-
-    let gathered = ledger.gathered().unwrap();
-    assert_eq!(gathered.len(), 2);
-    assert_eq!(gathered[0].source.url, "https://h/a");
-    assert_eq!(gathered[1].source.url, "https://h/b");
-}
-
-#[test]
-fn gathering_the_same_name_again_updates_rather_than_duplicates() {
-    let ledger = Ledger::in_memory().unwrap();
-    let source = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
-        .unwrap();
-    ledger
-        .record(&source, Kind::Skill, "deploy", "p", Some("Old"), Some("1"))
-        .unwrap();
-    ledger
-        .record(&source, Kind::Skill, "deploy", "p", Some("New"), Some("2"))
-        .unwrap();
-
-    let gathered = ledger.gathered().unwrap();
-    assert_eq!(gathered.len(), 1);
-    assert_eq!(gathered[0].summary.as_deref(), Some("New"));
-    assert_eq!(gathered[0].revision.as_deref(), Some("2"));
-}
-
-#[test]
-fn the_log_keeps_failures_too_and_reads_back_newest_first() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .log(
-            Action::Gather,
-            Some("https://h/a"),
-            Outcome::Ok,
-            Some("3 skills"),
-        )
-        .unwrap();
-    ledger
-        .log(
-            Action::Gather,
-            Some("https://h/b"),
-            Outcome::Failed,
-            Some("no such host"),
-        )
-        .unwrap();
-
-    let history = ledger.history(10).unwrap();
-    assert_eq!(history.len(), 2);
-    assert_eq!(history[0].target.as_deref(), Some("https://h/b"));
-    assert_eq!(history[0].outcome, "failed");
-    assert_eq!(history[1].outcome, "ok");
-}
-
-#[test]
-fn a_database_from_the_future_is_refused_by_its_version() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-    let future = SCHEMA_VERSION + 1;
-    {
-        let ledger = Ledger::open(&path).unwrap();
-        ledger
-            .connection
-            .pragma_update(None, "user_version", future)
-            .unwrap();
-    }
-
-    for error in [
-        Ledger::open(&path).unwrap_err(),
-        Ledger::open_existing(&path).unwrap_err(),
-    ] {
-        assert!(
-            matches!(error, LedgerError::Version { found, .. } if found == future),
-            "{error}"
-        );
-        assert!(
-            error.to_string().contains(&format!(
-                "schema version {future}, this one reads {SCHEMA_VERSION}"
-            )),
-            "{error}"
-        );
-    }
-    // Left exactly as it is, and nothing copied for a step this build
-    // cannot take.
-    assert_eq!(version_of(&path), future);
-    assert!(!backup_path(&path, future).exists());
-}
-
-/// Every text column `table` holds, as stored, for asserting on what reached
-/// the file rather than on what the ledger hands back.
-fn stored(ledger: &Ledger, table: &str) -> String {
-    let mut statement = ledger
-        .connection
-        .prepare(&format!("SELECT * FROM {table}"))
-        .unwrap();
-    let columns = statement.column_count();
-    let rows = statement
-        .query_map([], |row| {
-            let mut values = Vec::new();
-            for column in 0..columns {
-                values.push(match row.get_ref(column)? {
-                    rusqlite::types::ValueRef::Text(text) => {
-                        String::from_utf8_lossy(text).into_owned()
-                    }
-                    rusqlite::types::ValueRef::Integer(number) => number.to_string(),
-                    _ => String::new(),
-                });
-            }
-            Ok(values.join("|"))
-        })
-        .unwrap();
-    rows.map(Result::unwrap).collect::<Vec<_>>().join("\n")
-}
-
-#[test]
-fn a_source_is_stored_and_found_without_the_credentials_in_its_url() {
-    let ledger = Ledger::in_memory().unwrap();
-    let source = ledger
-        .source_for(SourceKind::Git, "https://me:hunter2@h/a", None, "skills")
-        .unwrap();
-
-    assert_eq!(source.url, "https://h/a");
-    assert!(!stored(&ledger, "sources").contains("hunter2"));
-    // The same place, asked for without them, is the same source.
-    let again = ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
-        .unwrap();
-    assert_eq!(again, source);
-}
-
-#[test]
-fn the_log_keeps_no_credential_in_what_it_was_about_or_what_it_said() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .log(
-            Action::Gather,
-            Some("https://me:hunter2@h/a"),
-            Outcome::Failed,
-            Some("https://me:hunter2@h/a: cannot be fetched"),
-        )
-        .unwrap();
-
-    assert!(!stored(&ledger, "actions").contains("hunter2"));
-    let history = ledger.history(1).unwrap();
-    assert_eq!(history[0].target.as_deref(), Some("https://h/a"));
-    assert_eq!(
-        history[0].detail.as_deref(),
-        Some("https://h/a: cannot be fetched")
-    );
-}
-
-#[test]
-fn a_row_an_older_build_wrote_with_credentials_is_read_back_without_them() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .connection
-        .execute_batch(
-            "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
-                 VALUES (1, 'git', 'https://me:hunter2@h/a', NULL, 'skills', 'h-a', 0, 0);
-             INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
-                 VALUES ('skill', 'deploy', 1, '.mindflayer/skills/h-a/deploy', 0);
-             INSERT INTO actions (at, action, target, outcome, detail)
-                 VALUES (0, 'gather', 'https://me:hunter2@h/a', 'ok', 'from https://me:hunter2@h/a');",
-        )
-        .unwrap();
-
-    assert_eq!(ledger.gathered().unwrap()[0].source.url, "https://h/a");
-    let history = ledger.history(1).unwrap();
-    assert_eq!(history[0].target.as_deref(), Some("https://h/a"));
-    assert_eq!(history[0].detail.as_deref(), Some("from https://h/a"));
-}
-
-/// A ledger on disk, as a Mindflayer from before the redaction left it: one
-/// source gathered with a token in its URL, and the log of that gather.
-fn ledger_with_a_token_in_it() -> (tempfile::TempDir, Ledger) {
-    let dir = tempfile::TempDir::new().unwrap();
-    let ledger = Ledger::open(dir.path().join(LEDGER_FILE)).unwrap();
-    ledger
-        .connection
-        .execute_batch(
-            "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
-                 VALUES (1, 'git', 'https://me:hunter2@h/a', NULL, 'skills', 'h-a', 0, 0);
-             INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
-                 VALUES ('skill', 'deploy', 1, '.mindflayer/skills/h-a/deploy', 0);
-             INSERT INTO actions (at, action, target, outcome, detail)
-                 VALUES (0, 'gather', 'https://me:hunter2@h/a', 'ok', '1 added');",
-        )
-        .unwrap();
-    (dir, ledger)
-}
-
-#[test]
-fn only_a_url_with_credentials_is_tainted_and_it_is_handed_back_without_them() {
-    let (_dir, ledger) = ledger_with_a_token_in_it();
-    ledger
-        .connection
-        .execute_batch(
-            "INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
-                 VALUES ('git', 'ssh://git@h/b', NULL, 'skills', 'h-b', 0, 0),
-                        ('git', 'https://h/c', NULL, 'skills', 'h-c', 0, 0);",
-        )
-        .unwrap();
-
-    let tainted = ledger.tainted_sources().unwrap();
-
-    assert_eq!(tainted.len(), 1, "{tainted:?}");
-    assert_eq!(tainted[0].id, 1);
-    assert_eq!(tainted[0].url, "https://h/a");
-}
-
-#[test]
-fn a_scrubbed_source_leaves_no_copy_of_its_credentials_in_the_file() {
-    let (dir, ledger) = ledger_with_a_token_in_it();
-
-    ledger.scrub_source(1).unwrap();
-
-    assert!(ledger.tainted_sources().unwrap().is_empty());
-    assert_eq!(ledger.gathered().unwrap()[0].source.url, "https://h/a");
-    // Found by its URL now, which is what the next gather looks it up by.
-    assert!(ledger
-        .source(SourceKind::Git, "https://h/a", None, "skills")
-        .unwrap()
-        .is_some());
-    ledger.scrub_log().unwrap();
-    let file = std::fs::read(dir.path().join(LEDGER_FILE)).unwrap();
-    assert!(!file.windows(7).any(|bytes| bytes == b"hunter2"));
-    // Again is nothing.
-    ledger.scrub_source(1).unwrap();
-    assert_eq!(ledger.gathered().unwrap().len(), 1);
-}
-
-#[test]
-fn a_source_scrubbed_onto_one_already_at_its_url_becomes_one_row() {
-    let (_dir, ledger) = ledger_with_a_token_in_it();
-    // Gathered first without the token, which failed and left an empty row,
-    // then with it, which worked: the kept row is the later one.
-    ledger
-        .connection
-        .execute_batch(
-            "UPDATE sources SET last_seen = 20 WHERE id = 1;
-             INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
-                 VALUES (2, 'git', 'https://h/a', NULL, 'skills', 'h-a-2', 10, 10);
-             INSERT INTO installations (project, kind, name, source_id, installed_at)
-                 VALUES ('../p', 'skill', 'deploy', 1, 0);",
-        )
-        .unwrap();
-
-    let gone = ledger.scrub_source(1).unwrap();
-
-    let gathered = ledger.gathered().unwrap();
-    assert_eq!(gathered.len(), 1, "{gathered:?}");
-    assert_eq!(gathered[0].source.id, 1);
-    assert_eq!(gathered[0].source.url, "https://h/a");
-    assert_eq!(gathered[0].source.directory, "h-a");
-    assert_eq!(stored(&ledger, "sources").lines().count(), 1);
-    // Handed back so its folder can go too.
-    assert_eq!(
-        gone.map(|source| source.directory).as_deref(),
-        Some("h-a-2")
-    );
-}
-
-#[test]
-fn a_row_tried_later_that_filled_no_shelf_loses_to_the_one_that_did() {
-    let (_dir, ledger) = ledger_with_a_token_in_it();
-    // Gathered with the token, which worked, then tried without it, which
-    // failed before it took anything: the later row is the empty one.
-    ledger
-        .connection
-        .execute_batch(
-            "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
-                 VALUES (2, 'git', 'https://h/a', NULL, 'skills', 'h-a-2', 30, 30);",
-        )
-        .unwrap();
-
-    let gone = ledger.scrub_source(1).unwrap();
-
-    let gathered = ledger.gathered().unwrap();
-    assert_eq!(gathered.len(), 1, "{gathered:?}");
-    assert_eq!(gathered[0].name, "deploy");
-    assert_eq!(gathered[0].source.id, 1);
-    assert_eq!(gathered[0].source.url, "https://h/a");
-    assert_eq!(gone.map(|source| source.id), Some(2));
-}
-
-#[test]
-fn merging_keeps_the_fresher_rows_artifacts_and_lets_the_others_go_with_its_row() {
-    let (_dir, ledger) = ledger_with_a_token_in_it();
-    // A branch is part of the coordinate, so this is the case SQLite's UNIQUE
-    // would refuse if the URL were rewritten before the other row went.
-    ledger
-        .connection
-        .execute_batch(
-            "UPDATE sources SET reference = 'main' WHERE id = 1;
-             INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
-                 VALUES ('skill', 'only-here', 1, '.mindflayer/skills/h-a/only-here', 0);
-             INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
-                 VALUES (2, 'git', 'https://h/a', 'main', 'skills', 'h-a-2', 10, 10);
-             INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
-                 VALUES ('skill', 'deploy', 2, '.mindflayer/skills/h-a-2/deploy', 10);
-             INSERT INTO installations (project, kind, name, source_id, installed_at)
-                 VALUES ('../p', 'skill', 'only-here', 1, 0);",
-        )
-        .unwrap();
-
-    let gone = ledger.scrub_source(1).unwrap();
-
-    // Nothing points into the folder of the row that went, so the next
-    // source given that folder cannot gather over files a record claims.
-    let gathered = ledger.gathered().unwrap();
-    let names: Vec<(&str, i64, &str)> = gathered
-        .iter()
-        .map(|g| (g.name.as_str(), g.source.id, g.path.as_str()))
-        .collect();
-    assert_eq!(names, [("deploy", 2, ".mindflayer/skills/h-a-2/deploy")]);
-    assert_eq!(gone.map(|source| source.directory).as_deref(), Some("h-a"));
-    // An installation is about the place, which is the kept row now.
-    assert!(stored(&ledger, "installations").contains("|only-here|2|"));
-}
-
-#[test]
-fn an_origin_is_recorded_and_read_back_without_credentials() {
-    let ledger = Ledger::in_memory().unwrap();
-    let mut written = installation_of("deploy", &[(None, "skills/deploy")]);
-    written.origin = Some(String::from("https://me:hunter2@h/a#main"));
-
-    ledger.installed("collapse", &written).unwrap();
-
-    assert!(!stored(&ledger, "installations").contains("hunter2"));
-    let read = ledger
-        .installation("collapse", Kind::Skill, "deploy")
-        .unwrap()
-        .unwrap();
-    assert_eq!(read.origin.as_deref(), Some("https://h/a#main"));
-}
-
-#[test]
-fn scrubbing_a_source_takes_the_credentials_out_of_the_origins_spelling_it() {
-    let (dir, ledger) = ledger_with_a_token_in_it();
-    // As schema 3 fills it in from a source an older build stored, and an
-    // ssh user name, which is no credential, in another source's.
-    ledger
-        .connection
-        .execute_batch(
-            "INSERT INTO sources (id, kind, url, reference, subdirectory, directory, first_seen, last_seen)
-                 VALUES (2, 'git', 'ssh://git@h/b', NULL, 'skills', 'h-b', 0, 0);
-             INSERT INTO installations (project, kind, name, source_id, origin, installed_at)
-                 VALUES ('../p', 'skill', 'deploy', 1, 'https://me:hunter2@h/a', 0),
-                        ('../p', 'skill', 'lint', 2, 'ssh://git@h/b', 0);",
-        )
-        .unwrap();
-    // Handed back without them before the scrub too.
-    let origin = |name: &str| {
-        ledger
-            .installation("../p", Kind::Skill, name)
-            .unwrap()
-            .unwrap()
-            .origin
-    };
-    assert_eq!(origin("deploy").as_deref(), Some("https://h/a"));
-
-    ledger.scrub_source(1).unwrap();
-    ledger.scrub_log().unwrap();
-
-    let installations = stored(&ledger, "installations");
-    assert!(installations.contains("|https://h/a|"), "{installations}");
-    assert!(installations.contains("|ssh://git@h/b|"), "{installations}");
-    assert_eq!(origin("lint").as_deref(), Some("ssh://git@h/b"));
-    let file = std::fs::read(dir.path().join(LEDGER_FILE)).unwrap();
-    assert!(!file.windows(7).any(|bytes| bytes == b"hunter2"));
-}
-
-#[test]
-fn scrubbing_the_log_rewrites_only_the_entries_with_credentials_and_counts_them() {
-    let (_dir, ledger) = ledger_with_a_token_in_it();
-    ledger
-        .log(Action::Gather, Some("ssh://git@h/b"), Outcome::Ok, None)
-        .unwrap();
-    ledger
-        .connection
-        .execute_batch(
-            "INSERT INTO actions (at, action, target, outcome, detail)
-                 VALUES (1, 'gather', 'https://h/c', 'failed', 'https://me:hunter2@h/c: refused');",
-        )
-        .unwrap();
-
-    assert_eq!(ledger.scrub_log().unwrap(), 2);
-
-    assert!(!stored(&ledger, "actions").contains("hunter2"));
-    assert!(stored(&ledger, "actions").contains("ssh://git@h/b"));
-    assert_eq!(ledger.scrub_log().unwrap(), 0);
-}
-
-#[test]
-fn opening_only_an_existing_ledger_makes_nothing_when_there_is_none() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let folder = dir.path().join(".mindflayer");
-    let path = folder.join(LEDGER_FILE);
-
-    assert!(Ledger::open_existing(&path).unwrap().is_none());
-
-    // Not the database, and not the folder it would have gone in either.
-    assert!(!folder.exists());
-}
-
-#[test]
-fn opening_only_an_existing_ledger_still_brings_an_older_one_up_to_date() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-    {
-        let connection = Connection::open(&path).unwrap();
-        connection.execute_batch(SCHEMA_V1).unwrap();
-        connection.pragma_update(None, "user_version", 1).unwrap();
-    }
-
-    let ledger = Ledger::open_existing(&path).unwrap().unwrap();
-
-    let version: u32 = ledger
-        .connection
-        .pragma_query_value(None, "user_version", |row| row.get(0))
-        .unwrap();
-    assert_eq!(version, SCHEMA_VERSION);
-    assert!(ledger
-        .installations("collapse", Kind::Skill)
-        .unwrap()
-        .is_empty());
-}
-
-#[test]
-fn a_step_that_fails_leaves_the_ledger_as_it_was() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-    {
-        // A version 1 ledger that already has an index by the name the second
-        // step gives its own, so that step fails after creating its table.
-        let connection = Connection::open(&path).unwrap();
-        connection.execute_batch(SCHEMA_V1).unwrap();
-        connection
-            .execute_batch("CREATE INDEX installations_by_project ON sources (url);")
-            .unwrap();
-        connection.pragma_update(None, "user_version", 1).unwrap();
-    }
-
-    let error = Ledger::open(&path).unwrap_err();
-
-    assert!(
-        error.to_string().contains("adding the installations table"),
-        "{error}"
-    );
-    let connection = Connection::open(&path).unwrap();
-    let version: u32 = connection
-        .pragma_query_value(None, "user_version", |row| row.get(0))
-        .unwrap();
-    assert_eq!(version, 1);
-    let tables: i64 = connection
-        .query_row(
-            "SELECT count(*) FROM sqlite_master WHERE name = 'installations'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(tables, 0, "the table the failed step made is still there");
-}
-
-/// A ledger as version 1 left it, with one source in it.
-fn version_1_at(path: &Path) {
-    let connection = Connection::open(path).unwrap();
-    connection.execute_batch(SCHEMA_V1).unwrap();
-    connection
-        .execute(
-            "INSERT INTO sources
-                 (kind, url, reference, subdirectory, revision, directory, first_seen, last_seen)
-             VALUES ('git', 'https://h/a', NULL, 'skills', NULL, 'h-a', 1, 1)",
-            [],
-        )
-        .unwrap();
-    connection.pragma_update(None, "user_version", 1).unwrap();
-}
-
-fn version_of(path: &Path) -> u32 {
-    Connection::open(path)
-        .unwrap()
-        .pragma_query_value(None, "user_version", |row| row.get(0))
-        .unwrap()
-}
-
-#[test]
-fn an_older_ledger_is_copied_aside_before_it_is_migrated() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-    version_1_at(&path);
-
-    Ledger::open(&path).unwrap();
-
-    let backup = dir.path().join("mindflayer.db.v1.bak");
-    assert_eq!(backup_path(&path, 1), backup);
-    // Opened raw: opening it as a ledger would migrate the copy too.
-    assert_eq!(version_of(&backup), 1);
-    let copy = Connection::open(&backup).unwrap();
-    let url: String = copy
-        .query_row("SELECT url FROM sources", [], |row| row.get(0))
-        .unwrap();
-    assert_eq!(url, "https://h/a");
-    let installations: i64 = copy
-        .query_row(
-            "SELECT count(*) FROM sqlite_master WHERE name = 'installations'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(installations, 0, "the copy was taken after the step");
-    assert_eq!(version_of(&path), SCHEMA_VERSION);
-}
-
-#[test]
-fn a_ledger_another_process_migrates_meanwhile_is_left_to_that_ones_copy() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-    version_1_at(&path);
-    // The copy the other one took, which only it may write.
-    let backup = backup_path(&path, 1);
-    std::fs::write(&backup, "the other one's copy").unwrap();
-
-    // The other one, holding the write lock the migration takes.
-    let other = Connection::open(&path).unwrap();
-    other.execute_batch("BEGIN IMMEDIATE").unwrap();
-    let opening = std::thread::spawn({
-        let path = path.clone();
-        move || Ledger::open(path).map(drop)
-    });
-    // Long enough to read version 1 and wait for the lock, which is when a
-    // copy taken outside it would be taken.
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    other.execute_batch(SCHEMA_V2).unwrap();
-    other.execute_batch(SCHEMA_V3).unwrap();
-    other
-        .pragma_update(None, "user_version", SCHEMA_VERSION)
-        .unwrap();
-    other.execute_batch("COMMIT").unwrap();
-
-    opening.join().unwrap().unwrap();
-    assert!(
-        std::fs::read(&backup).unwrap() == b"the other one's copy",
-        "the other one's copy was replaced"
-    );
-    assert_eq!(version_of(&path), SCHEMA_VERSION);
-}
-
-#[test]
-fn a_ledger_made_now_or_already_current_is_not_copied() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-
-    Ledger::open(&path).unwrap();
-    Ledger::open(&path).unwrap();
-
-    let names: Vec<_> = std::fs::read_dir(dir.path())
-        .unwrap()
-        .map(|entry| entry.unwrap().file_name())
-        .collect();
-    assert_eq!(names, [LEDGER_FILE], "{names:?}");
-}
-
-#[test]
-fn what_an_earlier_attempt_left_beside_the_ledger_is_replaced() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-    version_1_at(&path);
-    let backup = backup_path(&path, 1);
-    std::fs::write(&backup, "an older copy").unwrap();
-    std::fs::write(dir.path().join("mindflayer.db.v1.bak.tmp"), "half a copy").unwrap();
-    std::fs::write(dir.path().join("mindflayer.db.v1.bak.tmp-journal"), "junk").unwrap();
-
-    Ledger::open(&path).unwrap();
-
-    assert_eq!(version_of(&backup), 1);
-    assert!(!dir.path().join("mindflayer.db.v1.bak.tmp").exists());
-    assert!(!dir.path().join("mindflayer.db.v1.bak.tmp-journal").exists());
-}
-
-#[test]
-fn a_ledger_that_cannot_be_copied_is_not_migrated() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-    version_1_at(&path);
-    // A folder holding something, where the copy would go, which no rename
-    // replaces.
-    let backup = backup_path(&path, 1);
-    std::fs::create_dir(&backup).unwrap();
-    std::fs::write(backup.join("keep"), "mine").unwrap();
-
-    let error = Ledger::open(&path).unwrap_err();
-
-    assert!(matches!(error, LedgerError::Backup { .. }), "{error}");
-    assert!(
-        error.to_string().contains("so it is left as it is"),
-        "{error}"
-    );
-    assert_eq!(version_of(&path), 1);
-    assert!(backup.join("keep").is_file());
-}
-
-#[cfg(unix)]
-#[test]
-fn the_copy_is_no_more_readable_than_the_ledger() {
-    use std::os::unix::fs::PermissionsExt;
-
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-    version_1_at(&path);
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
-
-    Ledger::open(&path).unwrap();
-
-    let mode = std::fs::metadata(backup_path(&path, 1))
-        .unwrap()
-        .permissions()
-        .mode();
-    assert_eq!(mode & 0o777, 0o600);
-}
-
-#[cfg(unix)]
-#[test]
-fn the_copy_is_no_more_readable_than_the_ledger_before_anything_is_in_it() {
-    use std::os::unix::fs::PermissionsExt;
-
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-    version_1_at(&path);
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
-    let temporary = dir.path().join("mindflayer.db.v1.bak.tmp");
-
-    create_like(&temporary, &path).unwrap();
-
-    let made = std::fs::metadata(&temporary).unwrap();
-    assert_eq!(made.len(), 0);
-    assert_eq!(made.permissions().mode() & 0o777, 0o600);
-}
-
-/// An installation of `name` with a copy at each of `targets`.
-fn installation_of(name: &str, targets: &[(Option<&str>, &str)]) -> InstallRecord {
-    InstallRecord {
-        kind: Kind::Skill,
-        name: name.to_owned(),
-        source_id: None,
-        origin: Some(String::from("workspace")),
-        content_hash: Some(String::from("e3b0c442")),
-        targets: targets
-            .iter()
-            .map(|(agent, path)| Target {
-                agent: agent.map(str::to_owned),
-                path: (*path).to_owned(),
-                content_hash: None,
-            })
-            .collect(),
-    }
-}
-
-#[test]
-fn each_copy_reads_back_with_the_hash_of_its_own_it_was_given() {
-    let ledger = Ledger::in_memory().unwrap();
-    let mut written = installation_of(
-        "git/no-force-push",
-        &[
-            (None, "AGENTS.md"),
-            (
-                Some("claude"),
-                ".claude/rules/mindflayer/git/no-force-push.md",
-            ),
-        ],
-    );
-    written.kind = Kind::Rule;
-    written.targets[0].content_hash = Some(String::from("section"));
-    written.targets[1].content_hash = Some(String::from("file"));
-
-    ledger.installed("collapse", &written).unwrap();
-
-    let read = ledger
-        .installation("collapse", Kind::Rule, "git/no-force-push")
-        .unwrap()
-        .unwrap();
-    // By path, as every copy reads back.
-    let mut expected = written;
-    expected.targets.reverse();
-    assert_eq!(read, expected);
-    assert_eq!(ledger.records("collapse", Kind::Rule).unwrap(), [expected]);
-}
-
-#[test]
-fn a_file_shared_by_several_installations_is_one_copy() {
-    let ledger = Ledger::in_memory().unwrap();
-    for name in ["commit-style", "review"] {
-        let mut rule = installation_of(name, &[(None, "AGENTS.md")]);
-        rule.kind = Kind::Rule;
-        ledger.installed("collapse", &rule).unwrap();
-    }
-
-    assert_eq!(
-        ledger.copies("collapse", Kind::Rule).unwrap(),
-        ["AGENTS.md"]
-    );
-}
-
-/// A rule's installation with a copy at each of `targets`, each with a hash
-/// of its own.
-fn rule_of(name: &str, targets: &[(Option<&str>, &str, &str)]) -> InstallRecord {
-    InstallRecord {
-        kind: Kind::Rule,
-        name: name.to_owned(),
-        source_id: None,
-        origin: Some(String::from("workspace")),
-        content_hash: Some(format!("{name}-rule")),
-        targets: targets
-            .iter()
-            .map(|(agent, path, hash)| Target {
-                agent: agent.map(str::to_owned),
-                path: (*path).to_owned(),
-                content_hash: Some((*hash).to_owned()),
-            })
-            .collect(),
-    }
-}
-
-#[test]
-fn a_render_records_every_rule_it_left_and_forgets_the_rest_of_its_kind() {
-    let ledger = Ledger::in_memory().unwrap();
-    let commits = rule_of("git/commits", &[(None, "AGENTS.md", "a")]);
-    let review = rule_of("review", &[(None, "AGENTS.md", "b")]);
-    ledger
-        .rendered(
-            "collapse",
-            Kind::Rule,
-            &[commits.clone(), review],
-            &[("AGENTS.md", true)],
-        )
-        .unwrap();
-    ledger
-        .installed(
-            "collapse",
-            &installation_of("deploy", &[(None, "skills/deploy")]),
-        )
-        .unwrap();
-    ledger
-        .rendered("tanukeys", Kind::Rule, std::slice::from_ref(&commits), &[])
-        .unwrap();
-    let changed = rule_of(
-        "git/commits",
-        &[
-            (None, "AGENTS.md", "c"),
-            (
-                Some("claude"),
-                ".claude/rules/mindflayer/git/commits.md",
-                "d",
-            ),
-        ],
-    );
-
-    ledger
-        .rendered(
-            "collapse",
-            Kind::Rule,
-            std::slice::from_ref(&changed),
-            &[("AGENTS.md", false)],
-        )
-        .unwrap();
-
-    let mut expected = changed;
-    expected.targets.reverse();
-    assert_eq!(ledger.records("collapse", Kind::Rule).unwrap(), [expected]);
-    assert!(!ledger.created("collapse", "AGENTS.md").unwrap());
-    // Another kind, and another project, are not the render's.
-    assert_eq!(
-        ledger.installations("collapse", Kind::Skill).unwrap(),
-        ["deploy"]
-    );
-    assert_eq!(ledger.records("tanukeys", Kind::Rule).unwrap(), [commits]);
-}
-
-#[test]
-fn a_render_keeps_the_time_an_installation_was_first_recorded_at() {
-    let ledger = Ledger::in_memory().unwrap();
-    let commits = rule_of("git/commits", &[(None, "AGENTS.md", "a")]);
-    ledger
-        .rendered("collapse", Kind::Rule, std::slice::from_ref(&commits), &[])
-        .unwrap();
-    ledger
-        .connection
-        .execute("UPDATE installations SET installed_at = 1", [])
-        .unwrap();
-
-    ledger
-        .rendered("collapse", Kind::Rule, &[commits], &[])
-        .unwrap();
-
-    let at: i64 = ledger
-        .connection
-        .query_row("SELECT installed_at FROM installations", [], |row| {
-            row.get(0)
-        })
-        .unwrap();
-    assert_eq!(at, 1);
-}
-
-#[test]
-fn whether_mindflayer_made_a_file_is_kept_per_project_until_it_is_forgotten() {
-    let ledger = Ledger::in_memory().unwrap();
-    assert!(!ledger.created("collapse", "AGENTS.md").unwrap());
-
-    ledger.set_created("collapse", "AGENTS.md", true).unwrap();
-    // Noted twice is noted once.
-    ledger.set_created("collapse", "AGENTS.md", true).unwrap();
-
-    assert!(ledger.created("collapse", "AGENTS.md").unwrap());
-    assert!(!ledger.created("tanukeys", "AGENTS.md").unwrap());
-    assert!(!ledger.created("collapse", "CLAUDE.md").unwrap());
-
-    ledger.set_created("collapse", "AGENTS.md", false).unwrap();
-    assert!(!ledger.created("collapse", "AGENTS.md").unwrap());
-    // Forgetting what was never noted is nothing to do.
-    ledger.set_created("tanukeys", "AGENTS.md", false).unwrap();
-}
-
-#[test]
-fn an_installation_reads_back_with_every_copy_it_wrote() {
-    let ledger = Ledger::in_memory().unwrap();
-    let written = installation_of(
-        "deploy",
-        &[
-            (Some("claude"), ".claude/skills/deploy"),
-            (None, ".agents/skills/deploy"),
-        ],
-    );
-
-    ledger.installed("collapse", &written).unwrap();
-
-    let read = ledger
-        .installation("collapse", Kind::Skill, "deploy")
-        .unwrap()
-        .unwrap();
-    // By path, whatever order they were written in.
-    assert_eq!(read.targets[0].path, ".agents/skills/deploy");
-    assert_eq!(read.targets[1].path, ".claude/skills/deploy");
-    let mut expected = written;
-    expected.targets.reverse();
-    assert_eq!(read, expected);
-    assert!(ledger
-        .installation("collapse", Kind::Rule, "deploy")
-        .unwrap()
-        .is_none());
-    assert!(ledger
-        .installation("tanukeys", Kind::Skill, "deploy")
-        .unwrap()
-        .is_none());
-}
-
-#[test]
-fn installing_again_replaces_the_copies_recorded_rather_than_adding_to_them() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .installed(
-            "collapse",
-            &installation_of(
-                "deploy",
-                &[(None, ".agents/skills/deploy"), (None, "skills/deploy")],
-            ),
-        )
-        .unwrap();
-    let mut again = installation_of("deploy", &[(None, "skills/deploy")]);
-    again.content_hash = Some(String::from("another"));
-
-    ledger.installed("collapse", &again).unwrap();
-
-    assert_eq!(
-        ledger
-            .installation("collapse", Kind::Skill, "deploy")
-            .unwrap(),
-        Some(again)
-    );
-    assert_eq!(
-        ledger.installations("collapse", Kind::Skill).unwrap(),
-        ["deploy"]
-    );
-}
-
-#[test]
-fn a_record_naming_one_copy_twice_is_refused_and_the_old_one_stands() {
-    let ledger = Ledger::in_memory().unwrap();
-    let first = installation_of("deploy", &[(None, "skills/deploy")]);
-    ledger.installed("collapse", &first).unwrap();
-
-    let twice = installation_of(
-        "deploy",
-        &[(Some("claude"), "skills/deploy"), (None, "skills/deploy")],
-    );
-    assert!(ledger.installed("collapse", &twice).is_err());
-
-    assert_eq!(
-        ledger
-            .installation("collapse", Kind::Skill, "deploy")
-            .unwrap(),
-        Some(first)
-    );
-}
-
-#[test]
-fn forgetting_an_installation_forgets_its_copies() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .installed(
-            "collapse",
-            &installation_of(
-                "deploy",
-                &[
-                    (None, ".agents/skills/deploy"),
-                    (None, ".claude/skills/deploy"),
-                ],
-            ),
-        )
-        .unwrap();
-
-    assert!(ledger
-        .uninstalled("collapse", Kind::Skill, "deploy")
-        .unwrap());
-
-    assert!(ledger
-        .installation("collapse", Kind::Skill, "deploy")
-        .unwrap()
-        .is_none());
-    let targets: i64 = ledger
-        .connection
-        .query_row("SELECT count(*) FROM installation_targets", [], |row| {
-            row.get(0)
-        })
-        .unwrap();
-    assert_eq!(targets, 0);
-}
-
-#[test]
-fn forgetting_one_copy_keeps_the_installation_until_its_last_copy_goes() {
-    let ledger = Ledger::in_memory().unwrap();
-    let written = installation_of(
-        "deploy",
-        &[
-            (None, ".agents/skills/deploy"),
-            (Some("claude"), ".claude/skills/deploy"),
-        ],
-    );
-    ledger.installed("collapse", &written).unwrap();
-
-    let forgot = |path| {
-        ledger
-            .uninstalled_copy("collapse", Kind::Skill, "deploy", path)
-            .unwrap()
-    };
-    assert_eq!(forgot("skills/deploy"), Forgotten::Nothing);
-    assert_eq!(forgot(".claude/skills/deploy"), Forgotten::Copy);
-    assert_eq!(
-        ledger
-            .installation("collapse", Kind::Skill, "deploy")
-            .unwrap(),
-        Some(InstallRecord {
-            targets: written.targets[..1].to_vec(),
-            ..written.clone()
-        })
-    );
-    assert_eq!(forgot(".claude/skills/deploy"), Forgotten::Nothing);
-    assert_eq!(forgot(".agents/skills/deploy"), Forgotten::Installation);
-    assert!(ledger
-        .installation("collapse", Kind::Skill, "deploy")
-        .unwrap()
-        .is_none());
-    assert_eq!(forgot(".agents/skills/deploy"), Forgotten::Nothing);
-}
-
-#[test]
-fn a_renamed_copy_takes_its_installation_with_it_when_it_was_the_only_one() {
-    let ledger = Ledger::in_memory().unwrap();
-    let written = installation_of("deploy", &[(None, "skills/deploy")]);
-    ledger.installed("collapse", &written).unwrap();
-    let when = |ledger: &Ledger| -> i64 {
-        ledger
-            .connection
-            .query_row("SELECT installed_at FROM installations", [], |row| {
-                row.get(0)
-            })
-            .unwrap()
-    };
-    let installed_at = when(&ledger);
-
-    assert_eq!(
-        ledger
-            .renamed_copy(
-                "collapse",
-                Kind::Skill,
-                "deploy",
-                "skills/deploy",
-                "ship",
-                "skills/ship"
-            )
-            .unwrap(),
-        Carried::Moved
-    );
-
-    assert!(ledger
-        .installation("collapse", Kind::Skill, "deploy")
-        .unwrap()
-        .is_none());
-    assert_eq!(
-        ledger
-            .installation("collapse", Kind::Skill, "ship")
-            .unwrap(),
-        Some(InstallRecord {
-            name: String::from("ship"),
-            ..installation_of("ship", &[(None, "skills/ship")])
-        })
-    );
-    assert_eq!(when(&ledger), installed_at);
-}
-
-#[test]
-fn a_renamed_copy_is_an_installation_of_its_own_beside_the_copies_it_left() {
-    let ledger = Ledger::in_memory().unwrap();
-    let mut written = installation_of(
-        "git/no-force-push",
-        &[(None, "AGENTS.md"), (None, "rules/git/no-force-push.md")],
-    );
-    written.kind = Kind::Rule;
-    written.targets[1].content_hash = Some(String::from("4f9c2a7e"));
-    ledger.installed("collapse", &written).unwrap();
-
-    let carried = ledger
-        .renamed_copy(
-            "collapse",
-            Kind::Rule,
-            "git/no-force-push",
-            "rules/git/no-force-push.md",
-            "git/never-force-push",
-            "rules/git/never-force-push.md",
-        )
-        .unwrap();
-
-    assert_eq!(carried, Carried::Moved);
-    assert_eq!(
-        ledger
-            .installation("collapse", Kind::Rule, "git/no-force-push")
-            .unwrap(),
-        Some(InstallRecord {
-            targets: written.targets[..1].to_vec(),
-            ..written.clone()
-        })
-    );
-    // With the hash of what was written there, which the copy still holds.
-    assert_eq!(
-        ledger
-            .installation("collapse", Kind::Rule, "git/never-force-push")
-            .unwrap(),
-        Some(InstallRecord {
-            name: String::from("git/never-force-push"),
-            targets: vec![Target {
-                agent: None,
-                path: String::from("rules/git/never-force-push.md"),
-                content_hash: Some(String::from("4f9c2a7e")),
-            }],
-            ..written
-        })
-    );
-}
-
-#[test]
-fn a_copy_renamed_onto_a_name_installed_already_is_forgotten() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .installed(
-            "collapse",
-            &installation_of("deploy", &[(None, "skills/deploy")]),
-        )
-        .unwrap();
-    let ship = installation_of("ship", &[(None, ".agents/skills/ship")]);
-    ledger.installed("collapse", &ship).unwrap();
-    let renamed = |path| {
-        ledger
-            .renamed_copy(
-                "collapse",
-                Kind::Skill,
-                "deploy",
-                path,
-                "ship",
-                "skills/ship",
-            )
-            .unwrap()
-    };
-
-    assert_eq!(renamed("skills/elsewhere"), Carried::Nothing);
-    assert_eq!(renamed("skills/deploy"), Carried::Forgotten);
-
-    assert_eq!(
-        ledger.installations("collapse", Kind::Skill).unwrap(),
-        ["ship"]
-    );
-    assert_eq!(
-        ledger
-            .installation("collapse", Kind::Skill, "ship")
-            .unwrap(),
-        Some(ship)
-    );
-    assert_eq!(renamed("skills/deploy"), Carried::Nothing);
-}
-
-#[test]
-fn an_installation_recording_no_copy_is_forgotten_whole_by_any_one() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .installed("collapse", &installation_of("deploy", &[]))
-        .unwrap();
-
-    assert_eq!(
-        ledger
-            .uninstalled_copy("collapse", Kind::Skill, "deploy", "skills/deploy")
-            .unwrap(),
-        Forgotten::Installation
-    );
-    assert!(ledger
-        .installations("collapse", Kind::Skill)
-        .unwrap()
-        .is_empty());
-}
-
-#[test]
-fn a_rules_installation_recording_no_copy_is_kept_by_a_change_elsewhere() {
-    let ledger = Ledger::in_memory().unwrap();
-    let rule = InstallRecord {
-        kind: Kind::Rule,
-        ..installation_of("rust/errors", &[])
-    };
-    ledger.installed("collapse", &rule).unwrap();
-
-    assert_eq!(
-        ledger
-            .uninstalled_copy(
-                "collapse",
-                Kind::Rule,
-                "rust/errors",
-                "rules/rust/errors.md"
-            )
-            .unwrap(),
-        Forgotten::Nothing
-    );
-    assert_eq!(
-        ledger
-            .installation("collapse", Kind::Rule, "rust/errors")
-            .unwrap(),
-        Some(rule)
-    );
-}
-
-#[test]
-fn retargeting_an_installation_moves_its_copies_and_keeps_the_rest_of_its_record() {
-    let ledger = Ledger::in_memory().unwrap();
-    let written = installation_of("deploy", &[(Some("claude"), ".claude/skills/deploy")]);
-    ledger.installed("collapse", &written).unwrap();
-    let when = |ledger: &Ledger| -> i64 {
-        ledger
-            .connection
-            .query_row("SELECT installed_at FROM installations", [], |row| {
-                row.get(0)
-            })
-            .unwrap()
-    };
-    let installed_at = when(&ledger);
-    let moved = installation_of("deploy", &[(None, ".agents/skills/deploy")]).targets;
-
-    assert!(ledger
-        .retargeted("collapse", Kind::Skill, "deploy", &moved)
-        .unwrap());
-
-    assert_eq!(
-        ledger
-            .installation("collapse", Kind::Skill, "deploy")
-            .unwrap(),
-        Some(InstallRecord {
-            targets: moved,
-            ..written
-        })
-    );
-    // Not installed again: it is the same installation, from when it was.
-    assert_eq!(when(&ledger), installed_at);
-}
-
-#[test]
-fn retargeting_an_installation_to_no_copy_forgets_it_and_one_never_made_is_nothing() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .installed(
-            "collapse",
-            &installation_of("deploy", &[(None, ".agents/skills/deploy")]),
-        )
-        .unwrap();
-
-    assert!(ledger
-        .retargeted("collapse", Kind::Skill, "deploy", &[])
-        .unwrap());
-    assert!(ledger
-        .installations("collapse", Kind::Skill)
-        .unwrap()
-        .is_empty());
-    assert!(!ledger
-        .retargeted("collapse", Kind::Skill, "deploy", &[])
-        .unwrap());
-    assert!(!ledger
-        .retargeted(
-            "collapse",
-            Kind::Skill,
-            "review",
-            &installation_of("review", &[(None, ".agents/skills/review")]).targets,
-        )
-        .unwrap());
-    assert!(ledger
-        .installations("collapse", Kind::Skill)
-        .unwrap()
-        .is_empty());
-}
-
-#[test]
-fn a_migrated_project_moves_every_installation_fills_a_missing_hash_and_logs_it_at_once() {
-    let ledger = Ledger::in_memory().unwrap();
-    let hashed = installation_of("deploy", &[(None, "skills/deploy")]);
-    let unhashed = InstallRecord {
-        content_hash: None,
-        origin: None,
-        ..installation_of("review", &[(None, "skills/review")])
-    };
-    ledger.installed("collapse", &hashed).unwrap();
-    ledger.installed("collapse", &unhashed).unwrap();
-    let moved = |name: &str, hash: Option<&str>| Moved {
-        kind: Kind::Skill,
-        name: name.to_owned(),
-        targets: installation_of(name, &[(Some("claude"), &format!(".claude/skills/{name}"))])
-            .targets,
-        content_hash: hash.map(str::to_owned),
-    };
-
-    ledger
-        .migrated(
-            "collapse",
-            &id('a'),
-            &[
-                moved("deploy", Some("ffff")),
-                moved("review", Some("abcd")),
-                moved("gone", Some("0000")),
-            ],
-            &[(Action::Install, String::from("collapse moved to settings"))],
-        )
-        .unwrap();
-
-    let record = |name: &str| {
-        ledger
-            .installation("collapse", Kind::Skill, name)
-            .unwrap()
-            .unwrap()
-    };
-    // A hash it had is kept: what was installed, not what is there now.
-    assert_eq!(record("deploy").content_hash.as_deref(), Some("e3b0c442"));
-    assert_eq!(record("review").content_hash.as_deref(), Some("abcd"));
-    assert_eq!(
-        record("review").targets,
-        moved("review", None).targets,
-        "{:?}",
-        record("review")
-    );
-    assert!(ledger
-        .installation("collapse", Kind::Skill, "gone")
-        .unwrap()
-        .is_none());
-    // Known by the id its settings gave it, and its records with it.
-    assert_eq!(ledger.project_at("collapse").unwrap(), Some(id('a')));
-    assert_eq!(
-        project_ids(&ledger, "collapse"),
-        [
-            (String::from("deploy"), Some(id('a').to_string())),
-            (String::from("review"), Some(id('a').to_string()))
-        ]
-    );
-    let history = ledger.history(5).unwrap();
-    assert_eq!(history.len(), 1);
-    assert_eq!(history[0].target.as_deref(), Some("collapse"));
-    assert_eq!(
-        history[0].detail.as_deref(),
-        Some("collapse moved to settings")
-    );
-}
-
-#[test]
-fn a_migration_the_ledger_cannot_finish_records_none_of_it() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .installed(
-            "collapse",
-            &installation_of("deploy", &[(None, "skills/deploy")]),
-        )
-        .unwrap();
-    // Two copies at one path break the table's uniqueness, after the first
-    // installation's copies were written.
-    let twice = Target {
-        agent: None,
-        path: String::from(".agents/skills/deploy"),
-        content_hash: None,
-    };
-
-    let failed = ledger.migrated(
-        "collapse",
-        &id('a'),
-        &[Moved {
-            kind: Kind::Skill,
-            name: String::from("deploy"),
-            targets: vec![twice.clone(), twice],
-            content_hash: None,
-        }],
-        &[(Action::Install, String::from("collapse moved"))],
-    );
-
-    assert!(failed.is_err());
-    assert_eq!(
-        ledger.copies("collapse", Kind::Skill).unwrap(),
-        ["skills/deploy"]
-    );
-    assert_eq!(ledger.project_at("collapse").unwrap(), None);
-    assert!(ledger.history(5).unwrap().is_empty());
-}
-
-#[test]
-fn every_copy_installed_into_a_project_is_listed_by_path_whichever_install_wrote_it() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .installed(
-            "collapse",
-            &installation_of(
-                "deploy",
-                &[
-                    (Some("claude"), ".claude/skills/deploy"),
-                    (None, ".agents/skills/deploy"),
-                ],
-            ),
-        )
-        .unwrap();
-    ledger
-        .installed(
-            "collapse",
-            &installation_of("audit", &[(None, ".agents/skills/audit")]),
-        )
-        .unwrap();
-    ledger
-        .installed(
-            "tanukeys",
-            &installation_of("deploy", &[(None, "skills/deploy")]),
-        )
-        .unwrap();
-
-    assert_eq!(
-        ledger.copies("collapse", Kind::Skill).unwrap(),
-        [
-            ".agents/skills/audit",
-            ".agents/skills/deploy",
-            ".claude/skills/deploy"
-        ]
-    );
-    assert_eq!(
-        ledger.copies("tanukeys", Kind::Skill).unwrap(),
-        ["skills/deploy"]
-    );
-    assert!(ledger.copies("collapse", Kind::Rule).unwrap().is_empty());
-    assert!(ledger.copies("elsewhere", Kind::Skill).unwrap().is_empty());
-}
-
-#[test]
-fn every_installation_into_a_project_reads_back_with_its_copies_in_name_order() {
-    let ledger = Ledger::in_memory().unwrap();
-    let deploy = installation_of(
-        "deploy",
-        &[
-            (Some("claude"), ".claude/skills/deploy"),
-            (None, ".agents/skills/deploy"),
-        ],
-    );
-    let audit = InstallRecord {
-        origin: Some(String::from("https://github.com/acme/skills")),
-        source_id: None,
-        ..installation_of("audit", &[(None, ".agents/skills/audit")])
-    };
-    let empty = installation_of("bare", &[]);
-    for record in [&deploy, &audit, &empty] {
-        ledger.installed("collapse", record).unwrap();
-    }
-    ledger
-        .installed(
-            "tanukeys",
-            &installation_of("deploy", &[(None, "skills/deploy")]),
-        )
-        .unwrap();
-
-    let records = ledger.records("collapse", Kind::Skill).unwrap();
-
-    let mut deploy = deploy;
-    deploy.targets.reverse();
-    assert_eq!(records, [audit, empty, deploy]);
-    for record in &records {
-        assert_eq!(
-            ledger
-                .installation("collapse", Kind::Skill, &record.name)
-                .unwrap()
-                .as_ref(),
-            Some(record)
-        );
-    }
-    assert!(ledger.records("collapse", Kind::Rule).unwrap().is_empty());
-    assert!(ledger.records("elsewhere", Kind::Skill).unwrap().is_empty());
-}
-
-#[test]
-fn every_installation_reads_back_without_the_credentials_an_older_build_stored() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .installed(
-            "collapse",
-            &installation_of("deploy", &[(None, "skills/deploy")]),
-        )
-        .unwrap();
-    ledger
-        .connection
-        .execute(
-            "UPDATE installations SET origin = 'https://user:ghp_t0ken@github.com/acme/skills'",
-            [],
-        )
-        .unwrap();
-
-    let records = ledger.records("collapse", Kind::Skill).unwrap();
-
-    assert_eq!(
-        records[0].origin.as_deref(),
-        Some("https://github.com/acme/skills")
-    );
-}
-
-#[test]
-fn a_ledger_waits_for_another_writer_as_long_as_a_writer_waits_for_the_workspace() {
-    let dir = tempfile::TempDir::new().unwrap();
-    let path = dir.path().join(LEDGER_FILE);
-    let opened = Ledger::open(&path).unwrap();
-    let existing = Ledger::open_existing(&path).unwrap().unwrap();
-
-    // Read off each connection rather than shown by two writers racing:
-    // rusqlite waits five seconds of its own accord, which is long enough
-    // for any race a test can stage.
-    for ledger in [&opened, &existing] {
-        let waits: i64 = ledger
-            .connection
-            .pragma_query_value(None, "busy_timeout", |row| row.get(0))
-            .unwrap();
-        assert_eq!(
-            u128::try_from(waits).unwrap(),
-            crate::lock::WAIT.as_millis()
-        );
-    }
-}
-
-fn id(digit: char) -> ProjectId {
-    ProjectId::parse(&digit.to_string().repeat(ProjectId::LEN)).unwrap()
-}
-
-/// The id each installation of `project` names, by name.
-fn project_ids(ledger: &Ledger, project: &str) -> Vec<(String, Option<String>)> {
-    let mut statement = ledger
-        .connection
-        .prepare("SELECT name, project_id FROM installations WHERE project = ?1 ORDER BY name")
-        .unwrap();
-    statement
-        .query_map([project], |row| Ok((row.get(0)?, row.get(1)?)))
-        .unwrap()
-        .map(Result::unwrap)
-        .collect()
-}
-
-#[test]
-fn an_install_names_the_id_known_at_its_route_and_none_where_none_is() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .knew(&[(id('a'), String::from("collapse"))], &[])
-        .unwrap();
-
-    for project in ["collapse", "legacy"] {
-        ledger
-            .installed(
-                project,
-                &installation_of("deploy", &[(None, "skills/deploy")]),
-            )
-            .unwrap();
-    }
-
-    assert_eq!(
-        project_ids(&ledger, "collapse"),
-        [(String::from("deploy"), Some(id('a').to_string()))]
-    );
-    assert_eq!(
-        project_ids(&ledger, "legacy"),
-        [(String::from("deploy"), None)]
-    );
-}
-
-#[test]
-fn a_route_known_by_an_id_is_read_back_both_ways() {
-    let ledger = Ledger::in_memory().unwrap();
-
-    let learned = ledger
-        .knew(
-            &[
-                (id('b'), String::from("tanukeys")),
-                (id('a'), String::from("collapse")),
-            ],
-            &[],
-        )
-        .unwrap();
-
-    assert_eq!(learned, 2);
-    assert_eq!(ledger.project_at("collapse").unwrap(), Some(id('a')));
-    assert_eq!(ledger.project_at("elsewhere").unwrap(), None);
-    assert_eq!(
-        ledger.known_projects().unwrap(),
-        [
-            (id('a'), String::from("collapse")),
-            (id('b'), String::from("tanukeys"))
-        ]
-    );
-    // Knowing it again is nothing new.
-    assert_eq!(
-        ledger
-            .knew(&[(id('a'), String::from("collapse"))], &[])
-            .unwrap(),
-        0
-    );
-}
-
-#[test]
-fn a_route_whose_project_holds_another_id_now_is_known_by_that_one_with_its_records() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .knew(&[(id('a'), String::from("collapse"))], &[])
-        .unwrap();
-    ledger
-        .installed(
-            "collapse",
-            &installation_of("deploy", &[(None, "skills/deploy")]),
-        )
-        .unwrap();
-
-    ledger
-        .knew(&[(id('c'), String::from("collapse"))], &[])
-        .unwrap();
-
-    assert_eq!(ledger.project_at("collapse").unwrap(), Some(id('c')));
-    assert_eq!(ledger.known_projects().unwrap().len(), 1);
-    assert_eq!(
-        project_ids(&ledger, "collapse"),
-        [(String::from("deploy"), Some(id('c').to_string()))]
-    );
-}
-
-#[test]
-fn an_id_last_seen_at_a_stale_entry_stays_there_until_a_relink_moves_it() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger.knew(&[(id('a'), String::from("old"))], &[]).unwrap();
-
-    ledger
-        .knew(&[(id('a'), String::from("new"))], &[String::from("old")])
-        .unwrap();
-    assert_eq!(ledger.project_at("old").unwrap(), Some(id('a')));
     assert_eq!(ledger.project_at("new").unwrap(), None);
-
-    // One no entry links any more is no reason to keep it there.
-    ledger.knew(&[(id('a'), String::from("new"))], &[]).unwrap();
-    assert_eq!(ledger.project_at("old").unwrap(), None);
-    assert_eq!(ledger.project_at("new").unwrap(), Some(id('a')));
+    assert_eq!(ledger.history(100).unwrap().len(), logged, "nothing logged");
 }
 
+/// The revision a mother draws stands for a commit; a test that pins a
+/// source's JSON by it must see it written as it was given.
 #[test]
-fn a_relink_moves_every_record_and_file_made_to_the_new_route() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger.knew(&[(id('a'), String::from("old"))], &[]).unwrap();
-    for name in ["deploy", "review"] {
-        let path = format!("skills/{name}");
-        ledger
-            .installed("old", &installation_of(name, &[(None, &path)]))
-            .unwrap();
-    }
-    ledger.set_created("old", "AGENTS.md", true).unwrap();
-
-    let (written, moved) = ledger
-        .relinked("old", "new", &id('a'), || Ok::<_, ()>("marker"))
-        .unwrap()
-        .unwrap();
-
-    assert_eq!((written, moved), ("marker", 2));
-    assert!(ledger.records("old", Kind::Skill).unwrap().is_empty());
-    assert_eq!(
-        ledger.installations("new", Kind::Skill).unwrap(),
-        ["deploy", "review"]
-    );
-    assert_eq!(
-        project_ids(&ledger, "new"),
-        [
-            (String::from("deploy"), Some(id('a').to_string())),
-            (String::from("review"), Some(id('a').to_string()))
-        ]
-    );
-    assert!(ledger.created("new", "AGENTS.md").unwrap());
-    assert!(!ledger.holds("old").unwrap());
-    assert_eq!(ledger.project_at("new").unwrap(), Some(id('a')));
-    assert_eq!(ledger.project_at("old").unwrap(), None);
-    let logged = &ledger.history(1).unwrap()[0];
-    assert_eq!(logged.action, "relink");
-    assert_eq!(logged.detail.as_deref(), Some("old to new"));
-}
-
-#[test]
-fn a_relink_drops_what_another_project_left_at_the_new_route() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .knew(
-            &[
-                (id('a'), String::from("old")),
-                (id('b'), String::from("new")),
-            ],
-            &[],
-        )
-        .unwrap();
-    ledger
-        .installed(
-            "old",
-            &installation_of("deploy", &[(None, "skills/deploy")]),
-        )
-        .unwrap();
-    for name in ["deploy", "lint"] {
-        let path = format!("skills/{name}");
-        ledger
-            .installed("new", &installation_of(name, &[(None, &path)]))
-            .unwrap();
-    }
-    ledger.set_created("new", "AGENTS.md", true).unwrap();
-
-    ledger
-        .relinked("old", "new", &id('a'), || Ok::<_, ()>(()))
-        .unwrap()
-        .unwrap();
-
-    assert_eq!(
-        ledger.installations("new", Kind::Skill).unwrap(),
-        ["deploy"]
-    );
-    assert!(!ledger.created("new", "AGENTS.md").unwrap());
-    assert_eq!(
-        ledger.known_projects().unwrap(),
-        [(id('a'), String::from("new"))]
-    );
-}
-
-#[test]
-fn a_relink_whose_marker_is_not_written_moves_nothing() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger.knew(&[(id('a'), String::from("old"))], &[]).unwrap();
-    ledger
-        .installed(
-            "old",
-            &installation_of("deploy", &[(None, "skills/deploy")]),
-        )
-        .unwrap();
-
-    let refused = ledger
-        .relinked("old", "new", &id('a'), || Err::<(), _>("refused"))
-        .unwrap();
-
-    assert_eq!(refused, Err("refused"));
-    assert_eq!(
-        ledger.installations("old", Kind::Skill).unwrap(),
-        ["deploy"]
-    );
-    assert_eq!(ledger.project_at("old").unwrap(), Some(id('a')));
-    assert!(ledger.history(1).unwrap().is_empty());
-}
-
-#[test]
-fn a_route_holds_what_an_install_or_a_made_file_records_there() {
-    let ledger = Ledger::in_memory().unwrap();
-    assert!(!ledger.holds("collapse").unwrap());
-
-    ledger.set_created("collapse", "AGENTS.md", true).unwrap();
-    assert!(ledger.holds("collapse").unwrap());
-
-    ledger
-        .installed(
-            "tanukeys",
-            &installation_of("deploy", &[(None, "skills/deploy")]),
-        )
-        .unwrap();
-    assert!(ledger.holds("tanukeys").unwrap());
-}
-
-#[test]
-fn a_new_ledger_knows_each_project_it_is_told_of_once() {
-    let ledger = Ledger::open_knowing(":memory:", || {
-        vec![
-            (id('a'), String::from("collapse")),
-            (id('a'), String::from("copy")),
-            (id('b'), String::from("tanukeys")),
-        ]
-    })
-    .unwrap();
-
-    assert_eq!(
-        ledger.known_projects().unwrap(),
-        [
-            (id('a'), String::from("collapse")),
-            (id('b'), String::from("tanukeys"))
-        ]
-    );
-}
-
-/// A gathered artifact as a source a test can build, whose URL is whatever
-/// it is given.
-fn gathered_from(url: &str) -> Gathered {
-    Gathered {
-        kind: Kind::Skill,
-        name: String::from("deploy"),
-        path: String::from(".mindflayer/skills/github.com-acme-skills/deploy"),
-        summary: Some(String::from("Ship it")),
-        revision: Some(String::from("4f9c2a7")),
-        gathered_at: 1_790_000_000,
-        source: Source {
-            id: 3,
-            kind: SourceKind::Git,
-            url: url.to_owned(),
-            reference: Some(String::from("main")),
-            subdirectory: String::from("skills"),
-            revision: Some(String::from("4f9c2a7")),
-            directory: String::from("github.com-acme-skills"),
-        },
-    }
-}
-
-/// What a gathered artifact serializes to is a contract, as a status
-/// report's is: each field by its name, its source's among them, but the
-/// row id, which is the ledger's.
-#[test]
-fn a_gathered_artifact_serializes_every_field_and_its_source() {
-    let serialized =
-        serde_json::to_string(&gathered_from("https://github.com/acme/skills.git")).unwrap();
-
-    assert_eq!(
-        serialized,
-        concat!(
-            r#"{"kind":"skill","name":"deploy","#,
-            r#""path":".mindflayer/skills/github.com-acme-skills/deploy","#,
-            r#""summary":"Ship it","revision":"4f9c2a7","gathered_at":1790000000,"#,
-            r#""source":{"kind":"git","url":"https://github.com/acme/skills.git","#,
-            r#""reference":"main","subdirectory":"skills","revision":"4f9c2a7","#,
-            r#""directory":"github.com-acme-skills"}}"#,
-        )
-    );
-}
-
-/// The ledger hands back no URL with a credential in it, but a source built
-/// any other way may hold one, and a report must not print it whatever
-/// built it.
-#[test]
-fn a_source_is_serialized_without_the_credentials_its_url_carries() {
-    let serialized = serde_json::to_string(&gathered_from(
-        "https://me:s3cret@github.com/acme/skills.git",
-    ))
-    .unwrap();
-
-    assert!(!serialized.contains("s3cret"), "{serialized}");
-    assert!(!serialized.contains("me:"), "{serialized}");
-    assert!(
-        serialized.contains(r#""url":"https://github.com/acme/skills.git""#),
-        "{serialized}"
-    );
-}
-
-#[test]
-fn a_source_kind_is_serialized_as_its_slug() {
-    assert_eq!(serde_json::to_string(&SourceKind::Git).unwrap(), r#""git""#);
-}
-
-/// What a line of the action log serializes to is a contract too: each
-/// field by its name.
-#[test]
-fn an_action_log_entry_serializes_every_field() {
-    let entry = Entry {
-        at: 1_790_000_000,
-        action: String::from("install"),
-        target: Some(String::from("collapse")),
-        outcome: String::from("ok"),
-        detail: None,
+fn a_source_s_revision_serializes_as_the_commit_it_names() {
+    let revision = RevisionMother::random();
+    let source = Source {
+        revision: Some(revision.clone()),
+        ..SourceMother::random()
     };
+    let serialized: Value = serde_json::from_str(&json(&source)).unwrap();
 
-    assert_eq!(
-        serde_json::to_string(&entry).unwrap(),
-        r#"{"at":1790000000,"action":"install","target":"collapse","outcome":"ok","detail":null}"#
-    );
+    assert_eq!(serialized["revision"], Value::from(revision.as_str()));
 }
 
-/// An entry built some other way than [`Ledger::history`] reads one may
-/// hold a credential, in its target or quoted in its detail, and a report
-/// must not print it whatever built it.
 #[test]
-fn an_action_log_entry_is_serialized_without_the_credentials_its_urls_carry() {
-    let url = "https://me:s3cret@github.com/acme/skills.git";
-    let entry = Entry {
-        at: 0,
-        action: String::from("gather"),
-        target: Some(url.to_owned()),
-        outcome: String::from("failed"),
-        detail: Some(format!("{url}: cannot be fetched")),
-    };
+fn a_source_s_url_serializes_as_the_redaction_leaves_it() {
+    for _ in 0..DRAWS {
+        let url = random::pick(&[UrlMother::clean(), UrlMother::credentialed().typed]);
+        let source = SourceMother::create(&url, None);
+        let serialized: Value = serde_json::from_str(&json(&source)).unwrap();
 
-    let serialized = serde_json::to_string(&entry).unwrap();
-
-    assert!(!serialized.contains("s3cret"), "{serialized}");
-    assert!(
-        serialized.contains(r#""target":"https://github.com/acme/skills.git""#),
-        "{serialized}"
-    );
-    assert!(
-        serialized.contains(r#""detail":"https://github.com/acme/skills.git: cannot be fetched""#),
-        "{serialized}"
-    );
-}
-
-/// Every source is listed, one nothing was gathered from included, by URL,
-/// then branch, then folder, and none with the credentials an older build
-/// stored in it.
-#[test]
-fn every_source_is_listed_in_url_order_without_credentials() {
-    let ledger = Ledger::in_memory().unwrap();
-    ledger
-        .source_for(SourceKind::Git, "https://h/b", None, "skills")
-        .unwrap();
-    ledger
-        .source_for(SourceKind::Git, "https://h/a", Some("main"), "skills")
-        .unwrap();
-    ledger
-        .source_for(SourceKind::Git, "https://h/a", None, "skills")
-        .unwrap();
-    // What a Mindflayer from before the refusal could have stored.
-    ledger
-        .connection
-        .execute(
-            "INSERT INTO sources (kind, url, reference, subdirectory, directory, first_seen, last_seen)
-             VALUES ('git', 'https://me:t0ken@h/aa', NULL, 'skills', 'h-aa', 0, 0)",
-            [],
-        )
-        .unwrap();
-
-    let listed: Vec<(String, Option<String>)> = ledger
-        .sources()
-        .unwrap()
-        .into_iter()
-        .map(|source| (source.url, source.reference))
-        .collect();
-
-    assert_eq!(
-        listed,
-        [
-            (String::from("https://h/a"), None),
-            (String::from("https://h/a"), Some(String::from("main"))),
-            (String::from("https://h/aa"), None),
-            (String::from("https://h/b"), None),
-        ]
-    );
+        assert_eq!(
+            serialized["url"],
+            Value::from(crate::url::redacted(&url).into_owned()),
+            "{url}"
+        );
+    }
 }

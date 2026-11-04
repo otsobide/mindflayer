@@ -27,7 +27,7 @@ fn write_into(root: &Path, entries: &[(&str, &str)]) {
 }
 
 fn hash_of(entries: &[(&str, &str)]) -> String {
-    tree(tree_of(entries).path()).unwrap()
+    tree(tree_of(entries).path()).unwrap().into_string()
 }
 
 const DEPLOY: &[(&str, &str)] = &[

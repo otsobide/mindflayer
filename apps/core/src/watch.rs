@@ -196,3 +196,7 @@ impl List {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "watch_test.rs"]
+mod tests;

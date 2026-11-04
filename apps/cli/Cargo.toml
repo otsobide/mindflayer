@@ -82,7 +82,9 @@ schemars = { version = "1.2", optional = true }
 # `dirwalk`, to ask in process what git would list as untracked in a project
 # `mind init` made. It builds nothing new: core's gix already has it.
 gix = { version = "0.87", default-features = false, features = ["dirwalk"] }
-mindflayer-core = { path = "../core" }
+# Core with its object mothers (`mindflayer_core::mother`), which the suites
+# build what a command acts on with, as core's own do.
+mindflayer-core = { path = "../core", features = ["mother"] }
 # To leave in a workspace's database what an older Mindflayer would have, which
 # nothing this one writes can, for the suites that check it is scrubbed. The
 # same version and features as core's, so it is one build of SQLite.

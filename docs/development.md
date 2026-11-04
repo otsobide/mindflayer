@@ -67,6 +67,28 @@ cargo test -p mindflayer-cli --test tui_test          # one area
 cargo test -p mindflayer-core --lib workspace         # one module's unit tests
 ```
 
+What a test needs is built by an object mother rather than by hand:
+`mindflayer_core::mother` has one for each value object
+(`ContentHashMother`, `RedactedMother`, `OriginMother`, `ArtifactNameMother`,
+`RevisionMother`, `ProjectIdMother`), for each record the ledger keeps
+(`InstallRecordMother`, `SourceMother` and the rest), for a skill's and a
+rule's text, a project's settings and the URLs a credential can be typed
+into (`UrlMother`), and for what lives on the disk (`WorkspaceMother`,
+`ProjectMother`, `GitRepositoryMother`, `ShelfMother`). Each has `random()`,
+for a value holding whatever the test does not care about, `create(..)`, for
+one holding exactly what it is given, and a named constructor for each shape
+a test asks for by name, such as `UrlMother::every_credentialed()` or
+`ContentHashMother::not_hashes()`. A mother of a record is made of the
+mothers of its values, so a value's rule changes in one place. What is
+random is drawn afresh every run, so a rule tested on a mother's values is
+tried on cases no test spells, and a test names the value it was handed in
+what it asserts. Core's unit tests reach the mothers as `crate::mother`;
+its integration suites and the CLI's as `mindflayer_core::mother`, through a
+dev-dependency on core with its `mother` feature, which no build of a binary
+turns on. The CLI's suites add mothers of what only a command takes in
+`apps/cli/tests/common/mother.rs`, and the server, which depends on no
+mindflayer crate, keeps all of its own in `apps/server/tests/common/mother.rs`.
+
 Working on it, the loop is `make dev/link` once, then:
 
 ```bash

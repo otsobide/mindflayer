@@ -246,7 +246,7 @@ fn a_loaded_workspaces_own_skills_are_offered_after_the_workspaces_own() {
 
     let offered: Vec<(&str, String)> = candidates
         .iter()
-        .map(|candidate| (candidate.name(), candidate.origin()))
+        .map(|candidate| (candidate.name().as_str(), candidate.origin().into_string()))
         .collect();
     assert_eq!(
         offered,
@@ -489,7 +489,7 @@ fn a_skill_declaring_a_name_that_is_not_one_folder_is_not_offered_and_is_said() 
     let candidates = install::survey(&target, &ledger, &project, Kind::Skill).unwrap();
     let names: Vec<&str> = candidates
         .iter()
-        .map(|candidate| candidate.name())
+        .map(|candidate| candidate.name().as_str())
         .collect();
     assert_eq!(names, ["deploy"]);
 
@@ -513,7 +513,7 @@ fn install_and_uninstall_refuse_a_name_that_is_not_one_folder_whatever_offers_it
         install::offered(&target, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
     // As though it had been offered anyway.
     if let Offer::Loaded { name, .. } = &mut candidate.offer {
-        *name = String::from("..");
+        *name = "..".into();
     }
 
     let installing = install::install(
@@ -734,7 +734,7 @@ fn something_gathered_and_loaded_from_one_directory_has_two_origins() {
     let candidates = install::survey(&target, &ledger, &project, Kind::Skill).unwrap();
     let origins: Vec<String> = candidates
         .iter()
-        .map(|candidate| candidate.origin())
+        .map(|candidate| candidate.origin().into_string())
         .collect();
     assert_eq!(origins.len(), 2);
     assert_ne!(origins[0], origins[1], "{origins:?}");

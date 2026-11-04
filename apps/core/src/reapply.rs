@@ -50,6 +50,7 @@ use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target}
 use crate::paths;
 use crate::settings::{Settings, Share};
 use crate::status::{self, Unreached};
+use crate::value::ArtifactName;
 use crate::workspace::{
     ignore_itself, misplaced_target, same_directory, FlayerWorkspace, MindProject, WorkspaceError,
     MIND_IGNORE,
@@ -209,7 +210,7 @@ pub enum Ignore {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Retarget {
     pub kind: Kind,
-    pub name: String,
+    pub name: ArtifactName,
     /// Copies put where an agent the project now names is sent one, each
     /// with the agents it is for, made from one the record names that still
     /// holds what was installed.
@@ -815,7 +816,9 @@ pub(crate) fn retarget(
 ) -> Result<Retarget, InstallError> {
     let name = &record.name;
     if !install::is_folder_name(name) {
-        return Err(InstallError::UnsafeName { name: name.clone() });
+        return Err(InstallError::UnsafeName {
+            name: name.to_string(),
+        });
     }
     let mut retarget = Retarget {
         kind,
@@ -1077,7 +1080,7 @@ fn place(project: &MindProject, retarget: &Retarget, applied: &mut Applied) -> b
         Ok(stage) => stage,
         Err(source) => {
             applied.failures.push(ReapplyFailure::Copy {
-                name: retarget.name.clone(),
+                name: retarget.name.to_string(),
                 path: scratch,
                 source,
             });
@@ -1093,7 +1096,7 @@ fn place(project: &MindProject, retarget: &Retarget, applied: &mut Applied) -> b
         Ok(_) => true,
         Err(copy::PlaceError { target, source }) => {
             applied.failures.push(ReapplyFailure::Copy {
-                name: retarget.name.clone(),
+                name: retarget.name.to_string(),
                 path: target.unwrap_or_else(|| copies[0].clone()),
                 source,
             });

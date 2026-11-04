@@ -44,6 +44,7 @@ use crate::install::{self, InstallError, WORKSPACE_ORIGIN};
 use crate::kind::Kind;
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::skill::SkillManifest;
+use crate::value::{ArtifactName, ContentHash, Origin};
 use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
 
 /// What the `metadata` keys start with that `gh skill` writes into a skill
@@ -57,7 +58,7 @@ pub struct Plan {
     /// The project it is adopted from.
     pub project: MindProject,
     /// The skill's name, which it declares and its folder is called.
-    pub name: String,
+    pub name: ArtifactName,
     /// Where its copy in the library goes: the workspace's own folder for
     /// skills, under its name.
     pub library: PathBuf,
@@ -69,7 +70,7 @@ pub struct Plan {
     pub source: PathBuf,
     /// What every copy that is there holds ([`hash::tree`]): what the
     /// library copy will hold, and the hash the record keeps.
-    pub hash: String,
+    pub hash: ContentHash,
     /// Each `metadata` entry its `SKILL.md` declares under a key starting
     /// with [`PROVENANCE_PREFIX`], in the order written: where `gh skill`
     /// says it got it, for a front end to show. Nothing reads it further,
@@ -142,7 +143,7 @@ pub enum AdoptError {
     Installed {
         project: String,
         name: String,
-        origin: String,
+        origin: Origin,
     },
     #[error("{path} is {project}'s own, in the folder it authors skills in, so it is not adopted: only somebody's skill in an agent's folder is")]
     Authored { project: String, path: PathBuf },
@@ -312,7 +313,7 @@ pub fn apply(
             kind: Kind::Skill,
             name: plan.name.clone(),
             source_id: None,
-            origin: Some(String::from(WORKSPACE_ORIGIN)),
+            origin: Some(Origin::from(WORKSPACE_ORIGIN)),
             content_hash: Some(plan.hash.clone()),
             targets: plan
                 .copies
@@ -362,7 +363,7 @@ fn into_library(plan: &Plan) -> Result<(), AdoptError> {
     }
     fs::create_dir(&plan.library).map_err(|source| match source.kind() {
         io::ErrorKind::AlreadyExists => AdoptError::InLibrary {
-            name: plan.name.clone(),
+            name: plan.name.to_string(),
             library: plan.library.clone(),
             copy: plan.source.clone(),
         },
@@ -426,7 +427,7 @@ fn plan_with(
             name,
             origin: record
                 .origin
-                .unwrap_or_else(|| String::from("a place not recorded")),
+                .unwrap_or_else(|| Origin::from("a place not recorded")),
         });
     }
     let there: Vec<&PathBuf> = paths
@@ -526,7 +527,7 @@ fn plan_with(
         .collect();
     Ok(Plan {
         project: project.clone(),
-        name,
+        name: ArtifactName::from(name),
         library,
         copies,
         source: first.clone(),
@@ -576,7 +577,7 @@ fn in_library(workspace: &FlayerWorkspace, name: &str, copy: &Path) -> Result<Pa
 /// What the copy at `path` holds ([`hash::tree`]), which refuses a link
 /// inside it, or anything else neither a file nor a folder: no install
 /// writes one, and following it could read anything.
-fn hash_of(path: &Path) -> Result<String, AdoptError> {
+fn hash_of(path: &Path) -> Result<ContentHash, AdoptError> {
     hash::tree(path).map_err(|error| AdoptError::Unreproducible {
         path: path.to_path_buf(),
         reason: error.to_string(),
@@ -629,3 +630,7 @@ fn held_to_an_install(path: &Path, name: &str) -> Result<SkillManifest, AdoptErr
     }
     Ok(manifest.clone())
 }
+
+#[cfg(test)]
+#[path = "adopt_test.rs"]
+mod tests;

@@ -183,7 +183,12 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
                          Mindflayer kept where from, so it {} left as it is; `install --from` \
                          says which",
                         named(update.kind, &update.name),
-                        listed(&origins.iter().map(String::as_str).collect::<Vec<_>>()),
+                        listed(
+                            &origins
+                                .iter()
+                                .map(|origin| origin.as_str())
+                                .collect::<Vec<_>>()
+                        ),
                         if done { "was" } else { "would be" }
                     )
                     .into(),

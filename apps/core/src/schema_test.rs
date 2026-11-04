@@ -19,9 +19,10 @@ use crate::resolve::Reason;
 use crate::scan;
 use crate::settings::{ProjectId, Share};
 use crate::status::State;
-use crate::template::{Origin, Template};
+use crate::template::{Origin as TemplateOrigin, Template};
 use crate::update::Does;
 use crate::url::redacted;
+use crate::value::{Origin, Redacted};
 use crate::view::Health;
 use crate::workspace::MarkerFile;
 
@@ -323,13 +324,16 @@ fn a_project_id_holds_to_its_schema_and_nothing_else_written_does() {
 /// as its serializer writes it, and nothing else.
 #[test]
 fn a_template_s_origin_holds_to_its_schema_as_serde_writes_it() {
-    let template = |origin: Origin| Template {
+    let template = |origin: TemplateOrigin| Template {
         name: "full".to_owned(),
         kind: Kind::Skill,
         origin,
     };
 
-    for origin in [Origin::BuiltIn, Origin::Path(PathBuf::from("/work/full"))] {
+    for origin in [
+        TemplateOrigin::BuiltIn,
+        TemplateOrigin::Path(PathBuf::from("/work/full")),
+    ] {
         holds_to::<Template>(&serde_json::to_value(template(origin)).unwrap());
     }
     refused_by::<Template>(&serde_json::json!({"name": "full", "kind": "skill", "origin": 1}));
@@ -341,7 +345,7 @@ fn a_template_s_origin_holds_to_its_schema_as_serde_writes_it() {
 fn a_skill_s_metadata_holds_to_its_schema_as_an_object() {
     let shown = |metadata| Shown {
         kind: Kind::Skill,
-        name: "deploy".to_owned(),
+        name: "deploy".to_owned().into(),
         path: PathBuf::from("/work/skills/deploy"),
         project: PathBuf::from("/work"),
         file: PathBuf::from("/work/skills/deploy/SKILL.md"),
@@ -383,31 +387,26 @@ fn every_code_core_gives_holds_to_its_schema_and_nothing_else_does() {
 /// takes, as every field it writes holds: schemars reads that type, as
 /// ts-rs does, so the schema of the type is what the API is said to give.
 /// `in_order`, which writes a skill's metadata, says its schema with
-/// `schemars(with)`, held by the test of the metadata.
+/// `schemars(with)`, held by the test of the metadata. Beside them, a URL
+/// and words that may quote one, each held by a value object that writes
+/// itself without a credential ([`Redacted`], [`Origin`]), whose schema is
+/// a string's.
 #[derive(Serialize, schemars::JsonSchema)]
 struct Written {
     #[serde(serialize_with = "crate::paths::lossy")]
     path: PathBuf,
     #[serde(serialize_with = "crate::paths::lossy_all")]
     paths: Vec<PathBuf>,
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    url: String,
-    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
-    detail: Option<String>,
-    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
-    none: Option<String>,
+    url: Redacted,
+    detail: Option<Redacted>,
+    none: Option<Origin>,
+    origin: Origin,
 }
 
 /// Every function a field of core's names, each held to its schema by the
 /// test of [`Written`]: one new joins it there first, as it joins the
 /// TypeScript's.
-const FIELD_SERIALIZERS: [&str; 5] = [
-    "in_order",
-    "paths::lossy",
-    "paths::lossy_all",
-    "url::serialize_redacted",
-    "url::serialize_redacted_option",
-];
+const FIELD_SERIALIZERS: [&str; 3] = ["in_order", "paths::lossy", "paths::lossy_all"];
 
 /// A path whose bytes are no UTF-8, where a path can be one: `lossy` writes
 /// it as text all the same, which is why its schema is a string.
@@ -432,14 +431,16 @@ fn every_field_serializer_writes_what_the_schema_says_of_its_field() {
     let written = Written {
         path: path.clone(),
         paths: vec![path, PathBuf::from("/work/rules")],
-        url: url.to_owned(),
-        detail: Some(format!("cloned {url}")),
+        url: Redacted::new(url),
+        detail: Some(Redacted::new(&format!("cloned {url}"))),
         none: None,
+        origin: Origin::from(format!("{url}#main")),
     };
 
     let json = serde_json::to_value(&written).unwrap();
     holds_to::<Written>(&json);
     assert_eq!(json["url"], *redacted(url));
+    assert_eq!(json["origin"], *redacted(&format!("{url}#main")));
 }
 
 #[test]
@@ -452,4 +453,66 @@ fn every_field_serializer_in_core_is_one_held_to_its_schema() {
         FIELD_SERIALIZERS.map(str::to_owned).into(),
         "a field written through a function the test of `Written` does not hold"
     );
+}
+
+/// What every value object of [`crate::value`] says its schema is: a
+/// `String`'s, inline, with no definition of its own in `$defs`, holding
+/// what serde writes of one a mother drew and refusing anything but text.
+fn schema_is_a_strings<T: JsonSchema + Serialize>(value: &T) {
+    let name = std::any::type_name::<T>();
+
+    assert!(T::inline_schema(), "{name} is no inline schema");
+    assert_eq!(T::schema_name(), String::schema_name(), "{name}");
+    assert_eq!(
+        given::<T>().as_value(),
+        given::<String>().as_value(),
+        "{name}"
+    );
+    holds_to::<T>(&serde_json::to_value(value).unwrap());
+    for refused in [
+        serde_json::json!(7),
+        serde_json::json!(null),
+        serde_json::json!({}),
+    ] {
+        assert!(
+            holds(&given::<T>(), &refused).is_err(),
+            "{name} holds {refused}"
+        );
+    }
+}
+
+#[test]
+fn every_value_objects_schema_is_the_strings_serde_writes() {
+    use crate::mother::{
+        ArtifactNameMother, ContentHashMother, OriginMother, RedactedMother, RevisionMother,
+    };
+
+    for _ in 0..20 {
+        schema_is_a_strings(&ContentHashMother::random());
+        schema_is_a_strings(&RedactedMother::url());
+        schema_is_a_strings(&OriginMother::random());
+        schema_is_a_strings(&ArtifactNameMother::random());
+        schema_is_a_strings(&RevisionMother::random());
+    }
+}
+
+#[test]
+fn a_project_ids_schema_holds_every_new_id_and_refuses_every_text_that_is_none() {
+    use crate::mother::ProjectIdMother;
+
+    let schema = given::<ProjectId>();
+    for _ in 0..100 {
+        let id = ProjectIdMother::random();
+        assert_eq!(
+            holds(&schema, &serde_json::json!(id.as_str())),
+            Ok(()),
+            "{id}"
+        );
+    }
+    for (why, text) in ProjectIdMother::not_ids() {
+        assert!(
+            holds(&schema, &serde_json::json!(text)).is_err(),
+            "{why}: {text:?}"
+        );
+    }
 }

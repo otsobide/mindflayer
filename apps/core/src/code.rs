@@ -59,7 +59,6 @@ use crate::create::CreateError;
 use crate::everywhere::EverywhereError;
 use crate::exclude::{self, ExcludeError};
 use crate::frontmatter::FrontMatterError;
-use crate::gather::git::GitError;
 use crate::gather::{self, GatherError, Leftover, ScrubFailure};
 use crate::install::{rules, Clash, InstallError, LoadFailure, PlanError, Refused};
 use crate::kind::UnknownKind;
@@ -68,6 +67,7 @@ use crate::lifecycle::LifecycleError;
 use crate::lock::LockError;
 use crate::migrate::{MigrateError, ProjectFailure, Refusal};
 use crate::policy::PolicyError;
+use crate::port::GitError;
 use crate::reapply::{ReapplyError, ReapplyFailure};
 use crate::relink::{Duplicate, RelinkError};
 use crate::resolve::ResolveError;
@@ -75,6 +75,7 @@ use crate::scan::ScanFailure;
 use crate::status::StatusFailure;
 use crate::template::TemplateError;
 use crate::update::{Left, UpdateError};
+use crate::value::Redacted;
 use crate::workspace::{MisplacedTarget, ProjectWarning, WorkspaceError};
 
 /// Give an error type its `code()` and its `CODES`.
@@ -214,7 +215,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("gather::GatherError", GatherError::CODES),
     ("gather::Leftover", Leftover::CODES),
     ("gather::ScrubFailure", ScrubFailure::CODES),
-    ("gather::git::GitError", GitError::CODES),
+    ("port::GitError", GitError::CODES),
     ("install::InstallError", InstallError::CODES),
     ("install::LoadFailure", LoadFailure::CODES),
     ("install::plan::Clash", Clash::CODES),
@@ -271,8 +272,7 @@ pub struct Said {
     /// Written through [`redacted`](crate::url::redacted), as every URL
     /// is: an error can quote one, a source's among them, and what built
     /// the error is no promise that it carries no credential.
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    pub message: String,
+    pub message: Redacted,
 }
 
 impl Said {
@@ -280,7 +280,7 @@ impl Said {
     pub(crate) fn of(code: &'static str, error: &impl Display) -> Self {
         Said {
             code,
-            message: error.to_string(),
+            message: Redacted::new(&error.to_string()),
         }
     }
 }

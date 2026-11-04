@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 use mindflayer_core::code::Said;
 use mindflayer_core::reading::{Shown, Validation};
+use mindflayer_core::value::Redacted;
 use mindflayer_core::view::Listing;
 use mindflayer_core::{Artifact, Catalog, FlayerWorkspace, Kind, MindProject, Reference};
 
@@ -251,7 +252,7 @@ pub(crate) fn listed_here(
             None,
             Some(Said {
                 code: error.code(),
-                message: error.to_string(),
+                message: Redacted::new(&error.to_string()),
             }),
         ),
     };
@@ -427,7 +428,7 @@ fn label(artifact: &Artifact, qualify: Qualify, level: Level) -> String {
     let name = if qualify.kind {
         artifact.qualified_name()
     } else {
-        artifact.name().to_owned()
+        artifact.name().to_string()
     };
     let label = if qualify.project {
         format!("{name} ({})", holder_of(artifact, level))

@@ -21,9 +21,10 @@ use crate::resolve::Reason;
 use crate::scan;
 use crate::settings::{ProjectId, Share};
 use crate::status::State;
-use crate::template::{Origin, Template};
+use crate::template::{Origin as TemplateOrigin, Template};
 use crate::update::Does;
 use crate::url::redacted;
+use crate::value::{Origin, Redacted};
 use crate::view::Health;
 use crate::workspace::MarkerFile;
 
@@ -225,18 +226,18 @@ fn an_issue_says_what_it_carries_with_its_type() {
 /// in, written by hand, which its field says as `string | null`.
 #[test]
 fn a_template_s_origin_is_a_string_or_null_in_both() {
-    let template = |origin: Origin| Template {
+    let template = |origin: TemplateOrigin| Template {
         name: "full".to_owned(),
         kind: Kind::Skill,
         origin,
     };
 
     assert_eq!(
-        serde_json::to_value(template(Origin::BuiltIn)).unwrap()["origin"],
+        serde_json::to_value(template(TemplateOrigin::BuiltIn)).unwrap()["origin"],
         Value::Null
     );
     assert_eq!(
-        serde_json::to_value(template(Origin::Path(PathBuf::from("/work/full")))).unwrap()
+        serde_json::to_value(template(TemplateOrigin::Path(PathBuf::from("/work/full")))).unwrap()
             ["origin"],
         Value::String("/work/full".to_owned())
     );
@@ -249,7 +250,7 @@ fn a_template_s_origin_is_a_string_or_null_in_both() {
 fn a_skill_s_metadata_is_an_object_in_both() {
     let shown = Shown {
         kind: Kind::Skill,
-        name: "deploy".to_owned(),
+        name: "deploy".to_owned().into(),
         path: PathBuf::from("/work/skills/deploy"),
         project: PathBuf::from("/work"),
         file: PathBuf::from("/work/skills/deploy/SKILL.md"),
@@ -273,6 +274,9 @@ fn a_skill_s_metadata_is_an_object_in_both() {
 /// Each function a field is written through, on a field of the type it
 /// takes, as every field it writes holds: ts-rs reads that type in place of
 /// the attribute, so what it says of the type is what the panel is told.
+/// Beside them, a URL and words that may quote one, each held by a value
+/// object that writes itself without a credential ([`Redacted`],
+/// [`Origin`]), said as the `string` a field holding text was.
 /// `in_order`, which writes a skill's metadata, is `reading`'s own, and its
 /// field says what it writes with `ts(as)`, held by the test of the metadata.
 #[derive(Serialize, TS)]
@@ -281,24 +285,16 @@ struct Written {
     path: PathBuf,
     #[serde(serialize_with = "crate::paths::lossy_all")]
     paths: Vec<PathBuf>,
-    #[serde(serialize_with = "crate::url::serialize_redacted")]
-    url: String,
-    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
-    detail: Option<String>,
-    #[serde(serialize_with = "crate::url::serialize_redacted_option")]
-    none: Option<String>,
+    url: Redacted,
+    detail: Option<Redacted>,
+    none: Option<Origin>,
+    origin: Origin,
 }
 
 /// Every function a field of core's names, each held to its TypeScript by
 /// the test of [`Written`]: one new joins it there first, or a field written
 /// as something its type is not would leave the panel told the type.
-const FIELD_SERIALIZERS: [&str; 5] = [
-    "in_order",
-    "paths::lossy",
-    "paths::lossy_all",
-    "url::serialize_redacted",
-    "url::serialize_redacted_option",
-];
+const FIELD_SERIALIZERS: [&str; 3] = ["in_order", "paths::lossy", "paths::lossy_all"];
 
 /// A path whose bytes are no UTF-8, where a path can be one: `lossy` writes
 /// it as text all the same, which is why its TypeScript is a `string`.
@@ -324,9 +320,10 @@ fn every_field_serializer_writes_what_typescript_says_of_its_field() {
     let written = Written {
         path: path.clone(),
         paths: vec![path.clone(), PathBuf::from("/work/rules")],
-        url: url.to_owned(),
-        detail: Some(detail.clone()),
+        url: Redacted::new(url),
+        detail: Some(Redacted::new(&detail)),
         none: None,
+        origin: Origin::from(format!("{url}#main")),
     };
 
     assert_eq!(
@@ -337,11 +334,12 @@ fn every_field_serializer_writes_what_typescript_says_of_its_field() {
             "url": redacted(url),
             "detail": redacted(&detail),
             "none": null,
+            "origin": redacted(&format!("{url}#main")),
         })
     );
     assert_eq!(
         Written::inline(&Config::new()),
-        "{ path: string, paths: Array<string>, url: string, detail: string | null, none: string | null, }"
+        "{ path: string, paths: Array<string>, url: string, detail: string | null, none: string | null, origin: string, }"
     );
 }
 
@@ -418,4 +416,64 @@ fn every_code_core_gives_is_in_its_union_once() {
 
     assert_eq!(said.len(), given.len());
     assert!(given.iter().all(|code| said.contains(*code)));
+}
+
+/// What every value object of [`crate::value`] says it is, beside what serde
+/// writes of one a mother drew: a `string`, inline, exporting no file of its
+/// own and naming no type a field holding one would import, so turning a
+/// field from a `String` into a value moves nothing the panel compiles
+/// against.
+fn says_it_is_a_string<T: TS + Serialize + 'static>(value: &T) {
+    let config = Config::new();
+    let name = std::any::type_name::<T>();
+
+    assert_eq!(T::name(&config), "string", "{name}");
+    assert_eq!(T::inline(&config), "string", "{name}");
+    assert_eq!(T::output_path(), None, "{name} exports a file of its own");
+    assert!(T::dependencies(&config).is_empty(), "{name} names a type");
+    assert!(
+        serde_json::to_value(value).unwrap().is_string(),
+        "{name} is written as no string"
+    );
+}
+
+#[test]
+fn every_value_object_is_said_as_the_string_serde_writes() {
+    use crate::mother::{
+        ArtifactNameMother, ContentHashMother, OriginMother, RedactedMother, RevisionMother,
+    };
+
+    for _ in 0..20 {
+        says_it_is_a_string(&ContentHashMother::random());
+        says_it_is_a_string(&RedactedMother::url());
+        says_it_is_a_string(&OriginMother::random());
+        says_it_is_a_string(&ArtifactNameMother::random());
+        says_it_is_a_string(&RevisionMother::random());
+    }
+}
+
+#[test]
+fn a_field_holding_a_value_object_reads_as_one_holding_a_string() {
+    use crate::value::{ArtifactName, ContentHash, Revision};
+
+    #[derive(Serialize, TS)]
+    struct Held {
+        hash: ContentHash,
+        name: ArtifactName,
+        revision: Option<Revision>,
+        names: Vec<ArtifactName>,
+    }
+
+    assert_eq!(
+        Held::inline(&Config::new()),
+        "{ hash: string, name: string, revision: string | null, names: Array<string>, }"
+    );
+}
+
+#[test]
+fn a_project_id_keeps_the_type_of_its_own_it_was_published_with() {
+    let config = Config::new();
+
+    assert_eq!(ProjectId::name(&config), "ProjectId");
+    assert_eq!(ProjectId::inline(&config), "string");
 }

@@ -13,7 +13,7 @@ fn only_an_outdated_a_missing_or_a_forced_installation_is_written() {
         Step::WriteOver(vec![path.clone()]),
         Step::Leave(vec![path]),
         Step::Orphaned,
-        Step::Unsure(vec![String::from("workspace")]),
+        Step::Unsure(vec![Origin::from("workspace")]),
     ]
     .iter()
     .map(Step::writes)
@@ -33,7 +33,7 @@ fn only_an_installation_left_as_edited_is_refused_and_by_an_install_s_code() {
         Step::WriteOver(vec![path.clone()]),
         Step::Leave(vec![path]),
         Step::Orphaned,
-        Step::Unsure(vec![String::from("workspace")]),
+        Step::Unsure(vec![Origin::from("workspace")]),
     ]
     .iter()
     .map(|step| step.refused().map(|refused| refused.code()))
@@ -49,8 +49,8 @@ fn only_an_installation_left_as_edited_is_refused_and_by_an_install_s_code() {
 fn a_plan_that_writes_nothing_is_empty_whatever_it_says() {
     let update = |step| Update {
         kind: Kind::Skill,
-        name: String::from("deploy"),
-        origin: Some(String::from("workspace")),
+        name: "deploy".into(),
+        origin: Some(Origin::from("workspace")),
         standing: Standing::Orphaned,
         step,
         done: None,
@@ -83,7 +83,7 @@ fn each_step_is_said_by_a_word_of_its_own() {
         Step::WriteOver(vec![path.clone()]),
         Step::Leave(vec![path]),
         Step::Orphaned,
-        Step::Unsure(vec![String::from("workspace")]),
+        Step::Unsure(vec![Origin::from("workspace")]),
     ]
     .iter()
     .map(|step| serde_json::to_value(step.does()).unwrap())
@@ -108,8 +108,8 @@ fn each_step_is_said_by_a_word_of_its_own() {
 fn update(standing: Standing, step: Step) -> Update {
     Update {
         kind: Kind::Skill,
-        name: String::from("deploy"),
-        origin: Some(String::from("workspace")),
+        name: "deploy".into(),
+        origin: Some(Origin::from("workspace")),
         standing,
         step,
         done: None,
@@ -165,8 +165,8 @@ fn an_update_says_why_it_leaves_an_installation_and_nothing_of_one_it_writes() {
         left(
             Standing::Outdated,
             Step::Unsure(vec![
-                String::from("workspace"),
-                String::from("load:../team")
+                Origin::from("workspace"),
+                Origin::from("load:../team")
             ])
         ),
         Some((

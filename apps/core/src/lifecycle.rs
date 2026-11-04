@@ -44,6 +44,7 @@ use crate::ledger::Carried;
 use crate::paths;
 use crate::skill::SkillManifest;
 use crate::template::Template;
+use crate::value::{ArtifactName, ContentHash};
 use crate::workspace::{
     replace_bytes_unresolved, replace_file, FlayerWorkspace, MindProject, WorkspaceError,
 };
@@ -54,7 +55,7 @@ pub struct Target {
     pub kind: Kind,
     /// What it declares, when it reads; otherwise the name its place on disk
     /// gives it.
-    pub name: String,
+    pub name: ArtifactName,
     /// The directory a skill is, or the file a rule is.
     pub path: PathBuf,
     /// The artifact itself, when it can be read.
@@ -203,7 +204,11 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
             let artifact = load(project, kind, &path, name).ok();
             found.push(Target {
                 kind,
-                name: artifact.as_ref().map_or(name, Artifact::name).to_owned(),
+                name: ArtifactName::from(
+                    artifact
+                        .as_ref()
+                        .map_or(name, |artifact| artifact.name().as_str()),
+                ),
                 path,
                 artifact,
             });
@@ -374,7 +379,7 @@ pub fn start_edit(target: &Target) -> Edit {
     let file = target.file();
     Edit {
         kind: target.kind,
-        name: target.name.clone(),
+        name: target.name.to_string(),
         path: target.path.clone(),
         before: fs::read(&file).ok(),
         file,
@@ -591,13 +596,15 @@ fn library(workspace: Option<&FlayerWorkspace>, kind: Kind, directory: &Path) ->
 fn fit(target: &Target, contents: &[u8]) -> Result<(), LifecycleError> {
     let name = target.name.clone();
     let Ok(text) = std::str::from_utf8(contents) else {
-        return Err(LifecycleError::NotText { name });
+        return Err(LifecycleError::NotText {
+            name: name.to_string(),
+        });
     };
     // Matched on the kind, so a third one has to say what it is held to.
     let issues = match target.kind {
         Kind::Skill => {
             let unreadable = |reason: String| LifecycleError::Unparsed {
-                name: name.clone(),
+                name: name.to_string(),
                 reason,
             };
             let document =
@@ -624,7 +631,10 @@ fn fit(target: &Target, contents: &[u8]) -> Result<(), LifecycleError> {
     if issues.is_empty() {
         Ok(())
     } else {
-        Err(LifecycleError::ContentsUnfit { name, issues })
+        Err(LifecycleError::ContentsUnfit {
+            name: name.to_string(),
+            issues,
+        })
     }
 }
 
@@ -828,7 +838,7 @@ fn rename_skill(
         let issues = artifact::strict_issues(&renamed, to);
         if !issues.is_empty() {
             return Err(LifecycleError::Unfit {
-                name: artifact.name().to_owned(),
+                name: artifact.name().to_string(),
                 issues,
             });
         }
@@ -920,7 +930,7 @@ fn rename_rule(
     // either.
     Ok(Target {
         kind: Kind::Rule,
-        name: to.to_owned(),
+        name: ArtifactName::from(to),
         artifact: Artifact::rule(&file, to.to_owned(), project.root()).ok(),
         path: file,
     })
@@ -1123,7 +1133,7 @@ pub enum LifecycleError {
     Stale {
         path: PathBuf,
         expected: String,
-        found: String,
+        found: ContentHash,
     },
     /// The file leads, through a link, out of `directory`, one of the
     /// folders contents given whole are written inside: the project's
@@ -1171,3 +1181,7 @@ codes!(LifecycleError {
     Self::Workspace(error) => error,
     Self::Artifact(error) => error,
 });
+
+#[cfg(test)]
+#[path = "lifecycle_test.rs"]
+mod tests;

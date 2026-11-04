@@ -143,7 +143,7 @@ fn artifacts(screen: &Screen, frame: &mut Frame, area: Rect) {
         .map(|entry| {
             let changes = screen.changes_of(entry);
             let mut spans = vec![Span::styled(
-                entry.candidate.name().to_owned(),
+                entry.candidate.name().to_string(),
                 Style::default().add_modifier(Modifier::BOLD),
             )];
             if changes > 0 {
@@ -208,7 +208,7 @@ fn receivers(screen: &Screen, frame: &mut Frame, area: Rect) {
 /// One offer: its box, its name, what it is for, and where it came from.
 fn row(entry: &Row) -> ListItem<'_> {
     ListItem::new(vec![
-        Line::from(boxed(entry, entry.candidate.name().to_owned())),
+        Line::from(boxed(entry, entry.candidate.name().to_string())),
         detail(entry),
     ])
 }

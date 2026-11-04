@@ -1555,7 +1555,7 @@ fn an_edit_that_changes_an_installed_copy_keeps_its_record_and_reads_as_edited()
         )
         .unwrap(),
         install::Removed::Edited {
-            name: String::from("deploy"),
+            name: "deploy".into(),
             paths: vec![project.root().join("skills").join("deploy")],
         }
     );
