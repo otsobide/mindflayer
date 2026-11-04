@@ -844,7 +844,8 @@ pub(super) fn plan_with(
 /// all, where the `mind.toml` meant the default beside the code.
 ///
 /// Every kind's default filled in (`Directories::with_defaults`, as `mind
-/// init` fills them), and any key this build does not know carried along. A
+/// init` fills them, a kind with none left out), and any key this build
+/// does not know carried along. A
 /// version 1 marker kept every kind it names no folder for inside `.mind`,
 /// and is described so, for the plan to refuse: settings cannot name a
 /// folder there. A folder it does name is kept, as every other command reads
@@ -857,7 +858,9 @@ fn authored(config: &MindConfig) -> Directories {
     Kind::ALL
         .into_iter()
         .fold(config.directories.clone(), |directories, kind| {
-            if directories.get(kind).is_some() {
+            // Only a kind it knew, which is a kind with a default: one added
+            // since was kept nowhere.
+            if directories.get(kind).is_some() || Directories::default_for(kind).is_none() {
                 directories
             } else {
                 directories.with(kind, Path::new(MIND_DIR).join(kind.folder()))

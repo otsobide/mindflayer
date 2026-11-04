@@ -392,14 +392,24 @@ impl Directories {
             .collect()
     }
 
-    /// What a project uses when it says nothing: a folder per kind beside the
-    /// code, named after the kind.
+    /// What a project uses when it says nothing: a folder beside the code,
+    /// named after the kind, for each kind that has one.
     ///
     /// Beside the code rather than inside `.mind`, because these are files the
     /// agents themselves read, and an agent looking for skills does not know
     /// what a `.mind` is.
-    pub fn default_for(kind: Kind) -> PathBuf {
-        PathBuf::from(kind.folder())
+    ///
+    /// `None` for a kind kept nowhere unless a marker names its folder.
+    /// Matched on the kind, so a kind added later has to say whether it has
+    /// one: given one, every project a `mind.toml` marks, which says where
+    /// the kinds it knew live and nothing of the rest, would start reading
+    /// a folder of that name at its root that nobody put there for it, and
+    /// every `mind init` and `mind migrate` would name it in the settings
+    /// they write.
+    pub fn default_for(kind: Kind) -> Option<PathBuf> {
+        match kind {
+            Kind::Skill | Kind::Rule => Some(PathBuf::from(kind.folder())),
+        }
     }
 
     /// What a new workspace uses when it says nothing: a folder per kind in
@@ -424,14 +434,16 @@ impl Directories {
     }
 
     /// Every kind's directory spelled out, which is what `init` writes so the
-    /// answer is in the file rather than in this function.
+    /// answer is in the file rather than in this function: each kind this
+    /// names, and each it leaves out that has a default
+    /// ([`default_for`](Self::default_for)).
     pub fn resolved(&self) -> Vec<(Kind, PathBuf)> {
         self.resolved_with(Directories::default_for)
     }
 
     /// Every kind named: one this leaves out at a project's default beside
-    /// the code ([`default_for`](Self::default_for)), and any key this build
-    /// does not recognise carried along.
+    /// the code ([`default_for`](Self::default_for)), when it has one, and
+    /// any key this build does not recognise carried along.
     ///
     /// What a new project's settings are given to author in
     /// ([`MindProject::init_asked`]). In settings a kind left out has no
@@ -444,26 +456,30 @@ impl Directories {
     }
 
     /// The same, with `default` answering for a kind nothing names: a
-    /// project's default or a workspace's.
-    fn resolved_with(&self, default: impl Fn(Kind) -> PathBuf) -> Vec<(Kind, PathBuf)> {
+    /// project's default or a workspace's. A kind neither names is left out.
+    fn resolved_with(&self, default: impl Fn(Kind) -> Option<PathBuf>) -> Vec<(Kind, PathBuf)> {
         Kind::ALL
             .into_iter()
-            .map(|kind| {
+            .filter_map(|kind| {
                 let directory = self
                     .get(kind)
-                    .map_or_else(|| default(kind), Path::to_path_buf);
-                (kind, directory)
+                    .map(Path::to_path_buf)
+                    .or_else(|| default(kind))?;
+                Some((kind, directory))
             })
             .collect()
     }
 
-    /// Every kind named, `default` answering for the ones that were not, and
-    /// any key this build does not recognise carried along.
-    fn filled(mut self, default: impl Fn(Kind) -> PathBuf) -> Self {
+    /// Every kind named, `default` answering for the ones that were not
+    /// where it has an answer, and any key this build does not recognise
+    /// carried along.
+    fn filled(mut self, default: impl Fn(Kind) -> Option<PathBuf>) -> Self {
         for kind in Kind::ALL {
-            self.0
-                .entry(kind.folder().to_owned())
-                .or_insert_with(|| default(kind));
+            if self.get(kind).is_none() {
+                if let Some(directory) = default(kind) {
+                    self.0.insert(kind.folder().to_owned(), directory);
+                }
+            }
         }
         self
     }
@@ -902,8 +918,9 @@ impl MindProject {
     /// meant by that. A project's settings ([`SETTINGS_VERSION`]) mean no
     /// folder at all. A `mind.toml` means the default beside the code, except
     /// one written before [`DIRECTORIES_VERSION`], which described a layout
-    /// where every kind lived inside `.mind`. Each is read the way it was
-    /// written.
+    /// where every kind lived inside `.mind`; and either means no folder for
+    /// a kind with no default ([`Directories::default_for`]), which it was
+    /// not written knowing. Each is read the way it was written.
     ///
     /// An `Option` rather than a folder always, so that a project can say it
     /// authors no artifacts of a kind: a reader then finds none there, which
@@ -917,10 +934,14 @@ impl MindProject {
         }
         match &self.config {
             ProjectConfig::Settings(_) => None,
+            // Every kind it knew, which is every kind with a default: one
+            // added since is kept nowhere it does not name.
             ProjectConfig::Toml(config) if config.version < DIRECTORIES_VERSION => {
-                Some(self.mind_dir().join(kind.folder()))
+                Directories::default_for(kind).map(|_| self.mind_dir().join(kind.folder()))
             }
-            ProjectConfig::Toml(_) => Some(self.root.join(Directories::default_for(kind))),
+            ProjectConfig::Toml(_) => {
+                Directories::default_for(kind).map(|directory| self.root.join(directory))
+            }
         }
     }
 
@@ -1284,7 +1305,7 @@ impl WeaverWorkspace {
         let config_path = dir.join(names.workspace_config());
 
         for (kind, directory) in
-            directories.resolved_with(|kind| Directories::library_under(names, kind))
+            directories.resolved_with(|kind| Some(Directories::library_under(names, kind)))
         {
             if let Some(error) = misplaced_own(kind, &directory) {
                 return Err(error);
@@ -2195,7 +2216,7 @@ impl WeaverWorkspace {
                     .config
                     .directories
                     .clone()
-                    .filled(|kind| Directories::library_under(self.names, kind)),
+                    .filled(|kind| Some(Directories::library_under(self.names, kind))),
             }),
         }
     }
@@ -2926,7 +2947,9 @@ fn weaver_template(name: &str, directories: &Directories, names: Names) -> Strin
          [directories]\n\
          {}",
         toml_string(name),
-        directory_lines(directories.resolved_with(|kind| Directories::library_under(names, kind))),
+        directory_lines(
+            directories.resolved_with(|kind| Some(Directories::library_under(names, kind)))
+        ),
     )
 }
 
