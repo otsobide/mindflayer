@@ -1155,15 +1155,15 @@ source for the workspace that manages you, without copying anything:
 
 ```
 $ cd ~/skills-equipo              # a workspace with skills of its own
-$ mf load .
+$ mw load .
 loaded skills-equipo as skills-equipo: 2 skills to install
   into the workspace at /home/you, the default one
 
 $ cd ~/code
-$ mf install -p api deploy
+$ mw install -p api deploy
 installed deploy into api, from load:skills-equipo
 
-$ mf load                         # what is loaded, and what each offers
+$ mw load                         # what is loaded, and what each offers
 skills-equipo  skills-equipo  2 skills to install
   in the workspace at /home/you, the default one
 ```
