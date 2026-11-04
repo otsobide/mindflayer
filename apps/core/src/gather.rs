@@ -444,9 +444,22 @@ fn harvest(
     // line is already where `ps` and the shell history show it, and every
     // report names the URL. A git credential helper, or the front end once
     // #110 lands, keeps it off the command line altogether.
-    if carries_credentials(request.source.url()) {
+    //
+    // So is a URL typed where the branch or the folder goes, which the
+    // ledger keeps as that branch or folder, word for word, and an error
+    // repeats: it is somebody's credential all the same.
+    let typed = [
+        Some(request.source.url()),
+        request.source.reference(),
+        Some(request.subdirectory.as_str()),
+    ];
+    if let Some(carrying) = typed
+        .into_iter()
+        .flatten()
+        .find(|text| carries_credentials(text))
+    {
         return Err(GatherError::CredentialsInUrl {
-            url: redacted(request.source.url()).into_owned(),
+            url: redacted(carrying).into_owned(),
         });
     }
 
@@ -755,7 +768,8 @@ pub enum GatherError {
     /// The URL carries a password or token, or a user name where a token can
     /// stand in for one, which the message names as a user name: calling it a
     /// password would send somebody looking for one that is not there. `url` is shown without it, which is the URL to
-    /// gather instead. A provider the front end supplies (#110) will be a
+    /// gather instead. A URL typed as the branch or the folder is refused
+    /// the same way, and is the one `url` names. A provider the front end supplies (#110) will be a
     /// second way to give the credential.
     #[error(
         "{url}: a password, a token or, over http(s), a user name in the URL is refused, because \

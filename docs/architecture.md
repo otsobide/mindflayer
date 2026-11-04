@@ -2376,7 +2376,11 @@ it: a token on the command line is already where `ps` and the shell history
 show it, and refusing is what points at a git credential helper, which keeps
 it off the command line altogether, as the front-end provider of
 [D-16](#d-16-credentials-come-from-the-front-end-never-from-a-prompt) will.
-Behind that refusal the rest holds whichever caller is writing. The ledger
+So is such a URL typed where the branch or the folder goes: the ledger keeps
+a source's branch and folder word for word, since neither is a URL, and a
+`GitError` would quote the branch, so a token typed there, found by the
+suite that tries every credentialed form in every place a gather takes text,
+was stored and printed until it was refused alike. Behind that refusal the rest holds whichever caller is writing. The ledger
 redacts every URL on the way in and again on the way out, so nothing it hands
 back carries a credential, scrubbed yet or not. Every `GitError` redacts the
 URL and what `gix` said. A clone is scrubbed as soon as it is made (the gix

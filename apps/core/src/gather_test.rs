@@ -199,6 +199,37 @@ fn a_gather_from_any_credentialed_url_is_refused_before_the_remote_is_asked() {
     }
 }
 
+/// A URL typed where the branch or the folder goes would be kept as that
+/// branch or folder, word for word, so it is refused as one typed where the
+/// URL goes is, before anything is registered.
+#[test]
+fn a_credentialed_url_typed_as_the_branch_or_the_folder_is_refused_alike() {
+    let (_dir, workspace) = WorkspaceMother::empty();
+    let ledger = Ledger::in_memory().unwrap();
+    for typed in UrlMother::every_credentialed() {
+        let remote = Arc::new(Unreached::default());
+        let request = if random::chance() {
+            Request::git(UrlMother::https()).at(Some(typed.typed.as_str()))
+        } else {
+            Request::git(UrlMother::https()).from_subdirectory(typed.typed.clone())
+        }
+        .through(remote.clone());
+
+        let refused = gather(&workspace, &ledger, &request).unwrap_err();
+
+        assert!(
+            matches!(&refused, GatherError::CredentialsInUrl { url } if url == &typed.clean),
+            "{typed:?} gave {refused:?}"
+        );
+        assert_eq!(*remote.asked.lock().unwrap(), 0, "{typed:?}");
+    }
+    assert!(ledger.sources().unwrap().is_empty());
+    let history = serde_json::to_string(&ledger.history(100).unwrap()).unwrap();
+    for typed in UrlMother::every_credentialed() {
+        assert!(!history.contains(&typed.secret), "{history}");
+    }
+}
+
 #[test]
 fn a_gather_of_rules_is_refused_and_fetches_nothing() {
     let (_dir, workspace) = WorkspaceMother::empty();

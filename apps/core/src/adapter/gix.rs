@@ -118,7 +118,9 @@ fn clone(
         prepare = prepare
             .with_ref_name(Some(reference))
             .map_err(|error| GitError::Reference {
-                reference: reference.to_owned(),
+                // Redacted as every URL this error says is: a URL typed
+                // where a branch goes is still somebody's credential.
+                reference: redacted(reference).into_owned(),
                 detail: said(error),
             })?;
     }
