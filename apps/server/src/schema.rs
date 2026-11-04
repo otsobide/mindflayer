@@ -31,6 +31,8 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde_json::{json, Map, Value};
 
+use crate::auth::COOKIE_PREFIX;
+use crate::guard::PANEL_HEADER;
 use crate::route::{Answer, Method, Own, Parameter, Reaches, Route, Sent, Shape};
 use crate::{Condition, Event, Grounds, Preview, Ran, Refused};
 
@@ -147,12 +149,14 @@ pub fn schemes() -> Value {
         "cookie": {
             "type": "apiKey",
             "in": "cookie",
-            "name": "mf_<port>",
-            "description": "The launch token, as the cookie the launch link sets, named `mf_` \
-                            and the server's port: how the panel's page sends it. A change sent \
-                            with it, which every POST is, needs `Sec-Fetch-Site: same-origin`, \
-                            `X-Mindflayer: 1` and `Content-Type: application/json` beside it, \
-                            which only the panel's own page sends.",
+            "name": format!("{COOKIE_PREFIX}<port>"),
+            "description": format!(
+                "The launch token, as the cookie the launch link sets, named `{COOKIE_PREFIX}` \
+                 and the server's port: how the panel's page sends it. A change sent with it, \
+                 which every POST is, needs `Sec-Fetch-Site: same-origin`, `{PANEL_HEADER}: 1` \
+                 and `Content-Type: application/json` beside it, which only the panel's own \
+                 page sends."
+            ),
         },
     })
 }

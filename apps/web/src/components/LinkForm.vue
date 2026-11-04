@@ -8,7 +8,7 @@ const { busy } = runner
 
 /**
  * The folder to link, as typed: sent to the server as it is, which holds it
- * to the path policy (absolute, normalized, outside every `.mindflayer`) and
+ * to the path policy (absolute, normalized, outside every `.mindweaver`) and
  * says why when it is not, before anything runs. Checked nowhere here, so
  * the panel cannot let through a path the CLI would refuse, or refuse one
  * it takes.

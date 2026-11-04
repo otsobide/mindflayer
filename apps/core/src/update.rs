@@ -1,5 +1,5 @@
 //! Bringing what was installed into projects up to date with where it came
-//! from, and putting back what has gone since: `flayer update` and `mind
+//! from, and putting back what has gone since: `mindweaver update` and `mind
 //! update` (D-04).
 //!
 //! Every installation the ledger records stands somewhere ([`Standing`]):
@@ -56,7 +56,7 @@ use crate::paths;
 use crate::status::State;
 use crate::value::{ArtifactName, Origin};
 use crate::view::StateCount;
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// What an update would do: [`plan`], or what [`apply`] did.
 #[derive(Debug)]
@@ -315,7 +315,7 @@ pub enum Left {
     /// Offered from each of these places, and recorded before origins were
     /// kept, with no copy left that tells which.
     #[error(
-        "{kind} `{name}` in {project} is offered by {}, and was installed before Mindflayer \
+        "{kind} `{name}` in {project} is offered by {}, and was installed before Mindweaver \
          kept where from, so an update leaves it as it is; `install --from` says which",
         .origins.join(", ")
     )]
@@ -390,7 +390,7 @@ codes!(UpdateError {} carried {
 /// (`deploy`, `rule:git/commits`), or every one when they name none. An
 /// edited copy is written over only when `edits` says so, as `--force` does.
 pub fn plan(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     references: &[Reference],
     edits: Edits,
@@ -421,7 +421,7 @@ pub fn plan(
 /// ahead: each one is written whole or not at all, as an install is, and
 /// the same update run again finishes the rest.
 pub fn apply(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     references: &[Reference],
     edits: Edits,
@@ -500,7 +500,7 @@ pub fn apply(
 
 /// [`plan`], against `ledger`.
 fn plan_with(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     projects: &[MindProject],
     references: &[Reference],
@@ -593,7 +593,7 @@ fn plan_with(
 /// written from when it is written: in the order a standing is said in,
 /// edited first, so an edit is never written over unless `edits` forces it.
 fn step(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     surveyed: &install::Surveyed,
     edits: Edits,
 ) -> (Step, Option<Candidate>) {
@@ -648,7 +648,7 @@ pub struct Updates {
     /// among them ([`State::asks_for_a_command`]): what a front end lists
     /// them by, each list counted.
     pub states: Vec<StateCount>,
-    /// Whether updating every project writes something: what `flayer update
+    /// Whether updating every project writes something: what `mindweaver update
     /// --all --yes` would, rather than leave and say.
     pub writes: bool,
     /// Each entry that opens no project, by why: whether it holds anything
@@ -703,11 +703,11 @@ pub struct Pending {
 impl Updates {
     /// What updating every project `workspace` links would do, against
     /// what its ledger records of them, every copy edited since left alone:
-    /// the dry run of `flayer update --all`, as a front end reads it.
+    /// the dry run of `mindweaver update --all`, as a front end reads it.
     ///
     /// Refused as a whole only when the ledger cannot be read; an entry
     /// that opens no project is said among the rest.
-    pub fn read(workspace: &FlayerWorkspace) -> Result<Updates, UpdateError> {
+    pub fn read(workspace: &WeaverWorkspace) -> Result<Updates, UpdateError> {
         let mut unread = Vec::new();
         let mut entries: Vec<(String, PathBuf)> = Vec::new();
         let mut projects: Vec<MindProject> = Vec::new();

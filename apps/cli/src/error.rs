@@ -7,23 +7,24 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::activate::{self, ActivateError, WORKSPACE_VARIABLE};
-use mindflayer_core::adopt::AdoptError;
-use mindflayer_core::everywhere::EverywhereError;
-use mindflayer_core::gather::GatherError;
-use mindflayer_core::ledger::LedgerError;
-use mindflayer_core::{
+use mindweaver_core::activate::{self, ActivateError, WORKSPACE_VARIABLE};
+use mindweaver_core::adopt::AdoptError;
+use mindweaver_core::everywhere::EverywhereError;
+use mindweaver_core::gather::GatherError;
+use mindweaver_core::ledger::LedgerError;
+use mindweaver_core::{
     codes, ArtifactError, CreateError, Kind, LifecycleError, Reason, ResolveError, TemplateError,
     WorkspaceError,
 };
 use thiserror::Error;
 
+use crate::homes::HOME_VARIABLE;
 use crate::render::plural;
 use crate::task::Refusal;
 
 /// Every type the CLI gives codes of its own to, by the module it is
 /// defined in, with those codes: what reaches the panel beside core's
-/// (`mindflayer_core::code::ALL`), and what a front end listing every code
+/// (`mindweaver_core::code::ALL`), and what a front end listing every code
 /// starts from, as it does from core's.
 ///
 /// Held to core's rules by a test: no code here is given twice, here or in
@@ -35,8 +36,8 @@ pub const CODES: &[(&str, &[&str])] = &[
 
 /// Every code a front end is handed for what went wrong, as one type a
 /// description of what it is handed names: core's
-/// (`mindflayer_core::code::CoreCode`), the CLI's own ([`CODES`]) and the
-/// local server's (`mindflayer_server::Condition::CODES`).
+/// (`mindweaver_core::code::CoreCode`), the CLI's own ([`CODES`]) and the
+/// local server's (`mindweaver_server::Condition::CODES`).
 ///
 /// A type with nothing in it, since what it stands for is the lists, and
 /// here, beside them, rather than beside one description of them.
@@ -71,9 +72,9 @@ pub enum CliError {
     },
     #[error("{0} is not inside a mind project (run `mind init` to create one here)")]
     NotInProject(PathBuf),
-    #[error("{0} is not inside a flayer workspace (run `flayer init` to create one here)")]
+    #[error("{0} is not inside a weaver workspace (run `mindweaver init` to create one here)")]
     NotInWorkspace(PathBuf),
-    #[error("no flayer workspace{} at or above {from} to {verb}, and no default one", if *named { " but the ones named" } else { "" })]
+    #[error("no weaver workspace{} at or above {from} to {verb}, and no default one", if *named { " but the ones named" } else { "" })]
     NowhereToLoad {
         from: PathBuf,
         verb: &'static str,
@@ -88,7 +89,7 @@ pub enum CliError {
     #[error(transparent)]
     Ledger(#[from] LedgerError),
     #[error(transparent)]
-    Install(#[from] mindflayer_core::install::InstallError),
+    Install(#[from] mindweaver_core::install::InstallError),
     #[error(transparent)]
     Create(#[from] CreateError),
     #[error(transparent)]
@@ -118,24 +119,24 @@ pub enum CliError {
         files: usize,
     },
     #[error("nothing moved: {0}")]
-    Refused(mindflayer_core::migrate::Refusal),
+    Refused(mindweaver_core::migrate::Refusal),
     #[error(transparent)]
-    Migrate(#[from] mindflayer_core::migrate::MigrateError),
+    Migrate(#[from] mindweaver_core::migrate::MigrateError),
     #[error("nothing moved: what the workspace records of the project decides which of its copies move, and it cannot be read: {0}")]
     MigrateUnrecorded(Box<CliError>),
     #[error("say what to migrate: --library moves the workspace's own into its library, -p <project> moves a project it links from its mind.toml or settings.json to a settings.toml, and --all-projects moves every one")]
     MigrateWhat,
     #[error(transparent)]
-    Reapply(#[from] mindflayer_core::ReapplyError),
+    Reapply(#[from] mindweaver_core::ReapplyError),
     #[error(transparent)]
-    Relink(#[from] mindflayer_core::relink::RelinkError),
+    Relink(#[from] mindweaver_core::relink::RelinkError),
     #[error(transparent)]
-    Update(#[from] mindflayer_core::update::UpdateError),
+    Update(#[from] mindweaver_core::update::UpdateError),
     #[error("say which projects to update: -p <project> for each, or --all for every one the workspace links")]
     UpdateWhere,
-    #[error("say which project's agents to change (`flayer agents -p <project> <agent>...`); the workspace's own reach agents by being installed")]
+    #[error("say which project's agents to change (`mindweaver agents -p <project> <agent>...`); the workspace's own reach agents by being installed")]
     AgentsWhere,
-    #[error("say which project's targets to change (`flayer targets -p <project> set <kind> <dir>...`); the workspace's own reach agents by being installed")]
+    #[error("say which project's targets to change (`mindweaver targets -p <project> set <kind> <dir>...`); the workspace's own reach agents by being installed")]
     TargetsWhere,
     #[error("`{editor}` could not be started: {source}")]
     Editor {
@@ -163,9 +164,9 @@ pub enum CliError {
         #[source]
         source: io::Error,
     },
-    #[error("no flayer workspace above {0}; make one with `flayer init` in the directory that holds your projects")]
+    #[error("no weaver workspace above {0}; make one with `mindweaver init` in the directory that holds your projects")]
     NoWorkspaceAbove(PathBuf),
-    #[error("{0}: not known, since there is no default workspace to remember it (--home or $MINDFLAYER_HOME names none)")]
+    #[error("{0}: not known, since there is no default workspace to remember it (--home or ${HOME_VARIABLE} names none)")]
     NoDefault(PathBuf),
     #[error("{project}: not managed by the workspace at {workspace}; `mind link` adds it")]
     NotManaged {
@@ -179,9 +180,9 @@ pub enum CliError {
         wanted: String,
         matches: Vec<String>,
     },
-    #[error("say which projects to install into: -p <project> for each, or --all-projects for every one the workspace links; or run `flayer install` alone for the screen")]
+    #[error("say which projects to install into: -p <project> for each, or --all-projects for every one the workspace links; or run `mindweaver install` alone for the screen")]
     InstallWhere,
-    #[error("say which skill or rule to install (`flayer install -p <project> <name>`), or run `flayer install` alone for the screen")]
+    #[error("say which skill or rule to install (`mindweaver install -p <project> <name>`), or run `mindweaver install` alone for the screen")]
     InstallWhat,
     #[error("say which projects to take it out of: -p <project> for each, or --all-projects for every one the workspace links")]
     UninstallWhere,
@@ -195,7 +196,7 @@ pub enum CliError {
         #[source]
         source: io::Error,
     },
-    #[error("`flayer` on its own opens a screen, and this is not a terminal; `flayer --help` lists the commands")]
+    #[error("`mindweaver` on its own opens a screen, and this is not a terminal; `mindweaver --help` lists the commands")]
     NotATerminal,
     #[error("the screen could not be drawn: {source}")]
     Screen {
@@ -368,7 +369,7 @@ fn named_by(reason: &Reason) -> String {
 /// "; it manages alpha, beta", or what to do when it manages nothing.
 fn known_projects(known: &[String]) -> String {
     if known.is_empty() {
-        String::from("; it manages none yet: `flayer link <path>` adds one")
+        String::from("; it manages none yet: `mindweaver link <path>` adds one")
     } else {
         format!("; it manages {}", known.join(", "))
     }
@@ -377,14 +378,14 @@ fn known_projects(known: &[String]) -> String {
 /// What `mind remove` would delete, as a sentence.
 pub(crate) fn deleting(path: &Path, kind: &Kind, files: &usize) -> String {
     match kind.layout() {
-        mindflayer_core::Layout::Directory { .. } => {
+        mindweaver_core::Layout::Directory { .. } => {
             format!(
                 "{} and the {} in it",
                 path.display(),
                 plural(*files, "file")
             )
         }
-        mindflayer_core::Layout::Files { .. } => path.display().to_string(),
+        mindweaver_core::Layout::Files { .. } => path.display().to_string(),
     }
 }
 

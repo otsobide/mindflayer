@@ -136,7 +136,7 @@
       "issues": [],
       "refused": {
         "code": "add_exists",
-        "message": "/home/you/Projects/.mindflayer/library/skills/review: already exists, and is left alone"
+        "message": "/home/you/Projects/.mindweaver/library/skills/review: already exists, and is left alone"
       }
     },
     "query": {

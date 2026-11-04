@@ -154,7 +154,7 @@
         "state": null,
         "summary": "Tidy the code before a commit",
         "targets": [
-          ".mindflayer/library/skills/lint"
+          ".mindweaver/library/skills/lint"
         ],
         "unread": null
       },
@@ -167,7 +167,7 @@
         "state": null,
         "summary": "Read a change before it lands",
         "targets": [
-          ".mindflayer/library/skills/review"
+          ".mindweaver/library/skills/review"
         ],
         "unread": null
       },
@@ -180,7 +180,7 @@
         "state": null,
         "summary": "Write commit messages that say why",
         "targets": [
-          ".mindflayer/library/rules/git/commits.md"
+          ".mindweaver/library/rules/git/commits.md"
         ],
         "unread": null
       }
@@ -188,11 +188,11 @@
     "directories": [
       {
         "kind": "skill",
-        "path": ".mindflayer/library/skills"
+        "path": ".mindweaver/library/skills"
       },
       {
         "kind": "rule",
-        "path": ".mindflayer/library/rules"
+        "path": ".mindweaver/library/rules"
       }
     ],
     "failures": [],

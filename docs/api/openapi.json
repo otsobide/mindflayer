@@ -141,7 +141,7 @@
           },
           {
             "const": "uninstalls",
-            "description": "`uninstall`, every form of it, and `flayer remove --everywhere\n--yes`, which uninstalls from every project first.",
+            "description": "`uninstall`, every form of it, and `mindweaver remove --everywhere\n--yes`, which uninstalls from every project first.",
             "type": "string"
           },
           {
@@ -430,6 +430,7 @@
           "markdown_block_unclosed",
           "markdown_block_unopened",
           "markdown_block_reopened",
+          "markdown_markers_mixed",
           "markdown_marker_stray",
           "markdown_section_repeated",
           "markdown_marker_miswritten",
@@ -530,6 +531,7 @@
           "exclude_block_unclosed",
           "exclude_block_unopened",
           "exclude_block_reopened",
+          "exclude_markers_mixed",
           "exclude_group_repeated",
           "front_matter_missing",
           "front_matter_unterminated",
@@ -625,10 +627,14 @@
           "migrate_folder_linked",
           "migrate_folder_tangled",
           "migrate_no_agent",
+          "migrate_ledger_open",
           "migrate_scratch_failed",
           "migrate_copy_failed",
           "migrate_retire_failed",
           "migrate_keep_failed",
+          "migrate_rename_failed",
+          "migrate_names_write_failed",
+          "migrate_ledger_opened",
           "path_url",
           "path_relative",
           "path_unnormalized",
@@ -1035,7 +1041,7 @@
             "description": "What it is."
           },
           "linked": {
-            "description": "Whether the workspace links it, by the path an entry leads to, as\n`flayer link` would tell.",
+            "description": "Whether the workspace links it, by the path an entry leads to, as\n`mindweaver link` would tell.",
             "type": "boolean"
           },
           "name": {
@@ -1060,7 +1066,7 @@
         "type": "object"
       },
       "FolderIs": {
-        "description": "What a folder is, the strongest of what it holds: a mind project, a\nflayer workspace, a git repository, or any other folder.",
+        "description": "What a folder is, the strongest of what it holds: a mind project, a\nweaver workspace, a git repository, or any other folder.",
         "enum": [
           "project",
           "workspace",
@@ -1166,7 +1172,7 @@
             "type": "boolean"
           },
           "moved": {
-            "description": "The entry it moved from, when it is not linked and holds the id the\nworkspace's ledger last saw at an entry where no project is any more\n([`MindProject::is_vacant`]): spelled as `route` is, so `flayer\nrelink <moved> <route>` run there follows it. None otherwise, and for\nan id another directory holds too, which is a copy rather than a\nmove.",
+            "description": "The entry it moved from, when it is not linked and holds the id the\nworkspace's ledger last saw at an entry where no project is any more\n([`MindProject::is_vacant`]): spelled as `route` is, so `mindweaver\nrelink <moved> <route>` run there follows it. None otherwise, and for\nan id another directory holds too, which is a copy rather than a\nmove.",
             "type": [
               "string",
               "null"
@@ -1181,7 +1187,7 @@
             "description": "Why it is worth linking: the strongest of what it holds."
           },
           "route": {
-            "description": "What `flayer link` would be given for it, run where the request\nspells routes from: the route from there, `/` separated, when it is\ninside, and its path otherwise.",
+            "description": "What `mindweaver link` would be given for it, run where the request\nspells routes from: the route from there, `/` separated, when it is\ninside, and its path otherwise.",
             "type": "string"
           }
         },
@@ -1322,7 +1328,7 @@
         "description": "Which level a task runs at: what holds the artifacts it is about.\n\n`{\"type\": \"project\", \"entry\": \"alpha\"}` in JSON, or `{\"type\":\n\"workspace\"}`: the shape a task's own variants have, which a variant\nholding one string cannot take inside the object the tag is in.",
         "oneOf": [
           {
-            "description": "The workspace, for its own artifacts: `flayer <cmd>`.",
+            "description": "The workspace, for its own artifacts: `mindweaver <cmd>`.",
             "properties": {
               "type": {
                 "const": "workspace",
@@ -1352,7 +1358,7 @@
             "type": "object"
           },
           {
-            "description": "A project whose own workspace is not the one on screen, by its entry:\n`mind -W . -C <entry> <cmd>`, which names the one on screen, so a\nchange drops that workspace's record and an add takes its templates.\n\nStill the project's command rather than `flayer <cmd> -p <entry>`,\nwhich would consult the same workspace: a project's row teaches the\nproject's command, at every row alike, and `-W` only where leaving\nit out would consult another.",
+            "description": "A project whose own workspace is not the one on screen, by its entry:\n`mind -W . -C <entry> <cmd>`, which names the one on screen, so a\nchange drops that workspace's record and an add takes its templates.\n\nStill the project's command rather than `mindweaver <cmd> -p <entry>`,\nwhich would consult the same workspace: a project's row teaches the\nproject's command, at every row alike, and `-W` only where leaving\nit out would consult another.",
             "properties": {
               "entry": {
                 "type": "string"
@@ -1375,7 +1381,7 @@
         "oneOf": [
           {
             "additionalProperties": false,
-            "description": "The workspace, for its own artifacts: `flayer <cmd>`.",
+            "description": "The workspace, for its own artifacts: `mindweaver <cmd>`.",
             "properties": {
               "type": {
                 "const": "workspace",
@@ -1407,7 +1413,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "A project whose own workspace is not the one on screen, by its entry:\n`mind -W . -C <entry> <cmd>`, which names the one on screen, so a\nchange drops that workspace's record and an add takes its templates.\n\nStill the project's command rather than `flayer <cmd> -p <entry>`,\nwhich would consult the same workspace: a project's row teaches the\nproject's command, at every row alike, and `-W` only where leaving\nit out would consult another.",
+            "description": "A project whose own workspace is not the one on screen, by its entry:\n`mind -W . -C <entry> <cmd>`, which names the one on screen, so a\nchange drops that workspace's record and an add takes its templates.\n\nStill the project's command rather than `mindweaver <cmd> -p <entry>`,\nwhich would consult the same workspace: a project's row teaches the\nproject's command, at every row alike, and `-W` only where leaving\nit out would consult another.",
             "properties": {
               "entry": {
                 "type": "string"
@@ -1500,7 +1506,7 @@
         "type": "object"
       },
       "KnownHere": {
-        "description": "A workspace this machine knows, as `flayer workspaces` lists it, with\nhow the workspace a snapshot is of stands with it: whether it loads it,\nand whether it could.\n\nBeside the row rather than in it, as a shelf row's origin is\n([`Shelved`]): the row is the machine's list, the same whichever\nworkspace asks, and what one of them loads is nothing that list says.\nTold here rather than by a front end from `in_use`, `stale` and\n[`Snapshot::loaded`], whose paths it would compare itself: two spellings\nof one folder are one workspace, which only a comparison of where each\nleads tells.",
+        "description": "A workspace this machine knows, as `mindweaver workspaces` lists it, with\nhow the workspace a snapshot is of stands with it: whether it loads it,\nand whether it could.\n\nBeside the row rather than in it, as a shelf row's origin is\n([`Shelved`]): the row is the machine's list, the same whichever\nworkspace asks, and what one of them loads is nothing that list says.\nTold here rather than by a front end from `in_use`, `stale` and\n[`Snapshot::loaded`], whose paths it would compare itself: two spellings\nof one folder are one workspace, which only a comparison of where each\nleads tells.",
         "properties": {
           "default": {
             "description": "The default workspace, in home: listed for being the default,\nwhatever its own `known` says.",
@@ -1511,11 +1517,11 @@
             "type": "boolean"
           },
           "loadable": {
-            "description": "Whether this workspace can load it: it opens, it is not this one,\nthis one loads it by no spelling yet, and its path is text a command\nline can hold. What a front end offers to load, by its `path`, which\n`flayer load` is given as it is.",
+            "description": "Whether this workspace can load it: it opens, it is not this one,\nthis one loads it by no spelling yet, and its path is text a command\nline can hold. What a front end offers to load, by its `path`, which\n`mindweaver load` is given as it is.",
             "type": "boolean"
           },
           "loaded_as": {
-            "description": "The entry this workspace loads it by, when it loads it, as\n[`LoadedWorkspace::entry`] spells it: what `flayer unload` is given.\nThe first, when it loads it by more than one spelling.",
+            "description": "The entry this workspace loads it by, when it loads it, as\n[`LoadedWorkspace::entry`] spells it: what `mindweaver unload` is given.\nThe first, when it loads it by more than one spelling.",
             "type": [
               "string",
               "null"
@@ -1533,13 +1539,13 @@
             "type": "string"
           },
           "projects": {
-            "description": "How many projects it links, each directory once, stale ones among\nthem: its own count, which says which of several flayers is which.",
+            "description": "How many projects it links, each directory once, stale ones among\nthem: its own count, which says which of several weavers is which.",
             "format": "uint",
             "minimum": 0,
             "type": "integer"
           },
           "remembered": {
-            "description": "Whether the default workspace's `known` names it, which is what\n`flayer workspaces forget` takes out. False for the default itself,\nand for the one in use when nothing remembers it.",
+            "description": "Whether the default workspace's `known` names it, which is what\n`mindweaver workspaces forget` takes out. False for the default itself,\nand for the one in use when nothing remembers it.",
             "type": "boolean"
           },
           "stale": {
@@ -1606,7 +1612,7 @@
             "type": "string"
           },
           "templates": {
-            "description": "What `flayer add --template` can start from.",
+            "description": "What `mindweaver add --template` can start from.",
             "items": {
               "$ref": "#/components/schemas/Template"
             },
@@ -1624,7 +1630,7 @@
         "type": "object"
       },
       "LibraryHolder": {
-        "description": "A project holding a copy of one of the workspace's own: one whose install\nthe ledger tells came from it ([`install::from_the_library`]), the rule\n`flayer remove --everywhere` takes the copies it removes by.\n\nTold here rather than by a front end comparing a copy's\n[`origin`](Held::origin) with [`Library::origin`], which would be a\nrule of its own, and a different one: a record from before origins were\nkept names none, and is a copy of one of the workspace's own all the\nsame while no workspace it loads offers that name.",
+        "description": "A project holding a copy of one of the workspace's own: one whose install\nthe ledger tells came from it ([`install::from_the_library`]), the rule\n`mindweaver remove --everywhere` takes the copies it removes by.\n\nTold here rather than by a front end comparing a copy's\n[`origin`](Held::origin) with [`Library::origin`], which would be a\nrule of its own, and a different one: a record from before origins were\nkept names none, and is a copy of one of the workspace's own all the\nsame while no workspace it loads offers that name.",
         "properties": {
           "entry": {
             "description": "The project, as its registry entry spells it ([`Project::entry`]):\nits artifact of that kind and name is the copy. Each entry that\nspells one directory is a holder of its own, as each is a project\nof the snapshot's.",
@@ -1689,7 +1695,7 @@
         "description": "A workspace another one loads, and how much of its own it offers.",
         "properties": {
           "entry": {
-            "description": "The entry as the marker spells it: what `flayer unload` is given.",
+            "description": "The entry as the marker spells it: what `mindweaver unload` is given.",
             "type": "string"
           },
           "error": {
@@ -2377,7 +2383,7 @@
         "type": "string"
       },
       "Scanned": {
-        "description": "What a scan the panel asked for found ([`Query::Scan`]): what `flayer\nscan --suggest --json` prints, each directory with what the panel needs\nto offer it, and what the command warns of beside it.\n\nA shape of the backend's rather than the envelope the command prints,\nsince what it adds to each directory is a front end's: the words the\ncommand says why in, what marking it asks for, and the entry a relink\nnames. Each worked out here, in Rust, where the minds screen works out\nthe same, rather than by the panel from the scan's fields.",
+        "description": "What a scan the panel asked for found ([`Query::Scan`]): what `mindweaver\nscan --suggest --json` prints, each directory with what the panel needs\nto offer it, and what the command warns of beside it.\n\nA shape of the backend's rather than the envelope the command prints,\nsince what it adds to each directory is a front end's: the words the\ncommand says why in, what marking it asks for, and the entry a relink\nnames. Each worked out here, in Rust, where the minds screen works out\nthe same, rather than by the panel from the scan's fields.",
         "properties": {
           "depth": {
             "description": "How many levels below each root it looked.",
@@ -2386,7 +2392,7 @@
             "type": "integer"
           },
           "found": {
-            "description": "Every directory it found, in the order `flayer scan --suggest` ranks\nthem: what is not linked first, most worth linking first, then what\nis.",
+            "description": "Every directory it found, in the order `mindweaver scan --suggest` ranks\nthem: what is not linked first, most worth linking first, then what\nis.",
             "items": {
               "$ref": "#/components/schemas/Suggestion"
             },
@@ -2404,14 +2410,14 @@
             "type": "boolean"
           },
           "untraced": {
-            "description": "Each entry where no project is any more whose id the ledger never\nlearned, as the scan spells it: what `flayer relink <entry> <path>`\nfollows, which only somebody who knows where it went can type.",
+            "description": "Each entry where no project is any more whose id the ledger never\nlearned, as the scan spells it: what `mindweaver relink <entry> <path>`\nfollows, which only somebody who knows where it went can type.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "warnings": {
-            "description": "What it could not read, and that it stopped early, as `flayer scan`\nwarns of them, each with its code.",
+            "description": "What it could not read, and that it stopped early, as `mindweaver scan`\nwarns of them, each with its code.",
             "items": {
               "$ref": "#/components/schemas/Warning"
             },
@@ -2456,7 +2462,7 @@
         "description": "A source the shelf is filled from, with what `--from` takes for what it\nsupplied.",
         "properties": {
           "directory": {
-            "description": "The folder this source owns under `.mindflayer/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
+            "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
             "type": "string"
           },
           "kind": {
@@ -2698,7 +2704,7 @@
         "description": "A place artifacts have been gathered from.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name, but the row id, and the URL only through [`redacted`].",
         "properties": {
           "directory": {
-            "description": "The folder this source owns under `.mindflayer/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
+            "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
             "type": "string"
           },
           "kind": {
@@ -2780,10 +2786,10 @@
         "properties": {
           "found": {
             "$ref": "#/components/schemas/Found",
-            "description": "What `flayer scan --json` prints of it."
+            "description": "What `mindweaver scan --json` prints of it."
           },
           "moved_from": {
-            "description": "The entry it moved from, as the marker spells it, which a relink\nnames: matched by core's `scan::moved_from`, as the minds screen\nmatches it, since the scan spells `moved` as `flayer link` would\ntake it. None when it did not move.",
+            "description": "The entry it moved from, as the marker spells it, which a relink\nnames: matched by core's `scan::moved_from`, as the minds screen\nmatches it, since the scan spells `moved` as `mindweaver link` would\ntake it. None when it did not move.",
             "type": [
               "string",
               "null"
@@ -2801,7 +2807,7 @@
             "description": "What marking it asks for ([`MindsChange::of_found`]): linking it, or\nmaking it a project first. None for one linked, and for one found\nmoved, which wants a relink rather than a second entry beside the one\nit left stale."
           },
           "why": {
-            "description": "Why it is worth linking, in the words `flayer scan --suggest` and the\nminds screen say it in ([`worth_linking`]); none for one linked.",
+            "description": "Why it is worth linking, in the words `mindweaver scan --suggest` and the\nminds screen say it in ([`worth_linking`]); none for one linked.",
             "type": [
               "string",
               "null"
@@ -2867,7 +2873,7 @@
         "type": "object"
       },
       "Switchable": {
-        "description": "A workspace a front end that stays on one may switch to, as\n[`switchable`] lists it: the row `flayer workspaces` prints, with how it\nstands with the front end.\n\nBeside the row rather than in it, as [`crate::view::KnownHere`] stands\nbeside it: the row is the machine's list, the same whoever asks, and\nwhich one a front end was launched on is the front end's.",
+        "description": "A workspace a front end that stays on one may switch to, as\n[`switchable`] lists it: the row `mindweaver workspaces` prints, with how it\nstands with the front end.\n\nBeside the row rather than in it, as [`crate::view::KnownHere`] stands\nbeside it: the row is the machine's list, the same whoever asks, and\nwhich one a front end was launched on is the front end's.",
         "properties": {
           "default": {
             "description": "The default workspace, in home: listed for being the default,\nwhatever its own `known` says.",
@@ -2893,7 +2899,7 @@
             "type": "string"
           },
           "projects": {
-            "description": "How many projects it links, each directory once, stale ones among\nthem: its own count, which says which of several flayers is which.",
+            "description": "How many projects it links, each directory once, stale ones among\nthem: its own count, which says which of several weavers is which.",
             "format": "uint",
             "minimum": 0,
             "type": "integer"
@@ -2903,7 +2909,7 @@
             "description": "The rule it is chosen by once switched to, as a snapshot of it says:\nthe launch's, for the one the front end was launched on, and named,\nas `-W` names it, for every other, since a switch names it to every\nline the front end runs from then on, and nothing else chose it."
           },
           "remembered": {
-            "description": "Whether the default workspace's `known` names it, which is what\n`flayer workspaces forget` takes out. False for the default itself,\nand for the one in use when nothing remembers it.",
+            "description": "Whether the default workspace's `known` names it, which is what\n`mindweaver workspaces forget` takes out. False for the default itself,\nand for the one in use when nothing remembers it.",
             "type": "boolean"
           },
           "stale": {
@@ -2974,7 +2980,7 @@
         "description": "Work a front end asked for, as the command it is.\n\nIn JSON, what the panel sends to be run, each variant is an object\ntagged by its name in snake_case, its fields beside the tag: `{\"type\":\n\"link\", \"path\": \"beta\"}`. Tagged inside the object rather than around\nit, so a task reads as one flat record, the shape TypeScript tells a\nunion apart by. A field a task with fields does not have is refused\nrather than passed over, as one its holder or its agents line does not\nhave is: a task is a write, and one sent with a field misspelled would\nrun without it. Each name is a contract once a front end sends it, as a\nreport's is, so a test pins every one.",
         "oneOf": [
           {
-            "description": "`flayer init`, where the TUI was opened.",
+            "description": "`mindweaver init`, where the TUI was opened.",
             "properties": {
               "type": {
                 "const": "init_workspace",
@@ -3000,7 +3006,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer link <path>`.",
+            "description": "`mindweaver link <path>`.",
             "properties": {
               "path": {
                 "type": "string"
@@ -3030,7 +3036,7 @@
             "type": "object"
           },
           {
-            "description": "`mind -C <path> init`, then `flayer link <path>`.",
+            "description": "`mind -C <path> init`, then `mindweaver link <path>`.",
             "properties": {
               "path": {
                 "type": "string"
@@ -3047,7 +3053,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer unlink <entry>`.",
+            "description": "`mindweaver unlink <entry>`.",
             "properties": {
               "entry": {
                 "type": "string"
@@ -3064,7 +3070,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer relink <old> <new>`: a stale entry pointed at where the scan\nfound its project, moved.",
+            "description": "`mindweaver relink <old> <new>`: a stale entry pointed at where the scan\nfound its project, moved.",
             "properties": {
               "new": {
                 "type": "string"
@@ -3085,7 +3091,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer load <path>`.",
+            "description": "`mindweaver load <path>`.",
             "properties": {
               "path": {
                 "type": "string"
@@ -3119,7 +3125,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer unload <entry>`.",
+            "description": "`mindweaver unload <entry>`.",
             "properties": {
               "entry": {
                 "type": "string"
@@ -3235,7 +3241,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer edit [-p <project>] --contents <file> --if-unchanged <hash>\n<kind:name>`: what the artifact is read from, a skill's `SKILL.md`\nor a rule's file, replaced with `text` whole, only while it holds\nwhat `hash`, the SHA-256 the panel was given with what it read\n(`contents::Contents::hash`), is the hash of.\n\nThe text, never a path: the file the line reads is the workspace's\nscratch file for it ([`scratch_route`]), named by the line, which\nthe front end running it writes the text into before the line runs\nand takes away after. A front end that has not written it runs a\nline that reads nothing, which `edit` says. The workspace's command\nat either level, `-p` naming a project, rather than `mind -C`, so\nthe route is read from the workspace's root, where the lines run and\nthe scratch folder is.",
+            "description": "`mindweaver edit [-p <project>] --contents <file> --if-unchanged <hash>\n<kind:name>`: what the artifact is read from, a skill's `SKILL.md`\nor a rule's file, replaced with `text` whole, only while it holds\nwhat `hash`, the SHA-256 the panel was given with what it read\n(`contents::Contents::hash`), is the hash of.\n\nThe text, never a path: the file the line reads is the workspace's\nscratch file for it ([`scratch_route`]), named by the line, which\nthe front end running it writes the text into before the line runs\nand takes away after. A front end that has not written it runs a\nline that reads nothing, which `edit` says. The workspace's command\nat either level, `-p` naming a project, rather than `mind -C`, so\nthe route is read from the workspace's root, where the lines run and\nthe scratch folder is.",
             "properties": {
               "hash": {
                 "type": "string"
@@ -3297,7 +3303,7 @@
             "type": "object"
           },
           {
-            "description": "`… remove --yes <kind:name>`: asked about before it gets here, which is\nwhat the `--yes` says. `flayer remove --everywhere --yes <kind:name>`\nwhen `everywhere`, one of the workspace's own taken out of every\nproject it links first. Without `yes`, the dry run, which deletes\nnothing and says what would go, each project's copy with how it\nstands when `everywhere`: what the panel shows before it asks.",
+            "description": "`… remove --yes <kind:name>`: asked about before it gets here, which is\nwhat the `--yes` says. `mindweaver remove --everywhere --yes <kind:name>`\nwhen `everywhere`, one of the workspace's own taken out of every\nproject it links first. Without `yes`, the dry run, which deletes\nnothing and says what would go, each project's copy with how it\nstands when `everywhere`: what the panel shows before it asks.",
             "properties": {
               "everywhere": {
                 "type": "boolean"
@@ -3330,7 +3336,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer validate`, everything; `mind validate`, one project.",
+            "description": "`mindweaver validate`, everything; `mind validate`, one project.",
             "properties": {
               "holder": {
                 "$ref": "#/components/schemas/Holder"
@@ -3347,7 +3353,7 @@
             "type": "object"
           },
           {
-            "description": "`mind -C <path> init` for each repository that is not a project yet,\nthen one `flayer link` and one `flayer unlink`: what the minds screen's\nmarks amount to, built from them by [`Task::minds`].",
+            "description": "`mind -C <path> init` for each repository that is not a project yet,\nthen one `mindweaver link` and one `mindweaver unlink`: what the minds screen's\nmarks amount to, built from them by [`Task::minds`].",
             "properties": {
               "init": {
                 "items": {
@@ -3401,7 +3407,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer gather list`.",
+            "description": "`mindweaver gather list`.",
             "properties": {
               "type": {
                 "const": "shelf",
@@ -3414,7 +3420,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer workspaces`: the workspaces this machine knows, the one in\nuse marked, to read.",
+            "description": "`mindweaver workspaces`: the workspaces this machine knows, the one in\nuse marked, to read.",
             "properties": {
               "type": {
                 "const": "workspaces",
@@ -3427,7 +3433,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer gather git [--path <folder>] [--ref <ref>] <url>`.",
+            "description": "`mindweaver gather git [--path <folder>] [--ref <ref>] <url>`.",
             "properties": {
               "folder": {
                 "type": "string"
@@ -3556,7 +3562,7 @@
             "type": "object"
           },
           {
-            "description": "`… update --yes [<kind:name>]`: what is installed in a project, or\nthe one artifact named, brought up to date and put back where a copy\nhas gone; `flayer update --all --yes [<kind:name>]` for the\nworkspace's own row, in every project it links. With `force`, `--yes\n--force`, writing over a copy changed since it was installed too,\nwhich the line is then asked about for ([`Caution::Forces`]).",
+            "description": "`… update --yes [<kind:name>]`: what is installed in a project, or\nthe one artifact named, brought up to date and put back where a copy\nhas gone; `mindweaver update --all --yes [<kind:name>]` for the\nworkspace's own row, in every project it links. With `force`, `--yes\n--force`, writing over a copy changed since it was installed too,\nwhich the line is then asked about for ([`Caution::Forces`]).",
             "properties": {
               "force": {
                 "type": "boolean"
@@ -3584,7 +3590,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`FlayerWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\n[`FlayerWorkspace::naming`]: mindflayer_core::FlayerWorkspace::naming",
+            "description": "`mindweaver install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`WeaverWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\n[`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming",
             "properties": {
               "from": {
                 "type": [
@@ -3619,7 +3625,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer uninstall -p <project>... <kind:name>`: one artifact taken\nback out of each project named, whichever place its copy came from,\neach named as an install's are, by what `naming` gives. With\n`force`, `--force`, taking out a copy changed since it was installed\ntoo, which the line is then asked about for ([`Caution::Forces`]):\nnever from the install screen, whose marks leave an edit to a command\nline, and from the panel only for the copy core says needs it.",
+            "description": "`mindweaver uninstall -p <project>... <kind:name>`: one artifact taken\nback out of each project named, whichever place its copy came from,\neach named as an install's are, by what `naming` gives. With\n`force`, `--force`, taking out a copy changed since it was installed\ntoo, which the line is then asked about for ([`Caution::Forces`]):\nnever from the install screen, whose marks leave an edit to a command\nline, and from the panel only for the copy core says needs it.",
             "properties": {
               "force": {
                 "type": "boolean"
@@ -3651,7 +3657,7 @@
             "type": "object"
           },
           {
-            "description": "`… uninstall --orphaned`: every installation in a project that\nnothing offers any more where it came from, taken back out of it;\n`flayer uninstall --all-projects --orphaned` for the workspace's own\nrow, out of every project it links, as an update reaches them. Never\nforced: one changed since it was installed is left, every copy of it,\nfor a command line that says `--force` once somebody has looked.",
+            "description": "`… uninstall --orphaned`: every installation in a project that\nnothing offers any more where it came from, taken back out of it;\n`mindweaver uninstall --all-projects --orphaned` for the workspace's own\nrow, out of every project it links, as an update reaches them. Never\nforced: one changed since it was installed is left, every copy of it,\nfor a command line that says `--force` once somebody has looked.",
             "properties": {
               "holder": {
                 "$ref": "#/components/schemas/Holder"
@@ -3668,7 +3674,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer adopt -p <project> --yes <kind:name>`: somebody's skill in\nthe project's agents' folders brought into the workspace's library,\nits copies recorded as installed from there: asked about before it\ngets here, which is what the `--yes` says. The project is named as an\ninstall's are, by what `naming` gives.",
+            "description": "`mindweaver adopt -p <project> --yes <kind:name>`: somebody's skill in\nthe project's agents' folders brought into the workspace's library,\nits copies recorded as installed from there: asked about before it\ngets here, which is what the `--yes` says. The project is named as an\ninstall's are, by what `naming` gives.",
             "properties": {
               "kind": {
                 "$ref": "#/components/schemas/Kind"
@@ -3693,7 +3699,7 @@
             "type": "object"
           },
           {
-            "description": "`flayer migrate -p <project> [--yes]`: one project the workspace\nlinks moved from an older marker, a `mind.toml` or a\n`settings.json`, to a `settings.toml`, what the workspace records of\nit carried along; without `yes`, the dry run, which writes nothing\nand says what would move. The project is named as an install's are,\nby what `naming` gives.\n\nThe workspace's command, as an install's is, so what it carries is\nwhat the workspace on screen records: `mind migrate` in the project\nfinds a workspace by walking up, which misses one linking the\nproject from beside it. The agents and the share mode are left to\nthe command, every agent and shared for a `mind.toml`, as a project\ncommitted by design was, and what a `settings.json` names for one,\nfor `mind agents` and `mind share` to change once it is moved.",
+            "description": "`mindweaver migrate -p <project> [--yes]`: one project the workspace\nlinks moved from an older marker, a `mind.toml` or a\n`settings.json`, to a `settings.toml`, what the workspace records of\nit carried along; without `yes`, the dry run, which writes nothing\nand says what would move. The project is named as an install's are,\nby what `naming` gives.\n\nThe workspace's command, as an install's is, so what it carries is\nwhat the workspace on screen records: `mind migrate` in the project\nfinds a workspace by walking up, which misses one linking the\nproject from beside it. The agents and the share mode are left to\nthe command, every agent and shared for a `mind.toml`, as a project\ncommitted by design was, and what a `settings.json` names for one,\nfor `mind agents` and `mind share` to change once it is moved.",
             "properties": {
               "project": {
                 "type": "string"
@@ -3714,7 +3720,7 @@
             "type": "object"
           },
           {
-            "description": "Open the install screen, which is what `flayer install` opens.",
+            "description": "Open the install screen, which is what `mindweaver install` opens.",
             "properties": {
               "type": {
                 "const": "open_install",
@@ -3766,7 +3772,7 @@
         "oneOf": [
           {
             "additionalProperties": false,
-            "description": "`flayer init`, where the TUI was opened.",
+            "description": "`mindweaver init`, where the TUI was opened.",
             "properties": {
               "type": {
                 "const": "init_workspace",
@@ -3794,7 +3800,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer link <path>`.",
+            "description": "`mindweaver link <path>`.",
             "properties": {
               "path": {
                 "type": "string"
@@ -3826,7 +3832,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`mind -C <path> init`, then `flayer link <path>`.",
+            "description": "`mind -C <path> init`, then `mindweaver link <path>`.",
             "properties": {
               "path": {
                 "type": "string"
@@ -3844,7 +3850,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer unlink <entry>`.",
+            "description": "`mindweaver unlink <entry>`.",
             "properties": {
               "entry": {
                 "type": "string"
@@ -3862,7 +3868,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer relink <old> <new>`: a stale entry pointed at where the scan\nfound its project, moved.",
+            "description": "`mindweaver relink <old> <new>`: a stale entry pointed at where the scan\nfound its project, moved.",
             "properties": {
               "new": {
                 "type": "string"
@@ -3884,7 +3890,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer load <path>`.",
+            "description": "`mindweaver load <path>`.",
             "properties": {
               "path": {
                 "type": "string"
@@ -3920,7 +3926,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer unload <entry>`.",
+            "description": "`mindweaver unload <entry>`.",
             "properties": {
               "entry": {
                 "type": "string"
@@ -4040,7 +4046,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer edit [-p <project>] --contents <file> --if-unchanged <hash>\n<kind:name>`: what the artifact is read from, a skill's `SKILL.md`\nor a rule's file, replaced with `text` whole, only while it holds\nwhat `hash`, the SHA-256 the panel was given with what it read\n(`contents::Contents::hash`), is the hash of.\n\nThe text, never a path: the file the line reads is the workspace's\nscratch file for it ([`scratch_route`]), named by the line, which\nthe front end running it writes the text into before the line runs\nand takes away after. A front end that has not written it runs a\nline that reads nothing, which `edit` says. The workspace's command\nat either level, `-p` naming a project, rather than `mind -C`, so\nthe route is read from the workspace's root, where the lines run and\nthe scratch folder is.",
+            "description": "`mindweaver edit [-p <project>] --contents <file> --if-unchanged <hash>\n<kind:name>`: what the artifact is read from, a skill's `SKILL.md`\nor a rule's file, replaced with `text` whole, only while it holds\nwhat `hash`, the SHA-256 the panel was given with what it read\n(`contents::Contents::hash`), is the hash of.\n\nThe text, never a path: the file the line reads is the workspace's\nscratch file for it ([`scratch_route`]), named by the line, which\nthe front end running it writes the text into before the line runs\nand takes away after. A front end that has not written it runs a\nline that reads nothing, which `edit` says. The workspace's command\nat either level, `-p` naming a project, rather than `mind -C`, so\nthe route is read from the workspace's root, where the lines run and\nthe scratch folder is.",
             "properties": {
               "hash": {
                 "type": "string"
@@ -4104,7 +4110,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`… remove --yes <kind:name>`: asked about before it gets here, which is\nwhat the `--yes` says. `flayer remove --everywhere --yes <kind:name>`\nwhen `everywhere`, one of the workspace's own taken out of every\nproject it links first. Without `yes`, the dry run, which deletes\nnothing and says what would go, each project's copy with how it\nstands when `everywhere`: what the panel shows before it asks.",
+            "description": "`… remove --yes <kind:name>`: asked about before it gets here, which is\nwhat the `--yes` says. `mindweaver remove --everywhere --yes <kind:name>`\nwhen `everywhere`, one of the workspace's own taken out of every\nproject it links first. Without `yes`, the dry run, which deletes\nnothing and says what would go, each project's copy with how it\nstands when `everywhere`: what the panel shows before it asks.",
             "properties": {
               "everywhere": {
                 "type": "boolean"
@@ -4138,7 +4144,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer validate`, everything; `mind validate`, one project.",
+            "description": "`mindweaver validate`, everything; `mind validate`, one project.",
             "properties": {
               "holder": {
                 "$ref": "#/components/schemas/HolderSent"
@@ -4156,7 +4162,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`mind -C <path> init` for each repository that is not a project yet,\nthen one `flayer link` and one `flayer unlink`: what the minds screen's\nmarks amount to, built from them by [`Task::minds`].",
+            "description": "`mind -C <path> init` for each repository that is not a project yet,\nthen one `mindweaver link` and one `mindweaver unlink`: what the minds screen's\nmarks amount to, built from them by [`Task::minds`].",
             "properties": {
               "init": {
                 "items": {
@@ -4212,7 +4218,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer gather list`.",
+            "description": "`mindweaver gather list`.",
             "properties": {
               "type": {
                 "const": "shelf",
@@ -4226,7 +4232,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer workspaces`: the workspaces this machine knows, the one in\nuse marked, to read.",
+            "description": "`mindweaver workspaces`: the workspaces this machine knows, the one in\nuse marked, to read.",
             "properties": {
               "type": {
                 "const": "workspaces",
@@ -4240,7 +4246,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer gather git [--path <folder>] [--ref <ref>] <url>`.",
+            "description": "`mindweaver gather git [--path <folder>] [--ref <ref>] <url>`.",
             "properties": {
               "folder": {
                 "type": "string"
@@ -4369,7 +4375,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`… update --yes [<kind:name>]`: what is installed in a project, or\nthe one artifact named, brought up to date and put back where a copy\nhas gone; `flayer update --all --yes [<kind:name>]` for the\nworkspace's own row, in every project it links. With `force`, `--yes\n--force`, writing over a copy changed since it was installed too,\nwhich the line is then asked about for ([`Caution::Forces`]).",
+            "description": "`… update --yes [<kind:name>]`: what is installed in a project, or\nthe one artifact named, brought up to date and put back where a copy\nhas gone; `mindweaver update --all --yes [<kind:name>]` for the\nworkspace's own row, in every project it links. With `force`, `--yes\n--force`, writing over a copy changed since it was installed too,\nwhich the line is then asked about for ([`Caution::Forces`]).",
             "properties": {
               "force": {
                 "type": "boolean"
@@ -4397,7 +4403,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`FlayerWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\n[`FlayerWorkspace::naming`]: mindflayer_core::FlayerWorkspace::naming",
+            "description": "`mindweaver install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`WeaverWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\n[`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming",
             "properties": {
               "from": {
                 "type": [
@@ -4432,7 +4438,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer uninstall -p <project>... <kind:name>`: one artifact taken\nback out of each project named, whichever place its copy came from,\neach named as an install's are, by what `naming` gives. With\n`force`, `--force`, taking out a copy changed since it was installed\ntoo, which the line is then asked about for ([`Caution::Forces`]):\nnever from the install screen, whose marks leave an edit to a command\nline, and from the panel only for the copy core says needs it.",
+            "description": "`mindweaver uninstall -p <project>... <kind:name>`: one artifact taken\nback out of each project named, whichever place its copy came from,\neach named as an install's are, by what `naming` gives. With\n`force`, `--force`, taking out a copy changed since it was installed\ntoo, which the line is then asked about for ([`Caution::Forces`]):\nnever from the install screen, whose marks leave an edit to a command\nline, and from the panel only for the copy core says needs it.",
             "properties": {
               "force": {
                 "type": "boolean"
@@ -4465,7 +4471,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`… uninstall --orphaned`: every installation in a project that\nnothing offers any more where it came from, taken back out of it;\n`flayer uninstall --all-projects --orphaned` for the workspace's own\nrow, out of every project it links, as an update reaches them. Never\nforced: one changed since it was installed is left, every copy of it,\nfor a command line that says `--force` once somebody has looked.",
+            "description": "`… uninstall --orphaned`: every installation in a project that\nnothing offers any more where it came from, taken back out of it;\n`mindweaver uninstall --all-projects --orphaned` for the workspace's own\nrow, out of every project it links, as an update reaches them. Never\nforced: one changed since it was installed is left, every copy of it,\nfor a command line that says `--force` once somebody has looked.",
             "properties": {
               "holder": {
                 "$ref": "#/components/schemas/HolderSent"
@@ -4483,7 +4489,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer adopt -p <project> --yes <kind:name>`: somebody's skill in\nthe project's agents' folders brought into the workspace's library,\nits copies recorded as installed from there: asked about before it\ngets here, which is what the `--yes` says. The project is named as an\ninstall's are, by what `naming` gives.",
+            "description": "`mindweaver adopt -p <project> --yes <kind:name>`: somebody's skill in\nthe project's agents' folders brought into the workspace's library,\nits copies recorded as installed from there: asked about before it\ngets here, which is what the `--yes` says. The project is named as an\ninstall's are, by what `naming` gives.",
             "properties": {
               "kind": {
                 "$ref": "#/components/schemas/Kind"
@@ -4509,7 +4515,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "`flayer migrate -p <project> [--yes]`: one project the workspace\nlinks moved from an older marker, a `mind.toml` or a\n`settings.json`, to a `settings.toml`, what the workspace records of\nit carried along; without `yes`, the dry run, which writes nothing\nand says what would move. The project is named as an install's are,\nby what `naming` gives.\n\nThe workspace's command, as an install's is, so what it carries is\nwhat the workspace on screen records: `mind migrate` in the project\nfinds a workspace by walking up, which misses one linking the\nproject from beside it. The agents and the share mode are left to\nthe command, every agent and shared for a `mind.toml`, as a project\ncommitted by design was, and what a `settings.json` names for one,\nfor `mind agents` and `mind share` to change once it is moved.",
+            "description": "`mindweaver migrate -p <project> [--yes]`: one project the workspace\nlinks moved from an older marker, a `mind.toml` or a\n`settings.json`, to a `settings.toml`, what the workspace records of\nit carried along; without `yes`, the dry run, which writes nothing\nand says what would move. The project is named as an install's are,\nby what `naming` gives.\n\nThe workspace's command, as an install's is, so what it carries is\nwhat the workspace on screen records: `mind migrate` in the project\nfinds a workspace by walking up, which misses one linking the\nproject from beside it. The agents and the share mode are left to\nthe command, every agent and shared for a `mind.toml`, as a project\ncommitted by design was, and what a `settings.json` names for one,\nfor `mind agents` and `mind share` to change once it is moved.",
             "properties": {
               "project": {
                 "type": "string"
@@ -4531,7 +4537,7 @@
           },
           {
             "additionalProperties": false,
-            "description": "Open the install screen, which is what `flayer install` opens.",
+            "description": "Open the install screen, which is what `mindweaver install` opens.",
             "properties": {
               "type": {
                 "const": "open_install",
@@ -4728,7 +4734,7 @@
             "type": "array"
           },
           "writes": {
-            "description": "Whether updating every project writes something: what `flayer update\n--all --yes` would, rather than leave and say.",
+            "description": "Whether updating every project writes something: what `mindweaver update\n--all --yes` would, rather than leave and say.",
             "type": "boolean"
           }
         },
@@ -5096,7 +5102,7 @@
         ]
       },
       "Warning": {
-        "description": "One line a command says beside what it reports, on stderr: a warning, a\nnote, a hint, or an error about one part of what it did; and the code of\nwhat it says, when what it says has one.\n\nThe text is what a terminal shows, word for word, `warning: ` and all.\nThe code rides beside it for the panel, which acts on a condition by its\ncode rather than by matching English that is reworded whenever it is\nmade clearer: the code core gives what went wrong ([`mindflayer_core::code`]),\nor the CLI's own ([`CliError::code`]). A line with none says something no\ncode is given to: a hint, a note, or what the CLI makes of what it found\nrather than something that went wrong. Kept beside the text rather than\nin a list of its own beside the lines, which every line pushed would have\nto keep in step with.\n\nSerialized as it is, `{\"text\": ..., \"code\": ...}`, in what a run of the\npanel's backend says (`backend::Run`): the line a terminal shows, and\nthe code beside it.",
+        "description": "One line a command says beside what it reports, on stderr: a warning, a\nnote, a hint, or an error about one part of what it did; and the code of\nwhat it says, when what it says has one.\n\nThe text is what a terminal shows, word for word, `warning: ` and all.\nThe code rides beside it for the panel, which acts on a condition by its\ncode rather than by matching English that is reworded whenever it is\nmade clearer: the code core gives what went wrong ([`mindweaver_core::code`]),\nor the CLI's own ([`CliError::code`]). A line with none says something no\ncode is given to: a hint, a note, or what the CLI makes of what it found\nrather than something that went wrong. Kept beside the text rather than\nin a list of its own beside the lines, which every line pushed would have\nto keep in step with.\n\nSerialized as it is, `{\"text\": ..., \"code\": ...}`, in what a run of the\npanel's backend says (`backend::Run`): the line a terminal shows, and\nthe code beside it.",
         "properties": {
           "code": {
             "type": [
@@ -5156,20 +5162,20 @@
         "type": "http"
       },
       "cookie": {
-        "description": "The launch token, as the cookie the launch link sets, named `mf_` and the server's port: how the panel's page sends it. A change sent with it, which every POST is, needs `Sec-Fetch-Site: same-origin`, `X-Mindflayer: 1` and `Content-Type: application/json` beside it, which only the panel's own page sends.",
+        "description": "The launch token, as the cookie the launch link sets, named `mw_` and the server's port: how the panel's page sends it. A change sent with it, which every POST is, needs `Sec-Fetch-Site: same-origin`, `X-Mindweaver: 1` and `Content-Type: application/json` beside it, which only the panel's own page sends.",
         "in": "cookie",
-        "name": "mf_<port>",
+        "name": "mw_<port>",
         "type": "apiKey"
       }
     }
   },
   "info": {
-    "description": "The HTTP API `flayer ui` serves, for scripts and tools on this machine as much as for the web panel, its first client. A read is a GET naming what it reads in its parameters, and a read that takes a structure a POST that changes nothing; every change is a task, the command lines it is, previewed and then run, so the API does nothing the command line cannot. A script that did not start the panel finds where the API is and its token in the file `flayer ui --token-file` writes. A route, a parameter or a field once served is a contract: dropping or renaming one, or changing what it holds, moves the API to `/api/v2`, and adding one does not, so an answer's schema leaves room for a field it does not name. Written from the Rust that serves it, never by hand.\n\nServed on 127.0.0.1 alone, at the port the system chose unless one was named, every route behind the launch token, as a Bearer token or as the cookie the launch link sets. Every answer that is no success is a `Refused`, `{\"code\", \"error\"}`, its code the word a script acts on and its error the words a person reads: a path under `/api` no route names, of another version or of none, is a 404 of `unknown_route`. Every answer under `/api` carries `Cache-Control: no-store`, and none grants another origin the right to read it.",
+    "description": "The HTTP API `mindweaver ui` serves, for scripts and tools on this machine as much as for the web panel, its first client. A read is a GET naming what it reads in its parameters, and a read that takes a structure a POST that changes nothing; every change is a task, the command lines it is, previewed and then run, so the API does nothing the command line cannot. A script that did not start the panel finds where the API is and its token in the file `mindweaver ui --token-file` writes. A route, a parameter or a field once served is a contract: dropping or renaming one, or changing what it holds, moves the API to `/api/v2`, and adding one does not, so an answer's schema leaves room for a field it does not name. Written from the Rust that serves it, never by hand.\n\nServed on 127.0.0.1 alone, at the port the system chose unless one was named, every route behind the launch token, as a Bearer token or as the cookie the launch link sets. Every answer that is no success is a `Refused`, `{\"code\", \"error\"}`, its code the word a script acts on and its error the words a person reads: a path under `/api` no route names, of another version or of none, is a 404 of `unknown_route`. Every answer under `/api` carries `Cache-Control: no-store`, and none grants another origin the right to read it.",
     "license": {
       "identifier": "GPL-3.0-only",
       "name": "GPL-3.0-only"
     },
-    "title": "Mindflayer",
+    "title": "Mindweaver",
     "version": "1"
   },
   "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
@@ -7265,7 +7271,7 @@
             "description": "What the request was handed on to failed, as the code says."
           }
         },
-        "summary": "What could be linked under the folders named, as `flayer scan --suggest` finds and ranks it"
+        "summary": "What could be linked under the folders named, as `mindweaver scan --suggest` finds and ranks it"
       }
     },
     "/snapshot": {
@@ -8617,7 +8623,7 @@
             "description": "What the request was handed on to failed, as the code says."
           }
         },
-        "summary": "What updating every project the workspace links would do, as `flayer update --all` says it without `--yes`"
+        "summary": "What updating every project the workspace links would do, as `mindweaver update --all` says it without `--yes`"
       }
     },
     "/validate": {
@@ -9076,7 +9082,7 @@
   ],
   "servers": [
     {
-      "description": "Where `flayer ui` serves it, beside this document: `http://127.0.0.1:<port>/api/v1`, at the port its link names.",
+      "description": "Where `mindweaver ui` serves it, beside this document: `http://127.0.0.1:<port>/api/v1`, at the port its link names.",
       "url": "/api/v1"
     }
   ]

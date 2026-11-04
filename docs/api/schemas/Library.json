@@ -37,7 +37,7 @@
       "type": "string"
     },
     "templates": {
-      "description": "What `flayer add --template` can start from.",
+      "description": "What `mindweaver add --template` can start from.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/Template"
@@ -168,7 +168,7 @@
       ]
     },
     "LibraryHolder": {
-      "description": "A project holding a copy of one of the workspace's own: one whose install\nthe ledger tells came from it ([`install::from_the_library`]), the rule\n`flayer remove --everywhere` takes the copies it removes by.\n\nTold here rather than by a front end comparing a copy's\n[`origin`](Held::origin) with [`Library::origin`], which would be a\nrule of its own, and a different one: a record from before origins were\nkept names none, and is a copy of one of the workspace's own all the\nsame while no workspace it loads offers that name.",
+      "description": "A project holding a copy of one of the workspace's own: one whose install\nthe ledger tells came from it ([`install::from_the_library`]), the rule\n`mindweaver remove --everywhere` takes the copies it removes by.\n\nTold here rather than by a front end comparing a copy's\n[`origin`](Held::origin) with [`Library::origin`], which would be a\nrule of its own, and a different one: a record from before origins were\nkept names none, and is a copy of one of the workspace's own all the\nsame while no workspace it loads offers that name.",
       "type": "object",
       "properties": {
         "entry": {

@@ -13,8 +13,8 @@ mod common;
 use std::collections::BTreeSet;
 
 use common::contract::{contract, DOCUMENT};
-use mindflayer_cli::backend::PanelBackend;
-use mindflayer_server::{Backend, Own};
+use mindweaver_cli::backend::PanelBackend;
+use mindweaver_server::{Backend, Own};
 use serde_json::Value;
 
 #[test]
@@ -25,7 +25,7 @@ fn the_document_is_read_as_openapi_3_1_with_every_reference_resolved() {
         .unwrap_or_else(|error| panic!("{error}"));
 
     assert_eq!((version.major, version.minor), (3, 1));
-    assert_eq!(spec.info.title, "Mindflayer");
+    assert_eq!(spec.info.title, "Mindweaver");
     let mut read = 0;
     for (path, method, operation) in spec.operations() {
         let at = format!("{method} {path}");

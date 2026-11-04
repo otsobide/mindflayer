@@ -1,9 +1,9 @@
 //! Starting points for `mind add`: a skill folder or a rule file to begin
 //! from, instead of the least that passes `validate`.
 //!
-//! Templates are Mindflayer's, not the agents', so they live inside the
+//! Templates are Mindweaver's, not the agents', so they live inside the
 //! markers rather than beside the code: `.mind/templates/` for one project,
-//! `.mindflayer/templates/` for every project a workspace manages. A skill
+//! `.mindweaver/templates/` for every project a workspace manages. A skill
 //! template is a folder holding a `SKILL.md` and whatever else the skill
 //! should start with; a rule template is one markdown file. Of two templates
 //! of one kind and one name, the closer wins (the project's over the
@@ -20,15 +20,15 @@ use thiserror::Error;
 use crate::code::codes;
 use crate::install;
 use crate::kind::{Kind, Layout};
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::workspace::{MindProject, WeaverWorkspace};
 
-/// The folder inside `.mind` or `.mindflayer` that holds templates.
+/// The folder inside `.mind` or `.mindweaver` that holds templates.
 pub const TEMPLATES_DIR: &str = "templates";
 
 /// Where a template comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Origin {
-    /// Shipped with Mindflayer.
+    /// Shipped with Mindweaver.
     BuiltIn,
     /// A skill folder or a rule file on disk.
     Path(PathBuf),
@@ -66,7 +66,7 @@ pub struct Template {
 /// One file a built-in template writes: its route, and what it holds.
 type File = (&'static str, &'static str);
 
-/// The templates that ship with Mindflayer, as the files each one writes.
+/// The templates that ship with Mindweaver, as the files each one writes.
 ///
 /// `full` is the shape the skill format sets aside room for: a manifest with
 /// sections to fill in, a `scripts/` folder for what the skill runs and a
@@ -122,7 +122,7 @@ impl Template {
 /// manages it, and the ones built in, with a closer one hiding a further one
 /// of the same kind and name. Ordered by kind, then by name.
 pub fn templates(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
 ) -> Result<Vec<Template>, TemplateError> {
     let mut found: Vec<Template> = Vec::new();
@@ -154,7 +154,7 @@ pub fn templates(
 
 /// The template of `kind` called `name`, from wherever is closest.
 pub fn find(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -200,7 +200,7 @@ pub fn find(
 /// For a front end that watches a holder to know when what it shows is out
 /// of date (#74), each on its own and nothing below it: what a template's
 /// folder holds further down is the template's, and no part of finding it.
-pub fn looked_in(workspace: Option<&FlayerWorkspace>, project: &MindProject) -> Vec<PathBuf> {
+pub fn looked_in(workspace: Option<&WeaverWorkspace>, project: &MindProject) -> Vec<PathBuf> {
     let mut folders = Vec::new();
     for directory in search_path(workspace, project) {
         let mut inside: Vec<PathBuf> = fs::read_dir(&directory)
@@ -224,12 +224,12 @@ pub fn looked_in(workspace: Option<&FlayerWorkspace>, project: &MindProject) -> 
 /// templates count for a project it manages and for its own artifacts, whose
 /// holder sits at its root; a workspace that does neither is not the
 /// project's, and neither are its templates.
-fn search_path(workspace: Option<&FlayerWorkspace>, project: &MindProject) -> Vec<PathBuf> {
+fn search_path(workspace: Option<&WeaverWorkspace>, project: &MindProject) -> Vec<PathBuf> {
     let mut directories = vec![project.mind_dir().join(TEMPLATES_DIR)];
     if let Some(workspace) = workspace.filter(|workspace| {
         workspace.root() == project.root() || workspace.is_linked(project.root())
     }) {
-        directories.push(workspace.flayer_dir().join(TEMPLATES_DIR));
+        directories.push(workspace.weaver_dir().join(TEMPLATES_DIR));
     }
     directories
 }

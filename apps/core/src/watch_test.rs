@@ -11,6 +11,7 @@ use std::fs;
 
 use crate::mother::random;
 use crate::mother::{ProjectMother, WorkspaceMother};
+use crate::workspace::{WEAVER_CONFIG, WEAVER_DIR};
 
 fn workspace_scope(watched: &[Watched]) -> Vec<&Path> {
     watched
@@ -29,12 +30,12 @@ fn project_scope<'a>(watched: &'a [Watched], entry: &str) -> Vec<&'a Path> {
 }
 
 #[test]
-fn a_workspace_s_marker_is_in_its_flayer_folder() {
+fn a_workspace_s_marker_is_in_its_weaver_folder() {
     let root = PathBuf::from(format!("/{}", random::word()));
 
     assert_eq!(
-        marker_of_workspace(&root),
-        root.join(".mindflayer").join("flayer.toml")
+        root.join(WEAVER_DIR).join(WEAVER_CONFIG),
+        root.join(".mindweaver").join("weaver.toml")
     );
 }
 
@@ -194,10 +195,19 @@ fn the_default_workspace_s_marker_is_watched_when_there_is_a_home() {
     let without = watched(&workspace, None);
     let with = watched(&workspace, Some(&home));
 
-    let marker = marker_of_workspace(&home);
-    assert!(!workspace_scope(&without).contains(&marker.as_path()));
-    assert_eq!(workspace_scope(&with).last(), Some(&marker.as_path()));
-    assert_eq!(with.len(), without.len() + 1);
+    // Under both names, either of which would make home a workspace.
+    let markers = [
+        home.join(WEAVER_DIR).join(WEAVER_CONFIG),
+        home.join(".mindflayer").join("flayer.toml"),
+    ];
+    for marker in &markers {
+        assert!(!workspace_scope(&without).contains(&marker.as_path()));
+    }
+    assert_eq!(
+        workspace_scope(&with)[workspace_scope(&with).len() - 2..],
+        markers.iter().map(PathBuf::as_path).collect::<Vec<_>>()
+    );
+    assert_eq!(with.len(), without.len() + 2);
 }
 
 /// A workspace that is the default itself names its marker once.

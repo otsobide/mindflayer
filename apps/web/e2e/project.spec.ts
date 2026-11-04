@@ -2,15 +2,15 @@ import { PROJECTS } from './fixture.ts'
 import { expect, listing, test } from './panel.ts'
 
 /*
- * Each project's page against what `flayer list --json` prints of it: the
+ * Each project's page against what `mindweaver list --json` prints of it: the
  * facts at the top, and every artifact it holds, kind by kind, in the
  * listing's order, as the page lays them out without sorting its own.
  */
 for (const entry of PROJECTS) {
-  test(`the page of ${entry} shows what flayer list --json lists of it`, async ({ page, panel }) => {
+  test(`the page of ${entry} shows what mindweaver list --json lists of it`, async ({ page, panel }) => {
     const project = listing().projects.find(each => each.entry === entry)
     if (!project) {
-      throw new Error(`flayer list --json lists no project at ${entry}`)
+      throw new Error(`mindweaver list --json lists no project at ${entry}`)
     }
     await panel.open(`/project?${new URLSearchParams({ entry })}`)
 

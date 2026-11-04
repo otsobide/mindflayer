@@ -1,8 +1,8 @@
-//! Command line interface for Mindflayer, split the way the model is.
+//! Command line interface for Mindweaver, split the way the model is.
 //!
-//! `mind <cmd>` acts on the mind project you are standing in. `mind flayer
-//! <cmd>` acts on the flayer workspace above it, and the `flayer` binary is
-//! the same tree reached directly, so `flayer link x` and `mind flayer link x`
+//! `mind <cmd>` acts on the mind project you are standing in. `mind weaver
+//! <cmd>` acts on the weaver workspace above it, and the `mindweaver` binary is
+//! the same tree reached directly, so `mindweaver link x` and `mind weaver link x`
 //! are one command with two spellings.
 //!
 //! The parser, the work and the rendering all live in this library rather
@@ -36,14 +36,14 @@ pub mod tui;
 pub mod typescript;
 
 pub use commands::read::WORKSPACE;
-pub use commands::{run, run_flayer_cli, run_flayer_cli_watched, run_watched};
+pub use commands::{run, run_watched, run_weaver_cli, run_weaver_cli_watched};
 pub use error::{CliError, CODES};
 pub use homes::{agent_homes, default_home, Lookup};
 #[cfg(feature = "ui")]
 pub use parse::UiOptions;
 pub use parse::{
-    AgentHomeOptions, AgentNames, AgentsChange, Cli, Command, Editing, FlayerCli, FlayerCommand,
-    GatherCommand, Given, Migrated, ShareMode, TargetsChange, WorkspacesCommand,
+    AgentHomeOptions, AgentNames, AgentsChange, Cli, Command, Editing, GatherCommand, Given,
+    Migrated, ShareMode, TargetsChange, WeaverCli, WeaverCommand, WorkspacesCommand,
 };
 pub use progress::ProgressLine;
 pub use render::{Failure, Outcome, Warning};

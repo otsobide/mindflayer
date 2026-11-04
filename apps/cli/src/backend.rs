@@ -2,7 +2,7 @@
 //! browser to (#67).
 //!
 //! The server is transport, generic over a [`Backend`] and depending on no
-//! mindflayer crate (D-17); this is the CLI's, with its own [`Query`], the
+//! mindweaver crate (D-17); this is the CLI's, with its own [`Query`], the
 //! [`Task`] the TUI runs, and an [`Outcome`] of its own. It is a front end
 //! as the TUI is, and works as the TUI does (D-18): a read is a query core
 //! answers, the snapshot or a file's contents, and a change is a task turned
@@ -28,7 +28,7 @@
 //! - **A task names only what the path policy allows** ([`Admission`]): a
 //!   project by its entry, which becomes the folder the registry resolves,
 //!   and a folder not linked yet by an absolute, normalized path outside
-//!   every `.mindflayer`, shown verbatim.
+//!   every `.mindweaver`, shown verbatim.
 //! - **A task no front end without a terminal runs is refused**
 //!   ([`Task::refusal`]): a screen, an editor, a shell's code, a gather, and
 //!   `show`, which prints an artifact whole through any link.
@@ -45,7 +45,7 @@
 //!   the boxes ticked amount to is core's to say ([`Query::Plan`]), and
 //!   nothing runs until its tasks are sent back.
 //! - **What an update would do is only read** ([`Query::Updates`]): the
-//!   dry run of `flayer update --all`, core's, naming nothing a browser
+//!   dry run of `mindweaver update --all`, core's, naming nothing a browser
 //!   sent; an update runs only as the task the panel sends for it.
 //! - **A draft is only judged** ([`Query::Validate`]): what core says of an
 //!   artifact a form or the editor is about to send, by the checks the
@@ -69,25 +69,24 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 
-use mindflayer_core::browse::{BrowseError, Folders};
-use mindflayer_core::code::Said;
-use mindflayer_core::contents::{Contents, ContentsError, Files};
-use mindflayer_core::draft;
-use mindflayer_core::gather::Watch;
-use mindflayer_core::install::{self, Cell, Conflict, Locked};
-use mindflayer_core::known::{self, Launch};
-use mindflayer_core::policy::PolicyError;
-use mindflayer_core::resolve::{resolve, Intent, Reason, Resolved};
-use mindflayer_core::scan::{self, Order, DEFAULT_DEPTH};
-use mindflayer_core::update::Updates;
-use mindflayer_core::value::Redacted;
-use mindflayer_core::view::Snapshot;
-use mindflayer_core::{paths, policy, watch};
-use mindflayer_core::{
-    FlayerWorkspace, Found, Kind, LifecycleError, MindProject, Reference, Scan, WorkspaceError,
-    FLAYER_CONFIG, FLAYER_DIR,
+use mindweaver_core::browse::{BrowseError, Folders};
+use mindweaver_core::code::Said;
+use mindweaver_core::contents::{Contents, ContentsError, Files};
+use mindweaver_core::draft;
+use mindweaver_core::gather::Watch;
+use mindweaver_core::install::{self, Cell, Conflict, Locked};
+use mindweaver_core::known::{self, Launch};
+use mindweaver_core::policy::PolicyError;
+use mindweaver_core::resolve::{resolve, Intent, Reason, Resolved};
+use mindweaver_core::scan::{self, Order, DEFAULT_DEPTH};
+use mindweaver_core::update::Updates;
+use mindweaver_core::value::Redacted;
+use mindweaver_core::view::Snapshot;
+use mindweaver_core::{paths, policy, watch};
+use mindweaver_core::{
+    Found, Kind, LifecycleError, MindProject, Reference, Scan, WeaverWorkspace, WorkspaceError,
 };
-use mindflayer_server::{Backend, Grounds, Preview, Refusal, Route, Watched};
+use mindweaver_server::{Backend, Grounds, Preview, Refusal, Route, Watched};
 use serde::{Deserialize, Serialize};
 
 use crate::admit::Admission;
@@ -151,9 +150,9 @@ pub enum Query {
         reference: String,
         file: String,
     },
-    /// What could be linked under `roots`, `depth` levels down, as `flayer
+    /// What could be linked under `roots`, `depth` levels down, as `mindweaver
     /// scan --suggest` finds it ([`Scanned`]): each root an absolute,
-    /// normalized path outside every `.mindflayer` ([`policy::path`]), as a
+    /// normalized path outside every `.mindweaver` ([`policy::path`]), as a
     /// folder to link is, which is only read; none is the workspace's root,
     /// and no depth core's own (`scan::DEFAULT_DEPTH`), as for the command.
     ///
@@ -166,7 +165,7 @@ pub enum Query {
     },
     /// The folders directly inside `path`, for the panel's explorer to pick
     /// one from ([`Folders`]): an absolute, normalized path outside every
-    /// `.mindflayer` ([`policy::path`]), as a folder to link or a root to
+    /// `.mindweaver` ([`policy::path`]), as a folder to link or a root to
     /// scan is, held to it before anything is read; none is the workspace's
     /// root. Hidden folders only when `hidden` asks for them. Answered with
     /// the launch's home beside them, for a way back to it.
@@ -191,7 +190,7 @@ pub enum Query {
     /// What updating every project the workspace links would do ([`Updates`]):
     /// each installation an update says something of, how it stands, what
     /// an update does with it, and why it leaves one it leaves, every copy
-    /// edited since left alone, as `flayer update --all` says without
+    /// edited since left alone, as `mindweaver update --all` says without
     /// `--yes`.
     ///
     /// A query of its own, asked for by the page of updates, rather than a
@@ -244,7 +243,7 @@ pub enum Draft {
     Edit { reference: String, text: String },
 }
 
-/// What a scan the panel asked for found ([`Query::Scan`]): what `flayer
+/// What a scan the panel asked for found ([`Query::Scan`]): what `mindweaver
 /// scan --suggest --json` prints, each directory with what the panel needs
 /// to offer it, and what the command warns of beside it.
 ///
@@ -262,18 +261,18 @@ pub struct Scanned {
     pub roots: Vec<String>,
     /// How many levels below each root it looked.
     pub depth: usize,
-    /// Every directory it found, in the order `flayer scan --suggest` ranks
+    /// Every directory it found, in the order `mindweaver scan --suggest` ranks
     /// them: what is not linked first, most worth linking first, then what
     /// is.
     pub found: Vec<Suggestion>,
     /// Each entry where no project is any more whose id the ledger never
-    /// learned, as the scan spells it: what `flayer relink <entry> <path>`
+    /// learned, as the scan spells it: what `mindweaver relink <entry> <path>`
     /// follows, which only somebody who knows where it went can type.
     pub untraced: Vec<String>,
     /// Whether it stopped at core's bound before looking everywhere, which
     /// `warnings` says too.
     pub truncated: bool,
-    /// What it could not read, and that it stopped early, as `flayer scan`
+    /// What it could not read, and that it stopped early, as `mindweaver scan`
     /// warns of them, each with its code.
     pub warnings: Vec<Warning>,
 }
@@ -283,9 +282,9 @@ pub struct Scanned {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Suggestion {
-    /// What `flayer scan --json` prints of it.
+    /// What `mindweaver scan --json` prints of it.
     pub found: Found,
-    /// Why it is worth linking, in the words `flayer scan --suggest` and the
+    /// Why it is worth linking, in the words `mindweaver scan --suggest` and the
     /// minds screen say it in ([`worth_linking`]); none for one linked.
     pub why: Option<String>,
     /// What marking it asks for ([`MindsChange::of_found`]): linking it, or
@@ -295,14 +294,14 @@ pub struct Suggestion {
     pub offers: Option<MindsChange>,
     /// The entry it moved from, as the marker spells it, which a relink
     /// names: matched by core's `scan::moved_from`, as the minds screen
-    /// matches it, since the scan spells `moved` as `flayer link` would
+    /// matches it, since the scan spells `moved` as `mindweaver link` would
     /// take it. None when it did not move.
     pub moved_from: Option<String>,
 }
 
 impl Scanned {
     /// What `scan` found in `workspace`, as the panel is answered with it.
-    fn of(workspace: &FlayerWorkspace, scan: &Scan) -> Scanned {
+    fn of(workspace: &WeaverWorkspace, scan: &Scan) -> Scanned {
         let members = workspace.members();
         let left = |moved: &str| {
             members
@@ -461,12 +460,12 @@ impl Pin {
     /// Only the default one: any other was there when it was pinned, and
     /// one gone since is refused rather than taken for one to make, which
     /// the first change would do to it.
-    fn workspace(&self) -> Result<FlayerWorkspace, Refusal> {
-        let made = self.root.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file();
+    fn workspace(&self) -> Result<WeaverWorkspace, Refusal> {
+        let made = WeaverWorkspace::is_marked(&self.root);
         if made || self.reason != Reason::Home {
-            FlayerWorkspace::open(&self.root)
+            WeaverWorkspace::open(&self.root)
         } else {
-            FlayerWorkspace::unmade(&self.root)
+            WeaverWorkspace::unmade(&self.root)
         }
         .map_err(|error| refused(error.code(), error))
     }
@@ -474,9 +473,9 @@ impl Pin {
     /// The workspace, or, when it will not open now, gone or broken since
     /// it was pinned, as it would be once made again: what is watched, and
     /// what the panel may switch away from, either way.
-    fn opened_or_not(&self) -> Result<FlayerWorkspace, Refusal> {
+    fn opened_or_not(&self) -> Result<WeaverWorkspace, Refusal> {
         self.workspace()
-            .or_else(|refusal| FlayerWorkspace::unmade(&self.root).map_err(|_| refusal))
+            .or_else(|refusal| WeaverWorkspace::unmade(&self.root).map_err(|_| refusal))
     }
 }
 
@@ -521,7 +520,7 @@ impl PanelBackend {
     }
 
     /// Every line run so far for a task that changes something, with what
-    /// each said, as a shell session would show it: what `flayer ui` prints
+    /// each said, as a shell session would show it: what `mindweaver ui` prints
     /// once it stops, as the TUI prints its own when it closes, so what the
     /// panel did outlives the server and can be done again without it.
     ///
@@ -561,7 +560,7 @@ impl PanelBackend {
     /// made. Before then the default is named by nothing, and found as the
     /// TUI's lines find it, walking up from its root; its first change makes
     /// it first ([`plan`](Self::plan)).
-    fn pinned(&self, workspace: &FlayerWorkspace) -> Lookup {
+    fn pinned(&self, workspace: &WeaverWorkspace) -> Lookup {
         Lookup {
             flag: Some(if workspace.is_made() {
                 workspace.root().to_path_buf()
@@ -597,7 +596,7 @@ impl PanelBackend {
             Some(root) => lines.iter().map(|line| task::naming(line, root)).collect(),
             None => lines,
         };
-        let lines = admitted.commands();
+        let lines = admitted.commands_in(&workspace);
         // As the TUI does: a change to the default before it is made makes
         // it first, by a line of its own, rather than leave the change to
         // find a workspace above home while it walks up from the root. Not
@@ -608,7 +607,7 @@ impl PanelBackend {
         // and the transcript keeps, says which workspace each reached, and
         // reaches it pasted anywhere. All but those before it is made: `-W`
         // refuses a folder with no marker, so the default is named by the
-        // lines after the `flayer init` that makes it, and a read of it
+        // lines after the `mindweaver init` that makes it, and a read of it
         // before then by none, as the TUI's lines find it. And all of a
         // workspace whose root no word of a line can hold, not UTF-8: its
         // lines run against it all the same, through the lookup, which
@@ -812,7 +811,7 @@ impl Backend for PanelBackend {
 
     /// Each line as a shell would read it, and what the panel has somebody
     /// confirm first, both of the one plan: so what the panel asks about is
-    /// the lines it shows, a `flayer init` in front of them counted.
+    /// the lines it shows, a `mindweaver init` in front of them counted.
     fn preview(&self, task: &Task) -> Result<Preview, Refusal> {
         let plan = self.plan(task, &self.pin())?;
         let confirm = cautioned(&plan.lines)
@@ -927,12 +926,12 @@ impl Backend for PanelBackend {
 
 /// A save's text, in the file its line reads it from
 /// ([`task::scratch_route`]): the workspace's scratch folder as core has it
-/// ([`FlayerWorkspace::scratch_dir`]), the file named by the text
+/// ([`WeaverWorkspace::scratch_dir`]), the file named by the text
 /// ([`task::scratch_name`]). Held for as long as this is: taken away when
 /// it is dropped, whatever came of the line.
 ///
 /// Made with `create_new`, in a folder made with `create_dir`, never
-/// `create_dir_all`, so no `.mindflayer` is made where there is none, which
+/// `create_dir_all`, so no `.mindweaver` is made where there is none, which
 /// a line of the panel's would then take for a workspace. The folder is
 /// looked at once it is there, and a link in its place refuses the save:
 /// `create_dir` says a link is there as it says a folder is, and
@@ -948,7 +947,7 @@ struct Scratch {
 
 impl Scratch {
     /// `text`, put where the line saving it reads it from, in `workspace`.
-    fn put(workspace: &FlayerWorkspace, text: &str) -> Result<Scratch, CliError> {
+    fn put(workspace: &WeaverWorkspace, text: &str) -> Result<Scratch, CliError> {
         let folder = workspace.scratch_dir();
         let path = folder.join(task::scratch_name(text));
         let unwritable = |source| CliError::Scratch {
@@ -1010,7 +1009,7 @@ fn scope(scope: watch::Scope) -> serde_json::Value {
 /// other, as a task's holder is ([`policy::linked`]). An entry no registry
 /// holds, or one whose folder holds no project any more, is refused as
 /// absent, as a read's parameter names it.
-fn linked(workspace: &FlayerWorkspace, holder: Holder) -> Result<Option<MindProject>, Refusal> {
+fn linked(workspace: &WeaverWorkspace, holder: Holder) -> Result<Option<MindProject>, Refusal> {
     match holder {
         Holder::Workspace => Ok(None),
         Holder::Project(entry) | Holder::Elsewhere(entry) => {
@@ -1150,7 +1149,7 @@ impl Absence for PolicyError {
             PolicyError::Url { .. }
             | PolicyError::Relative { .. }
             | PolicyError::Unnormalized { .. }
-            | PolicyError::InMindflayer { .. }
+            | PolicyError::InWeaverDir { .. }
             | PolicyError::Unlisted { .. } => false,
         }
     }

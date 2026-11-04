@@ -44,7 +44,7 @@ fn an_installation_recording_no_copy_has_nothing_to_fall_behind() {
 }
 
 #[test]
-fn only_somebodys_work_and_an_edit_are_not_mindflayers_to_change() {
+fn only_somebodys_work_and_an_edit_are_not_mindweavers_to_change() {
     for standing in [
         Standing::Current,
         Standing::Outdated,
@@ -60,7 +60,7 @@ fn only_somebodys_work_and_an_edit_are_not_mindflayers_to_change() {
 }
 
 #[test]
-fn what_is_not_mindflayers_to_change_is_refused_by_the_code_a_change_reaching_it_gives() {
+fn what_is_not_mindweavers_to_change_is_refused_by_the_code_a_change_reaching_it_gives() {
     assert_eq!(Standing::Foreign.refused(), Some(Refused::Foreign));
     assert_eq!(Standing::Edited.refused(), Some(Refused::Edited));
     for standing in [

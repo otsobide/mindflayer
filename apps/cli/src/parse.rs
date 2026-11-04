@@ -1,4 +1,4 @@
-//! The command lines `mind` and `flayer` take, as clap types.
+//! The command lines `mind` and `mindweaver` take, as clap types.
 //!
 //! Only the grammar, apart from the work, so the whole surface reads in one
 //! place. The binaries parse with these types and so does every line the TUI
@@ -8,16 +8,16 @@ use std::path::{Path, PathBuf};
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{ArgGroup, Args, Parser, Subcommand};
-use mindflayer_core::scan::DEFAULT_DEPTH;
-use mindflayer_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
+use mindweaver_core::scan::DEFAULT_DEPTH;
+use mindweaver_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
 //
 // `about` is spelled out rather than taken from the crate description, which
 // is one line for a package that ships two binaries and so can only be right
 // for one of them. `propagate_version` puts `--version` on the nested
-// subcommands too, so `mind flayer --version` answers instead of erroring
-// while `flayer --version` works.
+// subcommands too, so `mind weaver --version` answers instead of erroring
+// while `mindweaver --version` works.
 #[derive(Debug, Parser)]
 #[command(
     name = "mind",
@@ -40,16 +40,16 @@ pub struct Cli {
     pub directory: Option<PathBuf>,
 
     /// Where the default workspace lives, used when none is found above
-    /// [default: $MINDFLAYER_HOME, then your home directory; empty for none].
+    /// [default: $MINDWEAVER_HOME, then your home directory; empty for none].
     #[arg(long = "home", value_name = "DIR", global = true)]
     pub home: Option<String>,
 
     // A string rather than a path for the reason `home` is one: empty is an
     // answer, and a path cannot spell it.
-    /// The workspace to use, by its directory or its `.mindflayer`, wherever
-    /// you are [default: $MINDFLAYER_WORKSPACE, then the one at or above
+    /// The workspace to use, by its directory or its `.mindweaver`, wherever
+    /// you are [default: $MINDWEAVER_WORKSPACE, then the one at or above
     /// here, then the default one; empty to name none and ignore
-    /// $MINDFLAYER_WORKSPACE].
+    /// $MINDWEAVER_WORKSPACE].
     #[arg(short = 'W', long = "workspace", value_name = "DIR", global = true)]
     pub workspace: Option<String>,
 
@@ -153,7 +153,7 @@ pub enum Command {
         description: String,
 
         /// Start from a template instead: `full`, or one of yours in
-        /// `.mind/templates` or the workspace's `.mindflayer/templates`.
+        /// `.mind/templates` or the workspace's `.mindweaver/templates`.
         #[arg(long, value_name = "NAME")]
         template: Option<String>,
     },
@@ -231,7 +231,7 @@ pub enum Command {
         json: bool,
     },
 
-    /// Say what this project holds: whether what Mindflayer installed is
+    /// Say what this project holds: whether what Mindweaver installed is
     /// current, outdated, edited, missing or orphaned, what is somebody's
     /// and what is the project's own, which agents read each, and where
     /// what was installed came from.
@@ -242,17 +242,17 @@ pub enum Command {
         json: bool,
     },
 
-    /// Register this project with the flayer workspace above it.
+    /// Register this project with the weaver workspace above it.
     Link,
 
-    /// Drop this project from the flayer workspace above it.
+    /// Drop this project from the weaver workspace above it.
     Unlink,
 
-    /// Offer other flayer workspaces' own skills and rules to the workspace
+    /// Offer other weaver workspaces' own skills and rules to the workspace
     /// above this project, read live from where they are; on its own, list
     /// what it loads.
     Load {
-        /// Each workspace's directory, the one holding `.mindflayer`
+        /// Each workspace's directory, the one holding `.mindweaver`
         /// [default: list the loaded ones].
         #[arg(value_name = "WORKSPACE")]
         workspaces: Vec<PathBuf>,
@@ -283,7 +283,7 @@ pub enum Command {
         force: bool,
     },
 
-    /// Take a skill or a rule Mindflayer installed back out of this project.
+    /// Take a skill or a rule Mindweaver installed back out of this project.
     Uninstall {
         /// Its name, or `kind:name` when one name is both.
         #[arg(required_unless_present = "orphaned")]
@@ -300,7 +300,7 @@ pub enum Command {
         force: bool,
     },
 
-    /// Bring what Mindflayer installed into this project up to date with
+    /// Bring what Mindweaver installed into this project up to date with
     /// where it came from, and put back the copies that have gone.
     ///
     /// A copy changed since it was installed is left alone, with every
@@ -365,13 +365,19 @@ pub enum Command {
         change: TargetsChange,
     },
 
-    /// Bring this project, made by an older Mindflayer and marked by a
+    /// Bring this project, made by an older Mindweaver and marked by a
     /// mind.toml, to a settings.toml, and what is installed into it to where
     /// its agents read; or one marked by a settings.json to a settings.toml
     /// saying the same.
     ///
     /// Without --yes nothing changes, and the command says what would.
     Migrate {
+        /// Move the workspace this project's commands use, made by a
+        /// Mindflayer build, to Mindweaver's names, as `mindweaver migrate
+        /// --names` does there.
+        #[arg(long, conflicts_with_all = ["agents", "local", "shared"])]
+        names: bool,
+
         #[command(flatten)]
         settings: Migrated,
 
@@ -385,32 +391,32 @@ pub enum Command {
     Tui,
 
     /// Open the control panel in a browser, over the workspace a command run
-    /// here would use: what `flayer ui` does.
+    /// here would use: what `mindweaver ui` does.
     #[cfg(feature = "ui")]
     Ui(UiOptions),
 
-    /// Act on the flayer workspace instead. Also reachable as `flayer <cmd>`.
+    /// Act on the weaver workspace instead. Also reachable as `mindweaver <cmd>`.
     ///
-    /// On its own it opens the TUI, as `flayer` on its own does.
-    Flayer {
+    /// On its own it opens the TUI, as `mindweaver` on its own does.
+    Weaver {
         #[command(subcommand)]
-        command: Option<FlayerCommand>,
+        command: Option<WeaverCommand>,
     },
 }
 
-/// The `flayer` binary: a shortcut into the workspace half of `mind`.
+/// The `mindweaver` binary: a shortcut into the workspace half of `mind`.
 #[derive(Debug, Parser)]
 #[command(
-    name = "flayer",
+    name = "mindweaver",
     version,
     propagate_version = true,
-    about = "Manage the mind projects a flayer workspace orchestrates",
+    about = "Manage the mind projects a weaver workspace orchestrates",
     long_about = None
 )]
-pub struct FlayerCli {
+pub struct WeaverCli {
     /// What to do [default: open the TUI].
     #[command(subcommand)]
-    pub command: Option<FlayerCommand>,
+    pub command: Option<WeaverCommand>,
 
     /// Directory to work in [default: the current directory].
     ///
@@ -421,16 +427,16 @@ pub struct FlayerCli {
     pub directory: Option<PathBuf>,
 
     /// Where the default workspace lives, used when none is found above
-    /// [default: $MINDFLAYER_HOME, then your home directory; empty for none].
+    /// [default: $MINDWEAVER_HOME, then your home directory; empty for none].
     #[arg(long = "home", value_name = "DIR", global = true)]
     pub home: Option<String>,
 
     // A string rather than a path for the reason `home` is one: empty is an
     // answer, and a path cannot spell it.
-    /// The workspace to use, by its directory or its `.mindflayer`, wherever
-    /// you are [default: $MINDFLAYER_WORKSPACE, then the one at or above
+    /// The workspace to use, by its directory or its `.mindweaver`, wherever
+    /// you are [default: $MINDWEAVER_WORKSPACE, then the one at or above
     /// here, then the default one; empty to name none and ignore
-    /// $MINDFLAYER_WORKSPACE].
+    /// $MINDWEAVER_WORKSPACE].
     #[arg(short = 'W', long = "workspace", value_name = "DIR", global = true)]
     pub workspace: Option<String>,
 
@@ -439,8 +445,8 @@ pub struct FlayerCli {
 }
 
 #[derive(Debug, Subcommand)]
-pub enum FlayerCommand {
-    /// Create a flayer workspace here, or in the directory given.
+pub enum WeaverCommand {
+    /// Create a weaver workspace here, or in the directory given.
     Init {
         /// The directory to make it in, made as well when it is not there
         /// [default: the directory the command works in].
@@ -451,30 +457,30 @@ pub enum FlayerCommand {
         path: Option<PathBuf>,
 
         /// Where the workspace keeps its own skills [default:
-        /// `.mindflayer/library/skills`].
+        /// `.mindweaver/library/skills`].
         ///
         /// Relative to the workspace. They are the ones it shares with every
         /// project it manages, kept by default in its library, where no
         /// agent looks. Any folder inside the workspace will do except the
         /// shelf and the cache, a folder inside them, or one holding them,
-        /// such as `.mindflayer` itself.
+        /// such as `.mindweaver` itself.
         #[arg(long, value_name = "DIR")]
         skills: Option<PathBuf>,
 
         /// Where the workspace keeps its own rules [default:
-        /// `.mindflayer/library/rules`].
+        /// `.mindweaver/library/rules`].
         #[arg(long, value_name = "DIR")]
         rules: Option<PathBuf>,
     },
 
     /// Print the shell code that activates a workspace for every command the
     /// shell runs, as a Python virtualenv's `activate` does:
-    /// `eval "$(flayer activate DIR)"`. `flayer-deactivate` undoes it.
+    /// `eval "$(mindweaver activate DIR)"`. `mindweaver-deactivate` undoes it.
     ///
     /// It writes nothing, and prints no code when there is nothing to
     /// activate, so a failed `eval` changes nothing either.
     Activate {
-        /// The workspace, by its directory or its `.mindflayer` [default: the
+        /// The workspace, by its directory or its `.mindweaver` [default: the
         /// one a command run here would use].
         #[arg(value_name = "DIR")]
         path: Option<PathBuf>,
@@ -488,11 +494,11 @@ pub enum FlayerCommand {
     /// -W, activated, found walking up, or the default one.
     Which,
 
-    /// List the flayer workspaces this machine knows: the default one, each
-    /// one `flayer init` has made or been run on since the default was made,
+    /// List the weaver workspaces this machine knows: the default one, each
+    /// one `mindweaver init` has made or been run on since the default was made,
     /// and the one in use, marked with `*`.
     ///
-    /// `flayer workspaces forget <path>` takes one out of the list.
+    /// `mindweaver workspaces forget <path>` takes one out of the list.
     #[command(args_conflicts_with_subcommands = true)]
     Workspaces {
         #[command(subcommand)]
@@ -522,7 +528,7 @@ pub enum FlayerCommand {
         description: String,
 
         /// Start from a template instead: `full`, or one in
-        /// `.mindflayer/templates` or the project's `.mind/templates`.
+        /// `.mindweaver/templates` or the project's `.mind/templates`.
         #[arg(long, value_name = "NAME")]
         template: Option<String>,
     },
@@ -580,7 +586,7 @@ pub enum FlayerCommand {
         yes: bool,
     },
 
-    /// List the templates `flayer add --template` can start from.
+    /// List the templates `mindweaver add --template` can start from.
     Templates {
         /// A project this workspace manages, instead of the workspace itself.
         #[arg(short, long, value_name = "PROJECT")]
@@ -639,7 +645,7 @@ pub enum FlayerCommand {
         json: bool,
     },
 
-    /// Say what every managed project holds: whether what Mindflayer
+    /// Say what every managed project holds: whether what Mindweaver
     /// installed is current, outdated, edited, missing or orphaned, what is
     /// somebody's and what is the project's own, which agents read each,
     /// and where what was installed came from.
@@ -673,7 +679,7 @@ pub enum FlayerCommand {
     ///
     /// The directory must hold the id the workspace last saw where the
     /// project was, which only the project, or a copy of it, holds:
-    /// `flayer scan` names each one it finds as `moved`.
+    /// `mindweaver scan` names each one it finds as `moved`.
     Relink {
         /// The project's directory, as registered, which holds no project
         /// any more.
@@ -685,16 +691,16 @@ pub enum FlayerCommand {
         new: PathBuf,
     },
 
-    /// Offer other flayer workspaces' own skills and rules to this
+    /// Offer other weaver workspaces' own skills and rules to this
     /// workspace's projects, read live from where they are.
     ///
     /// Into the workspace at or above here that is not one being loaded, or
-    /// else the default one in your home: so `flayer load .` from inside a
+    /// else the default one in your home: so `mindweaver load .` from inside a
     /// workspace full of skills and rules loads it into the one that manages
     /// you. On its own, it lists what this workspace loads and what each
     /// offers.
     Load {
-        /// Each workspace's directory, the one holding `.mindflayer`
+        /// Each workspace's directory, the one holding `.mindweaver`
         /// [default: list the loaded ones].
         #[arg(value_name = "WORKSPACE")]
         workspaces: Vec<PathBuf>,
@@ -711,7 +717,7 @@ pub enum FlayerCommand {
     /// workspace, ticked where it is linked, to link and unlink in one pass.
     ///
     /// Given folders, it looks for what to link under those instead, as
-    /// `flayer scan` does, and still lists every project the workspace links.
+    /// `mindweaver scan` does, and still lists every project the workspace links.
     Minds {
         /// Each folder to look under, itself included [default: the
         /// workspace's root].
@@ -722,7 +728,7 @@ pub enum FlayerCommand {
     /// Look for projects and repositories to link: under this workspace, or
     /// under each folder given.
     ///
-    /// It links nothing, and prints each path as `flayer link` run from here
+    /// It links nothing, and prints each path as `mindweaver link` run from here
     /// takes it.
     Scan {
         /// Each folder to look under, itself included [default: the
@@ -781,7 +787,7 @@ pub enum FlayerCommand {
         force: bool,
     },
 
-    /// Take a skill or a rule Mindflayer installed back out of projects.
+    /// Take a skill or a rule Mindweaver installed back out of projects.
     Uninstall {
         /// A project to take it out of, by name or path; once for each.
         #[arg(short = 'p', long = "project", value_name = "PROJECT")]
@@ -806,7 +812,7 @@ pub enum FlayerCommand {
         force: bool,
     },
 
-    /// Bring what Mindflayer installed into projects up to date with where
+    /// Bring what Mindweaver installed into projects up to date with where
     /// it came from, and put back the copies that have gone, as `mind
     /// update` does in one.
     ///
@@ -849,7 +855,7 @@ pub enum FlayerCommand {
         #[arg(short, long, value_name = "PROJECT")]
         project: String,
 
-        /// Its name, as `flayer status` lists it `foreign`.
+        /// Its name, as `mindweaver status` lists it `foreign`.
         reference: String,
 
         /// Adopt it. Without this nothing is written, and the command says
@@ -864,7 +870,7 @@ pub enum FlayerCommand {
     /// Without --yes nothing changes, and the command says what would.
     #[command(
         subcommand_negates_reqs = true,
-        override_usage = "flayer agents -p <PROJECT> [OPTIONS] <AGENT>...\n       flayer agents -p <PROJECT> <add|remove> [OPTIONS] <AGENT>..."
+        override_usage = "mindweaver agents -p <PROJECT> [OPTIONS] <AGENT>...\n       mindweaver agents -p <PROJECT> <add|remove> [OPTIONS] <AGENT>..."
     )]
     Agents {
         /// The project, by name or path. Needed, and taken on either side of
@@ -897,7 +903,7 @@ pub enum FlayerCommand {
     ///
     /// Without --yes nothing changes, and the command says what would.
     #[command(
-        override_usage = "flayer targets -p <PROJECT> set [OPTIONS] <KIND> <DIR>...\n       flayer targets -p <PROJECT> reset [OPTIONS] <KIND>"
+        override_usage = "mindweaver targets -p <PROJECT> set [OPTIONS] <KIND> <DIR>...\n       mindweaver targets -p <PROJECT> reset [OPTIONS] <KIND>"
     )]
     Targets {
         /// The project, by name or path. Needed, and taken on either side of
@@ -909,7 +915,7 @@ pub enum FlayerCommand {
         change: TargetsChange,
     },
 
-    /// Bring a workspace made by an older Mindflayer, or the projects it
+    /// Bring a workspace made by an older Mindweaver, or the projects it
     /// links, into the layout a new one has.
     ///
     /// Without --yes nothing changes, and the command says what would.
@@ -921,15 +927,28 @@ pub enum FlayerCommand {
     // to migrate rather than shown clap's usage.
     #[command(group(
         ArgGroup::new("what")
-            .args(["library", "project", "all_projects"])
+            .args(["library", "names", "project", "all_projects"])
             .multiple(false)
     ))]
     Migrate {
         /// Move the workspace's own skills and rules from the folders its
-        /// flayer.toml names into its library, `.mindflayer/library`, and
-        /// point flayer.toml there, keeping it as it was beside it.
+        /// marker names into its library, `.mindweaver/library`, and point
+        /// the marker there, keeping it as it was beside it.
         #[arg(long, conflicts_with_all = ["agents", "local", "shared"])]
         library: bool,
+
+        /// Move a workspace a Mindflayer build made to Mindweaver's names:
+        /// its .mindflayer, flayer.toml and mindflayer.db to .mindweaver,
+        /// weaver.toml and mindweaver.db, and in each project it links the
+        /// markers Mindflayer wrote and Claude's rules folder.
+        //
+        // Named for what moves, the names written on the disk, beside
+        // `--library`, named for where the workspace's own go: not
+        // `--mindweaver`, which names the product and would be wrong again
+        // after another rename, nor `--rename`, which reads as the command
+        // that renames an artifact.
+        #[arg(long, conflicts_with_all = ["agents", "local", "shared"])]
+        names: bool,
 
         /// Move one project the workspace links, by name or path, from its
         /// mind.toml or settings.json to a settings.toml, as `mind migrate`
@@ -953,7 +972,7 @@ pub enum FlayerCommand {
 
     /// Open the TUI: every managed project, and a key for each command.
     ///
-    /// What `flayer` does on its own. Everything it changes, it changes by
+    /// What `mindweaver` does on its own. Everything it changes, it changes by
     /// running one of these commands, and it prints them when it closes.
     Tui,
 
@@ -998,7 +1017,7 @@ pub struct UiOptions {
     /// there, taken away when the panel stops unless it was changed. With
     /// --no-open, the way to serve the API to scripts with no browser.
     //
-    // A path somebody names rather than one of Mindflayer's own, in its
+    // A path somebody names rather than one of Mindweaver's own, in its
     // home say: several panels may be served at once, each with a token of
     // its own, and only whoever starts one knows which script it is for.
     #[arg(long, value_name = "PATH")]
@@ -1061,7 +1080,7 @@ pub enum WorkspacesCommand {
     /// Stop knowing a workspace: every entry the default workspace keeps for
     /// it, however it is spelled.
     Forget {
-        /// The workspace's directory, the one holding `.mindflayer`. It need
+        /// The workspace's directory, the one holding `.mindweaver`. It need
         /// not still exist.
         #[arg(value_name = "PATH")]
         path: PathBuf,

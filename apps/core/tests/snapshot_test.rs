@@ -9,16 +9,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::slice;
 
-use mindflayer_core::assign;
-use mindflayer_core::install::{self, Edits};
-use mindflayer_core::known;
-use mindflayer_core::ledger::{Action, InstallRecord, Outcome, Target};
-use mindflayer_core::reapply::{self, Change};
-use mindflayer_core::resolve::{Inputs, Intent, Reason};
-use mindflayer_core::view::{Health, Held, Listing, LoadedWorkspace, Project, Snapshot};
-use mindflayer_core::{
-    create, hash, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference,
-    Share, SourceKind, State, FLAYER_DIR, MIND_DIR, SETTINGS_JSON_FILE,
+use mindweaver_core::assign;
+use mindweaver_core::install::{self, Edits};
+use mindweaver_core::known;
+use mindweaver_core::ledger::{Action, InstallRecord, Outcome, Target};
+use mindweaver_core::reapply::{self, Change};
+use mindweaver_core::resolve::{Inputs, Intent, Reason};
+use mindweaver_core::view::{Health, Held, Listing, LoadedWorkspace, Project, Snapshot};
+use mindweaver_core::{
+    create, hash, Agent, AgentHomes, Directories, Kind, MindProject, Reference, Share, SourceKind,
+    State, WeaverWorkspace, MIND_DIR, SETTINGS_JSON_FILE, WEAVER_DIR,
 };
 use tempfile::TempDir;
 
@@ -48,7 +48,7 @@ struct Fixture {
 fn fixture() -> Fixture {
     let dir = TempDir::new().unwrap();
     let hub = dir.path().join("hub");
-    let (mut workspace, _) = FlayerWorkspace::init(&hub).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(&hub).unwrap();
     let library = workspace.own().directory_for(Kind::Skill).unwrap();
     common::write_files(
         &library,
@@ -121,7 +121,7 @@ fn fixture() -> Fixture {
     workspace.link(&gone).unwrap();
     fs::remove_dir_all(gone.root()).unwrap();
 
-    let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
+    let (team, _) = WeaverWorkspace::init(dir.path().join("team")).unwrap();
     let notes = team.own().directory_for(Kind::Skill).unwrap();
     common::write_files(&notes, &[("notes/SKILL.md", &skill("notes", "Take them"))]);
     workspace.load(&team).unwrap();
@@ -153,7 +153,7 @@ fn fixture() -> Fixture {
         .unwrap();
     let revision = "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3";
     ledger.saw_source(source.id, Some(revision)).unwrap();
-    let shelf = format!(".mindflayer/skills/{}/lint", source.directory);
+    let shelf = format!(".mindweaver/skills/{}/lint", source.directory);
     common::write_files(
         &hub.join(&shelf),
         &[("SKILL.md", &skill("lint", "Tidy it"))],
@@ -182,7 +182,7 @@ fn fixture() -> Fixture {
 }
 
 /// Every time the ledger keeps, set to [`AT`].
-fn at_a_pinned_time(workspace: &FlayerWorkspace) {
+fn at_a_pinned_time(workspace: &WeaverWorkspace) {
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()
         .execute_batch(&format!(
@@ -397,11 +397,11 @@ const EXPECTED: &str = r#"{
     "directories": [
       {
         "kind": "skill",
-        "path": ".mindflayer/library/skills"
+        "path": ".mindweaver/library/skills"
       },
       {
         "kind": "rule",
-        "path": ".mindflayer/library/rules"
+        "path": ".mindweaver/library/rules"
       }
     ],
     "artifacts": [
@@ -413,7 +413,7 @@ const EXPECTED: &str = r#"{
         "agents": [],
         "origin": null,
         "targets": [
-          ".mindflayer/library/skills/review"
+          ".mindweaver/library/skills/review"
         ],
         "issues": [],
         "unread": null
@@ -426,7 +426,7 @@ const EXPECTED: &str = r#"{
         "agents": [],
         "origin": null,
         "targets": [
-          ".mindflayer/library/rules/commits.md"
+          ".mindweaver/library/rules/commits.md"
         ],
         "issues": [],
         "unread": null
@@ -677,7 +677,7 @@ const EXPECTED: &str = r#"{
     {
       "kind": "skill",
       "name": "lint",
-      "path": ".mindflayer/skills/github.com-acme-skills/lint",
+      "path": ".mindweaver/skills/github.com-acme-skills/lint",
       "summary": "Tidy it",
       "revision": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3",
       "gathered_at": 1790000000,
@@ -871,7 +871,7 @@ fn building_a_snapshot_creates_no_path_and_never_the_home_workspace() {
     assert_eq!(named.workspace.reason, Reason::Explicit);
     assert_eq!(defaulted.workspace.reason, Reason::Home);
     assert!(!defaulted.workspace.made);
-    assert!(!home.join(FLAYER_DIR).exists());
+    assert!(!home.join(WEAVER_DIR).exists());
     assert_eq!(tree(fixture.dir.path()), before);
 }
 
@@ -881,7 +881,7 @@ fn building_a_snapshot_creates_no_path_and_never_the_home_workspace() {
 #[test]
 fn no_url_in_a_snapshot_carries_userinfo_even_from_rows_written_before_the_scrub() {
     let fixture = fixture();
-    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     let tainted = "https://me:ghp_t0ken@github.com/acme/skills";
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()
@@ -912,7 +912,7 @@ fn no_url_in_a_snapshot_carries_userinfo_even_from_rows_written_before_the_scrub
 
 /// The project `name` in [`fixture`], as a snapshot shows it.
 fn read(fixture: &Fixture, name: &str) -> Project {
-    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     let project = MindProject::open(fixture.hub.join(name)).unwrap();
     Project::read(&project, Some(&workspace))
 }
@@ -1052,7 +1052,7 @@ fn one_project_is_the_snapshots_own_by_its_entry_and_no_other_spelling() {
 #[test]
 fn a_project_an_older_marker_marks_is_said_to_migrate_and_no_other() {
     let fixture = fixture();
-    let mut workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let mut workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     let older = fixture.hub.join("older");
     workspace
         .link(&MindProject::init(&older).unwrap().0)
@@ -1089,7 +1089,7 @@ fn a_project_an_older_marker_marks_is_said_to_migrate_and_no_other() {
 
 /// An edited copy asks for attention, a forced update or an uninstall,
 /// and so does what `validate` only warns of; somebody's copy asks for
-/// nothing, since it is never Mindflayer's to change.
+/// nothing, since it is never Mindweaver's to change.
 #[test]
 fn an_edited_copy_asks_for_attention_and_somebody_s_asks_for_nothing() {
     let fixture = fixture();
@@ -1141,7 +1141,7 @@ fn a_file_that_does_not_read_breaks_its_project_over_an_edited_copy() {
 #[test]
 fn the_summary_counts_each_directory_once_however_many_entries_spell_it() {
     let fixture = fixture();
-    let marker = fixture.hub.join(FLAYER_DIR).join("flayer.toml");
+    let marker = fixture.hub.join(WEAVER_DIR).join("weaver.toml");
     let text = fs::read_to_string(&marker).unwrap();
     assert!(text.contains("\"gone\""), "{text}");
     fs::write(&marker, text.replacen("\"gone\"", "\"gone\", \"./api\"", 1)).unwrap();
@@ -1165,7 +1165,7 @@ fn the_summary_counts_each_directory_once_however_many_entries_spell_it() {
 #[test]
 fn what_a_workspace_loads_is_listed_on_its_own_as_the_snapshot_lists_it() {
     let fixture = fixture();
-    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
 
     let snapshot = Snapshot::read(&naming(&fixture.hub, None))
         .unwrap()
@@ -1183,13 +1183,13 @@ fn what_a_workspace_loads_is_listed_on_its_own_as_the_snapshot_lists_it() {
 fn each_workspace_this_machine_knows_says_whether_this_one_loads_it_and_could() {
     let fixture = fixture();
     let home = fixture.dir.path().join("home");
-    FlayerWorkspace::init(&home).unwrap();
+    WeaverWorkspace::init(&home).unwrap();
     let kit = fixture.dir.path().join("kit");
     let old = fixture.dir.path().join("old");
-    FlayerWorkspace::init(&kit).unwrap();
-    FlayerWorkspace::init(&old).unwrap();
+    WeaverWorkspace::init(&kit).unwrap();
+    WeaverWorkspace::init(&old).unwrap();
     for root in [&fixture.hub, &fixture.dir.path().join("team"), &kit, &old] {
-        known::remember(Some(&home), &FlayerWorkspace::open(root).unwrap()).unwrap();
+        known::remember(Some(&home), &WeaverWorkspace::open(root).unwrap()).unwrap();
     }
     fs::remove_dir_all(&old).unwrap();
 
@@ -1234,10 +1234,10 @@ fn each_workspace_this_machine_knows_says_whether_this_one_loads_it_and_could() 
 fn a_workspace_loaded_by_another_spelling_is_said_to_be_loaded_by_the_first() {
     let fixture = fixture();
     let home = fixture.dir.path().join("home");
-    FlayerWorkspace::init(&home).unwrap();
+    WeaverWorkspace::init(&home).unwrap();
     let team = fixture.dir.path().join("team");
-    known::remember(Some(&home), &FlayerWorkspace::open(&team).unwrap()).unwrap();
-    let marker = fixture.hub.join(FLAYER_DIR).join("flayer.toml");
+    known::remember(Some(&home), &WeaverWorkspace::open(&team).unwrap()).unwrap();
+    let marker = fixture.hub.join(WEAVER_DIR).join("weaver.toml");
     let text = fs::read_to_string(&marker).unwrap();
     fs::write(
         &marker,
@@ -1265,7 +1265,7 @@ fn a_workspace_loaded_by_another_spelling_is_said_to_be_loaded_by_the_first() {
 #[test]
 fn every_origin_a_snapshot_lists_names_its_offer_to_from() {
     let fixture = fixture();
-    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     let ledger = workspace.ledger_for_reading().unwrap();
     let api = MindProject::open(fixture.hub.join("api")).unwrap();
     let snapshot = Snapshot::read(&naming(&fixture.hub, None))
@@ -1301,7 +1301,7 @@ fn every_origin_a_snapshot_lists_names_its_offer_to_from() {
 #[test]
 fn a_second_spelling_of_a_load_lists_the_origin_its_offers_go_by() {
     let fixture = fixture();
-    let marker = fixture.hub.join(FLAYER_DIR).join("flayer.toml");
+    let marker = fixture.hub.join(WEAVER_DIR).join("weaver.toml");
     let text = fs::read_to_string(&marker).unwrap();
     assert!(text.contains("\"../team\""), "{text}");
     fs::write(
@@ -1341,13 +1341,13 @@ fn holders(snapshot: &Snapshot) -> Vec<(Kind, &str, &str)> {
 }
 
 /// An install recorded before origins were kept names none, and is a copy
-/// of one of the library's own all the same, as `flayer remove
+/// of one of the library's own all the same, as `mindweaver remove
 /// --everywhere` takes it: its project holds a copy of it, though no word
 /// beside the copy says so, so no front end comparing origins could tell.
 #[test]
 fn a_copy_recorded_before_origins_were_kept_is_a_copy_of_the_librarys_own() {
     let fixture = fixture();
-    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()
         .execute_batch("UPDATE installations SET origin = NULL WHERE name = 'review';")
@@ -1381,12 +1381,12 @@ fn a_copy_recorded_before_origins_were_kept_is_a_copy_of_the_librarys_own() {
 #[test]
 fn a_copy_recorded_before_origins_were_kept_is_nobodys_while_a_load_offers_its_name() {
     let fixture = fixture();
-    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()
         .execute_batch("UPDATE installations SET origin = NULL WHERE name = 'review';")
         .unwrap();
-    let team = FlayerWorkspace::open(fixture.dir.path().join("team")).unwrap();
+    let team = WeaverWorkspace::open(fixture.dir.path().join("team")).unwrap();
     common::write_files(
         &team.own().directory_for(Kind::Skill).unwrap(),
         &[("review/SKILL.md", &skill("review", "Read it"))],
@@ -1404,7 +1404,7 @@ fn a_copy_recorded_before_origins_were_kept_is_nobodys_while_a_load_offers_its_n
 #[test]
 fn a_listing_of_every_kind_holds_what_the_snapshot_holds() {
     let fixture = fixture();
-    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     let api = MindProject::open(fixture.hub.join("api")).unwrap();
 
     let snapshot = Snapshot::read(&naming(&fixture.hub, None))
@@ -1424,7 +1424,7 @@ fn a_listing_of_every_kind_holds_what_the_snapshot_holds() {
 #[test]
 fn a_listing_of_one_kind_holds_only_that_kind() {
     let fixture = fixture();
-    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
 
     let snapshot = Snapshot::read(&naming(&fixture.hub, None))
         .unwrap()
@@ -1481,7 +1481,7 @@ fn a_listing_of_one_kind_tells_health_from_that_kind_alone() {
         "no front matter\n",
     )
     .unwrap();
-    let workspace = FlayerWorkspace::open(&fixture.hub).unwrap();
+    let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
 
     let snapshot = Snapshot::read(&naming(&fixture.hub, None))
         .unwrap()

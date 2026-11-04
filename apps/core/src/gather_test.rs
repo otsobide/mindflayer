@@ -299,7 +299,7 @@ fn a_scrub_that_took_anything_out_is_not_empty() {
             ..Scrub::default()
         },
         Scrub {
-            leftovers: vec![leftover("/w/.mindflayer/cache/a")],
+            leftovers: vec![leftover("/w/.mindweaver/cache/a")],
             ..Scrub::default()
         },
     ];
@@ -431,7 +431,7 @@ fn a_path_in_the_workspace_is_filed_slash_separated_from_its_root() {
     assert_eq!(
         relative(&workspace, &path),
         format!(
-            ".mindflayer/{}/github.com-acme-skills/deploy",
+            ".mindweaver/{}/github.com-acme-skills/deploy",
             Kind::Skill.folder()
         )
     );
@@ -511,20 +511,20 @@ fn a_skill_that_cannot_be_read_is_a_failure_and_not_taken() {
 #[test]
 fn each_gather_failure_names_its_path_and_gives_its_code() {
     let copy = Failure::Copy {
-        path: PathBuf::from("/w/.mindflayer/skills/s/deploy"),
+        path: PathBuf::from("/w/.mindweaver/skills/s/deploy"),
         source: io::Error::other("full"),
     };
     let unusable = Failure::UnusableName {
-        path: PathBuf::from("/w/.mindflayer/cache/s/x"),
+        path: PathBuf::from("/w/.mindweaver/cache/s/x"),
     };
 
     assert_eq!(copy.code(), "gathered_copy_failed");
-    assert_eq!(copy.path(), Path::new("/w/.mindflayer/skills/s/deploy"));
+    assert_eq!(copy.path(), Path::new("/w/.mindweaver/skills/s/deploy"));
     assert_eq!(
         copy.to_string(),
-        "/w/.mindflayer/skills/s/deploy: cannot be copied into the workspace: full"
+        "/w/.mindweaver/skills/s/deploy: cannot be copied into the workspace: full"
     );
-    assert_eq!(unusable.path(), Path::new("/w/.mindflayer/cache/s/x"));
+    assert_eq!(unusable.path(), Path::new("/w/.mindweaver/cache/s/x"));
     assert_eq!(
         Failure::CODES,
         ["gathered_name_not_utf8", "gathered_copy_failed"]
@@ -534,14 +534,14 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
 #[test]
 fn a_warning_names_the_manifest_and_what_is_wrong_with_it() {
     let warning = Warning {
-        path: PathBuf::from("/w/.mindflayer/skills/s/deploy/SKILL.md"),
+        path: PathBuf::from("/w/.mindweaver/skills/s/deploy/SKILL.md"),
         issue: ValidationIssue::MetadataNotAMap,
     };
 
     assert_eq!(
         warning.to_string(),
         format!(
-            "/w/.mindflayer/skills/s/deploy/SKILL.md: {}",
+            "/w/.mindweaver/skills/s/deploy/SKILL.md: {}",
             ValidationIssue::MetadataNotAMap
         )
     );
@@ -598,13 +598,13 @@ fn a_gather_error_carrying_another_of_core_s_gives_its_code() {
         ),
         (
             GatherError::from(LedgerError::Unmade {
-                path: PathBuf::from("/w/.mindflayer/mindflayer.db"),
+                path: PathBuf::from("/w/.mindweaver/mindweaver.db"),
             }),
             "ledger_unmade",
         ),
         (
             GatherError::from(LockError::Busy {
-                path: PathBuf::from("/w/.mindflayer/lock"),
+                path: PathBuf::from("/w/.mindweaver/lock"),
                 pid: None,
                 waited: crate::lock::WAIT,
             }),
@@ -649,11 +649,11 @@ fn a_clone_that_kept_its_credential_is_said_by_its_url_without_it() {
 
 #[test]
 fn a_folder_left_behind_is_said_with_why_and_its_code() {
-    let left = leftover("/w/.mindflayer/cache/a");
+    let left = leftover("/w/.mindweaver/cache/a");
 
     assert_eq!(
         left.to_string(),
-        "/w/.mindflayer/cache/a: left by a source that is now one with another at the same URL, \
+        "/w/.mindweaver/cache/a: left by a source that is now one with another at the same URL, \
          and cannot be removed: busy"
     );
     assert_eq!(left.code(), "source_leftover");

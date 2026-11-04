@@ -2,7 +2,7 @@
 
 use super::*;
 
-/// What a team's `AGENTS.md` might hold before Mindflayer writes in it.
+/// What a team's `AGENTS.md` might hold before Mindweaver writes in it.
 const TEAM: &str = "\
 # Working here
 
@@ -62,10 +62,10 @@ fn an_absent_file_gains_a_block_holding_one_section() {
     assert!(changed);
     assert_eq!(
         text(&file),
-        "<!-- mindflayer:begin -->\n\
-         <!-- mindflayer:rule no-force-push -->\n\
+        "<!-- mindweaver:begin -->\n\
+         <!-- mindweaver:rule no-force-push -->\n\
          Never force-push.\n\
-         <!-- mindflayer:end -->\n"
+         <!-- mindweaver:end -->\n"
     );
 }
 
@@ -79,16 +79,16 @@ fn sections_are_one_blank_line_apart_and_bodies_lose_their_outer_blank_lines() {
     .unwrap();
     assert_eq!(
         text(&file),
-        "<!-- mindflayer:begin -->\n\
-         <!-- mindflayer:rule git/no-force-push -->\n\
+        "<!-- mindweaver:begin -->\n\
+         <!-- mindweaver:rule git/no-force-push -->\n\
          Never force-push.\n\
          \n\
-         <!-- mindflayer:rule review/tone -->\n\
+         <!-- mindweaver:rule review/tone -->\n\
          # Tone\n\
          \n\
          Kind first.  \n\
          Then precise.\n\
-         <!-- mindflayer:end -->\n"
+         <!-- mindweaver:end -->\n"
     );
 }
 
@@ -263,7 +263,7 @@ fn markers_forgive_trailing_whitespace_and_are_kept_as_written() {
 
 #[test]
 fn prose_that_names_a_marker_is_text() {
-    let before = format!("Mindflayer writes `{BEGIN}` above its rules.\n> {END}\n");
+    let before = format!("Mindweaver writes `{BEGIN}` above its rules.\n> {END}\n");
     let file = AgentsMd::parse(before.as_bytes()).unwrap();
     assert!(!file.has_block());
 }
@@ -281,7 +281,10 @@ fn a_block_left_open_is_refused() {
     let before = format!("{TEAM}{BEGIN}\n{RULE}a{CLOSE}\nRule a.\n");
     assert_eq!(
         AgentsMd::parse(before.as_bytes()),
-        Err(Malformed::Unclosed { line: 4 })
+        Err(Malformed::Unclosed {
+            line: 4,
+            names: Names::Mindweaver,
+        })
     );
 }
 
@@ -290,12 +293,18 @@ fn an_end_marker_that_closes_nothing_is_refused() {
     let before = format!("{TEAM}{END}\n");
     assert_eq!(
         AgentsMd::parse(before.as_bytes()),
-        Err(Malformed::Unopened { line: 4 })
+        Err(Malformed::Unopened {
+            line: 4,
+            names: Names::Mindweaver,
+        })
     );
     let twice = format!("{BEGIN}\n{END}\n{END}\n");
     assert_eq!(
         AgentsMd::parse(twice.as_bytes()),
-        Err(Malformed::Unopened { line: 3 })
+        Err(Malformed::Unopened {
+            line: 3,
+            names: Names::Mindweaver,
+        })
     );
 }
 
@@ -304,12 +313,18 @@ fn a_second_block_is_refused() {
     let before = format!("{BEGIN}\n{END}\nTeam.\n{BEGIN}\n{END}\n");
     assert_eq!(
         AgentsMd::parse(before.as_bytes()),
-        Err(Malformed::Reopened { line: 4 })
+        Err(Malformed::Reopened {
+            line: 4,
+            names: Names::Mindweaver,
+        })
     );
     let nested = format!("{BEGIN}\n{BEGIN}\n{END}\n");
     assert_eq!(
         AgentsMd::parse(nested.as_bytes()),
-        Err(Malformed::Reopened { line: 2 })
+        Err(Malformed::Reopened {
+            line: 2,
+            names: Names::Mindweaver,
+        })
     );
 }
 
@@ -342,16 +357,16 @@ fn a_second_section_for_one_route_is_refused() {
 #[test]
 fn a_marker_written_any_other_way_is_refused() {
     for miswritten in [
-        "  <!-- mindflayer:begin -->",
+        "  <!-- mindweaver:begin -->",
         "<!--mindflayer:begin-->",
-        "<!-- mindflayer:begin",
+        "<!-- mindweaver:begin",
         "<!-- Mindflayer:end -->",
-        "<!-- mindflayer:rule -->",
-        "<!-- mindflayer:rule  a -->",
-        "<!-- mindflayer:rule Not A Name -->",
-        "<!-- mindflayer:rule a/../b -->",
-        "<!-- mindflayer:import -->",
-        "Text, then <!-- mindflayer:end --> after it.",
+        "<!-- mindweaver:rule -->",
+        "<!-- mindweaver:rule  a -->",
+        "<!-- mindweaver:rule Not A Name -->",
+        "<!-- mindweaver:rule a/../b -->",
+        "<!-- mindweaver:import -->",
+        "Text, then <!-- mindweaver:end --> after it.",
     ] {
         let before = format!("{BEGIN}\n{miswritten}\n{END}\n");
         let parsed = AgentsMd::parse(before.as_bytes());
@@ -386,8 +401,8 @@ fn a_body_line_that_reads_as_a_marker_is_refused() {
     for line in [
         END,
         BEGIN,
-        "<!-- mindflayer:rule other -->",
-        "  <!-- mindflayer:end -->",
+        "<!-- mindweaver:rule other -->",
+        "  <!-- mindweaver:end -->",
     ] {
         let body = format!("Before.\n{line}\nAfter.\n");
         match Section::new("a", &body) {
@@ -424,4 +439,133 @@ fn what_is_rendered_reads_back_as_itself() {
         assert!(!again.set_block(&sections).unwrap(), "{ending:?}");
         assert_eq!(render(&rendered, &[]), ending.as_bytes());
     }
+}
+
+/// A block as a Mindflayer build wrote it, after somebody's text, under
+/// that build's markers: what is read and replaced under them.
+fn written_by_mindflayer() -> String {
+    format!(
+        "{TEAM}\n{FLAYER_BEGIN}\n{FLAYER_RULE}a{CLOSE}\nRule a.\n\n{FLAYER_RULE}b{CLOSE}\nRule b.\n{FLAYER_END}\n"
+    )
+}
+
+#[test]
+fn a_block_a_mindflayer_build_wrote_is_read_under_its_markers() {
+    let file = AgentsMd::parse(written_by_mindflayer().as_bytes()).unwrap();
+
+    assert_eq!(file.names(), Some(Names::Mindflayer));
+    assert_eq!(file.routes(), ["a", "b"]);
+    assert_eq!(file.section("b"), Some(section("b", "Rule b.\n")));
+}
+
+#[test]
+fn a_render_keeps_the_markers_a_block_was_written_under() {
+    let rendered = render(
+        written_by_mindflayer().as_bytes(),
+        &[section("a", "Rule a.\n"), section("c", "Rule c.\n")],
+    );
+
+    assert_eq!(
+        String::from_utf8(rendered).unwrap(),
+        format!(
+            "{TEAM}\n{FLAYER_BEGIN}\n{FLAYER_RULE}a{CLOSE}\nRule a.\n\n{FLAYER_RULE}c{CLOSE}\nRule c.\n{FLAYER_END}\n"
+        )
+    );
+}
+
+#[test]
+fn a_block_made_anew_is_spelled_under_mindweaver_s_markers() {
+    let rendered = render(TEAM.as_bytes(), &[section("a", "Rule a.\n")]);
+
+    assert_eq!(
+        String::from_utf8(rendered).unwrap(),
+        format!("{TEAM}\n{BEGIN}\n{RULE}a{CLOSE}\nRule a.\n{END}\n")
+    );
+    assert_eq!(
+        AgentsMd::parse(format!("{BEGIN}\n{END}\n").as_bytes())
+            .unwrap()
+            .names(),
+        Some(Names::Mindweaver)
+    );
+}
+
+#[test]
+fn a_marker_spelled_otherwise_than_its_block_is_refused() {
+    for (file, line, found) in [
+        (
+            format!("{FLAYER_BEGIN}\n{RULE}a{CLOSE}\n{FLAYER_END}\n"),
+            2,
+            Names::Mindweaver,
+        ),
+        (
+            format!("{BEGIN}\n{FLAYER_RULE}a{CLOSE}\n{END}\n"),
+            2,
+            Names::Mindflayer,
+        ),
+        (format!("{BEGIN}\n{FLAYER_END}\n"), 2, Names::Mindflayer),
+    ] {
+        let block = match found {
+            Names::Mindweaver => Names::Mindflayer,
+            Names::Mindflayer => Names::Mindweaver,
+        };
+        let refused = AgentsMd::parse(file.as_bytes()).unwrap_err();
+        assert_eq!(refused, Malformed::Mixed { line, found, block }, "{file}");
+        assert_eq!(refused.code(), "markdown_markers_mixed");
+    }
+}
+
+#[test]
+fn an_old_block_beside_a_new_one_is_a_second_block() {
+    let file = format!("{FLAYER_BEGIN}\n{FLAYER_END}\n{BEGIN}\n{END}\n");
+
+    assert_eq!(
+        AgentsMd::parse(file.as_bytes()),
+        Err(Malformed::Reopened {
+            line: 3,
+            names: Names::Mindweaver,
+        })
+    );
+    // Said in the words the file spells it in.
+    let unclosed = AgentsMd::parse(format!("{FLAYER_BEGIN}\n").as_bytes()).unwrap_err();
+    assert_eq!(
+        unclosed.to_string(),
+        "line 1: `<!-- mindflayer:begin -->` is never closed by `<!-- mindflayer:end -->`"
+    );
+}
+
+#[test]
+fn renaming_a_block_moves_its_markers_and_keeps_every_other_byte() {
+    let old = written_by_mindflayer().replace('\n', "\r\n");
+    let mut file = AgentsMd::parse(old.as_bytes()).unwrap();
+    let before: Vec<ContentHash> = file
+        .routes()
+        .iter()
+        .map(|route| file.section(route).unwrap().hash())
+        .collect();
+
+    assert!(file.renamed(Names::Mindweaver));
+    assert!(!file.renamed(Names::Mindweaver), "a second time");
+
+    assert_eq!(
+        text(&file),
+        old.replace("mindflayer:", "mindweaver:"),
+        "the markers alone, each line ending kept"
+    );
+    assert_eq!(file.names(), Some(Names::Mindweaver));
+    let after: Vec<ContentHash> = file
+        .routes()
+        .iter()
+        .map(|route| file.section(route).unwrap().hash())
+        .collect();
+    assert_eq!(after, before);
+    let mut none = AgentsMd::parse(TEAM.as_bytes()).unwrap();
+    assert!(!none.renamed(Names::Mindweaver));
+}
+
+#[test]
+fn a_rule_holding_a_line_read_as_an_old_marker_is_refused() {
+    assert!(matches!(
+        Section::new("a", &format!("Before.\n{FLAYER_END}\n")),
+        Err(AgentsMdError::Marked { .. })
+    ));
 }

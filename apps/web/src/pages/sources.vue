@@ -4,7 +4,7 @@ import type { Shelved } from '@/api/generated/Shelved'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import ActivityFeed from '@/components/ActivityFeed.vue'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
+import CommandHint, { weaver, making } from '@/components/CommandHint.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 
 /**
@@ -59,7 +59,7 @@ function short(revision: string): string {
             <CommandHint
               :commands="[
                 ...making(snapshot.workspace),
-                { line: flayer(snapshot.workspace, 'gather git <URL>'), does: 'skills from a repository, onto the shelf' }
+                { line: weaver(snapshot.workspace, 'gather git <URL>'), does: 'skills from a repository, onto the shelf' }
               ]"
             />
           </div>

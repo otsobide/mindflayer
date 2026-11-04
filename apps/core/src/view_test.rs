@@ -12,7 +12,7 @@ use crate::scan;
 /// own, and a project nobody linked, which a scan would find.
 fn fixture() -> TempDir {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let (project, _) = MindProject::init(dir.path().join("api")).unwrap();
     let skill = project.directory_for(Kind::Skill).unwrap().join("deploy");
     fs::create_dir_all(&skill).unwrap();
@@ -50,7 +50,7 @@ fn building_a_snapshot_runs_no_scan() {
     assert_eq!(scan::scans(), before, "the snapshot scanned");
     assert_eq!(snapshot.projects.len(), 1);
     // The counter counts: a scan of the same workspace is one.
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
     let found = scan::scan(&workspace, &scan::Request::default());
     assert_eq!(scan::scans(), before + 1);
     assert!(found.found.iter().any(|found| !found.linked));

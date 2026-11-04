@@ -9,7 +9,7 @@ use std::io;
 use std::path::Path;
 use std::process::ExitCode;
 
-use mindflayer_core::{paths, ArtifactError, ResolveError, ValidationIssue, WorkspaceError};
+use mindweaver_core::{paths, ArtifactError, ResolveError, ValidationIssue, WorkspaceError};
 use serde::Serialize;
 
 use crate::CliError;
@@ -71,7 +71,7 @@ impl Outcome {
 /// The text is what a terminal shows, word for word, `warning: ` and all.
 /// The code rides beside it for the panel, which acts on a condition by its
 /// code rather than by matching English that is reworded whenever it is
-/// made clearer: the code core gives what went wrong ([`mindflayer_core::code`]),
+/// made clearer: the code core gives what went wrong ([`mindweaver_core::code`]),
 /// or the CLI's own ([`CliError::code`]). A line with none says something no
 /// code is given to: a hint, a note, or what the CLI makes of what it found
 /// rather than something that went wrong. Kept beside the text rather than

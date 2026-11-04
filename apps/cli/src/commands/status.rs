@@ -4,8 +4,8 @@
 //! Core builds and orders the report ([`Status`]); this only lays it out, as
 //! a table naming no more than its rows need to be told apart.
 
-use mindflayer_core::{
-    Agent, FlayerWorkspace, Kind, MarkerFile, MindProject, Missed, Status, StatusFailure, Unreached,
+use mindweaver_core::{
+    Agent, Kind, MarkerFile, MindProject, Missed, Status, StatusFailure, Unreached, WeaverWorkspace,
 };
 
 use super::consulted;
@@ -22,16 +22,16 @@ const STALE: &str = "stale";
 /// could not be read does, and what a project's agents do not see does not.
 type Said = (Option<&'static str>, String);
 
-/// `flayer status`: every project the workspace links, against its ledger,
+/// `mindweaver status`: every project the workspace links, against its ledger,
 /// which core reads without making it; as JSON when `as_json`.
-pub(crate) fn status_of_workspace(workspace: &FlayerWorkspace, as_json: bool) -> Outcome {
+pub(crate) fn status_of_workspace(workspace: &WeaverWorkspace, as_json: bool) -> Outcome {
     // In JSON, a workspace with nothing linked is one with no projects in
     // its data, which a script reads like any other.
     if workspace.config().projects.is_empty() && !as_json {
-        // As `flayer list` says it, and for the same reason: a workspace with
+        // As `mindweaver list` says it, and for the same reason: a workspace with
         // nothing linked has nothing to report but how to link something.
         return Outcome::plain(format!(
-            "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+            "{} manages no projects yet\n  link one with `mindweaver link <path>`\n",
             workspace.name()
         ));
     }
@@ -44,9 +44,9 @@ pub(crate) fn status_of_workspace(workspace: &FlayerWorkspace, as_json: bool) ->
     )
 }
 
-/// `flayer status -p`: one project the workspace links.
+/// `mindweaver status -p`: one project the workspace links.
 pub(crate) fn status_of_project(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: MindProject,
     as_json: bool,
 ) -> Outcome {
@@ -268,7 +268,7 @@ fn report(
     outcome
 }
 
-/// What is said of each project an older Mindflayer's marker marks, a
+/// What is said of each project an older Mindweaver's marker marks, a
 /// `mind.toml` or a `settings.json`, as the TUI's header says it: nothing in
 /// the table tells a `settings.json` from a `settings.toml`, which name the
 /// same agents, though its settings can be changed only once `mind migrate`

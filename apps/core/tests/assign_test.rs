@@ -9,18 +9,18 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use common::skill;
-use mindflayer_core::assign::{self, Install, Offered, Part};
-use mindflayer_core::install::{self, Edits, Installed, Removed};
-use mindflayer_core::{
-    create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference, Share,
+use mindweaver_core::assign::{self, Install, Offered, Part};
+use mindweaver_core::install::{self, Edits, Installed, Removed};
+use mindweaver_core::{
+    create, Agent, AgentHomes, Directories, Kind, MindProject, Reference, Share, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
 /// A workspace with a skill of its own, `deploy`, linking a project for
 /// each of `names`, below it, each marked by settings naming every agent.
-fn given(names: &[&str]) -> (TempDir, FlayerWorkspace, Vec<MindProject>) {
+fn given(names: &[&str]) -> (TempDir, WeaverWorkspace, Vec<MindProject>) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let mut projects = Vec::new();
     for name in names {
         projects.push(linked(&mut workspace, &dir.path().join(name), &Agent::ALL));
@@ -30,7 +30,7 @@ fn given(names: &[&str]) -> (TempDir, FlayerWorkspace, Vec<MindProject>) {
 }
 
 /// A project at `root`, naming `agents`, shared, and linked.
-fn linked(workspace: &mut FlayerWorkspace, root: &Path, agents: &[Agent]) -> MindProject {
+fn linked(workspace: &mut WeaverWorkspace, root: &Path, agents: &[Agent]) -> MindProject {
     fs::create_dir(root).unwrap();
     let (project, _) =
         MindProject::init_settings(root, agents, Share::Shared, &Directories::default()).unwrap();
@@ -47,7 +47,7 @@ fn copies(project: &MindProject, name: &str) -> Vec<PathBuf> {
 }
 
 fn installing(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     typed: &str,
 ) -> Vec<Part<Install>> {
@@ -231,7 +231,7 @@ fn orphans_taken(parts: &[Part<assign::Orphans>]) -> Vec<(String, Vec<(String, &
 }
 
 fn orphans_out(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     edits: Edits,
 ) -> Vec<Part<assign::Orphans>> {
@@ -309,10 +309,10 @@ fn a_copy_from_a_loaded_workspace_that_cannot_be_opened_is_not_an_orphan() {
     let (dir, mut workspace, projects) = given(&["alpha"]);
     let team = dir.path().join("team");
     fs::create_dir(&team).unwrap();
-    let (loaded, _) = FlayerWorkspace::init(&team).unwrap();
+    let (loaded, _) = WeaverWorkspace::init(&team).unwrap();
     create(&loaded.own(), Kind::Skill, "review", "Review it").unwrap();
     workspace.load(&loaded).unwrap();
-    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let workspace = WeaverWorkspace::open(workspace.root()).unwrap();
     installing(&workspace, &projects, "review");
     // Away, as a drive unmounted is: what it offers cannot be told.
     fs::rename(&team, dir.path().join("away")).unwrap();
@@ -353,10 +353,10 @@ fn a_copy_from_a_loaded_workspace_whose_artifact_cannot_be_read_is_not_an_orphan
     let (dir, mut workspace, projects) = given(&["alpha"]);
     let team = dir.path().join("team");
     fs::create_dir(&team).unwrap();
-    let (loaded, _) = FlayerWorkspace::init(&team).unwrap();
+    let (loaded, _) = WeaverWorkspace::init(&team).unwrap();
     create(&loaded.own(), Kind::Skill, "review", "Review it").unwrap();
     workspace.load(&loaded).unwrap();
-    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let workspace = WeaverWorkspace::open(workspace.root()).unwrap();
     installing(&workspace, &projects, "review");
     let manifest = loaded
         .own()

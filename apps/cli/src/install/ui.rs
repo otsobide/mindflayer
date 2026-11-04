@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
-use mindflayer_core::Kind;
+use mindweaver_core::Kind;
 
 use super::state::{nothing, Focus, Pending, Row, Screen, Target};
 use crate::commands::install::named;
@@ -247,7 +247,7 @@ fn boxed(entry: &Row, label: String) -> Vec<Span<'static>> {
             spans.push(Span::styled("  - remove", Style::default().fg(Color::Red)));
         }
         None if entry.foreign() => spans.push(Span::styled(
-            "  (not installed by mindflayer)",
+            "  (not installed by mindweaver)",
             Style::default().fg(Color::DarkGray),
         )),
         None if entry.edited() => spans.push(Span::styled(
@@ -259,7 +259,7 @@ fn boxed(entry: &Row, label: String) -> Vec<Span<'static>> {
             Style::default().fg(Color::DarkGray),
         )),
         None if entry.outdated() => spans.push(Span::styled(
-            "  (outdated; flayer update refreshes it)",
+            "  (outdated; mindweaver update refreshes it)",
             Style::default().fg(Color::Yellow),
         )),
         None => {}
@@ -328,7 +328,7 @@ fn confirm(screen: &Screen, frame: &mut Frame, area: Rect) {
         Line::from(format!("Install {install}, remove {remove}?")),
         Line::from(""),
         Line::from(Span::styled(
-            "removals take what Mindflayer installed back out",
+            "removals take what Mindweaver installed back out",
             Style::default().fg(Color::Red),
         )),
         Line::from(""),
@@ -361,8 +361,10 @@ fn plural(kind: Kind) -> &'static str {
 fn first(kind: Kind) -> String {
     // Matched on the kind, so a third one has to say what brings it.
     let commands = match kind {
-        Kind::Skill => "`flayer gather git <url>`, `flayer load <path>` or `flayer add skill`",
-        Kind::Rule => "`flayer load <path>` or `flayer add rule`",
+        Kind::Skill => {
+            "`mindweaver gather git <url>`, `mindweaver load <path>` or `mindweaver add skill`"
+        }
+        Kind::Rule => "`mindweaver load <path>` or `mindweaver add rule`",
     };
     format!("{}; {commands} first", nothing(kind))
 }

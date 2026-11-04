@@ -6,7 +6,7 @@
 //! command it is about to run, as it is typed. The install screen, when it is
 //! open, draws itself. Nothing here decides anything; [`super::state`] does.
 
-use mindflayer_core::{Agent, Kind, MarkerFile, Reason, Share, State};
+use mindweaver_core::{Agent, Kind, MarkerFile, Reason, Share, State};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -70,9 +70,9 @@ fn nowhere(app: &App, frame: &mut Frame, area: Rect) {
     let directory = printable(&app.directory.display().to_string());
     let (missing, what, command) = match app.opened {
         Scope::Workspace => (
-            "No flayer workspace here",
+            "No weaver workspace here",
             "A workspace keeps track of the mind projects you manage together.",
-            "flayer init",
+            "mindweaver init",
         ),
         Scope::Project => (
             "No mind project here",
@@ -101,7 +101,7 @@ fn nowhere(app: &App, frame: &mut Frame, area: Rect) {
     let height = u16::try_from(text.len() + wrapped + 1).unwrap_or(u16::MAX);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(" mindflayer ");
+        .title(" mindweaver ");
     let box_ = centred(area, WIDTH, height);
     frame.render_widget(
         Paragraph::new(text).block(block).wrap(Wrap { trim: false }),
@@ -171,7 +171,7 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
     };
     let mut spans = vec![
         Span::styled(
-            " mindflayer ",
+            " mindweaver ",
             Style::default()
                 .fg(Color::Black)
                 .bg(Color::Cyan)
@@ -193,7 +193,7 @@ fn header(workspace: &Workspace, frame: &mut Frame, area: Rect) {
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
-/// What the header says of projects an older Mindflayer made, marked by a
+/// What the header says of projects an older Mindweaver made, marked by a
 /// `mind.toml` or a `settings.json`, with the command that moves them to a
 /// `settings.toml`: until then a `mind.toml`'s installs reach only the
 /// folder it names, neither one's settings can be changed, and nothing else
@@ -217,7 +217,7 @@ fn older(workspace: &Workspace) -> Option<String> {
         (_, 0) => None,
         (Scope::Project, _) => Some(format!("marked by {files}: `mind migrate`")),
         (Scope::Workspace, count) => Some(format!(
-            "{} marked by {files}: `flayer migrate --all-projects`",
+            "{} marked by {files}: `mindweaver migrate --all-projects`",
             plural(count, "project")
         )),
     }
@@ -536,11 +536,11 @@ fn item_row<'a>(item: &'a Item, agents: &[Agent], width: usize, room: usize) -> 
     ListItem::new(lines)
 }
 
-/// What a state looks like: green for what Mindflayer installed whole and
+/// What a state looks like: green for what Mindweaver installed whole and
 /// current, yellow for one an update brings up to date or puts back, cyan
 /// for one somebody edited, which nothing writes over unless forced, red for
 /// one nothing offers any more, and magenta for somebody's, which no key of
-/// Mindflayer's changes.
+/// Mindweaver's changes.
 fn state_style(state: State) -> Style {
     match state {
         State::Current => Style::default().fg(Color::Green),
@@ -914,7 +914,7 @@ fn linking(app: &App, form: &LinkForm, frame: &mut Frame, area: Rect) {
             .map(|unlinked| {
                 let route = printable(&unlinked.route);
                 let padding = " ".repeat(width.saturating_sub(route.chars().count()));
-                // Why, as the minds screen and `flayer scan --suggest` say
+                // Why, as the minds screen and `mindweaver scan --suggest` say
                 // it, since the list is in their order.
                 let why = worth_linking(
                     &unlinked.route,
@@ -1155,7 +1155,7 @@ fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
 }
 
 /// Where the screen looked for what could be linked, as its texts name it:
-/// the workspace, or the folders `flayer minds` was given.
+/// the workspace, or the folders `mindweaver minds` was given.
 pub(crate) fn looked_under(workspace: &Workspace) -> String {
     if workspace.roots.is_empty() {
         return String::from("this workspace");
@@ -1270,7 +1270,7 @@ fn minds_screen(app: &App, screen: &Minds, frame: &mut Frame, area: Rect) {
     // standing, which can name every agent file a repository holds, is cut
     // to what the pane leaves once the highlight, the box, the path and the
     // widest change any row could ask for have their room, so ticking one
-    // never moves the column. `flayer scan --suggest` says it whole.
+    // never moves the column. `mindweaver scan --suggest` says it whole.
     let offered = screen
         .rows
         .iter()

@@ -1,7 +1,7 @@
-# Developing Mindflayer
+# Developing Mindweaver
 
 How the repository is laid out, how to build and test it, and how to work on
-the panel. The [README](../README.md) is where using Mindflayer starts, and
+the panel. The [README](../README.md) is where using Mindweaver starts, and
 [the reference](reference.md) has every command; [architecture.md](architecture.md)
 says why each part is the way it is.
 
@@ -11,24 +11,24 @@ Every unit of the product is an app under `apps/`, so adding a front end means
 adding a directory rather than reshaping the tree:
 
 ```
-apps/core    mindflayer-core     projects, workspaces, artifacts.
+apps/core    mindweaver-core     projects, workspaces, artifacts.
                                  No I/O beyond files, and git when gathering.
-apps/cli     mindflayer-cli      the `mind` and `flayer` binaries, the TUI,
+apps/cli     mindweaver-cli      the `mind` and `mindweaver` binaries, the TUI,
                                  and the panel's backend. Parsing and
                                  rendering only; all of it goes through one
                                  parser.
-apps/server  mindflayer-server   the local server behind the web panel, which
-                                 `flayer ui` runs. Transport only: it moves
+apps/server  mindweaver-server   the local server behind the web panel, which
+                                 `mindweaver ui` runs. Transport only: it moves
                                  JSON between the browser and a front end,
                                  and holds no rules.
-apps/web     mindflayer-web      the web panel the server embeds: Vue and
+apps/web     mindweaver-web      the web panel the server embeds: Vue and
                                  Nuxt UI, built with Vite. It asks through
                                  the server and draws; no rules here either.
 ```
 
 See [architecture.md](architecture.md) for why the split is where it
 is. `examples/` sits beside `apps/` and is not an app: it is the workspace
-[to try Mindflayer with](reference.md#try-it-with-the-examples).
+[to try Mindweaver with](reference.md#try-it-with-the-examples).
 
 ## Development
 
@@ -44,7 +44,7 @@ make lint              # no em dash in a tracked file, then clippy
 make run ARGS="list"   # run the CLI without installing it
 
 make core/test         # one app: make <app>/<target>
-make cli/run ARGS="flayer list"
+make cli/run ARGS="weaver list"
 ```
 
 Tests live in their own files, named for what they test and ending in
@@ -53,22 +53,23 @@ surface, with what they share in `tests/common/`, and a module's unit tests in
 `src/<module>_test.rs` beside it. No test touches your home, or a workspace
 your shell has activated: the CLI suites run every command with `--home ""`
 and `--workspace ""`, and the few that run the binaries clear
-`$MINDFLAYER_HOME` and `$MINDFLAYER_WORKSPACE` and give them a home of their
-own. Nor do they touch your agents' folders, which no command reads yet, and
+`$MINDWEAVER_HOME` and `$MINDWEAVER_WORKSPACE`, and the `$MINDFLAYER_HOME`
+and `$MINDFLAYER_WORKSPACE` they still read in their place, and give them a
+home of their own. Nor do they touch your agents' folders, which no command reads yet, and
 the commands they run themselves give every agent-home option empty. The server's suites never leave 127.0.0.1, and run
 against a fake front end rather than the CLI. The CLI's `ui` suite starts
-`flayer ui` on 127.0.0.1 with `--no-open`, so no test opens a browser.
+`mindweaver ui` on 127.0.0.1 with `--no-open`, so no test opens a browser.
 `docs_test.rs` holds the README and every page here to their relative
 links: a file one names has to be there, an anchor has to be a heading's,
 and every image in `docs/images` has to be shown by some page.
 
 ```bash
-cargo test -p mindflayer-cli --test tui_test          # one area
-cargo test -p mindflayer-core --lib workspace         # one module's unit tests
+cargo test -p mindweaver-cli --test tui_test          # one area
+cargo test -p mindweaver-core --lib workspace         # one module's unit tests
 ```
 
 What a test needs is built by an object mother rather than by hand:
-`mindflayer_core::mother` has one for each value object
+`mindweaver_core::mother` has one for each value object
 (`ContentHashMother`, `RedactedMother`, `OriginMother`, `ArtifactNameMother`,
 `RevisionMother`, `ProjectIdMother`), for each record the ledger keeps
 (`InstallRecordMother`, `SourceMother` and the rest), for a skill's and a
@@ -83,11 +84,11 @@ mothers of its values, so a value's rule changes in one place. What is
 random is drawn afresh every run, so a rule tested on a mother's values is
 tried on cases no test spells, and a test names the value it was handed in
 what it asserts. Core's unit tests reach the mothers as `crate::mother`;
-its integration suites and the CLI's as `mindflayer_core::mother`, through a
+its integration suites and the CLI's as `mindweaver_core::mother`, through a
 dev-dependency on core with its `mother` feature, which no build of a binary
 turns on. The CLI's suites add mothers of what only a command takes in
 `apps/cli/tests/common/mother.rs`, and the server, which depends on no
-mindflayer crate, keeps all of its own in `apps/server/tests/common/mother.rs`.
+mindweaver crate, keeps all of its own in `apps/server/tests/common/mother.rs`.
 
 Working on it, the loop is `make dev/link` once, then:
 
@@ -107,7 +108,7 @@ them:
 
 ```bash
 make dev/link BINDIR=~/.local/bin
-make dev/link BINDIR=.          # `./mind`, `./flayer` and `./mf`, right here
+make dev/link BINDIR=.          # `./mind`, `./mindweaver` and `./mw`, right here
 ```
 
 The repository root is a fine answer if you would rather not put a
@@ -197,19 +198,19 @@ itself, as CI checks on every run.
 
 `make web/e2e` tests the whole chain in a browser: it builds the panel and
 the debug binaries, builds a workspace in your system's temporary folder by
-running `flayer` and `mind`, serves it with `flayer ui`, and drives the
+running `mindweaver` and `mind`, serves it with `mindweaver ui`, and drives the
 panel in Chromium and WebKit with Playwright. The overview, each project's
-page and each artifact's page have to show what `flayer list --json`
+page and each artifact's page have to show what `mindweaver list --json`
 prints, a project linked or unlinked from the panel has to leave
-`flayer.toml` byte for byte as `flayer link` or `flayer unlink` leaves a copy
+`weaver.toml` byte for byte as `mindweaver link` or `mindweaver unlink` leaves a copy
 of the workspace, an unlink has to ask first and run nothing when told no, a
 request from another origin has to be refused, and no page may log a
 violation of the server's content security policy. A test that changes
-something does it to a workspace and a `flayer ui` of its own, so no other
+something does it to a workspace and a `mindweaver ui` of its own, so no other
 test sees the change. Nothing it runs can
 reach your workspaces or your agents' folders: Playwright runs without
-`$MINDFLAYER_WORKSPACE`, `$MINDFLAYER_HOME`, `$CLAUDE_CONFIG_DIR`,
-`$CODEX_HOME` and `$OPENCODE_CONFIG_DIR`, the server and every command get
+`$MINDWEAVER_WORKSPACE`, `$MINDWEAVER_HOME`, their Mindflayer names,
+`$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` and `$OPENCODE_CONFIG_DIR`, the server and every command get
 an empty temporary folder as `HOME`, and every command names its workspace
 and gives every agent-home option empty. The suite fails if that home is not
 empty once the server has stopped. A test that loads another workspace gets
@@ -218,7 +219,7 @@ knows the one it loads, and fails unless that home too is as it was made
 once its server has stopped. Its specs are
 `apps/web/e2e/<area>.spec.ts`, and `make test` leaves them out, since they
 need the browsers and binaries built with the panel. `ARGS` go to
-`playwright test`, and `E2E_BIN` names another folder holding a `flayer` and
+`playwright test`, and `E2E_BIN` names another folder holding a `mindweaver` and
 a `mind` to drive, relative to `apps/web`:
 
 ```bash
@@ -235,7 +236,7 @@ leave WebKit to CI's `e2e (web)`, which drives the release `build (cli)`
 built.
 
 `make web/dev` serves the panel on `http://127.0.0.1:5173` and reloads it as
-you edit. It passes `/api`, and the launch link, on to `flayer ui --dev`,
+you edit. It passes `/api`, and the launch link, on to `mindweaver ui --dev`,
 run beside it, which listens on port 7878, where the dev server's proxy
 looks, takes requests from the dev server's pages, and prints and opens a
 link to the dev server: the token is traded for its cookie where the panel
@@ -265,11 +266,11 @@ GPL-3.0-only can take in.
 The README tours the panel in pictures, and none is taken by hand. `make
 docs/screenshots` builds the panel and the debug binaries, as `make web/e2e`
 does, then runs `apps/web/e2e/screenshots.ts`: it builds a demo workspace by
-running `git`, `flayer` and `mind` (`e2e/demo.ts`: six projects, a library,
+running `git`, `mindweaver` and `mind` (`e2e/demo.ts`: six projects, a library,
 a shelf gathered from a repository beside them, three installs behind
 where they came from, two repositories nobody linked, and a second
 workspace, which the tour loads last), serves it with
-`flayer ui`, and opens each page of the tour in Chromium, in a 1440 by 900
+`mindweaver ui`, and opens each page of the tour in Chromium, in a 1440 by 900
 viewport at a device scale of 1.25, with dates in US English and UTC
 whatever your machine's language and time zone, writing each into
 `docs/images`. It runs as the browser suite does, with no variable that
@@ -279,8 +280,8 @@ demo made it at the end, and every command naming its home
 and every agent home. The project's page is taken in dark as well, for the
 README's `<picture>`; the rest of the tour is light.
 
-The demo is built in `mindflayer-demo` under the system's temporary folder,
-`/tmp/mindflayer-demo` on Linux, always the same place, since every page
+The demo is built in `mindweaver-demo` under the system's temporary folder,
+`/tmp/mindweaver-demo` on Linux, always the same place, since every page
 shows its paths. A run refuses that folder when something other than an earlier
 run of its own is there, and removes it when it is done. Before it writes
 an image, it reads the page for a path under a home (other than

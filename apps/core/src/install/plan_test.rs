@@ -211,7 +211,7 @@ fn an_offer_asked_for_where_another_of_its_name_is_held_replaces_it_rather_than_
     ]);
 
     // Installing the one asked for writes over the one held, which is
-    // Mindflayer's: taking it out first would leave the project without it
+    // Mindweaver's: taking it out first would leave the project without it
     // were the install to fail.
     assert_eq!(
         plan.changes,
@@ -527,7 +527,7 @@ fn a_change_to_somebodys_copy_is_locked_as_foreign_and_one_asking_for_it_is_no_c
             why: Said {
                 code: "foreign",
                 message: Redacted::new(
-                    "`deploy` is in beta, and Mindflayer did not put it there, so it is left alone"
+                    "`deploy` is in beta, and Mindweaver did not put it there, so it is left alone"
                 ),
             },
         }]
@@ -659,7 +659,7 @@ fn a_plan_serializes_each_field_by_its_name() {
                 "cell": {"project": "alpha", "reference": "skill:lint", "origin": "workspace", "wanted": false},
                 "why": {
                     "code": "foreign",
-                    "message": "`lint` is in alpha, and Mindflayer did not put it there, so it is left alone",
+                    "message": "`lint` is in alpha, and Mindweaver did not put it there, so it is left alone",
                 },
             }],
         })

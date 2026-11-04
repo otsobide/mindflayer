@@ -2,7 +2,7 @@
 //!
 //! An MCP server is installed as one entry in each agent's own config file
 //! (D-10): `.mcp.json`, `opencode.json`, `.codex/config.toml`. Those files
-//! belong to the team, to the user and to the agents' own CLIs, so Mindflayer
+//! belong to the team, to the user and to the agents' own CLIs, so Mindweaver
 //! may change the one entry it was asked to and nothing else.
 //!
 //! Nothing here knows which agent reads which file, where in it a server goes
@@ -11,12 +11,12 @@
 //!
 //! An entry can carry no mark of its own (OpenCode rejects keys it does not
 //! know, `codex --strict-config` fails on them, and `.mcp.json` allows no
-//! comments), so what Mindflayer keeps of one it wrote is its
+//! comments), so what Mindweaver keeps of one it wrote is its
 //! [fingerprint](Value::fingerprint).
 //!
 //! An entry is found by its key path, the keys of the objects that lead to
 //! it: `["mcpServers", "github"]` in `.mcp.json`. Arrays are not walked into:
-//! an entry Mindflayer owns is a member of an object, which is what lets it
+//! an entry Mindweaver owns is a member of an object, which is what lets it
 //! be told apart by name from everybody else's.
 //!
 //! JSON and JSONC are edited through jsonc-parser's CST, which holds every
@@ -246,7 +246,7 @@ fn kept(
 
 /// The whole of `text` as a value.
 ///
-/// For a file Mindflayer reads whole, a project's settings in either of the
+/// For a file Mindweaver reads whole, a project's settings in either of the
 /// grammars they have been written in, as well as for what an edit is held
 /// to: one parser for both, so what a read takes is what an edit takes, and
 /// a file one refuses the other refuses too.
@@ -387,13 +387,13 @@ impl Value {
         text
     }
 
-    /// What the ledger keeps of an entry Mindflayer wrote: the SHA-256 of its
+    /// What the ledger keeps of an entry Mindweaver wrote: the SHA-256 of its
     /// [canonical form](Value::canonical), as 64 lowercase hex digits.
     ///
     /// The same whatever the file does to the entry's layout: its indentation,
     /// the order of its keys, whether TOML writes it as a table or inline,
     /// which quotes a string is in. Anything that changes a value changes it.
-    /// So a file somebody reformatted still holds Mindflayer's entry, and one
+    /// So a file somebody reformatted still holds Mindweaver's entry, and one
     /// somebody edited holds theirs.
     ///
     /// A digest rather than the canonical text itself: every row of the

@@ -14,7 +14,7 @@ import { first, useQueryChange } from '@/address'
 import { boxKey, boxOf, found, named, type Box } from '@/boxes'
 import AppHeader from '@/components/AppHeader.vue'
 import AssignGrid, { type Line, type Row, type Shown } from '@/components/AssignGrid.vue'
-import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
+import CommandHint, { weaver, making } from '@/components/CommandHint.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import { stateLook } from '@/components/StateBadge.vue'
 import { useMarks } from '@/stores/marks'
@@ -229,8 +229,8 @@ function clear() {
 function commands(snapshot: Snapshot) {
   return [
     ...making(snapshot.workspace),
-    { line: flayer(snapshot.workspace, 'install -p <PROJECT> --from <ORIGIN> <KIND>:<NAME>'), does: 'a box ticked' },
-    { line: flayer(snapshot.workspace, 'uninstall -p <PROJECT> <KIND>:<NAME>'), does: 'a box unticked' }
+    { line: weaver(snapshot.workspace, 'install -p <PROJECT> --from <ORIGIN> <KIND>:<NAME>'), does: 'a box ticked' },
+    { line: weaver(snapshot.workspace, 'uninstall -p <PROJECT> <KIND>:<NAME>'), does: 'a box unticked' }
   ]
 }
 </script>
@@ -267,10 +267,10 @@ function commands(snapshot: Snapshot) {
             :commands="snapshot.offers.length === 0
               ? [
                 ...making(snapshot.workspace),
-                { line: flayer(snapshot.workspace, 'add skill <NAME> <DESCRIPTION>'), does: 'one of its own' },
-                { line: flayer(snapshot.workspace, 'gather git <URL>'), does: 'skills from a repository, onto the shelf' }
+                { line: weaver(snapshot.workspace, 'add skill <NAME> <DESCRIPTION>'), does: 'one of its own' },
+                { line: weaver(snapshot.workspace, 'gather git <URL>'), does: 'skills from a repository, onto the shelf' }
               ]
-              : [...making(snapshot.workspace), { line: flayer(snapshot.workspace, 'link <PATH>'), does: 'a project, to install into' }]"
+              : [...making(snapshot.workspace), { line: weaver(snapshot.workspace, 'link <PATH>'), does: 'a project, to install into' }]"
           />
         </div>
 

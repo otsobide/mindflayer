@@ -2,6 +2,6 @@
 
 /**
  * What a folder is, the strongest of what it holds: a mind project, a
- * flayer workspace, a git repository, or any other folder.
+ * weaver workspace, a git repository, or any other folder.
  */
 export type FolderIs = "project" | "workspace" | "repository" | "folder";

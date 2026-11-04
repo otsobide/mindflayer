@@ -9,7 +9,7 @@
 //! `.mind/settings.toml` (D-09). [`plan`] says what a [`Change`] would do, writing nothing, and
 //! [`apply`] does it: the settings edited where they stand
 //! ([`MindProject::change_settings`]), each installation given a copy in
-//! every folder an agent the project now names is sent one, and Mindflayer's
+//! every folder an agent the project now names is sent one, and Mindweaver's
 //! untouched copies taken out of the folders no agent it names is sent copies
 //! to any more. A change of share mode writes or removes `.mind/.gitignore`
 //! (D-01) and the project's group of the exclude block too.
@@ -25,7 +25,7 @@
 //! than what was installed, and one in a folder the change drops is left too,
 //! and said. A recorded copy that is no longer what was installed, by its
 //! hash, is never deleted: it is left where it is, and stops being
-//! Mindflayer's when it is in a folder the change drops. Where an agent
+//! Mindweaver's when it is in a folder the change drops. Where an agent
 //! reads, an edited copy stays recorded and reads as edited (D-04); in a
 //! folder no agent the project names is sent copies to, no install writes
 //! again and no listing reads, so a record kept there would call the
@@ -52,8 +52,8 @@ use crate::settings::{Settings, Share};
 use crate::status::{self, Unreached};
 use crate::value::ArtifactName;
 use crate::workspace::{
-    ignore_itself, misplaced_target, same_directory, FlayerWorkspace, MindProject, WorkspaceError,
-    MIND_IGNORE,
+    ignore_itself, is_mind_ignore, misplaced_target, same_directory, MindProject, WeaverWorkspace,
+    WorkspaceError,
 };
 
 /// What a change asks of a project's settings.
@@ -149,14 +149,14 @@ pub struct Plan {
     pub after: Settings,
     /// Whether the installations a workspace records were read: false when
     /// no workspace given links the project, whose installs are then left
-    /// where they are, since nothing says which copies are Mindflayer's.
+    /// where they are, since nothing says which copies are Mindweaver's.
     pub recorded: bool,
     /// What happens to `.mind/.gitignore`, for a change of share mode.
     pub ignore: Option<Ignore>,
     /// Every installation whose copies move, by kind and then by name.
     pub installations: Vec<Retarget>,
     /// What sits in a folder the change stops sending copies to that
-    /// Mindflayer did not put there: left, and said, since no listing of the
+    /// Mindweaver did not put there: left, and said, since no listing of the
     /// project reads that folder any more.
     pub foreign: Vec<PathBuf>,
     /// Copies already in place that a project turning local keeps out of
@@ -201,7 +201,7 @@ pub enum Ignore {
     /// Removed, so `.mind` can be committed: a project turning shared.
     Remove(PathBuf),
     /// Left as it is, though the project turns shared: it is not the one
-    /// Mindflayer writes, so somebody changed it, and it may still keep
+    /// Mindweaver writes, so somebody changed it, and it may still keep
     /// `.mind` out of git.
     Kept(PathBuf),
 }
@@ -286,7 +286,7 @@ pub enum Why {
     Unsourced,
     /// Changed since it was installed, in a folder no agent the project
     /// names is sent copies to any more: never deleted, and no longer
-    /// Mindflayer's, since nothing of Mindflayer's writes or reads there
+    /// Mindweaver's, since nothing of Mindweaver's writes or reads there
     /// again.
     Edited,
     /// The same, for a copy that cannot be compared with what was installed:
@@ -295,7 +295,7 @@ pub enum Why {
 }
 
 impl Why {
-    /// Whether the copy stops being Mindflayer's: its record goes, and in a
+    /// Whether the copy stops being Mindweaver's: its record goes, and in a
     /// local project its exclude entry, since what is there is its author's.
     pub(crate) fn disowns(&self) -> bool {
         matches!(self, Why::Edited | Why::Uncompared(_))
@@ -384,7 +384,7 @@ pub enum ReapplyError {
     /// A project naming no agent has nowhere to put what is installed, so
     /// carrying it along would take every copy out: an uninstall's to do,
     /// asked for by name, not a side of changing the agents.
-    #[error("{project} would name no agent, and what is installed into it would reach none, so its last agent is not removed; `flayer uninstall` takes out what it has")]
+    #[error("{project} would name no agent, and what is installed into it would reach none, so its last agent is not removed; `mindweaver uninstall` takes out what it has")]
     NoAgent { project: String },
     /// Installing a kind in no folder at all would take every copy of it out
     /// of the project, an uninstall's to do; sending it back to the folders
@@ -415,7 +415,7 @@ codes!(ReapplyError {
 /// would land inside one of `homes` or in a folder a loaded workspace keeps
 /// as its own; and a record naming a copy outside the project.
 pub fn plan(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     change: &Change,
     homes: &AgentHomes,
@@ -449,7 +449,7 @@ pub fn plan(
 /// collected in [`Applied::failures`], and the same change run again
 /// finishes it.
 pub fn apply(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     change: &Change,
     homes: &AgentHomes,
@@ -602,7 +602,7 @@ pub fn apply(
 
     // Out of git after the copies go: every line of the group for a project
     // turning shared, and for a local one the entries of what has gone or
-    // stopped being Mindflayer's.
+    // stopped being Mindweaver's.
     let unexcluded = if !plan.unexcluded.is_empty() {
         exclude::forget(&root, &key).err()
     } else if local && !gone.is_empty() {
@@ -615,7 +615,7 @@ pub fn apply(
         .extend(unexcluded.map(ReapplyFailure::StillExcluded));
     if let Some(Ignore::Remove(path)) = &plan.ignore {
         // Looked at again, so one changed since the plan read it is left.
-        if fs::read(path).is_ok_and(|bytes| bytes == MIND_IGNORE.as_bytes()) {
+        if fs::read(path).is_ok_and(|bytes| is_mind_ignore(&bytes)) {
             if let Err(source) = fs::remove_file(path) {
                 applied.failures.push(ReapplyFailure::Ignore {
                     path: path.clone(),
@@ -630,13 +630,13 @@ pub fn apply(
 }
 
 /// `workspace`, when it is made and links `project`: the one whose records
-/// say what in the project is Mindflayer's. The project is refused first
+/// say what in the project is Mindweaver's. The project is refused first
 /// when an older marker marks it ([`MindProject::changeable`]), before any
 /// ledger is opened.
 fn linking<'a>(
-    workspace: Option<&'a FlayerWorkspace>,
+    workspace: Option<&'a WeaverWorkspace>,
     project: &MindProject,
-) -> Result<Option<&'a FlayerWorkspace>, ReapplyError> {
+) -> Result<Option<&'a WeaverWorkspace>, ReapplyError> {
     project.changeable()?;
     Ok(workspace.filter(|workspace| workspace.is_made() && workspace.is_linked(project.root())))
 }
@@ -644,7 +644,7 @@ fn linking<'a>(
 /// [`plan`], against `records`: the workspace that links the project and
 /// its ledger, or none.
 fn plan_with(
-    records: Option<(&FlayerWorkspace, &Ledger)>,
+    records: Option<(&WeaverWorkspace, &Ledger)>,
     project: &MindProject,
     change: &Change,
     homes: &AgentHomes,
@@ -861,7 +861,7 @@ pub(crate) fn retarget(
     //
     // Recorded from then on by the spelling it is sent copies to, which is
     // the one discovery reads it by and an install looks for its record by:
-    // left under the old one, Mindflayer's own copy would read as somebody's,
+    // left under the old one, Mindweaver's own copy would read as somebody's,
     // and the next install would refuse it. Two spellings recorded of one
     // copy become one record of it.
     for (path, target, found) in compared {
@@ -1001,7 +1001,7 @@ fn recorded_agent(retarget: &Retarget, root: &Path, path: &Path) -> Option<Strin
 
 /// What a change of share mode does to `.mind/.gitignore`: written for a
 /// local project that has none, removed from a shared one that has the one
-/// Mindflayer writes, and left in a shared one whose `.gitignore` says
+/// Mindweaver writes, and left in a shared one whose `.gitignore` says
 /// something else, which somebody wrote.
 fn ignore(project: &MindProject, share: Share) -> Option<Ignore> {
     let path = project.mind_dir().join(".gitignore");
@@ -1009,7 +1009,7 @@ fn ignore(project: &MindProject, share: Share) -> Option<Ignore> {
         Share::Local if fs::symlink_metadata(&path).is_err() => Some(Ignore::Write(path)),
         Share::Local => None,
         Share::Shared => match fs::read(&path) {
-            Ok(bytes) if bytes == MIND_IGNORE.as_bytes() => Some(Ignore::Remove(path)),
+            Ok(bytes) if is_mind_ignore(&bytes) => Some(Ignore::Remove(path)),
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
             _ => Some(Ignore::Kept(path)),
         },
@@ -1108,7 +1108,7 @@ fn place(project: &MindProject, retarget: &Retarget, applied: &mut Applied) -> b
 /// Write down where `retarget`'s copies are now (`targets`), and log what
 /// moved.
 fn record(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     retarget: &Retarget,

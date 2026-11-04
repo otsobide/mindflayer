@@ -13,7 +13,7 @@
 //! - **What `validate` would say of it** once written: the artifact read
 //!   from what it would hold, as discovery reads one from the disk, and
 //!   judged by [`Artifact::validate`], so each issue's message is word for
-//!   word what `flayer validate` prints of it then. Nothing, when what
+//!   word what `mindweaver validate` prints of it then. Nothing, when what
 //!   would be written cannot be told: `add` refusing before it builds
 //!   anything, or a skill whose front matter does not read, which the
 //!   refusal says.
@@ -32,7 +32,7 @@ use crate::create;
 use crate::kind::Kind;
 use crate::lifecycle;
 use crate::template;
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::workspace::{MindProject, WeaverWorkspace};
 
 /// What core says of a draft: what `validate` would say of it once written,
 /// and why the command writing it would write nothing, when it would.
@@ -71,7 +71,7 @@ impl Judged {
 /// check `add` makes before it writes, and then whether something is where
 /// it would go already, which `add` leaves alone and refuses.
 pub fn added(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -108,7 +108,7 @@ pub fn added(
 /// ([`lifecycle::replaceable`]), and `validate`'s verdict of the artifact
 /// holding them, in the place it is.
 pub fn edited(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     reference: &Reference,
     contents: &str,

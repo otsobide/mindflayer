@@ -1,4 +1,4 @@
-//! What each command does: `run` and `run_flayer_cli` dispatch a parsed
+//! What each command does: `run` and `run_weaver_cli` dispatch a parsed
 //! command line, and each family of commands has a module of its own.
 //!
 //! Split by family so that a change to one command touches one file, and two
@@ -22,11 +22,11 @@ pub(crate) mod workspace;
 
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::gather::Watch;
-use mindflayer_core::resolve::{self, resolve, Intent};
-use mindflayer_core::view::Listing;
-use mindflayer_core::{
-    paths, scan, Catalog, Change, FlayerWorkspace, MindProject, Reference, Share,
+use mindweaver_core::gather::Watch;
+use mindweaver_core::resolve::{self, resolve, Intent};
+use mindweaver_core::view::Listing;
+use mindweaver_core::{
+    paths, scan, Catalog, Change, MindProject, Names, Reference, Share, WeaverWorkspace,
 };
 
 use clap::Parser as _;
@@ -35,7 +35,7 @@ use crate::homes::Lookup;
 use crate::render::json_or_text;
 use crate::task::Refusal;
 use crate::{
-    tui, Cli, CliError, Command, Failure, FlayerCli, FlayerCommand, Outcome, Warning,
+    tui, Cli, CliError, Command, Failure, Outcome, Warning, WeaverCli, WeaverCommand,
     WorkspacesCommand,
 };
 use activate::{activate_command, which_command};
@@ -47,7 +47,7 @@ use artifact::{
 use gather::run_gather;
 use install::{install_named, uninstall_named, uninstall_orphans};
 use known::{forget_command, workspaces_command};
-use migrate::{migrate_all, migrate_here, migrate_library, migrate_one, Asked};
+use migrate::{migrate_all, migrate_here, migrate_library, migrate_names, migrate_one, Asked};
 use project::{
     init_project, init_workspace, link_here, link_projects, relink_project, renew_here,
     scan_workspace, unlink_here, unlink_projects,
@@ -73,15 +73,92 @@ pub fn run(cli: &Cli) -> Result<Outcome, Failure> {
 /// A parameter beside the parsed line rather than a field of it, because it
 /// is not something a person types: the line stays exactly what was typed.
 pub fn run_watched(cli: &Cli, watch: &Watch) -> Result<Outcome, Failure> {
-    run_with(
-        cli,
-        &Lookup::given(
-            cli.home.as_deref(),
-            cli.workspace.as_deref(),
-            &cli.agent_homes,
-        ),
-        watch,
-    )
+    let lookup = Lookup::given(
+        cli.home.as_deref(),
+        cli.workspace.as_deref(),
+        &cli.agent_homes,
+    );
+    let moving = match &cli.command {
+        Some(Command::Migrate { names, .. }) => *names,
+        Some(Command::Weaver {
+            command: Some(command),
+        }) => moves_names(command),
+        _ => false,
+    };
+    let result = run_with(cli, &lookup, watch);
+    looked_up(result, &lookup, cli.directory.as_deref(), moving)
+}
+
+/// Whether `command` is the move to Mindweaver's names, which says what it
+/// moves itself.
+fn moves_names(command: &WeaverCommand) -> bool {
+    matches!(command, WeaverCommand::Migrate { names: true, .. })
+}
+
+/// `result`, what a line typed in a shell came to, with what deciding where
+/// to look had to say: first each variable taken under the name a
+/// Mindflayer build read ([`Lookup::older`]), and last, of the workspace
+/// the line used, read again once it has run, how to move it to
+/// Mindweaver's names when a Mindflayer build made it, and the old folder
+/// left beside a new one, which an older build reads instead (D-26).
+///
+/// Said once a line, by the two entry points a shell reaches alone, since
+/// that is where the environment was read and where somebody who can move
+/// the workspace reads what is said: a line the TUI or the panel runs
+/// reads none, so its own launch says it once, as it closes. Said whatever
+/// the line did, a read as well as a write, being about the workspace
+/// rather than the line; never by the move itself (`moving`), which says
+/// what it moves. Notes and a hint, which reach no envelope and fail
+/// nothing: what was read is as it was written.
+fn looked_up(
+    mut result: Result<Outcome, Failure>,
+    lookup: &Lookup,
+    directory: Option<&Path>,
+    moving: bool,
+) -> Result<Outcome, Failure> {
+    let said: Vec<Warning> = lookup
+        .older
+        .iter()
+        .map(|older| Warning::from(older.note()))
+        .collect();
+    // Read again rather than handed up from the command, which resolved it
+    // wherever it needed to, and as it is now: a line that moved it, or made
+    // a new one, is said nothing of the old.
+    let used = working_directory(directory)
+        .ok()
+        .and_then(|directory| resolve(&lookup.inputs(&directory, Intent::Read)).ok())
+        .flatten()
+        .map(|resolved| resolved.workspace);
+    let mut after: Vec<Warning> = Vec::new();
+    if let Some(workspace) = used.filter(|_| !moving) {
+        if let Some(leftover) = workspace.leftover() {
+            after.push(Warning::from(format!(
+                "note: {}: left over beside the {} the workspace is read from, which an older \
+                 build reads instead; remove it, or move it aside, once nothing needs it",
+                leftover.display(),
+                workspace.weaver_dir().display()
+            )));
+        }
+        if workspace.names() == Names::Mindflayer {
+            after.push(Warning::from(format!(
+                "hint: the workspace at {} was made by a Mindflayer build, and is kept under \
+                 its names; `mindweaver migrate --names` moves it, and what it wrote in its \
+                 projects, to Mindweaver's",
+                workspace.root().display()
+            )));
+        }
+    }
+    match &mut result {
+        Ok(outcome) => {
+            outcome.stderr.splice(0..0, said);
+            outcome.stderr.extend(after);
+        }
+        Err(failure) => {
+            failure.warnings.splice(0..0, said);
+            failure.warnings.extend(after);
+        }
+    }
+    result
 }
 
 /// Run `mind` with where to look for a workspace already decided: what
@@ -91,8 +168,8 @@ pub fn run_watched(cli: &Cli, watch: &Watch) -> Result<Outcome, Failure> {
 pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
     match cli.command.as_ref().unwrap_or(&Command::Tui) {
-        Command::Flayer { command } => run_flayer(
-            command.as_ref().unwrap_or(&FlayerCommand::Tui),
+        Command::Weaver { command } => run_weaver(
+            command.as_ref().unwrap_or(&WeaverCommand::Tui),
             &directory,
             lookup,
             watch,
@@ -257,7 +334,20 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             let (change, yes) = targets_change(change);
             change_here(&project_here(&directory)?, &change, yes, lookup)
         }
-        Command::Migrate { settings, yes } => migrate_here(
+        Command::Migrate {
+            names: true, yes, ..
+        } => {
+            let project = project_here(&directory)?;
+            match consulted(&project, lookup)? {
+                Some(workspace) => migrate_names(&workspace, *yes),
+                None => Err(CliError::NoWorkspaceAbove(project.root().to_path_buf()).into()),
+            }
+        }
+        Command::Migrate {
+            settings,
+            yes,
+            names: false,
+        } => migrate_here(
             &project_here(&directory)?,
             &Asked {
                 agents: &settings.agents,
@@ -272,34 +362,33 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
     }
 }
 
-/// Run `flayer`, which is the same as running `mind flayer`.
-pub fn run_flayer_cli(cli: &FlayerCli) -> Result<Outcome, Failure> {
-    run_flayer_cli_watched(cli, &Watch::new())
+/// Run `mindweaver`, which is the same as running `mind weaver`.
+pub fn run_weaver_cli(cli: &WeaverCli) -> Result<Outcome, Failure> {
+    run_weaver_cli_watched(cli, &Watch::new())
 }
 
-/// Run `flayer` with a gather's progress and cancel going through `watch`,
+/// Run `mindweaver` with a gather's progress and cancel going through `watch`,
 /// as [`run_watched`] does for `mind`.
-pub fn run_flayer_cli_watched(cli: &FlayerCli, watch: &Watch) -> Result<Outcome, Failure> {
-    run_flayer_with(
-        cli,
-        &Lookup::given(
-            cli.home.as_deref(),
-            cli.workspace.as_deref(),
-            &cli.agent_homes,
-        ),
-        watch,
-    )
+pub fn run_weaver_cli_watched(cli: &WeaverCli, watch: &Watch) -> Result<Outcome, Failure> {
+    let lookup = Lookup::given(
+        cli.home.as_deref(),
+        cli.workspace.as_deref(),
+        &cli.agent_homes,
+    );
+    let moving = cli.command.as_ref().is_some_and(moves_names);
+    let result = run_weaver_with(cli, &lookup, watch);
+    looked_up(result, &lookup, cli.directory.as_deref(), moving)
 }
 
-/// [`run_with`], for `flayer`.
-pub(crate) fn run_flayer_with(
-    cli: &FlayerCli,
+/// [`run_with`], for `mindweaver`.
+pub(crate) fn run_weaver_with(
+    cli: &WeaverCli,
     lookup: &Lookup,
     watch: &Watch,
 ) -> Result<Outcome, Failure> {
     let directory = working_directory(cli.directory.as_deref())?;
-    run_flayer(
-        cli.command.as_ref().unwrap_or(&FlayerCommand::Tui),
+    run_weaver(
+        cli.command.as_ref().unwrap_or(&WeaverCommand::Tui),
         &directory,
         lookup,
         watch,
@@ -370,29 +459,29 @@ pub(crate) fn run_line(
                 }
             },
         },
-        Some("flayer") => match FlayerCli::try_parse_from(words) {
+        Some("mindweaver") => match WeaverCli::try_parse_from(words) {
             Err(error) => unparsed(error.to_string()),
-            Ok(cli) => match Refusal::of_flayer(cli.command.as_ref()).filter(|r| refuses(*r)) {
+            Ok(cli) => match Refusal::of_weaver(cli.command.as_ref()).filter(|r| refuses(*r)) {
                 Some(refusal) => Ran::Refused(refusal),
                 None => {
                     let mut cli = cli;
                     cli.directory = from(cli.directory.take());
                     let lookup = looking(cli.workspace.take());
-                    Ran::Done(run_flayer_with(&cli, &lookup, watch))
+                    Ran::Done(run_weaver_with(&cli, &lookup, watch))
                 }
             },
         },
-        _ => unparsed(String::from("not a `mind` or `flayer` command")),
+        _ => unparsed(String::from("not a `mind` or `mindweaver` command")),
     }
 }
 
-/// The workspace half, shared by `mind flayer <cmd>` and `flayer <cmd>`.
+/// The workspace half, shared by `mind weaver <cmd>` and `mindweaver <cmd>`.
 ///
 /// Every command that changes an artifact acts on the workspace's own unless
 /// `-p` names one of its projects, and is the same function `mind` runs for
 /// that project: the two levels differ in what they hold, never in the rules.
-fn run_flayer(
-    command: &FlayerCommand,
+fn run_weaver(
+    command: &WeaverCommand,
     directory: &Path,
     lookup: &Lookup,
     watch: &Watch,
@@ -400,7 +489,7 @@ fn run_flayer(
     match command {
         // Typed from the directory the command works in, as `link`'s paths
         // are, rather than from where it was run.
-        FlayerCommand::Init {
+        WeaverCommand::Init {
             path,
             skills,
             rules,
@@ -411,16 +500,16 @@ fn run_flayer(
             };
             init_workspace(&root, skills.as_deref(), rules.as_deref(), lookup)
         }
-        FlayerCommand::Activate { path, shell } => {
+        WeaverCommand::Activate { path, shell } => {
             activate_command(directory, path.as_deref(), *shell, lookup)
         }
-        FlayerCommand::Which => which_command(directory, lookup),
-        FlayerCommand::Workspaces { command, json } => match command {
+        WeaverCommand::Which => which_command(directory, lookup),
+        WeaverCommand::Workspaces { command, json } => match command {
             None => workspaces_command(directory, lookup, *json),
             Some(WorkspacesCommand::Forget { path }) => forget_command(directory, path, lookup),
         },
 
-        FlayerCommand::Add {
+        WeaverCommand::Add {
             project,
             kind,
             name,
@@ -437,7 +526,7 @@ fn run_flayer(
                 template.as_deref(),
             )
         }
-        FlayerCommand::Edit {
+        WeaverCommand::Edit {
             reference,
             project,
             editing,
@@ -451,7 +540,7 @@ fn run_flayer(
                 directory,
             )
         }
-        FlayerCommand::Rename {
+        WeaverCommand::Rename {
             reference,
             to,
             project,
@@ -467,7 +556,7 @@ fn run_flayer(
         // Without --yes it deletes nothing, so it is resolved as a read and
         // makes no workspace, the default one in home included: a dry run
         // that wrote a marker would not be one.
-        FlayerCommand::Remove {
+        WeaverCommand::Remove {
             reference,
             project,
             everywhere,
@@ -489,7 +578,7 @@ fn run_flayer(
                 removed_from(workspace, project.as_deref(), reference, false)
             }),
         },
-        FlayerCommand::Templates { project, json } => {
+        WeaverCommand::Templates { project, json } => {
             let mut found = None;
             let text = reading_workspace(directory, lookup, |workspace| {
                 templates_of(
@@ -501,28 +590,28 @@ fn run_flayer(
             Ok(json_or_text(found.filter(|_| *json), text))
         }
 
-        FlayerCommand::Link { projects } => link_projects(directory, projects, lookup),
-        FlayerCommand::Unlink { projects } => unlink_projects(directory, projects, lookup),
-        FlayerCommand::Relink { old, new } => relink_project(directory, old, new, lookup),
+        WeaverCommand::Link { projects } => link_projects(directory, projects, lookup),
+        WeaverCommand::Unlink { projects } => unlink_projects(directory, projects, lookup),
+        WeaverCommand::Relink { old, new } => relink_project(directory, old, new, lookup),
 
-        FlayerCommand::Load { workspaces } => {
+        WeaverCommand::Load { workspaces } => {
             load_command(directory, directory, workspaces, lookup)
         }
-        FlayerCommand::Unload { workspaces } => {
+        WeaverCommand::Unload { workspaces } => {
             unload_command(directory, directory, workspaces, lookup)
         }
 
         // A screen, so it opens as one: on the default workspace before it
         // is made too, which its first change makes. Its folders are taken
         // from here as `scan` takes them.
-        FlayerCommand::Minds { roots } => {
+        WeaverCommand::Minds { roots } => {
             tui::run_minds(directory, &targets(directory, roots)?, lookup)
         }
 
         // Each folder taken from here as `link` takes a path, and each path
-        // found spelled as `flayer link` run here would take it, so a line of
+        // found spelled as `mindweaver link` run here would take it, so a line of
         // the report is a line to type.
-        FlayerCommand::Scan {
+        WeaverCommand::Scan {
             roots,
             depth,
             suggest,
@@ -543,9 +632,9 @@ fn run_flayer(
             })
         }
 
-        FlayerCommand::Gather(command) => run_gather(command, directory, lookup, watch),
+        WeaverCommand::Gather(command) => run_gather(command, directory, lookup, watch),
 
-        FlayerCommand::Install {
+        WeaverCommand::Install {
             projects,
             all_projects,
             name,
@@ -581,7 +670,7 @@ fn run_flayer(
             (Some(_), true) => Err(CliError::InstallWhere.into()),
             (None, false) => Err(CliError::InstallWhat.into()),
         },
-        FlayerCommand::Uninstall {
+        WeaverCommand::Uninstall {
             projects,
             all_projects,
             name,
@@ -608,7 +697,7 @@ fn run_flayer(
         // too, as `migrate` is: one made for the occasion links no project
         // to update. Each project named, or every one linked, each that
         // would not open said beside the rest, as `status` says one.
-        FlayerCommand::Update {
+        WeaverCommand::Update {
             projects,
             all,
             names,
@@ -635,7 +724,7 @@ fn run_flayer(
         // Resolved as a read, with --yes too, as `update` is: a default
         // workspace made for the occasion links no project to adopt from,
         // and `-p` would refuse it all the same.
-        FlayerCommand::Adopt {
+        WeaverCommand::Adopt {
             project,
             reference,
             yes,
@@ -652,8 +741,9 @@ fn run_flayer(
         // Resolved as a read, on the default workspace before it is made
         // too: a workspace made for the occasion keeps its own in its
         // library from the start, and links no project to move.
-        FlayerCommand::Migrate {
+        WeaverCommand::Migrate {
             library,
+            names,
             project,
             all_projects,
             settings,
@@ -664,6 +754,11 @@ fn run_flayer(
                 share: settings.share(),
                 yes: *yes,
             };
+            if *names {
+                return reading_workspace(directory, lookup, |workspace| {
+                    migrate_names(workspace, *yes)
+                });
+            }
             match (library, project, all_projects) {
                 (true, _, _) => reading_workspace(directory, lookup, |workspace| {
                     migrate_library(workspace, *yes)
@@ -680,7 +775,7 @@ fn run_flayer(
 
         // `-p` is the project's whichever side of `add` or `remove` it is
         // typed, which clap can take only as an option it does not require.
-        FlayerCommand::Agents {
+        WeaverCommand::Agents {
             project,
             change,
             named,
@@ -696,7 +791,7 @@ fn run_flayer(
                 &lookup.agents,
             )
         }
-        FlayerCommand::Share { project, mode } => {
+        WeaverCommand::Share { project, mode } => {
             let workspace = workspace_here(directory, lookup)?;
             change_of(
                 &workspace,
@@ -711,7 +806,7 @@ fn run_flayer(
         }
         // `-p` is the project's on either side of `set` or `reset`, as for
         // `agents`.
-        FlayerCommand::Targets { project, change } => {
+        WeaverCommand::Targets { project, change } => {
             let project = project.as_deref().ok_or(CliError::TargetsWhere)?;
             let workspace = workspace_here(directory, lookup)?;
             let (change, yes) = targets_change(change);
@@ -723,13 +818,13 @@ fn run_flayer(
                 &lookup.agents,
             )
         }
-        FlayerCommand::Tui => tui::run(directory, lookup),
+        WeaverCommand::Tui => tui::run(directory, lookup),
         #[cfg(feature = "ui")]
-        FlayerCommand::Ui(options) => ui::ui_command(directory, options, lookup),
+        WeaverCommand::Ui(options) => ui::ui_command(directory, options, lookup),
 
         // Under --json, what the snapshot holds of each holder listed, with
         // the warnings and the exit status of the listing.
-        FlayerCommand::List {
+        WeaverCommand::List {
             kind,
             project,
             json,
@@ -761,7 +856,7 @@ fn run_flayer(
                 }
             })
         }
-        FlayerCommand::Show {
+        WeaverCommand::Show {
             reference,
             project,
             json,
@@ -785,7 +880,7 @@ fn run_flayer(
         // too, and from a ledger read without being made: a workspace that
         // has installed nothing has none, and a report is no reason to
         // create one.
-        FlayerCommand::Status { project, json } => {
+        WeaverCommand::Status { project, json } => {
             reading_workspace(directory, lookup, |workspace| match project {
                 Some(project) => Ok(status_of_project(
                     workspace,
@@ -797,7 +892,7 @@ fn run_flayer(
         }
         // Laid out as JSON once the read is done, the hint about a workspace
         // not made yet among what it said, which stays on stderr.
-        FlayerCommand::Validate {
+        WeaverCommand::Validate {
             target,
             project,
             json,
@@ -848,24 +943,24 @@ fn project_here(directory: &Path) -> Result<MindProject, CliError> {
     MindProject::locate(directory)?.ok_or_else(|| CliError::NotInProject(directory.to_path_buf()))
 }
 
-/// The flayer workspace a command that writes acts on: the one `lookup`
+/// The weaver workspace a command that writes acts on: the one `lookup`
 /// resolves from `directory`, which is the default one in home, made there
 /// the first time a command needs it, when nothing chooses another. A
 /// command that only reads asks [`workspace_to_read`] instead.
-fn workspace_here(directory: &Path, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+fn workspace_here(directory: &Path, lookup: &Lookup) -> Result<WeaverWorkspace, CliError> {
     resolve(&lookup.inputs(directory, Intent::Write))?
         .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NotInWorkspace(directory.to_path_buf()))
 }
 
-/// The flayer workspace a command that only reads looks at: the one `lookup`
+/// The weaver workspace a command that only reads looks at: the one `lookup`
 /// resolves from `directory` (the default one in home made, or as it will
 /// be once something makes it).
 ///
 /// Never made for the occasion. A read is no reason to write a marker into
 /// somebody's home, and the workspace that would be made there answers every
 /// read as the made one would a moment later.
-fn workspace_to_read(directory: &Path, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+fn workspace_to_read(directory: &Path, lookup: &Lookup) -> Result<WeaverWorkspace, CliError> {
     resolve(&lookup.inputs(directory, Intent::Read))?
         .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NotInWorkspace(directory.to_path_buf()))
@@ -880,7 +975,7 @@ fn workspace_to_read(directory: &Path, lookup: &Lookup) -> Result<FlayerWorkspac
 fn reading_workspace(
     directory: &Path,
     lookup: &Lookup,
-    read: impl FnOnce(&FlayerWorkspace) -> Result<Outcome, Failure>,
+    read: impl FnOnce(&WeaverWorkspace) -> Result<Outcome, Failure>,
 ) -> Result<Outcome, Failure> {
     reading(&workspace_to_read(directory, lookup)?, read)
 }
@@ -888,8 +983,8 @@ fn reading_workspace(
 /// Run a read on a workspace found some other way, with the same one line
 /// more when it has not been made.
 fn reading(
-    workspace: &FlayerWorkspace,
-    read: impl FnOnce(&FlayerWorkspace) -> Result<Outcome, Failure>,
+    workspace: &WeaverWorkspace,
+    read: impl FnOnce(&WeaverWorkspace) -> Result<Outcome, Failure>,
 ) -> Result<Outcome, Failure> {
     let mut result = read(workspace);
     if !workspace.is_made() {
@@ -904,11 +999,11 @@ fn reading(
 
 /// What a read says about a default workspace nothing has made yet: that
 /// it is not there, and where the first command that writes will put it.
-fn unmade_hint(workspace: &FlayerWorkspace) -> String {
+fn unmade_hint(workspace: &WeaverWorkspace) -> String {
     format!(
         "hint: no workspace here or above, and the default one is not made yet; \
-         the first command that writes to it, such as `flayer link <path>`, makes it in {}",
-        workspace.flayer_dir().display()
+         the first command that writes to it, such as `mindweaver link <path>`, makes it in {}",
+        workspace.weaver_dir().display()
     )
 }
 
@@ -946,9 +1041,9 @@ fn all_or_nothing(mut refused: Vec<CliError>) -> Option<Failure> {
 ///
 /// Only the registered ones. A workspace manages what it was told to manage,
 /// so a project that happens to sit inside it is not in scope until it is
-/// linked; otherwise `flayer list` would answer a different question
+/// linked; otherwise `mindweaver list` would answer a different question
 /// depending on which directory it was run from.
-fn managed(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<Warning>) {
+fn managed(workspace: &WeaverWorkspace) -> (Vec<MindProject>, Vec<Warning>) {
     let (projects, failures) = workspace.projects();
     let warnings = failures
         .iter()
@@ -961,17 +1056,17 @@ fn managed(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<Warning>) {
 /// `lookup` resolves from the project, whether or not it manages it yet;
 /// it is where `mind link` adds it, and the default one in home when nothing
 /// chooses another and there is none up the tree.
-fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+fn workspace_for(project: &MindProject, lookup: &Lookup) -> Result<WeaverWorkspace, CliError> {
     resolve(&lookup.inputs(project.root(), Intent::Write))?
         .map(|resolved| resolved.workspace)
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
 }
 
-/// `flayer remove` without `--everywhere`: of one of the workspace's own,
+/// `mindweaver remove` without `--everywhere`: of one of the workspace's own,
 /// with what it leaves orphaned said beside it, or of `project`'s, a
 /// project the workspace links, whose own nothing installed anywhere.
 fn removed_from(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: Option<&str>,
     reference: &str,
     yes: bool,
@@ -988,7 +1083,7 @@ fn removed_from(
 /// not link refuses the command, before anything is done for the others: a
 /// typo in one name is not a reason to change the rest without it.
 fn named_projects(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[String],
     all: bool,
 ) -> Result<(Vec<MindProject>, Vec<Warning>), CliError> {
@@ -1003,7 +1098,7 @@ fn named_projects(
 }
 
 /// Run an install or uninstall of one artifact, `assign`, on the workspace
-/// it is for: as a read when it is given every project (`all`), as `flayer
+/// it is for: as a read when it is given every project (`all`), as `mindweaver
 /// update --all` is, and as a write when it names them.
 ///
 /// Every project of a default workspace nothing has made yet is none, so
@@ -1017,7 +1112,7 @@ fn assigning(
     directory: &Path,
     lookup: &Lookup,
     all: bool,
-    assign: impl FnOnce(&FlayerWorkspace) -> Result<Outcome, Failure>,
+    assign: impl FnOnce(&WeaverWorkspace) -> Result<Outcome, Failure>,
 ) -> Result<Outcome, Failure> {
     if all {
         reading_workspace(directory, lookup, assign)
@@ -1028,7 +1123,7 @@ fn assigning(
 
 /// What a command given every project the workspace links says when it
 /// links none it could open: that nothing was `done`, and why, with each
-/// entry that would not open, `unread`, beside it, as `flayer update --all`
+/// entry that would not open, `unread`, beside it, as `mindweaver update --all`
 /// says it. Not a failure while every entry opens, since nothing asked of
 /// it went wrong.
 fn none_linked(done: &str, unread: Vec<Warning>) -> Outcome {
@@ -1064,7 +1159,7 @@ fn beside_all(result: Result<Outcome, Failure>, unread: Vec<Warning>) -> Result<
 /// The workspace that manages a project, as core's
 /// [`managing`](resolve::managing) resolves it: the one whose ledger records
 /// what is installed there.
-fn managing(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+fn managing(project: &MindProject, lookup: &Lookup) -> Result<WeaverWorkspace, CliError> {
     resolve::managing(&lookup.inputs(project.root(), Intent::Write), project)?
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
 }
@@ -1074,7 +1169,7 @@ fn managing(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, C
 /// workspace records, so one made now would link no project and refuse it
 /// all the same, having written a marker into somebody's home on the way,
 /// even for a dry run.
-fn managing_unmade(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorkspace, CliError> {
+fn managing_unmade(project: &MindProject, lookup: &Lookup) -> Result<WeaverWorkspace, CliError> {
     resolve::managing(&lookup.inputs(project.root(), Intent::Read), project)?
         .ok_or_else(|| CliError::NoWorkspaceAbove(project.root().to_path_buf()))
 }
@@ -1088,7 +1183,7 @@ fn managing_unmade(project: &MindProject, lookup: &Lookup) -> Result<FlayerWorks
 pub(crate) fn consulted(
     project: &MindProject,
     lookup: &Lookup,
-) -> Result<Option<FlayerWorkspace>, CliError> {
+) -> Result<Option<WeaverWorkspace>, CliError> {
     Ok(
         resolve::consulted(&lookup.inputs(project.root(), Intent::Read), project)?
             .map(|resolved| resolved.workspace),
@@ -1108,7 +1203,7 @@ pub(crate) fn consulted(
 fn consulting(
     project: &MindProject,
     lookup: &Lookup,
-    change: impl FnOnce(Option<&FlayerWorkspace>) -> Result<Outcome, Failure>,
+    change: impl FnOnce(Option<&WeaverWorkspace>) -> Result<Outcome, Failure>,
 ) -> Result<Outcome, Failure> {
     let (workspace, unread) = match consulted(project, lookup) {
         Ok(workspace) => (workspace, None),

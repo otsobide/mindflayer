@@ -9,14 +9,14 @@ mod common;
 
 use common::mother::ValueMother;
 use common::*;
-use mindflayer_core::mother::ArtifactNameMother;
+use mindweaver_core::mother::ArtifactNameMother;
 use serde_json::Value;
 
 /// What `list --json` says each artifact `holder` holds of its own is
 /// summarised by, by its kind and name, from `root`.
 fn summaries(root: &Path, holder: &Holder) -> Vec<((String, String), Value)> {
     let (listing, artifacts) = match holder {
-        Holder::Workspace => (flayer(root, &["list", "--json"]), "library"),
+        Holder::Workspace => (weaver(root, &["list", "--json"]), "library"),
         _ => (mind(root, &["list", "--json"]), "projects"),
     };
     let (data, warnings): (Value, _) = enveloped(&listing.unwrap());
@@ -61,7 +61,7 @@ fn places() -> Vec<(TempDir, Holder)> {
     let project = TempDir::new().unwrap();
     new_project(project.path());
     let workspace = TempDir::new().unwrap();
-    flayer(workspace.path(), &["init"]).unwrap();
+    weaver(workspace.path(), &["init"]).unwrap();
     vec![
         (project, Holder::Project(String::from("."))),
         (workspace, Holder::Workspace),
@@ -109,7 +109,7 @@ fn a_description_reaches_the_file_as_it_was_typed() {
             if kind == Kind::Skill {
                 let reference = format!("skill:{name}");
                 let shown = match &holder {
-                    Holder::Workspace => flayer(dir.path(), &["show", &reference, "--json"]),
+                    Holder::Workspace => weaver(dir.path(), &["show", &reference, "--json"]),
                     _ => mind(dir.path(), &["show", &reference, "--json"]),
                 };
                 let (shown, _): (Vec<Value>, _) = enveloped(&shown.unwrap());
@@ -145,7 +145,7 @@ fn a_template_named_by_a_value_is_looked_for_by_that_name_and_nothing_is_added()
 
             // Either way by the value as typed: one folder's name is looked
             // for, and anything else refused as no template's name.
-            let (code, said) = if mindflayer_core::install::is_folder_name(&template) {
+            let (code, said) = if mindweaver_core::install::is_folder_name(&template) {
                 (
                     "unknown_template",
                     format!("no {} template called `{template}`", kind.slug()),
@@ -176,8 +176,8 @@ mod panel {
     //! by the backend with the launch's lookup and the workspace named.
 
     use super::*;
-    use mindflayer_cli::backend::PanelBackend;
-    use mindflayer_server::Backend;
+    use mindweaver_cli::backend::PanelBackend;
+    use mindweaver_server::Backend;
     use serde_json::json;
 
     #[test]

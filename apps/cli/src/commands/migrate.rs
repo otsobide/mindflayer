@@ -1,14 +1,19 @@
-//! `flayer migrate` and `mind migrate`: bringing what an older Mindflayer
+//! `mindweaver migrate` and `mind migrate`: bringing what an older Mindweaver
 //! made into the layout a new one has. `--library` moves a workspace's own
-//! into its library; `mind migrate`, `-p` and `--all-projects` move a
-//! project from its `mind.toml` or its `settings.json` to a
-//! `settings.toml`. Core's [`migrate`] decides everything about each; here
-//! it is said.
+//! into its library; `--names` moves a workspace a Mindflayer build made to
+//! Mindweaver's names, with what it wrote in its projects; `mind migrate`,
+//! `-p` and `--all-projects` move a project from its `mind.toml` or its
+//! `settings.json` to a `settings.toml`. Core's [`migrate`] decides
+//! everything about each; here it is said.
 
 use std::fmt::Write as _;
+use std::path::Path;
 
-use mindflayer_core::migrate::{self, MigrateError, Plan, ProjectPlan, Stranded};
-use mindflayer_core::{Agent, AgentHomes, FlayerWorkspace, MarkerFile, MindProject, Share};
+use mindweaver_core::claude_rules;
+use mindweaver_core::migrate::{
+    self, CarriedRule, LeftWhy, MigrateError, NamesPlan, Plan, ProjectNames, ProjectPlan, Stranded,
+};
+use mindweaver_core::{Agent, AgentHomes, MarkerFile, MindProject, Names, Share, WeaverWorkspace};
 
 use super::all_or_nothing;
 use super::consulted;
@@ -17,7 +22,7 @@ use super::install::{cleared, shown};
 use super::settings::{agents, moved, not_copied, outside_note};
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
-/// `flayer migrate --library`: what moving the workspace's own into its
+/// `mindweaver migrate --library`: what moving the workspace's own into its
 /// library would do, or, with `yes`, doing it.
 ///
 /// The dry run is a report, and exits as one, where `remove`'s is a
@@ -25,7 +30,7 @@ use crate::{CliError, Failure, Lookup, Outcome, Warning};
 /// not one deletion that was asked for and did not happen. Refused, both say
 /// every reason at once, as a command given several things does, since each
 /// has to be put right before it can go ahead.
-pub(crate) fn migrate_library(workspace: &FlayerWorkspace, yes: bool) -> Result<Outcome, Failure> {
+pub(crate) fn migrate_library(workspace: &WeaverWorkspace, yes: bool) -> Result<Outcome, Failure> {
     if !yes {
         let mut plan = migrate::library_plan(workspace);
         refused(std::mem::take(&mut plan.refusals))?;
@@ -72,6 +77,227 @@ pub(crate) fn migrate_library(workspace: &FlayerWorkspace, yes: bool) -> Result<
 /// What a migration that has nothing to do says, with or without `--yes`.
 const NOTHING: &str = "nothing to move: the workspace keeps its own in its library already\n";
 
+/// `mindweaver migrate --names`, and `mind migrate --names` on the workspace
+/// a project consults: what moving a workspace a Mindflayer build made to
+/// Mindweaver's names would do, or, with `yes`, doing it.
+///
+/// A report, as `--library`'s dry run is, refused with every reason at
+/// once. Git is never run: each rule file git tracks that the move carries
+/// is said, with the lines that take the move into the index.
+pub(crate) fn migrate_names(workspace: &WeaverWorkspace, yes: bool) -> Result<Outcome, Failure> {
+    if !yes {
+        let mut plan = migrate::names_plan(workspace).map_err(CliError::Migrate)?;
+        refused(std::mem::take(&mut plan.refusals))?;
+        if plan.is_empty() {
+            return Ok(Outcome::plain(named(&plan, false)));
+        }
+        let mut stdout = names_report(&plan, false);
+        stdout.push_str("nothing moved: add --yes to go ahead\n");
+        let mut outcome = Outcome::plain(stdout);
+        outcome.stderr.extend(tracked(&plan));
+        return Ok(outcome);
+    }
+
+    let mut migrating = workspace.clone();
+    match migrate::names(&mut migrating) {
+        Ok(moved) if moved.plan.is_empty() => Ok(Outcome::plain(named(&moved.plan, true))),
+        Ok(moved) => {
+            let mut outcome = Outcome::plain(names_report(&moved.plan, true));
+            outcome.stderr.extend(tracked(&moved.plan));
+            Ok(outcome)
+        }
+        // Never without a reason, so what follows the refusal is not reached.
+        Err(MigrateError::Refused(refusals)) => {
+            refused(refusals)?;
+            Ok(Outcome::plain(String::from(NAMED)))
+        }
+        Err(error) => {
+            let warnings = error
+                .left_behind_names()
+                .iter()
+                .map(|path| {
+                    format!(
+                        "warning: {} could not be put back as it was before the move",
+                        path.display()
+                    )
+                    .into()
+                })
+                .collect();
+            Err(Failure {
+                error: Box::new(CliError::Migrate(error)),
+                warnings,
+            })
+        }
+    }
+}
+
+/// What a move to Mindweaver's names that has nothing to do says.
+const NAMED: &str = "nothing to move: the workspace is under Mindweaver's names already\n";
+
+/// What a move with nothing to do says: what it leaves as it is under
+/// Mindflayer's names, a rule file changed since or a block git tracks,
+/// which is why a name is still there, then that nothing moves.
+fn named(plan: &NamesPlan, done: bool) -> String {
+    let mut text = names_report(plan, done);
+    text.push_str(NAMED);
+    text
+}
+
+/// A line for each thing moving to Mindweaver's names does, as what would
+/// happen in a dry run and as what did: the workspace's folder and the
+/// files in it, the marker's folders and the shelf, then each project.
+fn names_report(plan: &NamesPlan, done: bool) -> String {
+    let would = |now: &'static str, then: &'static str| if done { now } else { then };
+    let mut text = String::new();
+    if let Some(folder) = &plan.folder {
+        let _ = writeln!(
+            text,
+            "{} {} to {}",
+            would("moved", "would move"),
+            folder.from.display(),
+            folder.to.display()
+        );
+    }
+    for renamed in &plan.files {
+        let _ = writeln!(
+            text,
+            "{} {} to {}",
+            would("renamed", "would rename"),
+            renamed.from.display(),
+            renamed.to.display()
+        );
+    }
+    for repointed in &plan.directories {
+        let _ = writeln!(
+            text,
+            "{} {} in the marker at {}",
+            would("pointed", "would point"),
+            repointed.key,
+            repointed.to.display()
+        );
+    }
+    if plan.shelf > 0 {
+        let _ = writeln!(
+            text,
+            "{} what the ledger records of {} gathered {} with the shelf",
+            would("moved", "would move"),
+            plan.shelf,
+            if plan.shelf == 1 {
+                "artifact"
+            } else {
+                "artifacts"
+            }
+        );
+    }
+    for project in &plan.projects {
+        project_names(&mut text, project, done);
+    }
+    for file in &plan.excludes {
+        let _ = writeln!(
+            text,
+            "{} the markers of the block in {} as Mindweaver's",
+            would("spelled", "would spell"),
+            file.display()
+        );
+    }
+    text
+}
+
+/// [`names_report`]'s lines for one project.
+fn project_names(text: &mut String, project: &ProjectNames, done: bool) {
+    let would = |now: &'static str, then: &'static str| if done { now } else { then };
+    for file in &project.blocks {
+        let _ = writeln!(
+            text,
+            "{} the markers of the block in {} as Mindweaver's",
+            would("spelled", "would spell"),
+            file.display()
+        );
+    }
+    for kept in &project.kept {
+        let _ = writeln!(
+            text,
+            "{} the markers of the block in {} as Mindflayer's: {}",
+            would("left", "would leave"),
+            kept.path.display(),
+            kept.why
+        );
+    }
+    for carried in &project.rules {
+        let _ = writeln!(
+            text,
+            "{} {} to {}",
+            would("moved", "would move"),
+            carried.from.display(),
+            carried.to.display()
+        );
+    }
+    for absent in &project.absent {
+        let _ = writeln!(
+            text,
+            "{} the record of rule `{}` at {}: its file is not there, so nothing moves, and an \
+             update puts it back there",
+            would("pointed", "would point"),
+            absent.route,
+            absent.to.display()
+        );
+    }
+    for left in &project.left {
+        let why = match left.why {
+            LeftWhy::Edited => "changed since Mindweaver wrote it, so it is somebody's",
+            LeftWhy::Unlike => "not a file Mindweaver could have written, so it is somebody's",
+        };
+        let _ = writeln!(
+            text,
+            "{} {} where it is: {why}",
+            would("left", "would leave"),
+            left.path.display()
+        );
+    }
+}
+
+/// What the move says on stderr: for each project with a rule file git
+/// tracks that the move carries, how to take the move into the index,
+/// which Mindweaver runs no git to do.
+///
+/// Each file by its route, never the old folder, which may hold a file the
+/// move left there: a `git rm -r --cached` of the folder would take that one
+/// out of the index too, and out of the team's repository with the commit.
+fn tracked(plan: &NamesPlan) -> Vec<Warning> {
+    plan.projects
+        .iter()
+        .filter_map(|project| {
+            let routes = |of: fn(&CarriedRule) -> &Path| {
+                project
+                    .rules
+                    .iter()
+                    .filter(|carried| carried.tracked)
+                    .filter_map(|carried| of(carried).strip_prefix(&project.root).ok())
+                    .map(|route| route.display().to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            };
+            let from = routes(|carried| &carried.from);
+            if from.is_empty() {
+                return None;
+            }
+            Some(
+                format!(
+                    "hint: git tracks what moved from {}; `git rm --cached -- {from}` and \
+                     `git add -- {}` in {} take the move into the index",
+                    project
+                        .root
+                        .join(claude_rules::folder_under(Names::Mindflayer))
+                        .display(),
+                    routes(|carried| &carried.to),
+                    project.root.display()
+                )
+                .into(),
+            )
+        })
+        .collect()
+}
+
 /// Every refusal, the first as the error and the rest before it.
 fn refused(refusals: Vec<migrate::Refusal>) -> Result<(), Failure> {
     match all_or_nothing(refusals.into_iter().map(CliError::Refused).collect()) {
@@ -82,7 +308,7 @@ fn refused(refusals: Vec<migrate::Refusal>) -> Result<(), Failure> {
 
 /// A line for each artifact moved, each one a project keeps, and the
 /// marker's rewrite: as what will happen in a dry run, and as what did.
-fn report(workspace: &FlayerWorkspace, plan: &Plan, done: bool) -> String {
+fn report(workspace: &WeaverWorkspace, plan: &Plan, done: bool) -> String {
     let (moving, leaving, uncounted) = if done {
         ("moved", "left", "no longer counts")
     } else {
@@ -223,10 +449,10 @@ pub(crate) fn migrate_here(
     }
 }
 
-/// `flayer migrate -p`: one project the workspace links moved to a
+/// `mindweaver migrate -p`: one project the workspace links moved to a
 /// `settings.toml`, carrying what its ledger records along.
 pub(crate) fn migrate_one(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     asked: &Asked,
     homes: &AgentHomes,
@@ -237,7 +463,7 @@ pub(crate) fn migrate_one(
     }
 }
 
-/// `flayer migrate --all-projects`: every project the workspace links that
+/// `mindweaver migrate --all-projects`: every project the workspace links that
 /// a `mind.toml` or a `settings.json` marks, moved to a `settings.toml` one
 /// at a time.
 ///
@@ -248,7 +474,7 @@ pub(crate) fn migrate_one(
 /// nothing written. Those their `settings.toml` marks already are not
 /// listed, there being nothing to say of them.
 pub(crate) fn migrate_all(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     asked: &Asked,
     homes: &AgentHomes,
 ) -> Result<Outcome, Failure> {
@@ -323,7 +549,7 @@ enum Stopped {
 
 impl Stopped {
     /// As a command given one project fails: every refusal at once, the
-    /// first as the error, as `flayer migrate --library` says them.
+    /// first as the error, as `mindweaver migrate --library` says them.
     fn failure(self) -> Failure {
         match self {
             // Never without a reason, so the second is not reached.
@@ -361,12 +587,12 @@ impl Stopped {
 /// One project's move, planned without `yes` and made with it, laid out;
 /// `None` when its `settings.toml` marks it already.
 ///
-/// The dry run is a report, as `flayer migrate --library`'s is: a line for
+/// The dry run is a report, as `mindweaver migrate --library`'s is: a line for
 /// each thing that would change, to read before saying yes. Made, a copy
 /// left out of a folder an agent the project names reads is a warning, as
 /// it is for `mind agents`.
 fn laid_out(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     asked: &Asked,
     homes: &AgentHomes,
@@ -463,7 +689,7 @@ fn project_report(project: &MindProject, plan: &ProjectPlan, done: bool) -> Stri
     for path in &plan.foreign {
         let _ = writeln!(
             text,
-            "{} {} where it is: Mindflayer did not install it",
+            "{} {} where it is: Mindweaver did not install it",
             would("left", "would leave"),
             shown(project, path)
         );
@@ -482,7 +708,7 @@ fn project_report(project: &MindProject, plan: &ProjectPlan, done: bool) -> Stri
 /// What a project's move says on stderr beside its lines: that nothing
 /// keeps a local project's copies out of git outside a work tree, and how
 /// to stop git tracking a `.mind` that a local project's `.gitignore` keeps
-/// none of out, which no ignore rule does and Mindflayer runs no git to do.
+/// none of out, which no ignore rule does and Mindweaver runs no git to do.
 fn beside(project: &MindProject, plan: &ProjectPlan) -> Vec<Warning> {
     let mut said: Vec<Warning> = outside_note(project, plan.outside).into_iter().collect();
     if plan.tracked {

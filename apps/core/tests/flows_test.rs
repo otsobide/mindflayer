@@ -11,13 +11,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Edits, Installed, Removed, Standing};
-use mindflayer_core::ledger::Ledger;
-use mindflayer_core::mother::random;
-use mindflayer_core::mother::{GitRepositoryMother, ProjectMother, ShelfMother, SkillMother};
-use mindflayer_core::update;
-use mindflayer_core::{Agent, AgentHomes, FlayerWorkspace, Kind, MindProject, Share, MIND_DIR};
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::{self, Edits, Installed, Removed, Standing};
+use mindweaver_core::ledger::Ledger;
+use mindweaver_core::mother::random;
+use mindweaver_core::mother::{GitRepositoryMother, ProjectMother, ShelfMother, SkillMother};
+use mindweaver_core::update;
+use mindweaver_core::{Agent, AgentHomes, Kind, MindProject, Share, WeaverWorkspace, MIND_DIR};
 
 const ROUNDS: usize = 8;
 
@@ -38,7 +38,7 @@ fn names() -> Vec<String> {
     drawn.into_iter().collect()
 }
 
-/// Every file under `root` but those in `.mind`, which is Mindflayer's own,
+/// Every file under `root` but those in `.mind`, which is Mindweaver's own,
 /// with what it holds: what a project's people see of it.
 fn files(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     let mut found = BTreeMap::new();
@@ -67,7 +67,7 @@ fn ready(
     names: &[String],
     agents: &[Agent],
     share: Share,
-) -> (tempfile::TempDir, FlayerWorkspace, Ledger, MindProject) {
+) -> (tempfile::TempDir, WeaverWorkspace, Ledger, MindProject) {
     let borrowed: Vec<&str> = names.iter().map(String::as_str).collect();
     let (dir, mut workspace, ledger) = ShelfMother::gathered(&borrowed);
     let root = dir.path().join("app");
@@ -80,7 +80,7 @@ fn ready(
     (dir, workspace, ledger, project)
 }
 
-fn install_all(workspace: &FlayerWorkspace, ledger: &Ledger, project: &MindProject) {
+fn install_all(workspace: &WeaverWorkspace, ledger: &Ledger, project: &MindProject) {
     for candidate in install::survey(workspace, ledger, project, Kind::Skill).unwrap() {
         let installed = install::install(
             workspace,
@@ -99,7 +99,7 @@ fn install_all(workspace: &FlayerWorkspace, ledger: &Ledger, project: &MindProje
 }
 
 fn standings(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
 ) -> Vec<(String, Standing)> {
@@ -230,7 +230,7 @@ fn an_edited_copy_is_kept_until_it_is_forced_out() {
 fn a_source_that_moved_on_outdates_its_copies_and_an_update_brings_them_current() {
     for _ in 0..ROUNDS {
         let (name, agents) = (random::kebab(), agents());
-        let (dir, workspace) = mindflayer_core::mother::WorkspaceMother::empty();
+        let (dir, workspace) = mindweaver_core::mother::WorkspaceMother::empty();
         let source = GitRepositoryMother::with_skills(&[name.as_str()]);
         let url = GitRepositoryMother::url(&source);
         let ledger = workspace.ledger().unwrap();

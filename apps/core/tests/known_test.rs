@@ -4,25 +4,25 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::known::{self, Launch};
-use mindflayer_core::resolve::Reason;
-use mindflayer_core::{
-    FlayerWorkspace, MindProject, Registration, WorkspaceError, FLAYER_CONFIG, FLAYER_DIR,
+use mindweaver_core::known::{self, Launch};
+use mindweaver_core::resolve::Reason;
+use mindweaver_core::{
+    MindProject, Registration, WeaverWorkspace, WorkspaceError, WEAVER_CONFIG, WEAVER_DIR,
 };
 use tempfile::TempDir;
 
 /// A temporary directory holding `home`, a made default workspace, and
-/// `home/flayers/writing`, a workspace somebody made under it.
-fn home_and_writing() -> (TempDir, PathBuf, FlayerWorkspace) {
+/// `home/weavers/writing`, a workspace somebody made under it.
+fn home_and_writing() -> (TempDir, PathBuf, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
-    FlayerWorkspace::init(&home).unwrap();
-    let (writing, _) = FlayerWorkspace::init(home.join("flayers/writing")).unwrap();
+    WeaverWorkspace::init(&home).unwrap();
+    let (writing, _) = WeaverWorkspace::init(home.join("weavers/writing")).unwrap();
     (dir, home, writing)
 }
 
 fn marker(root: &Path) -> String {
-    fs::read_to_string(root.join(FLAYER_DIR).join(FLAYER_CONFIG)).unwrap()
+    fs::read_to_string(root.join(WEAVER_DIR).join(WEAVER_CONFIG)).unwrap()
 }
 
 #[test]
@@ -33,18 +33,18 @@ fn remember_records_a_workspace_as_a_route_from_home_and_says_what_known_is() {
 
     assert_eq!(
         remembered,
-        Some((PathBuf::from("flayers/writing"), Registration::Added))
+        Some((PathBuf::from("weavers/writing"), Registration::Added))
     );
     let text = marker(&home);
-    assert!(text.contains("known = [\"flayers/writing\"]"), "{text}");
+    assert!(text.contains("known = [\"weavers/writing\"]"), "{text}");
     assert!(
-        text.contains("# `known` lists the other flayer workspaces on this machine"),
+        text.contains("# `known` lists the other weaver workspaces on this machine"),
         "{text}"
     );
-    assert!(text.contains("# Mindflayer workspace."), "comments kept");
+    assert!(text.contains("# Mindweaver workspace."), "comments kept");
     assert_eq!(
-        FlayerWorkspace::open(&home).unwrap().config().known,
-        [PathBuf::from("flayers/writing")]
+        WeaverWorkspace::open(&home).unwrap().config().known,
+        [PathBuf::from("weavers/writing")]
     );
 }
 
@@ -54,13 +54,13 @@ fn remembering_twice_changes_nothing_and_says_the_spelling_the_file_uses() {
     known::remember(Some(&home), &writing).unwrap();
     let before = marker(&home);
 
-    let again = FlayerWorkspace::open(home.join("flayers/./writing/")).unwrap();
+    let again = WeaverWorkspace::open(home.join("weavers/./writing/")).unwrap();
     let remembered = known::remember(Some(&home), &again).unwrap();
 
     assert_eq!(
         remembered,
         Some((
-            PathBuf::from("flayers/writing"),
+            PathBuf::from("weavers/writing"),
             Registration::AlreadyRegistered
         ))
     );
@@ -70,14 +70,14 @@ fn remembering_twice_changes_nothing_and_says_the_spelling_the_file_uses() {
 #[test]
 fn a_second_workspace_goes_after_the_first_under_one_comment() {
     let (_dir, home, writing) = home_and_writing();
-    let (notes, _) = FlayerWorkspace::init(home.join("notes")).unwrap();
+    let (notes, _) = WeaverWorkspace::init(home.join("notes")).unwrap();
 
     known::remember(Some(&home), &writing).unwrap();
     known::remember(Some(&home), &notes).unwrap();
 
     let text = marker(&home);
     assert!(
-        text.contains("known = [\"flayers/writing\", \"notes\"]"),
+        text.contains("known = [\"weavers/writing\", \"notes\"]"),
         "{text}"
     );
     assert_eq!(text.matches("# `known` lists").count(), 1, "{text}");
@@ -86,7 +86,7 @@ fn a_second_workspace_goes_after_the_first_under_one_comment() {
 #[test]
 fn a_workspace_outside_home_is_remembered_by_its_route_from_there() {
     let (dir, home, _) = home_and_writing();
-    let (elsewhere, _) = FlayerWorkspace::init(dir.path().join("elsewhere")).unwrap();
+    let (elsewhere, _) = WeaverWorkspace::init(dir.path().join("elsewhere")).unwrap();
 
     let remembered = known::remember(Some(&home), &elsewhere).unwrap();
 
@@ -110,17 +110,17 @@ fn a_default_not_made_yet_is_not_made_to_remember_one() {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
     fs::create_dir(&home).unwrap();
-    let (writing, _) = FlayerWorkspace::init(dir.path().join("writing")).unwrap();
+    let (writing, _) = WeaverWorkspace::init(dir.path().join("writing")).unwrap();
 
     assert_eq!(known::remember(Some(&home), &writing).unwrap(), None);
-    assert!(!home.join(FLAYER_DIR).exists(), "the default was made");
+    assert!(!home.join(WEAVER_DIR).exists(), "the default was made");
 }
 
 #[test]
 fn the_default_workspace_does_not_remember_itself() {
     let (_dir, home, _) = home_and_writing();
     let before = marker(&home);
-    let default = FlayerWorkspace::open(&home).unwrap();
+    let default = WeaverWorkspace::open(&home).unwrap();
 
     assert_eq!(known::remember(Some(&home), &default).unwrap(), None);
     assert_eq!(marker(&home), before);
@@ -130,7 +130,7 @@ fn the_default_workspace_does_not_remember_itself() {
 fn a_default_written_by_a_newer_build_is_refused_and_left_alone() {
     let (_dir, home, writing) = home_and_writing();
     let newer = marker(&home).replace("version = 2", "version = 99");
-    fs::write(home.join(FLAYER_DIR).join(FLAYER_CONFIG), &newer).unwrap();
+    fs::write(home.join(WEAVER_DIR).join(WEAVER_CONFIG), &newer).unwrap();
 
     let error = known::remember(Some(&home), &writing).unwrap_err();
 
@@ -143,26 +143,26 @@ fn forget_removes_every_spelling_of_a_workspace() {
     let (_dir, home, writing) = home_and_writing();
     known::remember(Some(&home), &writing).unwrap();
     let absolute = writing.root().to_string_lossy().into_owned();
-    let path = home.join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let path = home.join(WEAVER_DIR).join(WEAVER_CONFIG);
     let text = marker(&home).replace(
-        "known = [\"flayers/writing\"]",
-        &format!("known = [\"flayers/writing\", \"./flayers/writing/\", \"{absolute}\"]"),
+        "known = [\"weavers/writing\"]",
+        &format!("known = [\"weavers/writing\", \"./weavers/writing/\", \"{absolute}\"]"),
     );
     fs::write(&path, text).unwrap();
 
-    let forgotten = known::forget(&home, &home.join("flayers/writing")).unwrap();
+    let forgotten = known::forget(&home, &home.join("weavers/writing")).unwrap();
 
     assert_eq!(
         forgotten,
         [
-            PathBuf::from("flayers/writing"),
-            PathBuf::from("./flayers/writing/"),
+            PathBuf::from("weavers/writing"),
+            PathBuf::from("./weavers/writing/"),
             PathBuf::from(&absolute),
         ]
     );
     let text = marker(&home);
     assert!(text.contains("known = []"), "{text}");
-    assert!(FlayerWorkspace::open(&home)
+    assert!(WeaverWorkspace::open(&home)
         .unwrap()
         .config()
         .known
@@ -177,18 +177,18 @@ fn a_workspace_that_has_gone_is_forgotten_by_its_path() {
 
     let forgotten = known::forget(&home, writing.root()).unwrap();
 
-    assert_eq!(forgotten, [PathBuf::from("flayers/writing")]);
+    assert_eq!(forgotten, [PathBuf::from("weavers/writing")]);
 }
 
 #[test]
 fn forgetting_takes_the_comment_above_its_entry_and_leaves_the_others() {
     let (_dir, home, writing) = home_and_writing();
     known::remember(Some(&home), &writing).unwrap();
-    let path = home.join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let path = home.join(WEAVER_DIR).join(WEAVER_CONFIG);
     let text = marker(&home).replace(
-        "known = [\"flayers/writing\"]",
-        "known = [\n    # the work flayer\n    \"flayers/work\",\n    # the writing flayer\n    \
-         \"flayers/writing\",\n    # notes, keep\n    \"flayers/notes\",\n]",
+        "known = [\"weavers/writing\"]",
+        "known = [\n    # the work weaver\n    \"weavers/work\",\n    # the writing weaver\n    \
+         \"weavers/writing\",\n    # notes, keep\n    \"weavers/notes\",\n]",
     );
     fs::write(&path, text).unwrap();
 
@@ -196,16 +196,16 @@ fn forgetting_takes_the_comment_above_its_entry_and_leaves_the_others() {
     let text = marker(&home);
     assert!(
         text.contains(
-            "known = [\n    # the work flayer\n    \"flayers/work\",\n    \
-             # notes, keep\n    \"flayers/notes\",\n]\n"
+            "known = [\n    # the work weaver\n    \"weavers/work\",\n    \
+             # notes, keep\n    \"weavers/notes\",\n]\n"
         ),
         "{text}"
     );
 
-    known::forget(&home, &home.join("flayers/work")).unwrap();
+    known::forget(&home, &home.join("weavers/work")).unwrap();
     let text = marker(&home);
     assert!(
-        text.contains("known = [\n    # notes, keep\n    \"flayers/notes\",\n]\n"),
+        text.contains("known = [\n    # notes, keep\n    \"weavers/notes\",\n]\n"),
         "{text}"
     );
 }
@@ -238,7 +238,7 @@ fn forgetting_with_no_default_made_is_refused_and_makes_nothing() {
     let error = known::forget(&home, &dir.path().join("writing")).unwrap_err();
 
     assert!(matches!(error, WorkspaceError::NotKnown { .. }), "{error}");
-    assert!(!home.join(FLAYER_DIR).exists(), "the default was made");
+    assert!(!home.join(WEAVER_DIR).exists(), "the default was made");
 }
 
 #[test]
@@ -247,13 +247,13 @@ fn linking_into_the_default_keeps_what_it_knows() {
     known::remember(Some(&home), &writing).unwrap();
     let (project, _) = MindProject::init(home.join("collapse")).unwrap();
 
-    FlayerWorkspace::open(&home)
+    WeaverWorkspace::open(&home)
         .unwrap()
         .link(&project)
         .unwrap();
 
     let text = marker(&home);
-    assert!(text.contains("known = [\"flayers/writing\"]"), "{text}");
+    assert!(text.contains("known = [\"weavers/writing\"]"), "{text}");
     assert!(text.contains("projects = [\"collapse\"]"), "{text}");
 }
 
@@ -281,7 +281,7 @@ fn listed(known: &known::Known) -> Vec<(Option<&str>, &Path, bool, bool, bool)> 
 #[test]
 fn the_default_comes_first_then_what_it_remembers_in_order() {
     let (_dir, home, writing) = home_and_writing();
-    let (notes, _) = FlayerWorkspace::init(home.join("notes")).unwrap();
+    let (notes, _) = WeaverWorkspace::init(home.join("notes")).unwrap();
     known::remember(Some(&home), &writing).unwrap();
     known::remember(Some(&home), &notes).unwrap();
 
@@ -318,7 +318,7 @@ fn the_workspace_in_use_is_marked_where_it_is_listed() {
 fn one_in_use_that_nothing_remembers_is_listed_last() {
     let (dir, home, writing) = home_and_writing();
     known::remember(Some(&home), &writing).unwrap();
-    let (elsewhere, _) = FlayerWorkspace::init(dir.path().join("elsewhere")).unwrap();
+    let (elsewhere, _) = WeaverWorkspace::init(dir.path().join("elsewhere")).unwrap();
 
     let (known, _) = known::known(Some(&home), Some(&elsewhere));
 
@@ -345,7 +345,7 @@ fn a_remembered_workspace_that_has_gone_is_listed_with_why_and_a_failure() {
     assert_eq!(gone.path, writing.root());
     assert!(gone.remembered);
     let why = format!(
-        "{}: not a flayer workspace (no .mindflayer/flayer.toml)",
+        "{}: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)",
         writing.root().display()
     );
     assert_eq!(gone.stale.as_deref(), Some(why.as_str()));
@@ -357,11 +357,11 @@ fn a_remembered_workspace_that_has_gone_is_listed_with_why_and_a_failure() {
 fn two_spellings_of_one_workspace_are_listed_once() {
     let (_dir, home, writing) = home_and_writing();
     known::remember(Some(&home), &writing).unwrap();
-    let path = home.join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let path = home.join(WEAVER_DIR).join(WEAVER_CONFIG);
     let absolute = writing.root().to_string_lossy().into_owned();
     let text = marker(&home).replace(
-        "known = [\"flayers/writing\"]",
-        &format!("known = [\"flayers/writing\", \"{absolute}\", \".\"]"),
+        "known = [\"weavers/writing\"]",
+        &format!("known = [\"weavers/writing\", \"{absolute}\", \".\"]"),
     );
     fs::write(&path, text).unwrap();
 
@@ -381,7 +381,7 @@ fn two_spellings_of_one_workspace_are_listed_once() {
 fn each_workspace_counts_its_projects_and_the_stale_ones() {
     let (_dir, home, writing) = home_and_writing();
     known::remember(Some(&home), &writing).unwrap();
-    let mut writing = FlayerWorkspace::open(writing.root()).unwrap();
+    let mut writing = WeaverWorkspace::open(writing.root()).unwrap();
     for name in ["essays", "letters", "gone"] {
         let (project, _) = MindProject::init(writing.root().join(name)).unwrap();
         writing.link(&project).unwrap();
@@ -429,13 +429,13 @@ fn listing_never_makes_the_default_nor_marks_it_unmade() {
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
     fs::create_dir(&home).unwrap();
-    let unmade = FlayerWorkspace::unmade(&home).unwrap();
+    let unmade = WeaverWorkspace::unmade(&home).unwrap();
 
     let (known, failures) = known::known(Some(&home), Some(&unmade));
 
     assert!(known.workspaces.is_empty());
     assert!(failures.is_empty());
-    assert!(!home.join(FLAYER_DIR).exists(), "the default was made");
+    assert!(!home.join(WEAVER_DIR).exists(), "the default was made");
 }
 
 #[test]
@@ -443,7 +443,7 @@ fn a_default_that_will_not_open_is_listed_as_stale() {
     let (_dir, home, writing) = home_and_writing();
     known::remember(Some(&home), &writing).unwrap();
     let newer = marker(&home).replace("version = 2", "version = 99");
-    fs::write(home.join(FLAYER_DIR).join(FLAYER_CONFIG), newer).unwrap();
+    fs::write(home.join(WEAVER_DIR).join(WEAVER_CONFIG), newer).unwrap();
 
     let (known, failures) = known::known(Some(&home), None);
 
@@ -497,7 +497,7 @@ fn why_a_workspace_would_not_open_is_written_with_no_credential() {
     // whatever line it stopped at.
     let tainted = "https://me:ghp_t0ken@github.com/acme/skills";
     fs::write(
-        writing.root().join(FLAYER_DIR).join(FLAYER_CONFIG),
+        writing.root().join(WEAVER_DIR).join(WEAVER_CONFIG),
         format!("version = 2\nsource = \"{tainted}\n"),
     )
     .unwrap();
@@ -535,7 +535,7 @@ fn offered(rows: &[known::Switchable]) -> Vec<(Option<&str>, bool, bool, Reason,
 #[test]
 fn a_switch_is_offered_to_every_known_workspace_but_the_one_in_use() {
     let (_dir, home, writing) = home_and_writing();
-    let (notes, _) = FlayerWorkspace::init(home.join("notes")).unwrap();
+    let (notes, _) = WeaverWorkspace::init(home.join("notes")).unwrap();
     known::remember(Some(&home), &writing).unwrap();
     known::remember(Some(&home), &notes).unwrap();
     let launch = Launch {
@@ -559,7 +559,7 @@ fn a_switch_is_offered_to_every_known_workspace_but_the_one_in_use() {
 fn the_launch_is_listed_last_when_nothing_remembers_it_and_keeps_its_reason() {
     let (dir, home, writing) = home_and_writing();
     known::remember(Some(&home), &writing).unwrap();
-    let (elsewhere, _) = FlayerWorkspace::init(dir.path().join("elsewhere")).unwrap();
+    let (elsewhere, _) = WeaverWorkspace::init(dir.path().join("elsewhere")).unwrap();
     let launch = Launch {
         root: elsewhere.root(),
         reason: Reason::Above,
@@ -584,7 +584,7 @@ fn the_launch_is_listed_last_when_nothing_remembers_it_and_keeps_its_reason() {
 fn the_default_launched_on_keeps_its_reason_and_a_gone_workspace_is_offered_nothing() {
     let (_dir, home, writing) = home_and_writing();
     known::remember(Some(&home), &writing).unwrap();
-    let default = FlayerWorkspace::open(&home).unwrap();
+    let default = WeaverWorkspace::open(&home).unwrap();
     let launch = Launch {
         root: &home,
         reason: Reason::Home,
@@ -609,7 +609,7 @@ fn the_default_nothing_has_made_is_listed_while_it_is_the_one_in_use_and_never_m
     let dir = TempDir::new().unwrap();
     let home = dir.path().join("home");
     fs::create_dir(&home).unwrap();
-    let unmade = FlayerWorkspace::unmade(&home).unwrap();
+    let unmade = WeaverWorkspace::unmade(&home).unwrap();
     let launch = Launch {
         root: &home,
         reason: Reason::Home,
@@ -622,20 +622,20 @@ fn the_default_nothing_has_made_is_listed_while_it_is_the_one_in_use_and_never_m
         [(Some("home"), true, true, Reason::Home, false)]
     );
     assert!(rows[0].workspace.default);
-    assert!(!home.join(FLAYER_DIR).exists(), "the default was made");
+    assert!(!home.join(WEAVER_DIR).exists(), "the default was made");
 }
 
 #[test]
 fn the_one_in_use_gone_since_it_was_gone_to_is_listed_with_why_and_never_made() {
     let (dir, home, writing) = home_and_writing();
-    let (elsewhere, _) = FlayerWorkspace::init(dir.path().join("elsewhere")).unwrap();
+    let (elsewhere, _) = WeaverWorkspace::init(dir.path().join("elsewhere")).unwrap();
     let launch = Launch {
         root: elsewhere.root(),
         reason: Reason::Explicit,
     };
-    fs::remove_dir_all(elsewhere.root().join(FLAYER_DIR)).unwrap();
+    fs::remove_dir_all(elsewhere.root().join(WEAVER_DIR)).unwrap();
     // As a front end that stays on it hands it over once it will not open.
-    let gone = FlayerWorkspace::unmade(elsewhere.root()).unwrap();
+    let gone = WeaverWorkspace::unmade(elsewhere.root()).unwrap();
 
     let rows = known::switchable(Some(&home), &launch, &gone);
 
@@ -652,8 +652,8 @@ fn the_one_in_use_gone_since_it_was_gone_to_is_listed_with_why_and_never_made() 
 
     // Remembered, it is the row `known` lists with why, marked in use.
     known::remember(Some(&home), &writing).unwrap();
-    fs::remove_dir_all(writing.root().join(FLAYER_DIR)).unwrap();
-    let gone = FlayerWorkspace::unmade(writing.root()).unwrap();
+    fs::remove_dir_all(writing.root().join(WEAVER_DIR)).unwrap();
+    let gone = WeaverWorkspace::unmade(writing.root()).unwrap();
 
     let rows = known::switchable(Some(&home), &launch, &gone);
 
@@ -669,11 +669,11 @@ fn the_one_in_use_gone_since_it_was_gone_to_is_listed_with_why_and_never_made() 
     assert!(rows[1].workspace.remembered);
     assert!(rows[1].workspace.stale.is_some(), "{:?}", rows[1]);
     assert!(
-        !writing.root().join(FLAYER_DIR).exists(),
+        !writing.root().join(WEAVER_DIR).exists(),
         "nothing was made"
     );
     assert!(
-        !elsewhere.root().join(FLAYER_DIR).exists(),
+        !elsewhere.root().join(WEAVER_DIR).exists(),
         "nothing was made"
     );
 }

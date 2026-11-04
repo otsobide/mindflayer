@@ -16,16 +16,16 @@ use std::hash::{BuildHasher, Hash, RandomState};
 use std::ops::Deref;
 use std::path::Path;
 
-use mindflayer_core::hash;
-use mindflayer_core::install::{is_folder_name, is_installable_name};
-use mindflayer_core::mother::random;
-use mindflayer_core::mother::{
+use mindweaver_core::hash;
+use mindweaver_core::install::{is_folder_name, is_installable_name};
+use mindweaver_core::mother::random;
+use mindweaver_core::mother::{
     ArtifactNameMother, ContentHashMother, OriginMother, ProjectIdMother, RedactedMother,
     RevisionMother, SourceMother, UrlMother,
 };
-use mindflayer_core::url::carries_credentials;
-use mindflayer_core::value::{ArtifactName, ContentHash, Origin, ProjectId, Redacted, Revision};
-use mindflayer_core::Kind;
+use mindweaver_core::url::carries_credentials;
+use mindweaver_core::value::{ArtifactName, ContentHash, Origin, ProjectId, Redacted, Revision};
+use mindweaver_core::Kind;
 use serde::Serialize;
 use serde_json::{json, Value};
 

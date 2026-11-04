@@ -43,7 +43,7 @@ test('a workspace this machine knows, switched to from the header, is what every
   await expect(switcher.getByTestId('workspace-name')).toHaveText(named)
   await expect(switcher.getByTestId('workspace-reason')).toHaveText('named with -W')
   await expect(page.getByTestId('workspace-path')).toHaveText(workspace)
-  await loading(page, 'team', `$ flayer -W ${workspace} load ${team}`)
+  await loading(page, 'team', `$ mindweaver -W ${workspace} load ${team}`)
 
   let menu = await opened(page)
   const choices = menu.getByRole('menuitemcheckbox')
@@ -58,10 +58,10 @@ test('a workspace this machine knows, switched to from the header, is what every
   await page.getByTestId('sidebar').getByRole('link', { name: 'Library' }).click()
   await expect(page.getByRole('main').getByText(LOADED.name, { exact: true }).first()).toBeVisible()
   await expect(page.getByRole('main').getByText(OWN, { exact: true })).toHaveCount(0)
-  await loading(page, named, `$ flayer -W ${team} load ${workspace}`)
+  await loading(page, named, `$ mindweaver -W ${team} load ${workspace}`)
 
   menu = await opened(page)
   await menu.getByRole('menuitemcheckbox', { name: new RegExp(`^${named}`) }).click()
   await expect(page.getByTestId('workspace-path')).toHaveText(workspace)
-  await loading(page, 'team', `$ flayer -W ${workspace} load ${team}`)
+  await loading(page, 'team', `$ mindweaver -W ${workspace} load ${team}`)
 })

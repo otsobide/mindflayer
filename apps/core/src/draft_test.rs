@@ -284,12 +284,12 @@ fn what_an_edit_would_refuse_is_said_by_its_code_and_in_its_words() {
     }
 }
 
-/// The workspace's own are judged where `flayer edit` finds them: in its
+/// The workspace's own are judged where `mindweaver edit` finds them: in its
 /// library, held to the folder it keeps them in.
 #[test]
 fn the_workspaces_own_are_judged_in_its_library() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let own = workspace.own();
     lifecycle::add(
         Some(&workspace),

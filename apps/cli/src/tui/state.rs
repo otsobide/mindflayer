@@ -4,7 +4,7 @@
 //! embeds is, so a test drives it the way a person does. Nothing here touches
 //! a file. A key that asks for work returns a [`Task`], every front end's
 //! ([`crate::task`]), and a task is a command line: [`Task::commands`] is
-//! exactly what the caller parses, with the parsers `mind` and `flayer` use,
+//! exactly what the caller parses, with the parsers `mind` and `mindweaver` use,
 //! and runs. There is nothing this screen can do that a command cannot.
 
 use std::fmt::{self, Write as _};
@@ -12,9 +12,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::sync::Arc;
 
-use mindflayer_core::gather::{Progress, Watch};
-use mindflayer_core::scan;
-use mindflayer_core::{
+use mindweaver_core::gather::{Progress, Watch};
+use mindweaver_core::scan;
+use mindweaver_core::{
     paths, Agent, Kind, Layout, MarkerFile, Reason, Share, State, DEFAULT_SUBDIRECTORY,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -40,7 +40,7 @@ const PAGE: usize = 10;
 /// which level its keys act.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
-    /// `flayer`: a workspace, its own artifacts, and the projects it manages.
+    /// `mindweaver`: a workspace, its own artifacts, and the projects it manages.
     Workspace,
     /// `mind`, on a project no workspace manages: that project on its own.
     Project,
@@ -49,7 +49,7 @@ pub enum Scope {
 /// What the TUI is looking at.
 #[derive(Debug, Clone)]
 pub enum View {
-    /// Nothing yet where the TUI was opened: no workspace for `flayer`, no
+    /// Nothing yet where the TUI was opened: no workspace for `mindweaver`, no
     /// project for `mind`.
     Nowhere,
     /// A workspace and everything it holds, or one project on its own.
@@ -65,15 +65,15 @@ pub struct Workspace {
     /// The workspace's own artifacts first, then every registered entry in
     /// the order the marker lists them. On its own, a project is the one.
     pub members: Vec<Member>,
-    /// What sits under the root, or under the folders `flayer minds` was
+    /// What sits under the root, or under the folders `mindweaver minds` was
     /// given, and could be linked, but is not, most worth linking first, in
-    /// the order `flayer scan --suggest` gives.
+    /// the order `mindweaver scan --suggest` gives.
     pub unlinked: Vec<Unlinked>,
-    /// Where `unlinked` was looked for: the folders `flayer minds` was
+    /// Where `unlinked` was looked for: the folders `mindweaver minds` was
     /// given, none meaning the root.
     pub roots: Vec<PathBuf>,
     /// What the look for `unlinked` could not read, and that it stopped
-    /// early, in the words `flayer scan` warns with: a folder `flayer minds`
+    /// early, in the words `mindweaver scan` warns with: a folder `mindweaver minds`
     /// was given that is not there among them, which would otherwise be an
     /// empty screen with nothing to say why.
     pub scan_warnings: Vec<String>,
@@ -105,10 +105,10 @@ impl Workspace {
 
     /// Where the scan found the project `member`'s entry was, moved: the one
     /// unlinked directory holding the id the workspace last saw there, as
-    /// `flayer scan` says it (`moved`). Matched by core's
+    /// `mindweaver scan` says it (`moved`). Matched by core's
     /// `scan::moved_from`, as the panel's backend matches it, since the
     /// entry is spelled as the marker has it and the scan's route as
-    /// `flayer link` would take it.
+    /// `mindweaver link` would take it.
     pub fn moved_to(&self, member: &Member) -> Option<&Unlinked> {
         self.unlinked.iter().find(|unlinked| {
             unlinked
@@ -250,7 +250,7 @@ impl Item {
 /// A workspace this one loads, as the screen shows it.
 #[derive(Debug, Clone)]
 pub struct LoadedSource {
-    /// The entry as the marker spells it: what `flayer unload` is given.
+    /// The entry as the marker spells it: what `mindweaver unload` is given.
     pub entry: String,
     /// Where it points: what `mind unload` is given, from a project.
     pub root: PathBuf,
@@ -260,11 +260,11 @@ pub struct LoadedSource {
     pub offers: Result<usize, String>,
 }
 
-/// A directory under the workspace, or under a folder `flayer minds` was
+/// A directory under the workspace, or under a folder `mindweaver minds` was
 /// given, that is not linked yet.
 #[derive(Debug, Clone)]
 pub struct Unlinked {
-    /// What `flayer link` is given for it from the workspace root, where the
+    /// What `mindweaver link` is given for it from the workspace root, where the
     /// TUI runs its lines: the route from there, or its path when it is
     /// outside.
     pub route: String,
@@ -303,7 +303,7 @@ pub enum Step {
 /// Commands that ran, as a shell session would show them: each line after a
 /// `$`, then what it printed, its warnings and its error, if it had one.
 ///
-/// What the TUI prints when it closes, and what the install screen `flayer
+/// What the TUI prints when it closes, and what the install screen `mindweaver
 /// install` opens prints once it is applied, so the lines either ran can be
 /// read off and run again.
 pub fn transcript(dones: &[Done]) -> String {
@@ -548,10 +548,10 @@ pub enum Mode {
 /// The whole TUI.
 #[derive(Debug)]
 pub struct App {
-    /// Where it was opened, which is where `flayer init` makes a workspace,
+    /// Where it was opened, which is where `mindweaver init` makes a workspace,
     /// or `mind init` a project.
     pub directory: PathBuf,
-    /// What it was opened on: `flayer`'s workspace, or `mind`'s project.
+    /// What it was opened on: `mindweaver`'s workspace, or `mind`'s project.
     pub opened: Scope,
     pub view: View,
     pub focus: Focus,
@@ -572,7 +572,7 @@ pub struct App {
     /// told, so none of them looks again and finds another.
     pub lookup: Lookup,
     /// Where to look for what could be linked, every time the disk is read
-    /// again: the folders `flayer minds` was given, none meaning the
+    /// again: the folders `mindweaver minds` was given, none meaning the
     /// workspace root.
     pub roots: Vec<PathBuf>,
     /// What runs its command lines, when it is not the real thing: a test's
@@ -581,7 +581,7 @@ pub struct App {
 }
 
 impl App {
-    /// The TUI `flayer` opens: on a workspace.
+    /// The TUI `mindweaver` opens: on a workspace.
     pub fn new(directory: PathBuf, view: View) -> Self {
         Self::opened_on(Scope::Workspace, directory, view)
     }
@@ -622,11 +622,11 @@ impl App {
         let default = workspace.reason == Some(Reason::Home);
         let message = match (&workspace.above, workspace.scope) {
             _ if default && !workspace.made => Some(format!(
-                "no workspace here or above: your default one, in {}, is made by the first change; `flayer init` makes one here",
+                "no workspace here or above: your default one, in {}, is made by the first change; `mindweaver init` makes one here",
                 workspace.root.display()
             )),
             _ if default => Some(format!(
-                "no workspace here or above: this is your default one, in {}; `flayer init` makes one here",
+                "no workspace here or above: this is your default one, in {}; `mindweaver init` makes one here",
                 workspace.root.display()
             )),
             _ if lonely => Some(format!(
@@ -716,14 +716,14 @@ impl App {
     }
 
     /// The command lines a task runs from [`base`](Self::base): its
-    /// [`commands`](Task::commands), after a `flayer init` when it changes
+    /// [`commands`](Task::commands), after a `mindweaver init` when it changes
     /// the default workspace before anything has made it.
     ///
     /// Made by a line of its own rather than left to the change, which would
     /// make it as well from the shell. The lines run from the workspace root
     /// and walk up from there like any command, and before it is made there
     /// is no marker at the root to stop them: with a workspace above home,
-    /// the change would land in that one. `flayer init` makes the workspace
+    /// the change would land in that one. `mindweaver init` makes the workspace
     /// where it is run, and the transcript says so.
     pub fn lines(&self, task: &Task) -> Vec<Vec<String>> {
         let mut lines = task.commands();
@@ -867,7 +867,7 @@ impl App {
             ('L', Some(_)) => (Mode::Loading(LoadForm::default()), Step::Stay),
             ('l' | 'L', None) => {
                 self.message = Some(Message::info(
-                    "no workspace above this project; `flayer init` in the folder that holds your projects makes one",
+                    "no workspace above this project; `mindweaver init` in the folder that holds your projects makes one",
                 ));
                 (Mode::Browse, Step::Stay)
             }
@@ -1125,7 +1125,7 @@ impl App {
     }
 
     /// `M`: the stale entry under the cursor pointed at where the scan found
-    /// its project, moved, once somebody says yes, as `flayer relink` does.
+    /// its project, moved, once somebody says yes, as `mindweaver relink` does.
     /// Only where the scan found one: which directory holds the project is
     /// the scan's to say, by the id it holds, and a guess here could hand
     /// what was installed to the wrong one.
@@ -1145,7 +1145,7 @@ impl App {
         // though it may be right there.
         let Some(moved) = workspace.moved_to(member) else {
             self.message = Some(Message::info(format!(
-                "nothing found under {} is known to have moved from {}; `flayer relink {} <new>` follows it to where it went",
+                "nothing found under {} is known to have moved from {}; `mindweaver relink {} <new>` follows it to where it went",
                 super::ui::looked_under(workspace),
                 member.entry,
                 member.entry
@@ -1173,8 +1173,8 @@ impl App {
 
     /// `A`: the foreign skill under the cursor brought into the workspace's
     /// library, and its copies recorded as installed from there, once
-    /// somebody says yes, as `flayer adopt` does. Only on a row `status`
-    /// calls foreign: what Mindflayer installed is its own already, what the
+    /// somebody says yes, as `mindweaver adopt` does. Only on a row `status`
+    /// calls foreign: what Mindweaver installed is its own already, what the
     /// project authors is the project's, and a rule is never adopted. Core
     /// refuses the rest, a name the library holds or copies that differ,
     /// which the line's error says.
@@ -1525,7 +1525,7 @@ impl App {
                     }
                     None => {
                         form.error =
-                            Some(String::from("type the path of a flayer workspace to load"));
+                            Some(String::from("type the path of a weaver workspace to load"));
                         (Mode::Loading(form), Step::Stay)
                     }
                 };
@@ -1558,7 +1558,7 @@ impl App {
         })
     }
 
-    /// What the load form would run, if it were submitted now: `flayer load`
+    /// What the load form would run, if it were submitted now: `mindweaver load`
     /// on a workspace, `mind load` on a project on its own. Nothing without a
     /// path: picking a loaded one is for unloading it.
     pub fn load_task(&self, form: &LoadForm) -> Option<Task> {
@@ -2110,7 +2110,7 @@ pub struct LinkForm {
     pub error: Option<String>,
 }
 
-/// A flayer workspace about to be loaded, typed; or one already loaded,
+/// A weaver workspace about to be loaded, typed; or one already loaded,
 /// picked to unload.
 #[derive(Debug, Clone, Default)]
 pub struct LoadForm {
@@ -2443,14 +2443,14 @@ impl Reader {
                 "delete it, once you say yes; on the ◆ row, e takes it out of every project too",
                 &[
                     "mind -C <project> remove --yes <kind:name>",
-                    "flayer remove --everywhere --yes <kind:name>, with e on the workspace's own",
+                    "mindweaver remove --everywhere --yes <kind:name>, with e on the workspace's own",
                 ],
             ),
             (
                 "l",
                 "link a project",
                 &[
-                    "flayer link <path>",
+                    "mindweaver link <path>",
                     "mind -C <path> init, first, for a repository that is not one yet",
                 ],
             ),
@@ -2459,19 +2459,19 @@ impl Reader {
                 "update what is installed in the project, or the artifact under the cursor",
                 &[
                     "mind -C <project> update --yes [<kind:name>]",
-                    "flayer update --all --yes [<kind:name>], on the workspace's own",
+                    "mindweaver update --all --yes [<kind:name>], on the workspace's own",
                 ],
             ),
-            ("U", "unlink the project", &["flayer unlink <path>"]),
+            ("U", "unlink the project", &["mindweaver unlink <path>"]),
             (
                 "M",
                 "relink a stale project to where the scan found it moved",
-                &["flayer relink <old> <new>"],
+                &["mindweaver relink <old> <new>"],
             ),
             (
                 "A",
                 "adopt somebody's skill under the cursor into the library, once you say yes",
-                &["flayer adopt -p <project> --yes <kind:name>"],
+                &["mindweaver adopt -p <project> --yes <kind:name>"],
             ),
             (
                 "t",
@@ -2493,33 +2493,33 @@ impl Reader {
                 "L",
                 "load another workspace's own skills, read live from there",
                 &[
-                    "flayer load <path>",
-                    "flayer unload <path>, on one already loaded",
+                    "mindweaver load <path>",
+                    "mindweaver unload <path>, on one already loaded",
                     "mind load / mind unload, on a project on its own",
                 ],
             ),
-            ("v", "validate everything", &["flayer validate"]),
+            ("v", "validate everything", &["mindweaver validate"]),
             (
                 "g",
                 "gather from a git repository",
-                &["flayer gather git <url>"],
+                &["mindweaver gather git <url>"],
             ),
             (
                 "esc",
                 "while a gather runs: stop it, until it starts placing",
                 &[],
             ),
-            ("s", "what is on the shelf", &["flayer gather list"]),
+            ("s", "what is on the shelf", &["mindweaver gather list"]),
             (
                 "w",
                 "the workspaces this machine knows, the one in use marked",
-                &["flayer workspaces"],
+                &["mindweaver workspaces"],
             ),
-            ("i", "install skills and rules", &["flayer install"]),
+            ("i", "install skills and rules", &["mindweaver install"]),
             (
                 "m",
                 "which minds the workspace manages, ticked",
-                &["flayer link <path>...", "flayer unlink <path>..."],
+                &["mindweaver link <path>...", "mindweaver unlink <path>..."],
             ),
             ("R", "read the disk again", &[]),
             ("q", "quit, printing what was run", &[]),
@@ -2544,7 +2544,7 @@ impl Reader {
         lines.push((
             Tone::Info,
             String::from(
-                "On the workspace's own row the same keys run `flayer <cmd>` instead of `mind -C <project> <cmd>`.",
+                "On the workspace's own row the same keys run `mindweaver <cmd>` instead of `mind -C <project> <cmd>`.",
             ),
         ));
         lines.push((
@@ -2556,7 +2556,7 @@ impl Reader {
         lines.push((
             Tone::Info,
             String::from(
-                "What the link form and m offer is what `flayer scan --suggest` lists, in its order.",
+                "What the link form and m offer is what `mindweaver scan --suggest` lists, in its order.",
             ),
         ));
         let legend: Vec<String> = Agent::ALL
@@ -2566,7 +2566,7 @@ impl Reader {
         lines.push((
             Tone::Info,
             format!(
-                "A project's rows say how each artifact stands, as `flayer status` does, and which of its agents read it: {}.",
+                "A project's rows say how each artifact stands, as `mindweaver status` does, and which of its agents read it: {}.",
                 legend.join(", ")
             ),
         ));

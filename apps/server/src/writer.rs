@@ -74,7 +74,7 @@ impl<B: Backend> Writer<B> {
     ) -> io::Result<Self> {
         let (queue, jobs) = mpsc::channel::<Job<B>>();
         thread::Builder::new()
-            .name(String::from("mindflayer-writes"))
+            .name(String::from("mindweaver-writes"))
             .spawn(move || {
                 // Nobody may be waiting any more: a client that gives up
                 // does not take its task back, which has already run.

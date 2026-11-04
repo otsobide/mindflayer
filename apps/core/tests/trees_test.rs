@@ -11,8 +11,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::mother::random;
-use mindflayer_core::{copy, hash};
+use mindweaver_core::mother::random;
+use mindweaver_core::{copy, hash};
 use tempfile::TempDir;
 
 const ROUNDS: usize = 60;

@@ -1,4 +1,4 @@
-//! The CLI's own mothers, beside core's (`mindflayer_core::mother`), which
+//! The CLI's own mothers, beside core's (`mindweaver_core::mother`), which
 //! make the domain's values: what a suite types into a command where it
 //! takes free text, and a workspace left as an older build left it.
 //!
@@ -7,8 +7,8 @@
 
 use std::path::Path;
 
-use mindflayer_core::mother::random;
-use mindflayer_core::FlayerWorkspace;
+use mindweaver_core::mother::random;
+use mindweaver_core::WeaverWorkspace;
 
 /// Makes the values a person or a browser types where a command takes free
 /// text: a description, a template's name, a reference.
@@ -61,7 +61,7 @@ impl ValueMother {
     }
 }
 
-/// Makes a workspace hold what a Mindflayer from before a URL's credentials
+/// Makes a workspace hold what a Mindweaver from before a URL's credentials
 /// were refused left in it.
 pub struct OlderBuildMother;
 
@@ -74,7 +74,7 @@ impl OlderBuildMother {
     /// Written again over what an earlier call left, so a suite trying
     /// every form of URL in one workspace finds only the last stored.
     pub fn stored(dir: &Path, url: &str) {
-        let workspace = FlayerWorkspace::open(dir).unwrap();
+        let workspace = WeaverWorkspace::open(dir).unwrap();
         let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
         database
             .execute("UPDATE sources SET url = ?1", [url])
@@ -133,10 +133,31 @@ impl OlderBuildMother {
                 }
             }
         }
-        let workspace = FlayerWorkspace::open(dir).unwrap();
+        let workspace = WeaverWorkspace::open(dir).unwrap();
         let mut kept =
             String::from_utf8_lossy(&std::fs::read(workspace.ledger_path()).unwrap()).into_owned();
         text_under(&workspace.cache_dir(), &mut kept);
         kept
+    }
+}
+
+/// Makes what a Mindflayer build printed for a shell: its activation, under
+/// the names it set (D-26).
+pub struct MindflayerShellMother;
+
+impl MindflayerShellMother {
+    /// The bash or zsh code such a build printed where this one prints
+    /// `code`: the same code, setting `$MINDFLAYER_WORKSPACE` and defining
+    /// `flayer-deactivate`, and with no older activation of its own to undo
+    /// first. Made from this build's code rather than spelled here, so it
+    /// is what that build printed, the prompt and the virtualenv's handling
+    /// included.
+    pub fn activation(code: &str) -> String {
+        let undo_older =
+            "if typeset -f flayer-deactivate >/dev/null 2>&1; then\n    flayer-deactivate\nfi\n";
+        code.strip_prefix(undo_older)
+            .expect("the code undoes an older activation first")
+            .replace("MINDWEAVER_WORKSPACE", "MINDFLAYER_WORKSPACE")
+            .replace("mindweaver-deactivate", "flayer-deactivate")
     }
 }

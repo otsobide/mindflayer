@@ -26,8 +26,8 @@ export interface Served {
  * worker.
  */
 function served(): Served {
-  const origin = process.env.MINDFLAYER_E2E_URL
-  const token = process.env.MINDFLAYER_E2E_TOKEN
+  const origin = process.env.MINDWEAVER_E2E_URL
+  const token = process.env.MINDWEAVER_E2E_TOKEN
   if (!origin || !token) {
     throw new Error('no server said where it listens: run the suite with `make web/e2e`')
   }
@@ -83,7 +83,7 @@ async function open(page: Page, served: Served, path: string): Promise<void> {
 }
 
 /**
- * A workspace of a test's own, served by a `flayer ui` of its own, for a
+ * A workspace of a test's own, served by a `mindweaver ui` of its own, for a
  * test that changes what it serves: built by `changeable`, or what the
  * spec's `building` names, beside a copy of
  * it made before anything else touched it (`twin`), on which the test runs
@@ -186,13 +186,13 @@ export async function drawn(page: Page): Promise<void> {
 }
 
 /**
- * What `flayer list --json` says of the fixture workspace, run as every
+ * What `mindweaver list --json` says of the fixture workspace, run as every
  * command of the suite is (environment.ts), in the envelope it prints:
  * version 2, and no warning, since the fixture is built clean.
  */
 export function listing(): Listing {
   const at = given()
-  const ran = run(at, 'flayer', at.workspace, ['list', '--json'])
+  const ran = run(at, 'mindweaver', at.workspace, ['list', '--json'])
   expect(ran.status, `${ran.line}\n${ran.stderr}`).toBe(0)
   const envelope = JSON.parse(ran.stdout) as Envelope<Listing>
   expect(envelope.version).toBe(2)

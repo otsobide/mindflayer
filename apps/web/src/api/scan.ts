@@ -13,7 +13,7 @@ export interface Asked {
 }
 
 /**
- * What could be linked under the folders `asked` names, as `flayer scan
+ * What could be linked under the folders `asked` names, as `mindweaver scan
  * --suggest` finds it (the backend's `Scanned`): asked for once somebody
  * asks, and never again on its own.
  *

@@ -9,11 +9,11 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use mindflayer_core::code::Said;
-use mindflayer_core::reading::{Shown, Validation};
-use mindflayer_core::value::Redacted;
-use mindflayer_core::view::Listing;
-use mindflayer_core::{Artifact, Catalog, FlayerWorkspace, Kind, MindProject, Reference};
+use mindweaver_core::code::Said;
+use mindweaver_core::reading::{Shown, Validation};
+use mindweaver_core::value::Redacted;
+use mindweaver_core::view::Listing;
+use mindweaver_core::{Artifact, Catalog, Kind, MindProject, Reference, WeaverWorkspace};
 
 use super::consulted;
 use crate::render::{as_json, plural, printable, table, verdict};
@@ -71,7 +71,7 @@ impl Selector {
     }
 }
 
-/// Run a reading command over one project: `mind`'s level, or `flayer -p`.
+/// Run a reading command over one project: `mind`'s level, or `mindweaver -p`.
 pub(crate) fn one_project<F>(
     project: MindProject,
     kinds: Vec<Kind>,
@@ -88,7 +88,7 @@ where
 /// Run a reading command over the whole workspace: its own artifacts and
 /// every managed project's, in one catalog.
 pub(crate) fn everywhere<F>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
@@ -107,7 +107,7 @@ where
 /// something has to be able to say so again later. Listing the shelf is
 /// `gather list`'s, so `list` and `show` keep to what is held.
 pub(crate) fn everywhere_and_the_shelf<F>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
@@ -121,7 +121,7 @@ where
 
 /// The two above.
 fn workspace_wide<F>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
@@ -288,7 +288,7 @@ pub(crate) fn looked_in(text: &mut String, projects: &[MindProject]) {
 pub(crate) fn list_workspace(
     catalog: &Catalog,
     projects: &[MindProject],
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     level: Level,
 ) -> (String, bool) {
     // The workspace's own artifacts are worth listing whether or not it
@@ -301,7 +301,7 @@ pub(crate) fn list_workspace(
         return if registered == 0 {
             (
                 format!(
-                    "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+                    "{} manages no projects yet\n  link one with `mindweaver link <path>`\n",
                     workspace.name()
                 ),
                 true,
@@ -310,7 +310,7 @@ pub(crate) fn list_workspace(
             (
                 format!(
                     "{} manages {}, none of which could be opened\n  \
-                     see the warnings, or drop a stale entry with `flayer unlink <path>`\n",
+                     see the warnings, or drop a stale entry with `mindweaver unlink <path>`\n",
                     workspace.name(),
                     plural(registered, "project"),
                 ),
@@ -336,7 +336,7 @@ pub(crate) struct Holders {
 }
 
 impl Holders {
-    fn of(workspace: &FlayerWorkspace, own_kinds: &[Kind], shelf_kinds: &[Kind]) -> Self {
+    fn of(workspace: &WeaverWorkspace, own_kinds: &[Kind], shelf_kinds: &[Kind]) -> Self {
         let own = workspace.own();
         Self {
             own: own_kinds

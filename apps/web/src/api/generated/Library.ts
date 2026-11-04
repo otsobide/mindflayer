@@ -31,7 +31,7 @@ artifacts: Array<Held>,
  */
 holders: Array<LibraryHolder>, 
 /**
- * What `flayer add --template` can start from.
+ * What `mindweaver add --template` can start from.
  */
 templates: Array<Template>, 
 /**

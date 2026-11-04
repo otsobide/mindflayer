@@ -1,14 +1,16 @@
-//! The two levels Mindflayer works at.
+//! The two levels Mindweaver works at.
 //!
 //! A **mind project** is a directory carrying a `.mind`, the way a repository
 //! carries a `.git`: its marker says which agents work in it, and it authors
 //! skills and rules beside the code, in the directories the marker names
 //! (`skills/<name>/SKILL.md` and `rules/` by default).
 //!
-//! A **flayer workspace** sits above them, carrying a `.mindflayer` that
+//! A **weaver workspace** sits above them, carrying a `.mindweaver` that
 //! references the mind projects it manages, so their artifacts can be listed
 //! and moved across several projects at once, and holds artifacts of its own
-//! to share with them, in a library inside that `.mindflayer` by default.
+//! to share with them, in a library inside that `.mindweaver` by default.
+//! One a Mindflayer build made carries a `.mindflayer` instead, read and
+//! written under those names until it is moved ([`Names`]).
 //!
 //! Both are found the way git finds a repository: by walking up from a
 //! starting directory until the marker file appears. Both are described by a
@@ -30,8 +32,9 @@ use crate::agent::{Agent, AgentTarget, TargetTable};
 use crate::code::{codes, Said};
 use crate::gather::{self, Scrub};
 use crate::kind::{Kind, Layout};
-use crate::ledger::{Ledger, LedgerError, LEDGER_FILE};
+use crate::ledger::{Ledger, LedgerError};
 use crate::lock::{self, LockError, WorkspaceLock};
+use crate::names::Names;
 use crate::paths;
 use crate::settings::{ProjectId, Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
 
@@ -41,7 +44,7 @@ use crate::settings::{ProjectId, Settings, Share, SETTINGS_FILE, SETTINGS_JSON_F
 /// Refusing to read a version from the future is what lets the format change
 /// later without an old binary silently misreading a newer project. The
 /// project marker has a version of its own rather than one shared with
-/// [`FLAYER_FORMAT_VERSION`]: shared, a change to either format would be a new
+/// [`WEAVER_FORMAT_VERSION`]: shared, a change to either format would be a new
 /// version of both, and an older build would refuse a workspace that had not
 /// changed at all.
 ///
@@ -64,9 +67,9 @@ pub const MIND_FORMAT_VERSION: u32 = 5;
 /// build finds no project in, rather than one it misreads.
 pub const MIND_TOML_VERSION: u32 = 2;
 
-/// The layout version written into new `flayer.toml` markers, and the newest
+/// The layout version written into new `weaver.toml` markers, and the newest
 /// one this build reads. Its own, for the reason [`MIND_FORMAT_VERSION`] is.
-pub const FLAYER_FORMAT_VERSION: u32 = 2;
+pub const WEAVER_FORMAT_VERSION: u32 = 2;
 
 /// The first [`MIND_FORMAT_VERSION`] whose markers say where each kind's
 /// artifacts live. Only a project marker's version is held against it: a
@@ -108,7 +111,7 @@ pub const TARGETS_VERSION: u32 = 4;
 
 /// The first [`MIND_FORMAT_VERSION`] whose marker is `.mind/settings.toml`
 /// rather than `.mind/settings.json`: the same keys, in TOML written from a
-/// template whose comments say what each one does, as `flayer.toml` is
+/// template whose comments say what each one does, as `weaver.toml` is
 /// (D-06, amended).
 ///
 /// The one version that file holds, whatever keys it sets: every build that
@@ -120,47 +123,78 @@ pub const SETTINGS_TOML_VERSION: u32 = 5;
 pub const MIND_DIR: &str = ".mind";
 /// The marker file inside [`MIND_DIR`].
 pub const MIND_CONFIG: &str = "mind.toml";
-/// The directory a flayer workspace is identified by.
+/// The directory a weaver workspace is identified by.
+pub const WEAVER_DIR: &str = ".mindweaver";
+/// The marker file inside [`WEAVER_DIR`].
+pub const WEAVER_CONFIG: &str = "weaver.toml";
+/// [`WEAVER_DIR`] as a Mindflayer build named it: the folder a workspace
+/// one made is identified by, read and written under its names until
+/// `migrate --names` moves it ([`Names::Mindflayer`]).
 pub const FLAYER_DIR: &str = ".mindflayer";
-/// The marker file inside [`FLAYER_DIR`].
+/// [`WEAVER_CONFIG`] as a Mindflayer build named it, inside [`FLAYER_DIR`].
 pub const FLAYER_CONFIG: &str = "flayer.toml";
-/// Where a workspace keeps the clones it gathered from, inside [`FLAYER_DIR`].
+/// Where a workspace keeps the clones it gathered from, inside [`WEAVER_DIR`].
 ///
 /// Kept rather than discarded so a gather can be inspected after the fact, and
 /// so what a source actually contained is still there when its report is not.
 pub const CACHE_DIR: &str = "cache";
 /// Where a workspace keeps its own artifacts when its marker does not say,
-/// inside [`FLAYER_DIR`]: a folder per kind, named after it.
+/// inside [`WEAVER_DIR`]: a folder per kind, named after it.
 ///
-/// Inside `.mindflayer` rather than beside the projects, where a workspace
+/// Inside `.mindweaver` rather than beside the projects, where a workspace
 /// made before it keeps them, named in its marker: no agent looks in
-/// `.mindflayer`, so the workspace in a home directory puts no `~/skills` or
+/// `.mindweaver`, so the workspace in a home directory puts no `~/skills` or
 /// `~/rules` above every project there, and a workspace is one folder
 /// wherever it is made.
 pub const LIBRARY_DIR: &str = "library";
 /// Where an install builds its copy before moving it into place, inside a
 /// project's [`MIND_DIR`], and a workspace's scratch folder, inside its
-/// [`FLAYER_DIR`] ([`FlayerWorkspace::scratch_dir`]).
+/// [`WEAVER_DIR`] ([`WeaverWorkspace::scratch_dir`]).
 ///
 /// Not beside the copy, because that is a folder agents read, and not in the
 /// system's temporary folder, which can be another filesystem: inside the
 /// project, a finished copy is moved into place by a rename.
 pub const SCRATCH_DIR: &str = "tmp";
 
-/// Where a workspace's scratch folder is from its root, a folder at a time:
-/// the one place [`FlayerWorkspace::scratch_dir`] and
-/// [`FlayerWorkspace::scratch_route`] both read it from, so the file a front
+/// Where a workspace's scratch folder is from its root, a folder at a time,
+/// under `names`: the one place [`WeaverWorkspace::scratch_dir`] and
+/// [`WeaverWorkspace::scratch_route`] both read it from, so the file a front
 /// end writes and the route its line names cannot come apart.
-const SCRATCH: [&str; 2] = [FLAYER_DIR, SCRATCH_DIR];
+const fn scratch(names: Names) -> [&'static str; 2] {
+    [names.workspace_dir(), SCRATCH_DIR]
+}
 
 /// The `.gitignore` a local project's `.mind` is given: `*`, which keeps out
 /// of git everything in the folder, this file included, as a Python venv
 /// ignores itself.
+///
+/// A project turning shared loses the file only while it holds exactly what
+/// Mindweaver writes, this or the one a Mindflayer build wrote
+/// ([`FLAYER_MIND_IGNORE`], [`is_mind_ignore`]), so a new wording leaves no
+/// file an older build wrote where it is, and none somebody changed goes.
 pub const MIND_IGNORE: &str = "\
+# Mindweaver keeps this project's settings here, for this checkout alone.
+# Nothing in this folder is meant to be committed.
+*
+";
+
+/// [`MIND_IGNORE`] as a Mindflayer build wrote it, its old name for the
+/// product included (D-26): never written now, and still taken for
+/// Mindweaver's own when a project turning shared drops the file.
+pub const FLAYER_MIND_IGNORE: &str = "\
 # Mindflayer keeps this project's settings here, for this checkout alone.
 # Nothing in this folder is meant to be committed.
 *
 ";
+
+/// Whether `bytes`, what a `.mind/.gitignore` holds, are exactly what a
+/// build wrote there, this one's or a Mindflayer build's: the one test of
+/// whether the file is Mindweaver's to take away.
+pub(crate) fn is_mind_ignore(bytes: &[u8]) -> bool {
+    [MIND_IGNORE, FLAYER_MIND_IGNORE]
+        .iter()
+        .any(|ignore| bytes == ignore.as_bytes())
+}
 
 /// Which of the two marker files a version was read from.
 ///
@@ -172,17 +206,17 @@ pub const MIND_IGNORE: &str = "\
 pub enum Marker {
     /// A mind project's [`MIND_CONFIG`].
     Project,
-    /// A flayer workspace's [`FLAYER_CONFIG`].
+    /// A weaver workspace's [`WEAVER_CONFIG`].
     Workspace,
 }
 
 impl Marker {
     /// The newest version of this marker this build reads, and the one
-    /// `flayer init` and `mind init` write into a new one.
+    /// `mindweaver init` and `mind init` write into a new one.
     pub const fn version(self) -> u32 {
         match self {
             Marker::Project => MIND_FORMAT_VERSION,
-            Marker::Workspace => FLAYER_FORMAT_VERSION,
+            Marker::Workspace => WEAVER_FORMAT_VERSION,
         }
     }
 }
@@ -300,7 +334,7 @@ pub struct MindConfig {
 /// spelling the CLI already accepts, so there is no second table to keep in
 /// step. A key this build does not recognise is carried along rather than
 /// rejected, for the reason unknown front matter keys are: the format grows,
-/// and a project configured by a newer Mindflayer is still a project.
+/// and a project configured by a newer Mindweaver is still a project.
 ///
 /// What a kind left out means is the marker's to say, by its version. In a
 /// `mind.toml` it is the default beside the code, so an empty table, what a
@@ -368,14 +402,25 @@ impl Directories {
         PathBuf::from(kind.folder())
     }
 
-    /// What a workspace uses when it says nothing: a folder per kind in its
-    /// library, `.mindflayer/library/<kind>` ([`LIBRARY_DIR`]).
+    /// What a new workspace uses when it says nothing: a folder per kind in
+    /// its library, `.mindweaver/library/<kind>` ([`LIBRARY_DIR`]).
     ///
     /// Not a project's default, which would put the workspace's own beside
     /// the repositories it manages, or in a home directory; and spelled with
     /// `/`, so the marker `init` writes reads the same on every platform.
     pub fn library_for(kind: Kind) -> PathBuf {
-        PathBuf::from(format!("{FLAYER_DIR}/{LIBRARY_DIR}/{}", kind.folder()))
+        Self::library_under(Names::Mindweaver, kind)
+    }
+
+    /// The same, in a workspace kept under `names`: `.mindflayer/library/<kind>`
+    /// in one a Mindflayer build made, which is where its marker says nothing
+    /// sends a kind.
+    pub fn library_under(names: Names, kind: Kind) -> PathBuf {
+        PathBuf::from(format!(
+            "{}/{LIBRARY_DIR}/{}",
+            names.workspace_dir(),
+            kind.folder()
+        ))
     }
 
     /// Every kind's directory spelled out, which is what `init` writes so the
@@ -400,7 +445,7 @@ impl Directories {
 
     /// The same, with `default` answering for a kind nothing names: a
     /// project's default or a workspace's.
-    fn resolved_with(&self, default: fn(Kind) -> PathBuf) -> Vec<(Kind, PathBuf)> {
+    fn resolved_with(&self, default: impl Fn(Kind) -> PathBuf) -> Vec<(Kind, PathBuf)> {
         Kind::ALL
             .into_iter()
             .map(|kind| {
@@ -414,7 +459,7 @@ impl Directories {
 
     /// Every kind named, `default` answering for the ones that were not, and
     /// any key this build does not recognise carried along.
-    fn filled(mut self, default: fn(Kind) -> PathBuf) -> Self {
+    fn filled(mut self, default: impl Fn(Kind) -> PathBuf) -> Self {
         for kind in Kind::ALL {
             self.0
                 .entry(kind.folder().to_owned())
@@ -504,11 +549,12 @@ pub enum Misplaced {
     /// climbing out with `..`, or `.`. What is installed is one project's,
     /// and a copy anywhere else is no project's, or another's.
     Outside,
-    /// It is inside `.mind`, Mindflayer's own folder, which no agent reads
+    /// It is inside `.mind`, Mindweaver's own folder, which no agent reads
     /// and a local project keeps out of git.
     InsideMind,
-    /// It is inside a `.mindflayer`, a workspace's own folder, which no
-    /// agent reads and whose shelf and cache gathering replaces.
+    /// It is inside a `.mindweaver`, a workspace's own folder, or the
+    /// `.mindflayer` a Mindflayer build made one, which no agent reads and
+    /// whose shelf and cache gathering replaces.
     InsideWorkspace,
     /// It is inside a `.git`, a repository's own folder, which no agent
     /// reads and git owns: a copy there would sit among its refs and hooks,
@@ -525,10 +571,10 @@ impl Misplaced {
         match self {
             Misplaced::Outside => String::from("it is not inside the project"),
             Misplaced::InsideMind => format!(
-                "it is inside {MIND_DIR}, which holds Mindflayer's own files and no agent reads"
+                "it is inside {MIND_DIR}, which holds Mindweaver's own files and no agent reads"
             ),
-            Misplaced::InsideWorkspace => format!(
-                "it is inside {FLAYER_DIR}, which holds a workspace's own files and no agent reads"
+            Misplaced::InsideWorkspace => String::from(
+                "it is inside a workspace's own folder, which holds its own files and no agent reads",
             ),
             Misplaced::InsideGit => format!(
                 "it is inside {GIT_DIR}, which holds a repository's own files and no agent reads"
@@ -552,7 +598,7 @@ pub struct MindProject {
 impl MindProject {
     /// Create `.mind` and the folders its artifacts live in, under `root`,
     /// with every kind in its default place, marked by a `mind.toml` at
-    /// [`MIND_TOML_VERSION`]: the project an older Mindflayer made.
+    /// [`MIND_TOML_VERSION`]: the project an older Mindweaver made.
     ///
     /// No front end makes one since `mind init` writes settings
     /// ([`init_asked`](Self::init_asked)). It stays for what has to
@@ -984,9 +1030,9 @@ impl MindProject {
     /// The file is read here, not taken from what was read when the project
     /// was opened, so a change is made to the file it is about to write and
     /// not to a copy that may be minutes old, as a workspace's marker is
-    /// edited ([`FlayerWorkspace`]'s `edit_array`), through the same
+    /// edited ([`WeaverWorkspace`]'s `edit_array`), through the same
     /// `rewrite`. Each key whose value changed is edited where it stands,
-    /// through toml_edit as `flayer.toml` is (`settings::edited`), so a key
+    /// through toml_edit as `weaver.toml` is (`settings::edited`), so a key
     /// this build does not know, the order of the keys, the comments and the
     /// file's layout all stay as somebody left them. A changed file is
     /// written through a temporary and a rename (`replace_file`), so a crash
@@ -1058,7 +1104,7 @@ impl MindProject {
     /// migration: a `mind.toml` has no settings to change, and a
     /// `settings.json` is read as it was written and changed by nothing but
     /// its move to a `settings.toml`, so the settings are changed one way,
-    /// as `flayer.toml` is, and never in a grammar this build no longer
+    /// as `weaver.toml` is, and never in a grammar this build no longer
     /// writes.
     pub fn changeable(&self) -> Result<&Settings, WorkspaceError> {
         match &self.config {
@@ -1135,12 +1181,13 @@ impl MindProject {
 }
 
 // ---------------------------------------------------------------------------
-// Flayer workspaces
+// Weaver workspaces
 // ---------------------------------------------------------------------------
 
-/// The contents of `.mindflayer/flayer.toml`.
+/// The contents of `.mindweaver/weaver.toml`, or of the `.mindflayer/flayer.toml`
+/// a Mindflayer build wrote.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FlayerConfig {
+pub struct WeaverConfig {
     /// The layout version this workspace was written with.
     pub version: u32,
     /// A human name for the workspace. Defaults to its directory's name.
@@ -1148,15 +1195,15 @@ pub struct FlayerConfig {
     /// The mind projects this workspace manages, relative to its root.
     #[serde(default)]
     pub projects: Vec<PathBuf>,
-    /// Other flayer workspaces whose own artifacts this one offers to its
+    /// Other mindweaver workspaces whose own artifacts this one offers to its
     /// projects, read live from where they are; relative to its root.
     #[serde(default)]
     pub loaded: Vec<PathBuf>,
-    /// The other flayer workspaces this machine knows, relative to its root:
+    /// The other weaver workspaces this machine knows, relative to its root:
     /// read only in the default workspace, the one in home, which
     /// [`crate::known`] keeps it in.
     ///
-    /// No new [`FLAYER_FORMAT_VERSION`]: a build from before it reads past
+    /// No new [`WEAVER_FORMAT_VERSION`]: a build from before it reads past
     /// the key, which says nothing about this workspace, and keeps it when
     /// it edits the marker, since every edit goes through `toml_edit`.
     #[serde(default)]
@@ -1169,22 +1216,34 @@ pub struct FlayerConfig {
 }
 
 /// A directory orchestrating several mind projects, identified by its
-/// `.mindflayer`.
+/// `.mindweaver`, or by the `.mindflayer` of one a Mindflayer build made.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FlayerWorkspace {
+pub struct WeaverWorkspace {
     root: PathBuf,
-    config: FlayerConfig,
+    config: WeaverConfig,
     /// Whether its marker is on disk: false only for an
     /// [`unmade`](Self::unmade) one.
     made: bool,
+    /// Whose names its folder, marker and ledger go by: Mindweaver's for
+    /// every one made now, and kept as they are found ([`Names`]).
+    names: Names,
+    /// The folder of a workspace under older names beside the one read
+    /// ([`leftover`](Self::leftover)).
+    leftover: Option<PathBuf>,
 }
 
-impl FlayerWorkspace {
-    /// Create `.mindflayer` and its marker file under `root`.
+impl WeaverWorkspace {
+    /// Create `.mindweaver` and its marker file under `root`.
     ///
     /// The registry starts empty: a workspace manages the projects it is told
     /// about, and guessing which neighbouring directories were meant would be
     /// the kind of surprise that is hard to undo.
+    ///
+    /// A `root` that holds a workspace already, under either names, is that
+    /// one, and nothing is made: one a Mindflayer build made is opened as it
+    /// is ([`Initialization::AlreadyInitialized`]), never given a
+    /// `.mindweaver` beside it, which would leave two workspaces in one
+    /// folder, each read by one build and missed by the other.
     pub fn init(root: impl AsRef<Path>) -> Result<(Self, Initialization), WorkspaceError> {
         Self::init_with(root, &Directories::default())
     }
@@ -1208,40 +1267,82 @@ impl FlayerWorkspace {
         root: impl AsRef<Path>,
         directories: &Directories,
     ) -> Result<(Self, Initialization), WorkspaceError> {
-        let root = absolute(root.as_ref())?;
-        let dir = root.join(FLAYER_DIR);
-        let config_path = dir.join(FLAYER_CONFIG);
+        Self::init_under(root.as_ref(), directories, Names::Mindweaver)
+    }
 
-        for (kind, directory) in directories.resolved_with(Directories::library_for) {
+    /// [`init_with`](Self::init_with), under `names`: Mindweaver's for every
+    /// workspace a command makes, and Mindflayer's only for a test's mother
+    /// of what such a build made ([`crate::mother::MindflayerMother`]), so
+    /// no build makes a workspace under the old names.
+    pub(crate) fn init_under(
+        root: &Path,
+        directories: &Directories,
+        names: Names,
+    ) -> Result<(Self, Initialization), WorkspaceError> {
+        let root = absolute(root)?;
+        let dir = root.join(names.workspace_dir());
+        let config_path = dir.join(names.workspace_config());
+
+        for (kind, directory) in
+            directories.resolved_with(|kind| Directories::library_under(names, kind))
+        {
             if let Some(error) = misplaced_own(kind, &directory) {
                 return Err(error);
             }
         }
-        create_dir(&dir)?;
-
-        if config_path.is_file() {
+        if Self::is_marked(&root) {
             return Ok((Self::open(&root)?, Initialization::AlreadyInitialized));
         }
+        create_dir(&dir)?;
 
         let name = directory_name(&root);
-        write_new(&config_path, &flayer_template(&name, directories))?;
+        write_new(&config_path, &weaver_template(&name, directories, names))?;
         Ok((Self::open(&root)?, Initialization::Created))
     }
 
-    /// Open the workspace rooted at `root`.
+    /// Open the workspace rooted at `root`, under whichever names its marker
+    /// is found by: Mindweaver's first, then Mindflayer's.
+    ///
+    /// The new wins when both are there, as a project's newest marker does:
+    /// an old one beside it is one a Mindflayer build made since, or a copy
+    /// brought back. Still a workspace rather than a refusal, since the new
+    /// marker says what it is, but [`leftover`](Self::leftover) names the old
+    /// folder, which an older build reads instead.
     pub fn open(root: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
         let root = absolute(root.as_ref())?;
-        let config_path = root.join(FLAYER_DIR).join(FLAYER_CONFIG);
-        if !config_path.is_file() {
+        let mut found = Names::ALL
+            .into_iter()
+            .filter(|names| marker_under(&root, *names).is_file());
+        let Some(names) = found.next() else {
             return Err(WorkspaceError::NotAWorkspace { path: root });
-        }
-        let config: FlayerConfig = read_config(&config_path)?;
+        };
+        let leftover = found.next().map(|older| root.join(older.workspace_dir()));
+        let config_path = marker_under(&root, names);
+        let config: WeaverConfig = read_config(&config_path)?;
         check_version(&config_path, Marker::Workspace, config.version)?;
         Ok(Self {
             root,
             config,
             made: true,
+            names,
+            leftover,
         })
+    }
+
+    /// Whether `root` holds a workspace's marker, under either names: a
+    /// name looked for, never a file read, so a marker that would not open
+    /// still says a workspace is there, as [`MindProject::is_marked`] says
+    /// a project is.
+    pub fn is_marked(root: &Path) -> bool {
+        Self::names_at(root).is_some()
+    }
+
+    /// Whose names the workspace at `root` is kept under, the new looked
+    /// for first ([`Names::ALL`]): `None` when no marker is there.
+    pub fn names_at(root: &Path) -> Option<Names> {
+        Names::ALL
+            .into_iter()
+            .find(|names| marker_under(root, *names).is_file())
     }
 
     /// The workspace [`init`](Self::init) would make at `root`, held in memory
@@ -1259,15 +1360,18 @@ impl FlayerWorkspace {
     /// write.
     pub fn unmade(root: impl AsRef<Path>) -> Result<Self, WorkspaceError> {
         let root = absolute(root.as_ref())?;
-        let marker = flayer_template(&directory_name(&root), &Directories::default());
+        let names = Names::Mindweaver;
+        let marker = weaver_template(&directory_name(&root), &Directories::default(), names);
         let config = toml::from_str(&marker).map_err(|source| WorkspaceError::Parse {
-            path: root.join(FLAYER_DIR).join(FLAYER_CONFIG),
+            path: marker_under(&root, names),
             source,
         })?;
         Ok(Self {
             root,
             config,
             made: false,
+            names,
+            leftover: None,
         })
     }
 
@@ -1277,10 +1381,10 @@ impl FlayerWorkspace {
         self.made
     }
 
-    /// Walk up from `start` looking for a flayer workspace.
+    /// Walk up from `start` looking for a weaver workspace, under either
+    /// names.
     pub fn locate(start: impl AsRef<Path>) -> Result<Option<Self>, WorkspaceError> {
-        let marked = |root: &Path| root.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file();
-        match locate_marker(start.as_ref(), marked)? {
+        match locate_marker(start.as_ref(), Self::is_marked)? {
             Some(root) => Self::open(root).map(Some),
             None => Ok(None),
         }
@@ -1293,14 +1397,30 @@ impl FlayerWorkspace {
             .is_some_and(|home| home == self.root)
     }
 
-    /// The directory holding `.mindflayer`.
+    /// The directory holding `.mindweaver`.
     pub fn root(&self) -> &Path {
         &self.root
     }
 
-    /// The `.mindflayer` directory itself.
-    pub fn flayer_dir(&self) -> PathBuf {
-        self.root.join(FLAYER_DIR)
+    /// The `.mindweaver` directory itself, or the `.mindflayer` of one a
+    /// Mindflayer build made.
+    pub fn weaver_dir(&self) -> PathBuf {
+        self.root.join(self.names.workspace_dir())
+    }
+
+    /// Whose names its folder, marker and ledger go by.
+    pub fn names(&self) -> Names {
+        self.names
+    }
+
+    /// The folder of a workspace kept under older names beside this one,
+    /// when there is one: a `.mindflayer` beside the `.mindweaver` read,
+    /// which an older build reads instead, and so says other things about
+    /// the workspace than this one does. Collected rather than raised, for
+    /// a front end to say, as [`MindProject::warnings`] names an older
+    /// marker beside a project's.
+    pub fn leftover(&self) -> Option<&Path> {
+        self.leftover.as_deref()
     }
 
     /// The workspace's declared name.
@@ -1309,41 +1429,46 @@ impl FlayerWorkspace {
     }
 
     /// The parsed marker file.
-    pub fn config(&self) -> &FlayerConfig {
+    pub fn config(&self) -> &WeaverConfig {
         &self.config
     }
 
     /// The marker file itself.
     pub fn config_path(&self) -> PathBuf {
-        self.flayer_dir().join(FLAYER_CONFIG)
+        marker_under(&self.root, self.names)
     }
 
     /// Where clones are kept, whether or not it exists yet.
     pub fn cache_dir(&self) -> PathBuf {
-        self.flayer_dir().join(CACHE_DIR)
+        self.weaver_dir().join(CACHE_DIR)
     }
 
-    /// The workspace's scratch folder ([`SCRATCH_DIR`] in `.mindflayer`),
+    /// The workspace's scratch folder ([`SCRATCH_DIR`] in `.mindweaver`),
     /// whether or not anything has made it yet: where a front end puts what
     /// it hands a command as a file and takes away after, the panel's text
     /// for `edit --contents` among it.
     ///
     /// The workspace's own, as `.mind/tmp` is a project's, and named alike:
-    /// inside `.mindflayer`, where no agent looks and a workspace keeps what
-    /// is Mindflayer's, never in the system's temporary folder, where
+    /// inside `.mindweaver`, where no agent looks and a workspace keeps what
+    /// is Mindweaver's, never in the system's temporary folder, where
     /// another user could read what is about to be written. Not a project's
     /// `.mind/tmp`, even for a project's artifact: a cloned repository can
     /// bring that folder, or a link in its place, with it.
     pub fn scratch_dir(&self) -> PathBuf {
-        self.root.join(PathBuf::from_iter(SCRATCH))
+        self.root.join(PathBuf::from_iter(scratch(self.names)))
     }
 
     /// The workspace's scratch folder ([`scratch_dir`](Self::scratch_dir))
     /// as a route from its root, `/` separated: how a command line run from
-    /// the root names a file there, which a front end spells with no
-    /// workspace at hand, as the panel's save does its line.
-    pub fn scratch_route() -> String {
-        SCRATCH.join("/")
+    /// the root names a file there, as the panel's save does its line.
+    pub fn scratch_route(&self) -> String {
+        Self::scratch_route_under(self.names)
+    }
+
+    /// The same, for a workspace under `names`: what a front end spells
+    /// with no workspace at hand, under Mindweaver's for one made now.
+    pub fn scratch_route_under(names: Names) -> String {
+        scratch(names).join("/")
     }
 
     /// Where artifacts gathered from elsewhere live, one folder per kind.
@@ -1351,18 +1476,20 @@ impl FlayerWorkspace {
     /// The same shape a mind project uses, one level up, so installing one
     /// into a project is a copy rather than a translation.
     pub fn gathered_dir(&self, kind: Kind) -> PathBuf {
-        self.flayer_dir().join(kind.folder())
+        self.weaver_dir().join(kind.folder())
     }
 
-    /// The database recording what was gathered and what was done.
+    /// The database recording what was gathered and what was done:
+    /// `mindweaver.db`, or the `mindflayer.db` of one a Mindflayer build
+    /// made.
     pub fn ledger_path(&self) -> PathBuf {
-        self.flayer_dir().join(LEDGER_FILE)
+        self.weaver_dir().join(self.names.ledger_file())
     }
 
     /// The file a writer locks ([`lock::LOCK_FILE`]), whether or not one has
     /// made it yet.
     pub fn lock_path(&self) -> PathBuf {
-        self.flayer_dir().join(lock::LOCK_FILE)
+        self.weaver_dir().join(lock::LOCK_FILE)
     }
 
     /// Hold this workspace for a change, waiting up to [`lock::WAIT`] for a
@@ -1385,19 +1512,19 @@ impl FlayerWorkspace {
     /// [`Duration::ZERO`] tries once, and a wait too long to count from now,
     /// [`Duration::MAX`], never gives up.
     pub fn lock_waiting(&self, wait: Duration) -> Result<WorkspaceLock, LockError> {
-        WorkspaceLock::acquire(&self.flayer_dir(), wait)
+        WorkspaceLock::acquire(&self.weaver_dir(), wait)
     }
 
     /// Open that database, creating it if this workspace has never had one.
     ///
     /// Refused for an [`unmade`](Self::unmade) workspace, which has nowhere to
     /// keep one: creating it would leave half a workspace behind, a
-    /// `.mindflayer` holding a database and no marker.
+    /// `.mindweaver` holding a database and no marker.
     ///
     /// What a command opens it through, rather than how: one that writes to it
-    /// opens it with [`FlayerWorkspace::ledger_to_write`], which scrubs it
+    /// opens it with [`WeaverWorkspace::ledger_to_write`], which scrubs it
     /// first, and one that only reads with
-    /// [`FlayerWorkspace::ledger_for_reading`], which neither makes it nor
+    /// [`WeaverWorkspace::ledger_for_reading`], which neither makes it nor
     /// scrubs it.
     ///
     /// Opened without the workspace's [`lock`](Self::lock), though opening is
@@ -1412,7 +1539,7 @@ impl FlayerWorkspace {
     /// gather ran long, with the record left behind.
     ///
     /// A ledger made or migrated here is told the id of each project the
-    /// workspace links (`FlayerWorkspace::known`), which the step to schema 5
+    /// workspace links (`WeaverWorkspace::known`), which the step to schema 5
     /// names each one's records by.
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
         if !self.made {
@@ -1473,7 +1600,7 @@ impl FlayerWorkspace {
     /// making a file to say so.
     ///
     /// Never for a write. What is recorded in the stand-in is gone when it is
-    /// dropped, and a copy installed without its record is one Mindflayer
+    /// dropped, and a copy installed without its record is one Mindweaver
     /// would afterwards refuse to touch; a write opens
     /// [`ledger_to_write`](Self::ledger_to_write).
     ///
@@ -1741,7 +1868,7 @@ impl FlayerWorkspace {
     /// Idempotent, like `link`, and a workspace cannot load itself.
     pub fn load(
         &mut self,
-        source: &FlayerWorkspace,
+        source: &WeaverWorkspace,
     ) -> Result<(PathBuf, Registration), WorkspaceError> {
         let mut loaded = self.load_all(std::slice::from_ref(source))?;
         Ok(loaded.remove(0))
@@ -1753,7 +1880,7 @@ impl FlayerWorkspace {
     /// the refusal has to come before the first entry is written.
     pub fn load_all(
         &mut self,
-        sources: &[FlayerWorkspace],
+        sources: &[WeaverWorkspace],
     ) -> Result<Vec<(PathBuf, Registration)>, WorkspaceError> {
         let mut wanted = Vec::new();
         for source in sources {
@@ -1836,7 +1963,7 @@ impl FlayerWorkspace {
             .iter()
             .map(|entry| {
                 let root = paths::normalize(&self.root.join(entry));
-                let workspace = FlayerWorkspace::open(&root);
+                let workspace = WeaverWorkspace::open(&root);
                 Loaded {
                     entry: entry.clone(),
                     root,
@@ -1856,7 +1983,7 @@ impl FlayerWorkspace {
     /// front end writes the list into some other workspace.
     pub(crate) fn remember(
         &mut self,
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
     ) -> Result<(PathBuf, Registration), WorkspaceError> {
         let entry = self.entry_for(workspace.root());
         let target = paths::normalize(workspace.root());
@@ -1975,7 +2102,7 @@ impl FlayerWorkspace {
 
         // Re-read, so what is in memory is what is on disk rather than what we
         // believe we wrote.
-        let config: FlayerConfig = read_config(&path)?;
+        let config: WeaverConfig = read_config(&path)?;
         check_version(&path, Marker::Workspace, config.version)?;
         self.config = config;
         Ok(value)
@@ -2059,7 +2186,7 @@ impl FlayerWorkspace {
                 // line drawn in the project format, and below it sends every
                 // kind its marker does not name into `.mind`, where a
                 // workspace has never kept its artifacts and a v1
-                // `flayer.toml` would send them. The newest a `mind.toml`
+                // marker would send them. The newest a `mind.toml`
                 // holds, since what this is read as is one: every kind is
                 // named below, so no version gives one a different folder.
                 version: MIND_TOML_VERSION,
@@ -2068,7 +2195,7 @@ impl FlayerWorkspace {
                     .config
                     .directories
                     .clone()
-                    .filled(Directories::library_for),
+                    .filled(|kind| Directories::library_under(self.names, kind)),
             }),
         }
     }
@@ -2125,7 +2252,7 @@ impl FlayerWorkspace {
     /// it. A `mind` command spells its project the way the operating system
     /// reports the directory it runs in, through no symlink, while a
     /// workspace named with `-W` keeps the spelling it was given, `/tmp` on
-    /// a Mac say; the route between those two is not the one `flayer -p`
+    /// a Mac say; the route between those two is not the one `mindweaver -p`
     /// takes from the entry, and a record written under one would not be
     /// found under the other. A spelling that already matches as written is
     /// kept, so nothing that matched before is named differently now.
@@ -2147,7 +2274,7 @@ impl FlayerWorkspace {
 }
 
 /// What the projects a workspace links say of their ids
-/// ([`FlayerWorkspace::known`]).
+/// ([`WeaverWorkspace::known`]).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Known {
     /// Each id one linked directory holds, by its route from the workspace,
@@ -2210,7 +2337,7 @@ pub struct Loaded {
     /// Where it points, resolved against the workspace root.
     pub root: PathBuf,
     /// The workspace there, or why there is none.
-    pub workspace: Result<FlayerWorkspace, WorkspaceError>,
+    pub workspace: Result<WeaverWorkspace, WorkspaceError>,
 }
 
 /// As the entry and what it opens, for the reason a [`Member`] is: the entry
@@ -2223,7 +2350,7 @@ impl Serialize for Loaded {
         let mut loaded = serializer.serialize_struct("Loaded", 4)?;
         loaded.serialize_field("entry", &paths::as_route(&self.entry))?;
         loaded.serialize_field("root", &self.root.to_string_lossy())?;
-        loaded.serialize_field("name", &workspace.map(FlayerWorkspace::name))?;
+        loaded.serialize_field("name", &workspace.map(WeaverWorkspace::name))?;
         loaded.serialize_field("error", &error.map(|error| Said::of(error.code(), error)))?;
         loaded.end()
     }
@@ -2239,9 +2366,9 @@ const KNOWN_KEY: &str = "known";
 fn explained(key: &str) -> Option<&'static str> {
     (key == KNOWN_KEY).then_some(
         "\n\
-         # `known` lists the other flayer workspaces on this machine, which\n\
-         # `flayer workspaces` shows. While this is the default workspace,\n\
-         # `flayer init` adds each one it makes; `flayer workspaces forget <path>`\n\
+         # `known` lists the other weaver workspaces on this machine, which\n\
+         # `mindweaver workspaces` shows. While this is the default workspace,\n\
+         # `mindweaver init` adds each one it makes; `mindweaver workspaces forget <path>`\n\
          # takes one out.\n",
     )
 }
@@ -2347,7 +2474,7 @@ pub enum WorkspaceError {
         #[source]
         source: io::Error,
     },
-    #[error("{path}: not valid Mindflayer configuration: {source}")]
+    #[error("{path}: not valid Mindweaver configuration: {source}")]
     Parse {
         path: PathBuf,
         #[source]
@@ -2356,16 +2483,16 @@ pub enum WorkspaceError {
     /// A marker that is not what its format says, for a reason no parser
     /// gives: a project's settings, which are read a key at a time, or a
     /// version the file it is in does not hold.
-    #[error("{path}: not valid Mindflayer configuration: {detail}")]
+    #[error("{path}: not valid Mindweaver configuration: {detail}")]
     Malformed { path: PathBuf, detail: String },
     #[error(
         "{path}: not a mind project (no {MIND_DIR}/{SETTINGS_FILE}, {MIND_DIR}/{SETTINGS_JSON_FILE} \
          or {MIND_DIR}/{MIND_CONFIG})"
     )]
     NotAProject { path: PathBuf },
-    #[error("{path}: not a flayer workspace (no {FLAYER_DIR}/{FLAYER_CONFIG})")]
+    #[error("{path}: not a weaver workspace (no {WEAVER_DIR}/{WEAVER_CONFIG} or {FLAYER_DIR}/{FLAYER_CONFIG})")]
     NotAWorkspace { path: PathBuf },
-    #[error("{path}: written by a newer Mindflayer ({marker} version {found}, this one reads {supported})", supported = .marker.version())]
+    #[error("{path}: written by a newer Mindweaver ({marker} version {found}, this one reads {supported})", supported = .marker.version())]
     Version {
         path: PathBuf,
         marker: Marker,
@@ -2387,7 +2514,7 @@ pub enum WorkspaceError {
     OutsideProject { path: PathBuf, kind: Kind },
     #[error(
         "{path}: cannot hold a project's {kind}s, \
-         because it is inside {MIND_DIR}, which holds Mindflayer's own files \
+         because it is inside {MIND_DIR}, which holds Mindweaver's own files \
          and is kept out of git unless the project is shared"
     )]
     InsideMind { path: PathBuf, kind: Kind },
@@ -2686,9 +2813,9 @@ pub(crate) fn replace_bytes_unresolved(
 }
 
 /// A new, empty file beside `path` to build its replacement in, named after
-/// it and this run (`flayer.toml.<pid>-<suffix>.tmp`).
+/// it and this run (`weaver.toml.<pid>-<suffix>.tmp`).
 ///
-/// Not `flayer.toml.tmp`, the one name every writer used to share: two
+/// Not `weaver.toml.tmp`, the one name every writer used to share: two
 /// writers at once wrote into one temporary, so either could rename the
 /// other's half-written bytes into place, and the second rename found
 /// nothing to move. Made with `create_new`, so a file somebody else has
@@ -2733,7 +2860,7 @@ pub(crate) fn absolute(path: &Path) -> Result<PathBuf, WorkspaceError> {
 fn directory_name(root: &Path) -> String {
     root.file_name()
         .and_then(|name| name.to_str())
-        .unwrap_or("mindflayer")
+        .unwrap_or("mindweaver")
         .to_owned()
 }
 
@@ -2743,6 +2870,10 @@ fn directory_name(root: &Path) -> String {
 /// Every kind's directory is spelled out even when it is the default, so the
 /// answer to "where do this project's skills go" is in the file rather than in
 /// a function somebody has to go and read.
+///
+/// The `mind.toml` a version 2 build wrote, byte for byte, its old name for
+/// the product included: only tests of such a project write one now, and
+/// what they hold is what those builds left on the disk.
 fn mind_template(name: &str, directories: &Directories) -> String {
     let configured = directory_lines(directories.resolved());
 
@@ -2768,23 +2899,26 @@ fn mind_template(name: &str, directories: &Directories) -> String {
     )
 }
 
-fn flayer_template(name: &str, directories: &Directories) -> String {
+/// The marker a new workspace is written with, its directories and comments
+/// spelled under `names`: Mindweaver's for every one a command makes.
+fn weaver_template(name: &str, directories: &Directories, names: Names) -> String {
+    let dir = names.workspace_dir();
     format!(
-        "# Mindflayer workspace.\n\
+        "# Mindweaver workspace.\n\
          #\n\
          # It orchestrates the mind projects listed below, so their skills can be\n\
          # managed together. Paths are relative to this file's grandparent, the\n\
-         # directory holding {FLAYER_DIR}.\n\
+         # directory holding {dir}.\n\
          #\n\
          # `directories` says where the workspace keeps its own skills and rules,\n\
          # the ones every project it manages can install. By default that is its\n\
-         # library, inside {FLAYER_DIR} where no agent looks, and a kind not named\n\
+         # library, inside {dir} where no agent looks, and a kind not named\n\
          # here is kept there too. Each folder is made the first time something\n\
          # is added to it.\n\
          #\n\
-         # `loaded` lists other flayer workspaces whose own skills its projects\n\
-         # can install too, read from there each time: `flayer load <path>`.\n\
-         version = {FLAYER_FORMAT_VERSION}\n\
+         # `loaded` lists other weaver workspaces whose own skills its projects\n\
+         # can install too, read from there each time: `mindweaver load <path>`.\n\
+         version = {WEAVER_FORMAT_VERSION}\n\
          name = {}\n\
          projects = []\n\
          loaded = []\n\
@@ -2792,8 +2926,14 @@ fn flayer_template(name: &str, directories: &Directories) -> String {
          [directories]\n\
          {}",
         toml_string(name),
-        directory_lines(directories.resolved_with(Directories::library_for)),
+        directory_lines(directories.resolved_with(|kind| Directories::library_under(names, kind))),
     )
+}
+
+/// Where the marker of a workspace at `root` kept under `names` is.
+fn marker_under(root: &Path, names: Names) -> PathBuf {
+    root.join(names.workspace_dir())
+        .join(names.workspace_config())
 }
 
 /// `skills = "skills"`, a line per kind, spelled out even for the defaults.
@@ -2835,7 +2975,7 @@ fn stays_inside(directory: &Path) -> bool {
 /// settings say it authors `kind`s: it leads out of the project
 /// ([`stays_inside`]), or into its `.mind`.
 ///
-/// `.mind` is Mindflayer's: the marker, the templates, the stage an install
+/// `.mind` is Mindweaver's: the marker, the templates, the stage an install
 /// builds in. A local project's keeps itself out of git, so a folder there
 /// would hide what the project wrote from the team without a word, where the
 /// point of authoring beside the code (D-06) is that it is committed with it.
@@ -2868,7 +3008,8 @@ fn starts_in(directory: &Path, folder: &str) -> bool {
 /// project's and not some other's, or nobody's: the copies go where the
 /// project's agents are pointed, which only the project can promise. Not in
 /// `.mind`, which no agent reads and a local project keeps out of git, nor
-/// in a `.mindflayer`, which no agent reads either, and whose shelf and
+/// in a `.mindweaver` or the `.mindflayer` a Mindflayer build made, which no
+/// agent reads either, and whose shelf and
 /// cache gathering replaces and deletes by names of its own: a workspace at
 /// the project's root keeps both there. Nor in a `.git`, the project's or
 /// that of a repository nested in it, which no agent reads and git owns: a
@@ -2897,7 +3038,10 @@ pub(crate) fn misplaced_target(kind: Kind, folder: &Path) -> Option<Misplaced> {
             .components()
             .any(|part| part.as_os_str().eq_ignore_ascii_case(name))
     };
-    if named(FLAYER_DIR) {
+    if Names::ALL
+        .into_iter()
+        .any(|names| named(names.workspace_dir()))
+    {
         return Some(Misplaced::InsideWorkspace);
     }
     named(GIT_DIR).then_some(Misplaced::InsideGit)
@@ -2910,7 +3054,7 @@ const GIT_DIR: &str = ".git";
 /// workspace's own `kind`s: it leads out of the workspace, or it overlaps
 /// what is reserved for gathering ([`gathered_overlap`]).
 ///
-/// What [`FlayerWorkspace::init_with`] refuses before it makes anything, and
+/// What [`WeaverWorkspace::init_with`] refuses before it makes anything, and
 /// what a migration refuses to move out of
 /// ([`crate::migrate::library_plan`]). `open` still reads a marker edited by
 /// hand to name such a folder, since reading one changes nothing; moving out
@@ -2931,16 +3075,20 @@ pub(crate) fn misplaced_own(kind: Kind, directory: &Path) -> Option<WorkspaceErr
 
 /// The folder reserved for gathering that a workspace's own `directory` would
 /// overlap, if any: the shelf, a folder per kind
-/// ([`FlayerWorkspace::gathered_dir`]), or the cache of clones
-/// ([`FlayerWorkspace::cache_dir`]), as a route from the workspace's root.
+/// ([`WeaverWorkspace::gathered_dir`]), or the cache of clones
+/// ([`WeaverWorkspace::cache_dir`]), as a route from the workspace's root.
 ///
 /// Those folders are gathering's alone. It replaces and deletes what is in
 /// them by names of its own, so an artifact somebody wrote there could go with
 /// the next gather, and a listing could no longer tell what was gathered from
 /// what the workspace keeps. Overlapping counts either way round:
-/// `.mindflayer` holds both, and a rules folder there would read every
+/// `.mindweaver` holds both, and a rules folder there would read every
 /// markdown file in every clone as one of the workspace's rules. The rest of
-/// `.mindflayer` is not gathering's, so a directory there is allowed.
+/// `.mindweaver` is not gathering's, so a directory there is allowed.
+///
+/// Under both names, whichever the workspace is kept under: a `.mindflayer`
+/// becomes a `.mindweaver` when it is moved, its shelf and cache with it, so
+/// a folder of its own in the one would be gathering's in the other.
 ///
 /// Every kind's shelf is reserved, not only a gatherable kind's, rather than
 /// matched on the kind as `gather` is: scrubbing a source already deletes its
@@ -2949,16 +3097,20 @@ pub(crate) fn misplaced_own(kind: Kind, directory: &Path) -> Option<WorkspaceErr
 /// own.
 ///
 /// Compared a component at a time, ignoring ASCII case: where the filesystem
-/// does, as macOS's and Windows' do by default, `.Mindflayer/Skills` is the
+/// does, as macOS's and Windows' do by default, `.Mindweaver/Skills` is the
 /// shelf, and refusing it on Linux as well costs nobody anything.
 fn gathered_overlap(directory: &Path) -> Option<PathBuf> {
     let directory = paths::normalize(directory);
     // Spelled with `/`, so a refusal reads the same on every platform.
-    Kind::ALL
+    Names::ALL
         .into_iter()
-        .map(Kind::folder)
-        .chain(std::iter::once(CACHE_DIR))
-        .map(|folder| PathBuf::from(format!("{FLAYER_DIR}/{folder}")))
+        .flat_map(|names| {
+            Kind::ALL
+                .into_iter()
+                .map(Kind::folder)
+                .chain(std::iter::once(CACHE_DIR))
+                .map(move |folder| PathBuf::from(format!("{}/{folder}", names.workspace_dir())))
+        })
         .find(|gathered| {
             directory
                 .components()
@@ -2971,7 +3123,7 @@ fn gathered_overlap(directory: &Path) -> Option<PathBuf> {
 /// optional even though the common case never needs it.
 ///
 /// A basic string takes no control character as it is but a tab, so every
-/// other one is escaped: a name holding an ESC or a CR, which `flayer init
+/// other one is escaped: a name holding an ESC or a CR, which `mindweaver init
 /// PATH` takes as typed, would otherwise be written into a marker that no
 /// command, `init` again included, could read. The C1 controls are allowed
 /// as they are, and escaped all the same, since `char::is_control` is the

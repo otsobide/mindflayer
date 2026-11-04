@@ -3,7 +3,7 @@ import { useFreshness } from './live'
 import { useTransport, type Task } from './transport'
 
 /**
- * Every project brought up to date, `flayer update --all --yes`: the task
+ * Every project brought up to date, `mindweaver update --all --yes`: the task
  * the page of updates sends for **Update all**, and the command palette
  * for its own, spelled once so the two cannot drift apart.
  */
@@ -13,7 +13,7 @@ export const UPDATE_ALL: Task = { type: 'update', holder: { type: 'workspace' },
  * What updating every project the workspace links would do (core's
  * `update::Updates`): each installation an update says something of, how
  * it stands, what an update does with it, and why it leaves one it leaves,
- * as `flayer update --all` says without `--yes`.
+ * as `mindweaver update --all` says without `--yes`.
  *
  * A query of its own beside the snapshot, asked for only by the page of
  * updates: telling what an update does reads where each installation came

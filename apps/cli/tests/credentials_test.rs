@@ -8,7 +8,7 @@ mod common;
 
 use common::mother::OlderBuildMother;
 use common::*;
-use mindflayer_core::mother::{random, Credentialed, GitRepositoryMother, UrlMother};
+use mindweaver_core::mother::{random, Credentialed, GitRepositoryMother, UrlMother};
 
 /// The refusal a gather of a URL with a credential in it ends with, after
 /// the URL without it.
@@ -52,7 +52,7 @@ fn holds_no_secret(text: &str, url: &Credentialed, what: &str) {
 #[test]
 fn no_way_of_typing_a_credential_into_a_url_to_gather_is_said_or_kept() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
     for url in UrlMother::every_credentialed() {
         // A branch and a folder now and then, which reach the request the
@@ -67,7 +67,7 @@ fn no_way_of_typing_a_credential_into_a_url_to_gather_is_said_or_kept() {
         args.push(url.typed.clone());
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
 
-        let failure = flayer(dir.path(), &args).unwrap_err();
+        let failure = weaver(dir.path(), &args).unwrap_err();
 
         assert_eq!(failure.error.code(), "credentials_in_url", "{args:?}");
         assert_eq!(
@@ -76,17 +76,17 @@ fn no_way_of_typing_a_credential_into_a_url_to_gather_is_said_or_kept() {
             "{args:?}"
         );
         assert!(failure.warnings.is_empty(), "{:?}", failure.warnings);
-        let mind_args: Vec<&str> = std::iter::once("flayer").chain(args.clone()).collect();
+        let mind_args: Vec<&str> = std::iter::once("weaver").chain(args.clone()).collect();
         let long_way = mind(dir.path(), &mind_args);
         assert_eq!(
             said(&long_way),
             said(&Err(failure)),
-            "`mind flayer` is `flayer`"
+            "`mind weaver` is `mindweaver`"
         );
         holds_no_secret(&OlderBuildMother::kept(dir.path()), &url, "the workspace");
     }
 
-    let listed = flayer(dir.path(), &["gather", "list"]).unwrap();
+    let listed = weaver(dir.path(), &["gather", "list"]).unwrap();
     assert!(
         listed.stdout.starts_with("nothing gathered yet"),
         "{}",
@@ -97,12 +97,12 @@ fn no_way_of_typing_a_credential_into_a_url_to_gather_is_said_or_kept() {
 #[test]
 fn a_url_typed_where_a_branch_goes_is_said_and_kept_without_its_credential() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let source = GitRepositoryMother::with_skills(&["deploy"]);
     let address = GitRepositoryMother::url(&source);
 
     for url in UrlMother::every_credentialed() {
-        let ran = flayer(
+        let ran = weaver(
             dir.path(),
             &[
                 "gather",
@@ -127,7 +127,7 @@ fn a_url_typed_where_a_branch_goes_is_said_and_kept_without_its_credential() {
             format!("{}: {REFUSED}", url.clean)
         );
         holds_no_secret(&said(&ran), &url, "the refusal");
-        let history = flayer(dir.path(), &["gather", "list", "--json"]);
+        let history = weaver(dir.path(), &["gather", "list", "--json"]);
         holds_no_secret(&said(&history), &url, "the gather list");
         holds_no_secret(&OlderBuildMother::kept(dir.path()), &url, "the workspace");
     }
@@ -138,12 +138,12 @@ fn a_url_typed_where_a_branch_goes_is_said_and_kept_without_its_credential() {
 #[test]
 fn the_binaries_say_no_credential_typed_into_a_url_to_gather() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
     for url in UrlMother::every_credentialed() {
         for (binary, args) in [
-            ("flayer", vec!["gather", "git", url.typed.as_str()]),
-            ("mind", vec!["flayer", "gather", "git", url.typed.as_str()]),
+            ("mindweaver", vec!["gather", "git", url.typed.as_str()]),
+            ("mind", vec!["weaver", "gather", "git", url.typed.as_str()]),
         ] {
             let ran = spawn(binary, dir.path(), &args, &[]);
 
@@ -164,12 +164,12 @@ fn the_binaries_say_no_credential_typed_into_a_url_to_gather() {
 #[test]
 fn words_quoting_a_url_with_a_credential_are_said_without_it() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
     for url in UrlMother::every_credentialed() {
         let quoted = UrlMother::quoted(&url);
 
-        let failure = flayer(dir.path(), &["gather", "git", &quoted.typed]).unwrap_err();
+        let failure = weaver(dir.path(), &["gather", "git", &quoted.typed]).unwrap_err();
 
         assert_eq!(failure.error.code(), "credentials_in_url", "{quoted:?}");
         assert_eq!(
@@ -194,20 +194,20 @@ fn an_origin_typed_with_a_credential_is_said_without_it() {
 
     for url in UrlMother::every_credentialed() {
         for from in [url.clone(), UrlMother::quoted(&url)] {
-            let at_the_workspace = flayer(
+            let at_the_workspace = weaver(
                 dir.path(),
                 &["install", "-p", "alpha", "deploy", "--from", &from.typed],
             );
             let in_the_project = mind(&alpha, &["install", "deploy", "--from", &from.typed]);
 
-            for (level, result) in [("flayer", at_the_workspace), ("mind", in_the_project)] {
+            for (level, result) in [("mindweaver", at_the_workspace), ("mind", in_the_project)] {
                 let failure = result.unwrap_err();
                 assert_eq!(
                     failure.error.to_string(),
                     format!(
                         "nothing called `deploy` can be installed from {}: gather it, load a \
-                         workspace that has it with `flayer load`, or add it to the workspace \
-                         with `flayer add`",
+                         workspace that has it with `mindweaver load`, or add it to the workspace \
+                         with `mindweaver add`",
                         from.clean
                     ),
                     "{level} install --from {:?}",
@@ -239,7 +239,7 @@ fn readings(dir: &Path) -> Vec<(String, Result<Outcome, Failure>)> {
         &["validate"],
         &["validate", "--json"],
     ] {
-        read.push((format!("flayer {args:?}"), flayer(dir, args)));
+        read.push((format!("mindweaver {args:?}"), weaver(dir, args)));
     }
     for args in [
         &["list", "--json"][..],
@@ -252,13 +252,13 @@ fn readings(dir: &Path) -> Vec<(String, Result<Outcome, Failure>)> {
     read
 }
 
-/// What a Mindflayer from before the refusal stored is redacted on its way
+/// What a Mindweaver from before the refusal stored is redacted on its way
 /// out of every read, whichever form it was typed in, and a read leaves it
 /// where it is, as a read writes nothing.
 #[test]
 fn a_credential_an_older_build_stored_is_never_read_out() {
     let (dir, _workspace, _ledger) = shelved(&["alpha"], &["deploy"]);
-    flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
 
     for url in UrlMother::every_credentialed() {
         OlderBuildMother::stored(dir.path(), &url.typed);
@@ -266,7 +266,7 @@ fn a_credential_an_older_build_stored_is_never_read_out() {
         for (command, result) in readings(dir.path()) {
             holds_no_secret(&said(&result), &url, &command);
         }
-        let shelf = flayer(dir.path(), &["gather", "list", "--json"]).unwrap();
+        let shelf = weaver(dir.path(), &["gather", "list", "--json"]).unwrap();
         assert!(
             shelf.stdout.contains(&url.clean),
             "the shelf lists its source as {:?}:\n{}",
@@ -293,10 +293,10 @@ fn a_command_that_writes_takes_out_every_form_of_credential_an_older_build_store
 
     for url in UrlMother::every_credentialed() {
         let (dir, _workspace, _ledger) = shelved(&["alpha"], &["deploy"]);
-        flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+        weaver(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
         OlderBuildMother::stored(dir.path(), &url.typed);
 
-        let result = flayer(dir.path(), &["gather", "git", &other]);
+        let result = weaver(dir.path(), &["gather", "git", &other]);
 
         holds_no_secret(&said(&result), &url, "the gather");
         let gathered = result.unwrap();
@@ -306,7 +306,7 @@ fn a_command_that_writes_takes_out_every_form_of_credential_an_older_build_store
                 .stderr
                 .iter()
                 .any(|line| line.text.starts_with(&format!(
-                    "note: {}: the user name, password or token an older Mindflayer stored",
+                    "note: {}: the user name, password or token an older Mindweaver stored",
                     url.clean
                 ))),
             "{:?}: {:?}",
@@ -331,8 +331,8 @@ mod panel {
     //! older build stored.
 
     use super::*;
-    use mindflayer_cli::backend::{PanelBackend, Query};
-    use mindflayer_server::Backend;
+    use mindweaver_cli::backend::{PanelBackend, Query};
+    use mindweaver_server::Backend;
     use serde_json::{json, Value};
 
     fn backend(root: &Path) -> PanelBackend {
@@ -398,7 +398,7 @@ mod panel {
     #[test]
     fn the_panel_reads_no_credential_an_older_build_stored() {
         let (dir, _workspace, _ledger) = shelved(&["alpha"], &["deploy"]);
-        flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+        weaver(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
         let backend = backend(dir.path());
 
         for url in UrlMother::every_credentialed() {

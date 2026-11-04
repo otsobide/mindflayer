@@ -3,18 +3,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+        "mindweaver -W /home/you/Projects edit --contents .mindweaver/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+        "mindweaver -W /home/you/Projects edit --contents .mindweaver/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review",
+            "command": "mindweaver -W /home/you/Projects edit --contents .mindweaver/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -38,21 +38,21 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+        "mindweaver -W /home/you/Projects edit --contents .mindweaver/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
+        "mindweaver -W /home/you/Projects edit --contents .mindweaver/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review"
       ],
       "outcome": {
         "ok": false,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review",
+            "command": "mindweaver -W /home/you/Projects edit --contents .mindweaver/tmp/edit-f67e051f60a9675b.md --if-unchanged 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d skill:review",
             "error": {
               "code": "edit_stale",
-              "message": "/home/you/Projects/.mindflayer/library/skills/review/SKILL.md: changed since it was read, its SHA-256 now cb41a83d67ebbaa277cd7fe70f07d309ac257de256c210e6d8f35d9115edf740 and not 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d, so it is not written over; read it again"
+              "message": "/home/you/Projects/.mindweaver/library/skills/review/SKILL.md: changed since it was read, its SHA-256 now cb41a83d67ebbaa277cd7fe70f07d309ac257de256c210e6d8f35d9115edf740 and not 8b7db6a4fb1255506c9f5ec0fa7e343f5a9cb6b047a69f44b7aae72f4317439d, so it is not written over; read it again"
             },
             "ok": false,
             "stderr": [],
@@ -76,22 +76,22 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Projects add --template full skill deploy-docs 'Publish the docs'"
+        "mindweaver -W /home/you/Projects add --template full skill deploy-docs 'Publish the docs'"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects add --template full skill deploy-docs 'Publish the docs'"
+        "mindweaver -W /home/you/Projects add --template full skill deploy-docs 'Publish the docs'"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects add --template full skill deploy-docs 'Publish the docs'",
+            "command": "mindweaver -W /home/you/Projects add --template full skill deploy-docs 'Publish the docs'",
             "error": null,
             "ok": true,
             "stderr": [],
-            "stdout": "created skill deploy-docs at /home/you/Projects/.mindflayer/library/skills/deploy-docs/SKILL.md\n"
+            "stdout": "created skill deploy-docs at /home/you/Projects/.mindweaver/library/skills/deploy-docs/SKILL.md\n"
           }
         ]
       }
@@ -111,22 +111,22 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Projects rename skill:lint tidy"
+        "mindweaver -W /home/you/Projects rename skill:lint tidy"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects rename skill:lint tidy"
+        "mindweaver -W /home/you/Projects rename skill:lint tidy"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects rename skill:lint tidy",
+            "command": "mindweaver -W /home/you/Projects rename skill:lint tidy",
             "error": null,
             "ok": true,
             "stderr": [],
-            "stdout": "renamed skill lint to tidy at /home/you/Projects/.mindflayer/library/skills/tidy\n"
+            "stdout": "renamed skill lint to tidy at /home/you/Projects/.mindweaver/library/skills/tidy\n"
           }
         ]
       }
@@ -145,22 +145,22 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Projects adopt -p /home/you/Projects/web --yes skill:legacy"
+        "mindweaver -W /home/you/Projects adopt -p /home/you/Projects/web --yes skill:legacy"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects adopt -p /home/you/Projects/web --yes skill:legacy"
+        "mindweaver -W /home/you/Projects adopt -p /home/you/Projects/web --yes skill:legacy"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects adopt -p /home/you/Projects/web --yes skill:legacy",
+            "command": "mindweaver -W /home/you/Projects adopt -p /home/you/Projects/web --yes skill:legacy",
             "error": null,
             "ok": true,
             "stderr": [],
-            "stdout": "copied legacy from web into the library, at /home/you/Projects/.mindflayer/library/skills/legacy\nrecorded legacy in web as installed from workspace, at .claude/skills/legacy\nrecorded .agents/skills/legacy missing: `flayer update -p web` puts it there\n"
+            "stdout": "copied legacy from web into the library, at /home/you/Projects/.mindweaver/library/skills/legacy\nrecorded legacy in web as installed from workspace, at .claude/skills/legacy\nrecorded .agents/skills/legacy missing: `mindweaver update -p web` puts it there\n"
           }
         ]
       }

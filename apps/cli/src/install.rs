@@ -1,7 +1,7 @@
-//! `flayer install`: the screen for putting skills and rules into projects.
+//! `mindweaver install`: the screen for putting skills and rules into projects.
 //!
 //! The screen only marks boxes. Everything marked is carried out when you
-//! say so, as the `flayer install` and `flayer uninstall` lines it amounts
+//! say so, as the `mindweaver install` and `mindweaver uninstall` lines it amounts
 //! to ([`Screen::task`]), each parsed and run as typed, the way the TUI runs
 //! every line; and what they said is printed afterwards as the TUI's
 //! transcript prints it, each line and then what it said. So the report
@@ -13,10 +13,10 @@ pub mod ui;
 use std::io;
 use std::time::Duration;
 
-use mindflayer_core::gather::Watch;
-use mindflayer_core::install;
-use mindflayer_core::ledger::Ledger;
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject};
+use mindweaver_core::gather::Watch;
+use mindweaver_core::install;
+use mindweaver_core::ledger::Ledger;
+use mindweaver_core::{Kind, MindProject, WeaverWorkspace};
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::DefaultTerminal;
 
@@ -34,7 +34,7 @@ use state::{Screen, Step, Target};
 /// does from the shell; each with `lookup`, so they install nothing into the
 /// agents' own folders the command line was given, and use the workspace it
 /// chose.
-pub fn run(workspace: &FlayerWorkspace, lookup: &Lookup) -> Result<Outcome, Failure> {
+pub fn run(workspace: &WeaverWorkspace, lookup: &Lookup) -> Result<Outcome, Failure> {
     let (projects, warnings) = registered(workspace);
     let screen = open(workspace, projects)?;
 
@@ -43,7 +43,7 @@ pub fn run(workspace: &FlayerWorkspace, lookup: &Lookup) -> Result<Outcome, Fail
         stderr.extend(load_warnings(workspace));
         return Ok(Outcome {
             stdout: format!(
-                "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+                "{} manages no projects yet\n  link one with `mindweaver link <path>`\n",
                 workspace.name()
             ),
             stderr,
@@ -55,7 +55,7 @@ pub fn run(workspace: &FlayerWorkspace, lookup: &Lookup) -> Result<Outcome, Fail
     // thing here that needs a terminal, and being run without one (in CI,
     // with the output redirected) deserves a sentence rather than a panic.
     let mut terminal = ratatui::try_init().map_err(|source| CliError::NoTerminal {
-        command: "flayer install",
+        command: "mindweaver install",
         source,
     })?;
     let outcome = drive(&mut terminal, screen);
@@ -65,13 +65,13 @@ pub fn run(workspace: &FlayerWorkspace, lookup: &Lookup) -> Result<Outcome, Fail
     Ok(finish(workspace, &screen, step, lookup, warnings))
 }
 
-/// What `flayer install` says once its screen is left with `step`: what
+/// What `mindweaver install` says once its screen is left with `step`: what
 /// applying ran ([`apply`]), or that nothing was, after `warnings`, the
 /// projects that would not open, and what the loaded workspaces could not
 /// offer, on stderr, failing it.
 ///
 /// What the loaded workspaces could not offer is said by every install line
-/// itself, as `flayer install -p` says it typed by hand, so it is the
+/// itself, as `mindweaver install -p` says it typed by hand, so it is the
 /// screen's to say only when no install line ran: said here as well, it
 /// would be said once more than the lines that said it. An uninstall line
 /// does not say it, since what it takes out is read off the ledger rather
@@ -79,7 +79,7 @@ pub fn run(workspace: &FlayerWorkspace, lookup: &Lookup) -> Result<Outcome, Fail
 /// TUI prints a session, warnings and errors included: on stderr, a warning
 /// would be cut off from the line it is about.
 pub fn finish(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     screen: &Screen,
     step: Step,
     lookup: &Lookup,
@@ -107,10 +107,10 @@ pub fn finish(
 /// Build the screen from the ledger as it is, as a read: without making the
 /// ledger, or scrubbing it of what an older build stored with a credential.
 ///
-/// The screen `flayer install` opens and the one inside the TUI both open here
+/// The screen `mindweaver install` opens and the one inside the TUI both open here
 /// and apply as the lines [`Screen::task`] gives, so they cannot differ about
 /// either.
-pub fn open(workspace: &FlayerWorkspace, projects: Vec<MindProject>) -> Result<Screen, CliError> {
+pub fn open(workspace: &WeaverWorkspace, projects: Vec<MindProject>) -> Result<Screen, CliError> {
     let read = workspace.ledger_for_reading()?;
     Ok(build(workspace, &read, projects)?)
 }
@@ -127,7 +127,7 @@ pub fn open(workspace: &FlayerWorkspace, projects: Vec<MindProject>) -> Result<S
 /// it was by the time the line asks for it, by the origin the screen showed,
 /// which a scrub leaves as it was; and what only the source the scrub took
 /// out had gathered is refused as not offered, said where its line is.
-pub fn apply(workspace: &FlayerWorkspace, screen: &Screen, lookup: &Lookup) -> Outcome {
+pub fn apply(workspace: &WeaverWorkspace, screen: &Screen, lookup: &Lookup) -> Outcome {
     let dones: Vec<Done> = screen
         .task()
         .commands()
@@ -142,7 +142,7 @@ pub fn apply(workspace: &FlayerWorkspace, screen: &Screen, lookup: &Lookup) -> O
 }
 
 /// The projects a workspace manages, and what could not be opened.
-pub fn registered(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<Warning>) {
+pub fn registered(workspace: &WeaverWorkspace) -> (Vec<MindProject>, Vec<Warning>) {
     let (projects, failures) = workspace.projects();
     let warnings = failures
         .iter()
@@ -158,7 +158,7 @@ pub fn registered(workspace: &FlayerWorkspace) -> (Vec<MindProject>, Vec<Warning
 /// not need a terminal: a test builds a screen, presses the keys a person
 /// would, and applies the result.
 pub fn build(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     projects: Vec<MindProject>,
 ) -> Result<Screen, install::InstallError> {

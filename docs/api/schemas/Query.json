@@ -112,7 +112,7 @@
       ]
     },
     {
-      "description": "What could be linked under `roots`, `depth` levels down, as `flayer\nscan --suggest` finds it ([`Scanned`]): each root an absolute,\nnormalized path outside every `.mindflayer` ([`policy::path`]), as a\nfolder to link is, which is only read; none is the workspace's root,\nand no depth core's own (`scan::DEFAULT_DEPTH`), as for the command.\n\nA query of its own, asked for only when somebody asks, rather than a\npart of the snapshot: a scan walks the disk far past what a snapshot\nreads, and a live update reads the snapshot again on every change.",
+      "description": "What could be linked under `roots`, `depth` levels down, as `mindweaver\nscan --suggest` finds it ([`Scanned`]): each root an absolute,\nnormalized path outside every `.mindweaver` ([`policy::path`]), as a\nfolder to link is, which is only read; none is the workspace's root,\nand no depth core's own (`scan::DEFAULT_DEPTH`), as for the command.\n\nA query of its own, asked for only when somebody asks, rather than a\npart of the snapshot: a scan walks the disk far past what a snapshot\nreads, and a live update reads the snapshot again on every change.",
       "type": "object",
       "properties": {
         "depth": {
@@ -141,7 +141,7 @@
       ]
     },
     {
-      "description": "The folders directly inside `path`, for the panel's explorer to pick\none from ([`Folders`]): an absolute, normalized path outside every\n`.mindflayer` ([`policy::path`]), as a folder to link or a root to\nscan is, held to it before anything is read; none is the workspace's\nroot. Hidden folders only when `hidden` asks for them. Answered with\nthe launch's home beside them, for a way back to it.\n\nA read of one folder, asked for each time the explorer opens one,\nand no task: choosing a folder only fills a field, and the line it\ngoes to is previewed and run as a typed one is. No command line has\none, since a terminal has `ls` and completion.",
+      "description": "The folders directly inside `path`, for the panel's explorer to pick\none from ([`Folders`]): an absolute, normalized path outside every\n`.mindweaver` ([`policy::path`]), as a folder to link or a root to\nscan is, held to it before anything is read; none is the workspace's\nroot. Hidden folders only when `hidden` asks for them. Answered with\nthe launch's home beside them, for a way back to it.\n\nA read of one folder, asked for each time the explorer opens one,\nand no task: choosing a folder only fills a field, and the line it\ngoes to is previewed and run as a typed one is. No command line has\none, since a terminal has `ls` and completion.",
       "type": "object",
       "properties": {
         "hidden": {
@@ -186,7 +186,7 @@
       ]
     },
     {
-      "description": "What updating every project the workspace links would do ([`Updates`]):\neach installation an update says something of, how it stands, what\nan update does with it, and why it leaves one it leaves, every copy\nedited since left alone, as `flayer update --all` says without\n`--yes`.\n\nA query of its own, asked for by the page of updates, rather than a\npart of the snapshot: telling what an update does reads where each\ninstallation came from again, past what the snapshot reads, and a\nlive update reads the snapshot again on every change. Nothing in it\nis sent by the browser, so nothing is held to the path policy.",
+      "description": "What updating every project the workspace links would do ([`Updates`]):\neach installation an update says something of, how it stands, what\nan update does with it, and why it leaves one it leaves, every copy\nedited since left alone, as `mindweaver update --all` says without\n`--yes`.\n\nA query of its own, asked for by the page of updates, rather than a\npart of the snapshot: telling what an update does reads where each\ninstallation came from again, past what the snapshot reads, and a\nlive update reads the snapshot again on every change. Nothing in it\nis sent by the browser, so nothing is held to the path policy.",
       "type": "object",
       "properties": {
         "type": {
@@ -326,7 +326,7 @@
       "description": "Which level a task runs at: what holds the artifacts it is about.\n\n`{\"type\": \"project\", \"entry\": \"alpha\"}` in JSON, or `{\"type\":\n\"workspace\"}`: the shape a task's own variants have, which a variant\nholding one string cannot take inside the object the tag is in.",
       "oneOf": [
         {
-          "description": "The workspace, for its own artifacts: `flayer <cmd>`.",
+          "description": "The workspace, for its own artifacts: `mindweaver <cmd>`.",
           "type": "object",
           "properties": {
             "type": {
@@ -358,7 +358,7 @@
           ]
         },
         {
-          "description": "A project whose own workspace is not the one on screen, by its entry:\n`mind -W . -C <entry> <cmd>`, which names the one on screen, so a\nchange drops that workspace's record and an add takes its templates.\n\nStill the project's command rather than `flayer <cmd> -p <entry>`,\nwhich would consult the same workspace: a project's row teaches the\nproject's command, at every row alike, and `-W` only where leaving\nit out would consult another.",
+          "description": "A project whose own workspace is not the one on screen, by its entry:\n`mind -W . -C <entry> <cmd>`, which names the one on screen, so a\nchange drops that workspace's record and an add takes its templates.\n\nStill the project's command rather than `mindweaver <cmd> -p <entry>`,\nwhich would consult the same workspace: a project's row teaches the\nproject's command, at every row alike, and `-W` only where leaving\nit out would consult another.",
           "type": "object",
           "properties": {
             "entry": {

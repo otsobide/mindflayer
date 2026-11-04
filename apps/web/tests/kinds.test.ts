@@ -32,7 +32,7 @@ function withAKindMore(): Snapshot {
     state: null,
     agents: [],
     origin: null,
-    targets: ['.mindflayer/library/mcp/linear.json'],
+    targets: ['.mindweaver/library/mcp/linear.json'],
     issues: [],
     unread: null
   })
@@ -108,7 +108,7 @@ describe('a kind core adds', () => {
 
     unmount()
     const docs = await render('/project?entry=docs', withAKindMore())
-    expect(texts(docs.page, '[data-testid="kind-mcp"] code')).toContain('$ flayer -W /home/you/Projects install -p docs mcp:<NAME>')
+    expect(texts(docs.page, '[data-testid="kind-mcp"] code')).toContain('$ mindweaver -W /home/you/Projects install -p docs mcp:<NAME>')
   })
 })
 

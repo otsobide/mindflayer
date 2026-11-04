@@ -1,4 +1,4 @@
-//! `flayer update` and `mind update`: what Mindflayer installed into
+//! `mindweaver update` and `mind update`: what Mindweaver installed into
 //! projects brought up to date with where it came from, and the copies that
 //! have gone put back. Core's [`update`] decides everything, what is
 //! written, left or said; here it is laid out, as what would happen without
@@ -7,9 +7,9 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::install::{Installation, Installed};
-use mindflayer_core::update::{self, Plan, ProjectPlan, Step, Update};
-use mindflayer_core::{paths, AgentHomes, Excluded, FlayerWorkspace, MindProject, Reference};
+use mindweaver_core::install::{Installation, Installed};
+use mindweaver_core::update::{self, Plan, ProjectPlan, Step, Update};
+use mindweaver_core::{paths, AgentHomes, Excluded, MindProject, Reference, WeaverWorkspace};
 
 use super::gather::scrubbed;
 use super::install::{edits, left_out, named};
@@ -18,7 +18,7 @@ use crate::{CliError, Failure, Outcome, Warning};
 /// What a dry run that would write something ends with.
 const UNCHANGED: &str = "nothing changed: add --yes to go ahead\n";
 
-/// `flayer update -p`, `flayer update --all` and `mind update`: `projects`,
+/// `mindweaver update -p`, `mindweaver update --all` and `mind update`: `projects`,
 /// each one `workspace` links, brought up to date, or, without `yes`, what
 /// that would do. `typed` names the installations to update, as a command
 /// line names them, every one when it names none; `force` writes over a
@@ -30,7 +30,7 @@ const UNCHANGED: &str = "nothing changed: add --yes to go ahead\n";
 /// either way, as an install refused over it is, and an orphaned one a
 /// note, never a failure, since nothing could be done for it.
 pub(crate) fn update_projects(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     projects: &[MindProject],
     typed: &[String],
     force: bool,
@@ -180,7 +180,7 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
                 outcome.stderr.push(
                     format!(
                         "warning: {} in {into} is offered by {}, and was installed before \
-                         Mindflayer kept where from, so it {} left as it is; `install --from` \
+                         Mindweaver kept where from, so it {} left as it is; `install --from` \
                          says which",
                         named(update.kind, &update.name),
                         listed(
@@ -241,7 +241,7 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
                 outcome.stderr.push(
                     format!(
                         "warning: {into}: the exclude file still keeps out of git a file that is \
-                         no longer Mindflayer's: {reason}"
+                         no longer Mindweaver's: {reason}"
                     )
                     .into(),
                 );
@@ -323,7 +323,7 @@ fn installed(
         Installed::Foreign { path, .. } => {
             outcome.stderr.push(Warning {
                 text: format!(
-                    "warning: {into} already has a {what} at {} that Mindflayer did not put \
+                    "warning: {into} already has a {what} at {} that Mindweaver did not put \
                      there, so it was left alone",
                     at(root, path)
                 ),

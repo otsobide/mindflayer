@@ -7,7 +7,7 @@ import type { Snapshot } from '@/api/generated/Snapshot'
 import { useSnapshot } from '@/api/snapshot'
 import { first, useQueryChange } from '@/address'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
+import CommandHint, { weaver, making } from '@/components/CommandHint.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import { instant, when } from '@/time'
 
@@ -69,7 +69,7 @@ function short(revision: string): string {
           <CommandHint
             :commands="[
               ...making(snapshot.workspace),
-              { line: flayer(snapshot.workspace, 'gather git <URL>'), does: 'skills from a repository, onto the shelf' }
+              { line: weaver(snapshot.workspace, 'gather git <URL>'), does: 'skills from a repository, onto the shelf' }
             ]"
           />
         </div>
@@ -79,7 +79,7 @@ function short(revision: string): string {
             What was gathered from elsewhere, to install as it is. Each says where it came from as <code class="font-mono">--from</code> takes it, for when two places offer one name.
           </p>
           <CommandHint
-            :commands="[{ line: flayer(snapshot.workspace, 'install -p <PROJECT> <KIND>:<NAME> --from <ORIGIN>'), does: 'one of these into a project' }]"
+            :commands="[{ line: weaver(snapshot.workspace, 'install -p <PROJECT> <KIND>:<NAME> --from <ORIGIN>'), does: 'one of these into a project' }]"
           />
 
           <div

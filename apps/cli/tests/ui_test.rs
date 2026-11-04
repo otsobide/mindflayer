@@ -1,4 +1,4 @@
-//! `flayer ui` end to end: the binary started as a person starts it, the
+//! `mindweaver ui` end to end: the binary started as a person starts it, the
 //! link read from what it prints, and the panel's requests sent to it over
 //! loopback as a script sends them, with the token as Bearer. No browser is
 //! opened: every launch passes --no-open.
@@ -15,9 +15,9 @@ use std::time::Duration;
 use common::contract;
 use common::panel::*;
 use common::*;
-use mindflayer_cli::backend::PanelBackend;
-use mindflayer_cli::{Command, FlayerCommand, UiOptions};
-use mindflayer_server::Backend;
+use mindweaver_cli::backend::PanelBackend;
+use mindweaver_cli::{Command, UiOptions, WeaverCommand};
+use mindweaver_server::Backend;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -42,7 +42,7 @@ fn standing<'a>(snapshot: &'a Value, entry: &str, name: &str) -> Option<&'a str>
 fn the_panel_runs_what_it_is_sent_and_the_next_snapshot_shows_it() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
-    let panel = serve("flayer", dir.path(), home.path());
+    let panel = serve("mindweaver", dir.path(), home.path());
 
     let before = panel.snapshot();
     assert_eq!(standing(&before, "alpha", "commit-style"), None);
@@ -55,7 +55,7 @@ fn the_panel_runs_what_it_is_sent_and_the_next_snapshot_shows_it() {
         "from": null,
     });
     let line = format!(
-        "flayer -W {} install -p {} skill:commit-style",
+        "mindweaver -W {} install -p {} skill:commit-style",
         dir.path().display(),
         dir.path().join("alpha").display()
     );
@@ -84,7 +84,7 @@ fn the_panel_runs_what_it_is_sent_and_the_next_snapshot_shows_it() {
 fn every_read_route_answers_over_loopback_with_a_bearer_token() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
-    let panel = serve("flayer", dir.path(), home.path());
+    let panel = serve("mindweaver", dir.path(), home.path());
     let root = dir.path().to_str().unwrap();
     let snapshot = panel.snapshot();
     assert_eq!(snapshot["workspace"]["path"], root);
@@ -181,9 +181,9 @@ fn the_panel_switches_only_to_a_workspace_this_machine_knows() {
     let home = TempDir::new().unwrap();
     let team = home.path().join("team");
     fs::create_dir_all(&team).unwrap();
-    flayer_at_home(home.path(), home.path(), &["init"]).unwrap();
-    flayer_at_home(&team, home.path(), &["init"]).unwrap();
-    let panel = serve("flayer", dir.path(), home.path());
+    weaver_at_home(home.path(), home.path(), &["init"]).unwrap();
+    weaver_at_home(&team, home.path(), &["init"]).unwrap();
+    let panel = serve("mindweaver", dir.path(), home.path());
 
     for path in ["/etc", "--yes", "../team"] {
         let (status, refused) = panel.post("/api/v1/switch", json!({ "path": path }));
@@ -206,7 +206,7 @@ fn the_panel_switches_only_to_a_workspace_this_machine_knows() {
     assert_eq!(status, 200, "{preview}");
     assert_eq!(
         preview["lines"],
-        json!([format!("flayer -W {} gather list", team.display())])
+        json!([format!("mindweaver -W {} gather list", team.display())])
     );
 }
 
@@ -218,7 +218,7 @@ fn the_panel_switches_only_to_a_workspace_this_machine_knows() {
 fn a_save_writes_the_text_and_leaves_nothing_in_the_scratch_folder() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
-    let panel = serve("flayer", dir.path(), home.path());
+    let panel = serve("mindweaver", dir.path(), home.path());
     let workspace = json!({"type": "workspace"});
     let (status, read) = panel.get("/api/v1/contents?reference=skill%3Acommit-style&file=SKILL.md");
     assert_eq!(status, 200, "{read}");
@@ -239,7 +239,7 @@ fn a_save_writes_the_text_and_leaves_nothing_in_the_scratch_folder() {
     assert_eq!(ran["outcome"]["ok"], true, "{ran}");
     let manifest = own_directory_for(dir.path(), Kind::Skill).join("commit-style/SKILL.md");
     assert_eq!(fs::read_to_string(manifest).unwrap(), text);
-    let scratch = FlayerWorkspace::open(dir.path()).unwrap().scratch_dir();
+    let scratch = WeaverWorkspace::open(dir.path()).unwrap().scratch_dir();
     assert_eq!(fs::read_dir(scratch).unwrap().count(), 0);
 }
 
@@ -251,7 +251,7 @@ fn a_save_writes_the_text_and_leaves_nothing_in_the_scratch_folder() {
 fn every_event_the_stream_tells_holds_to_the_document() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
-    let panel = serve("flayer", dir.path(), home.path());
+    let panel = serve("mindweaver", dir.path(), home.path());
     let install = json!({
         "type": "install", "projects": ["alpha"], "kind": "skill", "name": "commit-style",
         "from": null,
@@ -296,7 +296,7 @@ fn every_event_the_stream_tells_holds_to_the_document() {
 fn the_api_s_document_is_the_one_committed_and_only_with_the_token() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
-    let panel = serve("flayer", dir.path(), home.path());
+    let panel = serve("mindweaver", dir.path(), home.path());
     let committed = include_str!("../../../docs/api/openapi.json");
 
     let (status, head, document) =
@@ -325,7 +325,7 @@ fn the_api_s_document_is_the_one_committed_and_only_with_the_token() {
 fn a_request_without_the_token_is_refused_with_a_401() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
-    let panel = serve("flayer", dir.path(), home.path());
+    let panel = serve("mindweaver", dir.path(), home.path());
 
     for (method, path, body) in [
         ("GET", "/api/v1/snapshot", None),
@@ -353,7 +353,7 @@ fn a_request_without_the_token_is_refused_with_a_401() {
 fn a_read_naming_what_is_not_there_is_a_404_and_a_refused_path_a_422() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
-    let panel = serve("flayer", dir.path(), home.path());
+    let panel = serve("mindweaver", dir.path(), home.path());
     let gone = dir.path().join("gone");
 
     for (asked, status, code) in [
@@ -386,7 +386,7 @@ fn a_read_naming_what_is_not_there_is_a_404_and_a_refused_path_a_422() {
 fn a_refused_command_is_a_422_naming_the_command() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
-    let panel = serve("flayer", dir.path(), home.path());
+    let panel = serve("mindweaver", dir.path(), home.path());
 
     let edit = json!({
         "type": "edit",
@@ -400,7 +400,7 @@ fn a_refused_command_is_a_422_naming_the_command() {
         assert_eq!(
             refusal,
             json!({
-                "error": "`flayer edit skill:commit-style` opens an editor, which needs a terminal to draw on",
+                "error": "`mindweaver edit skill:commit-style` opens an editor, which needs a terminal to draw on",
                 "code": "opens_editor",
             }),
             "{path}"
@@ -410,7 +410,7 @@ fn a_refused_command_is_a_422_naming_the_command() {
     assert_eq!(transcript, json!([]));
 }
 
-/// `mind ui` is `flayer ui` from where it is run: the panel is over the
+/// `mind ui` is `mindweaver ui` from where it is run: the panel is over the
 /// workspace a command run there would use.
 #[test]
 fn mind_ui_in_a_project_serves_the_workspace_above_it() {
@@ -436,7 +436,7 @@ fn mind_ui_in_a_project_serves_the_workspace_above_it() {
 fn through_the_dev_server_the_link_is_its_own_and_its_changes_are_taken() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
-    let (mut started, stdout, link) = launch("flayer", dir.path(), home.path(), &["--dev"]);
+    let (mut started, stdout, link) = launch("mindweaver", dir.path(), home.path(), &["--dev"]);
     let token = link
         .strip_prefix("http://127.0.0.1:5173/?token=")
         .unwrap_or_else(|| panic!("not the dev server's link: {link}"))
@@ -501,7 +501,7 @@ fn a_port_somebody_holds_is_a_failure_and_no_link() {
     ];
     args.extend(NO_AGENT_HOMES);
 
-    let mut started = start("flayer", dir.path(), &args, &[]);
+    let mut started = start("mindweaver", dir.path(), &args, &[]);
     let exited = exit(&mut started, Duration::from_secs(60));
 
     assert!(!exited.success(), "{exited:?}");
@@ -526,7 +526,7 @@ fn a_port_somebody_holds_is_a_failure_and_no_link() {
 fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
     let dir = workspace_with_own();
     let home = TempDir::new().unwrap();
-    let mut panel = serve("flayer", dir.path(), home.path());
+    let mut panel = serve("mindweaver", dir.path(), home.path());
     let (status, _) = panel.post("/api/v1/tasks", json!({"type": "shelf"}));
     assert_eq!(status, 200);
     let install = json!({
@@ -552,7 +552,7 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
         transcript.push_str(&format!("{}\n", line["text"].as_str().unwrap()));
     }
     assert_eq!(rest, transcript);
-    let named = format!("$ flayer -W {} install -p ", dir.path().display());
+    let named = format!("$ mindweaver -W {} install -p ", dir.path().display());
     assert!(rest.starts_with(&named), "{rest}");
     assert_eq!(
         said,
@@ -597,7 +597,7 @@ fn a_script_reaches_the_api_through_the_token_file_which_goes_when_ui_stops() {
     let run = TempDir::new().unwrap();
     let path = run.path().join("api.json");
     let panel = serve_with(
-        "flayer",
+        "mindweaver",
         dir.path(),
         home.path(),
         &["--token-file", path.to_str().unwrap()],
@@ -663,7 +663,7 @@ fn a_sigterm_stops_the_panel_as_ctrl_c_does_and_takes_the_token_file_away() {
     let run = TempDir::new().unwrap();
     let path = run.path().join("api.json");
     let token_file = ["--token-file", path.to_str().unwrap()];
-    let mut panel = serve_with("flayer", dir.path(), home.path(), &token_file);
+    let mut panel = serve_with("mindweaver", dir.path(), home.path(), &token_file);
     let install = json!({
         "type": "install",
         "projects": ["alpha"],
@@ -681,7 +681,7 @@ fn a_sigterm_stops_the_panel_as_ctrl_c_does_and_takes_the_token_file_away() {
         fs::symlink_metadata(&path).is_err(),
         "the file is still there"
     );
-    let named = format!("$ flayer -W {} install -p ", dir.path().display());
+    let named = format!("$ mindweaver -W {} install -p ", dir.path().display());
     assert!(rest.starts_with(&named), "{rest}");
     assert_eq!(
         said,
@@ -691,7 +691,7 @@ fn a_sigterm_stops_the_panel_as_ctrl_c_does_and_takes_the_token_file_away() {
             panel.address
         )
     );
-    let mut again = serve_with("flayer", dir.path(), home.path(), &token_file);
+    let mut again = serve_with("mindweaver", dir.path(), home.path(), &token_file);
     assert_eq!(handed(&path).token, again.token);
     let (exited, _, _) = signal(&mut again, "-TERM");
     assert!(exited.success(), "{exited:?}");
@@ -708,7 +708,7 @@ fn a_token_file_changed_while_the_panel_ran_is_left_where_it_is() {
     let run = TempDir::new().unwrap();
     let path = run.path().join("api.json");
     let mut panel = serve_with(
-        "flayer",
+        "mindweaver",
         dir.path(),
         home.path(),
         &["--token-file", path.to_str().unwrap()],
@@ -750,7 +750,7 @@ fn refused_token_file(path: &Path) -> (String, String) {
     ];
     args.extend(NO_AGENT_HOMES);
 
-    let mut started = start("flayer", dir.path(), &args, &[]);
+    let mut started = start("mindweaver", dir.path(), &args, &[]);
     let exited = exit(&mut started, Duration::from_secs(60));
 
     assert!(!exited.success(), "{exited:?}");
@@ -808,7 +808,7 @@ fn a_token_file_in_a_folder_not_there_is_refused_and_no_folder_is_made() {
     assert!(!run.path().join("run").exists());
 }
 
-/// The option on both binaries, as `mind ui`, `mind flayer ui` and `flayer
+/// The option on both binaries, as `mind ui`, `mind weaver ui` and `mindweaver
 /// ui` take it, in either spelling, the path kept as it was typed for the
 /// command to make it absolute from where it works; and none without it.
 #[test]
@@ -818,8 +818,8 @@ fn both_binaries_take_a_token_file_for_ui() {
         token_file: Some(PathBuf::from("run/api.json")),
         ..UiOptions::default()
     };
-    let ui = |parsed: Option<FlayerCommand>| match parsed {
-        Some(FlayerCommand::Ui(options)) => options,
+    let ui = |parsed: Option<WeaverCommand>| match parsed {
+        Some(WeaverCommand::Ui(options)) => options,
         other => panic!("not ui: {other:?}"),
     };
 
@@ -831,22 +831,27 @@ fn both_binaries_take_a_token_file_for_ui() {
     assert_eq!(options, given);
     let nested = Cli::try_parse_from([
         "mind",
-        "flayer",
+        "weaver",
         "ui",
         "--token-file=run/api.json",
         "--no-open",
     ])
     .unwrap();
-    let Some(Command::Flayer { command }) = nested.command else {
-        panic!("not flayer: {:?}", nested.command);
+    let Some(Command::Weaver { command }) = nested.command else {
+        panic!("not weaver: {:?}", nested.command);
     };
     assert_eq!(ui(command), given);
-    let flayer =
-        FlayerCli::try_parse_from(["flayer", "ui", "--no-open", "--token-file", "run/api.json"])
-            .unwrap();
-    assert_eq!(ui(flayer.command), given);
+    let weaver = WeaverCli::try_parse_from([
+        "mindweaver",
+        "ui",
+        "--no-open",
+        "--token-file",
+        "run/api.json",
+    ])
+    .unwrap();
+    assert_eq!(ui(weaver.command), given);
 
-    let bare = FlayerCli::try_parse_from(["flayer", "ui"]).unwrap();
+    let bare = WeaverCli::try_parse_from(["mindweaver", "ui"]).unwrap();
     assert_eq!(ui(bare.command).token_file, None);
 }
 
@@ -854,12 +859,12 @@ fn both_binaries_take_a_token_file_for_ui() {
 fn a_token_file_is_refused_without_a_path() {
     for line in [
         &["mind", "ui", "--token-file"][..],
-        &["flayer", "ui", "--token-file"],
-        &["flayer", "ui", "--token-file="],
+        &["mindweaver", "ui", "--token-file"],
+        &["mindweaver", "ui", "--token-file="],
     ] {
         let error = match line[0] {
             "mind" => Cli::try_parse_from(line).map(drop),
-            _ => FlayerCli::try_parse_from(line).map(drop),
+            _ => WeaverCli::try_parse_from(line).map(drop),
         }
         .expect_err(&line.join(" "));
 

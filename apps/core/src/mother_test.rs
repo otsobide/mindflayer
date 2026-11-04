@@ -13,11 +13,12 @@ use super::*;
 use crate::artifact::{name_issues, strict_issues, ValidationIssue};
 use crate::frontmatter;
 use crate::kind::Kind;
+use crate::names::Names;
 use crate::rule::RuleManifest;
 use crate::settings::Settings;
 use crate::skill::SkillManifest;
 use crate::url::{carries_credentials, redacted};
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::workspace::{MindProject, WeaverWorkspace};
 
 const DRAWS: usize = 100;
 
@@ -201,7 +202,7 @@ fn an_entry_mother_holds_no_credential() {
 #[test]
 fn the_fixture_mothers_make_a_workspace_a_project_and_a_repository() {
     let (dir, workspace) = WorkspaceMother::empty();
-    assert!(FlayerWorkspace::open(dir.path()).is_ok());
+    assert!(WeaverWorkspace::open(dir.path()).is_ok());
 
     let project = ProjectMother::random(dir.path());
     assert!(MindProject::is_marked(project.root()));
@@ -222,6 +223,21 @@ fn the_fixture_mothers_make_a_workspace_a_project_and_a_repository() {
 }
 
 #[test]
+fn a_mindflayer_mother_makes_a_workspace_under_the_old_names() {
+    let (dir, workspace) = MindflayerMother::empty();
+
+    assert!(dir.path().join(".mindflayer/flayer.toml").is_file());
+    assert!(!dir.path().join(".mindweaver").exists());
+    let opened = WeaverWorkspace::open(dir.path()).unwrap();
+    assert_eq!(opened.names(), Names::Mindflayer);
+    assert_eq!(opened, workspace);
+    assert_eq!(
+        workspace.ledger_path(),
+        dir.path().join(".mindflayer/mindflayer.db")
+    );
+}
+
+#[test]
 fn a_shelf_mother_gathers_every_skill_it_is_given() {
     let (_dir, _workspace, ledger) = ShelfMother::gathered(&["deploy", "review"]);
 
@@ -232,4 +248,56 @@ fn a_shelf_mother_gathers_every_skill_it_is_given() {
         .map(|gathered| gathered.name.into_string())
         .collect();
     assert_eq!(names, ["deploy", "review"]);
+}
+
+#[test]
+fn a_mindflayer_mother_leaves_a_projects_blocks_under_the_old_markers() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let new = format!(
+        "# Team\n\n{}\n{}a -->\nRule a.\n{}\n",
+        crate::agents_md::BEGIN,
+        crate::agents_md::RULE,
+        crate::agents_md::END
+    );
+    fs::write(dir.path().join("AGENTS.md"), &new).unwrap();
+    fs::write(
+        dir.path().join("CLAUDE.md"),
+        format!(
+            "{}\n@AGENTS.md\n{}\n",
+            crate::agents_md::BEGIN,
+            crate::agents_md::END
+        ),
+    )
+    .unwrap();
+
+    MindflayerMother::rendered_into(dir.path());
+
+    assert_eq!(
+        fs::read_to_string(dir.path().join("AGENTS.md")).unwrap(),
+        "# Team\n\n<!-- mindflayer:begin -->\n<!-- mindflayer:rule a -->\nRule a.\n<!-- mindflayer:end -->\n"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("CLAUDE.md")).unwrap(),
+        "<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n"
+    );
+}
+
+#[test]
+fn a_mindflayer_mother_leaves_a_projects_exclude_block_under_the_old_markers() {
+    let dir = tempfile::TempDir::new().unwrap();
+    gix::init(dir.path()).unwrap();
+    crate::exclude::add(
+        dir.path(),
+        "app",
+        &[crate::exclude::Entry::file("AGENTS.md")],
+    )
+    .unwrap();
+
+    MindflayerMother::rendered_into(dir.path());
+
+    let text = fs::read_to_string(dir.path().join(".git/info/exclude")).unwrap();
+    assert!(
+        text.ends_with("# mindflayer:begin\n# project app\n/AGENTS.md\n# mindflayer:end\n"),
+        "{text}"
+    );
 }

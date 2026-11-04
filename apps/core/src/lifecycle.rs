@@ -20,7 +20,7 @@
 //! stale one in place.
 //!
 //! Changing a record opens the ledger to write, which scrubs it first
-//! ([`FlayerWorkspace::ledger_to_write`]), so each result that may also hands
+//! ([`WeaverWorkspace::ledger_to_write`]), so each result that may also hands
 //! back what that took out ([`Scrub`]) for the front end to say. Said
 //! nowhere, it would go unsaid for good: a scrub says what it found only the
 //! first time. An edit changes none, and only reads the ledger.
@@ -46,7 +46,7 @@ use crate::skill::SkillManifest;
 use crate::template::Template;
 use crate::value::{ArtifactName, ContentHash};
 use crate::workspace::{
-    replace_bytes_unresolved, replace_file, FlayerWorkspace, MindProject, WorkspaceError,
+    replace_bytes_unresolved, replace_file, MindProject, WeaverWorkspace, WorkspaceError,
 };
 
 /// An artifact found by what somebody typed.
@@ -74,7 +74,7 @@ impl Target {
     }
 }
 
-/// What a change did to the ledger's record that Mindflayer installed what
+/// What a change did to the ledger's record that Mindweaver installed what
 /// is under one name.
 ///
 /// That record is what gives an install leave to overwrite and an uninstall
@@ -120,7 +120,7 @@ pub struct Added {
     /// A record of an install under the same name. Nothing was there for the
     /// new artifact to be written over, so the copy it was about had gone,
     /// and left in place the record would make somebody's new work look like
-    /// something Mindflayer put there.
+    /// something Mindweaver put there.
     pub stale: Result<Record, InstallError>,
     /// What opening the ledger to see to that record scrubbed out of it.
     pub scrub: Scrub,
@@ -135,7 +135,7 @@ pub struct Added {
 /// that links the project from somewhere that is not above it. With none,
 /// there is no record to drop.
 pub fn add(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -189,7 +189,7 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
 
     // Only a name made of plain folder names is turned into a place: one with
     // `..` in it would otherwise be a way out of the project. Not the naming
-    // rules, which are for what Mindflayer writes: a folder from before they
+    // rules, which are for what Mindweaver writes: a folder from before they
     // were tightened, or one somebody made by hand, is exactly what has to be
     // found to be fixed or removed.
     let name = reference.name();
@@ -255,7 +255,7 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
 /// what the report just showed; the ledger says whether it is one, and the
 /// refusal says how to take it out instead.
 pub fn find_to_change(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     reference: &Reference,
 ) -> Result<Target, LifecycleError> {
@@ -399,7 +399,7 @@ pub fn start_edit(target: &Target) -> Edit {
 /// A front end finishes the edit whether or not the editor succeeded: one
 /// that wrote the file before it failed has changed the copy all the same.
 pub fn finish_edit(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     edit: Edit,
 ) -> Edited {
@@ -420,7 +420,7 @@ pub fn finish_edit(
 /// writes the text itself. `workspace` is the one consulted, as for [`add`].
 ///
 /// Held to the rules every write is held to before a byte is written. A
-/// skill's must be one Mindflayer would write ([`artifact::strict_issues`]):
+/// skill's must be one Mindweaver would write ([`artifact::strict_issues`]):
 /// front matter that reads, a name and a description that pass, and the
 /// name its folder has. A different name is refused rather than written,
 /// since a name changed there and not in the folder is a skill no agent
@@ -450,7 +450,7 @@ pub fn finish_edit(
 /// the artifact's file, not anything of the workspace's, whose ledger is
 /// only read.
 pub fn replace_contents(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     contents: &[u8],
@@ -509,7 +509,7 @@ pub fn replace_contents(
 /// whether it is still what an edit was made from, is the write's alone to
 /// tell, at the moment it writes.
 pub(crate) fn replaceable(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     contents: &[u8],
@@ -539,7 +539,7 @@ pub(crate) fn replaceable(
 /// a sibling's is not rewritten under a name that folder does not have.
 /// The widest first, so a refusal names the most the file leads out of.
 fn written_at(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     directory: &Path,
@@ -571,9 +571,9 @@ fn written_at(
 }
 
 /// Whether `directory`, where a holder keeps `kind`, is the folder
-/// `workspace` keeps its own of that kind in ([`FlayerWorkspace::own`]),
+/// `workspace` keeps its own of that kind in ([`WeaverWorkspace::own`]),
 /// of a kind it keeps apart from a project at its root
-/// ([`FlayerWorkspace::own_kinds`]): the library, as a read of it for the
+/// ([`WeaverWorkspace::own_kinds`]): the library, as a read of it for the
 /// panel finds it ([`crate::contents`]).
 ///
 /// Told by the folder, since the holder is a [`MindProject`] either way:
@@ -582,14 +582,14 @@ fn written_at(
 /// project's root. One at the workspace's root keeping a kind where the
 /// library does holds what is there itself, by `own_kinds`, and is held to
 /// its root too. With no workspace there is no library to be.
-fn library(workspace: Option<&FlayerWorkspace>, kind: Kind, directory: &Path) -> bool {
+fn library(workspace: Option<&WeaverWorkspace>, kind: Kind, directory: &Path) -> bool {
     workspace.is_some_and(|workspace| {
         workspace.own().directory_for(kind).as_deref() == Some(directory)
             && workspace.own_kinds().contains(&kind)
     })
 }
 
-/// Refuse `contents` for `target` unless they are what Mindflayer would
+/// Refuse `contents` for `target` unless they are what Mindweaver would
 /// write there: text, and for a skill a manifest that reads, names its
 /// folder and passes the strict rules; for a rule, one that says something
 /// with front matter that reads whole.
@@ -642,7 +642,7 @@ fn fit(target: &Target, contents: &[u8]) -> Result<(), LifecycleError> {
 /// `workspace` records a copy at `at`, and untouched when it records none
 /// or there is no workspace to ask.
 fn kept(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -697,7 +697,7 @@ pub struct Removed {
 /// uninstall of that copy would. `workspace` is the one consulted, as for
 /// [`add`].
 pub fn remove(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
 ) -> Result<Removed, LifecycleError> {
@@ -742,7 +742,7 @@ pub struct Renamed {
     pub copy: Result<Record, InstallError>,
     /// A record under the new name, from an install that is no longer there:
     /// stale, and left in place it would make what was just renamed look like
-    /// something Mindflayer put there.
+    /// something Mindweaver put there.
     pub stale: Result<Record, InstallError>,
     /// What opening the ledger to see to both records scrubbed out of it,
     /// once: the second opening finds only what the first could not take out,
@@ -763,7 +763,7 @@ pub struct Renamed {
 /// copy renamed carried along with it. `workspace` is the one consulted, as
 /// for [`add`].
 pub fn rename(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     to: &str,
@@ -827,7 +827,7 @@ fn rename_skill(
         });
     };
     // Held to the strict rules as it will be, the rules `add` and `install`
-    // hold a skill to: what is left behind is a skill Mindflayer wrote, if
+    // hold a skill to: what is left behind is a skill Mindweaver wrote, if
     // only its name, and one an agent would skip is not left behind. Judged as
     // renamed, because its name and folder are what a rename fixes.
     if let Some(manifest) = artifact.manifest() {
@@ -1019,7 +1019,7 @@ fn holds(kind: Kind, path: &Path) -> bool {
 /// that names the copy at `at`, the one the change reached, adding what
 /// opening the ledger to do it scrubbed out of it to `scrub`.
 fn disowned(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -1046,7 +1046,7 @@ fn disowned(
 /// moved it to, adding what opening the ledger to do it scrubbed out of it to
 /// `scrub`.
 fn carried(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     (name, at): (&str, &Path),
@@ -1117,7 +1117,7 @@ pub enum LifecycleError {
     /// A skill's contents given whole that name it other than its folder.
     #[error("the contents given for `{name}` call it `{to}`: a skill's name is its folder's too, so it is changed with `mind rename`, which moves both, and nothing was written")]
     NameChanged { name: String, to: String },
-    /// Contents given whole that break a rule Mindflayer holds a write to.
+    /// Contents given whole that break a rule Mindweaver holds a write to.
     #[error("the contents given for `{name}` break a rule, so nothing was written: {}", issue_list(.issues))]
     ContentsUnfit {
         name: String,

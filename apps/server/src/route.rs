@@ -371,7 +371,7 @@ fn conditions(
         // A change, as every POST is, sent by cookie; and a body, read as
         // JSON.
         Condition::SameOriginRequired
-        | Condition::XMindflayerRequired
+        | Condition::PanelHeaderRequired
         | Condition::JsonRequired
         | Condition::MalformedJson
         | Condition::InvalidBody
