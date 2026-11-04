@@ -31,6 +31,31 @@ $(foreach app,$(APPS),$(eval $(call APP_DELEGATE,$(app))))
 .PHONY: test
 test: $(addsuffix /test,$(APPS)) ## Run every test suite, the panel's first (Node 24 and pnpm)
 
+# The Rust suites by layer, for the `unit-and-integration` workflow and for
+# running one layer alone: the unit tests compiled inside each crate (its
+# `src/<module>_test.rs`), the integration suites in each crate's `tests/`,
+# which see only what a crate makes public, and the value objects with the
+# mothers every test builds them through, their TypeScript and JSON Schema
+# included, which only the `ts` and `schema` features compile. Rust alone, so
+# no Node: the panel's suites are `web/test`'s. `--no-fail-fast`, so one
+# failing suite does not hide what the rest would say.
+RUST_CRATES := -p mindflayer-core -p mindflayer-cli -p mindflayer-server
+VALUE_TESTS := value:: mother:: typescript::tests::every_value typescript::tests::a_field_holding \
+	typescript::tests::a_project_id schema::tests::every_value schema::tests::a_project_id
+
+.PHONY: test/unit
+test/unit: ## Run every crate's unit tests (src/<module>_test.rs), Rust only
+	cargo test $(RUST_CRATES) --lib --bins --no-fail-fast
+
+.PHONY: test/integration
+test/integration: ## Run every crate's integration suites (tests/<area>_test.rs), Rust only
+	cargo test $(RUST_CRATES) --test '*' --no-fail-fast
+
+.PHONY: test/values
+test/values: ## Run the value objects' tests and their mothers', their TypeScript and JSON Schema included
+	cargo test -p mindflayer-core --test value_test --no-fail-fast
+	cargo test -p mindflayer-core --features ts,schema --lib --no-fail-fast -- $(VALUE_TESTS)
+
 .PHONY: build
 build: $(addsuffix /build,$(APPS)) ## Build the panel, then every crate (debug)
 

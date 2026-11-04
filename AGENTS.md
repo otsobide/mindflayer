@@ -31,6 +31,9 @@ lists everything.
 
 ```bash
 make test                 # every suite, the panel's first: needs Node 24 and pnpm
+make test/unit            # every crate's unit tests (src/<module>_test.rs), Rust only
+make test/values          # the value objects and their mothers, with their TypeScript and JSON Schema
+make test/integration     # every crate's integration suites (tests/<area>_test.rs), Rust only
 make fmt/check            # CI runs this first
 make lint                 # no em dash in a tracked file, then clippy --workspace --all-targets, with the ts feature too
 make run ARGS="flayer list"
@@ -193,7 +196,10 @@ under `apps/` with its own `Makefile`:
   front end judging what is typed (`draft`). Every record, report and view
   it builds is an aggregate of the value objects in `value` (a copy's
   `ContentHash`, a `Redacted` URL or message, an `Origin`, an
-  `ArtifactName`, a `Revision`, a `ProjectId`). Its only I/O beyond files
+  `ArtifactName`, a `Revision`, a `ProjectId`), each of which, and each
+  record, a test builds through its object mother in `mother`, compiled only
+  for tests (`cfg(test)`, or the `mother` feature a dev-dependency turns
+  on). Its only I/O beyond files
   goes through a port (`port`: a `Remote` a gather fetches through, a
   `LedgerStore` the ledger keeps its records in, a `Clock` it stamps them
   by), each implemented by an adapter in `adapter` (`adapter::gix::Gix`,
@@ -914,7 +920,8 @@ These are easy to break from a single file without noticing.
   - URLs are stored, logged and shown without credentials. `url::redacted`
     is the one function that takes them out: the ledger applies it to every
     URL it writes and reads, `GitError` to what it says, the gix adapter's
-    scrub (`Remote::scrub`) to a clone's config and reflogs. A gather refuses a URL that carries one. A
+    scrub (`Remote::scrub`) to a clone's config and reflogs. A gather refuses a URL that carries one, and one typed as its branch or
+    folder, which the ledger would keep word for word. A
     command that writes to the ledger opens it with
     `FlayerWorkspace::ledger_to_write`, which scrubs what an older build
     stored first and hands back what it took out to be said; one that only
@@ -1283,6 +1290,36 @@ These are easy to break from a single file without noticing.
   helpers in `tests/common/mod.rs` (`use common::*;`). Unit tests sit in
   `src/<module>_test.rs`, wired in with
   `#[cfg(test)] #[path = "<module>_test.rs"] mod tests;`.
+- What a test needs is built by an object mother (`mindflayer_core::mother`,
+  `apps/core/src/mother/`), never by hand where a mother makes it: one per
+  value object (`ContentHashMother`, `RedactedMother`, `OriginMother`,
+  `ArtifactNameMother`, `RevisionMother`, `ProjectIdMother`), per record the
+  ledger keeps (`InstallRecordMother`, `TargetMother`, `SourceMother`,
+  `GatheredMother`, `MovedMother`, `EntryMother`), for a skill's and a
+  rule's text (`SkillMother`, `RuleMother`), a project's settings
+  (`SettingsMother`), the URLs a credential can be typed into (`UrlMother`,
+  each form beside what redacting leaves of it) and what lives on the disk
+  (`WorkspaceMother`, `ProjectMother`, `GitRepositoryMother`, `ShelfMother`).
+  Each is a unit struct with `random()`, `create(..)` and a named
+  constructor for each shape a test asks for by name (`not_hashes`,
+  `unwritable`, `every_credentialed`), made only the way its value's rule
+  allows; a mother of a record is made of the mothers of its values, so a
+  rule changes in one place. `tests/common`'s builders delegate to them. What
+  is random is drawn afresh each run (`mother::random`, from `std`'s hasher
+  keys, no dependency), so a rule is tried on cases no test spells: a test
+  drawing from a mother names the value in what it asserts, and loops over
+  many draws where a rule holds of every value. `src/mother_test.rs` holds
+  every mother to the rule it claims, through core's own judgement. Core's
+  unit tests reach them as `crate::mother` (`cfg(test)`); its integration
+  suites and the CLI's through a dev-dependency on core with its `mother`
+  feature, which no build of a binary turns on. The CLI's suites add mothers
+  of what only a command takes (`tests/common/mother.rs`: `ValueMother`,
+  `OlderBuildMother`); the server depends on no mindflayer crate, so its
+  suites keep all of theirs there (hosts, origins, tokens and headers). A new value object gets a mother and a section of
+  `tests/value_test.rs`, which holds every value to one set of laws
+  (`reads_as_its_text`) and to its rule both ways, and a new port a
+  contract suite every adapter of it runs (`tests/ledger_store_test.rs`,
+  `tests/remote_test.rs`).
 - No test reads the real home, the real agent homes or a workspace the
   developer's shell activated, which `HOME`, `MINDFLAYER_HOME`,
   `MINDFLAYER_WORKSPACE`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and
@@ -1490,6 +1527,12 @@ These are easy to break from a single file without noticing.
   only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
   the compatibility pass (#154) puts them back on pushes to `dev`/`main` and
   PRs from `dev`, `main` or `release/*`.
+- `.github/workflows/unit-and-integration.yml` runs the Rust suites by layer
+  on Linux, each through its root target: `unit (rust)` (`make test/unit`)
+  and `value objects (rust)` (`make test/values`), then `integration (rust)`
+  (`make test/integration`, with zsh installed for the shells suite). A
+  workflow of its own so a failure names the layer that broke, and so no
+  check the rulesets require changes name; its checks are not required.
 - The rulesets for `dev` and `main` require every check that runs on every
   pull request: `fmt and clippy`, `test (core)`, `test (cli)`, `test
   (server)`, `test (web)`, `types drift (web)`, `build (core)`, `build
