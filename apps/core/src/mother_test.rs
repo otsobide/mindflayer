@@ -249,3 +249,35 @@ fn a_shelf_mother_gathers_every_skill_it_is_given() {
         .collect();
     assert_eq!(names, ["deploy", "review"]);
 }
+
+#[test]
+fn a_mindflayer_mother_leaves_a_projects_blocks_under_the_old_markers() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let new = format!(
+        "# Team\n\n{}\n{}a -->\nRule a.\n{}\n",
+        crate::agents_md::BEGIN,
+        crate::agents_md::RULE,
+        crate::agents_md::END
+    );
+    fs::write(dir.path().join("AGENTS.md"), &new).unwrap();
+    fs::write(
+        dir.path().join("CLAUDE.md"),
+        format!(
+            "{}\n@AGENTS.md\n{}\n",
+            crate::agents_md::BEGIN,
+            crate::agents_md::END
+        ),
+    )
+    .unwrap();
+
+    MindflayerMother::rendered_into(dir.path());
+
+    assert_eq!(
+        fs::read_to_string(dir.path().join("AGENTS.md")).unwrap(),
+        "# Team\n\n<!-- mindflayer:begin -->\n<!-- mindflayer:rule a -->\nRule a.\n<!-- mindflayer:end -->\n"
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("CLAUDE.md")).unwrap(),
+        "<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n"
+    );
+}

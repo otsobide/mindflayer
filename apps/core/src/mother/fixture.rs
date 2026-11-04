@@ -14,6 +14,8 @@ use gix::objs::tree::{Entry, EntryKind};
 use tempfile::TempDir;
 
 use crate::agent::Agent;
+use crate::agents_md::AgentsMd;
+use crate::claude_md::ClaudeMd;
 use crate::gather::{self, Request};
 use crate::ledger::Ledger;
 use crate::mother::artifact::SkillMother;
@@ -67,6 +69,32 @@ impl MindflayerMother {
         WeaverWorkspace::init_under(root, &Directories::default(), Names::Mindflayer)
             .expect("make a workspace under Mindflayer's names")
             .0
+    }
+
+    /// Leave what core rendered into the project at `root` as such a build
+    /// rendered it: the block of its `AGENTS.md` and the import in its
+    /// `CLAUDE.md` or `.claude/CLAUDE.md` under that build's markers, every
+    /// other byte as core wrote it.
+    ///
+    /// Moved back by core's own parsers rather than spelled here, so what a
+    /// test reads is what such a build wrote, line endings and all.
+    pub fn rendered_into(root: &Path) {
+        let agents = root.join(crate::agents_md::FILE);
+        if let Ok(bytes) = fs::read(&agents) {
+            let mut file = AgentsMd::parse(&bytes).expect("read the block");
+            if file.renamed(Names::Mindflayer) {
+                fs::write(&agents, file.to_bytes()).expect("write the block back");
+            }
+        }
+        for claude in [root.join("CLAUDE.md"), root.join(".claude/CLAUDE.md")] {
+            let Ok(bytes) = fs::read(&claude) else {
+                continue;
+            };
+            let mut file = ClaudeMd::parse(&bytes).expect("read the import");
+            if file.renamed(Names::Mindflayer) {
+                fs::write(&claude, file.to_bytes()).expect("write the import back");
+            }
+        }
     }
 }
 

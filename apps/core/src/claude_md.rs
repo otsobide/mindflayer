@@ -15,9 +15,9 @@
 //! has, at the top of a file that is otherwise somebody else's:
 //!
 //! ```text
-//! <!-- mindflayer:begin -->
+//! <!-- mindweaver:begin -->
 //! @AGENTS.md
-//! <!-- mindflayer:end -->
+//! <!-- mindweaver:end -->
 //!
 //! # Working here
 //! ```
@@ -27,7 +27,9 @@
 //! line just below the end marker, which is the block's ([`ClaudeMd`]), and a
 //! block that is not exactly one well-formed one is refused, never repaired,
 //! as in `AGENTS.md`: the markers are read by the same search
-//! (`agents_md::locate`).
+//! (`agents_md::locate`), under either names, and an import a Mindflayer
+//! build wrote is kept under its own markers until it is moved
+//! ([`ClaudeMd::renamed`]).
 //!
 //! [`reach`] decides how Claude gets the block, from the predicate, the
 //! project's settings and whether the block was written: natively, through
@@ -52,6 +54,7 @@ use crate::claude_rules::{self, Mode};
 use crate::code::codes;
 use crate::exclude;
 use crate::lines::{self, Line};
+use crate::names::Names;
 use crate::settings::Share;
 use crate::workspace::{replace_bytes_unresolved, MindProject};
 
@@ -783,6 +786,9 @@ pub struct ClaudeMd {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Block {
+    /// Whose markers it is spelled with: those it was found under, and
+    /// Mindweaver's for one made anew.
+    names: Names,
     begin: Line,
     /// Every line between the markers, as read or as written.
     lines: Vec<Line>,
@@ -839,6 +845,7 @@ impl ClaudeMd {
             bom,
             before,
             block: Some(Block {
+                names: span.names,
                 begin,
                 lines: inside,
                 end,
@@ -852,6 +859,29 @@ impl ClaudeMd {
     /// Whether the file holds Mindweaver's block.
     pub fn has_block(&self) -> bool {
         self.block.is_some()
+    }
+
+    /// Whose markers the block is spelled with: `None` when there is none.
+    pub fn names(&self) -> Option<Names> {
+        self.block.as_ref().map(|block| block.names)
+    }
+
+    /// Spell the block's two markers with `names`', and whether that
+    /// changed anything: what `migrate --names` does to an import a
+    /// Mindflayer build wrote, every other byte kept, the markers' line
+    /// endings among them.
+    pub fn renamed(&mut self, names: Names) -> bool {
+        let Some(block) = &mut self.block else {
+            return false;
+        };
+        if block.names == names {
+            return false;
+        }
+        let (begin, end, _) = agents_md::markers(names);
+        block.begin = Line::new(begin, block.begin.end);
+        block.end = Line::new(end, block.end.end);
+        block.names = names;
+        true
     }
 
     /// Whether the block holds `import` and nothing else: whether Claude,
@@ -894,6 +924,7 @@ impl ClaudeMd {
         self.after = std::mem::take(&mut self.before);
         let spacer = (!self.after.is_empty()).then(|| Line::new("", ending));
         self.block = Some(Block {
+            names: Names::Mindweaver,
             begin: Line::new(BEGIN, ending),
             lines,
             end: Line::new(END, ending),

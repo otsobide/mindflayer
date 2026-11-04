@@ -7,13 +7,13 @@
 //! file that is otherwise somebody else's:
 //!
 //! ```text
-//! <!-- mindflayer:begin -->
-//! <!-- mindflayer:rule git/no-force-push -->
+//! <!-- mindweaver:begin -->
+//! <!-- mindweaver:rule git/no-force-push -->
 //! Never force-push a branch somebody else may have pulled.
 //!
-//! <!-- mindflayer:rule review/tone -->
+//! <!-- mindweaver:rule review/tone -->
 //! Say what a change does before what is wrong with it.
-//! <!-- mindflayer:end -->
+//! <!-- mindweaver:end -->
 //! ```
 //!
 //! HTML comments, because they are the one mark markdown has that is not
@@ -22,6 +22,13 @@
 //! to Codex and OpenCode, which read the file as it is, a comment is a line
 //! that says nothing. A heading of Mindweaver's own was the alternative, and
 //! every agent would read it as one more instruction.
+//!
+//! A block a Mindflayer build wrote says `mindflayer:` where this one says
+//! `mindweaver:` (D-26, [`Names`]). It is read as a block all the same, and
+//! a render replaces it under its own markers, a section added to it
+//! included, since a block spelled two ways would be read whole by neither
+//! build: only a block made anew is given Mindweaver's, and only
+//! `migrate --names` moves an old one to them ([`AgentsMd::renamed`]).
 //!
 //! Everything outside the block is somebody else's and comes back byte for
 //! byte, but for the empty line just above the begin marker, which is the
@@ -49,19 +56,27 @@ use crate::exclude;
 use crate::hash;
 use crate::install;
 use crate::lines::{self, Line};
+use crate::names::Names;
 use crate::paths;
 use crate::value::ContentHash;
 use crate::workspace::{replace_bytes, same_directory, MindProject, WeaverWorkspace};
 
 /// The line that opens Mindweaver's block.
-pub const BEGIN: &str = "<!-- mindflayer:begin -->";
+pub const BEGIN: &str = "<!-- mindweaver:begin -->";
 /// The line that closes it.
-pub const END: &str = "<!-- mindflayer:end -->";
+pub const END: &str = "<!-- mindweaver:end -->";
 /// What opens the marker heading one rule's section, before the rule's
 /// route; [`CLOSE`] follows the route.
-pub const RULE: &str = "<!-- mindflayer:rule ";
+pub const RULE: &str = "<!-- mindweaver:rule ";
 /// What closes a rule's marker, after its route.
 pub const CLOSE: &str = " -->";
+/// [`BEGIN`] as a Mindflayer build wrote it, read and kept in a block it
+/// wrote ([`Names::Mindflayer`]).
+pub const FLAYER_BEGIN: &str = "<!-- mindflayer:begin -->";
+/// [`END`] as a Mindflayer build wrote it.
+pub const FLAYER_END: &str = "<!-- mindflayer:end -->";
+/// [`RULE`] as a Mindflayer build wrote it.
+pub const FLAYER_RULE: &str = "<!-- mindflayer:rule ";
 
 /// The file the block is rendered into, at a project's root.
 pub const FILE: &str = "AGENTS.md";
@@ -77,9 +92,19 @@ pub const CODEX_BUDGET: u64 = 32 * 1024;
 /// warning comes a render before Codex starts cutting rather than after.
 pub const CODEX_NEAR: u64 = CODEX_BUDGET / 8 * 7;
 
-/// What each marker's comment opens with. A comment that opens with it and
-/// is none of them is one written wrong, and refused.
-const MARK: &[u8] = b"mindflayer:";
+/// What each marker's comment opens with, under either names. A comment
+/// that opens with one and is none of the markers is one written wrong, and
+/// refused.
+const MARKS: [&[u8]; 2] = [b"mindweaver:", b"mindflayer:"];
+
+/// The markers a block is spelled with under `names`: its begin, its end,
+/// and what opens a rule's.
+pub(crate) const fn markers(names: Names) -> (&'static str, &'static str, &'static str) {
+    match names {
+        Names::Mindweaver => (BEGIN, END, RULE),
+        Names::Mindflayer => (FLAYER_BEGIN, FLAYER_END, FLAYER_RULE),
+    }
+}
 
 /// An `AGENTS.md`'s text, split around Mindweaver's block.
 ///
@@ -108,6 +133,9 @@ struct Block {
     /// put there goes with the block too: the price of that round trip,
     /// which leaving it would break for every file Mindweaver added to.
     spacer: Option<Line>,
+    /// Whose markers it is spelled with: those it was found under, and
+    /// Mindweaver's for one made anew.
+    names: Names,
     begin: Line,
     /// Every line between the markers, as read or as rendered.
     lines: Vec<Line>,
@@ -726,6 +754,7 @@ impl AgentsMd {
             before,
             block: Some(Block {
                 spacer,
+                names: span.names,
                 begin: begin_line,
                 lines: inside,
                 routes: span.rules.into_iter().map(|(_, route)| route).collect(),
@@ -759,7 +788,7 @@ impl AgentsMd {
         let mut lines = block
             .lines
             .iter()
-            .skip_while(|line| marker(&line.text) != Marker::Rule(route));
+            .skip_while(|line| marker(&line.text) != Marker::Rule(block.names, route));
         lines.next()?;
         let body: Vec<&str> = lines
             .take_while(|line| marker(&line.text) == Marker::Text)
@@ -771,6 +800,35 @@ impl AgentsMd {
     /// Whether the file holds Mindweaver's block.
     pub fn has_block(&self) -> bool {
         self.block.is_some()
+    }
+
+    /// Whose markers the block is spelled with: `None` when there is none.
+    pub fn names(&self) -> Option<Names> {
+        self.block.as_ref().map(|block| block.names)
+    }
+
+    /// Spell every marker of the block with `names`' markers, and whether
+    /// that changed anything: what `migrate --names` does to a block a
+    /// Mindflayer build wrote, every byte but the markers kept as it was,
+    /// each line ending among them, so no section's hash
+    /// ([`Section::hash`]), which is of its body alone, changes.
+    pub fn renamed(&mut self, names: Names) -> bool {
+        let Some(block) = &mut self.block else {
+            return false;
+        };
+        if block.names == names {
+            return false;
+        }
+        let (begin, end, rule) = markers(names);
+        block.begin = Line::new(begin, block.begin.end);
+        block.end = Line::new(end, block.end.end);
+        for line in &mut block.lines {
+            if let Marker::Rule(_, route) = marker(&line.text) {
+                *line = Line::new(&format!("{rule}{route}{CLOSE}"), line.end);
+            }
+        }
+        block.names = names;
+        true
     }
 
     /// Whether nothing but blank lines is left outside the block: what a
@@ -806,12 +864,14 @@ impl AgentsMd {
         }
 
         let ending = self.ending;
-        let lines = rendered(sections, ending);
         let routes = sections
             .iter()
             .map(|section| section.route.clone())
             .collect();
         if let Some(block) = &mut self.block {
+            // Under the markers it was found under, which a render never
+            // moves.
+            let lines = rendered(sections, ending, block.names);
             if block.lines == lines {
                 return Ok(false);
             }
@@ -835,8 +895,9 @@ impl AgentsMd {
         let spacer = (!self.before.is_empty()).then(|| Line::new("", ending));
         self.block = Some(Block {
             spacer,
+            names: Names::Mindweaver,
             begin: Line::new(BEGIN, ending),
-            lines,
+            lines: rendered(sections, ending, Names::Mindweaver),
             routes,
             end: Line::new(END, close),
         });
@@ -887,6 +948,8 @@ pub(crate) struct Span {
     pub(crate) begin: usize,
     /// The end marker's.
     pub(crate) end: usize,
+    /// Whose markers the block is spelled with, every one of them alike.
+    pub(crate) names: Names,
     /// Each rule's marker between the two, in order: its index among the
     /// lines, and the route it names.
     pub(crate) rules: Vec<(usize, String)>,
@@ -898,29 +961,49 @@ pub(crate) struct Span {
 /// One search for every markdown file Mindweaver keeps a block in, this
 /// file and the `CLAUDE.md` that imports it ([`crate::claude_md`]), so a
 /// marker reads the same in each and one written wrong is refused alike.
+///
+/// Under either names, the block's every marker spelled as its begin marker
+/// is: one spelled the other way inside it is refused, as a second block is
+/// beside it, rather than read as either build would.
 pub(crate) fn locate(lines: &[Line]) -> Result<Option<Span>, Malformed> {
-    let mut begin = None;
+    let mut begin: Option<(usize, Names)> = None;
     let mut end = None;
     let mut rules: Vec<(usize, String)> = Vec::new();
+    let mixed = |line: usize, found: Names, opened: Option<(usize, Names)>| match opened {
+        Some((_, block)) if block != found => Some(Malformed::Mixed { line, found, block }),
+        _ => None,
+    };
     for (index, line) in lines.iter().enumerate() {
         let number = index + 1;
         match marker(&line.text) {
             Marker::Text => {}
-            Marker::Begin => {
+            Marker::Begin(names) => {
                 if begin.is_some() {
-                    return Err(Malformed::Reopened { line: number });
+                    return Err(Malformed::Reopened {
+                        line: number,
+                        names,
+                    });
                 }
-                begin = Some(index);
+                begin = Some((index, names));
             }
-            Marker::End => {
+            Marker::End(names) => {
                 if begin.is_none() || end.is_some() {
-                    return Err(Malformed::Unopened { line: number });
+                    return Err(Malformed::Unopened {
+                        line: number,
+                        names,
+                    });
+                }
+                if let Some(mixed) = mixed(number, names, begin) {
+                    return Err(mixed);
                 }
                 end = Some(index);
             }
-            Marker::Rule(route) => {
+            Marker::Rule(names, route) => {
                 if begin.is_none() || end.is_some() {
                     return Err(Malformed::Stray { line: number });
+                }
+                if let Some(mixed) = mixed(number, names, begin) {
+                    return Err(mixed);
                 }
                 if rules.iter().any(|(_, seen)| seen == route) {
                     return Err(Malformed::Repeated {
@@ -935,25 +1018,35 @@ pub(crate) fn locate(lines: &[Line]) -> Result<Option<Span>, Malformed> {
     }
     match (begin, end) {
         (None, _) => Ok(None),
-        (Some(begin), None) => Err(Malformed::Unclosed { line: begin + 1 }),
-        (Some(begin), Some(end)) => Ok(Some(Span { begin, end, rules })),
+        (Some((begin, names)), None) => Err(Malformed::Unclosed {
+            line: begin + 1,
+            names,
+        }),
+        (Some((begin, names)), Some(end)) => Ok(Some(Span {
+            begin,
+            end,
+            names,
+            rules,
+        })),
     }
 }
 
-/// The lines between the markers for `sections`: each rule's marker, then its
-/// body, with a blank line between one section and the next.
+/// The lines between the markers for `sections`: each rule's marker, spelled
+/// under `names`, then its body, with a blank line between one section and
+/// the next.
 ///
 /// The blank line keeps two rules two paragraphs once Claude has stripped the
 /// markers, which would otherwise leave the last line of one against the
 /// first of the next.
-fn rendered(sections: &[Section], ending: &'static [u8]) -> Vec<Line> {
+fn rendered(sections: &[Section], ending: &'static [u8], names: Names) -> Vec<Line> {
+    let (_, _, rule) = markers(names);
     let mut lines = Vec::new();
     for (index, section) in sections.iter().enumerate() {
         if index > 0 {
             lines.push(Line::new("", ending));
         }
         lines.push(Line::new(
-            &format!("{RULE}{}{CLOSE}", section.route),
+            &format!("{rule}{}{CLOSE}", section.route),
             ending,
         ));
         lines.extend(section.lines.iter().map(|line| Line::new(line, ending)));
@@ -961,15 +1054,16 @@ fn rendered(sections: &[Section], ending: &'static [u8]) -> Vec<Line> {
     lines
 }
 
-/// What a line of the file is to the block.
+/// What a line of the file is to the block, each marker with whose names it
+/// is spelled under.
 #[derive(Debug, PartialEq, Eq)]
 enum Marker<'a> {
     /// Anything that is not a marker.
     Text,
-    Begin,
-    End,
+    Begin(Names),
+    End(Names),
     /// A rule's marker, and the route it names.
-    Rule(&'a str),
+    Rule(Names, &'a str),
     /// A comment that opens as a marker does and is none of them: indented,
     /// spaced otherwise, naming a mark there is not, or a route that is no
     /// name.
@@ -985,27 +1079,35 @@ enum Marker<'a> {
 /// render to write a second block below the first.
 fn marker(text: &[u8]) -> Marker<'_> {
     let line = text.trim_ascii_end();
-    if line == BEGIN.as_bytes() {
-        return Marker::Begin;
+    for names in Names::ALL {
+        let (begin, end, rule) = markers(names);
+        if line == begin.as_bytes() {
+            return Marker::Begin(names);
+        }
+        if line == end.as_bytes() {
+            return Marker::End(names);
+        }
+        if let Some(route) = line
+            .strip_prefix(rule.as_bytes())
+            .and_then(|rest| rest.strip_suffix(CLOSE.as_bytes()))
+        {
+            return match std::str::from_utf8(route) {
+                Ok(route) if name_issues(route).is_empty() => Marker::Rule(names, route),
+                _ => Marker::Miswritten,
+            };
+        }
     }
-    if line == END.as_bytes() {
-        return Marker::End;
-    }
-    if let Some(route) = line
-        .strip_prefix(RULE.as_bytes())
-        .and_then(|rest| rest.strip_suffix(CLOSE.as_bytes()))
-    {
-        return match std::str::from_utf8(route) {
-            Ok(route) if name_issues(route).is_empty() => Marker::Rule(route),
-            _ => Marker::Miswritten,
-        };
-    }
-    let opens_a_mark = text
+    let comment = text
         .trim_ascii()
         .strip_prefix(b"<!--")
-        .map(<[u8]>::trim_ascii_start)
-        .and_then(|comment| comment.get(..MARK.len()))
-        .is_some_and(|start| start.eq_ignore_ascii_case(MARK));
+        .map(<[u8]>::trim_ascii_start);
+    let opens_a_mark = comment.is_some_and(|comment| {
+        MARKS.iter().any(|mark| {
+            comment
+                .get(..mark.len())
+                .is_some_and(|start| start.eq_ignore_ascii_case(mark))
+        })
+    });
     if opens_a_mark {
         Marker::Miswritten
     } else {
@@ -1015,14 +1117,29 @@ fn marker(text: &[u8]) -> Marker<'_> {
 
 /// Why the block in an `AGENTS.md` is not one Mindweaver can replace. Lines
 /// are counted from 1.
+///
+/// Each that quotes a marker quotes it as the file spells it, under `names`:
+/// a block a Mindflayer build wrote is refused in its own words.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Malformed {
-    #[error("line {line}: `{BEGIN}` is never closed by `{END}`")]
-    Unclosed { line: usize },
-    #[error("line {line}: `{END}` closes no `{BEGIN}`")]
-    Unopened { line: usize },
-    #[error("line {line}: a second `{BEGIN}`, where there can be one block")]
-    Reopened { line: usize },
+    #[error("line {line}: `{}` is never closed by `{}`", markers(*.names).0, markers(*.names).1)]
+    Unclosed { line: usize, names: Names },
+    #[error("line {line}: `{}` closes no `{}`", markers(*.names).1, markers(*.names).0)]
+    Unopened { line: usize, names: Names },
+    #[error("line {line}: a second `{}`, where there can be one block", markers(*.names).0)]
+    Reopened { line: usize, names: Names },
+    /// A marker spelled under other names than the block's begin marker:
+    /// one a Mindflayer build wrote in a block this one opened, or the
+    /// other way round.
+    #[error(
+        "line {line}: a marker spelled as {found} spells them, in a block {block}'s \
+         markers open, where every marker of a block is spelled alike"
+    )]
+    Mixed {
+        line: usize,
+        found: Names,
+        block: Names,
+    },
     #[error("line {line}: a rule's marker outside the block")]
     Stray { line: usize },
     #[error("line {line}: a second section for the rule `{route}` in the block")]
@@ -1044,6 +1161,7 @@ codes!(Malformed {
     Self::Unclosed { .. } => "markdown_block_unclosed",
     Self::Unopened { .. } => "markdown_block_unopened",
     Self::Reopened { .. } => "markdown_block_reopened",
+    Self::Mixed { .. } => "markdown_markers_mixed",
     Self::Stray { .. } => "markdown_marker_stray",
     Self::Repeated { .. } => "markdown_section_repeated",
     Self::Miswritten { .. } => "markdown_marker_miswritten",

@@ -34,6 +34,7 @@ export type CoreCode =
   | "markdown_block_unclosed"
   | "markdown_block_unopened"
   | "markdown_block_reopened"
+  | "markdown_markers_mixed"
   | "markdown_marker_stray"
   | "markdown_section_repeated"
   | "markdown_marker_miswritten"

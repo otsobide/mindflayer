@@ -10,7 +10,7 @@ use mindweaver_core::agents_md::{
     self, AgentsMdError, Malformed, Rendered, Warning, Written, BEGIN, CODEX_BUDGET, CODEX_NEAR,
     END,
 };
-use mindweaver_core::{AgentHomes, Artifact, MindProject, WeaverWorkspace};
+use mindweaver_core::{AgentHomes, Artifact, MindProject, Names, WeaverWorkspace};
 use tempfile::TempDir;
 
 /// What a team's `AGENTS.md` holds before Mindweaver writes in it.
@@ -135,7 +135,7 @@ fn created_is_said_only_when_the_file_was_not_there() {
     assert!(first.created());
     assert_eq!(
         fixture.text(),
-        format!("{BEGIN}\n<!-- mindflayer:rule a -->\nRule a.\n{END}\n")
+        format!("{BEGIN}\n<!-- mindweaver:rule a -->\nRule a.\n{END}\n")
     );
 
     let again = fixture.render(&[&rule], true).unwrap();
@@ -171,7 +171,7 @@ fn no_rules_and_no_file_writes_nothing() {
 fn text_around_the_block_is_the_same_through_a_render_a_second_one_and_a_removal() {
     let fixture = fixture();
     let before =
-        format!("{TEAM}{BEGIN}\n<!-- mindflayer:rule old -->\nOld.\n{END}\n\n## Later\n\nMore.\n");
+        format!("{TEAM}{BEGIN}\n<!-- mindweaver:rule old -->\nOld.\n{END}\n\n## Later\n\nMore.\n");
     fs::write(fixture.agents_md(), &before).unwrap();
     let rule = fixture.rule("a", "Rule a.\n");
 
@@ -200,7 +200,7 @@ fn a_crlf_file_keeps_crlf_through_a_render_a_second_one_and_a_removal() {
     let rendered = fs::read(fixture.agents_md()).unwrap();
     assert_eq!(
         String::from_utf8(rendered.clone()).unwrap(),
-        format!("{before}\r\n{BEGIN}\r\n<!-- mindflayer:rule a -->\r\nOne.\r\nTwo.\r\n{END}\r\n")
+        format!("{before}\r\n{BEGIN}\r\n<!-- mindweaver:rule a -->\r\nOne.\r\nTwo.\r\n{END}\r\n")
     );
 
     assert_eq!(
@@ -308,14 +308,20 @@ fn a_link_to_nothing_in_place_of_the_file_is_never_written_through() {
 #[test]
 fn a_malformed_block_is_refused_and_nothing_is_written() {
     let fixture = fixture();
-    let before = format!("{TEAM}{BEGIN}\n<!-- mindflayer:rule a -->\nRule a.\n");
+    let before = format!("{TEAM}{BEGIN}\n<!-- mindweaver:rule a -->\nRule a.\n");
     fs::write(fixture.agents_md(), &before).unwrap();
     let rule = fixture.rule("b", "Rule b.\n");
 
     match fixture.render(&[&rule], true) {
         Err(AgentsMdError::Malformed { file, problem }) => {
             assert_eq!(file, fixture.agents_md());
-            assert_eq!(problem, Malformed::Unclosed { line: 4 });
+            assert_eq!(
+                problem,
+                Malformed::Unclosed {
+                    line: 4,
+                    names: Names::Mindweaver,
+                }
+            );
         }
         other => panic!("{other:?}"),
     }
@@ -326,7 +332,7 @@ fn a_malformed_block_is_refused_and_nothing_is_written() {
 fn a_duplicated_marker_is_refused_and_nothing_is_written() {
     let fixture = fixture();
     let before = format!(
-        "{BEGIN}\n<!-- mindflayer:rule a -->\nOne.\n<!-- mindflayer:rule a -->\nTwo.\n{END}\n"
+        "{BEGIN}\n<!-- mindweaver:rule a -->\nOne.\n<!-- mindweaver:rule a -->\nTwo.\n{END}\n"
     );
     fs::write(fixture.agents_md(), &before).unwrap();
 

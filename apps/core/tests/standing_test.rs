@@ -461,7 +461,7 @@ fn a_rules_section_or_file_gone_is_put_back_by_an_install() {
 
     let text = fs::read_to_string(given.agents_md()).unwrap();
     assert!(text.starts_with("# Ours\n"), "{text}");
-    assert!(text.contains("<!-- mindflayer:rule git/no-force-push -->"));
+    assert!(text.contains("<!-- mindweaver:rule git/no-force-push -->"));
     assert!(text.contains(NO_FORCE_PUSH), "{text}");
     assert_eq!(fs::read_to_string(&file).unwrap(), written);
     for route in ["git/no-force-push", "rust/errors"] {

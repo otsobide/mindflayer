@@ -1205,8 +1205,8 @@ fn a_rule_ticked_on_the_screen_is_installed_and_unticked_is_taken_out() {
     assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
     assert_eq!(
         fs::read_to_string(collapse.join("AGENTS.md")).unwrap(),
-        "<!-- mindflayer:begin -->\n<!-- mindflayer:rule git/commits -->\n\
-         # Commit one coherent step at a time\n<!-- mindflayer:end -->\n"
+        "<!-- mindweaver:begin -->\n<!-- mindweaver:rule git/commits -->\n\
+         # Commit one coherent step at a time\n<!-- mindweaver:end -->\n"
     );
 
     let mut again = screen_for(&workspace, &ledger);

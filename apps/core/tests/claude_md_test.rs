@@ -436,7 +436,7 @@ fn the_user_memory_file_in_a_project_at_the_home_is_never_its_claude_md() {
 fn an_import_already_in_a_tracked_file_is_how_claude_reaches_the_block() {
     let fixture = fixture(Share::Local);
     let imported =
-        format!("<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n\n{TEAM}");
+        format!("<!-- mindweaver:begin -->\n@AGENTS.md\n<!-- mindweaver:end -->\n\n{TEAM}");
     write(fixture.root(), ".claude/CLAUDE.md", TEAM);
     write(fixture.root(), "CLAUDE.md", &imported);
     fixture.track();
@@ -452,7 +452,7 @@ fn an_import_already_in_a_tracked_file_is_how_claude_reaches_the_block() {
 fn an_import_in_the_second_file_keeps_it_there() {
     let fixture = fixture(Share::Shared);
     let imported =
-        format!("<!-- mindflayer:begin -->\n@../AGENTS.md\n<!-- mindflayer:end -->\n\n{TEAM}");
+        format!("<!-- mindweaver:begin -->\n@../AGENTS.md\n<!-- mindweaver:end -->\n\n{TEAM}");
     write(fixture.root(), "CLAUDE.md", TEAM);
     write(fixture.root(), ".claude/CLAUDE.md", &imported);
     assert_eq!(
@@ -521,7 +521,7 @@ fn mindweavers_import_beside_one_somebody_wrote_is_taken_out() {
     write(
         fixture.root(),
         "CLAUDE.md",
-        &format!("<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n\n{SHARING}"),
+        &format!("<!-- mindweaver:begin -->\n@AGENTS.md\n<!-- mindweaver:end -->\n\n{SHARING}"),
     );
     let sharing = SHARING.replace("@AGENTS.md", "@../AGENTS.md");
     write(fixture.root(), ".claude/CLAUDE.md", &sharing);
@@ -599,7 +599,7 @@ fn a_malformed_block_in_the_projects_claude_md_is_refused() {
     write(
         fixture.root(),
         "CLAUDE.md",
-        "<!-- mindflayer:begin -->\n@AGENTS.md\n",
+        "<!-- mindweaver:begin -->\n@AGENTS.md\n",
     );
     let error = claude_md::reach(&fixture.project, &NO_HOMES, true).unwrap_err();
     assert!(matches!(error, ClaudeMdError::Malformed { .. }), "{error}");
@@ -771,7 +771,7 @@ fn a_dot_claude_md_imports_the_agents_md_in_the_folder_above_it() {
     fixture.render(true);
     assert_eq!(
         fs::read_to_string(fixture.file(".claude/CLAUDE.md")).unwrap(),
-        format!("<!-- mindflayer:begin -->\n@../AGENTS.md\n<!-- mindflayer:end -->\n\n{TEAM}")
+        format!("<!-- mindweaver:begin -->\n@../AGENTS.md\n<!-- mindweaver:end -->\n\n{TEAM}")
     );
 }
 
@@ -940,12 +940,12 @@ fn a_malformed_file_refuses_the_render_with_nothing_written() {
     // takes out: one that wrote each file as it went would have taken it
     // out before meeting the malformed one.
     let imported =
-        format!("<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n\n{TEAM}");
+        format!("<!-- mindweaver:begin -->\n@AGENTS.md\n<!-- mindweaver:end -->\n\n{TEAM}");
     write(fixture.root(), "CLAUDE.md", &imported);
     write(
         fixture.root(),
         ".claude/CLAUDE.md",
-        &format!("<!-- mindflayer:begin -->\n@../AGENTS.md\n\n{TEAM}"),
+        &format!("<!-- mindweaver:begin -->\n@../AGENTS.md\n\n{TEAM}"),
     );
     for block_written in [false, true] {
         let error = claude_md::render(&fixture.project, &NO_HOMES, block_written).unwrap_err();
@@ -964,7 +964,7 @@ fn the_agents_md_itself_is_never_imported_into_and_an_import_beside_it_goes() {
     write(fixture.root(), "AGENTS.md", TEAM);
     std::os::unix::fs::symlink("AGENTS.md", fixture.file("CLAUDE.md")).unwrap();
     let imported =
-        format!("<!-- mindflayer:begin -->\n@../AGENTS.md\n<!-- mindflayer:end -->\n\n{TEAM}");
+        format!("<!-- mindweaver:begin -->\n@../AGENTS.md\n<!-- mindweaver:end -->\n\n{TEAM}");
     write(fixture.root(), ".claude/CLAUDE.md", &imported);
 
     let rendered = fixture.render(true);
@@ -983,7 +983,7 @@ fn the_agents_md_itself_is_never_imported_into_and_an_import_beside_it_goes() {
 fn a_link_is_never_written_through() {
     let fixture = fixture(Share::Shared);
     let imported =
-        format!("<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n\n{TEAM}");
+        format!("<!-- mindweaver:begin -->\n@AGENTS.md\n<!-- mindweaver:end -->\n\n{TEAM}");
     let docs = write(fixture.root(), "docs/claude.md", &imported);
     std::os::unix::fs::symlink("docs/claude.md", fixture.file("CLAUDE.md")).unwrap();
     for block_written in [true, false] {

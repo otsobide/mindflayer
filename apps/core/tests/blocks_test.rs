@@ -333,9 +333,9 @@ fn a_section_twice_in_one_block_is_refused_and_nothing_changes() {
 fn a_rule_whose_body_holds_a_marker_is_no_section() {
     let route = ArtifactNameMother::random();
     for marker in [
-        String::from("<!-- mindflayer:begin -->"),
-        String::from("<!-- mindflayer:end -->"),
-        format!("<!-- mindflayer:rule {route} -->"),
+        String::from("<!-- mindweaver:begin -->"),
+        String::from("<!-- mindweaver:end -->"),
+        format!("<!-- mindweaver:rule {route} -->"),
         String::from("<!-- MINDFLAYER:whatever -->"),
     ] {
         let body = format!("# {route}\n\n{marker}\n\nMore.");
@@ -355,5 +355,30 @@ fn a_section_is_named_only_by_a_route_the_name_rules_take() {
     for _ in 0..DRAWS {
         let route = ArtifactNameMother::route();
         assert!(Section::new(route.as_str(), "Body.").is_ok(), "{route}");
+    }
+}
+
+/// A block moved to Mindflayer's markers and back is the block it was, and
+/// one rendered again under the old markers keeps them and every byte
+/// outside: what `migrate --names` and a render of a project an older build
+/// wrote into rely on.
+#[test]
+fn a_block_spelled_under_either_names_keeps_every_byte_outside_it() {
+    use mindweaver_core::Names;
+
+    for _ in 0..DRAWS {
+        let sections = sections();
+        let mut file = AgentsMd::parse(&file()).unwrap();
+        file.set_block(&sections).unwrap();
+        let new = file.to_bytes();
+
+        assert!(file.renamed(Names::Mindflayer));
+        let old = file.to_bytes();
+        let mut reread = AgentsMd::parse(&old).unwrap();
+        assert_eq!(reread.names(), Some(Names::Mindflayer));
+        assert!(!reread.set_block(&sections).unwrap(), "rendered again");
+        assert_eq!(reread.to_bytes(), old);
+        assert!(reread.renamed(Names::Mindweaver));
+        assert_eq!(reread.to_bytes(), new);
     }
 }

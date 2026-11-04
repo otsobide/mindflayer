@@ -1468,7 +1468,7 @@ fn a_rule_ticked_on_the_install_screen_inside_the_tui_is_installed_from_there() 
     );
     assert!(fs::read_to_string(dir.path().join("collapse/AGENTS.md"))
         .unwrap()
-        .contains("<!-- mindflayer:rule git/commits -->\n# Commit one coherent step at a time\n"));
+        .contains("<!-- mindweaver:rule git/commits -->\n# Commit one coherent step at a time\n"));
     assert!(
         app.transcript().starts_with(
             "$ mindweaver install -p collapse --from workspace rule:git/commits\n\

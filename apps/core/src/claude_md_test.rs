@@ -60,9 +60,9 @@ fn a_file_gains_the_import_at_the_top_an_empty_line_above_its_text() {
     assert!(file.set_import(IMPORT));
     assert_eq!(
         text(&file),
-        "<!-- mindflayer:begin -->\n\
+        "<!-- mindweaver:begin -->\n\
          @AGENTS.md\n\
-         <!-- mindflayer:end -->\n\
+         <!-- mindweaver:end -->\n\
          \n\
          # Working here\n\
          \n\
@@ -75,7 +75,7 @@ fn a_file_gains_the_import_at_the_top_an_empty_line_above_its_text() {
 fn an_empty_file_gains_the_import_alone() {
     assert_eq!(
         imported(b""),
-        b"<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n"
+        b"<!-- mindweaver:begin -->\n@AGENTS.md\n<!-- mindweaver:end -->\n"
     );
     assert_eq!(dropped(&imported(b"")), b"");
 }
@@ -112,22 +112,22 @@ fn a_crlf_file_gets_a_crlf_block_and_a_marked_one_keeps_its_mark_first() {
     let with = imported(b"# Team\r\n");
     assert_eq!(
         with,
-        b"<!-- mindflayer:begin -->\r\n@AGENTS.md\r\n<!-- mindflayer:end -->\r\n\r\n# Team\r\n"
+        b"<!-- mindweaver:begin -->\r\n@AGENTS.md\r\n<!-- mindweaver:end -->\r\n\r\n# Team\r\n"
     );
     let with = imported(b"\xEF\xBB\xBF# Team\n");
-    assert!(with.starts_with(b"\xEF\xBB\xBF<!-- mindflayer:begin -->\n"));
+    assert!(with.starts_with(b"\xEF\xBB\xBF<!-- mindweaver:begin -->\n"));
 }
 
 #[test]
 fn a_block_somebody_moved_is_changed_and_dropped_where_it_is() {
-    let moved = "# Team\n\n<!-- mindflayer:begin -->\n@OLD.md\n<!-- mindflayer:end -->";
+    let moved = "# Team\n\n<!-- mindweaver:begin -->\n@OLD.md\n<!-- mindweaver:end -->";
     let mut file = ClaudeMd::parse(moved.as_bytes()).unwrap();
     assert!(file.has_block());
     assert!(!file.imports(IMPORT));
     assert!(file.set_import(IMPORT));
     assert_eq!(
         text(&file),
-        "# Team\n\n<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->"
+        "# Team\n\n<!-- mindweaver:begin -->\n@AGENTS.md\n<!-- mindweaver:end -->"
     );
     // The file ended at the end marker, so it ends where the block began.
     assert!(file.drop_import());
@@ -137,7 +137,7 @@ fn a_block_somebody_moved_is_changed_and_dropped_where_it_is() {
 #[test]
 fn the_import_is_only_the_one_line_alone_between_the_markers() {
     let holds = |inside: &str| {
-        let file = format!("<!-- mindflayer:begin -->\n{inside}<!-- mindflayer:end -->\n");
+        let file = format!("<!-- mindweaver:begin -->\n{inside}<!-- mindweaver:end -->\n");
         ClaudeMd::parse(file.as_bytes()).unwrap().imports(IMPORT)
     };
     assert!(holds("@AGENTS.md\n"));
@@ -153,34 +153,43 @@ fn the_import_is_only_the_one_line_alone_between_the_markers() {
 fn a_malformed_block_is_refused_as_in_agents_md() {
     let refused = |file: &str| ClaudeMd::parse(file.as_bytes()).unwrap_err();
     assert_eq!(
-        refused("# Team\n<!-- mindflayer:begin -->\n@AGENTS.md\n"),
-        Malformed::Unclosed { line: 2 }
+        refused("# Team\n<!-- mindweaver:begin -->\n@AGENTS.md\n"),
+        Malformed::Unclosed {
+            line: 2,
+            names: Names::Mindweaver,
+        }
     );
     assert_eq!(
-        refused("@AGENTS.md\n<!-- mindflayer:end -->\n"),
-        Malformed::Unopened { line: 2 }
+        refused("@AGENTS.md\n<!-- mindweaver:end -->\n"),
+        Malformed::Unopened {
+            line: 2,
+            names: Names::Mindweaver,
+        }
     );
     assert_eq!(
         refused(
-            "<!-- mindflayer:begin -->\n<!-- mindflayer:end -->\n\
-             <!-- mindflayer:begin -->\n<!-- mindflayer:end -->\n"
+            "<!-- mindweaver:begin -->\n<!-- mindweaver:end -->\n\
+             <!-- mindweaver:begin -->\n<!-- mindweaver:end -->\n"
         ),
-        Malformed::Reopened { line: 3 }
+        Malformed::Reopened {
+            line: 3,
+            names: Names::Mindweaver,
+        }
     );
     assert_eq!(
-        refused("  <!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n"),
+        refused("  <!-- mindweaver:begin -->\n@AGENTS.md\n<!-- mindweaver:end -->\n"),
         Malformed::Miswritten { line: 1 }
     );
     assert_eq!(
-        refused("<!-- mindflayer:rule style -->\nBe brief.\n"),
+        refused("<!-- mindweaver:rule style -->\nBe brief.\n"),
         Malformed::Stray { line: 1 }
     );
 }
 
 #[test]
 fn a_rules_marker_in_the_block_is_refused_as_a_copy_of_agents_md() {
-    let copy = "# Team\n\n<!-- mindflayer:begin -->\n\
-                <!-- mindflayer:rule style -->\nBe brief.\n<!-- mindflayer:end -->\n";
+    let copy = "# Team\n\n<!-- mindweaver:begin -->\n\
+                <!-- mindweaver:rule style -->\nBe brief.\n<!-- mindweaver:end -->\n";
     assert_eq!(
         ClaudeMd::parse(copy.as_bytes()).unwrap_err(),
         Malformed::Ruled { line: 4 }
@@ -231,7 +240,7 @@ fn an_import_in_an_html_comment_is_not_one() {
     assert!(follows("<!--\nnotes\n-->\n@AGENTS.md\n"));
     // Mindweaver's markers are comments of one line each.
     assert!(follows(
-        "<!-- mindflayer:begin -->\n@AGENTS.md\n<!-- mindflayer:end -->\n"
+        "<!-- mindweaver:begin -->\n@AGENTS.md\n<!-- mindweaver:end -->\n"
     ));
 }
 
@@ -251,4 +260,33 @@ fn an_import_outside_the_block_is_somebodys_and_the_one_inside_is_not() {
     let file = ClaudeMd::parse(&both).unwrap();
     assert!(file.imports_outside(IMPORT));
     assert!(file.imports(IMPORT));
+}
+
+/// An import as a Mindflayer build wrote it, at the top of a team's file.
+fn imported_by_mindflayer() -> String {
+    let (begin, end, _) = agents_md::markers(Names::Mindflayer);
+    format!("{begin}\n{IMPORT}\n{end}\n\n{TEAM}")
+}
+
+#[test]
+fn an_import_a_mindflayer_build_wrote_is_read_and_kept_under_its_markers() {
+    let old = imported_by_mindflayer();
+    let mut file = ClaudeMd::parse(old.as_bytes()).unwrap();
+
+    assert_eq!(file.names(), Some(Names::Mindflayer));
+    assert!(file.imports(IMPORT));
+    assert!(!file.set_import(IMPORT));
+    assert_eq!(text(&file), old);
+}
+
+#[test]
+fn renaming_an_import_moves_its_two_markers_alone() {
+    let old = imported_by_mindflayer();
+    let mut file = ClaudeMd::parse(old.as_bytes()).unwrap();
+
+    assert!(file.renamed(Names::Mindweaver));
+    assert!(!file.renamed(Names::Mindweaver));
+
+    assert_eq!(text(&file), old.replace("mindflayer:", "mindweaver:"));
+    assert_eq!(file.names(), Some(Names::Mindweaver));
 }

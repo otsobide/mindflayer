@@ -11,8 +11,8 @@ use common::*;
 const COMMITS: &str = "# Commit one coherent step at a time\n";
 
 /// The block a project marked by its settings is given for it alone.
-const BLOCK: &str = "<!-- mindflayer:begin -->\n<!-- mindflayer:rule git/commits -->\n\
-                     # Commit one coherent step at a time\n<!-- mindflayer:end -->\n";
+const BLOCK: &str = "<!-- mindweaver:begin -->\n<!-- mindweaver:rule git/commits -->\n\
+                     # Commit one coherent step at a time\n<!-- mindweaver:end -->\n";
 
 /// What a team's `AGENTS.md` might hold before Mindweaver writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
@@ -227,7 +227,7 @@ fn one_name_a_skill_and_a_rule_share_is_installed_and_taken_out_by_its_kind() {
     );
     assert!(fs::read_to_string(alpha.join("AGENTS.md"))
         .unwrap()
-        .contains("<!-- mindflayer:rule deploy -->\n# Ship on a Friday never\n"));
+        .contains("<!-- mindweaver:rule deploy -->\n# Ship on a Friday never\n"));
     for copy in copies(&alpha, "deploy") {
         assert!(copy.join("SKILL.md").is_file(), "{}", copy.display());
     }
@@ -264,8 +264,8 @@ fn a_section_somebody_else_wrote_is_neither_written_over_nor_taken_out() {
     let (dir, alpha) = workspace(&["--shared"]);
     own_rule(dir.path(), "review/tone", "Say what a change does first.\n");
     let theirs = format!(
-        "{TEAM}\n<!-- mindflayer:begin -->\n<!-- mindflayer:rule review/tone -->\nTheirs.\n\
-         <!-- mindflayer:end -->\n"
+        "{TEAM}\n<!-- mindweaver:begin -->\n<!-- mindweaver:rule review/tone -->\nTheirs.\n\
+         <!-- mindweaver:end -->\n"
     );
     fs::write(alpha.join("AGENTS.md"), &theirs).unwrap();
 
@@ -362,7 +362,7 @@ fn a_route_two_places_offer_is_installed_from_the_one_from_names() {
     quiet(&theirs);
     assert!(fs::read_to_string(alpha.join("AGENTS.md"))
         .unwrap()
-        .contains("<!-- mindflayer:rule git/commits -->\n# Commit as the team does\n"));
+        .contains("<!-- mindweaver:rule git/commits -->\n# Commit as the team does\n"));
     assert_eq!(
         mind(&alpha, &["status"]).unwrap().stdout,
         "git/commits  current  claude,codex,opencode  load:team\n"
