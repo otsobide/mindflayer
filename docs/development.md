@@ -402,8 +402,7 @@ whatever your machine's language and time zone, writing each into
 leads to your workspaces or your agents' folders, a temporary home holding
 only the default workspace the demo makes there, which has to be as the
 demo made it at the end, and every command naming its home
-and every agent home. The project's page is taken in dark as well, for the
-README's `<picture>`; the rest of the tour is light.
+and every agent home. Every page is taken in dark.
 
 The demo is built in `mindweaver-demo` under the system's temporary folder,
 `/tmp/mindweaver-demo` on Linux, always the same place, since every page

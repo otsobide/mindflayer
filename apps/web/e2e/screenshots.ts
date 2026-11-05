@@ -389,9 +389,6 @@ const TOUR: Shot[] = [
   }
 ]
 
-/** The pages taken in dark as well, for the README's `<picture>`. */
-const DARK = ['project']
-
 /**
  * Open the launch link in a page of its own, in `mode`, and take `shots`
  * of it, each read for a leak before it is written.
@@ -439,7 +436,7 @@ async function take(browser: Browser, served: Serving, mode: 'light' | 'dark', s
           throw new Error(`the ${shot.name} page shows \`${trouble}\`: ${await page.getByTestId(trouble).first().innerText()}`)
         }
       }
-      const file = join(IMAGES, mode === 'light' ? `${shot.name}.png` : `${shot.name}-${mode}.png`)
+      const file = join(IMAGES, `${shot.name}.png`)
       await page.screenshot({ path: file, animations: 'disabled', caret: 'hide' })
       written.push(file)
     }
@@ -471,10 +468,9 @@ try {
   served = await serve(at, 'none')
   browser = await chromium.launch()
   mkdirSync(IMAGES, { recursive: true })
-  const written = [
-    ...await take(browser, served, 'dark', TOUR.filter(shot => DARK.includes(shot.name))),
-    ...await take(browser, served, 'light', TOUR)
-  ]
+  // Dark, the owner's choice for the README, every page of the tour:
+  // one mode, so one image a page and no `<picture>` to pick between two.
+  const written = await take(browser, served, 'dark', TOUR)
   const heavy = written.filter(file => statSync(file).size > BUDGET)
   for (const file of written) {
     console.error(`wrote ${file.slice(IMAGES.length + 1)}, ${Math.round(statSync(file).size / 1024)} KB`)
