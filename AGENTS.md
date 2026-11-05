@@ -163,7 +163,8 @@ under `apps/` with its own `Makefile`:
   (`mcp::Inexpressible`, `mcp::Expressibility`), among it the variables
   Claude reads as empty toward a remote server (`mcp/blanked.rs`), one
   rendered into Claude's `.mcp.json` as its one entry and taken out again
-  (`claude_mcp`), and what `add` is told of
+  (`claude_mcp`), and into Codex's `.codex/config.toml` the same way
+  (`codex_mcp`), and what `add` is told of
   how one is started or reached, a program or an address, and the
   definition it writes from it (`mcp::Given`), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
@@ -759,7 +760,17 @@ These are easy to break from a single file without noticing.
     each input as `${VAR}`, asks `McpDefinition::inexpressible` what Claude
     cannot be given and writes no approval; and the file goes with its last
     server only when the caller says Mindweaver made it and nothing else is
-    in it.
+    in it (`config_entry::holds_only`). Codex's `.codex/config.toml`
+    (`codex_mcp`) is TOML up to 2 MiB, its table written with each key only
+    when it holds something and each input only where a key names its
+    variable (`env_vars`, `env_http_headers`, `bearer_token_env_var`, the
+    shapes `passed_on` and `bearer` say and the report asks of a secret),
+    never `experimental_environment` nor `environment_id`; it reads, never
+    writes, the user's `config.toml` in the Codex home `AgentHomes` gives,
+    refusing a name it holds (`codex_mcp_collision`) and warning of a
+    project it does not mark trusted (`codex_mcp_untrusted`), refuses a
+    project whose file is inside an agent's own folder, and leaves `.codex`
+    when its file goes.
   - `ui --token-file` (`TokenFile`, in `src/commands/ui.rs`) makes its
     file with `create_new`, mode 0600 on Unix, so whatever is at the path,
     a link included, is refused and never written over or through, and
@@ -1030,7 +1041,7 @@ These are easy to break from a single file without noticing.
   `install_with` hands to once it holds the lock) and
   `install::rules::update_held`, which take none of their own. A new
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
-  `claude_mcp::render` and `remove`,
+  `claude_mcp::render` and `remove`, `codex_mcp::render` and `remove`,
   `agents_md::render`, `claude_rules::render`, `claude_md::render` and
   `MindProject::change_settings` take none, since
   the writers that call them hold it, and `assign::install` and
@@ -1441,13 +1452,18 @@ These are easy to break from a single file without noticing.
   token in a file, the names a server may and may not be given, `name`,
   `unwritable`, `reserved`, `claimed`, `twin`, and each shape an agent
   cannot be given, `secret_argument`, `secret_in_url`,
-  `composite_secret_header`, and the variables Claude empties toward a
+  `composite_secret_header`, `composite_secret_env` (and `stdio` itself,
+  its secret under a name of its own), beside `whole_secret_env`, which
+  Codex is given, and the variables Claude empties toward a
   remote server and passes on, `blanked_variables` and `passed_variables`,
   read where `header_read_from`, `url_read_from` and `env_read_from` say,
   and the text Claude reads a reference in and the text it does not,
   `references` and `not_references`, written where `with_text` says;
   what Claude's entry is refused for or given beside it, `unread_input` and
-  `with_claude_extras`; what `add` is told of one, `given_program`,
+  `with_claude_extras`; what Codex is given whole, `program_for_codex`,
+  `address_for_codex`, `whole_header_for_codex`, `plain_program` and
+  `plain_address`, and given beside it, `with_codex_extras`; what `add` is
+  told of one, `given_program`,
   `given_address`, `given`, and the shapes it refuses, `given_unfit`,
   `given_with_literal`, `given_repeating` and `given_refused_unread`; and
   `InputNameMother` and `VariableNameMother` for its values, with what each
@@ -1498,7 +1514,11 @@ These are easy to break from a single file without noticing.
   spawns a binary (`common::spawn`) clears those variables
   (`common::CLEARED`), sets only the ones it is about, and sets
   `HOME` (`USERPROFILE` on Windows) to a temp dir. Not to empty: the standard
-  library then falls back to the account's real home. Keep it that way.
+  library then falls back to the account's real home. Keep it that way. A
+  core test about what an agent's own folder holds, the user's Codex
+  `config.toml` a server's name collides with or that marks a project
+  trusted, makes that folder in a temp dir and hands it over in
+  `AgentHomes` (`codex_mcp_test.rs`'s `codex_home`).
 - Git sources are built in-process with `gix` (`common::repository`): no
   network and no `git` binary. A CLI fixture's project is a repository given
   `mind init` (`common::new_project`), so a local install keeps its copies out
