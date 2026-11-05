@@ -1,5 +1,8 @@
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { expect, pressure, stalled, test } from './panel.ts'
+import type { TestInfo } from '@playwright/test'
+import { given } from './environment.ts'
+import { close, type Ending, expect, keep, keepStalls, pressure, stalled, test } from './panel.ts'
 
 /*
  * What a test that fails keeps beside its trace: the log its own
@@ -18,6 +21,11 @@ import { expect, pressure, stalled, test } from './panel.ts'
  * waited on the machine rather than on anything of the panel's: worked out
  * from two readings of Linux's pressure files, as a failed test keeps it
  * (`stalled`), and read from this machine's own where it has them.
+ *
+ * Each kept, and attached to the report, only for a test that ended other
+ * than it was expected to (`keep`), which no test here is: so the
+ * fixtures' teardowns (`close`, `keepStalls`) are handed a stand-in for
+ * one that failed (`ending`).
  */
 
 /** The time of day a line of the log starts with, in UTC to the millisecond. */
@@ -73,13 +81,104 @@ test('how long the machine stalled is said from the totals of two readings, as a
   expect(said.slice(2)).toEqual(['', '/proc/pressure/cpu:', ...file(1_230_000, 0).trimEnd().split('\n'), '', '/proc/pressure/io:', ...file(6_120_000, 4_870_000).trimEnd().split('\n'), ''])
 })
 
-test('the machine\'s own pressure reads as a failed test keeps it, where Linux says it', () => {
+/** What a stand-in for a test's `TestInfo` was handed to attach to the report. */
+interface Attached {
+  name: string
+  path?: string
+  contentType?: string
+}
+
+/**
+ * A stand-in for the `TestInfo` of a test that ended as `status`, expected
+ * to end as `expected`: its files in a folder of its own under the run's
+ * temporary one, which the driver removes, and what it was handed to attach
+ * in `attached`, rather than in this test's own report.
+ */
+function ending(status: TestInfo['expectedStatus'], expected: TestInfo['expectedStatus'] = 'passed'): { info: Ending, folder: string, attached: Attached[] } {
+  const folder = mkdtempSync(join(given().scratch, 'ending-'))
+  const attached: Attached[] = []
+  const info: Ending = {
+    status,
+    expectedStatus: expected,
+    outputPath: (...parts: string[]) => join(folder, ...parts),
+    attach: (name, options) => {
+      attached.push({ name, path: options?.path, contentType: options?.contentType })
+      return Promise.resolve()
+    }
+  }
+  return { info, folder, attached }
+}
+
+test('what a test keeps beside its trace is kept and attached only when it ended other than it was expected to', async () => {
+  for (const [status, expected] of [['failed', 'passed'], ['timedOut', 'passed'], ['interrupted', 'passed'], ['passed', 'failed']] as const) {
+    const ended = ending(status, expected)
+
+    await keep(ended.info, 'kept.txt', () => 'said\n')
+
+    const path = join(ended.folder, 'kept.txt')
+    expect(readFileSync(path, 'utf8'), `${status}, expected ${expected}`).toBe('said\n')
+    expect(ended.attached, `${status}, expected ${expected}`).toEqual([{ name: 'kept.txt', path, contentType: 'text/plain' }])
+  }
+  for (const [status, expected] of [['passed', 'passed'], ['failed', 'failed'], ['skipped', 'skipped']] as const) {
+    const ended = ending(status, expected)
+
+    await keep(ended.info, 'kept.txt', () => {
+      throw new Error(`asked what to keep of a test that ended ${status}, as expected`)
+    })
+
+    expect(readdirSync(ended.folder), `${status}, expected ${expected}`).toEqual([])
+    expect(ended.attached, `${status}, expected ${expected}`).toEqual([])
+  }
+})
+
+test('a test that fails keeps all its own server said beside its trace once the server has stopped, and never the token', async ({ page, own }) => {
+  await own.open('/')
+  // Off the panel before its server stops, so nothing the page would ask
+  // of a server that is gone fails the test.
+  await page.goto('about:blank')
+
+  const passed = ending('passed')
+  await close(passed.info, own.served)
+  expect(readdirSync(passed.folder), 'what a test that passed keeps').toEqual([])
+  expect(passed.attached).toEqual([])
+
+  const failed = ending('failed')
+  await close(failed.info, own.served)
+  const path = join(failed.folder, 'mindweaver-ui.log')
+  expect(failed.attached).toEqual([{ name: 'mindweaver-ui.log', path, contentType: 'text/plain' }])
+  const kept = readFileSync(path, 'utf8')
+  expect(kept, 'all it said, as it has stopped').toBe(own.served.said())
+  const log = kept.split('\n').filter(line => line !== '')
+  expect(log[0], 'where it serves, first, as ever').toBe(`note: serving the workspace at ${own.at.workspace} on ${new URL(own.served.origin).host} until Ctrl-C`)
+  for (const said of [
+    String.raw`GET /\?token=<redacted> 303 \d+ms`,
+    String.raw`GET /api/v1/snapshot 200 \d+ms`
+  ]) {
+    expect(holds(log, said), `${said}, in:\n${kept}`).toBe(true)
+  }
+  expect(kept).not.toContain(own.served.token)
+})
+
+test('a test that fails keeps how long the machine stalled while it ran beside its trace, where Linux says it', async () => {
+  const silent = ending('failed')
+  await keepStalls(silent.info, {}, Date.now())
+  expect(readdirSync(silent.folder), 'what a system with no /proc/pressure keeps').toEqual([])
+  expect(silent.attached).toEqual([])
+
   const before = pressure()
   test.skip(Object.keys(before).length === 0, 'no /proc/pressure on this system')
+  const passed = ending('passed')
+  await keepStalls(passed.info, before, Date.now())
+  expect(readdirSync(passed.folder), 'what a test that passed keeps').toEqual([])
 
-  const said = stalled(before, pressure(), 0).split('\n')
+  const failed = ending('failed')
+  await keepStalls(failed.info, before, Date.now())
 
+  const path = join(failed.folder, 'pressure.txt')
+  expect(failed.attached).toEqual([{ name: 'pressure.txt', path, contentType: 'text/plain' }])
+  const kept = readFileSync(path, 'utf8').split('\n')
   for (const resource of Object.keys(before)) {
-    expect(said, resource).toContainEqual(expect.stringMatching(new RegExp(`^${resource}: some \\d+ms(, full \\d+ms)? of 0ms$`)))
+    expect(kept, resource).toContainEqual(expect.stringMatching(new RegExp(`^${resource}: some \\d+ms(, full \\d+ms)? of \\d+ms$`)))
+    expect(kept, resource).toContain(`/proc/pressure/${resource}:`)
   }
 })

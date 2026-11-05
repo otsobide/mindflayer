@@ -9,7 +9,7 @@ import { join, relative } from 'node:path'
 import { test as base, expect, type Page, type TestInfo } from '@playwright/test'
 import type { Envelope } from '../src/api/generated/Envelope'
 import type { Listing } from '../src/api/generated/Listing'
-import { given, look, run, serve, type Places } from './environment.ts'
+import { given, look, run, serve, type Places, type Serving } from './environment.ts'
 import { assignable, authorable, changeable, loadable, updatable } from './fixture.ts'
 
 /** The server under test, as the link it printed says. */
@@ -98,12 +98,13 @@ export interface Own extends Panel {
   at: Places
   /** The copy, as every command names it. */
   twin: Places
-  served: Served
+  /** Its `mindweaver ui`, which the fixture stops once the test is done (`close`). */
+  served: Serving
   /**
    * What its `mindweaver ui` has said on stderr so far, a line at a time:
    * where it serves, then its log, every request it answered and every
    * run, each after the time of day and with how long it took. What a
-   * test that fails keeps beside its trace (`keep`).
+   * test that fails keeps beside its trace (`close`).
    */
   log(): string[]
 }
@@ -136,11 +137,7 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
     const before = pressure()
     const started = Date.now()
     await use()
-    if (testInfo.status !== testInfo.expectedStatus && Object.keys(before).length > 0) {
-      const path = testInfo.outputPath('pressure.txt')
-      writeFileSync(path, stalled(before, pressure(), Date.now() - started))
-      await testInfo.attach('pressure', { path, contentType: 'text/plain' })
-    }
+    await keepStalls(testInfo, before, started)
   }, { auto: true }],
 
   served: async ({}, use) => {
@@ -187,10 +184,7 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
     try {
       await use({ at: mine, twin, served: server, log, open: (path = '/') => open(page, server, path) })
     } finally {
-      await server.stop()
-      if (testInfo.status !== testInfo.expectedStatus) {
-        await keep(testInfo, server.said())
-      }
+      await close(testInfo, server)
     }
     if (made) {
       expect(look(mine.home), `the home of its own, ${mine.home}, is as it was made`).toEqual(made)
@@ -265,19 +259,57 @@ export function stalled(before: Pressure, after: Pressure, took: number): string
 }
 
 /**
- * Keep what a failed test's own `mindweaver ui` said beside its trace, as
- * `mindweaver-ui.log` in its folder of `test-results`, which CI uploads,
- * and attached to the report: every request it answered with how long the
- * answer took, and every run with how long it waited its turn behind the
- * runs before it, how long each of its lines took and how much of that it
- * waited for a workspace's lock. The trace times each request from the
- * browser, which says that a run took seconds but not where they went
- * (#240). Never the token, which the server keeps out of its log.
+ * What keeping a file beside a test's trace reads of its `TestInfo`: how
+ * it ended, how it was expected to, where its files go and how one is
+ * attached to the report. No more, so `log.spec.ts` can hand `keep` a
+ * test that failed, which no test that passes is, and which `test.fail()`
+ * cannot make either: a test marked so that fails ended as expected.
  */
-async function keep(testInfo: TestInfo, said: string): Promise<void> {
-  const path = testInfo.outputPath('mindweaver-ui.log')
-  writeFileSync(path, said)
-  await testInfo.attach('mindweaver ui log', { path, contentType: 'text/plain' })
+export type Ending = Pick<TestInfo, 'status' | 'expectedStatus' | 'outputPath' | 'attach'>
+
+/**
+ * Keep what `said` gives as `name` beside the trace of a test that ended
+ * other than it was expected to, in its folder of `test-results`, which CI
+ * uploads, and attached to the report; nothing, and `said` never asked,
+ * for one that ended as expected. Whether a test failed is decided here
+ * alone, for every fixture that keeps something, so the one decision is
+ * the one `log.spec.ts` holds.
+ */
+export async function keep(ending: Ending, name: string, said: () => string): Promise<void> {
+  if (ending.status === ending.expectedStatus) {
+    return
+  }
+  const path = ending.outputPath(name)
+  writeFileSync(path, said())
+  await ending.attach(name, { path, contentType: 'text/plain' })
+}
+
+/**
+ * Stop a test's own `mindweaver ui`, then keep all it said beside the trace
+ * of a test that failed, as `mindweaver-ui.log` (`keep`): every request it
+ * answered with how long the answer took, and every run with how long it
+ * waited its turn behind the runs before it, how long each of its lines
+ * took and how much of that it waited for a workspace's lock. Once it has
+ * stopped, so it has said all it will. The trace times each request from
+ * the browser, which says that a run took seconds but not where they went
+ * (#240). Never the token, which the server keeps out of its log. The own
+ * fixture's teardown.
+ */
+export async function close(ending: Ending, server: Serving): Promise<void> {
+  await server.stop()
+  await keep(ending, 'mindweaver-ui.log', () => server.said())
+}
+
+/**
+ * Keep how long the machine stalled since `before` was read, at `started`,
+ * beside the trace of a test that failed, as `pressure.txt` (`keep`,
+ * `stalled`); nothing where Linux said nothing to read. The `stalls`
+ * fixture's teardown.
+ */
+export async function keepStalls(ending: Ending, before: Pressure, started: number): Promise<void> {
+  if (Object.keys(before).length > 0) {
+    await keep(ending, 'pressure.txt', () => stalled(before, pressure(), Date.now() - started))
+  }
 }
 
 /**

@@ -1608,9 +1608,13 @@ These are easy to break from a single file without noticing.
   `environment.ts` as every process is), and holds what the panel left to
   what the same command leaves in the copy. That `mindweaver ui` runs with
   `--log`, and a test that fails keeps what it said beside its trace
-  (`keep`, in `panel.ts`), which `log.spec.ts` holds to saying a run and
+  (`close`, in `panel.ts`), which `log.spec.ts` holds to saying a run and
   never the token; every test that fails keeps how long the machine
-  stalled while it ran, from Linux's `/proc/pressure` (`stalls`).
+  stalled while it ran, from Linux's `/proc/pressure` (`stalls`). Whether
+  a test failed is decided in one place (`keep`), and `log.spec.ts` hands
+  both teardowns a stand-in for a test that failed, since no test that
+  passes is one, and finds each file kept and attached, and nothing kept
+  for one that passed.
 - The tests of the panel's types are core's and the CLI's
   `src/typescript_test.rs`, compiled only with the `ts` feature, and named
   so `--lib typescript` picks them out: each crate's export

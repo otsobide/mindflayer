@@ -7484,7 +7484,7 @@ CI, which its trace could say no more of (#240). So a test's own
 its stderr kept for as long as it runs, and a test that fails keeps it
 beside its trace, once the server has stopped and said all it will, as
 `mindweaver-ui.log` in its folder of `test-results/`, attached to the
-report too (`keep`, in `e2e/panel.ts`): every request with how long its
+report too (`close`, in `e2e/panel.ts`): every request with how long its
 answer took, and every run with how long it waited its turn, how long
 each of its lines took and how much of that it waited for a workspace's
 lock ([the log](#the-log)), each after the time of day, to read beside the
@@ -7508,6 +7508,19 @@ starts and again after its last one stops, so it is the test's own time
 rather than an average of the minutes around it (`stalled`), then each file
 as it read the second time. Nothing on a system without them, where there
 is nothing to read.
+
+Both are kept only for a test that ended other than it was expected to,
+decided in one place for both (`keep`), and held by tests that pass: one
+made to fail would fail the suite, and `test.fail()` makes none that keeps
+anything, a test marked so that fails having ended as expected. So
+`e2e/log.spec.ts` hands `keep` and both teardowns (`close`, `keepStalls`)
+a stand-in for a test's `TestInfo` that failed (`ending`), and finds the
+server's log kept whole once it has stopped, the token redacted where the
+launch link carried it, and the pressure kept for each file Linux has;
+and nothing kept, nor anything asked of what would be, for a test that
+passed, or one marked to fail that failed.
+Rather than a nested run of Playwright over a spec made to fail, which
+would need a config and a fixture of its own beside the driver's.
 
 ### The README's screenshots
 
