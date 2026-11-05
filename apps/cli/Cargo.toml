@@ -1,5 +1,5 @@
 [package]
-name = "mindflayer-cli"
+name = "mindweaver-cli"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
@@ -7,7 +7,7 @@ license = "GPL-3.0-only"
 # tool does rather than what kind of crate it is.
 description = "Manage agent skills across mind projects"
 # Two binaries leave `cargo run` unable to choose, which breaks `make run`.
-# `mind` is the one that reaches both levels (`mind flayer <cmd>`).
+# `mind` is the one that reaches both levels (`mind weaver <cmd>`).
 default-run = "mind"
 
 # Not `mf`: that is METAFONT, which ships with every TeX distribution and is
@@ -16,17 +16,17 @@ default-run = "mind"
 name = "mind"
 path = "src/main.rs"
 
-# `flayer <cmd>` is `mind flayer <cmd>`. A second entry point into the same
+# `mindweaver <cmd>` is `mind weaver <cmd>`. A second entry point into the same
 # parser, not a wrapper that re-executes `mind`, so the two spellings share one
 # implementation and cannot drift apart.
 [[bin]]
-name = "flayer"
-path = "src/bin/flayer.rs"
+name = "mindweaver"
+path = "src/bin/mindweaver.rs"
 
 # The command surface is a library so integration tests (and, later, other
 # front ends) can drive the real parser instead of shelling out to the binary.
 [lib]
-name = "mindflayer_cli"
+name = "mindweaver_cli"
 path = "src/lib.rs"
 
 [features]
@@ -35,25 +35,25 @@ default = ["ui"]
 # to serve it on and a browser to open it in. On by default, so the one
 # binary somebody installs has it (D-17); without it, `--no-default-features`
 # builds the commands and the TUI and nothing that serves HTTP.
-ui = ["dep:mindflayer-server", "dep:tokio", "dep:webbrowser"]
+ui = ["dep:mindweaver-server", "dep:tokio", "dep:webbrowser"]
 # The TypeScript types of what the panel sends the CLI's backend and is
 # answered with, and core's beside them (#70): `make web/types` builds with
 # it to write them into the panel, and nothing else does. With `ui`, whose
 # backend the panel's queries and outcomes are.
-ts = ["ui", "dep:ts-rs", "mindflayer-core/ts"]
+ts = ["ui", "dep:ts-rs", "mindweaver-core/ts"]
 # The JSON Schema of what the CLI's backend is sent and answers with, the
 # token file `ui --token-file` writes, core's and the server's own beside
 # them (#217): `make api/schemas` builds with it to write them into
 # docs/api/schemas, and nothing else does. With `ui`, whose backend and
 # server they describe.
-schema = ["ui", "dep:schemars", "mindflayer-core/schema", "mindflayer-server/schema"]
+schema = ["ui", "dep:schemars", "mindweaver-core/schema", "mindweaver-server/schema"]
 
 [dependencies]
-mindflayer-core = { path = "../core" }
+mindweaver-core = { path = "../core" }
 # The local server behind the web panel, whose `Backend` the CLI implements
 # (`backend`): the front end depends on the transport, never the other way
 # (D-17).
-mindflayer-server = { path = "../server", optional = true }
+mindweaver-server = { path = "../server", optional = true }
 # What `ui` serves the panel on: a runtime of one thread, since every query
 # and run goes off it anyway, and Ctrl-C to stop it. The version the server
 # builds.
@@ -82,13 +82,18 @@ schemars = { version = "1.2", optional = true }
 # `dirwalk`, to ask in process what git would list as untracked in a project
 # `mind init` made. It builds nothing new: core's gix already has it.
 gix = { version = "0.87", default-features = false, features = ["dirwalk"] }
-# Core with its object mothers (`mindflayer_core::mother`), which the suites
+# Core with its object mothers (`mindweaver_core::mother`), which the suites
 # build what a command acts on with, as core's own do.
-mindflayer-core = { path = "../core", features = ["mother"] }
-# To leave in a workspace's database what an older Mindflayer would have, which
+mindweaver-core = { path = "../core", features = ["mother"] }
+# To leave in a workspace's database what an older Mindweaver would have, which
 # nothing this one writes can, for the suites that check it is scrubbed. The
 # same version and features as core's, so it is one build of SQLite.
 rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+# To read a command line of the end-to-end suite (`e2e_test`) into words as a
+# shell would, quotes and all, so a test spells what a person types. The
+# version gix-command builds already, so it adds no crate to the tree; MIT
+# or Apache-2.0, which GPL-3.0-only takes in.
+shell-words = "1.1"
 tempfile = "3"
 # To wait, bounded, for what the panel's watcher tells (`live_test`): the
 # runtime and timers the server's own suites use, and the version it builds.
@@ -111,3 +116,20 @@ boon = { version = "0.6", default-features = false }
 # openapi-spec-validator-rs carries 3.1's own meta-schema, but builds
 # jsonschema and turns that same feature on.
 oas3 = { version = "0.22", default-features = false }
+
+# The TUI end to end (`tui_e2e_test`), Unix alone, as a pseudo-terminal is.
+[target.'cfg(unix)'.dev-dependencies]
+# The pseudo-terminal the screen runs in, its process the leader of a
+# session of its own with that terminal as its controlling one, as a shell
+# starts it: crossterm reads the window's size from `/dev/tty`, which would
+# otherwise be the developer's terminal, or none at all under CI. The
+# version crossterm, gix and tempfile build already, so it adds no crate to
+# the tree; Apache-2.0 WITH LLVM-exception, Apache-2.0 or MIT, which
+# GPL-3.0-only takes in.
+rustix = { version = "1", features = ["process", "pty", "termios"] }
+# The terminal the screen draws on, read back as rows of text: a parser of
+# what a VT100 terminal is sent, which keeps the grid the alternate screen
+# draws and the one it gives back on leaving it. MIT, and vte, the one other
+# crate it adds to the tree, Apache-2.0 or MIT: each a licence GPL-3.0-only
+# takes in. 0.16 rather than 0.15, which would build a second unicode-width.
+vt100 = "0.16"

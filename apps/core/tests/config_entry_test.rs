@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-use mindflayer_core::config_entry::{
+use mindweaver_core::config_entry::{
     ConfigFile, Edit, EntryError, FileError, Format, Value, Written,
 };
 use tempfile::TempDir;

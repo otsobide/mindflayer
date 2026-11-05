@@ -34,7 +34,7 @@ fn every_own_error(url: &str, detail: &str) -> Vec<(GitError, &'static str)> {
         ),
         (
             GitError::Cache {
-                path: PathBuf::from("/w/.mindflayer/cache/acme"),
+                path: PathBuf::from("/w/.mindweaver/cache/acme"),
                 source: io::Error::other(detail.to_owned()),
             },
             "git_cache_failed",
@@ -99,11 +99,11 @@ fn a_git_error_carrying_a_workspace_s_gives_the_workspace_s_code() {
             path: PathBuf::from("/w"),
         },
         WorkspaceError::Read {
-            path: PathBuf::from("/w/.mindflayer/cache/acme/.git/config"),
+            path: PathBuf::from("/w/.mindweaver/cache/acme/.git/config"),
             source: io::Error::other("denied"),
         },
         WorkspaceError::Malformed {
-            path: PathBuf::from("/w/.mindflayer/cache/acme/.git/config"),
+            path: PathBuf::from("/w/.mindweaver/cache/acme/.git/config"),
             detail: String::from("not a config"),
         },
     ];
@@ -147,13 +147,13 @@ fn a_reference_that_is_no_name_is_quoted_in_backticks() {
 #[test]
 fn a_cache_that_cannot_be_prepared_names_its_folder_and_why() {
     let error = GitError::Cache {
-        path: PathBuf::from("/w/.mindflayer/cache/acme"),
+        path: PathBuf::from("/w/.mindweaver/cache/acme"),
         source: io::Error::other("read-only file system"),
     };
 
     assert_eq!(
         error.to_string(),
-        "/w/.mindflayer/cache/acme: the cache directory cannot be prepared: read-only file system"
+        "/w/.mindweaver/cache/acme: the cache directory cannot be prepared: read-only file system"
     );
 }
 
@@ -263,7 +263,7 @@ fn a_git_error_says_its_url_once() {
 #[test]
 fn a_clone_is_equal_to_one_at_the_same_place_and_revision() {
     let clone = Cloned {
-        root: PathBuf::from("/w/.mindflayer/cache/acme"),
+        root: PathBuf::from("/w/.mindweaver/cache/acme"),
         revision: Some(Revision::from("4f9c2a7")),
     };
 

@@ -23,7 +23,7 @@ async fn a_command_runs_on_the_writer_thread_and_says_what_it_was() {
         reply.json(),
         json!({
             "lines": ["fake run link beta"],
-            "outcome": { "ran": "link beta", "thread": "mindflayer-writes" },
+            "outcome": { "ran": "link beta", "thread": "mindweaver-writes" },
         })
     );
     assert_eq!(*runs.lock().unwrap(), ["start link beta", "end link beta"]);
@@ -244,11 +244,11 @@ async fn the_transcript_keeps_runs_and_nothing_that_only_read() {
         json!([
             {
                 "lines": ["fake run init"],
-                "outcome": { "ran": "init", "thread": "mindflayer-writes" },
+                "outcome": { "ran": "init", "thread": "mindweaver-writes" },
             },
             {
                 "lines": ["fake run link beta"],
-                "outcome": { "ran": "link beta", "thread": "mindflayer-writes" },
+                "outcome": { "ran": "link beta", "thread": "mindweaver-writes" },
             },
         ])
     );

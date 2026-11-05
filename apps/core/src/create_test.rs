@@ -407,9 +407,13 @@ fn any_rule_template_without_front_matter_opens_with_what_was_typed() {
 #[test]
 fn a_name_validate_would_refuse_is_refused_before_anything_is_planned() {
     let (_dir, project) = project();
-    for (why, name) in crate::mother::ArtifactNameMother::unwritable() {
-        for kind in Kind::ALL {
-            let refused = plan(&project, kind, &name, "Ship it", None);
+    for kind in Kind::ALL {
+        let unwritable = match kind {
+            Kind::Skill | Kind::Rule => crate::mother::ArtifactNameMother::unwritable(),
+            Kind::Mcp => crate::mother::McpMother::unwritable(),
+        };
+        for (why, name) in unwritable {
+            let refused = plan(&project, kind, &name, "Ship it", Start::Scratch);
 
             assert!(
                 matches!(refused, Err(CreateError::Name { .. })),
@@ -423,7 +427,14 @@ fn a_name_validate_would_refuse_is_refused_before_anything_is_planned() {
 fn a_skill_named_by_a_route_is_refused_as_nested() {
     let (_dir, project) = project();
 
-    let refused = plan(&project, Kind::Skill, "ops/deploy", "Ship it", None).unwrap_err();
+    let refused = plan(
+        &project,
+        Kind::Skill,
+        "ops/deploy",
+        "Ship it",
+        Start::Scratch,
+    )
+    .unwrap_err();
 
     assert!(matches!(refused, CreateError::Nested { .. }), "{refused:?}");
     assert_eq!(refused.code(), "add_skill_nested");
@@ -436,10 +447,17 @@ fn a_description_is_trimmed_before_it_is_checked_and_written() {
     let (_dir, project) = project();
 
     assert!(matches!(
-        plan(&project, Kind::Rule, "lint", "  \n\t ", None),
+        plan(&project, Kind::Rule, "lint", "  \n\t ", Start::Scratch),
         Err(CreateError::DescriptionEmpty { .. })
     ));
-    let planned = plan(&project, Kind::Rule, "lint", "  Run the linter\n", None).unwrap();
+    let planned = plan(
+        &project,
+        Kind::Rule,
+        "lint",
+        "  Run the linter\n",
+        Start::Scratch,
+    )
+    .unwrap();
     assert!(
         matches!(&planned, Scaffold::Rule { text, .. } if text == "# Run the linter\n"),
         "{planned:?}"
@@ -451,7 +469,14 @@ fn a_rule_is_planned_at_its_route_in_the_project_s_folder_for_rules() {
     let (_dir, project) = project();
     let folder = project.directory_for(Kind::Rule).unwrap();
 
-    let planned = plan(&project, Kind::Rule, "git/no-force", "Never force", None).unwrap();
+    let planned = plan(
+        &project,
+        Kind::Rule,
+        "git/no-force",
+        "Never force",
+        Start::Scratch,
+    )
+    .unwrap();
 
     assert_eq!(planned.path(), folder.join("git").join("no-force.md"));
     assert!(matches!(
@@ -465,7 +490,7 @@ fn a_skill_is_planned_as_its_folder_holding_its_manifest_alone() {
     let (_dir, project) = project();
     let folder = project.directory_for(Kind::Skill).unwrap();
 
-    let planned = plan(&project, Kind::Skill, "deploy", "Ship it", None).unwrap();
+    let planned = plan(&project, Kind::Skill, "deploy", "Ship it", Start::Scratch).unwrap();
 
     assert_eq!(planned.path(), folder.join("deploy"));
     match &planned {
@@ -489,7 +514,7 @@ fn planning_writes_nothing() {
     let skills = project.directory_for(Kind::Skill).unwrap();
     let _ = fs::remove_dir_all(&skills);
 
-    let planned = plan(&project, Kind::Skill, "deploy", "Ship it", None).unwrap();
+    let planned = plan(&project, Kind::Skill, "deploy", "Ship it", Start::Scratch).unwrap();
 
     assert!(!planned.path().exists());
     assert!(!skills.exists());
@@ -507,7 +532,7 @@ fn a_kind_the_project_keeps_no_folder_for_cannot_be_planned() {
     .unwrap();
     assert_eq!(project.directory_for(Kind::Rule), None);
 
-    let refused = plan(&project, Kind::Rule, "lint", "Lint", None).unwrap_err();
+    let refused = plan(&project, Kind::Rule, "lint", "Lint", Start::Scratch).unwrap_err();
 
     assert!(matches!(refused, CreateError::Workspace(_)), "{refused:?}");
 }
@@ -516,7 +541,7 @@ fn a_kind_the_project_keeps_no_folder_for_cannot_be_planned() {
 fn a_plan_is_free_while_nothing_is_where_it_goes() {
     let (_dir, project) = project();
 
-    let planned = plan(&project, Kind::Rule, "lint", "Lint", None).unwrap();
+    let planned = plan(&project, Kind::Rule, "lint", "Lint", Start::Scratch).unwrap();
 
     assert!(planned.taken().is_none());
 }
@@ -526,7 +551,7 @@ fn a_plan_is_free_while_nothing_is_where_it_goes() {
 #[test]
 fn a_plan_is_taken_by_whatever_is_already_where_it_goes() {
     let (_dir, project) = project();
-    let planned = plan(&project, Kind::Skill, "deploy", "Ship it", None).unwrap();
+    let planned = plan(&project, Kind::Skill, "deploy", "Ship it", Start::Scratch).unwrap();
     fs::create_dir_all(planned.path().parent().unwrap()).unwrap();
     #[cfg(unix)]
     std::os::unix::fs::symlink("/nowhere/at/all", planned.path()).unwrap();
@@ -545,7 +570,14 @@ fn a_plan_is_taken_by_whatever_is_already_where_it_goes() {
 #[test]
 fn a_planned_rule_reads_as_the_rule_it_would_be() {
     let (_dir, project) = project();
-    let planned = plan(&project, Kind::Rule, "git/no-force", "Never force", None).unwrap();
+    let planned = plan(
+        &project,
+        Kind::Rule,
+        "git/no-force",
+        "Never force",
+        Start::Scratch,
+    )
+    .unwrap();
 
     let artifact = planned.read_as(&project).unwrap();
 
@@ -558,7 +590,7 @@ fn a_planned_rule_reads_as_the_rule_it_would_be() {
 #[test]
 fn a_planned_skill_reads_as_the_skill_it_would_be() {
     let (_dir, project) = project();
-    let planned = plan(&project, Kind::Skill, "deploy", "Ship it", None).unwrap();
+    let planned = plan(&project, Kind::Skill, "deploy", "Ship it", Start::Scratch).unwrap();
 
     let artifact = planned.read_as(&project).unwrap();
 
@@ -651,6 +683,36 @@ fn each_create_error_of_its_own_gives_its_own_code() {
                 source: io::Error::other("full"),
             },
             "add_write_failed",
+        ),
+        (
+            CreateError::McpUnscaffolded {
+                directory: PathBuf::from("/p/mcp"),
+            },
+            "add_mcp_unscaffolded",
+        ),
+        (
+            CreateError::TransportNotMcp { kind: Kind::Skill },
+            "add_transport_not_mcp",
+        ),
+        (
+            CreateError::KeyRepeated {
+                table: "env",
+                key: String::from("K"),
+            },
+            "add_mcp_key_repeated",
+        ),
+        (
+            CreateError::UrlUserinfo {
+                url: crate::value::Redacted::new("https://example.com/mcp"),
+            },
+            "add_mcp_url_userinfo",
+        ),
+        (
+            CreateError::Definition {
+                name: String::from("x"),
+                issues: Vec::new(),
+            },
+            "add_mcp_unfit",
         ),
     ];
     let given: Vec<&str> = errors.iter().map(|(_, code)| *code).collect();

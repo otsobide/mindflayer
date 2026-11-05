@@ -1,9 +1,9 @@
 //! Bringing a skill somebody keeps in a project's agents' folders into the
 //! workspace's library, and making the project's copies of it an
-//! installation from there: `flayer adopt` (#59).
+//! installation from there: `mindweaver adopt` (#59).
 //!
 //! Many repositories keep hand-written skills in `.claude/skills` or
-//! `.agents/skills` already. Mindflayer lists each as foreign, never its to
+//! `.agents/skills` already. Mindweaver lists each as foreign, never its to
 //! change, so nothing it does reaches one: no update, and no copy for an
 //! agent that reads the other folder. Adopting one, when asked and never by
 //! itself, copies it into the library and records the project's copies as
@@ -45,7 +45,7 @@ use crate::kind::Kind;
 use crate::ledger::{Action, InstallRecord, Ledger, LedgerError, Outcome, Target};
 use crate::skill::SkillManifest;
 use crate::value::{ArtifactName, ContentHash, Origin};
-use crate::workspace::{same_directory, FlayerWorkspace, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// What the `metadata` keys start with that `gh skill` writes into a skill
 /// it installed, saying where it came from: shown ([`Plan::provenance`]),
@@ -91,7 +91,7 @@ pub struct Copy {
     /// The agents it is for, as the install's target has them.
     pub agents: Vec<Agent>,
     /// Whether it is there. One that is not is recorded all the same, and so
-    /// reads as missing, for `flayer update` to put there from the library:
+    /// reads as missing, for `mindweaver update` to put there from the library:
     /// adopting writes nothing in the project.
     pub there: bool,
     /// What a local project does with it in git's exclude file, when it is
@@ -131,15 +131,17 @@ pub struct Adopted {
 /// Why a skill could not be adopted, before anything was written.
 #[derive(Debug, Error)]
 pub enum AdoptError {
-    #[error("rule `{name}` is not adopted: only a skill somebody keeps in an agent's folder is")]
-    Rule { name: String },
+    /// Named for what it is not, and holding what it is, so a kind added
+    /// is refused by the one condition, with the one code.
+    #[error("{kind} `{name}` is not adopted: only a skill somebody keeps in an agent's folder is")]
+    NotASkill { kind: Kind, name: String },
     #[error("{project} holds no skill `{name}` where an install of it would go ({folders}), so there is nothing to adopt")]
     NotHeld {
         project: String,
         name: String,
         folders: String,
     },
-    #[error("skill `{name}` is installed in {project} already, from {origin}, so it is Mindflayer's to update or uninstall, not to adopt")]
+    #[error("skill `{name}` is installed in {project} already, from {origin}, so it is Mindweaver's to update or uninstall, not to adopt")]
     Installed {
         project: String,
         name: String,
@@ -147,7 +149,7 @@ pub enum AdoptError {
     },
     #[error("{path} is {project}'s own, in the folder it authors skills in, so it is not adopted: only somebody's skill in an agent's folder is")]
     Authored { project: String, path: PathBuf },
-    #[error("{path} is inside {home}, which {reader} reads for every project, so it is not adopted: Mindflayer manages one project at a time")]
+    #[error("{path} is inside {home}, which {reader} reads for every project, so it is not adopted: Mindweaver manages one project at a time")]
     UserScope {
         path: PathBuf,
         home: PathBuf,
@@ -195,7 +197,7 @@ pub enum AdoptError {
 }
 
 codes!(AdoptError {
-    Self::Rule { .. } => "adopt_not_a_skill",
+    Self::NotASkill { .. } => "adopt_not_a_skill",
     Self::NotHeld { .. } => "adopt_not_held",
     Self::Installed { .. } => "adopt_already_installed",
     Self::Authored { .. } => "adopt_authored",
@@ -222,7 +224,7 @@ codes!(AdoptError {
 /// `homes` are the agents' own folders, which the front end decides, as for
 /// an install: a copy inside one is no one project's to adopt.
 pub fn plan(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     reference: &Reference,
     homes: &AgentHomes,
@@ -252,7 +254,7 @@ pub fn plan(
 /// it is after an install, with what was adopted left adopted, both halves
 /// of it there. Nothing in the project is written, ever.
 pub fn apply(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     reference: &Reference,
     homes: &AgentHomes,
@@ -390,7 +392,7 @@ fn into_library(plan: &Plan) -> Result<(), AdoptError> {
 /// updates, and recording it would leave the next install, which records
 /// its copies afresh, to make it somebody's again.
 fn plan_with(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     reference: &Reference,
@@ -404,7 +406,11 @@ fn plan_with(
         // `AGENTS.md`, rendered from the library; one somebody wrote is no
         // folder to copy, and taking rules out of a hand-written `AGENTS.md`
         // is a change of its own.
-        Some(Kind::Rule) => return Err(AdoptError::Rule { name }),
+        //
+        // A server an agent is given is an entry in its own config file,
+        // never a folder to copy either; adopting one is a change of its own,
+        // once one is installed (#94).
+        Some(kind @ (Kind::Rule | Kind::Mcp)) => return Err(AdoptError::NotASkill { kind, name }),
     }
     let kind = Kind::Skill;
     // Joined onto the project's folders below, and onto the library's.
@@ -541,7 +547,7 @@ fn plan_with(
 /// the library holds that name already, by its folder or by what one of
 /// its skills declares, which would be two skills of one name the
 /// workspace offers.
-fn in_library(workspace: &FlayerWorkspace, name: &str, copy: &Path) -> Result<PathBuf, AdoptError> {
+fn in_library(workspace: &WeaverWorkspace, name: &str, copy: &Path) -> Result<PathBuf, AdoptError> {
     let own = workspace.own();
     let folder = own.required_directory(Kind::Skill)?;
     let library = install::copy_at(&folder, Kind::Skill, name);

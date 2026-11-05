@@ -26,7 +26,7 @@
       }
     },
     "writes": {
-      "description": "Whether updating every project writes something: what `flayer update\n--all --yes` would, rather than leave and say.",
+      "description": "Whether updating every project writes something: what `mindweaver update\n--all --yes` would, rather than leave and say.",
       "type": "boolean"
     }
   },
@@ -55,7 +55,8 @@
       "type": "string",
       "enum": [
         "skill",
-        "rule"
+        "rule",
+        "mcp"
       ]
     },
     "Pending": {

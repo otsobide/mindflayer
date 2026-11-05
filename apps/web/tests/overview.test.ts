@@ -118,14 +118,14 @@ describe('an empty workspace', () => {
     const { page } = await render('/', fixture('unmade'))
 
     expect(page.get('[data-testid="unmade"]').text()).toContain('Not made yet')
-    // `-W` never makes the workspace it names, so `flayer init` does first.
+    // `-W` never makes the workspace it names, so `mindweaver init` does first.
     expect(texts(page, '[data-testid="start"] code')).toEqual([
-      '$ flayer init /home/you',
+      '$ mindweaver init /home/you',
       '$ mind init',
-      '$ flayer -W /home/you link <PATH>',
-      '$ flayer -W /home/you scan --suggest',
-      '$ flayer -W /home/you add <KIND> <NAME> <DESCRIPTION>',
-      '$ flayer -W /home/you gather git <URL>'
+      '$ mindweaver -W /home/you link <PATH>',
+      '$ mindweaver -W /home/you scan --suggest',
+      '$ mindweaver -W /home/you add <KIND> <NAME> <DESCRIPTION>',
+      '$ mindweaver -W /home/you gather git <URL>'
     ])
   })
 
@@ -141,7 +141,7 @@ describe('an empty workspace', () => {
 
     const { page } = await render('/', snapshot)
 
-    expect(texts(page, '[data-testid="start"] code')).toEqual(['$ flayer -W /home/you/Projects gather git <URL>'])
+    expect(texts(page, '[data-testid="start"] code')).toEqual(['$ mindweaver -W /home/you/Projects gather git <URL>'])
   })
 })
 
@@ -156,7 +156,7 @@ describe('a snapshot that does not come', () => {
   })
 
   it('says why the server would not answer', async () => {
-    const refused = new TransportError(401, 'this browser does not hold the launch token: open the link `flayer ui` printed')
+    const refused = new TransportError(401, 'this browser does not hold the launch token: open the link `mindweaver ui` printed')
 
     const { page } = await render('/', refusing(refused))
 

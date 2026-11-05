@@ -14,16 +14,16 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::{repository, skill, url, workspace};
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Installed, Removed, Standing};
-use mindflayer_core::ledger::{Action, Outcome, SourceKind};
-use mindflayer_core::lifecycle::{self, Record};
-use mindflayer_core::lock::{HOLDER_FILE, WAIT};
-use mindflayer_core::migrate;
-use mindflayer_core::reapply::{self, Change};
-use mindflayer_core::AgentHomes;
-use mindflayer_core::{
-    Agent, Directories, FlayerWorkspace, Kind, Ledger, LockError, MindProject, Reference, Share,
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::{self, Installed, Removed, Standing};
+use mindweaver_core::ledger::{Action, Outcome, SourceKind};
+use mindweaver_core::lifecycle::{self, Record};
+use mindweaver_core::lock::{HOLDER_FILE, WAIT};
+use mindweaver_core::migrate;
+use mindweaver_core::reapply::{self, Change};
+use mindweaver_core::AgentHomes;
+use mindweaver_core::{
+    Agent, Directories, Kind, Ledger, LockError, MindProject, Reference, Share, WeaverWorkspace,
     WorkspaceError, LEDGER_FILE,
 };
 use tempfile::TempDir;
@@ -32,7 +32,7 @@ use tempfile::TempDir;
 /// unless `write` finished only after that: it waited for the writer before
 /// it rather than writing beside it.
 fn waits_for_the_writer_before_it(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     write: impl FnOnce() + Send + 'static,
 ) {
     let held = workspace.lock().unwrap();
@@ -121,7 +121,7 @@ fn a_writer_kept_waiting_gives_up_as_busy_once_its_own_wait_is_over() {
         ),
         "{error:?}"
     );
-    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let workspace = WeaverWorkspace::open(workspace.root()).unwrap();
     assert!(!workspace.is_linked(project.root()), "linked all the same");
 }
 
@@ -129,7 +129,7 @@ fn a_writer_kept_waiting_gives_up_as_busy_once_its_own_wait_is_over() {
 fn a_holder_that_left_no_id_is_called_another_process() {
     let (_dir, workspace) = workspace();
     let _held = workspace.lock().unwrap();
-    fs::remove_file(workspace.flayer_dir().join(HOLDER_FILE)).unwrap();
+    fs::remove_file(workspace.weaver_dir().join(HOLDER_FILE)).unwrap();
 
     let error = workspace.lock_waiting(Duration::ZERO).unwrap_err();
 
@@ -147,7 +147,7 @@ fn a_holder_that_left_no_id_is_called_another_process() {
 fn dropping_the_lock_releases_it_and_takes_its_id_away() {
     let (_dir, workspace) = workspace();
     let held = workspace.lock().unwrap();
-    let holder = workspace.flayer_dir().join(HOLDER_FILE);
+    let holder = workspace.weaver_dir().join(HOLDER_FILE);
     assert_eq!(
         fs::read_to_string(&holder).unwrap(),
         std::process::id().to_string()
@@ -193,7 +193,7 @@ fn readers_never_wait_for_a_writer() {
     let _held = workspace.lock().unwrap();
 
     let started = Instant::now();
-    let read = FlayerWorkspace::open(workspace.root()).unwrap();
+    let read = WeaverWorkspace::open(workspace.root()).unwrap();
     assert!(read.members().is_empty());
     let ledger = read.ledger_for_reading().unwrap();
     assert!(ledger.gathered().unwrap().is_empty());
@@ -229,7 +229,7 @@ fn two_ledger_connections_writing_at_once_both_succeed() {
                     let target = format!("writer {writer}, entry {entry}");
                     ledger.log(Action::Gather, Some(&target), Outcome::Ok, None)?;
                 }
-                Ok::<_, mindflayer_core::LedgerError>(())
+                Ok::<_, mindweaver_core::LedgerError>(())
             })
         })
         .collect();
@@ -270,7 +270,7 @@ fn a_ledger_a_newer_build_wrote_is_refused_before_its_journal_is_changed() {
     assert!(
         matches!(
             error,
-            mindflayer_core::LedgerError::Version { found: 99, .. }
+            mindweaver_core::LedgerError::Version { found: 99, .. }
         ),
         "{error:?}"
     );
@@ -283,7 +283,7 @@ fn a_ledger_opened_to_read_keeps_the_journal_it_had() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join(LEDGER_FILE);
     drop(Ledger::open(&path).unwrap());
-    // A ledger an older Mindflayer made, before it kept a log.
+    // A ledger an older Mindweaver made, before it kept a log.
     rusqlite::Connection::open(&path)
         .unwrap()
         .query_row("PRAGMA journal_mode = DELETE", [], |row| {
@@ -326,7 +326,7 @@ impl Drop for ReadOnly {
 fn a_ledger_keeping_a_log_is_read_where_its_folder_cannot_be_written() {
     let dir = TempDir::new().unwrap();
     // Named with what SQLite would read as part of a URI's syntax.
-    let folder = dir.path().join("odd #1, 50%?").join(".mindflayer");
+    let folder = dir.path().join("odd #1, 50%?").join(".mindweaver");
     let path = folder.join(LEDGER_FILE);
     {
         let ledger = Ledger::open(&path).unwrap();
@@ -359,7 +359,7 @@ fn two_threads_linking_different_projects_at_once_leave_every_entry_in_the_marke
             let root = workspace.root().to_path_buf();
             let start = Arc::clone(&start);
             thread::spawn(move || {
-                let mut workspace = FlayerWorkspace::open(&root).unwrap();
+                let mut workspace = WeaverWorkspace::open(&root).unwrap();
                 start.wait();
                 for project in &batch {
                     workspace.link(project).unwrap();
@@ -373,7 +373,7 @@ fn two_threads_linking_different_projects_at_once_leave_every_entry_in_the_marke
         .flat_map(|linker| linker.join().unwrap())
         .collect();
 
-    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let workspace = WeaverWorkspace::open(workspace.root()).unwrap();
     assert_eq!(workspace.config().projects.len(), 2 * EACH);
     for project in &linked {
         assert!(
@@ -394,13 +394,13 @@ fn a_link_waits_for_the_writer_before_it() {
         linking.link(&project).unwrap();
     });
 
-    let workspace = FlayerWorkspace::open(workspace.root()).unwrap();
+    let workspace = WeaverWorkspace::open(workspace.root()).unwrap();
     assert_eq!(workspace.config().projects.len(), 1);
 }
 
 /// A workspace keeping a `deploy` skill of its own, and a project beside it
 /// to install it into.
-fn offering_deploy() -> (TempDir, FlayerWorkspace, MindProject) {
+fn offering_deploy() -> (TempDir, WeaverWorkspace, MindProject) {
     let (dir, workspace) = workspace();
     let folder = workspace
         .own()
@@ -451,7 +451,7 @@ fn an_install_looks_again_at_the_copy_once_it_holds_the_workspace() {
         &AgentHomes::default(),
     )
     .unwrap();
-    // Surveyed while the copy was Mindflayer's, as the install screen
+    // Surveyed while the copy was Mindweaver's, as the install screen
     // surveys when it is built.
     let stale =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
@@ -569,10 +569,10 @@ fn a_gather_waits_for_the_writer_before_it() {
 
 /// A workspace keeping its own beside its projects, as one made before the
 /// library does, with a skill in its folder.
-fn kept_beside() -> (TempDir, FlayerWorkspace) {
+fn kept_beside() -> (TempDir, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init_with(dir.path(), &common::beside()).unwrap();
-    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let (workspace, _) = WeaverWorkspace::init_with(dir.path(), &common::beside()).unwrap();
+    mindweaver_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
     (dir, workspace)
 }
 
@@ -588,7 +588,7 @@ fn a_migration_waits_for_the_writer_before_it() {
 
     assert!(dir
         .path()
-        .join(".mindflayer/library/skills/deploy/SKILL.md")
+        .join(".mindweaver/library/skills/deploy/SKILL.md")
         .is_file());
 }
 
@@ -600,13 +600,13 @@ fn a_migration_plans_again_once_it_holds_the_workspace() {
     let writer = thread::spawn(move || migrate::library(&mut migrating).unwrap());
     thread::sleep(Duration::from_millis(100));
     // Added while the migration waits, after any plan made before it.
-    mindflayer_core::create(&workspace.own(), Kind::Skill, "review", "Look").unwrap();
+    mindweaver_core::create(&workspace.own(), Kind::Skill, "review", "Look").unwrap();
     drop(held);
 
     let migrated = writer.join().unwrap();
 
     assert_eq!(migrated.plan.moves.len(), 2);
-    let library = dir.path().join(".mindflayer/library/skills");
+    let library = dir.path().join(".mindweaver/library/skills");
     assert!(library.join("deploy/SKILL.md").is_file());
     assert!(library.join("review/SKILL.md").is_file());
 }
@@ -628,7 +628,7 @@ fn opening_the_ledger_does_not_wait_for_the_workspace() {
 
 /// A source an older build stored with a token in its URL, and the clone it
 /// made keeping the token in its config. Returns that config.
-fn tainted(workspace: &FlayerWorkspace) -> PathBuf {
+fn tainted(workspace: &WeaverWorkspace) -> PathBuf {
     let ledger = workspace.ledger().unwrap();
     let source = ledger
         .source_for(

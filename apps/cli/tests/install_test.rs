@@ -58,6 +58,41 @@ fn right_enters_the_skills_and_left_comes_back() {
 }
 
 #[test]
+fn h_j_k_and_l_move_as_the_arrows_do_either_way_round() {
+    let (_dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy", "lint"]);
+    let mut screen = screen_for(&workspace, &ledger);
+
+    press(&mut screen, &[KeyCode::Char('j')]);
+    assert_eq!(screen.current().unwrap().name(), "tanukeys");
+    press(&mut screen, &[KeyCode::Char('k'), KeyCode::Char('l')]);
+    assert_eq!(screen.current().unwrap().name(), "collapse");
+    assert_eq!(screen.focus, Focus::Offers);
+    press(&mut screen, &[KeyCode::Char('j'), KeyCode::Char(' ')]);
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("[ ] deploy"), "{drawn}");
+    assert!(drawn.contains("[x] lint"), "{drawn}");
+    press(&mut screen, &[KeyCode::Char('k'), KeyCode::Char(' ')]);
+    assert_eq!(screen.counts(), (2, 0));
+    press(&mut screen, &[KeyCode::Char('h')]);
+    assert_eq!(screen.focus, Focus::Projects);
+
+    // Turned round, by artifact: the same keys over its two columns.
+    press(&mut screen, &[KeyCode::Char('v')]);
+    assert_eq!(screen.focus, Focus::Artifacts);
+    press(&mut screen, &[KeyCode::Char('j')]);
+    assert_eq!(screen.chosen().unwrap().candidate.name(), "lint");
+    press(&mut screen, &[KeyCode::Char('l')]);
+    assert_eq!(screen.focus, Focus::Receivers);
+    press(&mut screen, &[KeyCode::Char('j')]);
+    assert_eq!(screen.receiver, 1);
+    press(&mut screen, &[KeyCode::Char('k'), KeyCode::Char('h')]);
+    assert_eq!(screen.receiver, 0);
+    assert_eq!(screen.focus, Focus::Artifacts);
+    press(&mut screen, &[KeyCode::Char('k')]);
+    assert_eq!(screen.chosen().unwrap().candidate.name(), "deploy");
+}
+
+#[test]
 fn space_marks_a_skill_and_the_screen_says_what_is_waiting() {
     let (_dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     let mut screen = screen_for(&workspace, &ledger);
@@ -149,7 +184,7 @@ fn applying_installs_what_was_marked_and_reports_it() {
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse --from {origin} skill:deploy\n\
+            "$ mindweaver install -p collapse --from {origin} skill:deploy\n\
              installed deploy into collapse, from {origin}\n"
         )
     );
@@ -193,7 +228,7 @@ fn unmarking_an_installed_skill_removes_it() {
 
     assert_eq!(
         outcome.stdout,
-        "$ flayer uninstall -p collapse skill:deploy\nremoved deploy from collapse\n"
+        "$ mindweaver uninstall -p collapse skill:deploy\nremoved deploy from collapse\n"
     );
     for copy in copies(&dir.path().join("collapse"), "deploy") {
         assert!(!copy.exists(), "{}", copy.display());
@@ -257,7 +292,7 @@ fn a_skill_written_by_hand_is_shown_but_not_touched() {
     let mut screen = screen_for(&workspace, &ledger);
     let drawn = rendered(&screen);
     assert!(drawn.contains("[x] deploy"), "shown as present:\n{drawn}");
-    assert!(drawn.contains("not installed by mindflayer"), "{drawn}");
+    assert!(drawn.contains("not installed by mindweaver"), "{drawn}");
 
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
 
@@ -271,18 +306,18 @@ fn a_skill_written_by_hand_is_shown_but_not_touched() {
 #[test]
 fn a_skill_offered_changed_since_it_was_installed_is_marked_outdated_and_stays_ticked() {
     let dir = workspace_with_own();
-    flayer(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "alpha", "commit-style"]).unwrap();
     let manifest = own_directory_for(dir.path(), Kind::Skill).join("commit-style/SKILL.md");
     let since = fs::read_to_string(&manifest).unwrap() + "Since.\n";
     fs::write(&manifest, since).unwrap();
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
     let ledger = workspace.ledger_for_reading().unwrap();
 
     let screen = screen_for(&workspace, &ledger);
 
     let drawn = rendered(&screen);
     assert!(
-        drawn.contains("[x] commit-style  (outdated; flayer update refreshes it)"),
+        drawn.contains("[x] commit-style  (outdated; mindweaver update refreshes it)"),
         "{drawn}"
     );
     assert_eq!(screen.counts(), (0, 0));
@@ -294,8 +329,8 @@ fn the_screen_opens_with_the_place_an_installation_came_from_ticked_though_its_c
     let dir = workspace_with_own();
     let team = dir.path().join("team");
     fs::create_dir(&team).unwrap();
-    flayer(&team, &["init"]).unwrap();
-    flayer(
+    weaver(&team, &["init"]).unwrap();
+    weaver(
         &team,
         &[
             "add",
@@ -305,8 +340,8 @@ fn the_screen_opens_with_the_place_an_installation_came_from_ticked_though_its_c
         ],
     )
     .unwrap();
-    flayer(dir.path(), &["load", "team"]).unwrap();
-    flayer(
+    weaver(dir.path(), &["load", "team"]).unwrap();
+    weaver(
         dir.path(),
         &[
             "install",
@@ -324,7 +359,7 @@ fn the_screen_opens_with_the_place_an_installation_came_from_ticked_though_its_c
     let manifest = own_directory_for(&team, Kind::Skill).join("commit-style/SKILL.md");
     let since = fs::read_to_string(&manifest).unwrap() + "Since.\n";
     fs::write(&manifest, since).unwrap();
-    let workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let workspace = WeaverWorkspace::open(dir.path()).unwrap();
     let ledger = workspace.ledger_for_reading().unwrap();
 
     let mut screen = screen_for(&workspace, &ledger);
@@ -383,7 +418,7 @@ fn one_name_from_two_shelves_cannot_be_marked_twice() {
         "skills/deploy/SKILL.md",
         &skill_file("deploy", "A different deploy"),
     )]);
-    flayer(
+    weaver(
         dir.path(),
         &["gather", "git", &other.path().to_string_lossy()],
     )
@@ -408,8 +443,8 @@ fn a_mark_on_one_address_gathered_at_two_branches_installs_the_one_ticked() {
     let url = source.path().to_string_lossy().into_owned();
     let head = fs::read_to_string(source.path().join(".git").join("HEAD")).unwrap();
     let branch = head.trim().rsplit('/').next().unwrap().to_owned();
-    flayer(dir.path(), &["gather", "git", &url]).unwrap();
-    flayer(dir.path(), &["gather", "git", &url, "--ref", &branch]).unwrap();
+    weaver(dir.path(), &["gather", "git", &url]).unwrap();
+    weaver(dir.path(), &["gather", "git", &url, "--ref", &branch]).unwrap();
     let mut screen = screen_for(&workspace, &ledger);
 
     // The row offering it from the address alone, which is also the other
@@ -426,7 +461,7 @@ fn a_mark_on_one_address_gathered_at_two_branches_installs_the_one_ticked() {
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse --from {url} skill:deploy\n\
+            "$ mindweaver install -p collapse --from {url} skill:deploy\n\
              installed deploy into collapse, from {url}\n"
         )
     );
@@ -551,9 +586,9 @@ fn applying_says_what_an_install_that_failed_had_cleared() {
 #[test]
 fn a_workspace_with_no_projects_says_so_instead_of_opening_a_screen() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
-    let outcome = flayer(dir.path(), &["install"]).unwrap();
+    let outcome = weaver(dir.path(), &["install"]).unwrap();
 
     assert!(outcome.ok);
     assert!(
@@ -561,38 +596,42 @@ fn a_workspace_with_no_projects_says_so_instead_of_opening_a_screen() {
         "{}",
         outcome.stdout
     );
-    assert!(outcome.stdout.contains("flayer link"), "{}", outcome.stdout);
+    assert!(
+        outcome.stdout.contains("mindweaver link"),
+        "{}",
+        outcome.stdout
+    );
 }
 
 #[test]
 fn opening_the_screen_makes_no_ledger() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
 
-    flayer(dir.path(), &["install"]).unwrap();
+    weaver(dir.path(), &["install"]).unwrap();
 
-    assert!(!dir.path().join(FLAYER_DIR).join("mindflayer.db").exists());
+    assert!(!dir.path().join(WEAVER_DIR).join("mindweaver.db").exists());
 }
 
 #[test]
 fn install_outside_a_workspace_says_what_to_run() {
     let dir = TempDir::new().unwrap();
 
-    let failure = flayer(dir.path(), &["install"]).unwrap_err();
+    let failure = weaver(dir.path(), &["install"]).unwrap_err();
 
     assert!(matches!(*failure.error, CliError::NotInWorkspace(_)));
-    assert!(failure.error.to_string().contains("flayer init"));
+    assert!(failure.error.to_string().contains("mindweaver init"));
 }
 
 #[test]
 fn a_project_with_an_empty_shelf_is_told_where_skills_come_from() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     mind(&root, &["init"]).unwrap();
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
-    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+    let workspace = WeaverWorkspace::locate(dir.path()).unwrap().unwrap();
     let ledger = workspace.ledger().unwrap();
 
     let screen = screen_for(&workspace, &ledger);
@@ -626,7 +665,7 @@ rules = "rules"
         ),
     )
     .unwrap();
-    flayer(dir, &["link", "alpha"]).unwrap();
+    weaver(dir, &["link", "alpha"]).unwrap();
 }
 
 /// A project beside the shelf's `beta`, marked by settings that name every
@@ -649,7 +688,7 @@ skills = [{targets}]
         ),
     )
     .unwrap();
-    flayer(dir, &["link", "alpha"]).unwrap();
+    weaver(dir, &["link", "alpha"]).unwrap();
 }
 
 #[test]
@@ -663,7 +702,7 @@ fn an_install_says_each_target_no_install_may_use_and_installs_in_the_others() {
         settings.display()
     );
 
-    let done = flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+    let done = weaver(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
 
     assert!(
         done.stdout.starts_with("installed deploy into alpha"),
@@ -677,7 +716,7 @@ fn an_install_says_each_target_no_install_may_use_and_installs_in_the_others() {
 
     // Refused for want of any other, it says why.
     installing_in_only(dir.path());
-    let refused = flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap_err();
+    let refused = weaver(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap_err();
     assert_eq!(
         refused.error.to_string(),
         "none of the folders alpha's settings name for its skills is one an install may use, so \
@@ -691,13 +730,13 @@ fn a_route_no_skill_can_be_called_says_nothing_of_the_folders_for_skills() {
     let (dir, _, _) = shelved(&["beta"], &["deploy"]);
     installing_in(dir.path(), r#"".skills", "../shared""#);
 
-    let refused = flayer(dir.path(), &["install", "-p", "alpha", "git/commits"]).unwrap_err();
+    let refused = weaver(dir.path(), &["install", "-p", "alpha", "git/commits"]).unwrap_err();
 
     // A rule's however it is typed, and none is offered.
     assert_eq!(
         refused.error.to_string(),
         "nothing called `git/commits` can be installed: gather it, load a workspace that has it \
-         with `flayer load`, or add it to the workspace with `flayer add`"
+         with `mindweaver load`, or add it to the workspace with `mindweaver add`"
     );
     assert_eq!(refused.warnings, Vec::<String>::new());
 }
@@ -711,9 +750,9 @@ fn a_bare_name_from_a_path_to_a_loaded_workspace_is_found_where_no_skill_can_go(
     installing_in(dir.path(), r#""../shared""#);
     let team = dir.path().join("team");
     fs::create_dir(&team).unwrap();
-    flayer(&team, &["init"]).unwrap();
-    flayer(&team, &["add", "rule", "deploy", "Never on a Friday"]).unwrap();
-    flayer(dir.path(), &["load", "team"]).unwrap();
+    weaver(&team, &["init"]).unwrap();
+    weaver(&team, &["add", "rule", "deploy", "Never on a Friday"]).unwrap();
+    weaver(dir.path(), &["load", "team"]).unwrap();
 
     // A skill's refusal, that alpha has nowhere to put one, keeps the path
     // from finding the rule no more than a skill offered nowhere would.
@@ -739,7 +778,7 @@ fn installing_in_only(dir: &Path) {
 fn the_screen_says_each_target_no_install_may_use_with_each_line_that_installs_the_kind() {
     let (dir, _, _) = shelved(&["beta"], &["deploy", "lint"]);
     installing_in(dir.path(), r#"".skills", ".mind/skills""#);
-    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let workspace = WeaverWorkspace::locate(dir.path()).unwrap().unwrap();
     let ledger = workspace.ledger().unwrap();
     let mut screen = screen_for(&workspace, &ledger);
     screen.cursor = listed(&screen, "alpha");
@@ -755,7 +794,7 @@ fn the_screen_says_each_target_no_install_may_use_with_each_line_that_installs_t
     );
     let outcome = install_screen::apply(&workspace, &screen, &Lookup::default());
 
-    // A line each, as `flayer install` says it of each install it is given.
+    // A line each, as `mindweaver install` says it of each install it is given.
     let said: Vec<&str> = outcome
         .stdout
         .lines()
@@ -785,7 +824,7 @@ fn listed(screen: &Screen, name: &str) -> usize {
 fn a_project_whose_settings_name_no_agent_is_said_and_hides_no_other() {
     let (dir, _, _) = shelved(&["beta"], &["deploy"]);
     with_settings(dir.path(), "");
-    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let workspace = WeaverWorkspace::locate(dir.path()).unwrap().unwrap();
     let ledger = workspace.ledger().unwrap();
 
     let mut screen = screen_for(&workspace, &ledger);
@@ -813,7 +852,7 @@ fn a_project_whose_settings_name_no_agent_is_said_and_hides_no_other() {
 fn the_screen_installs_into_every_folder_a_project_marked_by_its_settings_has_agents_read() {
     let (dir, _, _) = shelved(&["beta"], &["deploy"]);
     with_settings(dir.path(), r#""claude", "codex""#);
-    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let workspace = WeaverWorkspace::locate(dir.path()).unwrap().unwrap();
     let ledger = workspace.ledger().unwrap();
     let mut screen = screen_for(&workspace, &ledger);
     screen.cursor = listed(&screen, "alpha");
@@ -843,7 +882,7 @@ fn the_screen_installs_into_every_folder_a_project_marked_by_its_settings_has_ag
     let outcome = install_screen::apply(&workspace, &reopened, &Lookup::default());
     assert_eq!(
         outcome.stdout,
-        "$ flayer uninstall -p alpha skill:deploy\nremoved deploy from alpha\n"
+        "$ mindweaver uninstall -p alpha skill:deploy\nremoved deploy from alpha\n"
     );
     assert!(!root.join(".claude/skills/deploy").exists());
     assert!(!root.join(".agents/skills/deploy").exists());
@@ -860,22 +899,22 @@ fn a_skill_somebody_keeps_in_one_agents_folder_is_left_alone_from_the_screen() {
         skill_file("deploy", "Written by a person"),
     )
     .unwrap();
-    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let workspace = WeaverWorkspace::locate(dir.path()).unwrap().unwrap();
     let ledger = workspace.ledger().unwrap();
 
     let mut screen = screen_for(&workspace, &ledger);
     screen.cursor = listed(&screen, "alpha");
 
     let drawn = rendered(&screen);
-    assert!(drawn.contains("not installed by mindflayer"), "{drawn}");
+    assert!(drawn.contains("not installed by mindweaver"), "{drawn}");
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
     assert_eq!(screen.counts(), (0, 0));
     assert!(!root.join(".agents/skills/deploy").exists());
 }
 
-/// Put a token into the URL of every source on the shelf, the way a Mindflayer
+/// Put a token into the URL of every source on the shelf, the way a Mindweaver
 /// from before the refusal stored one.
-fn token_in_the_shelf(workspace: &FlayerWorkspace) {
+fn token_in_the_shelf(workspace: &WeaverWorkspace) {
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()
         .execute(
@@ -886,12 +925,12 @@ fn token_in_the_shelf(workspace: &FlayerWorkspace) {
 }
 
 const SCRUBBED: &str = "note: https://example.com/acme/skills: the user name, password or \
-     token an older Mindflayer stored in this URL is taken out; gathering it again needs a git \
+     token an older Mindweaver stored in this URL is taken out; gathering it again needs a git \
      credential helper that has it";
 
 /// How many sources still hold a credential in the file, which a read hands
 /// back without it.
-fn tainted(workspace: &FlayerWorkspace) -> usize {
+fn tainted(workspace: &WeaverWorkspace) -> usize {
     workspace
         .ledger_for_reading()
         .unwrap()
@@ -918,7 +957,7 @@ fn opening_the_screen_scrubs_nothing_and_applying_scrubs_first_and_says_so_witho
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse --from https://example.com/acme/skills skill:deploy\n\
+            "$ mindweaver install -p collapse --from https://example.com/acme/skills skill:deploy\n\
              installed deploy into collapse, from https://example.com/acme/skills\n\
              {SCRUBBED}\n"
         )
@@ -928,7 +967,7 @@ fn opening_the_screen_scrubs_nothing_and_applying_scrubs_first_and_says_so_witho
 
 /// What an older build could leave: the same place gathered twice, once with
 /// a token in its URL, into the folder `older`, and once, later, without.
-fn gathered_twice(workspace: &FlayerWorkspace) -> rusqlite::Connection {
+fn gathered_twice(workspace: &WeaverWorkspace) -> rusqlite::Connection {
     let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
     database
         .execute_batch(
@@ -947,7 +986,7 @@ fn gathered_twice(workspace: &FlayerWorkspace) -> rusqlite::Connection {
 /// Put the cursor on the row offering `name` from the source gathered into
 /// `directory`, and mark it.
 fn mark_from(screen: &mut Screen, name: &str, directory: &str) {
-    use mindflayer_core::install::Offer;
+    use mindweaver_core::install::Offer;
 
     let target = &mut screen.targets[0];
     target.cursor = target
@@ -980,7 +1019,7 @@ fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kep
     assert!(
         outcome
             .stdout
-            .starts_with("$ flayer install -p collapse --from https://example.com/acme/skills"),
+            .starts_with("$ mindweaver install -p collapse --from https://example.com/acme/skills"),
         "{}",
         outcome.stdout
     );
@@ -995,7 +1034,7 @@ fn a_mark_on_a_source_the_scrub_makes_one_with_another_installs_from_the_one_kep
             .installations("collapse", Kind::Skill)
             .unwrap(),
         ["deploy"],
-        "recorded, so Mindflayer still counts the copy as its own"
+        "recorded, so Mindweaver still counts the copy as its own"
     );
 }
 
@@ -1005,7 +1044,7 @@ fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() 
     gathered_twice(&workspace)
         .execute(
             "INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
-                 SELECT 'skill', 'lint', id, '.mindflayer/skills/older/lint', 0
+                 SELECT 'skill', 'lint', id, '.mindweaver/skills/older/lint', 0
                    FROM sources WHERE directory = 'older'",
             [],
         )
@@ -1022,11 +1061,11 @@ fn a_mark_on_what_only_the_source_the_scrub_drops_had_is_said_and_left_undone() 
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse --from https://example.com/acme/skills skill:lint\n\
+            "$ mindweaver install -p collapse --from https://example.com/acme/skills skill:lint\n\
              {SCRUBBED}\n\
              error: nothing called `lint` can be installed from https://example.com/acme/skills: \
-             gather it, load a workspace that has it with `flayer load`, or add it to the \
-             workspace with `flayer add`\n"
+             gather it, load a workspace that has it with `mindweaver load`, or add it to the \
+             workspace with `mindweaver add`\n"
         )
     );
     for copy in copies(&dir.path().join("collapse"), "lint") {
@@ -1039,7 +1078,7 @@ fn installing_and_uninstalling_one_skill_scrub_the_ledger_first() {
     let (dir, workspace, _ledger) = shelved(&["collapse"], &["deploy"]);
     token_in_the_shelf(&workspace);
 
-    let installed = flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    let installed = weaver(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
     assert!(installed.ok, "{:?}", installed.stderr);
     assert_eq!(installed.stderr, [SCRUBBED]);
     assert_eq!(
@@ -1056,7 +1095,7 @@ fn installing_and_uninstalling_one_skill_scrub_the_ledger_first() {
 #[test]
 fn installing_a_skill_that_holds_a_claude_plugin_folder_leaves_it_out_and_warns() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     with_settings(dir.path(), r#""claude", "codex""#);
     let source = repository(&[
         (
@@ -1066,9 +1105,9 @@ fn installing_a_skill_that_holds_a_claude_plugin_folder_leaves_it_out_and_warns(
         ("skills/deploy/.claude-plugin/plugin.json", "{}"),
     ]);
     let url = source.path().to_string_lossy().into_owned();
-    flayer(dir.path(), &["gather", "git", &url]).unwrap();
+    weaver(dir.path(), &["gather", "git", &url]).unwrap();
 
-    let outcome = flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+    let outcome = weaver(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
 
     assert_eq!(
         outcome.stdout,
@@ -1094,8 +1133,8 @@ fn a_local_project_outside_git_is_told_nothing_keeps_what_is_installed_out_of_it
     with_settings_sharing(dir.path(), r#""claude""#, "local");
     let root = dir.path().join("alpha");
 
-    let installed = flayer(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
-    let removed = flayer(dir.path(), &["uninstall", "-p", "alpha", "deploy"]).unwrap();
+    let installed = weaver(dir.path(), &["install", "-p", "alpha", "deploy"]).unwrap();
+    let removed = weaver(dir.path(), &["uninstall", "-p", "alpha", "deploy"]).unwrap();
 
     assert!(installed.ok, "{:?}", installed.stderr);
     assert_eq!(
@@ -1119,13 +1158,13 @@ fn nothing_is_installed_into_a_folder_an_agent_reads_for_every_project() {
     let claude = dir.path().join("alpha").join(".claude");
     let given = format!("--claude-config-dir={}", claude.display());
 
-    let failure = flayer(dir.path(), &["install", "-p", "alpha", "deploy", &given]).unwrap_err();
+    let failure = weaver(dir.path(), &["install", "-p", "alpha", "deploy", &given]).unwrap_err();
 
     assert_eq!(
         failure.error.to_string(),
         format!(
             "{} is inside {}, which Claude Code reads for every project, so nothing was \
-             installed: Mindflayer installs into one project at a time",
+             installed: Mindweaver installs into one project at a time",
             claude.join("skills").join("deploy").display(),
             claude.display()
         )
@@ -1138,9 +1177,9 @@ fn nothing_is_installed_into_a_folder_an_agent_reads_for_every_project() {
 // ---------------------------------------------------------------------------
 
 /// `shelved`, with `git/commits` a rule of the workspace's own.
-fn with_a_rule(projects: &[&str]) -> (TempDir, FlayerWorkspace, Ledger) {
+fn with_a_rule(projects: &[&str]) -> (TempDir, WeaverWorkspace, Ledger) {
     let (dir, workspace, ledger) = shelved(projects, &["deploy"]);
-    flayer(
+    weaver(
         dir.path(),
         &[
             "add",
@@ -1195,14 +1234,14 @@ fn a_rule_ticked_on_the_screen_is_installed_and_unticked_is_taken_out() {
 
     assert_eq!(
         outcome.stdout,
-        "$ flayer install -p collapse --from workspace rule:git/commits\n\
+        "$ mindweaver install -p collapse --from workspace rule:git/commits\n\
          installed rule git/commits into collapse, from workspace\n"
     );
     assert!(outcome.ok && outcome.stderr.is_empty(), "{outcome:?}");
     assert_eq!(
         fs::read_to_string(collapse.join("AGENTS.md")).unwrap(),
-        "<!-- mindflayer:begin -->\n<!-- mindflayer:rule git/commits -->\n\
-         # Commit one coherent step at a time\n<!-- mindflayer:end -->\n"
+        "<!-- mindweaver:begin -->\n<!-- mindweaver:rule git/commits -->\n\
+         # Commit one coherent step at a time\n<!-- mindweaver:end -->\n"
     );
 
     let mut again = screen_for(&workspace, &ledger);
@@ -1213,7 +1252,7 @@ fn a_rule_ticked_on_the_screen_is_installed_and_unticked_is_taken_out() {
 
     assert_eq!(
         outcome.stdout,
-        "$ flayer uninstall -p collapse rule:git/commits\n\
+        "$ mindweaver uninstall -p collapse rule:git/commits\n\
          removed rule git/commits from collapse\n"
     );
     assert!(!collapse.join("AGENTS.md").exists());
@@ -1222,7 +1261,7 @@ fn a_rule_ticked_on_the_screen_is_installed_and_unticked_is_taken_out() {
 #[test]
 fn a_skill_and_a_rule_of_one_name_each_keep_a_box_of_their_own() {
     let (dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
-    flayer(dir.path(), &["add", "rule", "deploy", "Never on a Friday"]).unwrap();
+    weaver(dir.path(), &["add", "rule", "deploy", "Never on a Friday"]).unwrap();
     let mut screen = screen_for(&workspace, &ledger);
 
     press(
@@ -1247,7 +1286,7 @@ fn a_skill_and_a_rule_of_one_name_each_keep_a_box_of_their_own() {
     assert!(lines[0].ends_with(" skill:deploy"), "{}", outcome.stdout);
     assert_eq!(
         lines[1],
-        "$ flayer install -p collapse --from workspace rule:deploy"
+        "$ mindweaver install -p collapse --from workspace rule:deploy"
     );
     assert!(outcome
         .stdout
@@ -1269,7 +1308,7 @@ fn a_project_offered_no_rules_is_told_where_rules_come_from() {
         "{drawn}"
     );
     assert!(
-        drawn.contains("loaded; `flayer load <path>` or `flayer add rule` first"),
+        drawn.contains("loaded; `mindweaver load <path>` or `mindweaver add rule` first"),
         "{drawn}"
     );
     assert_eq!(screen.focus, Focus::Projects);
@@ -1301,7 +1340,7 @@ fn a_rule_reaching_claude_alone_is_said_when_applied() {
     // `collapse: ` to say whose it is.
     assert_eq!(
         outcome.stdout,
-        "$ flayer install -p collapse --from workspace rule:style/comments\n\
+        "$ mindweaver install -p collapse --from workspace rule:style/comments\n\
          installed rule style/comments into collapse, from workspace\n\
          warning: rule `style/comments` states `paths`, so it reaches claude only: codex and \
          opencode read no .claude/rules\n"
@@ -1343,10 +1382,10 @@ fn what_is_true_of_a_projects_rules_as_a_whole_is_said_by_each_line_that_renders
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse --from workspace rule:git/commits\n\
+            "$ mindweaver install -p collapse --from workspace rule:git/commits\n\
              installed rule git/commits into collapse, from workspace\n\
              {tracked}\n\
-             $ flayer install -p collapse --from workspace rule:review/tone\n\
+             $ mindweaver install -p collapse --from workspace rule:review/tone\n\
              installed rule review/tone into collapse, from workspace\n\
              {tracked}\n"
         )
@@ -1364,7 +1403,7 @@ fn what_is_true_of_a_projects_rules_as_a_whole_is_said_by_each_line_that_renders
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer uninstall -p collapse rule:git/commits\n\
+            "$ mindweaver uninstall -p collapse rule:git/commits\n\
              removed rule git/commits from collapse\n\
              {tracked}\n"
         )
@@ -1446,7 +1485,7 @@ fn ticking_projects_for_one_artifact_marks_each_projects_box_and_applies_as_one_
     assert_eq!(
         outcome.stdout,
         format!(
-            "$ flayer install -p collapse -p tanukeys --from {origin} skill:deploy\n\
+            "$ mindweaver install -p collapse -p tanukeys --from {origin} skill:deploy\n\
              installed deploy into collapse, from {origin}\n\
              installed deploy into tanukeys, from {origin}\n"
         )
@@ -1487,7 +1526,7 @@ fn unticking_a_project_for_one_artifact_takes_it_out_of_that_project_alone() {
     let outcome = install_screen::apply(&workspace, &again, &Lookup::default());
     assert_eq!(
         outcome.stdout,
-        "$ flayer uninstall -p collapse skill:deploy\nremoved deploy from collapse\n"
+        "$ mindweaver uninstall -p collapse skill:deploy\nremoved deploy from collapse\n"
     );
     assert!(copies(&dir.path().join("collapse"), "deploy")
         .iter()
@@ -1542,7 +1581,7 @@ fn turned_round_somebodys_copy_is_held_and_says_why() {
     assert_eq!(screen.counts(), (0, 0), "the box did not move");
     let drawn = rendered(&screen);
     assert!(
-        drawn.contains("[x] tanukeys  (not installed by mindflayer)"),
+        drawn.contains("[x] tanukeys  (not installed by mindweaver)"),
         "{drawn}"
     );
     assert!(drawn.contains("left alone"), "and it says why:\n{drawn}");
@@ -1552,7 +1591,7 @@ fn turned_round_somebodys_copy_is_held_and_says_why() {
 fn turned_round_a_project_that_cannot_take_the_kind_has_no_box_and_says_why() {
     let (dir, _, _) = shelved(&["beta"], &["deploy"]);
     with_settings(dir.path(), "");
-    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let workspace = WeaverWorkspace::locate(dir.path()).unwrap().unwrap();
     let ledger = workspace.ledger().unwrap();
     let mut screen = screen_for(&workspace, &ledger);
     let alpha = listed(&screen, "alpha");
@@ -1609,5 +1648,5 @@ fn turned_round_with_nothing_offered_says_where_it_comes_from() {
         screen.message.as_deref(),
         Some("no rules to install: none of the workspace's own, and none loaded")
     );
-    assert!(rendered(&screen).contains("`flayer add rule` first"));
+    assert!(rendered(&screen).contains("`mindweaver add rule` first"));
 }

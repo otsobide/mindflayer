@@ -3,7 +3,7 @@
 
 use std::env;
 
-use mindflayer_core::typescript::{self as core, Export, Files};
+use mindweaver_core::typescript::{self as core, Export, Files};
 use ts_rs::{Config, TS};
 
 use super::*;
@@ -121,7 +121,7 @@ fn every_code_the_cli_and_the_server_give_is_in_its_union_once_beside_core_s() {
     let given: Vec<String> = CODES
         .iter()
         .flat_map(|(_, codes)| codes.iter())
-        .chain(mindflayer_server::Condition::CODES)
+        .chain(mindweaver_server::Condition::CODES)
         .map(|code| format!("{code:?}"))
         .collect();
 
@@ -137,7 +137,7 @@ fn no_field_of_the_cli_s_is_written_through_a_serializer_of_its_own() {
     let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
 
     assert_eq!(
-        mindflayer_core::described::field_serializers(&source).unwrap(),
+        mindweaver_core::described::field_serializers(&source).unwrap(),
         std::collections::BTreeSet::new()
     );
 }

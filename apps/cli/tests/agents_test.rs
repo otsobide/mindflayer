@@ -10,7 +10,7 @@ use common::*;
 /// installed into it.
 fn installed(agents: &str, shared: bool) -> (TempDir, PathBuf) {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     gix::init(&root).unwrap();
@@ -19,9 +19,9 @@ fn installed(agents: &str, shared: bool) -> (TempDir, PathBuf) {
         init.push("--shared");
     }
     mind(&root, &init).unwrap();
-    flayer(dir.path(), &["link", "collapse"]).unwrap();
-    flayer(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
-    flayer(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "collapse", "deploy"]).unwrap();
     (dir, root)
 }
 
@@ -47,7 +47,7 @@ fn offered(root: &Path) -> Vec<String> {
 
 /// What the workspace at `dir` records of `deploy` in `collapse`, by path.
 fn recorded(dir: &Path) -> Vec<String> {
-    let workspace = FlayerWorkspace::open(dir).unwrap();
+    let workspace = WeaverWorkspace::open(dir).unwrap();
     workspace
         .ledger()
         .unwrap()
@@ -115,7 +115,7 @@ fn removing_claude_takes_out_its_copies_and_says_what_somebody_left_there() {
         done.stdout,
         "set agents to codex,opencode in collapse, where they were claude,codex,opencode\n\
          removed deploy from .claude/skills/deploy\n\
-         left .claude/skills/notes where it is: Mindflayer did not install it\n"
+         left .claude/skills/notes where it is: Mindweaver did not install it\n"
     );
     assert!(done.ok, "{:?}", done.stderr);
     assert!(!claudes(&root, "deploy").exists());
@@ -140,10 +140,10 @@ fn naming_exactly_some_agents_moves_the_copies_from_the_others() {
 }
 
 #[test]
-fn flayer_agents_changes_a_project_the_workspace_manages_and_needs_one_named() {
+fn weaver_agents_changes_a_project_the_workspace_manages_and_needs_one_named() {
     let (dir, root) = installed("claude", false);
 
-    let done = flayer(
+    let done = weaver(
         dir.path(),
         &["agents", "-p", "collapse", "add", "codex", "-y"],
     )
@@ -156,7 +156,7 @@ fn flayer_agents_changes_a_project_the_workspace_manages_and_needs_one_named() {
     assert!(agents(&root, "deploy").is_dir());
 
     // `-p` on the other side of `remove` names it all the same.
-    let removed = flayer(
+    let removed = weaver(
         dir.path(),
         &["agents", "remove", "codex", "--project", "collapse", "-y"],
     )
@@ -165,7 +165,7 @@ fn flayer_agents_changes_a_project_the_workspace_manages_and_needs_one_named() {
         .stdout
         .contains("removed deploy from .agents/skills/deploy"));
 
-    let failure = flayer(dir.path(), &["agents", "add", "codex"]).unwrap_err();
+    let failure = weaver(dir.path(), &["agents", "add", "codex"]).unwrap_err();
     assert!(
         matches!(*failure.error, CliError::AgentsWhere),
         "{}",
@@ -176,11 +176,11 @@ fn flayer_agents_changes_a_project_the_workspace_manages_and_needs_one_named() {
 #[test]
 fn a_project_a_mind_toml_marks_is_refused_and_sent_to_mind_migrate() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let root = dir.path().join("old");
     fs::create_dir(&root).unwrap();
     older_project(&root);
-    flayer(dir.path(), &["link", "old"]).unwrap();
+    weaver(dir.path(), &["link", "old"]).unwrap();
 
     for args in [
         &["agents", "add", "codex"][..],
@@ -191,7 +191,7 @@ fn a_project_a_mind_toml_marks_is_refused_and_sent_to_mind_migrate() {
         assert!(said.contains("since a mind.toml marks it"), "{said}");
         assert!(said.ends_with("`mind migrate` moves it to one"), "{said}");
     }
-    let failure = flayer(dir.path(), &["share", "-p", "old", "local"]).unwrap_err();
+    let failure = weaver(dir.path(), &["share", "-p", "old", "local"]).unwrap_err();
     assert!(failure.error.to_string().contains("`mind migrate`"));
     assert!(!root.join(MIND_DIR).join(SETTINGS_FILE).exists());
 }
@@ -199,11 +199,11 @@ fn a_project_a_mind_toml_marks_is_refused_and_sent_to_mind_migrate() {
 #[test]
 fn a_project_a_settings_json_marks_is_refused_and_sent_to_mind_migrate() {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     let root = dir.path().join("json");
     fs::create_dir(&root).unwrap();
     json_project(&root);
-    flayer(dir.path(), &["link", "json"]).unwrap();
+    weaver(dir.path(), &["link", "json"]).unwrap();
     let json = root.join(MIND_DIR).join(SETTINGS_JSON_FILE);
     let written = fs::read_to_string(&json).unwrap();
 
@@ -235,7 +235,7 @@ fn somebodys_skill_where_a_copy_would_go_is_left_and_warned_about() {
     let dry = mind(&root, &["agents", "add", "codex"]).unwrap();
     assert!(
         dry.stdout.contains(
-            "would leave .agents/skills/deploy as it is: Mindflayer did not put it there, \
+            "would leave .agents/skills/deploy as it is: Mindweaver did not put it there, \
              so deploy would not be copied there\n"
         ),
         "{}",
@@ -250,7 +250,7 @@ fn somebodys_skill_where_a_copy_would_go_is_left_and_warned_about() {
     assert_eq!(
         done.stderr,
         [
-            "warning: collapse already has a deploy at .agents/skills/deploy that Mindflayer did \
+            "warning: collapse already has a deploy at .agents/skills/deploy that Mindweaver did \
           not put there, so it was left alone, and deploy was not copied there"
         ]
     );
@@ -333,17 +333,17 @@ fn making_a_shared_project_local_keeps_its_mind_and_its_copies_out_of_git() {
 }
 
 #[test]
-fn flayer_share_changes_a_project_the_workspace_manages() {
+fn weaver_share_changes_a_project_the_workspace_manages() {
     let (dir, root) = installed("claude", false);
 
-    let done = flayer(dir.path(), &["share", "-p", "collapse", "shared", "-y"]).unwrap();
+    let done = weaver(dir.path(), &["share", "-p", "collapse", "shared", "-y"]).unwrap();
 
     assert!(done
         .stdout
         .starts_with("set share to shared in collapse, where it was local\n"));
     assert!(
         MindProject::open(&root).unwrap().settings().unwrap().share
-            == mindflayer_core::Share::Shared
+            == mindweaver_core::Share::Shared
     );
 }
 

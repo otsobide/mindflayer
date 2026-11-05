@@ -1,4 +1,4 @@
-//! `flayer <cmd>`, the shortcut for `mind flayer <cmd>`.
+//! `mindweaver <cmd>`, the shortcut for `mind weaver <cmd>`.
 //!
 //! A second entry point into the same parser rather than a wrapper that
 //! re-executes `mind`: there is one implementation of every workspace command,
@@ -7,12 +7,12 @@
 use std::process::ExitCode;
 
 use clap::Parser;
-use mindflayer_cli::{run_flayer_cli_watched, FlayerCli, ProgressLine};
+use mindweaver_cli::{run_weaver_cli_watched, ProgressLine, WeaverCli};
 
 fn main() -> ExitCode {
-    let cli = FlayerCli::parse();
+    let cli = WeaverCli::parse();
     let progress = ProgressLine::on_stderr();
-    let result = run_flayer_cli_watched(&cli, &progress.watch());
+    let result = run_weaver_cli_watched(&cli, &progress.watch());
     progress.clear();
     match result {
         Ok(outcome) => outcome.report(),

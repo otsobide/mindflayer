@@ -13,6 +13,7 @@ use tempfile::TempDir;
 
 use crate::mother::random;
 use crate::mother::{ProjectMother, UrlMother, WorkspaceMother};
+use crate::workspace::WEAVER_DIR;
 
 #[test]
 fn no_home_is_no_default() {
@@ -27,7 +28,7 @@ fn a_home_with_no_marker_has_no_default_and_is_not_given_one() {
     let dir = TempDir::new().unwrap();
 
     assert!(made_default(Some(dir.path())).unwrap().is_none());
-    assert!(!dir.path().join(FLAYER_DIR).exists());
+    assert!(!dir.path().join(WEAVER_DIR).exists());
 }
 
 #[test]
@@ -99,7 +100,7 @@ fn a_workspace_that_would_not_open_is_listed_with_why_and_nothing_counted() {
 fn why_a_workspace_would_not_open_is_said_without_any_credential_it_quotes() {
     for typed in UrlMother::every_credentialed() {
         let error = WorkspaceError::Malformed {
-            path: PathBuf::from("/w/.mindflayer/flayer.toml"),
+            path: PathBuf::from("/w/.mindweaver/weaver.toml"),
             detail: format!("unknown source {}", typed.typed),
         };
 
@@ -140,13 +141,13 @@ fn a_workspace_in_use_that_nothing_remembers_is_the_one_row() {
 #[test]
 fn an_unmade_workspace_in_use_is_not_listed() {
     let dir = TempDir::new().unwrap();
-    let unmade = FlayerWorkspace::unmade(dir.path()).unwrap();
+    let unmade = WeaverWorkspace::unmade(dir.path()).unwrap();
 
     let (known, _) = known(Some(dir.path()), Some(&unmade));
 
     assert!(known.workspaces.is_empty(), "{known:?}");
     assert!(
-        !dir.path().join(FLAYER_DIR).exists(),
+        !dir.path().join(WEAVER_DIR).exists(),
         "listing makes nothing"
     );
 }
@@ -297,5 +298,5 @@ fn forgetting_with_no_default_made_names_what_was_not_known_and_where() {
         matches!(&refused, WorkspaceError::NotKnown { path, .. } if path == &root),
         "{refused:?}"
     );
-    assert!(!dir.path().join(FLAYER_DIR).exists());
+    assert!(!dir.path().join(WEAVER_DIR).exists());
 }

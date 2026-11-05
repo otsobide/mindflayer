@@ -9,13 +9,13 @@ use std::fs;
 use std::path::PathBuf;
 
 use common::{repository, skill, url};
-use mindflayer_core::copy;
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Edits, Installed, Removed, Standing};
-use mindflayer_core::value::ContentHash;
-use mindflayer_core::{
-    claude_rules, create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, Ledger,
-    MindProject, Share,
+use mindweaver_core::copy;
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::{self, Edits, Installed, Removed, Standing};
+use mindweaver_core::value::ContentHash;
+use mindweaver_core::{
+    claude_rules, create, Agent, AgentHomes, Directories, Kind, Ledger, MindProject, Share,
+    WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -23,7 +23,7 @@ use tempfile::TempDir;
 /// agent.
 struct Given {
     dir: TempDir,
-    workspace: FlayerWorkspace,
+    workspace: WeaverWorkspace,
     project: MindProject,
     ledger: Ledger,
 }
@@ -31,7 +31,7 @@ struct Given {
 /// [`Given`], with each of `skills` among the workspace's own.
 fn given(skills: &[&str]) -> Given {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("app");
     fs::create_dir(&root).unwrap();
     let (project, _) =
@@ -53,7 +53,7 @@ fn given(skills: &[&str]) -> Given {
 /// A workspace linking a project a `mind.toml` marks, below it.
 fn older() -> Given {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let (project, _) = MindProject::init(dir.path().join("app")).unwrap();
     workspace.link(&project).unwrap();
     let ledger = workspace.ledger().unwrap();
@@ -461,7 +461,7 @@ fn a_rules_section_or_file_gone_is_put_back_by_an_install() {
 
     let text = fs::read_to_string(given.agents_md()).unwrap();
     assert!(text.starts_with("# Ours\n"), "{text}");
-    assert!(text.contains("<!-- mindflayer:rule git/no-force-push -->"));
+    assert!(text.contains("<!-- mindweaver:rule git/no-force-push -->"));
     assert!(text.contains(NO_FORCE_PUSH), "{text}");
     assert_eq!(fs::read_to_string(&file).unwrap(), written);
     for route in ["git/no-force-push", "rust/errors"] {

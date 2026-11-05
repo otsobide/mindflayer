@@ -65,7 +65,8 @@ use crate::kind::UnknownKind;
 use crate::ledger::LedgerError;
 use crate::lifecycle::LifecycleError;
 use crate::lock::LockError;
-use crate::migrate::{MigrateError, ProjectFailure, Refusal};
+use crate::mcp::{Inexpressible, McpError};
+use crate::migrate::{MigrateError, NamesFailure, ProjectFailure, Refusal};
 use crate::policy::PolicyError;
 use crate::port::GitError;
 use crate::reapply::{ReapplyError, ReapplyFailure};
@@ -148,7 +149,7 @@ macro_rules! codes {
 
             /// Every code this type gives of its own, leaving out those
             /// it takes from an error it carries, or echoes: what
-            /// `mindflayer_core::code::ALL` gathers for core's.
+            /// `mindweaver_core::code::ALL` gathers for core's.
             pub const CODES: &'static [&'static str] = &[$($code),*];
 
             $(
@@ -171,7 +172,7 @@ macro_rules! codes {
             }
 
             /// The one code this type gives: what
-            /// `mindflayer_core::code::ALL` gathers for core's.
+            /// `mindweaver_core::code::ALL` gathers for core's.
             pub const CODES: &'static [&'static str] = &[$code];
         }
     };
@@ -227,9 +228,12 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("ledger::LedgerError", LedgerError::CODES),
     ("lifecycle::LifecycleError", LifecycleError::CODES),
     ("lock::LockError", LockError::CODES),
+    ("mcp::McpError", McpError::CODES),
+    ("mcp::expressible::Inexpressible", Inexpressible::CODES),
     ("migrate::MigrateError", MigrateError::CODES),
     ("migrate::Refusal", Refusal::CODES),
     ("migrate::project::ProjectFailure", ProjectFailure::CODES),
+    ("migrate::names::NamesFailure", NamesFailure::CODES),
     ("policy::PolicyError", PolicyError::CODES),
     ("reapply::ReapplyError", ReapplyError::CODES),
     ("reapply::ReapplyFailure", ReapplyFailure::CODES),

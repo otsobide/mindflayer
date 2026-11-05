@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
-use mindflayer_core::Kind;
+use mindweaver_core::Kind;
 
 use super::state::{nothing, Focus, Pending, Row, Screen, Target};
 use crate::commands::install::named;
@@ -190,7 +190,7 @@ fn receivers(screen: &Screen, frame: &mut Frame, area: Rect) {
                     Style::default().fg(Color::DarkGray),
                 ),
                 Span::styled(
-                    format!("  (takes no {kind}s)"),
+                    format!("  (takes no {})", kind.plural()),
                     Style::default().fg(Color::DarkGray),
                 ),
             ])),
@@ -247,7 +247,7 @@ fn boxed(entry: &Row, label: String) -> Vec<Span<'static>> {
             spans.push(Span::styled("  - remove", Style::default().fg(Color::Red)));
         }
         None if entry.foreign() => spans.push(Span::styled(
-            "  (not installed by mindflayer)",
+            "  (not installed by mindweaver)",
             Style::default().fg(Color::DarkGray),
         )),
         None if entry.edited() => spans.push(Span::styled(
@@ -259,7 +259,7 @@ fn boxed(entry: &Row, label: String) -> Vec<Span<'static>> {
             Style::default().fg(Color::DarkGray),
         )),
         None if entry.outdated() => spans.push(Span::styled(
-            "  (outdated; flayer update refreshes it)",
+            "  (outdated; mindweaver update refreshes it)",
             Style::default().fg(Color::Yellow),
         )),
         None => {}
@@ -275,18 +275,19 @@ fn boxed(entry: &Row, label: String) -> Vec<Span<'static>> {
 /// has, so the longest still fits an 80-column terminal.
 fn footer(screen: &Screen, frame: &mut Frame, area: Rect) {
     let (kind, next) = (screen.kind, screen.next_kind(false));
+    let (kinds, nexts) = (kind.plural(), next.plural());
     let keys = match screen.focus {
         Focus::Projects => {
-            format!("↑↓ project  →/enter {kind}s  tab {next}s  v by {kind}  a apply  q quit")
+            format!("↑↓ project  →/enter {kinds}  tab {nexts}  v by {kind}  a apply  q quit")
         }
         Focus::Offers => {
-            format!("↑↓ {kind}  space mark  tab {next}s  ←/esc back  v by {kind}  a apply  q quit")
+            format!("↑↓ {kind}  space mark  tab {nexts}  ←/esc back  v by {kind}  a apply  q quit")
         }
         Focus::Artifacts => {
-            format!("↑↓ {kind}  →/enter projects  tab {next}s  v by project  a apply  q quit")
+            format!("↑↓ {kind}  →/enter projects  tab {nexts}  v by project  a apply  q quit")
         }
         Focus::Receivers => format!(
-            "↑↓ project  space mark  tab {next}s  ←/esc back  v by project  a apply  q quit"
+            "↑↓ project  space mark  tab {nexts}  ←/esc back  v by project  a apply  q quit"
         ),
     };
     let (install, remove) = screen.counts();
@@ -328,7 +329,7 @@ fn confirm(screen: &Screen, frame: &mut Frame, area: Rect) {
         Line::from(format!("Install {install}, remove {remove}?")),
         Line::from(""),
         Line::from(Span::styled(
-            "removals take what Mindflayer installed back out",
+            "removals take what Mindweaver installed back out",
             Style::default().fg(Color::Red),
         )),
         Line::from(""),
@@ -353,6 +354,7 @@ fn plural(kind: Kind) -> &'static str {
     match kind {
         Kind::Skill => "Skills",
         Kind::Rule => "Rules",
+        Kind::Mcp => "MCP servers",
     }
 }
 
@@ -361,8 +363,13 @@ fn plural(kind: Kind) -> &'static str {
 fn first(kind: Kind) -> String {
     // Matched on the kind, so a third one has to say what brings it.
     let commands = match kind {
-        Kind::Skill => "`flayer gather git <url>`, `flayer load <path>` or `flayer add skill`",
-        Kind::Rule => "`flayer load <path>` or `flayer add rule`",
+        Kind::Skill => {
+            "`mindweaver gather git <url>`, `mindweaver load <path>` or `mindweaver add skill`"
+        }
+        Kind::Rule => "`mindweaver load <path>` or `mindweaver add rule`",
+        Kind::Mcp => {
+            "`mindweaver load <path>`, or a definition written into the workspace's library,"
+        }
     };
     format!("{}; {commands} first", nothing(kind))
 }

@@ -103,7 +103,7 @@ const refusal = computed(() => {
 // repeats it.
 const LOOKS: Partial<Record<FolderIs, { label: string, icon: string }>> = {
   project: { label: 'mind project', icon: 'i-lucide-folder-git-2' },
-  workspace: { label: 'flayer workspace', icon: 'i-lucide-box' },
+  workspace: { label: 'weaver workspace', icon: 'i-lucide-box' },
   repository: { label: 'git repository', icon: 'i-lucide-git-branch' },
   folder: { label: 'folder', icon: 'i-lucide-folder' }
 }

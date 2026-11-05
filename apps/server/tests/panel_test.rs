@@ -4,7 +4,7 @@
 mod common;
 
 use common::*;
-use mindflayer_server::Panel;
+use mindweaver_server::Panel;
 use rust_embed::RustEmbed;
 
 /// A panel as `make web/build` would leave one, small enough to read.

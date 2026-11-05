@@ -3,18 +3,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Updating update --all --yes"
+        "mindweaver -W /home/you/Updating update --all --yes"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Updating update --all --yes"
+        "mindweaver -W /home/you/Updating update --all --yes"
       ],
       "outcome": {
         "ok": false,
         "runs": [
           {
-            "command": "flayer -W /home/you/Updating update --all --yes",
+            "command": "mindweaver -W /home/you/Updating update --all --yes",
             "error": null,
             "ok": false,
             "stderr": [
@@ -163,22 +163,22 @@
         {
           "caution": "uninstalls",
           "line": 0,
-          "message": "takes copies Mindflayer installed out of projects"
+          "message": "takes copies Mindweaver installed out of projects"
         }
       ],
       "lines": [
-        "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web skill:format"
+        "mindweaver -W /home/you/Updating uninstall -p /home/you/Updating/web skill:format"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web skill:format"
+        "mindweaver -W /home/you/Updating uninstall -p /home/you/Updating/web skill:format"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web skill:format",
+            "command": "mindweaver -W /home/you/Updating uninstall -p /home/you/Updating/web skill:format",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -203,7 +203,7 @@
         {
           "caution": "uninstalls",
           "line": 0,
-          "message": "takes copies Mindflayer installed out of projects"
+          "message": "takes copies Mindweaver installed out of projects"
         },
         {
           "caution": "forces",
@@ -212,18 +212,18 @@
         }
       ],
       "lines": [
-        "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web --force skill:release"
+        "mindweaver -W /home/you/Updating uninstall -p /home/you/Updating/web --force skill:release"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web --force skill:release"
+        "mindweaver -W /home/you/Updating uninstall -p /home/you/Updating/web --force skill:release"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Updating uninstall -p /home/you/Updating/web --force skill:release",
+            "command": "mindweaver -W /home/you/Updating uninstall -p /home/you/Updating/web --force skill:release",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -248,22 +248,22 @@
         {
           "caution": "uninstalls",
           "line": 0,
-          "message": "takes copies Mindflayer installed out of projects"
+          "message": "takes copies Mindweaver installed out of projects"
         }
       ],
       "lines": [
-        "flayer -W /home/you/Updating uninstall --all-projects --orphaned"
+        "mindweaver -W /home/you/Updating uninstall --all-projects --orphaned"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Updating uninstall --all-projects --orphaned"
+        "mindweaver -W /home/you/Updating uninstall --all-projects --orphaned"
       ],
       "outcome": {
         "ok": false,
         "runs": [
           {
-            "command": "flayer -W /home/you/Updating uninstall --all-projects --orphaned",
+            "command": "mindweaver -W /home/you/Updating uninstall --all-projects --orphaned",
             "error": null,
             "ok": false,
             "stderr": [

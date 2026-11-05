@@ -1,9 +1,9 @@
-//! The flayer workspaces this machine knows: a `known` array in the default
-//! workspace's marker, the one in home, so switching between several flayers
+//! The mindweaver workspaces this machine knows: a `known` array in the default
+//! workspace's marker, the one in home, so switching between several weavers
 //! has somewhere to read them from.
 //!
 //! In the default workspace rather than a file of its own beside it: home is
-//! the one place every flayer on a machine can find, its marker is already
+//! the one place every weaver on a machine can find, its marker is already
 //! edited a key at a time (`edit_array`), under its lock, with every comment
 //! and every other key kept, and a list a person may read and prune by hand
 //! belongs beside the `projects` and `loaded` it reads like. A file of its
@@ -11,13 +11,13 @@
 //! it from that person, and would have to be made to hold it.
 //!
 //! Never made for the occasion. A default workspace nothing has made yet
-//! remembers nothing, and `flayer init` making one to remember another in
+//! remembers nothing, and `mindweaver init` making one to remember another in
 //! would write a marker into somebody's home for a list nobody has asked to
 //! read: the rule every read follows ([`crate::resolve::Intent::Read`]).
 //! The default workspace is never in its own list either. It is listed for
 //! being the default, whatever `known` says.
 //!
-//! What remembers is `flayer init`, of each workspace it makes and of one
+//! What remembers is `mindweaver init`, of each workspace it makes and of one
 //! already there, which it otherwise leaves as it was: so a workspace made
 //! before the default one, or by a build from before this list, is one
 //! idempotent command from being known. Activating one remembers nothing,
@@ -31,12 +31,9 @@ use serde::Serialize;
 use crate::paths;
 use crate::resolve::Reason;
 use crate::value::Redacted;
-use crate::workspace::{
-    absolute, same_directory, FlayerWorkspace, Registration, WorkspaceError, FLAYER_CONFIG,
-    FLAYER_DIR,
-};
+use crate::workspace::{absolute, same_directory, Registration, WeaverWorkspace, WorkspaceError};
 
-/// Every workspace this machine knows, as `flayer workspaces` lists them.
+/// Every workspace this machine knows, as `mindweaver workspaces` lists them.
 ///
 /// What it serializes to is a contract, as a status report's is: each field
 /// by its name.
@@ -64,13 +61,13 @@ pub struct KnownWorkspace {
     /// whatever its own `known` says.
     pub default: bool,
     /// Whether the default workspace's `known` names it, which is what
-    /// `flayer workspaces forget` takes out. False for the default itself,
+    /// `mindweaver workspaces forget` takes out. False for the default itself,
     /// and for the one in use when nothing remembers it.
     pub remembered: bool,
     /// The one in use where the list was asked for, as `resolve` chose it.
     pub in_use: bool,
     /// How many projects it links, each directory once, stale ones among
-    /// them: its own count, which says which of several flayers is which.
+    /// them: its own count, which says which of several weavers is which.
     pub projects: usize,
     /// How many of those would not open.
     pub stale_projects: usize,
@@ -88,7 +85,7 @@ pub struct KnownWorkspace {
 
 impl KnownWorkspace {
     /// A workspace that opened, with its projects counted.
-    fn of(workspace: &FlayerWorkspace) -> Self {
+    fn of(workspace: &WeaverWorkspace) -> Self {
         let mut roots: Vec<PathBuf> = Vec::new();
         let mut stale_projects = 0;
         for member in workspace.members() {
@@ -138,7 +135,7 @@ impl KnownWorkspace {
 /// no workspace to mark.
 pub fn known(
     home: Option<&Path>,
-    in_use: Option<&FlayerWorkspace>,
+    in_use: Option<&WeaverWorkspace>,
 ) -> (Known, Vec<WorkspaceError>) {
     let mut workspaces: Vec<KnownWorkspace> = Vec::new();
     let mut failures = Vec::new();
@@ -211,7 +208,7 @@ pub struct Launch<'a> {
 }
 
 /// A workspace a front end that stays on one may switch to, as
-/// [`switchable`] lists it: the row `flayer workspaces` prints, with how it
+/// [`switchable`] lists it: the row `mindweaver workspaces` prints, with how it
 /// stands with the front end.
 ///
 /// Beside the row rather than in it, as [`crate::view::KnownHere`] stands
@@ -258,7 +255,7 @@ pub struct Switchable {
 pub fn switchable(
     home: Option<&Path>,
     launch: &Launch<'_>,
-    in_use: &FlayerWorkspace,
+    in_use: &WeaverWorkspace,
 ) -> Vec<Switchable> {
     let (known, _) = known(home, Some(in_use));
     let mut rows = known.workspaces;
@@ -276,7 +273,7 @@ pub fn switchable(
                 let row = if default {
                     KnownWorkspace::of(in_use)
                 } else {
-                    match FlayerWorkspace::open(root) {
+                    match WeaverWorkspace::open(root) {
                         Ok(workspace) => KnownWorkspace::of(&workspace),
                         Err(error) => KnownWorkspace::gone(root.to_path_buf(), &error),
                     }
@@ -290,7 +287,7 @@ pub fn switchable(
         }
     }
     if !listed(&rows, launch.root) {
-        rows.push(match FlayerWorkspace::open(launch.root) {
+        rows.push(match WeaverWorkspace::open(launch.root) {
             Ok(workspace) => KnownWorkspace::of(&workspace),
             Err(error) => KnownWorkspace::gone(launch.root.to_path_buf(), &error),
         });
@@ -318,18 +315,18 @@ pub fn switchable(
 /// Opened only when its marker is there: a read of an unmade one would
 /// answer from the template, which knows no workspace, and a write must not
 /// make it.
-fn made_default(home: Option<&Path>) -> Result<Option<FlayerWorkspace>, WorkspaceError> {
+fn made_default(home: Option<&Path>) -> Result<Option<WeaverWorkspace>, WorkspaceError> {
     let Some(home) = home else {
         return Ok(None);
     };
     let home = absolute(home)?;
-    if !home.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() {
+    if !WeaverWorkspace::is_marked(&home) {
         return Ok(None);
     }
-    FlayerWorkspace::open(&home).map(Some)
+    WeaverWorkspace::open(&home).map(Some)
 }
 
-/// Remember `workspace` in the default workspace at `home`: what `flayer
+/// Remember `workspace` in the default workspace at `home`: what `mindweaver
 /// init` does with each workspace it makes, or finds already made.
 ///
 /// `None` when nothing is written: there is no default (`home` is `None`),
@@ -338,7 +335,7 @@ fn made_default(home: Option<&Path>) -> Result<Option<FlayerWorkspace>, Workspac
 /// already, by this spelling or another.
 pub fn remember(
     home: Option<&Path>,
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
 ) -> Result<Option<(PathBuf, Registration)>, WorkspaceError> {
     let Some(mut default) = made_default(home)? else {
         return Ok(None);

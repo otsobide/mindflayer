@@ -11,7 +11,7 @@ use std::fs;
 use std::time::Duration;
 
 use common::*;
-use mindflayer_server::{Event, DEBOUNCE};
+use mindweaver_server::{Event, DEBOUNCE};
 use tempfile::TempDir;
 
 /// How long a change takes at most to be told, as `watch_test` waits.

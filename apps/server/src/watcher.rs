@@ -133,7 +133,7 @@ impl Watcher {
         };
         state.apply(watched, &[]);
         let spawned = thread::Builder::new()
-            .name(String::from("mindflayer-watch"))
+            .name(String::from("mindweaver-watch"))
             .spawn(move || state.run(&messages));
         match spawned {
             Ok(_) => Some(sender),

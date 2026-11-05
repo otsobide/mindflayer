@@ -173,7 +173,7 @@ fn an_update_says_why_it_leaves_an_installation_and_nothing_of_one_it_writes() {
             "origin_unknown",
             String::from(
                 "skill `deploy` in collapse is offered by workspace, load:../team, and was \
-                 installed before Mindflayer kept where from, so an update leaves it as it is; \
+                 installed before Mindweaver kept where from, so an update leaves it as it is; \
                  `install --from` says which"
             )
         ))

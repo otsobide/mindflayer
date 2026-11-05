@@ -27,7 +27,7 @@ subdirectory: string,
  */
 revision: string | null, 
 /**
- * The folder this source owns under `.mindflayer/<kind folder>/`.
+ * The folder this source owns under `.mindweaver/<kind folder>/`.
  *
  * Stored rather than derived: two URLs can reduce to the same readable
  * name, and where a source's files went is a fact about the past that

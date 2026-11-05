@@ -1,4 +1,4 @@
-//! Harvesting artifacts from somewhere else into a flayer workspace.
+//! Harvesting artifacts from somewhere else into a weaver workspace.
 //!
 //! Gathering fills the workspace's own shelf and stops there. Nothing is
 //! written into a mind project: which of the gathered skills a project should
@@ -6,8 +6,8 @@
 //! would mean a `git clone` silently editing repositories.
 //!
 //! What lands where: a source's clone goes to
-//! `.mindflayer/cache/<source>/`, and each artifact it yields is copied to
-//! `.mindflayer/<kind folder>/<source>/<name>/`. Namespacing by source is what
+//! `.mindweaver/cache/<source>/`, and each artifact it yields is copied to
+//! `.mindweaver/<kind folder>/<source>/<name>/`. Namespacing by source is what
 //! lets two repositories both offer `commit-style`; [`crate::ledger`] is what
 //! remembers which is which.
 
@@ -35,7 +35,7 @@ use crate::paths;
 use crate::port::{GitError, Remote};
 use crate::url::{carries_credentials, redacted};
 use crate::value::{ArtifactName, Redacted, Revision};
-use crate::workspace::FlayerWorkspace;
+use crate::workspace::WeaverWorkspace;
 
 pub use watch::{Progress, Watch};
 
@@ -186,7 +186,7 @@ pub struct Harvested {
 pub struct Report {
     /// The revision that was gathered from, when there was one.
     pub revision: Option<Revision>,
-    /// The folder under `.mindflayer/<kind>/` this source owns.
+    /// The folder under `.mindweaver/<kind>/` this source owns.
     pub directory: String,
     pub added: Vec<Harvested>,
     pub updated: Vec<Harvested>,
@@ -221,7 +221,7 @@ impl Report {
 /// open across several gathers, and so tests can use one that never touches a
 /// disk.
 pub fn gather(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     request: &Request,
 ) -> Result<Report, GatherError> {
@@ -267,7 +267,7 @@ pub fn gather(
     outcome
 }
 
-/// What the scrub [`FlayerWorkspace::ledger_to_write`] runs took out.
+/// What the scrub [`WeaverWorkspace::ledger_to_write`] runs took out.
 #[derive(Debug, Default)]
 pub struct Scrub {
     /// The sources whose URL carried credentials, as they are stored now.
@@ -316,11 +316,11 @@ impl Scrub {
     }
 }
 
-/// Take out the credentials a Mindflayer from before they were refused
+/// Take out the credentials a Mindweaver from before they were refused
 /// stored: in the URLs of sources, in the action log, and in the clones it
 /// made from those URLs.
 ///
-/// Run by [`FlayerWorkspace::ledger_to_write`], which is how a command that
+/// Run by [`WeaverWorkspace::ledger_to_write`], which is how a command that
 /// writes opens the ledger, so it comes before anything is written. Every
 /// time rather than once, as a schema migration would, because an older build
 /// can keep writing to the same file after this one has scrubbed it, and the
@@ -330,7 +330,7 @@ impl Scrub {
 /// what it shows is redacted on the way out anyway, and reading should not
 /// write.
 ///
-/// The workspace is held ([`FlayerWorkspace::lock_waiting`], up to `wait`)
+/// The workspace is held ([`WeaverWorkspace::lock_waiting`], up to `wait`)
 /// while clones are rewritten and the folders of a source made one with
 /// another are removed, since a gather beside it would be cloning into and
 /// filling those same folders. Only then: with no clone to rewrite, which is
@@ -343,7 +343,7 @@ impl Scrub {
 /// Each clone is scrubbed through `remote`, the adapter that knows which of
 /// its files name the URL it was made from.
 pub(crate) fn scrub(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     wait: Duration,
     remote: &dyn Remote,
@@ -386,7 +386,7 @@ pub(crate) fn scrub(
 /// named by this ledger, and is left alone rather than followed out of the
 /// workspace.
 fn remove_folders_of(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     gone: &ledger::Source,
     leftovers: &mut Vec<Leftover>,
 ) {
@@ -435,7 +435,7 @@ codes!(ScrubFailure => "clone_unscrubbed");
 
 /// The work itself, with the logging left to [`gather`].
 fn harvest(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     request: &Request,
 ) -> Result<Report, GatherError> {
@@ -468,7 +468,7 @@ fn harvest(
     // answer this question before it can be added.
     match request.kind {
         Kind::Skill => {}
-        Kind::Rule => return Err(GatherError::NotGatherable { kind: request.kind }),
+        Kind::Rule | Kind::Mcp => return Err(GatherError::NotGatherable { kind: request.kind }),
     }
     let Layout::Directory { manifest } = request.kind.layout() else {
         return Err(GatherError::NotGatherable { kind: request.kind });
@@ -514,7 +514,7 @@ fn harvest(
 /// Fetch `source`, read what it offers, and put that on the shelf: the
 /// gather, once its source is registered.
 fn take(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     request: &Request,
     source: &ledger::Source,
@@ -698,7 +698,7 @@ fn candidates(root: &Path, manifest: &str) -> Result<Vec<PathBuf>, GatherError> 
 
 /// A path as the ledger stores it: relative to the workspace, `/` separated,
 /// so a workspace gathered on one platform reads on the other.
-fn relative(workspace: &FlayerWorkspace, path: &Path) -> String {
+fn relative(workspace: &WeaverWorkspace, path: &Path) -> String {
     paths::relative_to(path, workspace.root())
         .as_deref()
         .and_then(paths::to_config_string)
@@ -779,7 +779,7 @@ pub enum GatherError {
     CredentialsInUrl { url: String },
     #[error("{url}: has no `{subdirectory}` folder to gather from")]
     NoSuchFolder { subdirectory: String, url: String },
-    #[error("{kind}s cannot be gathered yet")]
+    #[error("{} cannot be gathered yet", .kind.plural())]
     NotGatherable { kind: Kind },
     #[error("{path}: cannot be read: {source}")]
     Read {

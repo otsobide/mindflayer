@@ -1,11 +1,11 @@
 //! The workspace's record of what it gathered, from where, and what it did.
 //!
-//! Everything else Mindflayer writes is a file a person is meant to open: the
+//! Everything else Mindweaver writes is a file a person is meant to open: the
 //! marker files are TOML with comments explaining themselves. This is the one
 //! thing that is not, because it answers questions a file cannot: which of two
 //! identically named skills came from which repository, at which revision, and
 //! what happened the last four times a gather was run. It sits beside
-//! `flayer.toml` in `.mindflayer/`, so it travels with the workspace it
+//! `weaver.toml` in `.mindweaver/`, so it travels with the workspace it
 //! describes and two workspaces never share a history.
 //!
 //! Nothing here decides *what* is worth gathering. It records what
@@ -18,7 +18,7 @@
 //!
 //! Nor does it write a credential. Every URL is [`redacted`] on the way in,
 //! whichever caller is writing, and again on the way out, for a row a
-//! Mindflayer from before the redaction wrote, which stays in the file until
+//! Mindweaver from before the redaction wrote, which stays in the file until
 //! a command that writes scrubs it: the ledger is the one place everything
 //! stored passes through, so it is where the guarantee is cheapest to keep.
 
@@ -45,8 +45,13 @@ use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision};
 /// one before a step: the SQLite store's, named here where they always were.
 pub use crate::adapter::sqlite::{backup_path, SCHEMA_VERSION};
 
-/// The file name, under `.mindflayer/`.
-pub const LEDGER_FILE: &str = "mindflayer.db";
+/// The file name, under `.mindweaver/`.
+pub const LEDGER_FILE: &str = "mindweaver.db";
+/// [`LEDGER_FILE`] as a Mindflayer build named it, under the `.mindflayer/`
+/// of a workspace one made ([`crate::names::Names::Mindflayer`]): the same
+/// schema, opened and migrated as it is, under its own name until the
+/// workspace is moved.
+pub const FLAYER_LEDGER_FILE: &str = "mindflayer.db";
 
 /// What kind of place an artifact was gathered from.
 ///
@@ -114,7 +119,7 @@ pub struct Source {
     pub subdirectory: String,
     /// The commit last gathered from, once one has been resolved.
     pub revision: Option<Revision>,
-    /// The folder this source owns under `.mindflayer/<kind folder>/`.
+    /// The folder this source owns under `.mindweaver/<kind folder>/`.
     ///
     /// Stored rather than derived: two URLs can reduce to the same readable
     /// name, and where a source's files went is a fact about the past that
@@ -323,7 +328,7 @@ impl Ledger {
     /// [`open`](Self::open), with `known` asked, only when a step to schema 5
     /// is taken, for the id each project it may hold records of holds and
     /// the route the ledger names it by: what a workspace's linked projects
-    /// say ([`crate::workspace::FlayerWorkspace::ledger`]), which no SQL in
+    /// say ([`crate::workspace::WeaverWorkspace::ledger`]), which no SQL in
     /// the file can know.
     pub fn open_knowing(
         path: impl Into<PathBuf>,
@@ -339,7 +344,7 @@ impl Ledger {
     /// One that is there is still brought up to [`SCHEMA_VERSION`], as
     /// [`open`](Self::open) brings it. A build reads its own schema and no
     /// other, so declining to migrate would leave an older ledger unreadable
-    /// rather than untouched: the step is upkeep of Mindflayer's own file, not
+    /// rather than untouched: the step is upkeep of Mindweaver's own file, not
     /// a change anybody asked for, and the one write a read may make.
     pub fn open_existing(path: impl Into<PathBuf>) -> Result<Option<Self>, LedgerError> {
         Ok(Sqlite::open_existing(path)?.map(Self::over))
@@ -436,7 +441,7 @@ impl fmt::Debug for Ledger {
 #[derive(Debug, Error)]
 pub enum LedgerError {
     /// The workspace could not be had to scrub clones in, opening its ledger
-    /// to write ([`crate::workspace::FlayerWorkspace::ledger_to_write`]).
+    /// to write ([`crate::workspace::WeaverWorkspace::ledger_to_write`]).
     #[error(transparent)]
     Lock(#[from] crate::lock::LockError),
     #[error("{path}: cannot be created: {source}")]
@@ -453,7 +458,7 @@ pub enum LedgerError {
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
-    #[error("{path}: written by a newer Mindflayer (schema version {found}, this one reads {SCHEMA_VERSION})")]
+    #[error("{path}: written by a newer Mindweaver (schema version {found}, this one reads {SCHEMA_VERSION})")]
     Version { path: PathBuf, found: u32 },
     #[error("{path}: cannot be copied to {backup} before its schema changes, so it is left as it is: {source}")]
     Backup {

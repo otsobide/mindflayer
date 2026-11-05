@@ -8,7 +8,7 @@ import { useSnapshot } from '@/api/snapshot'
 import { first, useQueryChange } from '@/address'
 import AgentBadges from '@/components/AgentBadges.vue'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
+import CommandHint, { weaver, making } from '@/components/CommandHint.vue'
 import FileTree from '@/components/FileTree.vue'
 import IssueList from '@/components/IssueList.vue'
 import MarkdownBody from '@/components/MarkdownBody.vue'
@@ -198,7 +198,7 @@ function withheld(contents: Contents): string {
               <CommandHint
                 :commands="[
                   ...making(snapshot.workspace),
-                  { line: flayer(snapshot.workspace, `install -p <PROJECT> ${held.kind}:${held.name} --from ${snapshot.library.origin}`), does: 'into a project, from the library' }
+                  { line: weaver(snapshot.workspace, `install -p <PROJECT> ${held.kind}:${held.name} --from ${snapshot.library.origin}`), does: 'into a project, from the library' }
                 ]"
               />
             </div>

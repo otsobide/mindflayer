@@ -55,7 +55,7 @@ build/if-node: ## Build the panel where Node and pnpm run, or warn what a binary
 		echo "warning: $$missing, so the panel is not built: the binaries embed the one apps/web/dist holds, from when it was built" >&2; \
 		touch ../server/src/panel.rs; \
 	else \
-		echo "warning: $$missing, so the panel is not built: the binaries' \`flayer ui\` serves only a page saying so" >&2; \
+		echo "warning: $$missing, so the panel is not built: the binaries' \`mindweaver ui\` serves only a page saying so" >&2; \
 	fi
 
 test: $(INSTALLED) ## Run the panel's tests (vitest)
@@ -80,7 +80,7 @@ GENERATED := src/api/generated
 # writes them, so which crate's runs first changes nothing.
 types/export: ## Write the types the panel takes from Rust into src/api/generated (cargo only)
 	rm -rf $(GENERATED)
-	cargo test -p mindflayer-core -p mindflayer-cli --features mindflayer-core/ts,mindflayer-cli/ts --lib typescript
+	cargo test -p mindweaver-core -p mindweaver-cli --features mindweaver-core/ts,mindweaver-cli/ts --lib typescript
 
 types: types/export $(INSTALLED) ## Write the types from Rust, then check the panel's against them (vue-tsc)
 	$(PNPM) run typecheck
@@ -105,7 +105,7 @@ FIXTURES := tests/fixtures
 
 fixtures: ## Write the snapshots and answers the panel's tests render from into tests/fixtures (cargo only)
 	rm -rf $(FIXTURES)
-	cargo test -p mindflayer-cli --features ts --test fixtures_test
+	cargo test -p mindweaver-cli --features ts --test fixtures_test
 
 # As types/check: a fixture that changed or went, or one new to git.
 fixtures/check: fixtures ## Fail if the snapshots written from Rust are not the ones committed (cargo and git only)
@@ -118,10 +118,10 @@ fixtures/check: fixtures ## Fail if the snapshots written from Rust are not the 
 typecheck: $(INSTALLED) ## Check the panel's types alone (vue-tsc)
 	$(PNPM) run typecheck
 
-dev: $(INSTALLED) ## Serve the panel on 127.0.0.1:5173, /api proxied to `flayer ui --dev --port 7878`
+dev: $(INSTALLED) ## Serve the panel on 127.0.0.1:5173, /api proxied to `mindweaver ui --dev --port 7878`
 	$(PNPM) run dev
 
-# The end-to-end suite (e2e/): the panel served by the real `flayer ui`
+# The end-to-end suite (e2e/): the panel served by the real `mindweaver ui`
 # over a workspace built with the real commands, driven in a browser, with
 # Playwright. Its driver, e2e/run.ts, builds that workspace and its home in
 # the system's temporary folder, clears every variable that leads to a real
@@ -129,7 +129,7 @@ dev: $(INSTALLED) ## Serve the panel on 127.0.0.1:5173, /api proxied to `flayer 
 # it was made once the server has stopped.
 #
 # The binaries it runs: the debug build `e2e` makes, or any folder holding a
-# `flayer` and a `mind` with the panel in them, as CI names the release
+# `mindweaver` and a `mind` with the panel in them, as CI names the release
 # `build (cli)` built. A path relative to this folder, or absolute.
 E2E_BIN ?= ../../target/debug
 
@@ -151,15 +151,15 @@ e2e/browsers: $(INSTALLED) ## Download the browsers the end-to-end suite runs in
 # The panel, then the binaries, which a server compiled before dist/ was
 # there would leave without it (see `build`), then the suite on them.
 e2e: build ## Build the panel and the debug binaries, then run the end-to-end suite on them
-	cargo build -p mindflayer-cli
+	cargo build -p mindweaver-cli
 	$(MAKE) e2e/run
 
 # ARGS go to `playwright test`: a spec, `-g <title>`, `--debug`, `--ui`.
-e2e/run: $(INSTALLED) ## Run the end-to-end suite on the flayer and mind in E2E_BIN, in BROWSERS
-	MINDFLAYER_E2E_BIN='$(E2E_BIN)' node e2e/run.ts $(addprefix --project=,$(BROWSERS)) $(ARGS)
+e2e/run: $(INSTALLED) ## Run the end-to-end suite on the mindweaver and mind in E2E_BIN, in BROWSERS
+	MINDWEAVER_E2E_BIN='$(E2E_BIN)' node e2e/run.ts $(addprefix --project=,$(BROWSERS)) $(ARGS)
 
 # The README's screenshots, in ../../docs/images: the demo workspace
-# e2e/demo.ts builds with the commands, served by the binaries' `flayer ui`
+# e2e/demo.ts builds with the commands, served by the binaries' `mindweaver ui`
 # and taken in Chromium by e2e/screenshots.ts, which fails on a page showing
 # a home's path, the account's name or the launch token, and on an image
 # over its budget. Chromium alone, which `make e2e/browsers
@@ -167,11 +167,11 @@ e2e/run: $(INSTALLED) ## Run the end-to-end suite on the flayer and mind in E2E_
 # WebKit does not run everywhere. Neither part of `test` nor of CI: the
 # images are taken when what the panel shows changes, and committed.
 screenshots: build ## Build the panel and the debug binaries, then take the README's screenshots into docs/images
-	cargo build -p mindflayer-cli
+	cargo build -p mindweaver-cli
 	$(MAKE) screenshots/run
 
-screenshots/run: $(INSTALLED) ## Take the README's screenshots with the flayer and mind in E2E_BIN
-	MINDFLAYER_E2E_BIN='$(E2E_BIN)' node e2e/screenshots.ts
+screenshots/run: $(INSTALLED) ## Take the README's screenshots with the mindweaver and mind in E2E_BIN
+	MINDWEAVER_E2E_BIN='$(E2E_BIN)' node e2e/screenshots.ts
 
 clean: ## Remove the built panel, what the end-to-end suite wrote and the tools' caches, keeping node_modules
 	rm -rf dist test-results playwright-report node_modules/.cache node_modules/.vite node_modules/.tmp

@@ -10,7 +10,7 @@ pub mod mother;
 
 pub use axum::body::{Body, Bytes};
 pub use axum::http::{header, HeaderMap, Method, Request, StatusCode};
-pub use mindflayer_server::{
+pub use mindweaver_server::{
     Arguments, Backend, Condition, Grounds, Listening, Own, Parameter, Preview, Refusal, Route,
     Server, Shape, Watched, API,
 };
@@ -68,7 +68,7 @@ struct Words {
 pub fn fake_routes() -> Vec<Route<FakeQuery>> {
     vec![
         Route {
-            method: mindflayer_server::Method::Get,
+            method: mindweaver_server::Method::Get,
             path: "/echo",
             about: "What was sent, said back",
             parameters: vec![
@@ -81,7 +81,7 @@ pub fn fake_routes() -> Vec<Route<FakeQuery>> {
             query: echoed,
         },
         Route {
-            method: mindflayer_server::Method::Get,
+            method: mindweaver_server::Method::Get,
             path: "/words",
             about: "Words, said back",
             parameters: vec![
@@ -103,7 +103,7 @@ pub fn fake_routes() -> Vec<Route<FakeQuery>> {
             },
         },
         Route {
-            method: mindflayer_server::Method::Post,
+            method: mindweaver_server::Method::Post,
             path: "/judge",
             about: "What was sent in the body, said back",
             parameters: Vec::new(),
@@ -206,7 +206,7 @@ impl Serialize for Unwritable {
     }
 }
 
-/// A backend that knows nothing of mindflayer, which is the point: the server
+/// A backend that knows nothing of mindweaver, which is the point: the server
 /// must carry types it has never heard of.
 #[derive(Default)]
 pub struct Fake {
@@ -370,13 +370,58 @@ pub fn launch() -> (Listening, Arc<Mutex<Vec<String>>>) {
 
 /// A server over a fake that logs, and the lines it has logged so far.
 pub fn launch_logged() -> (Listening, Arc<Mutex<Vec<String>>>) {
+    launch_logging(Fake::default())
+}
+
+/// A server over `fake` that logs, for a test that holds a run at the
+/// fake's hold, and the lines it has logged so far.
+pub fn launch_logging(fake: Fake) -> (Listening, Arc<Mutex<Vec<String>>>) {
     let lines = Arc::new(Mutex::new(Vec::new()));
     let sink = Arc::clone(&lines);
-    let server = Server::new(Fake::default())
+    let server = Server::new(fake)
         .log(move |line| sink.lock().unwrap().push(line.to_owned()))
         .bind()
         .unwrap();
     (server, lines)
+}
+
+/// A logged line with every time it says, `3ms`, written `Nms`, and those
+/// times in the order it says them: what a test holds a line of the writer
+/// thread's to, whose times are in the middle of it.
+pub fn times(line: &str) -> (String, Vec<Duration>) {
+    let mut said = Vec::new();
+    let mut times = Vec::new();
+    for word in line.split(' ') {
+        let (bare, after) = match word.strip_suffix(',') {
+            Some(bare) => (bare, ","),
+            None => (word, ""),
+        };
+        match bare
+            .strip_suffix("ms")
+            .and_then(|millis| millis.parse().ok())
+        {
+            Some(millis) => {
+                times.push(Duration::from_millis(millis));
+                said.push(format!("Nms{after}"));
+            }
+            None => said.push(word.to_owned()),
+        }
+    }
+    (said.join(" "), times)
+}
+
+/// A logged line without the time it says at its end, ` 3ms`, and that
+/// time: what a test holds a line's words to, apart from a time no test
+/// can say beforehand.
+pub fn untimed(line: &str) -> (&str, Duration) {
+    let (said, time) = line
+        .rsplit_once(' ')
+        .unwrap_or_else(|| panic!("no time at the end of {line:?}"));
+    let millis = time
+        .strip_suffix("ms")
+        .and_then(|millis| millis.parse().ok())
+        .unwrap_or_else(|| panic!("not a time in milliseconds at the end of {line:?}"));
+    (said, Duration::from_millis(millis))
 }
 
 // ---------------------------------------------------------------------------
@@ -441,7 +486,7 @@ pub fn request(
                 .header(header::COOKIE, pair)
                 .header(header::ORIGIN, format!("http://{}", server.address()))
                 .header("sec-fetch-site", "same-origin")
-                .header("x-mindflayer", "1")
+                .header("x-mindweaver", "1")
         }
     }
     match body {

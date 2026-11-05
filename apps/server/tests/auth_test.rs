@@ -100,7 +100,7 @@ async fn the_cookie_named_for_the_port_is_accepted_among_others() {
 async fn the_token_under_another_ports_cookie_is_refused() {
     let (server, _) = launch();
     let port = server.address().port();
-    let elsewhere = format!("mf_{}={}", port.wrapping_add(1), server.token());
+    let elsewhere = format!("mw_{}={}", port.wrapping_add(1), server.token());
 
     let reply = post(
         &server,
@@ -110,7 +110,7 @@ async fn the_token_under_another_ports_cookie_is_refused() {
     )
     .await;
 
-    assert_eq!(server.cookie(), format!("mf_{port}"));
+    assert_eq!(server.cookie(), format!("mw_{port}"));
     assert_eq!(reply.status, StatusCode::UNAUTHORIZED);
     assert_eq!(reply.json()["code"], "token_required");
 }
@@ -145,7 +145,7 @@ async fn the_launch_link_trades_its_token_for_a_cookie() {
     assert_eq!(
         reply.header("set-cookie").unwrap(),
         format!(
-            "mf_{port}={}; Path=/; HttpOnly; SameSite=Strict",
+            "mw_{port}={}; Path=/; HttpOnly; SameSite=Strict",
             server.token()
         )
     );
@@ -241,7 +241,7 @@ async fn two_servers_on_different_ports_set_differently_named_cookies() {
         let pair = set_pair(&reply);
         assert_eq!(
             pair,
-            format!("mf_{}={}", server.address().port(), server.token())
+            format!("mw_{}={}", server.address().port(), server.token())
         );
         pairs.push(pair);
     }

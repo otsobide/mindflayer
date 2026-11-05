@@ -377,7 +377,8 @@
       "type": "string",
       "enum": [
         "skill",
-        "rule"
+        "rule",
+        "mcp"
       ]
     },
     "KindCount": {
@@ -419,7 +420,7 @@
       ]
     },
     "KnownHere": {
-      "description": "A workspace this machine knows, as `flayer workspaces` lists it, with\nhow the workspace a snapshot is of stands with it: whether it loads it,\nand whether it could.\n\nBeside the row rather than in it, as a shelf row's origin is\n([`Shelved`]): the row is the machine's list, the same whichever\nworkspace asks, and what one of them loads is nothing that list says.\nTold here rather than by a front end from `in_use`, `stale` and\n[`Snapshot::loaded`], whose paths it would compare itself: two spellings\nof one folder are one workspace, which only a comparison of where each\nleads tells.",
+      "description": "A workspace this machine knows, as `mindweaver workspaces` lists it, with\nhow the workspace a snapshot is of stands with it: whether it loads it,\nand whether it could.\n\nBeside the row rather than in it, as a shelf row's origin is\n([`Shelved`]): the row is the machine's list, the same whichever\nworkspace asks, and what one of them loads is nothing that list says.\nTold here rather than by a front end from `in_use`, `stale` and\n[`Snapshot::loaded`], whose paths it would compare itself: two spellings\nof one folder are one workspace, which only a comparison of where each\nleads tells.",
       "type": "object",
       "properties": {
         "default": {
@@ -431,11 +432,11 @@
           "type": "boolean"
         },
         "loadable": {
-          "description": "Whether this workspace can load it: it opens, it is not this one,\nthis one loads it by no spelling yet, and its path is text a command\nline can hold. What a front end offers to load, by its `path`, which\n`flayer load` is given as it is.",
+          "description": "Whether this workspace can load it: it opens, it is not this one,\nthis one loads it by no spelling yet, and its path is text a command\nline can hold. What a front end offers to load, by its `path`, which\n`mindweaver load` is given as it is.",
           "type": "boolean"
         },
         "loaded_as": {
-          "description": "The entry this workspace loads it by, when it loads it, as\n[`LoadedWorkspace::entry`] spells it: what `flayer unload` is given.\nThe first, when it loads it by more than one spelling.",
+          "description": "The entry this workspace loads it by, when it loads it, as\n[`LoadedWorkspace::entry`] spells it: what `mindweaver unload` is given.\nThe first, when it loads it by more than one spelling.",
           "type": [
             "string",
             "null"
@@ -453,13 +454,13 @@
           "type": "string"
         },
         "projects": {
-          "description": "How many projects it links, each directory once, stale ones among\nthem: its own count, which says which of several flayers is which.",
+          "description": "How many projects it links, each directory once, stale ones among\nthem: its own count, which says which of several weavers is which.",
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
         "remembered": {
-          "description": "Whether the default workspace's `known` names it, which is what\n`flayer workspaces forget` takes out. False for the default itself,\nand for the one in use when nothing remembers it.",
+          "description": "Whether the default workspace's `known` names it, which is what\n`mindweaver workspaces forget` takes out. False for the default itself,\nand for the one in use when nothing remembers it.",
           "type": "boolean"
         },
         "stale": {
@@ -526,7 +527,7 @@
           "type": "string"
         },
         "templates": {
-          "description": "What `flayer add --template` can start from.",
+          "description": "What `mindweaver add --template` can start from.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/Template"
@@ -543,7 +544,7 @@
       ]
     },
     "LibraryHolder": {
-      "description": "A project holding a copy of one of the workspace's own: one whose install\nthe ledger tells came from it ([`install::from_the_library`]), the rule\n`flayer remove --everywhere` takes the copies it removes by.\n\nTold here rather than by a front end comparing a copy's\n[`origin`](Held::origin) with [`Library::origin`], which would be a\nrule of its own, and a different one: a record from before origins were\nkept names none, and is a copy of one of the workspace's own all the\nsame while no workspace it loads offers that name.",
+      "description": "A project holding a copy of one of the workspace's own: one whose install\nthe ledger tells came from it ([`install::from_the_library`]), the rule\n`mindweaver remove --everywhere` takes the copies it removes by.\n\nTold here rather than by a front end comparing a copy's\n[`origin`](Held::origin) with [`Library::origin`], which would be a\nrule of its own, and a different one: a record from before origins were\nkept names none, and is a copy of one of the workspace's own all the\nsame while no workspace it loads offers that name.",
       "type": "object",
       "properties": {
         "entry": {
@@ -569,7 +570,7 @@
       "type": "object",
       "properties": {
         "entry": {
-          "description": "The entry as the marker spells it: what `flayer unload` is given.",
+          "description": "The entry as the marker spells it: what `mindweaver unload` is given.",
           "type": "string"
         },
         "error": {
@@ -923,7 +924,7 @@
       "type": "object",
       "properties": {
         "directory": {
-          "description": "The folder this source owns under `.mindflayer/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
+          "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
           "type": "string"
         },
         "kind": {
@@ -1023,7 +1024,7 @@
       "type": "object",
       "properties": {
         "directory": {
-          "description": "The folder this source owns under `.mindflayer/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
+          "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
           "type": "string"
         },
         "kind": {
@@ -1346,6 +1347,33 @@
           "type": "object",
           "properties": {
             "code": {
+              "const": "name_file_mismatch"
+            },
+            "file": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "file",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
               "const": "description_empty"
             },
             "message": {
@@ -1590,6 +1618,318 @@
           },
           "required": [
             "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "transport_incomplete"
+            },
+            "field": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "transport": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "transport",
+            "field",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_repeated"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_unreferenced"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "kind",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_in_userinfo"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_name_malformed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "env_var_malformed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "variable": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "variable",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "secret_without_env_var"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "code": {
+              "const": "secret_literal"
+            },
+            "message": {
+              "type": "string"
+            },
+            "prefix": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "at",
+            "prefix",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "mcp_name_not_a_key"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "code": {
+              "const": "mcp_name_reserved"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "reserved": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "agent",
+            "reserved",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "claimed": {
+              "type": "string"
+            },
+            "code": {
+              "const": "mcp_name_claimed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "agent",
+            "claimed",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "mcp_name_case_clash"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "twin": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "twin",
             "warning",
             "message"
           ]

@@ -1,5 +1,5 @@
 //! What the integration suites share, each helper the mother it was moved
-//! into (`mindflayer_core::mother`), kept here under the name every suite
+//! into (`mindweaver_core::mother`), kept here under the name every suite
 //! already calls it by.
 //!
 //! Building a real git repository for a test, without the network and without
@@ -11,8 +11,8 @@
 
 use std::path::Path;
 
-use mindflayer_core::mother::{GitRepositoryMother, SkillMother, WorkspaceMother};
-use mindflayer_core::{Directories, FlayerWorkspace, Kind};
+use mindweaver_core::mother::{GitRepositoryMother, SkillMother, WorkspaceMother};
+use mindweaver_core::{Directories, Kind, WeaverWorkspace};
 use tempfile::TempDir;
 
 /// A git repository holding exactly these files, with one commit.
@@ -43,8 +43,8 @@ pub fn skill(name: &str, description: &str) -> String {
     SkillMother::create(name, description)
 }
 
-/// A flayer workspace with nothing gathered yet.
-pub fn workspace() -> (TempDir, FlayerWorkspace) {
+/// A weaver workspace with nothing gathered yet.
+pub fn workspace() -> (TempDir, WeaverWorkspace) {
     WorkspaceMother::empty()
 }
 

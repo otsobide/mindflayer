@@ -208,7 +208,7 @@ describe('the explorer', () => {
 
     // The home, a workspace, and a refusal.
     document.querySelector<HTMLElement>('[data-testid="folder-home"]')!.click()
-    await vi.waitFor(() => expect(document.querySelector('[data-testid="folder"] [data-testid="folder-is"]')?.textContent).toBe('flayer workspace'))
+    await vi.waitFor(() => expect(document.querySelector('[data-testid="folder"] [data-testid="folder-is"]')?.textContent).toBe('weaver workspace'))
     const field = document.querySelector<HTMLInputElement>('input[data-testid="folder-path"], [data-testid="folder-path"] input')!
     field.value = 'nowhere'
     field.dispatchEvent(new Event('input'))

@@ -7,7 +7,7 @@ import { TransportError, type Answer, type LiveEvent, type Preview, type Query, 
 /**
  * Sent with every request.
  *
- * `X-Mindflayer` is a header no form and no plain link can add, so a request
+ * `X-Mindweaver` is a header no form and no plain link can add, so a request
  * carrying it was made by a script on a page the browser let set it: the
  * server's own, since it answers no CORS preflight. JSON, because that is
  * all the server reads, and it too forces the preflight on any other origin.
@@ -15,7 +15,7 @@ import { TransportError, type Answer, type LiveEvent, type Preview, type Query, 
 const HEADERS = {
   'Accept': 'application/json',
   'Content-Type': 'application/json',
-  'X-Mindflayer': '1'
+  'X-Mindweaver': '1'
 }
 
 /**
@@ -146,7 +146,7 @@ function post<Reply>(path: string, body: unknown): Promise<Reply> {
 
 /**
  * A request to the server, and its answer as JSON; a GET carries no body.
- * Every one with the same headers: a read needs neither `X-Mindflayer` nor
+ * Every one with the same headers: a read needs neither `X-Mindweaver` nor
  * the JSON type, but one way to ask leaves no request without them.
  */
 async function ask<Reply>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Reply> {
@@ -161,7 +161,7 @@ async function ask<Reply>(method: 'GET' | 'POST', path: string, body?: unknown):
       body: body === undefined ? undefined : JSON.stringify(body)
     })
   } catch {
-    throw new TransportError(0, 'the server cannot be reached: is `flayer ui` still running?')
+    throw new TransportError(0, 'the server cannot be reached: is `mindweaver ui` still running?')
   }
   // The status came first, so the body can still be lost to a server that
   // stops halfway through it: that is no answer either.
@@ -169,7 +169,7 @@ async function ask<Reply>(method: 'GET' | 'POST', path: string, body?: unknown):
   try {
     text = await response.text()
   } catch {
-    throw new TransportError(0, 'the server stopped before it finished answering: is `flayer ui` still running?')
+    throw new TransportError(0, 'the server stopped before it finished answering: is `mindweaver ui` still running?')
   }
   const reply = parse(text)
   if (!response.ok) {
@@ -190,7 +190,7 @@ async function ask<Reply>(method: 'GET' | 'POST', path: string, body?: unknown):
  */
 function refusal(response: Response, reply: unknown): string {
   if (response.status === 401) {
-    return 'this browser does not hold the launch token: open the link `flayer ui` printed'
+    return 'this browser does not hold the launch token: open the link `mindweaver ui` printed'
   }
   if (typeof reply === 'object' && reply !== null && 'error' in reply && typeof reply.error === 'string') {
     return reply.error

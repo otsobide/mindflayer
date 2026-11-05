@@ -80,7 +80,7 @@
       "description": "Which level a task runs at: what holds the artifacts it is about.\n\n`{\"type\": \"project\", \"entry\": \"alpha\"}` in JSON, or `{\"type\":\n\"workspace\"}`: the shape a task's own variants have, which a variant\nholding one string cannot take inside the object the tag is in.",
       "oneOf": [
         {
-          "description": "The workspace, for its own artifacts: `flayer <cmd>`.",
+          "description": "The workspace, for its own artifacts: `mindweaver <cmd>`.",
           "type": "object",
           "properties": {
             "type": {
@@ -112,7 +112,7 @@
           ]
         },
         {
-          "description": "A project whose own workspace is not the one on screen, by its entry:\n`mind -W . -C <entry> <cmd>`, which names the one on screen, so a\nchange drops that workspace's record and an add takes its templates.\n\nStill the project's command rather than `flayer <cmd> -p <entry>`,\nwhich would consult the same workspace: a project's row teaches the\nproject's command, at every row alike, and `-W` only where leaving\nit out would consult another.",
+          "description": "A project whose own workspace is not the one on screen, by its entry:\n`mind -W . -C <entry> <cmd>`, which names the one on screen, so a\nchange drops that workspace's record and an add takes its templates.\n\nStill the project's command rather than `mindweaver <cmd> -p <entry>`,\nwhich would consult the same workspace: a project's row teaches the\nproject's command, at every row alike, and `-W` only where leaving\nit out would consult another.",
           "type": "object",
           "properties": {
             "entry": {
@@ -136,7 +136,8 @@
       "type": "string",
       "enum": [
         "skill",
-        "rule"
+        "rule",
+        "mcp"
       ]
     }
   }

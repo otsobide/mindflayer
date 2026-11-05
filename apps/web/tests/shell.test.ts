@@ -35,7 +35,7 @@ const LAUNCH = 'http://127.0.0.1:41001/'
 const NEXT_LAUNCH = 'http://127.0.0.1:41002/'
 
 /**
- * Open the page at another address, as the next `flayer ui` would. A browser
+ * Open the page at another address, as the next `mindweaver ui` would. A browser
  * keeps localStorage per origin, so a new port opens on an empty one; happy-dom
  * keeps one for every address, so it is emptied here.
  */
@@ -106,7 +106,7 @@ describe('the shell', () => {
     const page = await render('/')
 
     const sidebar = page.get('[data-testid="sidebar"]')
-    expect(sidebar.text()).toContain('Mindflayer')
+    expect(sidebar.text()).toContain('Mindweaver')
     expect(sidebar.findAll('nav a').map(link => link.text())).toEqual(['Overview', 'Projects', 'Discover', 'Assign', 'Updates', 'Library', 'Loads', 'Shelf', 'Sources'])
     expect(sidebar.get('nav a[aria-current="page"]').text()).toBe('Overview')
     expect(sidebar.get('[data-testid="address"]').text()).toBe(window.location.host)
@@ -130,7 +130,7 @@ describe('the shell', () => {
     await flushPromises()
 
     expect(useShell().sidebarCollapsed).toBe(true)
-    expect(page.get('[data-testid="sidebar"]').text()).not.toContain('Mindflayer')
+    expect(page.get('[data-testid="sidebar"]').text()).not.toContain('Mindweaver')
     expect(page.get('[data-testid="address"]').text()).toBe('')
   })
 
@@ -140,7 +140,7 @@ describe('the shell', () => {
     await page.get('[data-testid="overview"] button[aria-label="Collapse sidebar"]').trigger('click')
     await flushPromises()
 
-    expect(JSON.parse(cookie('mindflayer-dashboard-sidebar-default') ?? '{}')).toMatchObject({ collapsed: true })
+    expect(JSON.parse(cookie('mindweaver-dashboard-sidebar-default') ?? '{}')).toMatchObject({ collapsed: true })
   })
 
   it('opens the next launch, on a port of its own, with the sidebar as it was left', async () => {
@@ -153,7 +153,7 @@ describe('the shell', () => {
     const next = await render('/')
 
     expect(useShell().sidebarCollapsed).toBe(true)
-    expect(next.get('[data-testid="sidebar"]').text()).not.toContain('Mindflayer')
+    expect(next.get('[data-testid="sidebar"]').text()).not.toContain('Mindweaver')
   })
 
   it('adds no style element, which the CSP would refuse', async () => {
@@ -191,16 +191,26 @@ describe('the colour mode', () => {
     await render('/')
 
     expect(document.documentElement.classList.contains('dark')).toBe(true)
-    expect(cookie('mindflayer-vueuse-color-scheme')).toBe('dark')
+    expect(cookie('mindweaver-vueuse-color-scheme')).toBe('dark')
   })
 
   it('keeps the light mode this browser chose', async () => {
-    document.cookie = 'mindflayer-vueuse-color-scheme=light; Path=/'
+    document.cookie = 'mindweaver-vueuse-color-scheme=light; Path=/'
 
     await render('/')
 
     expect(document.documentElement.classList.contains('dark')).toBe(false)
     expect(document.documentElement.classList.contains('light')).toBe(true)
+  })
+
+  it('keeps the mode chosen under a Mindflayer build, moved to the new name once', async () => {
+    document.cookie = 'mindflayer-vueuse-color-scheme=light; Path=/'
+
+    await render('/')
+
+    expect(document.documentElement.classList.contains('light')).toBe(true)
+    expect(cookie('mindweaver-vueuse-color-scheme')).toBe('light')
+    expect(cookie('mindflayer-vueuse-color-scheme')).toBeUndefined()
   })
 
   it('switches from the header without adding a style element', async () => {
@@ -211,7 +221,7 @@ describe('the colour mode', () => {
 
     expect(document.documentElement.classList.contains('light')).toBe(true)
     expect(document.documentElement.classList.contains('dark')).toBe(false)
-    expect(cookie('mindflayer-vueuse-color-scheme')).toBe('light')
+    expect(cookie('mindweaver-vueuse-color-scheme')).toBe('light')
     expect(styles).toEqual([])
   })
 

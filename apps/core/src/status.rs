@@ -1,11 +1,11 @@
 //! What each project holds, where each thing in it came from, which agents
-//! read it, and whether it is all there: what `flayer status` reports.
+//! read it, and whether it is all there: what `mindweaver status` reports.
 //!
 //! Built from discovery and the ledger together, since neither answers
 //! alone. Discovery says what sits in the folders a project's agents read and
 //! the one it authors in, and which agents read each copy ([`Catalog`]); it
 //! reads no ledger, so it cannot tell an install from somebody's own. The
-//! ledger says which copies Mindflayer put where, and from where
+//! ledger says which copies Mindweaver put where, and from where
 //! ([`Ledger::records`]); it cannot see that one has gone since, nor a copy
 //! it never wrote.
 //!
@@ -35,7 +35,7 @@ use crate::relink::{self, Duplicate};
 use crate::settings::ProjectId;
 use crate::value::{ArtifactName, Origin};
 use crate::workspace::{
-    same_directory, FlayerWorkspace, MarkerFile, MindProject, MisplacedTarget, WorkspaceError,
+    same_directory, MarkerFile, MindProject, MisplacedTarget, WeaverWorkspace, WorkspaceError,
 };
 
 /// What every project a report covers holds.
@@ -53,14 +53,14 @@ pub struct ProjectStatus {
     /// has no marker to read.
     pub name: Option<String>,
     /// The workspace's entry for it, as the marker spells it: what `-p` and
-    /// `flayer unlink` take. None for a project no workspace links.
+    /// `mindweaver unlink` take. None for a project no workspace links.
     pub entry: Option<String>,
     /// Where it is.
     #[serde(serialize_with = "paths::lossy")]
     pub path: PathBuf,
     /// The file its marker is read from, inside its `.mind`: a
     /// `settings.toml`, or the `mind.toml` or `settings.json` an older
-    /// Mindflayer wrote, which `mind migrate` moves to one. Said because
+    /// Mindweaver wrote, which `mind migrate` moves to one. Said because
     /// nothing else in a report tells a `settings.json` from a
     /// `settings.toml`, which name the same agents, though only the second
     /// can be changed. None for an entry that would not open, which has no
@@ -169,7 +169,7 @@ pub enum State {
     /// A copy the ledger records holds something other than what was
     /// installed there, by its hash (D-04): edited by hand or with `mind
     /// edit`, or a skill renamed, its `name` line rewritten; a rule renamed
-    /// is moved as it is, and holds what it held. Still Mindflayer's
+    /// is moved as it is, and holds what it held. Still Mindweaver's
     /// install, and left alone by every install, update and uninstall
     /// unless forced. Said over a copy gone beside it, which the next
     /// install would not put back without forcing.
@@ -186,7 +186,7 @@ pub enum State {
     Orphaned,
     /// In an agent's folder outside any the project authors in, and recorded
     /// by nothing: somebody's, put there some other way, and never
-    /// Mindflayer's to change.
+    /// Mindweaver's to change.
     Foreign,
     /// In a folder the project authors in, and recorded by nothing: the
     /// project's own work, which a change made from it reaches.
@@ -336,7 +336,7 @@ impl Status {
     /// Every project `workspace` links, against what its ledger records of
     /// them.
     ///
-    /// Only the linked ones, as `flayer list` reads them: a workspace reports
+    /// Only the linked ones, as `mindweaver list` reads them: a workspace reports
     /// on what it was told to manage, not on whatever sits below it. Its own
     /// artifacts are no project's, and nothing is installed into them.
     ///
@@ -344,7 +344,7 @@ impl Status {
     /// about its one file, so it is said once, with the first. Two projects
     /// holding one id are each reported, and a failure names them together
     /// ([`Duplicate`]).
-    pub fn of_workspace(workspace: &FlayerWorkspace) -> (Status, Vec<StatusFailure>) {
+    pub fn of_workspace(workspace: &WeaverWorkspace) -> (Status, Vec<StatusFailure>) {
         let mut status = Status::default();
         let mut failures = Vec::new();
         let mut ledger_said = false;
@@ -412,7 +412,7 @@ impl Status {
     /// in it is missing, which reads as nothing installed.
     pub fn of_project(
         project: &MindProject,
-        workspace: Option<&FlayerWorkspace>,
+        workspace: Option<&WeaverWorkspace>,
     ) -> (Status, Vec<StatusFailure>) {
         let (held, catalog) = ProjectStatus::read(project, &Kind::ALL, workspace);
         let (_, failures) = catalog.into_parts();
@@ -437,7 +437,7 @@ impl ProjectStatus {
     /// project with.
     ///
     /// The ledger is opened here, for reading
-    /// ([`FlayerWorkspace::ledger_for_reading`]), rather than handed in, so
+    /// ([`WeaverWorkspace::ledger_for_reading`]), rather than handed in, so
     /// no front end can refuse a report over one that will not open while
     /// another reports without it. One that cannot be opened or read leaves
     /// every copy unrecorded, as `with_records` does: foreign or authored,
@@ -452,7 +452,7 @@ impl ProjectStatus {
     pub fn read(
         project: &MindProject,
         kinds: &[Kind],
-        workspace: Option<&FlayerWorkspace>,
+        workspace: Option<&WeaverWorkspace>,
     ) -> (ProjectStatus, Catalog) {
         let (status, catalog, _) = Self::read_placed(project, kinds, workspace);
         (status, catalog)
@@ -466,12 +466,12 @@ impl ProjectStatus {
     /// copy discovery found, and every place the record matched to it names,
     /// found or not, so an install with a copy gone still says where it went.
     /// Kept beside the report rather than in it: the report's JSON is a
-    /// contract `flayer status --json` prints, and where each copy sits is
+    /// contract `mindweaver status --json` prints, and where each copy sits is
     /// more than a script reading it was promised.
     pub(crate) fn read_placed(
         project: &MindProject,
         kinds: &[Kind],
-        workspace: Option<&FlayerWorkspace>,
+        workspace: Option<&WeaverWorkspace>,
     ) -> (ProjectStatus, Catalog, Vec<Vec<String>>) {
         let root = project.root();
         let mut catalog = Catalog::discover_kinds(std::slice::from_ref(project), kinds);
@@ -746,7 +746,6 @@ fn rendered(
     records
         .into_iter()
         .map(|record| {
-            let file = install::rules::claude_file(&record.name);
             let found = |target: &Target| {
                 if target.path == agents_md::FILE {
                     block.iter().any(|route| route == record.name.as_str())
@@ -759,7 +758,10 @@ fn rendered(
                 .targets
                 .iter()
                 .any(|target| target.path == agents_md::FILE && found(target));
-            let given_file = record.targets.iter().find(|target| target.path == file);
+            let given_file = record
+                .targets
+                .iter()
+                .find(|target| install::rules::is_claude_file(&target.path, &record.name));
             let in_file = given_file.is_some_and(found);
             let reached = agents
                 .iter()

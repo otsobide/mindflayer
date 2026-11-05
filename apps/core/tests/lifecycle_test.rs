@@ -4,14 +4,15 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::hash;
-use mindflayer_core::install::{self, InstallError, Standing};
-use mindflayer_core::ledger::{Ledger, SourceKind};
-use mindflayer_core::lifecycle::{self, Record, Target};
-use mindflayer_core::AgentHomes;
-use mindflayer_core::{
-    create, Agent, Catalog, Directories, FlayerWorkspace, Kind, LifecycleError, MindProject,
-    Reference, Share, ValidationIssue,
+use mindweaver_core::create::Start;
+use mindweaver_core::hash;
+use mindweaver_core::install::{self, InstallError, Standing};
+use mindweaver_core::ledger::{Ledger, SourceKind};
+use mindweaver_core::lifecycle::{self, Record, Target};
+use mindweaver_core::AgentHomes;
+use mindweaver_core::{
+    create, Agent, Catalog, Directories, Kind, LifecycleError, MindProject, Reference, Share,
+    ValidationIssue, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -276,7 +277,7 @@ fn renaming_a_skill_moves_its_folder_and_rewrites_nothing_but_its_name() {
 #[test]
 fn renaming_keeps_every_key_it_does_not_model_byte_for_byte() {
     // Claude Code's own keys, and metadata no agent should have written
-    // nested, all pass through: they are somebody's, not Mindflayer's.
+    // nested, all pass through: they are somebody's, not Mindweaver's.
     const AGENT_KEYS: &str = "---\nname: deploy\ndescription: Ship it\ndisable-model-invocation: true\npaths:\n  - 'src/**'\nallowed-tools: Bash(git add *) Read\ncompatibility: Requires git\nmetadata:\n  author: acme\n  owner:\n    team: ops\n---\n\nRun the pipeline.\n";
     let (dir, project) = project();
     write(dir.path(), "skills/deploy/SKILL.md", AGENT_KEYS);
@@ -306,7 +307,7 @@ fn renaming_refuses_a_name_that_breaks_the_rules() {
 #[test]
 fn renaming_refuses_a_skill_whose_description_breaks_the_rules() {
     // A rename writes only the name, but what it leaves behind is a skill
-    // Mindflayer wrote, and an agent skips one with an empty description.
+    // Mindweaver wrote, and an agent skips one with an empty description.
     let (dir, project) = project();
     write(
         dir.path(),
@@ -828,7 +829,7 @@ fn the_workspaces_own_are_held_to_the_folder_they_are_kept_in_and_not_its_root()
     // workspace's root, which may be a home: written there, as a read of it
     // for the panel reads it there.
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let own = workspace.own();
     let dotfiles = TempDir::new().unwrap();
     let folder = own.directory_for(Kind::Skill).unwrap();
@@ -884,9 +885,9 @@ fn the_workspaces_own_are_held_to_the_folder_they_are_kept_in_and_not_its_root()
 
 /// A workspace managing one project, `collapse`, from above it, with each of
 /// `names` among the workspace's own skills and installed into the project.
-fn installed(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn installed(names: &[&str]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -908,14 +909,14 @@ fn installed(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) 
     (dir, workspace, project, ledger)
 }
 
-/// The skills `ledger` says Mindflayer installed into `collapse`.
+/// The skills `ledger` says Mindweaver installed into `collapse`.
 fn records(ledger: &Ledger) -> Vec<String> {
     ledger.installations("collapse", Kind::Skill).unwrap()
 }
 
 /// How every skill installed into the project stands now, by name.
 fn standings(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
 ) -> Vec<(String, Standing)> {
@@ -924,7 +925,7 @@ fn standings(
 
 /// How the workspace's own `name` stands with the project now.
 fn standing(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     name: &str,
@@ -947,7 +948,7 @@ fn type_into(file: &Path) {
 /// A workspace with its own `names`, and a project marked by its settings,
 /// naming every agent and authoring skills in `skills`, linked to it, with
 /// each of the workspace's installed for its agents.
-fn installed_for_agents(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn installed_for_agents(names: &[&str]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     installed_authoring_in("skills", Share::Shared, names)
 }
 
@@ -957,9 +958,9 @@ fn installed_authoring_in(
     folder: &str,
     share: Share,
     names: &[&str],
-) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     gix::init(&root).unwrap();
@@ -996,7 +997,7 @@ fn what_a_project_authors_beside_its_agents_copies_leaves_their_record_alone() {
         Kind::Skill,
         "deploy",
         "Our own",
-        None,
+        Start::Scratch,
     )
     .unwrap();
     assert_eq!(added.stale.unwrap(), Record::Untouched);
@@ -1016,7 +1017,7 @@ fn what_a_project_authors_beside_its_agents_copies_leaves_their_record_alone() {
         lifecycle::remove(Some(&workspace), &project, &find(&project, "ship").unwrap()).unwrap();
     assert_eq!(removed.copy.unwrap(), Record::Untouched);
 
-    // The copies installed for its agents are still Mindflayer's to manage.
+    // The copies installed for its agents are still Mindweaver's to manage.
     assert_eq!(records(&ledger), ["deploy"]);
     assert_eq!(
         standing(&workspace, &ledger, &project, "deploy"),
@@ -1054,7 +1055,7 @@ fn removing_the_copy_in_a_folder_the_project_authors_in_leaves_the_others_instal
 
     assert_eq!(removed.copy.unwrap(), Record::Dropped);
     assert!(!reached.exists());
-    // The copy nobody touched is still Mindflayer's, and so still out of git;
+    // The copy nobody touched is still Mindweaver's, and so still out of git;
     // the place the change emptied is not.
     let record = ledger
         .installation("collapse", Kind::Skill, "deploy")
@@ -1076,7 +1077,7 @@ fn removing_the_copy_in_a_folder_the_project_authors_in_leaves_the_others_instal
         Kind::Skill,
         "deploy",
         "Our own",
-        None,
+        Start::Scratch,
     )
     .unwrap();
     assert_eq!(added.stale.unwrap(), Record::Untouched);
@@ -1110,7 +1111,7 @@ fn an_exclude_block_that_cannot_be_edited_is_reported_and_the_copys_record_still
         installed_authoring_in(".claude/skills", Share::Local, &["deploy"]);
     let file = project.root().join(".git/info/exclude");
     let mut text = fs::read_to_string(&file).unwrap();
-    text.push_str("# mindflayer:begin\n");
+    text.push_str("# mindweaver:begin\n");
     fs::write(&file, &text).unwrap();
 
     let removed = lifecycle::remove(
@@ -1251,7 +1252,7 @@ fn a_copy_renamed_onto_a_name_installed_from_elsewhere_is_its_authors() {
 
 /// A workspace managing `collapse`, a project a `mind.toml` marks, with the
 /// workspace's own rule `git/no-force-push` copied into it.
-fn installed_rule() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn installed_rule() -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, project, ledger) = installed(&[]);
     let own = workspace.own().directory_for(Kind::Rule).unwrap();
     write(&own, "git/no-force-push.md", "Never force-push.\n");
@@ -1276,7 +1277,7 @@ fn installed_rule() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
 }
 
 fn rule_standings(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
 ) -> Vec<(String, Standing)> {
@@ -1367,7 +1368,7 @@ fn adding_where_an_installed_copy_was_deleted_by_hand_drops_its_record() {
         Kind::Skill,
         "deploy",
         "Mine now",
-        None,
+        Start::Scratch,
     )
     .unwrap();
 
@@ -1386,7 +1387,7 @@ fn adding_a_rule_beside_an_installed_one_that_reaches_no_agent_keeps_its_record(
     // A project naming only Codex, given a rule about some files, which only
     // Claude reads: installed with no target at all.
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let directories = Directories::default().with(Kind::Rule, "rules");
@@ -1430,7 +1431,7 @@ fn adding_a_rule_beside_an_installed_one_that_reaches_no_agent_keeps_its_record(
         Kind::Rule,
         "rust/errors",
         "Our own",
-        None,
+        Start::Scratch,
     )
     .unwrap();
 
@@ -1453,7 +1454,7 @@ fn adding_touches_no_record_but_one_under_the_name_it_writes() {
         Kind::Skill,
         "notes",
         "Mine",
-        None,
+        Start::Scratch,
     )
     .unwrap();
 
@@ -1464,7 +1465,7 @@ fn adding_touches_no_record_but_one_under_the_name_it_writes() {
 #[test]
 fn a_change_asks_only_a_workspace_that_manages_the_project_and_creates_no_ledger() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -1475,7 +1476,7 @@ fn a_change_asks_only_a_workspace_that_manages_the_project_and_creates_no_ledger
         Kind::Skill,
         "deploy",
         "Ship it",
-        None,
+        Start::Scratch,
     )
     .unwrap();
     workspace.link(&project).unwrap();
@@ -1485,10 +1486,11 @@ fn a_change_asks_only_a_workspace_that_manages_the_project_and_creates_no_ledger
         Kind::Rule,
         "deploy",
         "How we ship",
-        None,
+        Start::Scratch,
     )
     .unwrap();
-    let alone = lifecycle::add(None, &project, Kind::Skill, "notes", "Mine", None).unwrap();
+    let alone =
+        lifecycle::add(None, &project, Kind::Skill, "notes", "Mine", Start::Scratch).unwrap();
 
     for added in [unmanaged, managed, alone] {
         assert_eq!(added.stale.unwrap(), Record::Untouched);
@@ -1502,7 +1504,7 @@ fn a_change_asks_only_a_workspace_that_manages_the_project_and_creates_no_ledger
 fn a_record_that_cannot_be_dropped_is_reported_and_the_change_stands() {
     let (dir, workspace, project, _ledger) = installed(&["deploy"]);
     fs::remove_dir_all(dir.path().join("collapse/skills/deploy")).unwrap();
-    // A ledger a newer Mindflayer wrote is refused, so nothing in it can be
+    // A ledger a newer Mindweaver wrote is refused, so nothing in it can be
     // changed from here.
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()
@@ -1515,7 +1517,7 @@ fn a_record_that_cannot_be_dropped_is_reported_and_the_change_stands() {
         Kind::Skill,
         "deploy",
         "Mine now",
-        None,
+        Start::Scratch,
     )
     .unwrap();
 
@@ -1667,7 +1669,7 @@ fn removing_an_installed_copy_uninstalls_it() {
 
 /// What an older build could have left in the same ledger: a source whose URL
 /// carries a token. Returns where its clone would be.
-fn tainted(workspace: &FlayerWorkspace, ledger: &Ledger) -> PathBuf {
+fn tainted(workspace: &WeaverWorkspace, ledger: &Ledger) -> PathBuf {
     let source = ledger
         .source_for(
             SourceKind::Git,
@@ -1758,7 +1760,7 @@ fn a_rename_tells_once_of_a_clone_neither_of_its_scrubs_could_rewrite() {
 }
 
 #[test]
-fn changing_something_mindflayer_did_not_install_touches_no_record() {
+fn changing_something_mindweaver_did_not_install_touches_no_record() {
     let (_dir, workspace, project, ledger) = installed(&["deploy"]);
     create(&workspace.own(), Kind::Skill, "notes", "The workspace's").unwrap();
     create(&project, Kind::Skill, "notes", "Mine").unwrap();
@@ -1796,7 +1798,7 @@ fn a_change_sees_to_the_record_of_the_workspace_it_is_given_wherever_that_sits()
     let dir = TempDir::new().unwrap();
     let hub = dir.path().join("hub");
     fs::create_dir(&hub).unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(&hub).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(&hub).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -1831,16 +1833,16 @@ fn a_record_is_kept_under_the_workspaces_spelling_of_a_project_whatever_the_syml
     // A workspace named with `-W` keeps the spelling it was given, and `mind`
     // spells its project the way the operating system does, through no
     // symlink: `/tmp` is one on every Mac. Either way round, the record is
-    // the one `flayer -p` reads, under the entry the workspace stores.
+    // the one `mindweaver -p` reads, under the entry the workspace stores.
     let dir = TempDir::new().unwrap();
     let real = dir.path().join("real");
     fs::create_dir_all(real.join("collapse")).unwrap();
     std::os::unix::fs::symlink(&real, dir.path().join("link")).unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(real.join("hub")).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(real.join("hub")).unwrap();
     let (project, _) = MindProject::init(real.join("collapse")).unwrap();
     workspace.link(&project).unwrap();
     create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
-    let through_link = FlayerWorkspace::open(dir.path().join("link/hub")).unwrap();
+    let through_link = WeaverWorkspace::open(dir.path().join("link/hub")).unwrap();
     let ledger = workspace.ledger().unwrap();
     let recorded = || ledger.installations("../collapse", Kind::Skill).unwrap();
 

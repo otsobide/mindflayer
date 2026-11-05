@@ -52,7 +52,7 @@ impl GatheredMother {
     pub fn create(kind: Kind, name: ArtifactName, source: Source) -> Gathered {
         Gathered {
             kind,
-            path: format!(".mindflayer/{}/{}/{name}", kind.slug(), source.directory),
+            path: format!(".mindweaver/{}/{}/{name}", kind.slug(), source.directory),
             name,
             summary: random::chance().then(|| random::text(30)),
             revision: source.revision.clone(),
@@ -129,7 +129,7 @@ impl InstallRecordMother {
                 TargetMother::holding(None, "AGENTS.md", ContentHashMother::random()),
                 TargetMother::holding(
                     Some(Agent::Claude),
-                    &format!(".claude/rules/mindflayer/{route}.md"),
+                    &format!(".claude/rules/mindweaver/{route}.md"),
                     ContentHashMother::random(),
                 ),
             ],

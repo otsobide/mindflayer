@@ -25,17 +25,22 @@ pub enum Kind {
     /// A markdown file that gives an agent context, with optional front
     /// matter that most rules go without.
     Rule,
+    /// An MCP server's definition: a file that says how an agent starts or
+    /// reaches the server ([`crate::mcp`]), rendered as an entry in each
+    /// agent's own config file rather than copied into a folder (D-10).
+    Mcp,
 }
 
 impl Kind {
     /// Every kind, in report order.
-    pub const ALL: [Kind; 2] = [Kind::Skill, Kind::Rule];
+    pub const ALL: [Kind; 3] = [Kind::Skill, Kind::Rule, Kind::Mcp];
 
     /// How a kind is written when it qualifies a name: `skill:commit-style`.
     pub const fn slug(self) -> &'static str {
         match self {
             Kind::Skill => "skill",
             Kind::Rule => "rule",
+            Kind::Mcp => "mcp",
         }
     }
 
@@ -43,16 +48,45 @@ impl Kind {
     /// ([`Directories::default_for`](crate::workspace::Directories::default_for)),
     /// in a workspace's library for its own
     /// ([`Directories::library_for`](crate::workspace::Directories::library_for)),
-    /// and inside `.mindflayer` on a workspace's shelf. A marker's
+    /// and inside `.mindweaver` on a workspace's shelf. A marker's
     /// `[directories]` is keyed by it, which is how a project or a workspace
     /// puts the folder somewhere else.
     ///
     /// It doubles as the plural spelling, which is what lets `mind list rules`
-    /// work without a second table to keep in step.
+    /// work without a second table to keep in step. An abbreviation has none,
+    /// so MCP servers are kept in `mcp`, and `mind list mcp` is the one word
+    /// in both places.
     pub const fn folder(self) -> &'static str {
         match self {
             Kind::Skill => "skills",
             Kind::Rule => "rules",
+            Kind::Mcp => "mcp",
+        }
+    }
+
+    /// How a sentence names one of this kind: its slug, where that is a
+    /// word a reader knows, and `MCP server` for the abbreviation.
+    ///
+    /// Apart from the slug, which is what a command line takes and a report
+    /// prints, so that a kind whose slug is no word a sentence can use (an
+    /// abbreviation) says itself in one it can, without a message or a
+    /// count spelling its kind by hand.
+    pub const fn noun(self) -> &'static str {
+        match self {
+            Kind::Skill => "skill",
+            Kind::Rule => "rule",
+            Kind::Mcp => "MCP server",
+        }
+    }
+
+    /// How a sentence names more than one of this kind: the folder's word
+    /// for a kind whose folder is a plural, and `MCP servers`, which an
+    /// abbreviation makes no plural of that a reader would know.
+    pub const fn plural(self) -> &'static str {
+        match self {
+            Kind::Skill => "skills",
+            Kind::Rule => "rules",
+            Kind::Mcp => "MCP servers",
         }
     }
 
@@ -63,6 +97,7 @@ impl Kind {
                 manifest: "SKILL.md",
             },
             Kind::Rule => Layout::Files { extension: "md" },
+            Kind::Mcp => Layout::Flat { extension: "toml" },
         }
     }
 }
@@ -86,7 +121,7 @@ impl Serialize for Kind {
 #[cfg(any(feature = "ts", feature = "schema"))]
 crate::described::words! {
     /// A kind of artifact, by the word a command line takes for it.
-    Kind by slug { Skill, Rule }
+    Kind by slug { Skill, Rule, Mcp }
 }
 
 /// From the word a command line takes, through [`FromStr`], so what a front
@@ -123,11 +158,12 @@ codes!(UnknownKind => "unknown_kind");
 impl fmt::Display for UnknownKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let expected: Vec<&str> = Kind::ALL.iter().map(|kind| kind.folder()).collect();
+        let (last, rest) = expected.split_last().expect("there is a kind");
         write!(
             f,
-            "unknown kind `{}`; expected {}",
+            "unknown kind `{}`; expected {} or {last}",
             self.0,
-            expected.join(" or ")
+            rest.join(", ")
         )
     }
 }
@@ -142,6 +178,12 @@ pub enum Layout {
     /// One file per artifact, at any depth. Folders under the kind's own
     /// folder group and mean nothing else.
     Files { extension: &'static str },
+    /// One file per artifact, directly in the kind's own folder, its name the
+    /// file's stem: what an install renders as an entry keyed by that name
+    /// in a file somebody else owns, where a key holds no folder, so a name
+    /// is never a route, and a folder under the kind's own holds nothing it
+    /// finds.
+    Flat { extension: &'static str },
 }
 
 #[cfg(test)]

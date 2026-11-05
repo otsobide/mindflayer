@@ -35,7 +35,9 @@ fn a_version_2_markers_folders_are_written_out_with_the_defaults_it_meant() {
 fn a_version_1_marker_is_described_inside_mind_where_it_kept_every_kind() {
     let written = authored(&marker(1, Directories::default()));
 
-    for kind in Kind::ALL {
+    // Not one added since, which it kept nowhere.
+    assert_eq!(written.get(Kind::Mcp), None);
+    for kind in [Kind::Skill, Kind::Rule] {
         let folder = written.get(kind).unwrap();
         assert_eq!(folder, Path::new(MIND_DIR).join(kind.folder()));
         assert!(matches!(
@@ -56,7 +58,8 @@ fn a_version_1_marker_keeps_the_folders_it_names_outside_mind() {
 
     assert_eq!(written.get(Kind::Skill), Some(Path::new("skills")));
     assert_eq!(written.get(Kind::Rule), Some(Path::new("rules")));
-    for kind in Kind::ALL {
+    assert_eq!(written.get(Kind::Mcp), None);
+    for kind in [Kind::Skill, Kind::Rule] {
         assert!(misplaced_authored(kind, written.get(kind).unwrap()).is_none());
     }
 }

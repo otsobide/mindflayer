@@ -56,7 +56,7 @@ use crate::lifecycle::{self, LifecycleError};
 use crate::paths;
 use crate::rule::RuleManifest;
 use crate::value::{ArtifactName, ContentHash};
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::workspace::{MindProject, WeaverWorkspace};
 
 /// The most a file may hold, in bytes, to have its text read: a mebibyte.
 ///
@@ -266,13 +266,13 @@ codes!(ContentsError {
 impl Contents {
     /// `file` of the artifact `reference` names among `workspace`'s own: the
     /// library a snapshot lists, of the kinds it keeps apart from a project
-    /// at its root ([`FlayerWorkspace::own_kinds`]).
+    /// at its root ([`WeaverWorkspace::own_kinds`]).
     ///
     /// Held to the folder the workspace keeps the artifact's kind in, not to
     /// its root as an install from it is: the default workspace's root is a
     /// home, where every secret its user keeps would count as inside it.
     pub fn of_library(
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         reference: &str,
         file: &str,
     ) -> Result<Contents, ContentsError> {
@@ -305,7 +305,7 @@ impl Files {
     /// What the artifact `reference` names among `workspace`'s own holds,
     /// held as [`Contents::of_library`] holds a file of it.
     pub fn of_library(
-        workspace: &FlayerWorkspace,
+        workspace: &WeaverWorkspace,
         reference: &str,
     ) -> Result<Files, ContentsError> {
         list(
@@ -354,7 +354,7 @@ fn locate(
     let reference = Reference::parse(reference);
     let (kind, name, at) = artifact(holder, kinds, &reference)?;
     // A `Kept` read never falls back to the root in fact: every kind has a
-    // folder in the workspace's own (`FlayerWorkspace::own`), and the
+    // folder in the workspace's own (`WeaverWorkspace::own`), and the
     // artifact was found in its kind's.
     let bound = match within {
         Within::Root => None,
@@ -467,11 +467,12 @@ fn read(
 }
 
 /// Whether `file`, a route of an artifact of `kind`, is the one it is read
-/// from: a skill's manifest, or a rule's one file, the only route it has.
+/// from: a skill's manifest, or a rule's or a definition's one file, the
+/// only route it has.
 fn is_manifest(kind: Kind, file: &str) -> bool {
     match kind.layout() {
         Layout::Directory { manifest } => file == manifest,
-        Layout::Files { .. } => true,
+        Layout::Files { .. } | Layout::Flat { .. } => true,
     }
 }
 
@@ -481,10 +482,12 @@ impl Manifest {
     /// front matter is required and what does not read is `validate`'s to
     /// say; a rule only where they hold a mapping, as [`RuleManifest::read`]
     /// decides, since its front matter is optional and anything else is
-    /// content.
+    /// content; and a definition never, since it has no front matter: its
+    /// file is what it declares, and is shown whole.
     fn of(kind: Kind, text: &str) -> Manifest {
         let cut = match kind {
             Kind::Skill => frontmatter::split(text).ok(),
+            Kind::Mcp => None,
             Kind::Rule => {
                 let (_, body) = RuleManifest::read(text);
                 // Its fences were taken off only when they hold a mapping.
@@ -572,8 +575,8 @@ fn list(
             walk.folder(&at, &resolved, names, "", &mut vec![resolved.clone()]);
             manifest.to_owned()
         }
-        Layout::Files { .. } => {
-            // A rule was found as a file, so it has a name.
+        Layout::Files { .. } | Layout::Flat { .. } => {
+            // A rule or a definition was found as a file, so it has a name.
             let file = at
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
@@ -807,16 +810,16 @@ fn artifact(
 /// file of it.
 ///
 /// A route of plain names for a skill, each one folder or file name, so a
-/// `..`, a root or an empty part never reaches the disk; a rule is one
-/// file, so its own file name is the one route it has. Joined a part at a
-/// time, so a `/` means the same on every platform.
+/// `..`, a root or an empty part never reaches the disk; a rule and a
+/// definition are one file, so its own file name is the one route it has.
+/// Joined a part at a time, so a `/` means the same on every platform.
 fn place(kind: Kind, at: &Path, file: &str) -> Option<PathBuf> {
     match kind.layout() {
         Layout::Directory { .. } => file.split('/').all(install::is_folder_name).then(|| {
             file.split('/')
                 .fold(at.to_path_buf(), |path, part| path.join(part))
         }),
-        Layout::Files { .. } => {
+        Layout::Files { .. } | Layout::Flat { .. } => {
             (at.file_name() == Some(OsStr::new(file))).then(|| at.to_path_buf())
         }
     }

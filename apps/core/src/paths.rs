@@ -111,7 +111,7 @@ pub fn to_config_string(path: &Path) -> Option<String> {
 
 /// A route as a marker spells it, `/` separated, or as it displays when it
 /// is not UTF-8, which no marker holds but a report still has to say: a
-/// workspace's entry as `-p` and `flayer unlink` take it, or a folder a
+/// workspace's entry as `-p` and `mindweaver unlink` take it, or a folder a
 /// project's settings name.
 pub(crate) fn as_route(route: &Path) -> String {
     to_config_string(route).unwrap_or_else(|| route.display().to_string())

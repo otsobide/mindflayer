@@ -204,9 +204,9 @@ fn moved(from: &Path, to: &Path) -> Result<(), io::Error> {
 /// somewhere other than beside what they replace.
 ///
 /// Beside is where an agent looks. OpenCode's first line globs hidden folders
-/// in a skills folder too, so a half-made `.deploy.mindflayer-new` next to
+/// in a skills folder too, so a half-made `.deploy.mindweaver-new` next to
 /// `deploy` is a skill it may load, and one an interrupted run leaves there it
-/// loads every time after. Built in a scratch folder Mindflayer owns, a copy is out of
+/// loads every time after. Built in a scratch folder Mindweaver owns, a copy is out of
 /// every agent's sight until a rename puts it in place whole, and what an
 /// interrupted run leaves is out of sight too.
 ///
@@ -271,7 +271,7 @@ impl PlaceError {
 /// committed: `*`, as a Python venv ignores itself, inside the folder it is
 /// about rather than in a team's `.gitignore`.
 const IGNORE: &str = "\
-# Mindflayer builds what it installs here, then moves it into place.
+# Mindweaver builds what it installs here, then moves it into place.
 # Nothing in this folder is meant to be committed.
 *
 ";
@@ -512,9 +512,10 @@ impl Stage {
         Ok(path)
     }
 
-    /// Remove the `.<name>.mindflayer-new` and `-old` that an interrupted run
-    /// of an earlier version left beside `to`: a skill an agent may load, in a
-    /// folder no sweep looks in.
+    /// Remove the `.<name>.mindweaver-new` and `-old` that an interrupted run
+    /// of an earlier version left beside `to`, and the `.<name>.mindflayer-new`
+    /// and `-old` of one from before Mindweaver's names (D-26): a skill an
+    /// agent may load, in a folder no sweep looks in.
     ///
     /// Without the lock a sweep waits for, because no run of this version
     /// builds there, and runs of those versions cleared each other's anyway.
@@ -522,8 +523,11 @@ impl Stage {
     /// than staying where an agent reads; one another run removed first is
     /// that run's to say.
     fn clear_beside(&mut self, to: &Path) -> Result<(), io::Error> {
-        for what in ["new", "old"] {
-            let left = beside(to, what);
+        let spelled = [BESIDE, FLAYER_BESIDE];
+        for left in spelled
+            .into_iter()
+            .flat_map(|by| ["new", "old"].map(|what| beside_by(to, by, what)))
+        {
             // A folder, not a link: no version ever staged one.
             if !fs::symlink_metadata(&left).is_ok_and(|meta| meta.is_dir()) {
                 continue;
@@ -677,14 +681,27 @@ pub(crate) fn random() -> u64 {
     hasher.finish()
 }
 
+/// What a hidden sibling of a copy is named by, between the copy's name and
+/// what it is (`new` or `old`): spelled here alone, since the next install
+/// clears what an interrupted one left by this very name.
+const BESIDE: &str = ".mindweaver-";
+/// [`BESIDE`] as a build from before Mindweaver's names spelled it (D-26),
+/// which the next install clears too, never writes.
+const FLAYER_BESIDE: &str = ".mindflayer-";
+
 /// A hidden sibling of `to`: where [`replace`] stages, and where installs
 /// staged before [`Stage`].
 fn beside(to: &Path, what: &str) -> PathBuf {
+    beside_by(to, BESIDE, what)
+}
+
+/// The sibling of `to` named by `by`, [`BESIDE`] or [`FLAYER_BESIDE`].
+fn beside_by(to: &Path, by: &str, what: &str) -> PathBuf {
     let name = to
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    to.with_file_name(format!(".{name}.mindflayer-{what}"))
+    to.with_file_name(format!(".{name}{by}{what}"))
 }
 
 /// What replacing a directory turned out to be.

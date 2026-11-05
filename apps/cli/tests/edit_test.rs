@@ -5,13 +5,13 @@
 mod common;
 
 use common::*;
-use mindflayer_core::hash;
-use mindflayer_core::mother::{
-    random, ArtifactNameMother, ContentHashMother, RuleMother, SkillMother,
+use mindweaver_core::hash;
+use mindweaver_core::mother::{
+    random, ArtifactNameMother, ContentHashMother, McpMother, RuleMother, SkillMother,
 };
 
 /// Where an artifact is edited: a project's own, through `mind`, or the
-/// workspace's library, through `flayer`.
+/// workspace's library, through `mindweaver`.
 #[derive(Debug, Clone, Copy)]
 enum Level {
     Project,
@@ -35,12 +35,15 @@ impl Edited {
         match level {
             Level::Project => new_project(dir.path()),
             Level::Workspace => {
-                flayer(dir.path(), &["init"]).unwrap();
+                weaver(dir.path(), &["init"]).unwrap();
             }
         }
         let name = match kind {
             Kind::Skill => ArtifactNameMother::random(),
             Kind::Rule => ArtifactNameMother::route(),
+            Kind::Mcp => {
+                unreachable!("these lines give no transport for `add` to write a server from")
+            }
         }
         .into_string();
         let edited = Edited {
@@ -69,7 +72,7 @@ impl Edited {
     fn run(&self, args: &[&str]) -> Result<Outcome, Failure> {
         match self.level {
             Level::Project => mind(self.root(), args),
-            Level::Workspace => flayer(self.root(), args),
+            Level::Workspace => weaver(self.root(), args),
         }
     }
 
@@ -83,6 +86,7 @@ impl Edited {
         match self.kind {
             Kind::Skill => SkillMother::create(&self.name, &SkillMother::description()),
             Kind::Rule => RuleMother::random(),
+            Kind::Mcp => McpMother::stdio(&self.name),
         }
     }
 
@@ -106,11 +110,13 @@ impl Edited {
     }
 }
 
-/// Each level with each kind.
+/// Each level with each kind `add` writes: an MCP server's definition is
+/// written by hand until `add` takes what starts or reaches one, so its
+/// edits have tests of their own below.
 fn every() -> Vec<(Level, Kind)> {
     [Level::Project, Level::Workspace]
         .into_iter()
-        .flat_map(|level| Kind::ALL.into_iter().map(move |kind| (level, kind)))
+        .flat_map(|level| [Kind::Skill, Kind::Rule].map(move |kind| (level, kind)))
         .collect()
 }
 

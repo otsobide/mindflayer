@@ -12,7 +12,7 @@ import { useSnapshot } from '@/api/snapshot'
 import { TransportError, type Task } from '@/api/transport'
 import { UPDATE_ALL, useUpdates } from '@/api/updates'
 import AppHeader from '@/components/AppHeader.vue'
-import CommandHint, { flayer, making } from '@/components/CommandHint.vue'
+import CommandHint, { weaver, making } from '@/components/CommandHint.vue'
 import SnapshotGate from '@/components/SnapshotGate.vue'
 import StateBadge from '@/components/StateBadge.vue'
 import { projectLink } from '@/routes'
@@ -159,7 +159,7 @@ function why(error: unknown): string {
     <template #body>
       <SnapshotGate v-slot="{ snapshot }">
         <p class="max-w-3xl text-sm text-muted">
-          What updating every project the workspace links would do, as <code class="font-mono text-xs">flayer update --all</code> says before it is told <code class="font-mono text-xs">--yes</code>:
+          What updating every project the workspace links would do, as <code class="font-mono text-xs">mindweaver update --all</code> says before it is told <code class="font-mono text-xs">--yes</code>:
           what is behind where it came from is written again, a copy gone is put back, and a copy changed since it was installed is left alone unless the update is forced.
         </p>
 
@@ -237,7 +237,7 @@ function why(error: unknown): string {
             <CommandHint
               :commands="[
                 ...making(snapshot.workspace),
-                { line: flayer(snapshot.workspace, 'update --all'), does: 'says so too' }
+                { line: weaver(snapshot.workspace, 'update --all'), does: 'says so too' }
               ]"
             />
           </div>

@@ -14,7 +14,15 @@
   ],
   "boxes": [
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "api",
       "held": [
         {
@@ -34,7 +42,15 @@
       ]
     },
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "web",
       "held": [
         {
@@ -54,7 +70,15 @@
       ]
     },
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "docs",
       "held": [
         {
@@ -81,6 +105,13 @@
             "code": "not_a_project",
             "message": "/home/you/Projects/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
           }
+        },
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_a_project",
+            "message": "/home/you/Projects/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
         }
       ],
       "entry": "gone",
@@ -101,13 +132,28 @@
             "code": "not_a_project",
             "message": "/home/you/Projects/old: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
           }
+        },
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_a_project",
+            "message": "/home/you/Projects/old: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
         }
       ],
       "entry": "old",
       "held": []
     },
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "legacy",
       "held": []
     }
@@ -172,7 +218,8 @@
   ],
   "kinds": [
     "skill",
-    "rule"
+    "rule",
+    "mcp"
   ],
   "known": [
     {
@@ -199,7 +246,7 @@
         "state": null,
         "summary": "Tidy the code before a commit",
         "targets": [
-          ".mindflayer/library/skills/lint"
+          ".mindweaver/library/skills/lint"
         ],
         "unread": null
       },
@@ -212,7 +259,7 @@
         "state": null,
         "summary": "Read a change before it lands",
         "targets": [
-          ".mindflayer/library/skills/review"
+          ".mindweaver/library/skills/review"
         ],
         "unread": null
       },
@@ -225,7 +272,7 @@
         "state": null,
         "summary": "Write commit messages that say why",
         "targets": [
-          ".mindflayer/library/rules/git/commits.md"
+          ".mindweaver/library/rules/git/commits.md"
         ],
         "unread": null
       },
@@ -238,7 +285,20 @@
         "state": null,
         "summary": "Comment the why, not the what",
         "targets": [
-          ".mindflayer/library/rules/style/comments.md"
+          ".mindweaver/library/rules/style/comments.md"
+        ],
+        "unread": null
+      },
+      {
+        "agents": [],
+        "issues": [],
+        "kind": "mcp",
+        "name": "github",
+        "origin": null,
+        "state": null,
+        "summary": "GitHub's issues, pull requests and code",
+        "targets": [
+          ".mindweaver/library/mcp/github.toml"
         ],
         "unread": null
       }
@@ -246,11 +306,15 @@
     "directories": [
       {
         "kind": "skill",
-        "path": ".mindflayer/library/skills"
+        "path": ".mindweaver/library/skills"
       },
       {
         "kind": "rule",
-        "path": ".mindflayer/library/rules"
+        "path": ".mindweaver/library/rules"
+      },
+      {
+        "kind": "mcp",
+        "path": ".mindweaver/library/mcp"
       }
     ],
     "failures": [],
@@ -295,7 +359,7 @@
       "entry": "../team",
       "error": {
         "code": "not_a_workspace",
-        "message": "/home/you/team: not a flayer workspace (no .mindflayer/flayer.toml)"
+        "message": "/home/you/team: not a weaver workspace (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)"
       },
       "name": null,
       "offers": 0,
@@ -345,6 +409,13 @@
       "origin": "workspace",
       "place": "workspace",
       "summary": "Comment the why, not the what"
+    },
+    {
+      "kind": "mcp",
+      "name": "github",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "GitHub's issues, pull requests and code"
     }
   ],
   "projects": [
@@ -440,6 +511,10 @@
           {
             "count": 1,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -584,6 +659,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -708,6 +787,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -789,6 +872,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -854,6 +941,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -925,6 +1016,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -975,7 +1070,7 @@
       "kind": "skill",
       "name": "format",
       "origin": "https://github.com/acme/skills",
-      "path": ".mindflayer/skills/github.com-acme-skills/format",
+      "path": ".mindweaver/skills/github.com-acme-skills/format",
       "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
       "source": {
         "directory": "github.com-acme-skills",
@@ -992,7 +1087,7 @@
       "kind": "skill",
       "name": "triage",
       "origin": "https://github.com/acme/skills",
-      "path": ".mindflayer/skills/github.com-acme-skills/triage",
+      "path": ".mindweaver/skills/github.com-acme-skills/triage",
       "revision": "8d1c3f0a2b4e6d8f0a1c3e5b7d9f1a3c5e7b9d2f",
       "source": {
         "directory": "github.com-acme-skills",
@@ -1035,6 +1130,10 @@
         {
           "count": 1,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [
@@ -1078,6 +1177,10 @@
         {
           "count": 2,
           "kind": "rule"
+        },
+        {
+          "count": 1,
+          "kind": "mcp"
         }
       ],
       "states": [
@@ -1110,7 +1213,7 @@
           "state": "authored"
         }
       ],
-      "total": 4
+      "total": 5
     },
     "projects": 4,
     "shelf": {
@@ -1122,6 +1225,10 @@
         {
           "count": 0,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [

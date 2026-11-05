@@ -6,7 +6,7 @@ import type { Said } from "./Said";
  */
 export type LoadedWorkspace = { 
 /**
- * The entry as the marker spells it: what `flayer unload` is given.
+ * The entry as the marker spells it: what `mindweaver unload` is given.
  */
 entry: string, 
 /**

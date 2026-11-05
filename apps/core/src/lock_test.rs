@@ -3,7 +3,7 @@
 //! The lock is the operating system's, taken on a file a writer opens for
 //! itself, so two acquisitions in one process keep each other out as two
 //! processes would: each test here plays both writers on one temporary
-//! `.mindflayer`.
+//! `.mindweaver`.
 
 use super::*;
 
@@ -13,7 +13,7 @@ use tempfile::TempDir;
 
 use crate::mother::random;
 
-/// A `.mindflayer` of its own, as a workspace holds one.
+/// A `.mindweaver` of its own, as a workspace holds one.
 fn folder() -> TempDir {
     TempDir::new().expect("make a temporary folder")
 }
@@ -195,14 +195,14 @@ fn no_holder_file_names_no_holder() {
 #[test]
 fn a_busy_workspace_says_which_process_holds_it_and_how_long_it_waited() {
     let error = LockError::Busy {
-        path: PathBuf::from("/w/.mindflayer/lock"),
+        path: PathBuf::from("/w/.mindweaver/lock"),
         pid: Some(4242),
         waited: Duration::from_secs(10),
     };
 
     assert_eq!(
         error.to_string(),
-        "/w/.mindflayer/lock: workspace busy: waited 10s for process 4242 to finish \
+        "/w/.mindweaver/lock: workspace busy: waited 10s for process 4242 to finish \
          writing to it; try again once it has"
     );
 }
@@ -210,14 +210,14 @@ fn a_busy_workspace_says_which_process_holds_it_and_how_long_it_waited() {
 #[test]
 fn a_busy_workspace_whose_holder_is_unknown_says_another_process_holds_it() {
     let error = LockError::Busy {
-        path: PathBuf::from("/w/.mindflayer/lock"),
+        path: PathBuf::from("/w/.mindweaver/lock"),
         pid: None,
         waited: Duration::from_millis(1500),
     };
 
     assert_eq!(
         error.to_string(),
-        "/w/.mindflayer/lock: workspace busy: waited 1.5s for another process to finish \
+        "/w/.mindweaver/lock: workspace busy: waited 1.5s for another process to finish \
          writing to it; try again once it has"
     );
 }
@@ -254,7 +254,7 @@ fn a_lock_in_a_folder_that_is_not_there_cannot_be_opened() {
 
 #[test]
 fn every_lock_error_names_the_lock_file() {
-    let path = PathBuf::from(format!("/{}/.mindflayer/lock", random::word()));
+    let path = PathBuf::from(format!("/{}/.mindweaver/lock", random::word()));
     let errors = [
         LockError::Busy {
             path: path.clone(),
@@ -295,4 +295,117 @@ fn a_writer_waits_a_bounded_while_that_a_person_waits_out() {
     assert!(WAIT <= Duration::from_secs(60), "{WAIT:?}");
     assert!(FIRST_PAUSE < LONGEST_PAUSE);
     assert!(LONGEST_PAUSE < WAIT);
+}
+
+// ---------------------------------------------------------------------------
+// What a thread's writers waited (`waits`)
+// ---------------------------------------------------------------------------
+
+/// A writer kept out until it gives up, as [`waits`] counts it: `wait` long
+/// at least, by the process holding the lock, which is this one.
+fn kept_out(dir: &TempDir, wait: Duration) {
+    let error = WorkspaceLock::acquire(dir.path(), wait).unwrap_err();
+    assert!(matches!(error, LockError::Busy { .. }), "{error:?}");
+}
+
+#[test]
+fn a_lock_nobody_holds_is_taken_with_no_wait_counted() {
+    let dir = folder();
+
+    let (lock, waited) = waits(|| WorkspaceLock::acquire(dir.path(), WAIT));
+
+    assert!(lock.unwrap().is_held());
+    assert_eq!(waited, Waited::default());
+}
+
+/// A wait that ends busy is a wait all the same, and the one most worth
+/// telling: all of it is counted, with the holder it names.
+#[test]
+fn a_writer_kept_out_counts_its_whole_wait_and_who_held_the_lock() {
+    let dir = folder();
+    let _held = WorkspaceLock::acquire(dir.path(), WAIT).unwrap();
+    let wait = Duration::from_millis(random::between(10, 40) as u64);
+
+    let ((), waited) = waits(|| kept_out(&dir, wait));
+
+    assert!(waited.total >= wait, "{waited:?} < {wait:?}");
+    assert_eq!(waited.holder, Some(std::process::id()));
+}
+
+#[test]
+fn a_writer_that_waited_for_the_holder_to_let_go_counts_the_wait() {
+    let dir = folder();
+    let held = WorkspaceLock::acquire(dir.path(), WAIT).unwrap();
+    let (asking, asked) = mpsc::channel();
+    let path = dir.path().to_path_buf();
+    let waiter = thread::spawn(move || {
+        asking.send(()).unwrap();
+        let started = Instant::now();
+        let (lock, waited) = waits(|| WorkspaceLock::acquire(&path, WAIT));
+        (lock.map(|lock| lock.is_held()), waited, started.elapsed())
+    });
+
+    asked.recv().unwrap();
+    thread::sleep(Duration::from_millis(100));
+    drop(held);
+    let (held, waited, took) = waiter.join().unwrap();
+
+    assert!(held.unwrap());
+    assert!(waited.total > Duration::ZERO, "{waited:?}");
+    assert!(waited.total <= took, "{waited:?} counted of {took:?}");
+    assert_eq!(waited.holder, Some(std::process::id()));
+}
+
+/// No writer of this thread's waited, though one of another's did: what a
+/// command waited is its own, whatever ran beside it.
+#[test]
+fn a_wait_on_another_thread_is_not_counted_on_this_one() {
+    let dir = folder();
+    let _held = WorkspaceLock::acquire(dir.path(), WAIT).unwrap();
+
+    let ((), waited) = waits(|| {
+        thread::scope(|scope| {
+            scope.spawn(|| kept_out(&dir, Duration::from_millis(20)));
+        })
+    });
+
+    assert_eq!(waited, Waited::default());
+}
+
+#[test]
+fn waits_counted_inside_others_count_toward_both() {
+    let dir = folder();
+    let _held = WorkspaceLock::acquire(dir.path(), WAIT).unwrap();
+    let wait = Duration::from_millis(15);
+
+    let (inner, outer) = waits(|| {
+        kept_out(&dir, wait);
+        let ((), inner) = waits(|| kept_out(&dir, wait));
+        inner
+    });
+
+    assert!(inner.total >= wait, "{inner:?}");
+    assert!(outer.total >= inner.total + wait, "{outer:?} of {inner:?}");
+}
+
+/// Work that panics, caught further up, leaves what was counted around it as
+/// it was, with what it waited before it panicked.
+#[test]
+fn a_panic_inside_waits_leaves_the_count_around_it_whole() {
+    let dir = folder();
+    let _held = WorkspaceLock::acquire(dir.path(), WAIT).unwrap();
+    let wait = Duration::from_millis(15);
+
+    let ((), outer) = waits(|| {
+        kept_out(&dir, wait);
+        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            waits(|| {
+                kept_out(&dir, wait);
+                panic!("the work fails");
+            })
+        }));
+        assert!(caught.is_err());
+    });
+
+    assert!(outer.total >= wait * 2, "{outer:?}");
 }

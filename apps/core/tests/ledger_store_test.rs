@@ -19,17 +19,17 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 
-use mindflayer_core::adapter::SystemClock;
-use mindflayer_core::ledger::{
+use mindweaver_core::adapter::SystemClock;
+use mindweaver_core::ledger::{
     Action, Carried, Forgotten, InstallRecord, LedgerError, Moved, Outcome, Source, Target,
 };
-use mindflayer_core::mother::ledger::RouteMother;
-use mindflayer_core::mother::{
+use mindweaver_core::mother::ledger::RouteMother;
+use mindweaver_core::mother::{
     random, ArtifactNameMother, ContentHashMother, InstallRecordMother, OriginMother,
     ProjectIdMother, RedactedMother, RevisionMother, TargetMother, UrlMother,
 };
-use mindflayer_core::value::{ArtifactName, Origin, Redacted};
-use mindflayer_core::{Agent, Clock, Kind, Ledger, ProjectId, SourceKind, LEDGER_FILE};
+use mindweaver_core::value::{ArtifactName, Origin, Redacted};
+use mindweaver_core::{Agent, Clock, Kind, Ledger, ProjectId, SourceKind, LEDGER_FILE};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -190,7 +190,7 @@ every_store![
     a_render_of_nothing_forgets_every_installation_of_its_kind,
     a_render_notes_each_file_it_made_and_forgets_each_it_did_not,
     a_render_that_cannot_be_recorded_leaves_the_last_render_whole,
-    whether_mindflayer_made_a_file_is_kept_per_project_and_path,
+    whether_mindweaver_made_a_file_is_kept_per_project_and_path,
     a_source_is_registered_once_and_found_by_its_coordinate,
     every_coordinate_is_a_source_of_its_own_with_a_folder_of_its_own,
     a_source_remembers_the_revision_it_was_last_gathered_at,
@@ -199,6 +199,7 @@ every_store![
     a_gathered_artifact_reads_back_with_its_source,
     gathering_a_name_again_from_one_source_replaces_it_and_from_another_adds_it,
     what_was_gathered_is_listed_by_name_then_source,
+    a_shelf_moved_moves_every_path_under_it_and_nothing_else,
     no_credential_typed_into_a_url_comes_back_from_the_store,
     a_url_typed_with_a_credential_and_without_it_is_one_source,
     nothing_stored_through_the_port_is_left_to_scrub,
@@ -295,7 +296,7 @@ fn source(store: &Store, url: &str) -> Source {
             SourceKind::Git,
             url,
             None,
-            mindflayer_core::DEFAULT_SUBDIRECTORY,
+            mindweaver_core::DEFAULT_SUBDIRECTORY,
         )
         .unwrap()
 }
@@ -355,7 +356,7 @@ fn a_new_store_records_nothing(mut store: Store) {
 fn a_refusal_names_where_the_store_is_kept_and_records_nothing(mut store: Store) {
     // A source the store never registered, which nothing it lists could
     // name: an artifact of it, and an installation pointing at it.
-    let unregistered = mindflayer_core::mother::SourceMother::random();
+    let unregistered = mindweaver_core::mother::SourceMother::random();
     let name = ArtifactNameMother::random();
     let mut pointing = InstallRecordMother::skill(&name);
     pointing.source_id = Some(unregistered.id);
@@ -1083,7 +1084,7 @@ fn a_migration_moves_each_installation_fills_a_missing_hash_and_logs_each_line(m
 /// were kept. `MovedMother::skill` names the copies an install writes
 /// today, which a store given them would seem to leave where they were.
 fn moved_skill(name: &str) -> Moved {
-    let mut moved = mindflayer_core::mother::MovedMother::skill(name);
+    let mut moved = mindweaver_core::mother::MovedMother::skill(name);
     moved.targets = moved
         .targets
         .into_iter()
@@ -1299,7 +1300,7 @@ fn a_render_that_cannot_be_recorded_leaves_the_last_render_whole(mut store: Stor
     assert!(store.created("collapse", "AGENTS.md").unwrap());
 }
 
-fn whether_mindflayer_made_a_file_is_kept_per_project_and_path(mut store: Store) {
+fn whether_mindweaver_made_a_file_is_kept_per_project_and_path(mut store: Store) {
     let [here, there] = <[String; 2]>::try_from(RouteMother::distinct(2)).unwrap();
     store.set_created(&here, "AGENTS.md", true).unwrap();
     store.set_created(&here, "AGENTS.md", true).unwrap();
@@ -1329,7 +1330,7 @@ fn coordinate() -> (String, Option<String>, String) {
         UrlMother::clean(),
         random::chance().then(random::word),
         random::pick(&[
-            String::from(mindflayer_core::DEFAULT_SUBDIRECTORY),
+            String::from(mindweaver_core::DEFAULT_SUBDIRECTORY),
             random::word(),
         ]),
     )
@@ -1528,7 +1529,7 @@ fn a_gathered_artifact_reads_back_with_its_source(store: Store) {
     let revision = RevisionMother::random();
     store.saw_source(from.id, Some(revision.as_str())).unwrap();
     let name = ArtifactNameMother::random();
-    let path = format!(".mindflayer/skills/{}/{name}", from.directory);
+    let path = format!(".mindweaver/skills/{}/{name}", from.directory);
     let summary = random::chance().then(|| random::text(30));
 
     store
@@ -1606,6 +1607,60 @@ fn gathering_a_name_again_from_one_source_replaces_it_and_from_another_adds_it(m
     assert_eq!(replaced[0].summary, None);
     assert_eq!(replaced[0].revision.as_ref(), Some(&revision));
     assert_eq!(of(&second)[0].summary.as_deref(), Some("Other"));
+}
+
+fn a_shelf_moved_moves_every_path_under_it_and_nothing_else(mut store: Store) {
+    let from = source(&store, &UrlMother::https());
+    let names = distinct_names(3);
+    let under = format!(".{}/skills/{}", random::word(), random::word());
+    store
+        .record(
+            &from,
+            Kind::Skill,
+            &names[0],
+            &format!("{under}/a"),
+            None,
+            None,
+        )
+        .unwrap();
+    store
+        .record(
+            &from,
+            Kind::Rule,
+            &names[1],
+            &format!("{under}/b.md"),
+            None,
+            None,
+        )
+        .unwrap();
+    // Beside it, spelled to look like it: a prefix of characters is not
+    // a folder.
+    let beside = format!("{under}_beside/c");
+    store
+        .record(&from, Kind::Skill, &names[2], &beside, None, None)
+        .unwrap();
+
+    let moved = store
+        .shelf_moved(&format!("{under}/"), "elsewhere/")
+        .unwrap();
+
+    store.reopen();
+    assert_eq!(moved, 2);
+    let mut paths: Vec<String> = store
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|gathered| gathered.path)
+        .collect();
+    paths.sort();
+    let mut expected = vec![
+        String::from("elsewhere/a"),
+        String::from("elsewhere/b.md"),
+        beside,
+    ];
+    expected.sort();
+    assert_eq!(paths, expected);
+    assert_eq!(store.shelf_moved("nowhere/", "anywhere/").unwrap(), 0);
 }
 
 fn what_was_gathered_is_listed_by_name_then_source(mut store: Store) {

@@ -6,6 +6,7 @@ use std::fs;
 use tempfile::TempDir;
 
 use super::*;
+use crate::create::Start;
 use crate::template::TEMPLATES_DIR;
 use crate::MIND_DIR;
 
@@ -14,8 +15,24 @@ use crate::MIND_DIR;
 fn fixture() -> (TempDir, MindProject) {
     let dir = TempDir::new().unwrap();
     let (project, _) = MindProject::init(dir.path().join("api")).unwrap();
-    lifecycle::add(None, &project, Kind::Skill, "deploy", "Ship it", None).unwrap();
-    lifecycle::add(None, &project, Kind::Rule, "git/commits", "Say why", None).unwrap();
+    lifecycle::add(
+        None,
+        &project,
+        Kind::Skill,
+        "deploy",
+        "Ship it",
+        Start::Scratch,
+    )
+    .unwrap();
+    lifecycle::add(
+        None,
+        &project,
+        Kind::Rule,
+        "git/commits",
+        "Say why",
+        Start::Scratch,
+    )
+    .unwrap();
     (dir, project)
 }
 
@@ -108,7 +125,7 @@ fn what_add_would_refuse_is_said_by_its_code_and_in_its_words() {
     ] {
         let judged = added(None, &project, kind, name, description, template);
         let written = match template {
-            None => lifecycle::add(None, &project, kind, name, description, None)
+            None => lifecycle::add(None, &project, kind, name, description, Start::Scratch)
                 .map(|_| ())
                 .expect_err("add wrote it"),
             Some(template) => template::find(None, &project, kind, template)
@@ -174,7 +191,7 @@ fn what_validate_would_warn_of_in_what_add_writes_is_said_as_it_then_says_it() {
         Kind::Skill,
         "review",
         "Read it",
-        Some(&template),
+        Start::Template(&template),
     )
     .unwrap();
     assert_eq!(judged.issues, validated(&project, "skill:review"));
@@ -284,12 +301,12 @@ fn what_an_edit_would_refuse_is_said_by_its_code_and_in_its_words() {
     }
 }
 
-/// The workspace's own are judged where `flayer edit` finds them: in its
+/// The workspace's own are judged where `mindweaver edit` finds them: in its
 /// library, held to the folder it keeps them in.
 #[test]
 fn the_workspaces_own_are_judged_in_its_library() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let own = workspace.own();
     lifecycle::add(
         Some(&workspace),
@@ -297,7 +314,7 @@ fn the_workspaces_own_are_judged_in_its_library() {
         Kind::Skill,
         "deploy",
         "Ship it",
-        None,
+        Start::Scratch,
     )
     .unwrap();
 

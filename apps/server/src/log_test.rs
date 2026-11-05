@@ -37,3 +37,11 @@ fn the_token_is_scrubbed_wherever_else_it_turns_up() {
         "GET /api/v1/transcript 200"
     );
 }
+
+#[test]
+fn a_time_is_said_in_whole_milliseconds() {
+    assert_eq!(millis(Duration::ZERO), "0ms");
+    assert_eq!(millis(Duration::from_micros(999)), "0ms");
+    assert_eq!(millis(Duration::from_micros(1_500)), "1ms");
+    assert_eq!(millis(Duration::from_millis(5_508)), "5508ms");
+}

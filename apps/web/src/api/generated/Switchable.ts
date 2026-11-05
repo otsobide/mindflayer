@@ -3,7 +3,7 @@ import type { Reason } from "./Reason";
 
 /**
  * A workspace a front end that stays on one may switch to, as
- * [`switchable`] lists it: the row `flayer workspaces` prints, with how it
+ * [`switchable`] lists it: the row `mindweaver workspaces` prints, with how it
  * stands with the front end.
  *
  * Beside the row rather than in it, as [`crate::view::KnownHere`] stands
@@ -44,7 +44,7 @@ path: string,
 default: boolean, 
 /**
  * Whether the default workspace's `known` names it, which is what
- * `flayer workspaces forget` takes out. False for the default itself,
+ * `mindweaver workspaces forget` takes out. False for the default itself,
  * and for the one in use when nothing remembers it.
  */
 remembered: boolean, 
@@ -54,7 +54,7 @@ remembered: boolean,
 in_use: boolean, 
 /**
  * How many projects it links, each directory once, stale ones among
- * them: its own count, which says which of several flayers is which.
+ * them: its own count, which says which of several weavers is which.
  */
 projects: number, 
 /**

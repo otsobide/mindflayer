@@ -11,23 +11,23 @@ pub mod mother;
 pub mod panel;
 
 pub use clap::Parser;
-pub use mindflayer_cli::install::state::{Focus, Screen, Step};
-pub use mindflayer_cli::install::{self as install_screen, ui};
-pub use mindflayer_cli::tui;
-pub use mindflayer_cli::tui::state::{
+pub use mindweaver_cli::install::state::{Focus, Screen, Step};
+pub use mindweaver_cli::install::{self as install_screen, ui};
+pub use mindweaver_cli::tui;
+pub use mindweaver_cli::tui::state::{
     AgentsLine, App, Done, Holder, Mode, Runner, Scope, Task, View,
 };
-pub use mindflayer_cli::{
-    agent_homes, default_home, run, run_flayer_cli, run_flayer_cli_watched, run_watched,
-    AgentHomeOptions, Cli, CliError, Failure, FlayerCli, Lookup, Outcome,
+pub use mindweaver_cli::{
+    agent_homes, default_home, run, run_watched, run_weaver_cli, run_weaver_cli_watched,
+    AgentHomeOptions, Cli, CliError, Failure, Lookup, Outcome, WeaverCli,
 };
-pub use mindflayer_core::gather::{Progress, Watch};
-pub use mindflayer_core::install::Standing;
-pub use mindflayer_core::ledger::Ledger;
-pub use mindflayer_core::{AgentHomes, FlayerWorkspace, Reason};
-pub use mindflayer_core::{
-    Kind, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_CONFIG, MIND_DIR, SETTINGS_FILE,
-    SETTINGS_JSON_FILE,
+pub use mindweaver_core::gather::{Progress, Watch};
+pub use mindweaver_core::install::Standing;
+pub use mindweaver_core::ledger::Ledger;
+pub use mindweaver_core::{AgentHomes, Reason, WeaverWorkspace};
+pub use mindweaver_core::{
+    Kind, MindProject, MIND_CONFIG, MIND_DIR, SETTINGS_FILE, SETTINGS_JSON_FILE, WEAVER_CONFIG,
+    WEAVER_DIR,
 };
 pub use ratatui::backend::TestBackend;
 pub use ratatui::crossterm::event::KeyCode;
@@ -87,8 +87,12 @@ fn gives(args: &[&str], option: &str) -> bool {
 
 /// Every variable that would send a spawned binary outside the fixture: to
 /// the real home, a workspace the developer's shell activated, or the real
-/// agent folders.
-pub const CLEARED: [&str; 5] = [
+/// agent folders. Under Mindweaver's names and Mindflayer's, which a binary
+/// still reads while the new ones are not set, so a shell an older build
+/// activated reaches no test either.
+pub const CLEARED: [&str; 7] = [
+    "MINDWEAVER_HOME",
+    "MINDWEAVER_WORKSPACE",
     "MINDFLAYER_HOME",
     "MINDFLAYER_WORKSPACE",
     "CLAUDE_CONFIG_DIR",
@@ -173,7 +177,7 @@ fn command(
 ) -> std::process::Command {
     let program = match binary {
         "mind" => env!("CARGO_BIN_EXE_mind"),
-        "flayer" => env!("CARGO_BIN_EXE_flayer"),
+        "mindweaver" => env!("CARGO_BIN_EXE_mindweaver"),
         _ => panic!("no binary called {binary}"),
     };
     let mut command = std::process::Command::new(program);
@@ -219,10 +223,10 @@ pub fn parsed_mind(dir: &Path, args: &[&str]) -> Cli {
     Cli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"))
 }
 
-/// What `flayer ...` parses into, through the second binary's parser.
-pub fn parsed_flayer(dir: &Path, args: &[&str]) -> FlayerCli {
-    let line = line("flayer", args, dir);
-    FlayerCli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"))
+/// What `mindweaver ...` parses into, through the second binary's parser.
+pub fn parsed_weaver(dir: &Path, args: &[&str]) -> WeaverCli {
+    let line = line("mindweaver", args, dir);
+    WeaverCli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}"))
 }
 
 /// Run `mind ...`.
@@ -230,9 +234,9 @@ pub fn mind(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
     run(&parsed_mind(dir, args))
 }
 
-/// Run `flayer ...`.
-pub fn flayer(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
-    run_flayer_cli(&parsed_flayer(dir, args))
+/// Run `mindweaver ...`.
+pub fn weaver(dir: &Path, args: &[&str]) -> Result<Outcome, Failure> {
+    run_weaver_cli(&parsed_weaver(dir, args))
 }
 
 /// Run a line a front end built (`Task::commands`), its binary first, with
@@ -253,8 +257,8 @@ pub fn typed(dir: &Path, words: &[String]) -> Result<Outcome, Failure> {
         "mind" => {
             run(&Cli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}")))
         }
-        "flayer" => run_flayer_cli(
-            &FlayerCli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}")),
+        "mindweaver" => run_weaver_cli(
+            &WeaverCli::try_parse_from(&line).unwrap_or_else(|error| panic!("{line:?}: {error}")),
         ),
         other => panic!("no binary called {other}"),
     }
@@ -344,7 +348,7 @@ pub fn directory_for(root: &Path, kind: Kind) -> PathBuf {
 /// marks, whose one folder does.
 pub fn copies(root: &Path, name: &str) -> Vec<PathBuf> {
     let project = MindProject::open(root).expect("an initialized mind project");
-    let targets = mindflayer_core::install::targets(&project, Kind::Skill)
+    let targets = mindweaver_core::install::targets(&project, Kind::Skill)
         .expect("somewhere to install into");
     assert!(!targets.is_empty(), "{}: no target", root.display());
     targets
@@ -356,8 +360,8 @@ pub fn copies(root: &Path, name: &str) -> Vec<PathBuf> {
 /// Where the workspace at `root` keeps its own of a kind, asked of the
 /// workspace as [`directory_for`] asks a project.
 pub fn own_directory_for(root: &Path, kind: Kind) -> PathBuf {
-    FlayerWorkspace::open(root)
-        .expect("an initialized flayer workspace")
+    WeaverWorkspace::open(root)
+        .expect("an initialized weaver workspace")
         .own()
         .directory_for(kind)
         .unwrap()
@@ -376,13 +380,13 @@ pub fn skill_file(name: &str, description: &str) -> String {
 /// A workspace with `alpha` and `beta` linked, each holding one skill.
 pub fn workspace_with_two() -> TempDir {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     for name in ["alpha", "beta"] {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
         new_project(&root);
         write_skill(&root, name, &skill_file(name, "A skill"));
-        flayer(dir.path(), &["link", name]).unwrap();
+        weaver(dir.path(), &["link", name]).unwrap();
     }
     dir
 }
@@ -390,7 +394,7 @@ pub fn workspace_with_two() -> TempDir {
 /// A workspace with `gamma` and `delta` initialized under it but not linked.
 pub fn workspace_with_two_unlinked() -> TempDir {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     for name in ["gamma", "delta"] {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
@@ -399,13 +403,13 @@ pub fn workspace_with_two_unlinked() -> TempDir {
     dir
 }
 
-/// Run `flayer ...` with `home` as the home directory.
-pub fn flayer_at_home(dir: &Path, home: &Path, args: &[&str]) -> Result<Outcome, Failure> {
+/// Run `mindweaver ...` with `home` as the home directory.
+pub fn weaver_at_home(dir: &Path, home: &Path, args: &[&str]) -> Result<Outcome, Failure> {
     let mut args: Vec<&str> = args.to_vec();
     let home = home.to_string_lossy().into_owned();
     args.push("--home");
     args.push(&home);
-    flayer(dir, &args)
+    weaver(dir, &args)
 }
 
 /// Run `mind ...` with `home` as the home directory.
@@ -571,38 +575,26 @@ pub fn older_project(root: &Path) {
 /// Make `root`, a folder, a project the way a version 3 `mind init` did: a
 /// git repository whose `.mind` holds a `settings.json` naming every agent,
 /// local, and authoring in `skills/` and `rules/`, and the `.gitignore` that
-/// keeps it out of git. Written here as that build wrote it, so these tests
-/// keep such a project whatever `mind init` writes.
+/// keeps it out of git ([`ProjectMother::json`]), so these tests keep such a
+/// project whatever `mind init` writes.
+///
+/// [`ProjectMother::json`]: mindweaver_core::mother::ProjectMother::json
 pub fn json_project(root: &Path) {
     gix::init(root).expect("initialize a repository");
-    let mind = root.join(MIND_DIR);
-    fs::create_dir_all(&mind).unwrap();
-    fs::write(mind.join(".gitignore"), mindflayer_core::MIND_IGNORE).unwrap();
-    let name = root.file_name().unwrap().to_str().unwrap();
-    fs::write(
-        mind.join(SETTINGS_JSON_FILE),
-        format!(
-            "{{\n  \"version\": 3,\n  \"id\": \"{}\",\n  \"name\": \"{name}\",\n  \
-             \"agents\": [\"claude\", \"codex\", \"opencode\"],\n  \"share\": \"local\",\n  \
-             \"edit_tracked\": false,\n  \"directories\": {{\n    \"skills\": \"skills\",\n    \
-             \"rules\": \"rules\"\n  }}\n}}\n",
-            mindflayer_core::ProjectId::generate()
-        ),
-    )
-    .unwrap();
-    for folder in ["skills", "rules"] {
-        fs::create_dir_all(root.join(folder)).unwrap();
-    }
+    mindweaver_core::mother::ProjectMother::json(
+        root,
+        &mindweaver_core::mother::SettingsMother::authoring(),
+    );
 }
 
 /// A workspace with `projects` linked and a shelf holding `skills`.
-pub fn shelved(projects: &[&str], skills: &[&str]) -> (TempDir, FlayerWorkspace, Ledger) {
+pub fn shelved(projects: &[&str], skills: &[&str]) -> (TempDir, WeaverWorkspace, Ledger) {
     shelved_with(projects, skills, new_project)
 }
 
-/// [`shelved`], each project made the way an older Mindflayer made it
+/// [`shelved`], each project made the way an older Mindweaver made it
 /// ([`older_project`]).
-pub fn shelved_older(projects: &[&str], skills: &[&str]) -> (TempDir, FlayerWorkspace, Ledger) {
+pub fn shelved_older(projects: &[&str], skills: &[&str]) -> (TempDir, WeaverWorkspace, Ledger) {
     shelved_with(projects, skills, older_project)
 }
 
@@ -611,14 +603,14 @@ fn shelved_with(
     projects: &[&str],
     skills: &[&str],
     make: fn(&Path),
-) -> (TempDir, FlayerWorkspace, Ledger) {
+) -> (TempDir, WeaverWorkspace, Ledger) {
     let dir = TempDir::new().unwrap();
-    flayer(dir.path(), &["init"]).unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
     for name in projects {
         let root = dir.path().join(name);
         fs::create_dir(&root).unwrap();
         make(&root);
-        flayer(dir.path(), &["link", name]).unwrap();
+        weaver(dir.path(), &["link", name]).unwrap();
     }
 
     let files: Vec<(String, String)> = skills
@@ -635,18 +627,18 @@ fn shelved_with(
         .map(|(p, b)| (p.as_str(), b.as_str()))
         .collect();
     let source = repository(&borrowed);
-    flayer(
+    weaver(
         dir.path(),
         &["gather", "git", &source.path().to_string_lossy()],
     )
     .unwrap();
 
-    let workspace = FlayerWorkspace::locate(dir.path()).unwrap().unwrap();
+    let workspace = WeaverWorkspace::locate(dir.path()).unwrap().unwrap();
     let ledger = workspace.ledger().unwrap();
     (dir, workspace, ledger)
 }
 
-pub fn screen_for(workspace: &FlayerWorkspace, ledger: &Ledger) -> Screen {
+pub fn screen_for(workspace: &WeaverWorkspace, ledger: &Ledger) -> Screen {
     let (projects, _) = install_screen::registered(workspace);
     install_screen::build(workspace, ledger, projects).unwrap()
 }
@@ -705,20 +697,26 @@ pub fn press_and_run(app: &mut App, code: KeyCode) -> Option<Task> {
 }
 
 pub fn tui_drawn(app: &App) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(110, 30)).unwrap();
+    tui_drawn_at(app, 110, 30)
+}
+
+/// The screen drawn into a terminal `width` columns wide and `height` rows
+/// high, a row a line.
+pub fn tui_drawn_at(app: &App, width: u16, height: u16) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal.draw(|frame| tui::ui::draw(app, frame)).unwrap();
     terminal
         .backend()
         .buffer()
         .content()
-        .chunks(110)
+        .chunks(usize::from(width))
         .map(|line| line.iter().map(|cell| cell.symbol()).collect::<String>())
         .collect::<Vec<_>>()
         .join("\n")
 }
 
 pub fn registry(dir: &Path) -> String {
-    fs::read_to_string(dir.join(FLAYER_DIR).join(FLAYER_CONFIG)).unwrap()
+    fs::read_to_string(dir.join(WEAVER_DIR).join(WEAVER_CONFIG)).unwrap()
 }
 
 /// `workspace_with_two`, plus `gamma`, a mind project nobody linked, and
@@ -733,7 +731,7 @@ pub fn workspace_with_candidates() -> TempDir {
 }
 
 /// Install `deploy` from the shelf into `collapse`, through the screen.
-pub fn installed(dir: &Path, workspace: &FlayerWorkspace, ledger: &Ledger) {
+pub fn installed(dir: &Path, workspace: &WeaverWorkspace, ledger: &Ledger) {
     let mut screen = screen_for(workspace, ledger);
     press(&mut screen, &[KeyCode::Right, KeyCode::Char(' ')]);
     install_screen::apply(workspace, &screen, &Lookup::default());
@@ -745,7 +743,7 @@ pub fn installed(dir: &Path, workspace: &FlayerWorkspace, ledger: &Ledger) {
 /// `workspace_with_two`, with a skill of the workspace's own.
 pub fn workspace_with_own() -> TempDir {
     let dir = workspace_with_two();
-    flayer(
+    weaver(
         dir.path(),
         &[
             "add",

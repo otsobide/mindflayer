@@ -13,6 +13,7 @@
 //! everything here is held to the rule every report is: each field by its
 //! name, a contract once printed.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Serialize, Serializer};
@@ -20,8 +21,9 @@ use serde::{Serialize, Serializer};
 use crate::artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
 use crate::catalog::DiscoveryFailure;
 use crate::kind::Kind;
+use crate::mcp::{Expressibility, Input, InputKind, Transport, TransportType};
 use crate::paths;
-use crate::value::ArtifactName;
+use crate::value::{ArtifactName, InputName, Redacted, VariableName};
 
 /// One artifact in full, as `show` shows it: what it is, where it is, what
 /// its front matter declares that `show` prints, and the body after it.
@@ -68,6 +70,18 @@ pub struct Shown {
     pub metadata: Option<Vec<(String, String)>>,
     /// The files a rule is about, as glob patterns, when it says.
     pub paths: Option<Vec<String>>,
+    /// How an MCP server is started or reached, as its definition says:
+    /// none for a skill or a rule, which no agent starts.
+    pub transport: Option<ShownTransport>,
+    /// What somebody supplies for an MCP server, each input in the order
+    /// its definition declares them, every one by the variable it is read
+    /// from and never by a value, which no definition holds: none for a
+    /// skill or a rule.
+    pub inputs: Option<Vec<ShownInput>>,
+    /// What each agent cannot be given of an MCP server's definition, every
+    /// agent's in report order ([`crate::mcp::McpDefinition::expressibility`]):
+    /// none for a skill or a rule, which every agent reads as it is.
+    pub expressibility: Option<Vec<Expressibility>>,
     /// What follows the front matter, as the file has it now.
     pub body: String,
 }
@@ -91,6 +105,9 @@ impl Shown {
             compatibility: None,
             metadata: None,
             paths: None,
+            transport: None,
+            inputs: None,
+            expressibility: None,
             body,
         };
         match artifact.declared() {
@@ -103,8 +120,107 @@ impl Shown {
             Declared::Rule(manifest) => {
                 shown.paths = manifest.paths.stated().cloned();
             }
+            // What each agent cannot be given of its transport and inputs
+            // is core's to say, beside them.
+            Declared::Mcp(definition) => {
+                shown.transport = Some(ShownTransport::of(&definition.transport));
+                shown.inputs = Some(definition.inputs.iter().map(ShownInput::of).collect());
+                shown.expressibility = Some(definition.expressibility());
+            }
         }
         Ok(shown)
+    }
+}
+
+/// How an MCP server is started or reached, as `show` lays it out: the
+/// transport by the word its definition writes as `type`, then what that
+/// transport holds, as written, a key of the other transport empty.
+///
+/// One record for every transport rather than a variant each, so that its
+/// `type` goes out as the word the format writes ([`TransportType::slug`])
+/// rather than one a derive would spell from a variant. Its address is held
+/// as the definition holds it, without any credential its userinfo was
+/// typed with ([`Redacted`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ShownTransport {
+    /// `stdio` for a program, `http` or `sse` for an address.
+    #[serde(rename = "type")]
+    pub transport: TransportType,
+    /// The program an agent starts; none for an address.
+    pub command: Option<String>,
+    /// What the program is started with, in order.
+    pub args: Vec<String>,
+    /// What the program's environment is given, each value as written,
+    /// an input's placeholder among it.
+    pub env: BTreeMap<String, String>,
+    /// The folder the program is started in, when the definition names
+    /// one.
+    pub cwd: Option<String>,
+    /// Where the server is; none for a program.
+    pub url: Option<Redacted>,
+    /// What every request to the address carries, each value as written.
+    pub headers: BTreeMap<String, String>,
+}
+
+impl ShownTransport {
+    /// What `transport` holds, laid out.
+    pub fn of(transport: &Transport) -> ShownTransport {
+        let mut shown = ShownTransport {
+            transport: transport.kind(),
+            command: None,
+            args: Vec::new(),
+            env: BTreeMap::new(),
+            cwd: None,
+            url: None,
+            headers: BTreeMap::new(),
+        };
+        match transport {
+            Transport::Stdio(stdio) => {
+                shown.command = Some(stdio.command.clone());
+                shown.args.clone_from(&stdio.args);
+                shown.env.clone_from(&stdio.env);
+                shown.cwd.clone_from(&stdio.cwd);
+            }
+            Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                shown.url = Some(endpoint.url.clone());
+                shown.headers.clone_from(&endpoint.headers);
+            }
+        }
+        shown
+    }
+}
+
+/// One input of an MCP server, as `show` lays it out: what it is called
+/// where it is written, where that may be, by the word its definition
+/// writes as `kind`, and the variable it is read from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct ShownInput {
+    pub name: InputName,
+    pub kind: InputKind,
+    /// What it is, for whoever supplies it, when the definition says.
+    pub description: Option<String>,
+    pub required: bool,
+    pub secret: bool,
+    /// The environment variable an agent reads it from: what a secret is
+    /// said by, its value being nowhere in the definition.
+    pub env_var: Option<VariableName>,
+}
+
+impl ShownInput {
+    /// `input`, laid out.
+    pub fn of(input: &Input) -> ShownInput {
+        ShownInput {
+            name: input.name.clone(),
+            kind: input.kind,
+            description: input.description.clone(),
+            required: input.required,
+            secret: input.secret,
+            env_var: input.env_var.clone(),
+        }
     }
 }
 

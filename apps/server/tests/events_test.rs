@@ -8,7 +8,7 @@ use std::io::{Read, Write};
 use std::sync::mpsc;
 
 use common::*;
-use mindflayer_server::{Event, CAPACITY};
+use mindweaver_server::{Event, CAPACITY};
 
 #[tokio::test]
 async fn the_stream_needs_the_launch_token() {

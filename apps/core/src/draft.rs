@@ -13,7 +13,7 @@
 //! - **What `validate` would say of it** once written: the artifact read
 //!   from what it would hold, as discovery reads one from the disk, and
 //!   judged by [`Artifact::validate`], so each issue's message is word for
-//!   word what `flayer validate` prints of it then. Nothing, when what
+//!   word what `mindweaver validate` prints of it then. Nothing, when what
 //!   would be written cannot be told: `add` refusing before it builds
 //!   anything, or a skill whose front matter does not read, which the
 //!   refusal says.
@@ -32,7 +32,7 @@ use crate::create;
 use crate::kind::Kind;
 use crate::lifecycle;
 use crate::template;
-use crate::workspace::{FlayerWorkspace, MindProject};
+use crate::workspace::{MindProject, WeaverWorkspace};
 
 /// What core says of a draft: what `validate` would say of it once written,
 /// and why the command writing it would write nothing, when it would.
@@ -71,7 +71,7 @@ impl Judged {
 /// check `add` makes before it writes, and then whether something is where
 /// it would go already, which `add` leaves alone and refuses.
 pub fn added(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -85,7 +85,10 @@ pub fn added(
         Ok(template) => template,
         Err(error) => return Judged::refused(error.code(), &error),
     };
-    let scaffold = match create::plan(project, kind, name, description, template.as_ref()) {
+    let start = template
+        .as_ref()
+        .map_or(create::Start::Scratch, create::Start::Template);
+    let scaffold = match create::plan(project, kind, name, description, start) {
         Ok(scaffold) => scaffold,
         Err(error) => return Judged::refused(error.code(), &error),
     };
@@ -108,7 +111,7 @@ pub fn added(
 /// ([`lifecycle::replaceable`]), and `validate`'s verdict of the artifact
 /// holding them, in the place it is.
 pub fn edited(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     reference: &Reference,
     contents: &str,
@@ -130,6 +133,21 @@ pub fn edited(
             project.root(),
             contents,
         )),
+        // Told of what sits beside it, as discovery tells it, so that the
+        // verdict is the one `validate` gives once it is written.
+        Kind::Mcp => Artifact::mcp_holding(
+            &target.path,
+            target.name.to_string(),
+            project.root(),
+            contents,
+        )
+        .ok()
+        .map(|mut artifact| {
+            if let Some(folder) = target.path.parent() {
+                artifact.twinned(lifecycle::twins_beside(folder, &target.name, &target.path));
+            }
+            artifact
+        }),
     };
     Judged {
         issues: artifact

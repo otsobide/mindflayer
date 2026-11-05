@@ -1,13 +1,13 @@
-//! `flayer gather`: collecting artifacts onto the workspace's shelf, and
+//! `mindweaver gather`: collecting artifacts onto the workspace's shelf, and
 //! listing everything that can be installed from elsewhere.
 
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindflayer_core::gather::{self, Report, Request, Scrub, Watch};
-use mindflayer_core::install::{offered_by_loads, Offer};
-use mindflayer_core::url::redacted;
-use mindflayer_core::{FlayerWorkspace, Kind};
+use mindweaver_core::gather::{self, Report, Request, Scrub, Watch};
+use mindweaver_core::install::{offered_by_loads, Offer};
+use mindweaver_core::url::redacted;
+use mindweaver_core::{Kind, WeaverWorkspace};
 
 use super::{reading_workspace, workspace_here};
 use crate::render::{indent, json_or_text, plural, printable, table};
@@ -54,11 +54,11 @@ pub(crate) fn run_gather(
     }
 }
 
-/// `flayer gather list`: what can be installed from elsewhere, from a
+/// `mindweaver gather list`: what can be installed from elsewhere, from a
 /// ledger read without being made, with each offer kept in `found`, for
 /// `--json` to print in place of the text. A workspace that has gathered
 /// nothing has no database, and listing that is no reason to create one.
-fn shelf(workspace: &FlayerWorkspace, found: &mut Option<Vec<Offer>>) -> Result<Outcome, Failure> {
+fn shelf(workspace: &WeaverWorkspace, found: &mut Option<Vec<Offer>>) -> Result<Outcome, Failure> {
     let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
     // What the workspaces it loads offer first, as the install screen
     // orders them; what they cannot offer is a warning beside the rest, not
@@ -74,7 +74,7 @@ fn shelf(workspace: &FlayerWorkspace, found: &mut Option<Vec<Offer>>) -> Result<
     for gathered in ledger.gathered().map_err(CliError::from)? {
         // Listed only if it could be installed: a name that is not one folder
         // name never can be, wherever it came from.
-        if mindflayer_core::install::is_folder_name(&gathered.name) {
+        if mindweaver_core::install::is_folder_name(&gathered.name) {
             offers.push(Offer::Shelf(gathered));
         } else {
             stderr.push(
@@ -123,7 +123,7 @@ impl Scrubbed {
 }
 
 /// What the scrub that opening the ledger to write runs took out
-/// ([`mindflayer_core::FlayerWorkspace::ledger_to_write`]), said the way a
+/// ([`mindweaver_core::WeaverWorkspace::ledger_to_write`]), said the way a
 /// person can act on: every source it scrubbed now needs its credential from
 /// a git credential helper.
 pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
@@ -132,7 +132,7 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
         .iter()
         .map(|source| {
             format!(
-                "note: {}: the user name, password or token an older Mindflayer stored in this \
+                "note: {}: the user name, password or token an older Mindweaver stored in this \
                  URL is taken out; gathering it again needs a git credential helper that has it",
                 source.url
             )
@@ -143,7 +143,7 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
         0 => {}
         1 => notes.push(
             String::from(
-                "note: 1 action log entry: the user name, password or token an older Mindflayer \
+                "note: 1 action log entry: the user name, password or token an older Mindweaver \
                  stored in a URL in it is taken out",
             )
             .into(),
@@ -151,7 +151,7 @@ pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
         entries => notes.push(
             format!(
                 "note: {entries} action log entries: the user names, passwords or tokens an \
-                 older Mindflayer stored in URLs in them are taken out"
+                 older Mindweaver stored in URLs in them are taken out"
             )
             .into(),
         ),
@@ -241,18 +241,18 @@ fn gathered(url: &str, report: &Report) -> Outcome {
 /// comes from, spelled as `--from` takes it.
 ///
 /// Empty, it says how to fill it, and suggests loading only when nothing is
-/// loaded yet; `flayer load` on its own lists what is.
+/// loaded yet; `mindweaver load` on its own lists what is.
 fn shelf_listing(shelf: &[Offer], nothing_loaded: bool) -> String {
     if shelf.is_empty() {
         return if nothing_loaded {
             String::from(
-                "nothing gathered yet\n  take some with `flayer gather git <url>`, \
-                 or offer a workspace's own with `flayer load <path>`\n",
+                "nothing gathered yet\n  take some with `mindweaver gather git <url>`, \
+                 or offer a workspace's own with `mindweaver load <path>`\n",
             )
         } else {
             String::from(
                 "nothing gathered yet, and the loaded workspaces offer nothing\n  \
-                 take some with `flayer gather git <url>`; `flayer load` lists what is loaded\n",
+                 take some with `mindweaver gather git <url>`; `mindweaver load` lists what is loaded\n",
             )
         };
     }

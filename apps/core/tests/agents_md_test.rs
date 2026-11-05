@@ -6,14 +6,14 @@ mod common;
 use std::fs;
 use std::path::PathBuf;
 
-use mindflayer_core::agents_md::{
+use mindweaver_core::agents_md::{
     self, AgentsMdError, Malformed, Rendered, Warning, Written, BEGIN, CODEX_BUDGET, CODEX_NEAR,
     END,
 };
-use mindflayer_core::{AgentHomes, Artifact, FlayerWorkspace, MindProject};
+use mindweaver_core::{AgentHomes, Artifact, MindProject, Names, WeaverWorkspace};
 use tempfile::TempDir;
 
-/// What a team's `AGENTS.md` holds before Mindflayer writes in it.
+/// What a team's `AGENTS.md` holds before Mindweaver writes in it.
 const TEAM: &str = "# Working here\n\nRun `make test` before every push.\n";
 
 /// No agent's own folder, as a front end hands over when a test pins them.
@@ -28,7 +28,7 @@ const NO_HOMES: AgentHomes = AgentHomes {
 /// render from, in a git work tree whose root is the workspace's.
 struct Fixture {
     dir: TempDir,
-    workspace: FlayerWorkspace,
+    workspace: WeaverWorkspace,
     project: MindProject,
     library: PathBuf,
 }
@@ -42,7 +42,7 @@ fn fixture() -> Fixture {
 /// The same, in no git work tree.
 fn outside_git() -> Fixture {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, &dir.path().join("app"));
     Fixture {
         library: dir.path().join("library"),
@@ -53,7 +53,7 @@ fn outside_git() -> Fixture {
 }
 
 /// A project made at `root` and linked by `workspace`.
-fn linked(workspace: &mut FlayerWorkspace, root: &std::path::Path) -> MindProject {
+fn linked(workspace: &mut WeaverWorkspace, root: &std::path::Path) -> MindProject {
     fs::create_dir_all(root).unwrap();
     let (project, _) = MindProject::init(root).unwrap();
     workspace.link(&project).unwrap();
@@ -135,7 +135,7 @@ fn created_is_said_only_when_the_file_was_not_there() {
     assert!(first.created());
     assert_eq!(
         fixture.text(),
-        format!("{BEGIN}\n<!-- mindflayer:rule a -->\nRule a.\n{END}\n")
+        format!("{BEGIN}\n<!-- mindweaver:rule a -->\nRule a.\n{END}\n")
     );
 
     let again = fixture.render(&[&rule], true).unwrap();
@@ -171,7 +171,7 @@ fn no_rules_and_no_file_writes_nothing() {
 fn text_around_the_block_is_the_same_through_a_render_a_second_one_and_a_removal() {
     let fixture = fixture();
     let before =
-        format!("{TEAM}{BEGIN}\n<!-- mindflayer:rule old -->\nOld.\n{END}\n\n## Later\n\nMore.\n");
+        format!("{TEAM}{BEGIN}\n<!-- mindweaver:rule old -->\nOld.\n{END}\n\n## Later\n\nMore.\n");
     fs::write(fixture.agents_md(), &before).unwrap();
     let rule = fixture.rule("a", "Rule a.\n");
 
@@ -200,7 +200,7 @@ fn a_crlf_file_keeps_crlf_through_a_render_a_second_one_and_a_removal() {
     let rendered = fs::read(fixture.agents_md()).unwrap();
     assert_eq!(
         String::from_utf8(rendered.clone()).unwrap(),
-        format!("{before}\r\n{BEGIN}\r\n<!-- mindflayer:rule a -->\r\nOne.\r\nTwo.\r\n{END}\r\n")
+        format!("{before}\r\n{BEGIN}\r\n<!-- mindweaver:rule a -->\r\nOne.\r\nTwo.\r\n{END}\r\n")
     );
 
     assert_eq!(
@@ -214,7 +214,7 @@ fn a_crlf_file_keeps_crlf_through_a_render_a_second_one_and_a_removal() {
 }
 
 #[test]
-fn removing_the_last_rule_takes_away_a_file_mindflayer_made() {
+fn removing_the_last_rule_takes_away_a_file_mindweaver_made() {
     let fixture = fixture();
     let rule = fixture.rule("a", "Rule a.\n");
     assert!(fixture.render(&[&rule], false).unwrap().created());
@@ -226,7 +226,7 @@ fn removing_the_last_rule_takes_away_a_file_mindflayer_made() {
 }
 
 #[test]
-fn a_file_mindflayer_made_stays_once_somebody_wrote_in_it() {
+fn a_file_mindweaver_made_stays_once_somebody_wrote_in_it() {
     let fixture = fixture();
     let rule = fixture.rule("a", "Rule a.\n");
     fixture.render(&[&rule], false).unwrap();
@@ -240,7 +240,7 @@ fn a_file_mindflayer_made_stays_once_somebody_wrote_in_it() {
 }
 
 #[test]
-fn a_file_mindflayer_did_not_make_stays_when_the_block_was_all_it_held() {
+fn a_file_mindweaver_did_not_make_stays_when_the_block_was_all_it_held() {
     let fixture = fixture();
     let rule = fixture.rule("a", "Rule a.\n");
     fixture.render(&[&rule], false).unwrap();
@@ -252,7 +252,7 @@ fn a_file_mindflayer_did_not_make_stays_when_the_block_was_all_it_held() {
 
 #[cfg(unix)]
 #[test]
-fn a_link_in_place_of_a_file_mindflayer_made_is_emptied_not_taken_away() {
+fn a_link_in_place_of_a_file_mindweaver_made_is_emptied_not_taken_away() {
     let fixture = fixture();
     let target = fixture.project.root().join("NOTES.md");
     fs::write(&target, "").unwrap();
@@ -308,14 +308,20 @@ fn a_link_to_nothing_in_place_of_the_file_is_never_written_through() {
 #[test]
 fn a_malformed_block_is_refused_and_nothing_is_written() {
     let fixture = fixture();
-    let before = format!("{TEAM}{BEGIN}\n<!-- mindflayer:rule a -->\nRule a.\n");
+    let before = format!("{TEAM}{BEGIN}\n<!-- mindweaver:rule a -->\nRule a.\n");
     fs::write(fixture.agents_md(), &before).unwrap();
     let rule = fixture.rule("b", "Rule b.\n");
 
     match fixture.render(&[&rule], true) {
         Err(AgentsMdError::Malformed { file, problem }) => {
             assert_eq!(file, fixture.agents_md());
-            assert_eq!(problem, Malformed::Unclosed { line: 4 });
+            assert_eq!(
+                problem,
+                Malformed::Unclosed {
+                    line: 4,
+                    names: Names::Mindweaver,
+                }
+            );
         }
         other => panic!("{other:?}"),
     }
@@ -326,7 +332,7 @@ fn a_malformed_block_is_refused_and_nothing_is_written() {
 fn a_duplicated_marker_is_refused_and_nothing_is_written() {
     let fixture = fixture();
     let before = format!(
-        "{BEGIN}\n<!-- mindflayer:rule a -->\nOne.\n<!-- mindflayer:rule a -->\nTwo.\n{END}\n"
+        "{BEGIN}\n<!-- mindweaver:rule a -->\nOne.\n<!-- mindweaver:rule a -->\nTwo.\n{END}\n"
     );
     fs::write(fixture.agents_md(), &before).unwrap();
 
@@ -425,7 +431,7 @@ fn the_workspaces_own_folder_is_refused() {
 #[test]
 fn a_project_the_workspace_links_at_its_root_is_given_its_rules() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, dir.path());
     let library = TempDir::new().unwrap();
     let file = library.path().join("a.md");
@@ -440,7 +446,7 @@ fn a_project_the_workspace_links_at_its_root_is_given_its_rules() {
 #[test]
 fn a_project_unlinked_from_the_workspaces_root_is_refused_a_block_and_can_drop_its_own() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, dir.path());
     let library = TempDir::new().unwrap();
     let file = library.path().join("a.md");

@@ -8,7 +8,7 @@ import { colors } from './src/theme.ts'
 /** The suite that times a render, which runs on its own (`test.projects`). */
 const BENCHMARK = 'tests/matrix.test.ts'
 
-/** Where `flayer ui --dev --port 7878` listens while the panel is worked on. */
+/** Where `mindweaver ui --dev --port 7878` listens while the panel is worked on. */
 const SERVER = 'http://127.0.0.1:7878'
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url))
@@ -22,7 +22,7 @@ const here = (path: string) => fileURLToPath(new URL(path, import.meta.url))
  * this one instead. And a test that rewrote them would mend a stale file
  * behind the back of the test that looks for one (declarations.test.ts).
  */
-const declarations = !process.env.VITEST && process.env.MINDFLAYER_PANEL_DTS !== 'off'
+const declarations = !process.env.VITEST && process.env.MINDWEAVER_PANEL_DTS !== 'off'
 
 export default defineConfig({
   plugins: [

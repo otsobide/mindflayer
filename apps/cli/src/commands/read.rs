@@ -9,14 +9,15 @@ use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use mindflayer_core::code::Said;
-use mindflayer_core::reading::{Shown, Validation};
-use mindflayer_core::value::Redacted;
-use mindflayer_core::view::Listing;
-use mindflayer_core::{Artifact, Catalog, FlayerWorkspace, Kind, MindProject, Reference};
+use mindweaver_core::code::Said;
+use mindweaver_core::mcp::Expressibility;
+use mindweaver_core::reading::{Shown, ShownInput, ShownTransport, Validation};
+use mindweaver_core::value::Redacted;
+use mindweaver_core::view::Listing;
+use mindweaver_core::{Artifact, Catalog, Kind, MindProject, Reference, WeaverWorkspace};
 
 use super::consulted;
-use crate::render::{as_json, plural, printable, table, verdict};
+use crate::render::{as_json, counted_kind, plural, printable, table, verdict};
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
 /// Which level a command reports at.
@@ -71,7 +72,7 @@ impl Selector {
     }
 }
 
-/// Run a reading command over one project: `mind`'s level, or `flayer -p`.
+/// Run a reading command over one project: `mind`'s level, or `mindweaver -p`.
 pub(crate) fn one_project<F>(
     project: MindProject,
     kinds: Vec<Kind>,
@@ -88,7 +89,7 @@ where
 /// Run a reading command over the whole workspace: its own artifacts and
 /// every managed project's, in one catalog.
 pub(crate) fn everywhere<F>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
@@ -107,7 +108,7 @@ where
 /// something has to be able to say so again later. Listing the shelf is
 /// `gather list`'s, so `list` and `show` keep to what is held.
 pub(crate) fn everywhere_and_the_shelf<F>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
@@ -121,7 +122,7 @@ where
 
 /// The two above.
 fn workspace_wide<F>(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     warnings: Vec<Warning>,
     projects: &[MindProject],
     kinds: Vec<Kind>,
@@ -288,7 +289,7 @@ pub(crate) fn looked_in(text: &mut String, projects: &[MindProject]) {
 pub(crate) fn list_workspace(
     catalog: &Catalog,
     projects: &[MindProject],
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     level: Level,
 ) -> (String, bool) {
     // The workspace's own artifacts are worth listing whether or not it
@@ -301,7 +302,7 @@ pub(crate) fn list_workspace(
         return if registered == 0 {
             (
                 format!(
-                    "{} manages no projects yet\n  link one with `flayer link <path>`\n",
+                    "{} manages no projects yet\n  link one with `mindweaver link <path>`\n",
                     workspace.name()
                 ),
                 true,
@@ -310,7 +311,7 @@ pub(crate) fn list_workspace(
             (
                 format!(
                     "{} manages {}, none of which could be opened\n  \
-                     see the warnings, or drop a stale entry with `flayer unlink <path>`\n",
+                     see the warnings, or drop a stale entry with `mindweaver unlink <path>`\n",
                     workspace.name(),
                     plural(registered, "project"),
                 ),
@@ -336,7 +337,7 @@ pub(crate) struct Holders {
 }
 
 impl Holders {
-    fn of(workspace: &FlayerWorkspace, own_kinds: &[Kind], shelf_kinds: &[Kind]) -> Self {
+    fn of(workspace: &WeaverWorkspace, own_kinds: &[Kind], shelf_kinds: &[Kind]) -> Self {
         let own = workspace.own();
         Self {
             own: own_kinds
@@ -536,6 +537,29 @@ pub(crate) fn show(
                     let _ = writeln!(text, "{}", parts.join("\n"));
                 }
             }
+            // What it says of itself is its description, how it is started
+            // or reached and what is supplied for it, then what each agent
+            // cannot be given of it, as core says it, a block each. Not its
+            // file, as a skill's body is printed: every key of it an agent is
+            // given is laid out here, and the file is at the path heading
+            // it, whole in `--json`'s `body`.
+            Kind::Mcp => {
+                let mut blocks = vec![format!(
+                    "{}\n",
+                    printable(shown.description.as_deref().unwrap_or(""))
+                )];
+                blocks.extend(shown.transport.as_ref().map(transport_lines));
+                blocks.extend(
+                    shown
+                        .inputs
+                        .as_deref()
+                        .filter(|inputs| !inputs.is_empty())
+                        .map(input_lines),
+                );
+                blocks.extend(shown.expressibility.as_deref().map(agent_lines));
+                text.push_str(&blocks.join("\n"));
+                continue;
+            }
         }
         // Blank lines trimmed at both ends, not indentation: the body usually
         // opens with a blank line after the fence, and the line above is
@@ -545,6 +569,93 @@ pub(crate) fn show(
     }
     *found = Some(shown);
     Ok((text, true))
+}
+
+/// How an MCP server is started or reached, a line a key, as its
+/// definition writes it: what it starts and with what, or where it is and
+/// what a request to it carries. Each value made printable, since it is
+/// from a file somebody wrote, and each argument on a line of its own,
+/// since one may hold a space.
+fn transport_lines(transport: &ShownTransport) -> String {
+    let mut lines = format!("transport: {}\n", transport.transport.slug());
+    if let Some(command) = &transport.command {
+        let _ = writeln!(lines, "  command: {}", printable(command));
+    }
+    if let Some(url) = &transport.url {
+        let _ = writeln!(lines, "  url: {}", printable(url));
+    }
+    if !transport.args.is_empty() {
+        lines.push_str("  args:\n");
+        for arg in &transport.args {
+            let _ = writeln!(lines, "    - {}", printable(arg));
+        }
+    }
+    for (key, table) in [("env", &transport.env), ("headers", &transport.headers)] {
+        if !table.is_empty() {
+            let _ = writeln!(lines, "  {key}:");
+            for (name, value) in table {
+                let _ = writeln!(lines, "    {}: {}", printable(name), printable(value));
+            }
+        }
+    }
+    if let Some(cwd) = &transport.cwd {
+        let _ = writeln!(lines, "  cwd: {}", printable(cwd));
+    }
+    lines
+}
+
+/// What is supplied for an MCP server, an input a line: its name, where it
+/// is written, whether it is a secret and needed, and the variable it is
+/// read from, its description below it when it has one. A secret is said
+/// by its variable alone, since no definition holds its value.
+fn input_lines(inputs: &[ShownInput]) -> String {
+    let mut lines = String::from("inputs:\n");
+    for input in inputs {
+        let mut said = vec![input.kind.slug()];
+        if input.secret {
+            said.push("secret");
+        }
+        if input.required {
+            said.push("required");
+        }
+        let read = input.env_var.as_ref().map_or_else(
+            || String::from("read from no variable"),
+            |variable| format!("read from ${}", printable(variable)),
+        );
+        let _ = writeln!(
+            lines,
+            "  {}: {}, {read}",
+            printable(&input.name),
+            said.join(", ")
+        );
+        if let Some(description) = &input.description {
+            let _ = writeln!(lines, "    {}", printable(description));
+        }
+    }
+    lines
+}
+
+/// How each agent is given an MCP server, as core says it
+/// ([`Expressibility`]): whole, without what it has no place for, or not
+/// at all, and why.
+fn agent_lines(agents: &[Expressibility]) -> String {
+    let mut lines = String::from("agents:\n");
+    for one in agents {
+        // One thing refused and the agent is given none of it, whatever
+        // else would be left out.
+        let verdict = if !one.refused.is_empty() {
+            "given none of it:"
+        } else if !one.dropped.is_empty() {
+            "given it without what it has no place for:"
+        } else {
+            "given it whole"
+        };
+        let _ = writeln!(lines, "  {}: {verdict}", one.agent);
+        for said in one.refused.iter().chain(&one.dropped) {
+            let _ = writeln!(lines, "    - {}", printable(&said.message));
+        }
+    }
+    lines
 }
 
 /// Every artifact's problems, or a line saying it has none, and whether
@@ -624,14 +735,7 @@ fn counted(artifacts: &[&Artifact]) -> String {
                 .iter()
                 .filter(|artifact| artifact.kind() == kind)
                 .count();
-            (count > 0).then(|| {
-                let noun = if count == 1 {
-                    kind.slug()
-                } else {
-                    kind.folder()
-                };
-                format!("{count} {noun}")
-            })
+            (count > 0).then(|| counted_kind(count, kind))
         })
         .collect();
     match parts.split_last() {

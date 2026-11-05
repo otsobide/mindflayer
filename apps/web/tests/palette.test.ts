@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type VueWrapper } from '@vue/test-utils'
 import type { Planned } from '@/api/generated/Planned'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { TransportError, type Query, type Transport } from '@/api/transport'
@@ -105,6 +105,66 @@ async function opened() {
   expect(palette(), 'the palette, opened by Ctrl+K').not.toBeNull()
 }
 
+/**
+ * Have the document tell of its selection changing as a browser does: in a
+ * task of its own, once whatever changed it has returned, and once for
+ * however many changes came before that task ran
+ * (https://w3c.github.io/selection-api/#selectionchange-event). happy-dom
+ * 21.0.4 tells of each at once, inside the call that made it,
+ * `Selection.collapse` among them, and CodeMirror collapses the selection
+ * in the middle of an update. Told then, it reads the caret it is placing
+ * as one somebody moved, and starts a second update inside the first,
+ * which it refuses ("Calls to EditorView.update are not allowed while an
+ * update is in progress") from a timer of its own, outside the test, an
+ * error Vitest fails the run for (#233). The update it makes 10ms after
+ * the focus moves in did so whenever an earlier test had left the
+ * selection in its own editor, in nodes happy-dom keeps it in once they
+ * are taken away, and so does that update when it comes more than 200ms
+ * after the focus, once CodeMirror no longer takes a caret at the start of
+ * the text for the one a browser puts there as it focuses. Taking the
+ * selection out between tests was the other way, and would have left the
+ * late update throwing. Undone after each test, by `vi.restoreAllMocks`.
+ */
+function selecting() {
+  const dispatch = document.dispatchEvent.bind(document)
+  let scheduled = false
+  vi.spyOn(document, 'dispatchEvent').mockImplementation((event: Event) => {
+    // happy-dom hands an event on from target to target through this same
+    // method, its phase set: only a change told anew waits.
+    if (event.type !== 'selectionchange' || event.eventPhase !== Event.NONE) {
+      return dispatch(event)
+    }
+    if (!scheduled) {
+      scheduled = true
+      setTimeout(() => {
+        scheduled = false
+        dispatch(event)
+      })
+    }
+    return true
+  })
+}
+
+/**
+ * The editor's text on `page`, focused as a click there focuses it, its
+ * selection told of as a browser tells of it (`selecting`), once CodeMirror
+ * has taken the focus in, which it does 10ms after the focus moves, in an
+ * update a person sees as the editor's outline. A key pressed at once left
+ * that update to the machine's speed: it ran before the test took the
+ * editor down, or after, so a run went through it only by chance.
+ */
+async function editorFocused(page: VueWrapper): Promise<HTMLElement> {
+  selecting()
+  const content = await vi.waitFor(() => {
+    const found = page.get('[data-testid="editor"]').element.shadowRoot?.querySelector<HTMLElement>('.cm-content')
+    expect(found).toBeTruthy()
+    return found!
+  })
+  content.focus()
+  await vi.waitFor(() => expect(content.closest('.cm-editor.cm-focused')).not.toBeNull())
+  return content
+}
+
 describe('the command palette', () => {
   it('opens on Ctrl+K over any page, its search focused, and gives the focus back where it was on Escape', async () => {
     await render('/projects', fixture('workspace'))
@@ -187,12 +247,7 @@ describe('the command palette', () => {
     unmount()
 
     const editing = await render('/edit?kind=skill&name=review', answering(fixture('workspace'), [...answers(), ...drafts()]).transport)
-    const content = await vi.waitFor(() => {
-      const found = editing.page.get('[data-testid="editor"]').element.shadowRoot?.querySelector<HTMLElement>('.cm-content')
-      expect(found).toBeTruthy()
-      return found!
-    })
-    content.focus()
+    const content = await editorFocused(editing.page)
     press('k', { ctrlKey: true }, content)
     await settled()
     expect(palette()).toBeNull()
@@ -572,12 +627,7 @@ describe('the sheet of shortcuts', () => {
     unmount()
 
     const editing = await render('/edit?kind=skill&name=review', answering(fixture('workspace'), [...answers(), ...drafts()]).transport)
-    const content = await vi.waitFor(() => {
-      const found = editing.page.get('[data-testid="editor"]').element.shadowRoot?.querySelector<HTMLElement>('.cm-content')
-      expect(found).toBeTruthy()
-      return found!
-    })
-    content.focus()
+    const content = await editorFocused(editing.page)
     press('?', { shiftKey: true }, content)
     await settled()
     expect(sheet()).toBeNull()

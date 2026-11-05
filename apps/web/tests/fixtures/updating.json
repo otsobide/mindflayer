@@ -14,7 +14,15 @@
   ],
   "boxes": [
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "api",
       "held": [
         {
@@ -41,7 +49,15 @@
       ]
     },
     {
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "entry": "web",
       "held": [
         {
@@ -64,6 +80,13 @@
         },
         {
           "kind": "rule",
+          "why": {
+            "code": "not_a_project",
+            "message": "/home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        },
+        {
+          "kind": "mcp",
           "why": {
             "code": "not_a_project",
             "message": "/home/you/Updating/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
@@ -127,7 +150,8 @@
   ],
   "kinds": [
     "skill",
-    "rule"
+    "rule",
+    "mcp"
   ],
   "known": [
     {
@@ -154,7 +178,7 @@
         "state": null,
         "summary": "Tidy the code before a commit",
         "targets": [
-          ".mindflayer/library/skills/lint"
+          ".mindweaver/library/skills/lint"
         ],
         "unread": null
       },
@@ -167,7 +191,7 @@
         "state": null,
         "summary": "Read a change before it lands",
         "targets": [
-          ".mindflayer/library/skills/review"
+          ".mindweaver/library/skills/review"
         ],
         "unread": null
       },
@@ -180,7 +204,7 @@
         "state": null,
         "summary": "Write commit messages that say why",
         "targets": [
-          ".mindflayer/library/rules/git/commits.md"
+          ".mindweaver/library/rules/git/commits.md"
         ],
         "unread": null
       }
@@ -188,11 +212,15 @@
     "directories": [
       {
         "kind": "skill",
-        "path": ".mindflayer/library/skills"
+        "path": ".mindweaver/library/skills"
       },
       {
         "kind": "rule",
-        "path": ".mindflayer/library/rules"
+        "path": ".mindweaver/library/rules"
+      },
+      {
+        "kind": "mcp",
+        "path": ".mindweaver/library/mcp"
       }
     ],
     "failures": [],
@@ -347,6 +375,10 @@
           {
             "count": 1,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -496,6 +528,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -567,6 +603,10 @@
           {
             "count": 0,
             "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
           }
         ],
         "states": [
@@ -626,6 +666,10 @@
         {
           "count": 1,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [
@@ -669,6 +713,10 @@
         {
           "count": 1,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [
@@ -713,6 +761,10 @@
         {
           "count": 0,
           "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
         }
       ],
       "states": [

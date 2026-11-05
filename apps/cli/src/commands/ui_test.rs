@@ -111,6 +111,38 @@ fn the_port_is_the_one_named_or_the_dev_servers_proxys_or_any() {
 }
 
 // ---------------------------------------------------------------------------
+// The log
+// ---------------------------------------------------------------------------
+
+/// A moment of a run on CI whose trace the log was made to be read beside:
+/// 04:20:59.756, UTC, on 5 November 2026.
+const MOMENT: u64 = 1_793_852_459_756;
+
+#[test]
+fn a_logged_line_is_said_after_its_time_of_day_in_utc() {
+    let at = |millis: u64| time_of_day(UNIX_EPOCH + std::time::Duration::from_millis(millis));
+
+    assert_eq!(at(MOMENT), "04:20:59.756Z");
+    assert_eq!(at(0), "00:00:00.000Z");
+    assert_eq!(at(86_400_000 - 1), "23:59:59.999Z");
+    assert_eq!(
+        at(86_400_000),
+        "00:00:00.000Z",
+        "a day later, the same time"
+    );
+    assert_eq!(at(MOMENT + 3_600_000 * 20), "00:20:59.756Z");
+}
+
+/// Before 1970, which no clock should say, is said as midnight then rather
+/// than refused: a line of the log is no reason for a panel to stop.
+#[test]
+fn a_time_before_1970_is_said_as_its_start() {
+    let before = UNIX_EPOCH - std::time::Duration::from_secs(1);
+
+    assert_eq!(time_of_day(before), "00:00:00.000Z");
+}
+
+// ---------------------------------------------------------------------------
 // The token file
 // ---------------------------------------------------------------------------
 

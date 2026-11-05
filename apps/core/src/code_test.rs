@@ -53,7 +53,7 @@ fn every_type_is_listed_once() {
 #[test]
 fn a_variant_that_carries_an_error_takes_its_code() {
     let busy = LockError::Busy {
-        path: PathBuf::from("/work/.mindflayer/lock"),
+        path: PathBuf::from("/work/.mindweaver/lock"),
         pid: Some(7),
         waited: std::time::Duration::from_secs(10),
     };

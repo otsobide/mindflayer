@@ -175,7 +175,7 @@ fn without_a_dev_server_its_origin_is_any_other_page() {
 fn panel(changes: &[(&'static str, Option<&str>)]) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
-    headers.insert("x-mindflayer", HeaderValue::from_static("1"));
+    headers.insert("x-mindweaver", HeaderValue::from_static("1"));
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     for (name, value) in changes {
         match value {
@@ -221,10 +221,10 @@ fn a_change_from_any_other_page_or_from_no_browser_is_not() {
 #[test]
 fn a_change_without_the_panels_own_header_is_refused() {
     for value in [None, Some("0"), Some("true"), Some("")] {
-        let headers = panel(&[("x-mindflayer", value)]);
+        let headers = panel(&[("x-mindweaver", value)]);
         let (condition, message) = from_the_panel(&Method::POST, &headers).unwrap_err();
-        assert_eq!(condition, Condition::XMindflayerRequired, "{value:?}");
-        assert!(message.contains("X-Mindflayer: 1"), "{message}");
+        assert_eq!(condition, Condition::PanelHeaderRequired, "{value:?}");
+        assert!(message.contains("X-Mindweaver: 1"), "{message}");
     }
 }
 

@@ -110,7 +110,7 @@ const { busy } = runner
 
 /**
  * Save it: the text and the hash it was started from, sent as a task the
- * server previews as the line it runs, `flayer edit --contents`, and runs
+ * server previews as the line it runs, `mindweaver edit --contents`, and runs
  * once asked. Never refused here for what core says of it: the line is
  * core's to refuse, in its words, as it refuses a change made on disk.
  */
@@ -220,7 +220,7 @@ const withheld = computed(() => {
               />
             </div>
             <p class="text-sm text-muted">
-              Saving runs <code class="font-mono text-xs">flayer edit --contents</code> with the text, held to what it held when it was read,
+              Saving runs <code class="font-mono text-xs">mindweaver edit --contents</code> with the text, held to what it held when it was read,
               so a change made to it since is never written over. Ctrl-S saves from the editor; Tab leaves it.
             </p>
           </div>
@@ -314,7 +314,7 @@ const withheld = computed(() => {
                 :judged="judged.data.value"
                 :pending="judging"
                 :error="judged.error.value"
-                writer="flayer edit"
+                writer="mindweaver edit"
               />
             </div>
           </div>
