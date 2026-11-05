@@ -1,4 +1,4 @@
-//! Installing an MCP server into a project (D-10).
+//! Installing an MCP server into a project, and taking it back out (D-10).
 //!
 //! A server is no copy: it reaches each agent the project names as one
 //! entry in that agent's own config file ([`Agent::mcp_file`]), written by
@@ -28,9 +28,18 @@
 //! since it was written, unless the install is forced ([`Edits::Forced`]).
 //! In a local project a config file the install makes is kept out of git,
 //! an entry in the project's group of the exclude block written before the
-//! file lands, and the ledger notes that Mindweaver made it
-//! ([`Ledger::set_created`]), for the file to go with its last server and
-//! only then. One somebody had is theirs to commit.
+//! file lands, and the ledger notes that Mindweaver made it (`created`),
+//! for the file to go with its last server and only then. One somebody had
+//! is theirs to commit.
+//!
+//! An uninstall goes by the record: each entry it names is taken out of the
+//! file it names, and nothing else, every other server and byte there kept,
+//! all of them or none, as an install writes them. An entry changed since
+//! it was written refuses it unless forced, as a copy does, and forcing
+//! never reaches an entry nothing records; one in a file git tracks in a
+//! local project without `edit_tracked` refuses it too, since taking it out
+//! is an edit of a team's file. A file Mindweaver made goes with its last
+//! server, as its renderer decides, and its exclude entry with it.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -39,7 +48,7 @@ use super::entries::{self, ConfigUnread};
 use super::rules::{self, Withheld};
 use super::{
     edited, local, offered_for, project_entry, user_scope, Candidate, Edits, InstallError,
-    Installation, Installed, Offer, Standing,
+    Installation, Installed, Offer, Removed, Standing,
 };
 use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, ArtifactError};
@@ -448,6 +457,166 @@ pub(crate) fn install_held(
         excluded,
         entries: Some(Rendered { given, unreached }),
         ..Installation::from(installed)
+    })
+}
+
+/// Take the MCP server `name` back out of `project`: each entry its
+/// installation recorded, from the file the record names, and the record
+/// with them.
+///
+/// Holds the workspace's lock from before the record is read until it is
+/// dropped, for the reason an install holds it. Only what the ledger
+/// records is taken out: with no record, a server of the name in the file
+/// of an agent the project names is somebody's, and said
+/// ([`Removed::Foreign`]). An entry changed since it was written refuses
+/// the whole uninstall, every entry left and the record kept
+/// ([`Removed::Edited`]), unless `edits` forces it; an entry no longer in
+/// its file has nothing to take out, and is forgotten with the rest.
+///
+/// What can refuse is asked before anything is taken out: a file that
+/// cannot be read, and one git tracks in a local project without
+/// `edit_tracked` ([`InstallError::EntryWithheld`]), which a removal would
+/// edit as a write would. Then each file is changed in report order, and
+/// the first that fails puts back the files changed before it and keeps
+/// the record.
+pub(crate) fn uninstall(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    project: &MindProject,
+    name: &str,
+    edits: Edits,
+) -> Result<Removed, InstallError> {
+    let root = project.root();
+    let _lock = workspace.lock().map_err(WorkspaceError::from)?;
+    let entry = project_entry(workspace, project);
+    let Some(record) = ledger.installation(&entry, Kind::Mcp, name)? else {
+        return Ok(match somebodys(project, name) {
+            Some(path) => Removed::Foreign {
+                name: ArtifactName::from(name),
+                path,
+            },
+            None => Removed::Absent {
+                name: ArtifactName::from(name),
+            },
+        });
+    };
+    if edits == Edits::Kept {
+        let edited = edited(workspace, ledger, project, Kind::Mcp, name)?;
+        if !edited.is_empty() {
+            return Ok(Removed::Edited {
+                name: ArtifactName::from(name),
+                paths: edited,
+            });
+        }
+    }
+    let mut taking: Vec<&EntryTarget> = Vec::new();
+    for target in &record.entries {
+        let holds = entries::held(root, target.agent, &target.file)
+            .map_err(config)?
+            .iter()
+            .any(|held| held.name == name);
+        if !holds {
+            continue;
+        }
+        if let Some(why) = rules::withheld_from(project, Path::new(&target.file)) {
+            return Err(InstallError::EntryWithheld {
+                file: root.join(&target.file),
+                name: name.to_owned(),
+                why,
+            });
+        }
+        taking.push(target);
+    }
+
+    let mut changed: Vec<Before> = Vec::new();
+    let mut gone: Vec<&str> = Vec::new();
+    for target in taking {
+        let was = Before::of(root, &target.file);
+        let created = ledger.created(&entry, &target.file)?;
+        match remove(target.agent, root, &target.file, name, created) {
+            Ok(written) => {
+                if written == Written::Removed {
+                    gone.push(&target.file);
+                }
+                changed.push(was);
+            }
+            Err(error) => {
+                put_back(&changed);
+                return Err(config(error));
+            }
+        }
+    }
+    let forgotten = ledger.uninstalled(&entry, Kind::Mcp, name).and_then(|_| {
+        gone.iter()
+            .try_for_each(|route| ledger.set_created(&entry, route, false))
+    });
+    // A record kept beside entries gone would say they are missing; one
+    // dropped beside entries put back would leave them nobody's.
+    if let Err(error) = forgotten {
+        put_back(&changed);
+        let _ = ledger.installed(&entry, &record);
+        for route in &gone {
+            let _ = ledger.set_created(&entry, route, true);
+        }
+        return Err(error.into());
+    }
+    let detail = format!("{name} from {}", project.name());
+    ledger.log(Action::Uninstall, Some(&entry), Outcome::Ok, Some(&detail))?;
+
+    // After the files go, as a copy's line goes after the copy; and said
+    // rather than raised when the block cannot be edited, since they are
+    // gone and so is their record.
+    let lines: Vec<exclude::Entry> = gone.iter().map(exclude::Entry::file).collect();
+    let still_excluded = local(project)
+        .filter(|_| !lines.is_empty())
+        .and_then(|key| exclude::remove(root, key, &lines).err())
+        .map(|error| error.to_string());
+    Ok(Removed::Removed {
+        name: ArtifactName::from(name),
+        paths: record
+            .entries
+            .iter()
+            .map(|target| root.join(&target.file))
+            .collect(),
+        still_excluded,
+        rendered: None,
+    })
+}
+
+/// Where somebody's server `name` is in `project` while the ledger records
+/// none there: the file of the first agent the project names that holds a
+/// server of the name, as an install of it would meet it. A file that
+/// cannot be read holds nothing that can be told.
+pub(crate) fn somebodys(project: &MindProject, name: &str) -> Option<PathBuf> {
+    let root = project.root();
+    agents(project).into_iter().find_map(|agent| {
+        let route = agent.mcp_file(root).ok()?;
+        entries::held(root, agent, route)
+            .ok()?
+            .iter()
+            .any(|held| held.name == name)
+            .then(|| root.join(route))
+    })
+}
+
+/// Take the server `name` out of `agent`'s config file at `route` in the
+/// project at `root`, through the agent's renderer, and the file with it
+/// when `created` and nothing else is left in it.
+fn remove(
+    agent: Agent,
+    root: &Path,
+    route: &str,
+    name: &str,
+    created: bool,
+) -> Result<Written, ConfigUnread> {
+    // Matched on the agent, so one added says how its entry is taken out
+    // before it compiles. Claude's and Codex's files are one each, the one
+    // the record names, as `entries::held` read it; OpenCode's is taken out
+    // of the one the record names, whichever of the four comes first now.
+    Ok(match agent {
+        Agent::Claude => claude_mcp::remove(root, name, created)?,
+        Agent::Codex => codex_mcp::remove(root, name, created)?,
+        Agent::OpenCode => opencode_mcp::remove_from(root, route, name, created)?,
     })
 }
 

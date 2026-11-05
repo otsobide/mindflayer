@@ -193,6 +193,7 @@ export type CoreCode =
   | "rule_not_recorded"
   | "rule_section_unread"
   | "rules_block_unedited"
+  | "mcp_entry_unedited"
   | "not_installable"
   | "mcp_unreached"
   | "install_unfit"

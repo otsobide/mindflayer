@@ -1,14 +1,17 @@
 //! An MCP server installed into a project, an entry in the config file of
-//! each agent it names (D-10): what each file holds afterwards, what the
-//! ledger records of it, what is refused and what is left as it was, each
-//! file built here in a temporary folder, none in a real agent's home.
+//! each agent it names (D-10), and taken back out: what each file holds
+//! afterwards, what the ledger records of it, what is refused and what is
+//! left as it was, each file built here in a temporary folder, none in a
+//! real agent's home.
 
 mod common;
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindweaver_core::install::{self, Edits, InstallError, Installation, Installed, Standing};
+use mindweaver_core::install::{
+    self, Edits, InstallError, Installation, Installed, Removed, Standing,
+};
 use mindweaver_core::ledger::InstallRecord;
 use mindweaver_core::mother::McpMother;
 use mindweaver_core::{
@@ -20,6 +23,18 @@ use tempfile::TempDir;
 /// A team's own `.mcp.json`, holding a server of theirs.
 const TEAMS: &str = "{\n  \"mcpServers\": {\n    \"docs\": {\n      \"type\": \"stdio\",\n      \
                      \"command\": \"docs-mcp\"\n    }\n  }\n}\n";
+
+/// A team's own `.codex/config.toml`: a setting, a comment and a server of
+/// theirs.
+const CODEX_TEAMS: &str = "# The team's Codex settings.\nmodel = \"o4\"\n\n\
+                           [mcp_servers.docs]\ncommand = \"docs-mcp\" # theirs\n";
+
+/// A team's own `opencode.json`, as OpenCode reads it, JSONC: a comment,
+/// a trailing comma and a server of theirs.
+const OPENCODE_TEAMS: &str = "// The team's OpenCode settings.\n{\n  \"theme\": \"dark\",\n  \
+                              \"mcp\": {\n    \"servers\": {\n      \"docs\": {\n        \
+                              \"type\": \"local\",\n        \"command\": [\"docs-mcp\"],\n      \
+                              },\n    },\n  },\n}\n";
 
 /// A workspace at the root of a git work tree, linking `app`, a project
 /// below it whose settings name `agents` and share as `share`, with the
@@ -94,6 +109,31 @@ impl Fixture {
 
     fn install(&self) -> Installation {
         self.try_install(Edits::Kept).unwrap()
+    }
+
+    fn try_uninstall(&self, edits: Edits) -> Result<Removed, InstallError> {
+        install::uninstall_with(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            Kind::Mcp,
+            &self.name,
+            &AgentHomes::default(),
+            edits,
+        )
+    }
+
+    fn uninstall(&self, edits: Edits) -> Removed {
+        self.try_uninstall(edits).unwrap()
+    }
+
+    /// Every config file of the project's agents, by agent, and what each
+    /// holds, if it is there.
+    fn files(&self) -> Vec<(Agent, Option<String>)> {
+        Agent::ALL
+            .into_iter()
+            .map(|agent| (agent, self.read(self.route(agent))))
+            .collect()
     }
 
     fn record(&self) -> Option<InstallRecord> {
@@ -448,4 +488,134 @@ fn a_file_that_cannot_be_written_puts_back_every_file_written_before_it() {
     assert_eq!(fixture.record(), None);
     assert!(fixture.excluded().is_empty(), "{:?}", fixture.excluded());
     assert!(!fixture.ledger.created("app", ".codex/config.toml").unwrap());
+}
+
+#[test]
+fn uninstalling_takes_out_each_entry_recorded_and_leaves_every_other_server_byte_for_byte() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+    fixture.write(".mcp.json", TEAMS);
+    fixture.write(".codex/config.toml", CODEX_TEAMS);
+    fixture.write("opencode.json", OPENCODE_TEAMS);
+    fixture.install();
+
+    let removed = fixture.uninstall(Edits::Kept);
+
+    assert_eq!(
+        removed,
+        Removed::Removed {
+            name: fixture.name.as_str().into(),
+            paths: Agent::ALL.map(|agent| fixture.file(agent)).to_vec(),
+            still_excluded: None,
+            rendered: None,
+        }
+    );
+    assert_eq!(
+        fixture.files(),
+        [
+            (Agent::Claude, Some(TEAMS.to_owned())),
+            (Agent::Codex, Some(CODEX_TEAMS.to_owned())),
+            (Agent::OpenCode, Some(OPENCODE_TEAMS.to_owned())),
+        ]
+    );
+    assert_eq!(fixture.record(), None);
+    assert_eq!(
+        fixture.uninstall(Edits::Kept),
+        Removed::Absent {
+            name: fixture.name.as_str().into(),
+        }
+    );
+}
+
+#[test]
+fn a_file_an_install_made_goes_with_its_last_server_and_its_exclude_line_with_it() {
+    let fixture = fixture(Share::Local, &Agent::ALL, McpMother::plain_program);
+    fixture.install();
+    assert_eq!(fixture.excluded().len(), 3, "{:?}", fixture.excluded());
+
+    fixture.uninstall(Edits::Kept);
+
+    assert_eq!(fixture.files(), Agent::ALL.map(|agent| (agent, None)));
+    // Codex's own folder, which no record says Mindweaver made.
+    assert!(fixture.root().join(".codex").is_dir());
+    assert!(fixture.excluded().is_empty(), "{:?}", fixture.excluded());
+    for agent in Agent::ALL {
+        let route = fixture.route(agent);
+        assert!(!fixture.ledger.created("app", route).unwrap(), "{route}");
+    }
+}
+
+#[test]
+fn an_entry_edited_by_hand_refuses_the_uninstall_until_it_is_forced() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+    fixture.install();
+    let text = fixture.read(".mcp.json").unwrap();
+    let edited = text.replacen("\"npx\"", "\"bunx\"", 1);
+    assert_ne!(edited, text);
+    fixture.write(".mcp.json", &edited);
+    let before = fixture.files();
+
+    let kept = fixture.uninstall(Edits::Kept);
+
+    assert_eq!(
+        kept,
+        Removed::Edited {
+            name: fixture.name.as_str().into(),
+            paths: vec![fixture.file(Agent::Claude)],
+        }
+    );
+    assert_eq!(kept.refused().unwrap().code(), "edited");
+    assert_eq!(fixture.files(), before);
+    assert!(fixture.record().is_some());
+
+    let forced = fixture.uninstall(Edits::Forced);
+
+    assert!(matches!(forced, Removed::Removed { .. }), "{forced:?}");
+    for (agent, text) in fixture.files() {
+        assert!(
+            !text.unwrap_or_default().contains(&fixture.name),
+            "{agent:?}"
+        );
+    }
+    assert_eq!(fixture.record(), None);
+}
+
+#[test]
+fn a_server_nothing_records_is_somebodys_and_left_where_it_is() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+    let theirs = format!("[mcp_servers.{}]\ncommand = \"theirs\"\n", fixture.name);
+    fixture.write(".codex/config.toml", &theirs);
+
+    let removed = fixture.uninstall(Edits::Forced);
+
+    assert_eq!(
+        removed,
+        Removed::Foreign {
+            name: fixture.name.as_str().into(),
+            path: fixture.file(Agent::Codex),
+        }
+    );
+    assert_eq!(fixture.read(".codex/config.toml").unwrap(), theirs);
+}
+
+#[test]
+fn an_entry_in_a_file_git_tracks_in_a_local_project_refuses_the_uninstall() {
+    let mut fixture = fixture(Share::Local, &Agent::ALL, McpMother::plain_program);
+    fixture
+        .project
+        .change_settings(|settings| settings.edit_tracked = true)
+        .unwrap();
+    fixture.write(".mcp.json", TEAMS);
+    common::indexed(fixture.dir.path());
+    fixture.install();
+    fixture
+        .project
+        .change_settings(|settings| settings.edit_tracked = false)
+        .unwrap();
+    let before = fixture.files();
+
+    let refused = fixture.try_uninstall(Edits::Forced).unwrap_err();
+
+    assert_eq!(refused.code(), "mcp_entry_unedited", "{refused}");
+    assert_eq!(fixture.files(), before);
+    assert!(fixture.record().is_some());
 }

@@ -1969,6 +1969,9 @@ pub fn uninstall_with(
     if kind == Kind::Rule && project.settings().is_some() {
         return rules::uninstall(workspace, ledger, project, name, homes, edits);
     }
+    if kind == Kind::Mcp {
+        return mcp::uninstall(workspace, ledger, project, name, edits);
+    }
     // Held from before the record is read until it is dropped, for the
     // reason `install` holds it: an install of the same name at the same
     // moment comes wholly before this or wholly after it. Between the copies
@@ -2072,7 +2075,11 @@ pub(crate) fn somebodys(
     if ledger.installation(&entry, kind, name)?.is_some() {
         return Ok(None);
     }
-    Ok(held_where(project, kind, name))
+    // Matched on the kind, so a third one says where somebody's is.
+    Ok(match kind {
+        Kind::Skill | Kind::Rule => held_where(project, kind, name),
+        Kind::Mcp => mcp::somebodys(project, name),
+    })
 }
 
 /// The first target of `project` holding something called `name`, of
@@ -2817,6 +2824,12 @@ pub enum InstallError {
         route: String,
         why: rules::Withheld,
     },
+    #[error("{file}: holds MCP server `{name}`, which cannot be taken out of it ({why}), so the server is not uninstalled: share the project or set edit_tracked, or take its entry out by hand")]
+    EntryWithheld {
+        file: PathBuf,
+        name: String,
+        why: rules::Withheld,
+    },
     #[error(transparent)]
     AgentsMd(#[from] AgentsMdError),
     #[error(transparent)]
@@ -2904,6 +2917,7 @@ codes!(InstallError {
     Self::NotRecorded { .. } => "rule_not_recorded",
     Self::Unread { .. } => "rule_section_unread",
     Self::Withheld { .. } => "rules_block_unedited",
+    Self::EntryWithheld { .. } => "mcp_entry_unedited",
     Self::NotInstallable { .. } => "not_installable",
     Self::Unreached { .. } => "mcp_unreached",
     Self::Unfit { .. } => "install_unfit",
