@@ -4,6 +4,7 @@
 //! Core builds and orders the report ([`Status`]); this only lays it out, as
 //! a table naming no more than its rows need to be told apart.
 
+use mindweaver_core::status::{EntryStatus, ProjectStatus, State};
 use mindweaver_core::{
     Agent, Kind, MarkerFile, MindProject, Missed, Status, StatusFailure, Unreached, WeaverWorkspace,
 };
@@ -300,8 +301,21 @@ fn older(status: &Status) -> Vec<Warning> {
         .collect()
 }
 
-/// One line per artifact, and one per entry that would not open; none at
-/// all when there is neither.
+/// Each MCP server's entry an agent's config file holds that nothing
+/// records, which the table lists as a foreign copy is listed (D-23), an
+/// entry an agent. One Mindweaver installed is not: its installation is an
+/// artifact row of its own, which says how it stands and which agents it
+/// reaches, as an installed skill's says it of its copies.
+fn foreign(project: &ProjectStatus) -> impl Iterator<Item = &EntryStatus> {
+    project
+        .entries
+        .iter()
+        .filter(|entry| entry.state == State::Foreign)
+}
+
+/// One line per artifact, one per MCP server's entry somebody keeps in an
+/// agent's config file ([`foreign`]), and one per entry that would not open;
+/// none at all when there is none of them.
 ///
 /// The project column only when the rows come from more than one project,
 /// or one of them is stale, whose row is nothing but its name; the kind
@@ -312,7 +326,11 @@ fn rows(status: &Status, across: bool) -> Option<String> {
     let listed = status
         .projects
         .iter()
-        .filter(|project| project.stale.is_some() || !project.artifacts.is_empty())
+        .filter(|project| {
+            project.stale.is_some()
+                || !project.artifacts.is_empty()
+                || foreign(project).next().is_some()
+        })
         .count();
     if listed == 0 {
         return None;
@@ -325,7 +343,13 @@ fn rows(status: &Status, across: bool) -> Option<String> {
     let kinds: Vec<Kind> = status
         .projects
         .iter()
-        .flat_map(|project| project.artifacts.iter().map(|artifact| artifact.kind))
+        .flat_map(|project| {
+            project
+                .artifacts
+                .iter()
+                .map(|artifact| artifact.kind)
+                .chain(foreign(project).map(|_| Kind::Mcp))
+        })
         .collect();
     let kinded = kinds.iter().any(|kind| Some(kind) != kinds.first());
 
@@ -366,6 +390,22 @@ fn rows(status: &Status, across: bool) -> Option<String> {
             row.push(artifact.state.slug().to_owned());
             row.push(agents(&artifact.agents));
             row.push(printable(artifact.origin.as_deref().unwrap_or("")));
+            rows.push(row);
+        }
+        // After the artifacts, in the order core lists them, by agent and
+        // then name: no origin, since nothing installed it.
+        for entry in foreign(project) {
+            let mut row = Vec::new();
+            if named {
+                row.push(label.clone());
+            }
+            if kinded {
+                row.push(Kind::Mcp.slug().to_owned());
+            }
+            row.push(printable(&entry.name));
+            row.push(entry.state.slug().to_owned());
+            row.push(agents(&[entry.agent]));
+            row.push(String::new());
             rows.push(row);
         }
     }

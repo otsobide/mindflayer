@@ -1301,7 +1301,11 @@ the file holds under its name has changed. Nothing installs a server yet, so
 for now every entry it lists is `foreign`. A config file holding an entry
 Mindweaver installed that cannot be read is a warning beside the report,
 the entry `missing`; one holding none it installed is passed over, a link
-included, and nothing in it is listed.
+included, and nothing in it is listed. The text lists each `foreign` one
+as a row of its own, kind `mcp`, with the agent whose file holds it, as a
+foreign copy is listed; one Mindweaver installed is the row of its
+installation, which says how it stands and which agents it reaches, as an
+installed skill's row does.
 
 `--json` prints the same report in the envelope every reading command's
 `--json` shares ([machine-readable output](#machine-readable-output)): the

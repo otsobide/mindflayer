@@ -4753,7 +4753,11 @@ built as a rule's received is: missing while an entry it recorded is not
 found, otherwise as core stands it from its entries, reaching the agents
 whose entry is found, held in each of their files. The snapshot carries
 the same `entries` on each project ([the read model](#the-read-model)), and
-a project a `mind.toml` marks, which names no agent, lists none.
+a project a `mind.toml` marks, which names no agent, lists none. The text
+of `status` lists each foreign entry as a row of its own, kind `mcp`, with
+the agent whose file holds it, so whoever reads it is told of a server
+somebody keeps there as of a foreign copy; an entry Mindweaver wrote is
+told by its installation's row, which the table has already.
 
 Each rule a project marked by its settings received that some of its agents
 read nowhere is named in `missed`, with those agents, and is a warning beside

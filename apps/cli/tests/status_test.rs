@@ -511,7 +511,7 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
 }
 
 #[test]
-fn status_as_json_lists_each_server_an_agents_config_holds_that_nothing_installed_as_foreign() {
+fn status_lists_each_server_an_agents_config_holds_that_nothing_installed_as_foreign() {
     let (_dir, projects) = workspace_with_everything();
     let collapse = projects.join("collapse");
     fs::write(
@@ -534,9 +534,20 @@ fn status_as_json_lists_each_server_an_agents_config_holds_that_nothing_installe
             origin: None,
         }]
     );
-    // An entry is no artifact the table lists: the text says what it said.
+    // And the text lists it as it lists a foreign copy, the kind column
+    // telling it from the skills.
     let text = weaver(&projects, &["status", "-p", "collapse"]).unwrap();
-    assert_eq!(text.stdout, COLLAPSE);
+    assert_eq!(
+        text.stdout,
+        "\
+skill  commit-style  current   claude,codex,opencode  workspace
+skill  deploy        missing   codex,opencode         load:../team
+skill  notes         foreign   claude,opencode
+skill  review        authored  -
+mcp    theirs        foreign   claude
+"
+    );
+    assert_eq!(text.ok, outcome.ok);
 }
 
 #[cfg(unix)]
