@@ -47,7 +47,7 @@ use crate::url::redacted;
 use crate::value::{ArtifactName, ContentHash, Origin};
 use crate::workspace::{same_directory, Loaded, MindProject, WeaverWorkspace, WorkspaceError};
 
-mod entries;
+pub(crate) mod entries;
 mod plan;
 pub mod rules;
 mod standing;

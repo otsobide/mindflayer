@@ -1289,6 +1289,17 @@ a warning names the agents that read none of its folders, and `unreached` in
 the JSON says the same; and one given a rule some of its agents read nowhere,
 which `missed` in the JSON says.
 
+`entries` in the JSON lists each MCP server's entry in the config files of
+the project's agents (`.mcp.json` for Claude Code, `.codex/config.toml` for
+Codex, OpenCode's `opencode.json` or whichever of its config files the
+project has), one row an agent: the `agent`, the `file`, the server's
+`name`, its `state` and, for one Mindweaver installed, its `origin`. A
+server somebody keeps there that Mindweaver did not install is `foreign`,
+and one it installed stands as an installed skill does, `edited` once what
+the file holds under its name has changed. Nothing installs a server yet, so
+for now every entry it lists is `foreign`; a config file that cannot be
+read is a warning beside the report.
+
 `--json` prints the same report in the envelope every reading command's
 `--json` shares ([machine-readable output](#machine-readable-output)): the
 data, the warnings the text says on stderr, each again with its code, and a
@@ -1320,7 +1331,8 @@ $ mindweaver status -p tanukeys --json
             "agents": [],
             "origin": "load:../src/mindweaver/examples"
           }
-        ]
+        ],
+        "entries": []
       }
     ]
   },
@@ -1386,7 +1398,9 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   project says where it authors each kind, its settings and templates, and
   every artifact it holds: its state, the agents that read it, where it came
   from, where each copy is, what `validate` says of it, and for a file that
-  does not read, `unread`, with why. Its `tally` counts them, by kind and by
+  does not read, `unread`, with why, and in `entries` each MCP server's entry
+  its agents' config files hold, as `status` lists them. Its `tally` counts
+  the artifacts, by kind and by
   state, and its `health` says how it stands as a whole, in the words the
   [control panel](#control-panel) sorts by: `ok`, `attention`, `broken` or
   `stale`. `mind list --json` reads the project against the workspace that

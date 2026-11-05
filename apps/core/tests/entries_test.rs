@@ -1,7 +1,8 @@
 //! How an MCP server's entries stand in a project, an entry an agent: told
 //! by what the ledger records writing, what each agent's config file holds
 //! and what the library offers now, each built here as files in a
-//! temporary folder.
+//! temporary folder, and said where the installed view lists them
+//! (`status`, D-23).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,6 +11,7 @@ use mindweaver_core::config_entry::{ConfigFile, Format, Value};
 use mindweaver_core::install::{self, Standing};
 use mindweaver_core::ledger::{EntryTarget, InstallRecord};
 use mindweaver_core::mother::{McpMother, ProjectMother, WorkspaceMother};
+use mindweaver_core::status::{EntryStatus, State, Status};
 use mindweaver_core::value::{ArtifactName, Origin};
 use mindweaver_core::{
     claude_mcp, codex_mcp, opencode_mcp, Agent, AgentHomes, Kind, Ledger, McpDefinition,
@@ -115,6 +117,30 @@ impl World {
             .map(|(_, standing)| standing)
     }
 
+    /// The report of the project, and the codes of what it could not read.
+    fn status(&self) -> (Status, Vec<&'static str>) {
+        let (status, failures) = Status::of_workspace(&self.workspace);
+        (
+            status,
+            failures.iter().map(|failure| failure.code()).collect(),
+        )
+    }
+
+    /// What the installed view lists of the project's entries.
+    fn entries(&self) -> Vec<EntryStatus> {
+        self.status().0.projects[0].entries.clone()
+    }
+
+    /// The server's own row of the report.
+    fn row(&self) -> (State, Vec<Agent>) {
+        let (status, _) = self.status();
+        let row = status.projects[0]
+            .find(Kind::Mcp, &self.name)
+            .unwrap()
+            .clone();
+        (row.state, row.agents)
+    }
+
     /// Change what the server's entry holds in `agent`'s file, as a person
     /// editing it by hand would.
     fn edit(&self, agent: Agent, key: &[&str], value: Value) {
@@ -137,11 +163,26 @@ fn every(standing: Standing) -> Vec<(Agent, Standing)> {
         .collect()
 }
 
+/// Each agent's entry, as the installed view lists one it recorded.
+fn listed(world: &World, state: State) -> Vec<EntryStatus> {
+    Agent::ALL
+        .into_iter()
+        .map(|agent| EntryStatus {
+            agent,
+            file: agent.mcp_file(world.root()).unwrap().to_owned(),
+            name: ArtifactName::from(world.name.as_str()),
+            state,
+            origin: Some(Origin::from(install::WORKSPACE_ORIGIN)),
+        })
+        .collect()
+}
+
 #[test]
 fn a_server_nothing_records_and_no_file_holds_is_absent_for_every_agent() {
     let world = World::new(McpMother::plain_program);
 
     assert_eq!(world.standings(), every(Standing::Absent));
+    assert_eq!(world.entries(), []);
     assert_eq!(world.installation(), None);
 }
 
@@ -153,6 +194,9 @@ fn an_entry_written_and_recorded_is_current_for_every_agent() {
 
     assert_eq!(world.standings(), every(Standing::Current));
     assert_eq!(world.installation(), Some(Standing::Current));
+    assert_eq!(world.entries(), listed(&world, State::Current));
+    assert_eq!(world.row(), (State::Current, Agent::ALL.to_vec()));
+    assert_eq!(world.status().1, Vec::<&str>::new());
 }
 
 #[test]
@@ -178,6 +222,8 @@ fn a_definition_changed_since_makes_every_entry_it_changes_outdated() {
 
     assert_eq!(world.standings(), every(Standing::Outdated));
     assert_eq!(world.installation(), Some(Standing::Outdated));
+    assert_eq!(world.entries(), listed(&world, State::Outdated));
+    assert_eq!(world.row(), (State::Outdated, Agent::ALL.to_vec()));
 }
 
 #[test]
@@ -225,6 +271,7 @@ fn an_entry_edited_in_its_file_is_edited_for_that_agent_and_over_the_rest() {
         ]
     );
     assert_eq!(world.installation(), Some(Standing::Edited));
+    assert_eq!(world.row().0, State::Edited);
 }
 
 #[test]
@@ -245,6 +292,7 @@ fn an_entry_taken_out_of_its_file_or_with_it_is_missing() {
     );
     assert_eq!(world.installation(), Some(Standing::Missing));
     // Missing, and reaching Codex alone.
+    assert_eq!(world.row(), (State::Missing, vec![Agent::Codex]));
 }
 
 #[test]
@@ -257,10 +305,15 @@ fn an_entry_whose_definition_is_offered_no_more_is_orphaned_over_missing() {
 
     assert_eq!(world.standings(), every(Standing::Orphaned));
     assert_eq!(world.installation(), Some(Standing::Orphaned));
+    // Reaching the agents whose entry is still there, Claude's gone.
+    assert_eq!(
+        world.row(),
+        (State::Orphaned, vec![Agent::Codex, Agent::OpenCode])
+    );
 }
 
 #[test]
-fn an_entry_of_the_name_nothing_records_is_foreign() {
+fn an_entry_of_the_name_nothing_records_is_foreign_and_listed_as_foreign() {
     let world = World::new(McpMother::plain_program);
     let definition = McpDefinition::parse(&McpMother::plain_program(&world.name)).unwrap();
     claude_mcp::render(world.root(), &definition).unwrap();
@@ -281,7 +334,44 @@ fn an_entry_of_the_name_nothing_records_is_foreign() {
             (Agent::OpenCode, Standing::Absent),
         ]
     );
-    assert_eq!(world.installation(), None);
+    let foreign = |agent: Agent, name: &str| EntryStatus {
+        agent,
+        file: agent.mcp_file(world.root()).unwrap().to_owned(),
+        name: ArtifactName::from(name),
+        state: State::Foreign,
+        origin: None,
+    };
+    assert_eq!(
+        world.entries(),
+        [
+            foreign(Agent::Claude, &world.name),
+            foreign(Agent::Codex, &theirs)
+        ]
+    );
+    // Nothing is installed, so no row of the server's own.
+    assert!(world.status().0.projects[0]
+        .find(Kind::Mcp, &world.name)
+        .is_none());
+}
+
+#[test]
+fn an_entry_beside_somebody_elses_is_told_apart_from_theirs_by_its_name() {
+    let world = World::new(McpMother::plain_program);
+    let theirs = format!("{}x", world.name);
+    let definition = McpDefinition::parse(&McpMother::plain_program(&theirs)).unwrap();
+    opencode_mcp::render(world.root(), &definition, &AgentHomes::default()).unwrap();
+
+    world.installed();
+
+    let mut expected = listed(&world, State::Current);
+    expected.push(EntryStatus {
+        agent: Agent::OpenCode,
+        file: String::from(opencode_mcp::FILE),
+        name: ArtifactName::from(theirs.as_str()),
+        state: State::Foreign,
+        origin: None,
+    });
+    assert_eq!(world.entries(), expected);
 }
 
 #[test]
@@ -302,6 +392,9 @@ fn a_file_that_cannot_be_read_holds_no_entry_and_says_why() {
         "{told:?}"
     );
     assert_eq!(world.installation(), Some(Standing::Missing));
+    let (status, codes) = world.status();
+    assert_eq!(codes, ["mcp_json_not_strict"]);
+    assert_eq!(status.projects[0].entries[0].state, State::Missing);
 }
 
 #[test]
@@ -320,4 +413,38 @@ fn an_opencode_entry_kept_in_v1s_shape_is_held_to_what_that_shape_is_given() {
     assert_eq!(world.standings(), every(Standing::Current));
     let held = fs::read_to_string(world.root().join(opencode_mcp::FILE)).unwrap();
     assert!(!held.contains("\"servers\""), "{held}");
+    let entries = world.entries();
+    assert!(
+        entries
+            .iter()
+            .any(|entry| entry.name == "theirs" && entry.state == State::Foreign),
+        "{entries:?}"
+    );
+}
+
+#[test]
+fn the_snapshot_lists_a_projects_entries_as_status_does() {
+    let world = World::new(McpMother::plain_program);
+    world.installed();
+    world.edit(
+        Agent::Claude,
+        &["mcpServers", &world.name, "command"],
+        Value::from("bunx"),
+    );
+
+    let read = mindweaver_core::view::Project::read(&world.project, Some(&world.workspace));
+
+    assert_eq!(read.entries, world.entries());
+    assert_eq!(read.entries[0].state, State::Edited);
+    let held = read
+        .artifacts
+        .iter()
+        .find(|held| held.kind == Kind::Mcp)
+        .unwrap();
+    assert_eq!(held.state, Some(State::Edited));
+    // Where it is held is each file it was written into, in path order.
+    assert_eq!(
+        held.targets,
+        [codex_mcp::FILE, claude_mcp::FILE, opencode_mcp::FILE]
+    );
 }

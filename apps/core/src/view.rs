@@ -46,7 +46,7 @@ use crate::paths;
 use crate::relink;
 use crate::resolve::{self, Inputs, Intent, Reason, ResolveError, Resolved};
 use crate::settings::{ProjectId, Settings, Share};
-use crate::status::{ArtifactStatus, Missed, ProjectStatus, State, Unreached};
+use crate::status::{ArtifactStatus, EntryStatus, Missed, ProjectStatus, State, Unreached};
 use crate::template::{self, Template};
 use crate::value::{ArtifactName, Origin, Redacted};
 use crate::workspace::{
@@ -290,6 +290,10 @@ pub struct Project {
     /// Everything it holds, authored, received or somebody's, by kind and
     /// then name, the rules its `AGENTS.md` block holds among them (D-23).
     pub artifacts: Vec<Held>,
+    /// Each entry of an MCP server its agents' config files hold, and each
+    /// one the ledger records writing, as `status` lists them: by agent,
+    /// then name, a foreign one among them (D-23).
+    pub entries: Vec<EntryStatus>,
     /// How many of them are of each kind, and stand in each state.
     pub tally: Tally,
     /// What `mind add --template` can start from in it.
@@ -1154,6 +1158,7 @@ impl Project {
             directories: directories(project, kinds),
             tally: Tally::of_held(&artifacts, kinds),
             artifacts,
+            entries: status.entries,
             templates,
             unreached: status.unreached,
             missed: status.missed,
@@ -1185,6 +1190,7 @@ impl Project {
             health: Health::Stale,
             directories: Vec::new(),
             artifacts: Vec::new(),
+            entries: Vec::new(),
             tally: Tally::of([], kinds),
             templates: Vec::new(),
             unreached: Vec::new(),

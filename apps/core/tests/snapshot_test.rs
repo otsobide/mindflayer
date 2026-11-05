@@ -560,6 +560,7 @@ const EXPECTED: &str = r#"{
           "unread": null
         }
       ],
+      "entries": [],
       "tally": {
         "total": 3,
         "kinds": [
@@ -635,6 +636,7 @@ const EXPECTED: &str = r#"{
       "health": "stale",
       "directories": [],
       "artifacts": [],
+      "entries": [],
       "tally": {
         "total": 0,
         "kinds": [

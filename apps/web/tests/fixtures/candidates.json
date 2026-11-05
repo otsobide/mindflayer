@@ -482,6 +482,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "api",
       "failures": [],
       "health": "ok",
@@ -625,6 +626,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "web",
       "failures": [
         {
@@ -752,6 +754,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "docs",
       "failures": [],
       "health": "broken",
@@ -848,6 +851,7 @@
       "agents": [],
       "artifacts": [],
       "directories": [],
+      "entries": [],
       "entry": "gone",
       "failures": [],
       "health": "stale",
@@ -917,6 +921,7 @@
       "agents": [],
       "artifacts": [],
       "directories": [],
+      "entries": [],
       "entry": "old",
       "failures": [],
       "health": "stale",
@@ -995,6 +1000,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "legacy",
       "failures": [],
       "health": "ok",

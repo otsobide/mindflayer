@@ -400,6 +400,17 @@ struct Project {
     unreached: Vec<Unreached>,
     missed: Vec<Missed>,
     artifacts: Vec<Held>,
+    entries: Vec<Entry>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Entry {
+    agent: String,
+    file: String,
+    name: String,
+    state: String,
+    origin: Option<String>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -487,6 +498,7 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
     assert_eq!(collapse.stale, None);
     assert_eq!(collapse.unreached, []);
     assert_eq!(collapse.missed, []);
+    assert_eq!(collapse.entries, []);
     let kinds: Vec<&str> = collapse
         .artifacts
         .iter()
@@ -496,6 +508,35 @@ fn status_as_json_holds_the_same_entries_as_the_table() {
     let legacy = &report.projects[1];
     assert_eq!(legacy.marker.as_deref(), Some("mind.toml"));
     assert!(legacy.agents.is_empty());
+}
+
+#[test]
+fn status_as_json_lists_each_server_an_agents_config_holds_that_nothing_installed_as_foreign() {
+    let (_dir, projects) = workspace_with_everything();
+    let collapse = projects.join("collapse");
+    fs::write(
+        collapse.join(".mcp.json"),
+        "{\"mcpServers\": {\"theirs\": {\"type\": \"http\", \"url\": \"https://example.com/mcp\"}}}\n",
+    )
+    .unwrap();
+
+    let outcome = weaver(&projects, &["status", "-p", "collapse", "--json"]).unwrap();
+
+    let (report, warnings): (Report, _) = enveloped(&outcome);
+    assert!(warnings.is_empty());
+    assert_eq!(
+        report.projects[0].entries,
+        [Entry {
+            agent: String::from("claude"),
+            file: String::from(".mcp.json"),
+            name: String::from("theirs"),
+            state: String::from("foreign"),
+            origin: None,
+        }]
+    );
+    // An entry is no artifact the table lists: the text says what it said.
+    let text = weaver(&projects, &["status", "-p", "collapse"]).unwrap();
+    assert_eq!(text.stdout, COLLAPSE);
 }
 
 #[test]

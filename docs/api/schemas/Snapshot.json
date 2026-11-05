@@ -251,6 +251,42 @@
         "detail"
       ]
     },
+    "EntryStatus": {
+      "description": "One entry of an MCP server in one of a project's agents' config files,\nand how it stands there: what the installed view lists of what it\nreceived as entries rather than copies (D-23).\n\nOne an agent rather than one a server, as an installation's entries are\nrecorded: what Claude's `.mcp.json` holds of a server can be edited\nwhile Codex's is not, and a foreign one is somebody's in one file alone.",
+      "type": "object",
+      "properties": {
+        "agent": {
+          "description": "The agent whose config file it is in.",
+          "$ref": "#/$defs/Agent"
+        },
+        "file": {
+          "description": "That file, as a route from the project, with `/` whatever the\nplatform: the one the ledger recorded writing it into, or for a\nforeign one the one the agent reads now (`Agent::mcp_file`).",
+          "type": "string"
+        },
+        "name": {
+          "description": "The server's name, the key it is under.",
+          "type": "string"
+        },
+        "origin": {
+          "description": "Where what was installed came from, as `--from` takes it; none for a\nforeign entry.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "How it stands, as an artifact's state says it: never `authored`,\nwhich no entry is, and `foreign` for one nothing records.",
+          "$ref": "#/$defs/State"
+        }
+      },
+      "required": [
+        "agent",
+        "file",
+        "name",
+        "state",
+        "origin"
+      ]
+    },
     "Health": {
       "description": "How a project stands as a whole.",
       "type": "string",
@@ -716,6 +752,13 @@
             "$ref": "#/$defs/Directory"
           }
         },
+        "entries": {
+          "description": "Each entry of an MCP server its agents' config files hold, and each\none the ledger records writing, as `status` lists them: by agent,\nthen name, a foreign one among them (D-23).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EntryStatus"
+          }
+        },
         "entry": {
           "description": "The entry as the marker spells it, which `-p` and `unlink` take; none\nfor a project no workspace links.",
           "type": [
@@ -839,6 +882,7 @@
         "health",
         "directories",
         "artifacts",
+        "entries",
         "tally",
         "templates",
         "unreached",

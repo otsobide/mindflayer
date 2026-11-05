@@ -2429,6 +2429,12 @@ type derives `Serialize` from the start:
   `reading::Shown`. One record for every transport rather than a variant
   each, so its `type` is the word the format writes, never one a derive
   spells from a variant; a key of the other transport goes out empty.
+- **Listed by `status` and the snapshot since #93**: each MCP server's
+  entry in a project's agents' config files (`status::EntryStatus`), its
+  agent by its name, its file a route from the project, its state the word
+  an artifact's is said in and its origin a `value::Origin`, as `entries`,
+  a field added to `ProjectStatus` and `view::Project`, which moves
+  neither `ENVELOPE_VERSION` nor `view::FORMAT`.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -2621,6 +2627,11 @@ read, built and ordered in core from the read types the commands print:
   how a readable copy of the name elsewhere stands, the report's), the
   rules a project's `AGENTS.md` block holds among them
   ([D-23](#d-23-what-a-project-received-is-an-installed-view));
+- each MCP server's entry in a project's agents' config files, one an
+  agent, an installed one as it stands and somebody's as `foreign`
+  (`entries`, as `status` lists them, [what each project
+  has](#what-each-project-has)), read from the ledger and those files, as
+  D-23 has it, since discovery parses no config file;
 - the workspaces it loads, each with how many of its own it offers; its
   shelf and the sources it is filled from; the workspaces this machine
   knows, each with whether it loads it and by which entry, and whether it
@@ -4717,6 +4728,28 @@ cannot be read holds none of them, and the next render says why. A rule
 copied into a project a `mind.toml` marks is discovered as its copy, as a
 skill is. A name the project authors a rule of too keeps the one entry
 discovery gives it, as a skill's does.
+
+What a project received as MCP servers is entries in its agents' config
+files, which discovery never parses (D-23), so each is listed from the
+ledger and those files too (#93): in `entries` (`status::EntryStatus`), one
+row an agent's entry, its agent, its file, the server's name, its state and
+its origin, by agent in report order and then name. Every entry an
+installation recorded is listed, looked for in the file its record names,
+whichever agent it is for, as [it stands](#how-an-entry-stands); and every
+entry the config file of each of the project's agents holds that nothing
+records is listed as `foreign`, D-23's foreign entries, which no artifact of
+the catalog is, since a name can be somebody's in one agent's file and
+Mindweaver's in another's. Rows rather than one an artifact: what Claude's
+file holds of a server can be edited while Codex's is not. A config file
+that cannot be read, as its renderer would refuse it (`mcp_json_not_strict`
+for a `.mcp.json` holding a comment), is a failure beside the report
+(`DiscoveryFailure::Config`), and the entries recorded in it read as
+missing. A server's installation has an artifact row of its own as well,
+built as a rule's received is: missing while an entry it recorded is not
+found, otherwise as core stands it from its entries, reaching the agents
+whose entry is found, held in each of their files. The snapshot carries
+the same `entries` on each project ([the read model](#the-read-model)), and
+a project a `mind.toml` marks, which names no agent, lists none.
 
 Each rule a project marked by its settings received that some of its agents
 read nowhere is named in `missed`, with those agents, and is a warning beside

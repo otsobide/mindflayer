@@ -43,6 +43,7 @@ use thiserror::Error;
 use super::standing::{Found, Looked};
 use super::{entry_for_root, offered_for, offers, Offer, Standing};
 use crate::agent::Agent;
+use crate::catalog::DiscoveryFailure;
 use crate::claude_mcp::{self, ClaudeMcpError};
 use crate::code::codes;
 use crate::codex_mcp::{self, CodexMcpError};
@@ -50,7 +51,7 @@ use crate::kind::Kind;
 use crate::ledger::{EntryTarget, InstallRecord, Ledger, LedgerError};
 use crate::mcp::McpDefinition;
 use crate::opencode_mcp::{self, OpenCodeMcpError, Shape};
-use crate::value::ContentHash;
+use crate::value::{ArtifactName, ContentHash, Origin};
 use crate::workspace::{MindProject, WeaverWorkspace};
 
 /// Why an agent's config file could not be read for the MCP servers it
@@ -286,6 +287,116 @@ pub(crate) fn told(
         ));
     }
     (looked, of_installation(&standings, !offered.is_empty()))
+}
+
+/// One entry of an agent's config file, as the installed view lists it
+/// (D-23): one an installation recorded, as it stands, or one nothing
+/// records, foreign.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Listed {
+    pub agent: Agent,
+    /// The file, as a route from the project, `/` separated.
+    pub file: String,
+    /// The key it is under, the server's name.
+    pub name: ArtifactName,
+    pub standing: Standing,
+    /// Whether the file holds an entry under the name, which an orphaned
+    /// one may or may not.
+    pub held: bool,
+    /// Where what was installed came from; none for a foreign entry.
+    pub origin: Option<Origin>,
+}
+
+/// Every entry of `project`'s agents' config files, and every one `records`
+/// recorded, as the installed view lists them (D-23), by agent in report
+/// order, then name, then file, with each file that could not be read.
+///
+/// `records` are the MCP installations `workspace`'s ledger records in the
+/// project and `offers` every offer of an MCP server there, which what they
+/// installed is held to; with no workspace there is none of either. Each of
+/// `agents`, the project's own, has its file read for what nothing records,
+/// which is foreign; a recorded entry is looked for in the file its record
+/// names, whichever agent it is for. A file is read once, however many
+/// entries are in it, and one that cannot be read is said once.
+pub(crate) fn listed(
+    workspace: Option<&WeaverWorkspace>,
+    project: &MindProject,
+    records: &[InstallRecord],
+    offers: &[Offer],
+    agents: &[Agent],
+) -> (Vec<Listed>, Vec<DiscoveryFailure>) {
+    let root = project.root();
+    let mut files = Files::new(root);
+    let mut failures = Vec::new();
+    let mut listed = Vec::new();
+    for record in records {
+        let offered = offered_for(record, offers);
+        for entry in &record.entries {
+            let held = files.server(entry.agent, &entry.file, &entry.name);
+            let shape = held.as_ref().and_then(|held| held.shape);
+            let offered = match workspace {
+                Some(workspace) => rendered(workspace, &offered, entry.agent, shape),
+                None => Offered::Nothing,
+            };
+            listed.push(Listed {
+                agent: entry.agent,
+                file: entry.file.clone(),
+                name: entry.name.clone(),
+                standing: of_entry(
+                    Some(&entry.fingerprint),
+                    held.as_ref().map(|held| &held.fingerprint),
+                    &offered,
+                ),
+                held: held.is_some(),
+                origin: record.origin.clone(),
+            });
+        }
+    }
+    for &agent in agents {
+        let route = match agent.mcp_file(root) {
+            Ok(route) => route,
+            // Only OpenCode's is looked for, and only a folder that cannot
+            // be read fails it.
+            Err(error) => {
+                failures.push(DiscoveryFailure::Config {
+                    path: root.to_path_buf(),
+                    unread: Box::new(OpenCodeMcpError::from(error).into()),
+                });
+                continue;
+            }
+        };
+        let recorded = |name: &str| {
+            records.iter().any(|record| {
+                record
+                    .entries
+                    .iter()
+                    .any(|entry| entry.agent == agent && entry.file == route && entry.name == name)
+            })
+        };
+        let foreign: Vec<String> = files
+            .of(agent, route)
+            .unwrap_or_default()
+            .iter()
+            .map(|held| held.name.clone())
+            .filter(|name| !recorded(name))
+            .collect();
+        listed.extend(foreign.into_iter().map(|name| Listed {
+            agent,
+            file: route.to_owned(),
+            name: ArtifactName::from(name),
+            standing: Standing::Foreign,
+            held: true,
+            origin: None,
+        }));
+    }
+    listed.sort_by(|a, b| (a.agent, &a.name, &a.file).cmp(&(b.agent, &b.name, &b.file)));
+    failures.extend(files.read.into_iter().filter_map(|((_, route), read)| {
+        read.err().map(|unread| DiscoveryFailure::Config {
+            path: root.join(route),
+            unread: Box::new(unread),
+        })
+    }));
+    (listed, failures)
 }
 
 /// How a server's entry stands for one agent, or why that agent's file

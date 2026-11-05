@@ -176,8 +176,9 @@ under `apps/` with its own `Makefile`:
   `CLAUDE.md` that makes it (`claude_md`), installing a rule through those
   three, or as a copy into a project a `mind.toml` marks (`install::rules`),
   changing a project's agents or share mode and carrying its installs along
-  (`reapply`), what each project holds, from where and for which agents
-  (`status`), finding a project that moved again by its id and giving a
+  (`reapply`), what each project holds, from where and for which agents,
+  each MCP server's entry in its agents' config files among it, as it stands
+  (`status`, `status::EntryStatus`, told in `install::entries`), finding a project that moved again by its id and giving a
   copy made with its `.mind` one of its own (`relink`), the workspaces this
   machine knows, a list the default
   workspace keeps, and those a front end on one may switch to
