@@ -146,8 +146,12 @@ function selecting() {
 }
 
 /**
- * The editor's text on `page`, once it is drawn, focused as a click there
- * focuses it, its selection told of as a browser tells of it (`selecting`).
+ * The editor's text on `page`, focused as a click there focuses it, its
+ * selection told of as a browser tells of it (`selecting`), once CodeMirror
+ * has taken the focus in, which it does 10ms after the focus moves, in an
+ * update a person sees as the editor's outline. A key pressed at once left
+ * that update to the machine's speed: it ran before the test took the
+ * editor down, or after, so a run went through it only by chance.
  */
 async function editorFocused(page: VueWrapper): Promise<HTMLElement> {
   selecting()
@@ -157,6 +161,7 @@ async function editorFocused(page: VueWrapper): Promise<HTMLElement> {
     return found!
   })
   content.focus()
+  await vi.waitFor(() => expect(content.closest('.cm-editor.cm-focused')).not.toBeNull())
   return content
 }
 
