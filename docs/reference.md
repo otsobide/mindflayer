@@ -3217,7 +3217,9 @@ its own or of a tool on the machine (`ANTHROPIC_API_KEY`, `NPM_TOKEN`,
 `HTTPS_PROXY` and the like) as empty in a remote server's address and
 headers, so it is given no server whose address or headers are read from
 one, nor one that writes `${` as it is where no input stands, which it
-would read as a variable. `show` says so of each, and
+would read as a variable. OpenCode, in the same way, fills `{env:NAME}`
+and `{file:path}` in over its config, so it is given no server that writes
+either as it is where no input stands. `show` says so of each, and
 `--json` says it by a code under `expressibility`. The server is no less
 valid for it, and each agent that can be given it will be: `notion`,
 reached over sse, reaches Claude alone:

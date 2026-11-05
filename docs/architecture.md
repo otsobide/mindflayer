@@ -1065,6 +1065,8 @@ anything, and refuses the agent by or writes the entry without
 | Claude Code | an extra for it giving a key its entry is written with from the transport, `type`, `command`, `args` and `env` or `url` and `headers` (`extra_repeated`) | refused |
 | Codex | an extra for it giving a key its entry may be written with from the transport, `command`, `args`, `env`, `env_vars` and `cwd` or `url`, `http_headers`, `env_http_headers` and `bearer_token_env_var` (`extra_repeated`) | refused |
 | Codex | an extra for it giving `experimental_environment` or `environment_id` (`extra_withheld`) | refused |
+| OpenCode | `{env:` or `{file:` written as it is in a command, an argument, the environment, the folder, the URL or a header, where no input stands (`text_substituted`) | refused |
+| OpenCode | an extra for it giving a key its entry may be written with in either of its shapes, `type`, `command`, `enabled`, `environment` and `cwd` or `type`, `url`, `enabled` and `headers` (`extra_repeated`) | refused |
 
 Codex has no interpolation, so a secret reaches a server there only through
 the keys that name a variable, each in one shape: `env_vars` for a
@@ -1100,12 +1102,21 @@ nothing, where a brace naming no input means what it says: any `${`
 outside an input's placeholder refuses the server Claude, rather than only
 what 2.1.318's pattern takes (a name, then `}` or `:-`), since a reference
 written for an input after it may close what it opens. A `$` just before a
-placeholder is the `$` and the value, and stays. Claude's and Codex's
-extras go beside their entries, never over a key the entry writes
-(`claude_mcp::keys`, `codex_mcp::keys`), which would leave one of the two
-lost; Codex's are held to every key its entry may be written with, since it
-writes each only when it holds something, so what `show` says does not
-turn on which a definition fills. Nor do Codex's say the environment it
+placeholder is the `$` and the value, and stays. OpenCode fills `{env:NAME}`
+in over its config file's text before it parses it, as #18's runs saw in
+the command, the environment, the URL and the headers, and its docs say
+`{file:path}` too, so a definition's `{env:HOME}` written as it is reaches
+the server as a variable's value or nothing: any `{env:` or `{file:`
+outside an input's placeholder, in any value its entry writes, the folder
+among them, refuses the server OpenCode, for the reason any `${` refuses
+it Claude. Every agent's extras go beside its entry, never over a key the
+entry writes (`claude_mcp::keys`, `codex_mcp::keys`, `opencode_mcp::keys`),
+which would leave one of the two lost; Codex's are held to every key its
+entry may be written with, since it writes each only when it holds
+something, and OpenCode's to every key either of its shapes may be written
+with, since which shape a server is given is its file's to say, so what
+`show` says does not turn on which a definition fills or where it goes.
+Nor do Codex's say the environment it
 runs a server in (`experimental_environment`, `environment_id`,
 `codex_mcp::WITHHELD`): an entry of Mindweaver's is for a server the
 project's own machine starts or reaches, as every other agent's is. `show` says every
@@ -1114,9 +1125,9 @@ file, and `show --json` the same as `expressibility`, each shape by its code
 under `refused` or `dropped`, and `null` for a skill or a rule: a name
 added, so no version moved.
 
-An input read from no variable is not among them, though Claude's and
-Codex's renderers refuse it (`claude_mcp_input_unread`,
-`codex_mcp_input_unread`): every agent could be given its value as it is,
+An input read from no variable is not among them, though every agent's
+renderer refuses it (`claude_mcp_input_unread`, `codex_mcp_input_unread`,
+`opencode_mcp_input_unread`): every agent could be given its value as it is,
 and none is given it only because no install hands a renderer one yet
 (#93, in the open questions). Said here, `show` would call every agent
 refused a server each of them can take. Nor is an input that is no secret
@@ -9142,8 +9153,9 @@ to and keeps every other byte. It knows no agent: which file, which key path
 and what an entry holds are the caller's, and the agents' shapes are #90 to
 #92's: Claude's `.mcp.json` is the first to call it ([Claude Code's
 `.mcp.json`](#claude-codes-mcpjson)), Codex's `.codex/config.toml` the
-second ([Codex's `.codex/config.toml`](#codexs-codexconfigtoml)), and nothing
-installs through it yet.
+second ([Codex's `.codex/config.toml`](#codexs-codexconfigtoml)), OpenCode's
+`opencode.json` the third ([OpenCode's `opencode.json`](#opencodes-opencodejson)),
+and nothing installs through it yet.
 
 An entry is found by its key path, the keys of the objects that lead to it
 (`["mcpServers", "github"]`), and holds a `config_entry::Value`. Its own type
@@ -9294,7 +9306,10 @@ the way to the entry holding the next key alone. The document holds no
 comment, so `take` hands its caller the text as well, and a caller whose
 format has comments asks the text: one somebody wrote is something.
 `codex_mcp` takes `.codex/config.toml` only when taking the entry out of
-its text leaves it blank. It is read as an edit reads it, so a file that does not parse is
+its text leaves it blank, and `opencode_mcp` its JSONC only when what that
+leaves is the objects on the way, empty, and no comment
+(`config_entry::jsonc_commented`, read where the parser finds comments,
+so a `//` in a string is the string's). It is read as an edit reads it, so a file that does not parse is
 refused rather than judged, and the route is looked at again before the
 file goes, so one that has become a link is refused and what it points at
 kept.
@@ -9453,6 +9468,84 @@ whatever is left in it: it is Codex's own folder, which may hold what else
 Codex keeps for the project, and no record says Mindweaver made it. Whose
 entry it is, and whether Mindweaver made the file, are the ledger's to say
 (#93), and the install's to ask (#94): nothing here reads either.
+
+### OpenCode's `opencode.json`
+
+`opencode_mcp` (#92) gives OpenCode a server as one entry under `mcp` of
+the project's config, written and taken out through `ConfigFile` in
+JSONC, every byte outside it kept, the team's comments and trailing
+commas among them. What it builds on is #18's runs on OpenCode 2.2.5,
+2.1.3 and 1.19.4 ([docs/agents.md, OpenCode's
+`opencode.json`](agents.md#opencodes-opencodejson)), which it takes as
+they came out, and OpenCode's docs where no run looked.
+
+The file is the first of `opencode.json`, `opencode.jsonc`,
+`.opencode/opencode.json` and `.opencode/opencode.jsonc` there is at the
+project's root, in #92's order, and `opencode.json`, made with
+`create_new`, when none is. Whatever stands at one of the four routes
+counts, a link or a folder too, so that `ConfigFile` refuses it rather
+than a server being written into another file beside it; a `.opencode`
+that is no folder holds none of them. Each is read as `Format::Jsonc`,
+the `.json` files too, rather than as the format its name would say:
+OpenCode's docs say it reads JSON and JSONC alike, so a `.json` holding a
+comment is a file OpenCode loads, which strict JSON, as Claude's
+`.mcp.json` is held to, would refuse to touch. What Mindweaver makes is
+strict JSON all the same, holding no comment. Up to 2 MiB
+(`opencode_mcp::MAX_BYTES`), as the other two are read.
+
+The entry (`opencode_mcp::entry`) is D-12's minimal V2 shape,
+`mcp.servers.<name>`: a program's `{type: "local", command: [command,
+...args], environment, cwd}` or an address's `{type: "remote", url,
+headers}`, each key after the command or the address written only when
+it holds something, as Codex's are, and no `codemode`, `protocol` or
+`timeout.startup`, on which V1 warns, nor a key of Mindweaver's, since an
+entry takes none OpenCode does not know. V1's shape, `mcp.<name>` with
+`enabled`, is written only into a file that keeps a server so already:
+`mcp` holding a member other than `servers` and `timeout`, the two keys it
+holds itself, which `mcp::name` refuses a server's name for, so neither is
+ever taken for a server of V1's. A server of the name is replaced in the
+shape it stands in, where it stands, rather than written beside itself in
+the other, and one written in both is refused (`opencode_mcp_twice`), by
+`render` and `remove` alike: which of the two OpenCode reads cannot be
+told. Each shape has one canonical form (`Entry::canonical`), its
+members sorted, and `Entry::shape` says which, for the ledger's record
+(#93) to find it again. V1's shape has no key for a program's folder, by
+V1's docs, so `cwd` is left out of an entry written in it and said
+(`opencode_mcp_v1_cwd`), a warning of the renderer's rather than the
+report's, since the report is of V2's shape, which takes it, and a
+definition is given V1's only for the file it goes into.
+
+Each input is written where its placeholder stands as `{env:VAR}`, the
+variable it is read from (D-11), through the pass Claude's `${VAR}` is
+written in (`mcp::referring`), since OpenCode fills it in in every
+place, the command's first word and inside a longer value included. The
+first word and the folder are written as the definition holds them, no
+input's kind being written there. What OpenCode cannot be given is
+`McpDefinition::inexpressible`'s to say, asked before anything else:
+sse, which V2's shape does not take, text it would fill in where no input
+stands, `{env:` or `{file:` written as it is (`text_substituted`), and
+extras over a key either shape may write (`extra_repeated`), each by the
+shape's own code. A definition `validate` calls invalid is refused first
+(`opencode_mcp_unfit`), and an input read from no variable after the
+report (`opencode_mcp_input_unread`), as the other renderers refuse them.
+Nothing is said of whose environment V2's background server fills the
+references from: that is the owner's open question ([open
+questions](#open-questions)).
+
+`render` makes the entry first, in V2's shape, so a definition refused
+reads nothing, and again in V1's when the file keeps its servers so, and
+writes it in place of a server of the name or after the servers there,
+leaving a file that already holds it as it is (`Written::Unchanged`).
+`remove` takes the server out of whichever shape it stands in, and the
+file with it when the caller says Mindweaver made it and nothing else is
+left, asked of what taking the server out of the text leaves: the objects
+on the way to it, empty, and no comment (`config_entry::jsonc_commented`),
+since the document `config_entry::holds_only` reads holds none, and one
+somebody wrote is something. Only `opencode.json` is ever one Mindweaver
+made, so another of the four chosen once it has gone stays whatever it
+holds, and `.opencode` is never taken away. Whose entry it is, and
+whether Mindweaver made the file, are the ledger's to say (#93), and the
+install's to ask (#94): nothing here reads either.
 
 ## Creating and changing artifacts
 
@@ -10528,10 +10621,13 @@ command line, from how an agent starts or reaches it or from a template
 its transport and inputs. #90 renders one into Claude's `.mcp.json` as
 its one entry and takes it out again ([Claude Code's
 `.mcp.json`](#claude-codes-mcpjson)), handing back the entry's canonical
-form for the fingerprint, and #91 into Codex's `.codex/config.toml` the
+form for the fingerprint, #91 into Codex's `.codex/config.toml` the
 same way ([Codex's `.codex/config.toml`](#codexs-codexconfigtoml)), its
 canonical form its members sorted, since `codex mcp add` writes every entry
-again; installing them, and the record, are #93's and #94's.
+again, and #92 into OpenCode's `opencode.json`, or the first of its four
+config files there is, in the shape the file keeps its servers in
+([OpenCode's `opencode.json`](#opencodes-opencodejson)); installing them,
+and the record, are #93's and #94's.
 
 Checking it, #18 added MCP checks to `scripts/agent-probe`, run by hand.
 Claude Code's and OpenCode's ran on 2026-11-05; Codex's were not run, since
@@ -10609,7 +10705,11 @@ shape D-11 left unsaid: a secret in a program's environment beside other
 text, or under a name other than its variable's, since `env_vars` passes a
 variable on under its own name (`secret_env_composite`,
 `secret_env_renamed`), which a registry's server often is and `add
---secret-env` never writes.
+--secret-env` never writes. #92 writes each input as `{env:VAR}` in
+OpenCode's entry, and says the shape OpenCode's reference leaves: text
+it would fill in where no input stands, `{env:` or `{file:` written as it
+is, which the report now says (`text_substituted`), as #90 said Claude's
+`${`.
 
 Checking it, #18's checks put a reference in every place a renderer would,
 naming a variable with a value of its own, and read what a stand-in server
@@ -10652,6 +10752,15 @@ The owner runs OpenCode 2.1.3, so Mindweaver writes a minimal V2
 warns on them. Following a file's existing shape avoids mixing two in one file.
 Rejected: always the V1 shape; and running `opencode --version` on every write,
 which would tie core to a binary. Unblocks #92.
+
+#92 carried it out ([OpenCode's `opencode.json`](#opencodes-opencodejson)),
+on #18's runs, which loaded V2's shape in 2.2.5, 2.1.3 and 1.19.4 and V1's
+in V2: V2's minimal entry, and V1's only in a file whose `mcp` holds a
+server so already, a server of the name replaced in the shape it stands
+in and one written in both refused (`opencode_mcp_twice`), so no entry
+mixes the two. V1's shape has no key for a program's folder, by its docs,
+so `cwd` is left out of an entry written in it and said
+(`opencode_mcp_v1_cwd`).
 
 ### D-13: Sources have names, and a marketplace is a parent
 
@@ -11095,8 +11204,23 @@ it once as it closes.
   ([docs/agents.md](agents.md#mcp-servers)), since none of #18's checks
   asks it: which spelling of `Claude Preview` Claude compares, whether
   Codex keeps a name of its own, whether OpenCode's V1 line takes sse where
-  its V2 shape does not. A fact a later run moves changes one table in
-  `mcp::name` or one arm of `McpDefinition::inexpressible`.
+  its V2 shape does not, and whether it fills `{file:}` in as it does
+  `{env:}`. A fact a later run moves changes one table in `mcp::name` or
+  one arm of `McpDefinition::inexpressible`. So does V1's shape having no
+  key for a program's folder, read from its docs, which `opencode_mcp`
+  leaves out of an entry it writes in that shape (`opencode_mcp_v1_cwd`):
+  a run of an entry with `cwd` in V1's shape would move it.
+- **OpenCode's other config files.** `opencode_mcp` writes into the first
+  of a project's four config files there is and reads none of the others
+  ([OpenCode's `opencode.json`](#opencodes-opencodejson)), as #92 orders
+  them. OpenCode's docs say it merges every config it finds, the
+  project's files among them and those of the folders above it up to the
+  repository's root, so a server of the name in another of them would be
+  read beside Mindweaver's, merged with it key by key as Codex's user
+  config is. Refusing a name another of them holds, as
+  `codex_mcp_collision` does, waits for a run that says what the merge
+  makes of two entries of one name; until then a server is written into
+  the file #92's order chooses whatever the others hold.
 - **A server Codex's user config names too.** `codex_mcp` refuses a name
   `$CODEX_HOME/config.toml` holds under `mcp_servers`, since Codex merges
   the two key by key ([Codex's `.codex/config.toml`](#codexs-codexconfigtoml)).
@@ -12377,11 +12501,12 @@ it once as it closes.
   path as spelled, as `ConfigFile` does, would close it, at the price of
   replacing the link to a file inside the project that some teams keep
   between `AGENTS.md` and `CLAUDE.md`.
-- **A config file left empty by its last entry.** `claude_mcp::remove` and
-  `codex_mcp::remove` take their file away with its last server when their
-  caller says Mindweaver made it and nothing else is left, through
-  `ConfigFile::take`; without that word `.mcp.json` is left holding
-  `"mcpServers": {}` and `.codex/config.toml` nothing. `.codex` stays
+- **A config file left empty by its last entry.** `claude_mcp::remove`,
+  `codex_mcp::remove` and `opencode_mcp::remove` take their file away with
+  its last server when their caller says Mindweaver made it and nothing
+  else is left, through `ConfigFile::take`; without that word `.mcp.json`
+  is left holding `"mcpServers": {}`, `.codex/config.toml` nothing and
+  `opencode.json` `"mcp": {"servers": {}}`. `.codex` stays
   either way, made by Mindweaver or not: it is Codex's own folder, and
   which folder Mindweaver made is no record anybody keeps, so a project
   given a server and then none keeps an empty `.codex`, which git does not
@@ -12390,9 +12515,9 @@ it once as it closes.
 - **An input given a value rather than a variable.** An input that is no
   secret may name no variable, its value being somebody's to give, and
   Claude's entry then has nothing to refer to: `claude_mcp` refuses it
-  (`claude_mcp_input_unread`), and `codex_mcp` too
-  (`codex_mcp_input_unread`), which `show`'s report of each agent does
-  not say, since it is no agent's limit. So does `codex_mcp` one that
+  (`claude_mcp_input_unread`), and `codex_mcp` and `opencode_mcp` too
+  (`codex_mcp_input_unread`, `opencode_mcp_input_unread`), which `show`'s
+  report of each agent does not say, since it is no agent's limit. So does `codex_mcp` one that
   names a variable and is written where Codex reads none, an argument or a
   part of the address `add --arg-env` and `--url-var` write
   (`codex_mcp_input_in_text`): every server `add` writes with either
