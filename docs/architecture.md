@@ -707,9 +707,14 @@ is: wider than the kebab-case of a skill's and a rule's names, which #86
 held a server's to until #87 said which names an agent takes. Kebab-case is
 what an agent is asked to invoke a skill by; nobody invokes a server by its
 name, and kebab-case would call `GitHub` or `my_server` invalid for a rule
-no agent has. `rename`, `add` (which writes no definition yet) and an
-install's filing (`mcp::name::is_key`) ask the same rule, through
-`artifact::mcp_name_strict_issues`.
+no agent has. `rename` and `add` (which writes no definition yet) refuse a
+name through `artifact::mcp_name_strict_issues`, the strict half of what
+`validate` says of it. An install's filing asks less
+(`install::is_installable_name`, through `mcp::name::is_key`): that the name
+is a key every agent takes and one file's name, never whether an agent keeps
+it for itself, so a reserved name is refused by `validate` and by whatever
+writes the definition, not by the filing (#93, which installs one, decides
+whether it asks more).
 
 Two names that differ only by case are one name. A file system that folds
 case, macOS's and Windows' by default, cannot hold `GitHub.toml` beside
