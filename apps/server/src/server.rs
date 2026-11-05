@@ -49,8 +49,12 @@ impl<B: Backend> Server<B> {
         self
     }
 
-    /// Hand every request's line to `sink` once it has been answered, with
-    /// the launch token redacted wherever it appears.
+    /// Hand `sink` a line for every request once it has been answered, with
+    /// how long that took, and for every job the writer thread takes: a run
+    /// once its lines are worked out, before any of them runs, and again
+    /// once they have run, and a switch once it is made or refused, each
+    /// with how long it waited its turn and took. The launch token is
+    /// taken out of every line, wherever it appears.
     pub fn log(mut self, sink: impl Fn(&str) + Send + Sync + 'static) -> Self {
         self.log = Some(Arc::new(sink));
         self
