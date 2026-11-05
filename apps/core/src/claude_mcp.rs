@@ -185,9 +185,10 @@ pub fn entry(definition: &McpDefinition) -> Result<Entry, ClaudeMcpError> {
     }
     // Passed on as written, beside what the transport renders, never over
     // it: an extra holding a key the entry writes refused the entry above
-    // ([`Inexpressible::ExtraRepeated`]).
+    // ([`Inexpressible::ExtraRepeated`]). A TOML date and time, which JSON
+    // has no value for, goes as the text it is written in.
     for (key, value) in definition.extras_for(Agent::Claude).into_iter().flatten() {
-        members.push((key.clone(), value_of(value)));
+        members.push((key.clone(), Value::from(value)));
     }
     Ok(Entry {
         name,
@@ -396,25 +397,6 @@ fn referring(text: &str, read: &[(&InputName, &VariableName)]) -> String {
     }
     written.push_str(rest);
     written
-}
-
-/// An extra as an entry holds it, every value as it is; a TOML date and
-/// time, which JSON has no value for, as the text it is written in, as
-/// [`crate::config_entry`] reads one.
-fn value_of(value: &toml::Value) -> Value {
-    match value {
-        toml::Value::String(text) => Value::String(text.clone()),
-        toml::Value::Integer(number) => Value::Integer(*number),
-        toml::Value::Float(number) => Value::Float(*number),
-        toml::Value::Boolean(flag) => Value::Bool(*flag),
-        toml::Value::Datetime(moment) => Value::String(moment.to_string()),
-        toml::Value::Array(values) => Value::Array(values.iter().map(value_of).collect()),
-        toml::Value::Table(table) => Value::object(
-            table
-                .iter()
-                .map(|(key, value)| (key.clone(), value_of(value))),
-        ),
-    }
 }
 
 #[cfg(test)]

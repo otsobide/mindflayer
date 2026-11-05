@@ -474,6 +474,28 @@ impl From<String> for Value {
     }
 }
 
+/// A value as the `toml` crate reads it, an MCP definition's extras among
+/// them, which a renderer passes on: every value as it is, and a date and
+/// time, which JSON has none of and so neither has this type, as the text
+/// it is written in, as an entry read from a TOML file holds one.
+impl From<&::toml::Value> for Value {
+    fn from(value: &::toml::Value) -> Self {
+        match value {
+            ::toml::Value::String(text) => Value::String(text.clone()),
+            ::toml::Value::Integer(number) => Value::Integer(*number),
+            ::toml::Value::Float(number) => Value::Float(*number),
+            ::toml::Value::Boolean(flag) => Value::Bool(*flag),
+            ::toml::Value::Datetime(moment) => Value::String(moment.to_string()),
+            ::toml::Value::Array(values) => Value::Array(values.iter().map(Value::from).collect()),
+            ::toml::Value::Table(table) => Value::object(
+                table
+                    .iter()
+                    .map(|(key, value)| (key.clone(), Value::from(value))),
+            ),
+        }
+    }
+}
+
 fn write_canonical(value: &Value, text: &mut String) {
     match value {
         Value::Null => text.push_str("null"),
