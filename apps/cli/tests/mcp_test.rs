@@ -281,6 +281,36 @@ fn a_server_is_renamed_and_removed_as_every_kind_is() {
     assert!(!folder.join("octocat.toml").exists());
 }
 
+#[cfg(unix)]
+#[test]
+fn edit_says_a_server_clashes_with_one_beside_it_in_another_case_as_validate_does() {
+    let dir = library();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    let twin = McpMother::twin("github");
+    fs::write(folder.join(format!("{twin}.toml")), McpMother::stdio(&twin)).unwrap();
+
+    // A stand-in editor that changes nothing.
+    let edited = weaver(dir.path(), &["edit", "mcp:github", "--editor", "true"]).unwrap();
+    let validated = weaver(dir.path(), &["validate", "mcp:github"]).unwrap();
+
+    let problem = format!(
+        "1 problem\n  \
+         - `github` and `{twin}` differ only by case, which a file system that folds case, as \
+         macOS's and Windows' do, holds as one file, so no library holds both everywhere: \
+         rename one of them\n"
+    );
+    assert!(!edited.ok && !validated.ok);
+    assert_eq!(
+        edited.stdout,
+        format!("left mcp github unchanged: {problem}")
+    );
+    assert!(
+        validated.stdout.starts_with(&format!("github: {problem}")),
+        "{}",
+        validated.stdout
+    );
+}
+
 #[test]
 fn contents_given_whole_that_name_a_server_otherwise_are_refused() {
     let dir = library();

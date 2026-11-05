@@ -304,6 +304,11 @@ fn place_in(directory: &Path, kind: Kind, name: &str) -> PathBuf {
 
 /// Load the artifact at `path`, named `name` if it is the kind whose name
 /// comes from where it sits.
+///
+/// An MCP server's definition is told of those beside it named as it is
+/// in another case, as discovery tells it ([`twins_beside`]), so that a
+/// verdict on one file, the one `edit` gives once the editor closes, is
+/// the one `validate` gives.
 pub fn load(
     project: &MindProject,
     kind: Kind,
@@ -313,7 +318,13 @@ pub fn load(
     match kind {
         Kind::Skill => Artifact::skill(path, project.root()),
         Kind::Rule => Artifact::rule(path, name.to_owned(), project.root()),
-        Kind::Mcp => Artifact::mcp(path, name.to_owned(), project.root()),
+        Kind::Mcp => {
+            let mut artifact = Artifact::mcp(path, name.to_owned(), project.root())?;
+            if let Some(folder) = path.parent() {
+                artifact.twinned(twins_beside(folder, name, path));
+            }
+            Ok(artifact)
+        }
     }
 }
 

@@ -719,10 +719,12 @@ discovery tells each definition of the others in its folder named as it is
 in another case, and `validate` calls each invalid (`mcp_name_case_clash`);
 `rename` and `edit --contents` read the same off the folder they write in
 (`lifecycle::twins_beside`), a rename that changes only a name's case
-excepted, and refuse it through the one strict function, and a draft is
-judged as it would be once written. Listing the first of the two and
-passing over the other was the alternative, and would hide a server the
-moment somebody added its twin.
+excepted, and refuse it through the one strict function, a draft is
+judged as it would be once written, and a definition loaded on its own,
+as `edit` loads the file its editor closed on, is told the same
+(`lifecycle::load`), so that `edit`'s verdict is `validate`'s. Listing the
+first of the two and passing over the other was the alternative, and would
+hide a server the moment somebody added its twin.
 
 A name an agent keeps for itself is refused (`mcp_name_reserved`), in any
 case, since two names that differ by case alone are one: Claude Code's
