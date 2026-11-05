@@ -1589,7 +1589,12 @@ These are easy to break from a single file without noticing.
   starts the server the same way, from the fixture's folder. A spec reads
   the server from `served`, what the CLI says from `listing()`, `mindweaver
   list --json` in its envelope, and opens a page with `panel.open`, through
-  the launch link, as a person does. Every test fails on a CSP violation or
+  the launch link, as a person does. After a click that opens another page,
+  it acts through what only that page draws (the add page's form, by its
+  name, and `exact` labels inside it), never a label or a name the page it
+  leaves could match too: the click returns while that page is still
+  drawn, and Playwright matches either in any case and anywhere in it.
+  Every test fails on a CSP violation or
   an uncaught error on its page (`watch`), and `csp.spec.ts` holds the watch
   to seeing one. No spec changes the shared workspace: a test that changes
   something takes a workspace and a `mindweaver ui` of its own (`own`, built by

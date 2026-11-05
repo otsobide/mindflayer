@@ -7298,6 +7298,18 @@ a person's browser trades it. The security smoke tests send requests of
 their own: one with the cookie the link set, one with the token as
 Bearer, and one with neither.
 
+A page a click leads to is acted on through what that page alone draws.
+The router loads a page's code the first time it is opened, so a click on
+a link returns while the page it leaves is still drawn, and Playwright
+matches a label or a name in any case and anywhere in it unless told
+`exact`. The add page's `Name`, looked for anywhere, was once the
+library's filter ("Filter each skill by name or summary"), and the name
+typed into it went into the filter, or nowhere once the library made way
+for the add page (#238). So a spec finds the fields it fills inside what
+the page draws once it is ready, the add page's form by its name, and a
+spec that only reads waits for a test id or an address only the page it
+arrives at has; never for a fixed time, which a slower runner outlasts.
+
 The specs hold the panel to the CLI: the overview's cards to the rows
 `mindweaver list --json` prints, counted from them rather than read from a
 count beside them; each project's page to what the listing says of that
@@ -10712,6 +10724,22 @@ it once as it closes.
   document in JavaScript, so it is slower than a browser at the same work
   and says nothing of painting. The browser suite times nothing; a bound
   there would be one more number a runner's load moves.
+- **An unload's run once took five and a half seconds.** In one run of
+  CI's Chromium, `e2e/loads.spec.ts` found the unload's command dialog
+  still drawn five seconds after Run was clicked (#238). The trace CI kept
+  says why: the dialog was the unload's own, its buttons held as they are
+  while a run goes on, and the server answered the run 5508 ms after it
+  was sent, half a second after the spec stopped waiting, where the load
+  before it, a change to the same marker, took 952 ms. A snapshot asked
+  meanwhile was answered in 9 ms, so what waited was the writer thread,
+  or the line it ran, which is one `edit_array` under the workspace's
+  lock. Nearly six hundred runs here, on the debug and the release
+  binaries, with the browser's CPU throttled and with the whole run held
+  to two cores, never took longer than about half a second. What the run
+  waited on (another writer holding the lock, something in the line, or
+  the runner) waits for a run that says how long each line took and how
+  long it waited for the lock (#240); the spec is left as it is, since a
+  longer wait there would hide a run a person waits for too.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has
