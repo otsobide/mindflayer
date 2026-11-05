@@ -202,8 +202,9 @@ impl ConfigFile {
     /// Take the file away when `empty` says the document it holds is
     /// nothing its caller keeps, and leave it as it is otherwise.
     ///
-    /// What a caller that made the file asks once its last entry is out, a
-    /// file nobody else wrote in being nothing to leave behind. Which
+    /// What a caller that made the file asks when what it is taking out is
+    /// all that is left in it, a file nobody else wrote in being nothing to
+    /// leave behind. Which
     /// documents are empty is the caller's to say, as the key path is:
     /// `{"mcpServers": {}}` is nothing in `.mcp.json`, and something in a
     /// file that holds other settings beside it.

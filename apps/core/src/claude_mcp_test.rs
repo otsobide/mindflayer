@@ -246,3 +246,28 @@ fn a_definition_validate_calls_invalid_is_refused_without_its_token() {
         "claude_mcp_unfit"
     );
 }
+
+#[test]
+fn a_document_holds_only_a_server_when_nothing_else_is_written_beside_it() {
+    let server = || Value::object([("type", Value::from("stdio"))]);
+    let servers = |members: Vec<(&str, Value)>| Value::object([(SERVERS, Value::object(members))]);
+
+    assert!(holds_only(&Value::object::<&str>([]), "a"));
+    assert!(holds_only(&servers(vec![]), "a"));
+    assert!(holds_only(&servers(vec![("a", server())]), "a"));
+
+    assert!(!holds_only(&servers(vec![("b", server())]), "a"));
+    assert!(!holds_only(
+        &servers(vec![("a", server()), ("b", server())]),
+        "a"
+    ));
+    assert!(!holds_only(
+        &Value::object([
+            (SERVERS, Value::object::<&str>([])),
+            ("other", Value::Bool(true))
+        ]),
+        "a"
+    ));
+    assert!(!holds_only(&Value::object([(SERVERS, Value::Null)]), "a"));
+    assert!(!holds_only(&Value::Array(Vec::new()), "a"));
+}

@@ -165,6 +165,7 @@
         "claude_mcp_unfit",
         "claude_mcp_input_unread",
         "claude_mcp_extra_repeated",
+        "mcp_json_not_strict",
         "claude_mcp_sse_deprecated",
         "claude_md_read_failed",
         "claude_md_write_failed",

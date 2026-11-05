@@ -1,13 +1,23 @@
-//! What Claude Code is given of an MCP server's definition: one entry of
-//! its `.mcp.json`, `mcpServers.<name>` (D-10).
+//! An MCP server's definition rendered into Claude Code's `.mcp.json`: one
+//! entry, `mcpServers.<name>`, written and taken out again through
+//! [`crate::config_entry`], every byte outside it kept (D-10).
+//!
+//! Claude reads a project's servers from `.mcp.json` at its root, a strict
+//! JSON file, and loses every one of them to a comment or a trailing comma
+//! ("MCP config is not valid JSON", #18's `claude-mcp-comment` and
+//! `claude-mcp-comma` in `docs/agents.md`). So the file is read as
+//! [`Format::Json`], and one only a looser reader takes is refused with a
+//! code of its own ([`ClaudeMcpError::NotStrict`]), saying why, rather than
+//! given an entry Claude would never load, or rewritten into one it would,
+//! which is its owner's to do.
 //!
 //! The entry always says its `type`. An http entry somebody wrote without
 //! one is dropped by Claude alone and costs the file nothing else
-//! (`claude-mcp-untyped`, #18's in `docs/agents.md`), and an entry of
-//! Mindweaver's never is one. A program is `{type, command, args, env}`
-//! and an address `{type, url, headers}`, each key written whether or not
-//! it holds anything, so a definition has one entry, and one canonical
-//! form, whatever it leaves empty.
+//! (`claude-mcp-untyped`), so it is no reason to refuse the file, and an
+//! entry of Mindweaver's never is one. A program is `{type, command, args,
+//! env}` and an address `{type, url, headers}`, each key written whether
+//! or not it holds anything, so a definition has one entry, and one
+//! canonical form, whatever it leaves empty.
 //!
 //! Each input is written where its placeholder stands as `${VAR}`, the
 //! variable it is read from (D-11): Claude expands one in `args`, `env`,
@@ -19,26 +29,43 @@
 //!
 //! What Claude cannot be given of a definition is
 //! [`McpDefinition::inexpressible`]'s to say, never a second copy of its
-//! rule here: a shape that refuses the agent refuses the entry, and one the
-//! entry is written without (a program's `cwd`) is a [`Warning`].
+//! rule here, and it is asked before the file is read: a shape that
+//! refuses the agent refuses the entry, and one the entry is written
+//! without (a program's `cwd`) is a [`Warning`].
 //!
 //! No approval is written. A person approves a project's servers when
 //! Claude asks, and a `-p` run starts every server the file names, approved
 //! or not (`claude-mcp`), so an entry runs there as soon as it is written.
+//!
+//! Nothing here knows of the ledger. Whether an entry of the name is
+//! Mindweaver's to replace or take out, and whether Mindweaver made the
+//! file, are the caller's, as its record says (#93, #94); and the caller
+//! holds the workspace's lock, as one calling [`ConfigFile`] does.
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
 use crate::agent::Agent;
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
-use crate::config_entry::Value;
+use crate::config_entry::{ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
 use crate::mcp::{Inexpressible, McpDefinition, Transport};
 use crate::value::{ArtifactName, InputName, VariableName};
 
-/// The object in `.mcp.json` that holds every server by its name.
+/// Where Claude reads a project's servers, from its root.
+pub const FILE: &str = ".mcp.json";
+
+/// The object in [`FILE`] that holds every server by its name.
 pub const SERVERS: &str = "mcpServers";
+
+/// The most a [`FILE`] is read for: 2 MiB.
+///
+/// A project's servers come to a few KiB, so a file past this is not one
+/// somebody keeps servers in, and it would be held in memory whole, as
+/// text, as a tree of every byte and as what an edit is checked against.
+pub const MAX_BYTES: u64 = 2 * 1024 * 1024;
 
 /// What Claude is given of a definition: its entry under [`SERVERS`], and
 /// what is said of it.
@@ -59,6 +86,17 @@ impl Entry {
     pub fn canonical(&self) -> String {
         self.value.canonical()
     }
+}
+
+/// What [`render`] did.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rendered {
+    /// The project's [`FILE`].
+    pub file: PathBuf,
+    /// [`Written::Created`] when the file was not there and is made now,
+    /// which the caller keeps, to hand back to [`remove`] as `created`.
+    pub written: Written,
+    pub entry: Entry,
 }
 
 /// The entry Claude is given for `definition`, or why it is given none.
@@ -158,6 +196,64 @@ pub fn entry(definition: &McpDefinition) -> Result<Entry, ClaudeMcpError> {
     })
 }
 
+/// Write `definition`'s entry into the [`FILE`] at `root`, a project's
+/// root, in place of one of the same name or after the servers already
+/// there, and make the file when it is not there yet.
+///
+/// The entry is made first ([`entry`]), so a definition refused reads and
+/// writes nothing. The file is read up to [`MAX_BYTES`], strictly, and
+/// written through [`ConfigFile`], which keeps every byte outside the
+/// entry, makes a new file with `create_new` and leaves one that already
+/// holds the entry as it is.
+pub fn render(root: &Path, definition: &McpDefinition) -> Result<Rendered, ClaudeMcpError> {
+    let entry = entry(definition)?;
+    let file = config(root)?;
+    let key = [SERVERS, entry.name.as_str()];
+    let edit = match file.get(&key).map_err(|error| loose(root, error))? {
+        None => Edit::Insert(entry.value.clone()),
+        Some(_) => Edit::Replace(entry.value.clone()),
+    };
+    let written = file.edit(&key, &edit).map_err(|error| loose(root, error))?;
+    Ok(Rendered {
+        file: file.path(),
+        written,
+        entry,
+    })
+}
+
+/// Take the entry keyed `name` out of the [`FILE`] at `root`, every other
+/// byte as it was, and take the file away with it when `created`, that
+/// Mindweaver made it, and nothing else is left in it: no other server, and
+/// nothing beside [`SERVERS`].
+///
+/// [`Written::Removed`] when the file went, [`Written::Changed`] when the
+/// entry did and the file stays, and [`Written::Unchanged`] when there was
+/// no such entry, nor a file to take. A file Mindweaver made that somebody
+/// has written in since is theirs too, and stays.
+pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, ClaudeMcpError> {
+    let file = config(root)?;
+    // Taken whole when the entry is all it holds, rather than written
+    // without it first only to be taken away.
+    if created {
+        let taken = file
+            .take(|document| holds_only(document, name))
+            .map_err(|error| loose(root, error))?;
+        if taken == Written::Removed {
+            return Ok(taken);
+        }
+    }
+    let key = [SERVERS, name];
+    if file
+        .get(&key)
+        .map_err(|error| loose(root, error))?
+        .is_none()
+    {
+        return Ok(Written::Unchanged);
+    }
+    file.edit(&key, &Edit::Remove)
+        .map_err(|error| loose(root, error))
+}
+
 /// What is said of an entry written all the same.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Warning {
@@ -178,7 +274,7 @@ codes!(Warning {
     Self::Dropped { shape, .. } => shape,
 });
 
-/// Why Claude is given no entry.
+/// Why Claude is given no entry, or the file is not changed.
 #[derive(Debug, Error)]
 pub enum ClaudeMcpError {
     #[error("`{name}` is written for no agent while it is invalid: {}", issue_list(.issues))]
@@ -192,15 +288,74 @@ pub enum ClaudeMcpError {
     InputUnread { name: String, input: InputName },
     #[error("`{name}` cannot be given to Claude Code: its extras for Claude give `{key}`, which the entry writes from its transport")]
     ExtraRepeated { name: String, key: String },
+    #[error("{path}: not strict JSON ({detail}), which is how Claude Code reads it, loading none of the servers of a file that holds a comment or a trailing comma, so it was left as it is")]
+    NotStrict { path: PathBuf, detail: String },
+    #[error(transparent)]
+    File(#[from] FileError),
 }
 
 codes!(ClaudeMcpError {
     Self::Unfit { .. } => "claude_mcp_unfit",
     Self::InputUnread { .. } => "claude_mcp_input_unread",
     Self::ExtraRepeated { .. } => "claude_mcp_extra_repeated",
+    Self::NotStrict { .. } => "mcp_json_not_strict",
 } carried {
     Self::Inexpressible { shape, .. } => shape,
+    Self::File(error) => error,
 });
+
+/// The project's [`FILE`], read strictly and up to [`MAX_BYTES`].
+fn config(root: &Path) -> Result<ConfigFile, ClaudeMcpError> {
+    Ok(ConfigFile::new(root, FILE, Format::Json)?.capped(MAX_BYTES))
+}
+
+/// `error`, said as [`ClaudeMcpError::NotStrict`] when the file it was
+/// refused for is not strict JSON and reads all the same as JSON with
+/// comments and trailing commas: a file somebody wrote for a reader looser
+/// than Claude's, rather than one broken for every reader.
+fn loose(root: &Path, error: FileError) -> ClaudeMcpError {
+    let FileError::Entry {
+        path,
+        source:
+            EntryError::Malformed {
+                format: Format::Json,
+                detail,
+            },
+    } = error
+    else {
+        return error.into();
+    };
+    let looser = ConfigFile::new(root, FILE, Format::Jsonc)
+        .map(|file| file.capped(MAX_BYTES))
+        .and_then(|file| file.get(&[SERVERS]));
+    match looser {
+        Err(FileError::Entry {
+            source: EntryError::Malformed { .. },
+            ..
+        }) => ClaudeMcpError::File(FileError::Entry {
+            path,
+            source: EntryError::Malformed {
+                format: Format::Json,
+                detail,
+            },
+        }),
+        _ => ClaudeMcpError::NotStrict { path, detail },
+    }
+}
+
+/// Whether `document` holds nothing but the server keyed `name`, or not
+/// even that: nothing a person wrote beside an entry of Mindweaver's.
+fn holds_only(document: &Value, name: &str) -> bool {
+    let Value::Object(members) = document else {
+        return false;
+    };
+    members.iter().all(|(key, value)| match value {
+        Value::Object(servers) if key == SERVERS => {
+            servers.iter().all(|(server, _)| server == name)
+        }
+        _ => false,
+    })
+}
 
 /// `text` with each placeholder of an input in `read` written as Claude's
 /// reference to the variable it is read from, and every other byte as it
