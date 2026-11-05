@@ -1560,7 +1560,7 @@ These are easy to break from a single file without noticing.
   named into is held by its shape alone. Unix alone.
 - The TUI end to end is `apps/cli/tests/tui_e2e_test.rs`, its modules under
   `tests/tui_e2e/` grouped by what a person does on the screen (browsing,
-  changing, screens, starting), on the CLI suite's `Scenario`. Each test
+  changing, screens, sources, starting), on the CLI suite's `Scenario`. Each test
   starts `mindweaver` or `mind` in a pseudo-terminal of its own
   (`tui_e2e/terminal.rs`, `Terminal`, 120 by 24), its process the leader of
   a session with that terminal as its controlling one (rustix's `pty`,
@@ -1572,9 +1572,16 @@ These are easy to break from a single file without noticing.
   bounded, for what it expects (`shows`, `no_longer_shows`, `draws` for
   rows word for word), then quits (`exits`) and holds the exit status, the
   transcript the terminal shows once the window is given back, and the
-  disk. A row with a path inside a box is held by what it says, not word
-  for word: read as `/home`, the path is shorter than the one the box was
-  drawn around. Unix alone.
+  disk. A key typed before the screen is drawn is the shell's, echoed where
+  the transcript lands, so a test waits for the first draw before typing.
+  The terminal answers where its cursor is (`ESC [ 6 n`) as a person's
+  does, from the thread that reads it, since ratatui asks when it clears
+  the screen, as after an editor; the editor `e` hands the terminal to is
+  the use case's (`open_with`, `EDITOR`), and the test waits for the
+  screen to give the window up and take it back (`steps_aside`,
+  `comes_back`). A row with a path inside a box is held by what it says,
+  not word for word: read as `/home`, the path is shorter than the one the
+  box was drawn around. Unix alone.
 - The server's suites run against a fake backend with types of its own
   (`common::Fake`, its reads `common::fake_routes`), never the CLI's.
   `routes_test.rs` holds the server to the table: a path and its
@@ -1708,7 +1715,11 @@ These are easy to break from a single file without noticing.
   api/schemas/check` run them, with `ts` beside `schema`; `make test` does
   not.
 - Screens are tested without a terminal. Drive `state` with key events, or
-  call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
+  call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`
+  (`common::tui_drawn`, or `tui_drawn_at` for a size of its own). What
+  every form and page shares, the line being typed (`Input`, its cursor
+  counted in characters) and the page being read (`Reader`), is held key
+  by key in `src/tui/state_test.rs`. Only
   the event loops in `tui.rs` and `install.rs` go untested there, and only
   the TUI's end-to-end suite reaches them, so keep logic out of them. A task
   that runs apart is started by `tui::step` and taken in by

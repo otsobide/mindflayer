@@ -313,6 +313,19 @@ The one pause is after an escape: one read together with the key after it
 is that key with Alt held, in any terminal, and a person's next key comes
 later than a test's.
 
+**The terminal answers where its cursor is.** ratatui asks before it
+clears the screen (`ESC [ 6 n`, a device status report), which the
+screen does when it takes its window back from an editor, and gives up
+drawing when no answer comes within two seconds. Every terminal a person
+uses answers it, and a pseudo-terminal read by a parser does not, so the
+suite answers as a terminal does, with where the cursor is when it was
+asked: on the thread that reads what the screen writes, with a parser of
+its own fed everything, so an answer never waits on a test's next step.
+The editor itself is the use case's (`EDITOR`, given to that one
+screen), one that writes and waits for a key, so a test sees the window
+while it is the editor's, off the alternate screen, before the screen
+draws itself again.
+
 **A row with a path in a box is held by what it says.** The screen pads a
 box's rows to its width around the path it shows, so a path read back as
 `/home` is shorter than the one drawn, and the box's edge moves: such a

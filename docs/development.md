@@ -162,8 +162,26 @@ terminal.types("q");
 let closed = terminal.exits();
 ```
 
+A key that hands the terminal to another program, `e` to the editor, is
+given that program by the variable the use case names (`open_with`), and
+the test waits for the screen to step aside and to come back:
+
+```rust
+let mut terminal = scenario.open_with("~/Projects", "mindweaver", &[("EDITOR", &editor)]);
+terminal.types("e").steps_aside().shows("save the draft?");
+terminal.types("y\r").comes_back().shows("edited skill deploy: ok");
+```
+
 ```bash
 cargo test -p mindweaver-cli --test tui_e2e_test                # every use case
+```
+
+What every form and page of the screen shares, the line being typed
+(`Input`) and the page being read (`Reader`), is held key by key with no
+screen around it in `apps/cli/src/tui/state_test.rs`:
+
+```bash
+cargo test -p mindweaver-cli --lib tui::state
 ```
 
 What a test needs is built by an object mother rather than by hand:
