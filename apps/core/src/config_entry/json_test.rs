@@ -1,6 +1,7 @@
 //! Unit tests for `config_entry/json.rs`: what an edit through the CST keeps,
 //! byte for byte, in files written the ways people write them.
 
+use super::{commented, loose};
 use crate::config_entry::{edit, edit_document, get, Edit, EntryError, Format, Value};
 
 /// A server entry, the shape of which is nobody's in particular.
@@ -271,6 +272,64 @@ fn strict_json_refuses_raw_control_characters_and_other_whitespace() {
         get(Format::Json, text, &["a"]).unwrap(),
         Some(Value::from("\"tab\there\\\u{a0}\u{2028}"))
     );
+}
+
+#[test]
+fn json_but_for_comments_and_trailing_commas_is_told_from_what_no_reader_takes() {
+    for text in [
+        "{\n  // a comment\n  \"mcpServers\": {}\n}\n",
+        "{\n  \"mcpServers\": {},\n}\n",
+        "/* the team's */ {\"a\": [1, 2,],}",
+        // Whatever a comment holds is the comment's: a quote, a letter
+        // past ASCII, a no-break space, a control character.
+        "{\n  // \"quoted\", caf\u{e9}\u{a0}\u{b}\n  \"a\": \"b\"\n}",
+        "{\"a\": /* \" */ \"b\"}",
+        "{\"a\": 1} // a lone carriage return ends it\r",
+        // Strict JSON is JSON but for nothing.
+        "{\"a\": 1}",
+    ] {
+        assert!(loose(text), "{text:?}");
+    }
+    for text in [
+        "{\"a\": \"tab\there\"}",
+        "\u{a0}{\"a\": 1}",
+        "{\"a\":\u{2028}1}",
+        // A comment does not make what else is wrong with the file its.
+        "{\n  // a comment\n  \"a\": \"tab\there\"\n}",
+        "{\"a\": 1,} \u{a0}",
+        "{\n  \"mcpServers\": \n",
+        "{ 'a': 1 }",
+        // Nothing, which no reader takes as a document.
+        "",
+        "// only a comment\n",
+    ] {
+        assert!(!loose(text), "{text:?}");
+    }
+}
+
+#[test]
+fn a_comment_anywhere_is_told_from_a_text_that_holds_none() {
+    for text in [
+        JSONC,
+        "// the team's\n{}",
+        "{\n  \"mcp\": {} // theirs\n}\n",
+        "{\"a\": /* \"b\" */ 1}",
+        "{\"a\": 1,} // beside a trailing comma\n",
+        "// only a comment\n",
+    ] {
+        assert!(commented(text), "{text:?}");
+    }
+    for text in [
+        "{}",
+        "{\"a\": [1, 2,],}",
+        // What a string holds is the string's.
+        "{\"a\": \"// no comment\", \"b\": \"/* nor this */\"}",
+        // What JSONC does not read holds no comment its reader takes.
+        "{ 'a': 1 } // JSON5's\n",
+        "",
+    ] {
+        assert!(!commented(text), "{text:?}");
+    }
 }
 
 #[test]

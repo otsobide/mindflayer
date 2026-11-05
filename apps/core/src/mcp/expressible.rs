@@ -14,17 +14,29 @@
 //!
 //! Each agent's shapes are a function matched on the agent with no
 //! wildcard, so a new agent says what it cannot express before it
-//! compiles. Each fact is docs-only, from D-11 and #87, and
-//! `docs/agents.md`'s "MCP servers" says what #18's run on the binaries
-//! would move.
+//! compiles. Each fact is docs-only, from D-11 and #87, the variables
+//! Claude reads as empty toward a remote server from its binary
+//! ([`super::blanked`]), and what Codex passes on to a program from its
+//! documentation (#91), but what OpenCode fills in over its config's text,
+//! `{env:}` as #18's runs saw it and `{file:}` as its documentation says
+//! (#92); `docs/agents.md`'s "MCP servers" says what #18's runs on the
+//! binaries moved, and what a later one would.
+//!
+//! Not an input read from no variable either, which a renderer refuses
+//! (`claude_mcp_input_unread`) while no install hands it the value (#93):
+//! every agent could be given that value as it is, so it is no agent's
+//! limit, and `show` would say it of all three only until then.
 
 use serde::Serialize;
 use thiserror::Error;
 
 use crate::agent::Agent;
+use crate::claude_mcp;
 use crate::code::{codes, Said};
-use crate::mcp::{written, InputKind, McpDefinition, Transport};
-use crate::value::InputName;
+use crate::codex_mcp;
+use crate::mcp::{blanked, keyed, written, Input, InputKind, McpDefinition, Transport};
+use crate::opencode_mcp;
+use crate::value::{InputName, VariableName};
 
 /// Something a definition holds that one agent cannot be given as it is
 /// written, said of the agent the report is for.
@@ -58,6 +70,27 @@ pub enum Inexpressible {
          `Authorization: Bearer` and the token"
     )]
     SecretHeaderComposite { header: String, input: InputName },
+    /// A secret input written in a program's environment variable beside
+    /// other text: Codex passes a variable on to a program only whole
+    /// (`env_vars`), so the text around it has nowhere to go.
+    #[error(
+        "secret input `{input}` is written in environment variable `{key}` beside other text, \
+         and a program is given a variable there only whole, under its own name"
+    )]
+    SecretEnvComposite { key: String, input: InputName },
+    /// A secret input that is the whole value of a program's environment
+    /// variable named otherwise than the variable it is read from: Codex
+    /// passes a variable on under its own name (`env_vars`), so the program
+    /// would find it there, and nothing under the name it looks for.
+    #[error(
+        "secret input `{input}` is written as environment variable `{key}`, and a program is \
+         given a variable there only whole, under its own name, `{variable}`"
+    )]
+    SecretEnvRenamed {
+        key: String,
+        input: InputName,
+        variable: VariableName,
+    },
     /// Server-sent events, which the MCP specification has since replaced
     /// with streamable HTTP, and which neither Codex nor OpenCode's V2
     /// shape, the one Mindweaver writes (D-12), takes.
@@ -67,14 +100,73 @@ pub enum Inexpressible {
     /// is started where Claude starts it, and the rest is written.
     #[error("the transport's `cwd` is left out, since a program is started there in no folder it is told")]
     WorkingDirectory,
+    /// An input of an address read from a variable Claude reads as empty in
+    /// a remote server's `url` and `headers`, a credential of its own or of
+    /// a tool on the machine ([`super::blanked`]): written as a reference,
+    /// it would reach the server with nothing in it.
+    #[error(
+        "input `{input}` is read from `{variable}`, which is read as empty there in a remote \
+         server's `url` and `headers`, so that a credential it holds never reaches one"
+    )]
+    VariableBlanked {
+        input: InputName,
+        variable: VariableName,
+    },
+    /// `${` written as it is in a value Claude expands, where no input's
+    /// placeholder stands: the opening of a reference to an environment
+    /// variable there (`${VAR}`, `${VAR:-default}`), which would give the
+    /// server the variable's value, a default or nothing in place of the
+    /// text, where a brace naming no input means what it says.
+    #[error(
+        "`{at}` holds `${{` as it is, which opens a reference to an environment variable \
+         there, so the text written in it cannot be given"
+    )]
+    TextExpanded { at: String },
+    /// `{env:` or `{file:` written as it is in a value OpenCode is given,
+    /// where no input's placeholder stands: OpenCode fills both in over its
+    /// config file's text before it reads the file ([`SUBSTITUTED`]), a
+    /// variable's value or a file's contents in place of the text, where a
+    /// brace naming no input means what it says.
+    #[error(
+        "`{at}` holds `{opening}` as it is, which is filled in there over the file's text \
+         before it is read, so the text written in it cannot be given"
+    )]
+    TextSubstituted { at: String, opening: &'static str },
+    /// A key the agent's extras give that its entry is written with from
+    /// the transport: passed on beside it, one of the two would be lost,
+    /// and which one would be the order of a file's keys. Said of every
+    /// agent, whose entries' keys are their renderers' (`claude_mcp::keys`,
+    /// `codex_mcp::keys`, `opencode_mcp::keys`).
+    #[error(
+        "its extras for the agent give `{key}`, a key the entry there is written with from the \
+         transport, so one of the two would be lost"
+    )]
+    ExtraRepeated { key: String },
+    /// A key the agent's extras give that is never written for it: Codex's
+    /// `experimental_environment` and `environment_id`, by their names the
+    /// environment it runs a server in, where an entry of Mindweaver's is
+    /// for a server the project's own machine starts or reaches. Said of
+    /// Codex (`codex_mcp::WITHHELD`).
+    #[error(
+        "its extras for the agent give `{key}`, a key for the environment it runs a server in, \
+         which is never written there"
+    )]
+    ExtraWithheld { key: String },
 }
 
 codes!(Inexpressible {
     Self::SecretInArgument { .. } => "secret_in_argument",
     Self::SecretInUrl { .. } => "secret_in_url",
     Self::SecretHeaderComposite { .. } => "secret_header_composite",
+    Self::SecretEnvComposite { .. } => "secret_env_composite",
+    Self::SecretEnvRenamed { .. } => "secret_env_renamed",
     Self::ServerSentEvents => "sse_unsupported",
     Self::WorkingDirectory => "cwd_unsupported",
+    Self::VariableBlanked { .. } => "variable_blanked",
+    Self::TextExpanded { .. } => "text_expanded",
+    Self::TextSubstituted { .. } => "text_substituted",
+    Self::ExtraRepeated { .. } => "extra_repeated",
+    Self::ExtraWithheld { .. } => "extra_withheld",
 });
 
 impl Inexpressible {
@@ -89,7 +181,14 @@ impl Inexpressible {
             Inexpressible::SecretInArgument { .. }
             | Inexpressible::SecretInUrl { .. }
             | Inexpressible::SecretHeaderComposite { .. }
-            | Inexpressible::ServerSentEvents => true,
+            | Inexpressible::SecretEnvComposite { .. }
+            | Inexpressible::SecretEnvRenamed { .. }
+            | Inexpressible::ServerSentEvents
+            | Inexpressible::VariableBlanked { .. }
+            | Inexpressible::TextExpanded { .. }
+            | Inexpressible::TextSubstituted { .. }
+            | Inexpressible::ExtraRepeated { .. }
+            | Inexpressible::ExtraWithheld { .. } => true,
             Inexpressible::WorkingDirectory => false,
         }
     }
@@ -118,7 +217,7 @@ pub struct Expressibility {
 impl McpDefinition {
     /// What `agent` cannot be given of this definition as it is written,
     /// in the order the definition holds it: its transport, then each
-    /// input in the order declared.
+    /// input in the order declared, then the agent's extras.
     ///
     /// What a renderer asks before it writes the agent's entry, and the
     /// one place each agent's limits are said.
@@ -157,35 +256,125 @@ impl McpDefinition {
 
     /// Claude expands `${VAR}` in a program's command, arguments and
     /// environment and in an address and its headers (D-11), and reaches
-    /// every transport; its entry for a program has no folder to start it
-    /// in.
+    /// every transport: so it cannot be given text there that opens a
+    /// reference as it is written, its entry for a program has no folder to
+    /// start it in, toward an address it reads the credentials it keeps
+    /// from one as empty, and its extras go beside the keys the entry
+    /// writes, never over one.
     fn for_claude(&self) -> Vec<Inexpressible> {
+        // Where an input stands, the renderer writes a reference of its
+        // own, so text is held to this only around one; but not in a
+        // program's command, which it writes as the definition holds it, no
+        // input's kind being written there.
+        let placeholders: Vec<String> = self
+            .inputs
+            .iter()
+            .map(|input| written(&input.name))
+            .collect();
+        let expanded = |at: String, text: &str, placeholders: &[String]| {
+            opens(text, placeholders, "${").then_some(Inexpressible::TextExpanded { at })
+        };
+        let mut shapes = Vec::new();
         match &self.transport {
-            Transport::Stdio(stdio) if stdio.cwd.is_some() => {
-                vec![Inexpressible::WorkingDirectory]
+            Transport::Stdio(stdio) => {
+                shapes.extend(expanded(
+                    String::from("transport.command"),
+                    &stdio.command,
+                    &[],
+                ));
+                for (index, arg) in stdio.args.iter().enumerate() {
+                    shapes.extend(expanded(
+                        format!("transport.args[{index}]"),
+                        arg,
+                        &placeholders,
+                    ));
+                }
+                for (key, value) in &stdio.env {
+                    shapes.extend(expanded(keyed("transport.env", key), value, &placeholders));
+                }
+                if stdio.cwd.is_some() {
+                    shapes.push(Inexpressible::WorkingDirectory);
+                }
             }
-            Transport::Stdio(_) | Transport::Http(_) | Transport::Sse(_) => Vec::new(),
+            Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                shapes.extend(expanded(
+                    String::from("transport.url"),
+                    endpoint.url.as_str(),
+                    &placeholders,
+                ));
+                for (key, value) in &endpoint.headers {
+                    shapes.extend(expanded(
+                        keyed("transport.headers", key),
+                        value,
+                        &placeholders,
+                    ));
+                }
+                shapes.extend(
+                    self.inputs
+                        .iter()
+                        .filter(|input| match input.kind {
+                            InputKind::Header | InputKind::UrlVar => true,
+                            // Written nowhere in an address.
+                            InputKind::Env | InputKind::Arg => false,
+                        })
+                        .filter_map(|input| {
+                            let variable = input.env_var.as_ref()?;
+                            blanked::by_claude(variable).then(|| Inexpressible::VariableBlanked {
+                                input: input.name.clone(),
+                                variable: variable.clone(),
+                            })
+                        }),
+                );
+            }
         }
+        let entry = claude_mcp::keys(self.transport.kind());
+        shapes.extend(
+            self.extras_for(Agent::Claude)
+                .into_iter()
+                .flatten()
+                .filter(|(key, _)| entry.contains(&key.as_str()))
+                .map(|(key, _)| Inexpressible::ExtraRepeated { key: key.clone() }),
+        );
+        shapes
     }
 
     /// Codex has no interpolation: a secret reaches a server only through
     /// the keys that name a variable (`env_vars`, `env_http_headers`,
-    /// `bearer_token_env_var`, D-11), so a secret anywhere else has no
-    /// spelling there; and it does not take server-sent events.
+    /// `bearer_token_env_var`, D-11), each of which reads one only in a
+    /// shape of its own ([`codex_mcp::passed_on`], [`codex_mcp::bearer`]),
+    /// so a secret anywhere else, or in any other shape, has no spelling
+    /// there; it does not take server-sent events; and its extras go beside
+    /// the keys its entry writes, never over one, and never say where Codex
+    /// runs the server.
     fn for_codex(&self) -> Vec<Inexpressible> {
         let mut shapes = Vec::new();
         if let Transport::Sse(_) = self.transport {
             shapes.push(Inexpressible::ServerSentEvents);
         }
+        // By where each secret is written, not by its kind: a placeholder
+        // stands for its input wherever it is written, so one of an
+        // environment's written in an argument too is a secret argument.
         for input in self.inputs.iter().filter(|input| input.secret) {
-            match input.kind {
-                InputKind::Arg => shapes.push(Inexpressible::SecretInArgument {
-                    input: input.name.clone(),
-                }),
-                InputKind::UrlVar => shapes.push(Inexpressible::SecretInUrl {
-                    input: input.name.clone(),
-                }),
-                InputKind::Header => {
+            let placeholder = written(&input.name);
+            match &self.transport {
+                Transport::Stdio(stdio) => {
+                    if stdio.args.iter().any(|arg| arg.contains(&placeholder)) {
+                        shapes.push(Inexpressible::SecretInArgument {
+                            input: input.name.clone(),
+                        });
+                    }
+                    shapes.extend(self.unpassed_env(input));
+                }
+                Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                    // One its userinfo held is written in the address too,
+                    // though no address is kept with it.
+                    if endpoint.url.contains(&placeholder)
+                        || endpoint.withheld.contains(&input.name)
+                    {
+                        shapes.push(Inexpressible::SecretInUrl {
+                            input: input.name.clone(),
+                        });
+                    }
                     for header in self.composite_headers(&input.name) {
                         shapes.push(Inexpressible::SecretHeaderComposite {
                             header,
@@ -193,27 +382,142 @@ impl McpDefinition {
                         });
                     }
                 }
-                // A program's environment is what `env_vars` passes on.
-                InputKind::Env => {}
             }
         }
+        let entry = codex_mcp::keys(self.transport.kind());
+        shapes.extend(
+            self.extras_for(Agent::Codex)
+                .into_iter()
+                .flatten()
+                .filter_map(|(key, _)| {
+                    let key = key.clone();
+                    if entry.contains(&key.as_str()) {
+                        Some(Inexpressible::ExtraRepeated { key })
+                    } else if codex_mcp::WITHHELD.contains(&key.as_str()) {
+                        Some(Inexpressible::ExtraWithheld { key })
+                    } else {
+                        None
+                    }
+                }),
+        );
         shapes
     }
 
-    /// OpenCode expands `{env:VAR}` in any string of its config (D-11),
-    /// and its V2 shape, the one Mindweaver writes (D-12), reaches a
+    /// Each of a program's environment variables that holds `input` and is
+    /// not one Codex passes on: it gives a program a variable only whole,
+    /// under its own name (`env_vars`), so `input` written beside other
+    /// text, or as the whole value of a variable named otherwise than the
+    /// one it is read from, has no spelling there. An input read from no
+    /// variable at all is `validate`'s to call invalid, and none of this.
+    fn unpassed_env(&self, input: &Input) -> Vec<Inexpressible> {
+        let Transport::Stdio(stdio) = &self.transport else {
+            return Vec::new();
+        };
+        let placeholder = written(&input.name);
+        stdio
+            .env
+            .iter()
+            .filter(|(_, value)| value.contains(&placeholder))
+            .filter_map(|(key, value)| {
+                if *value != placeholder {
+                    return Some(Inexpressible::SecretEnvComposite {
+                        key: key.clone(),
+                        input: input.name.clone(),
+                    });
+                }
+                let variable = input.env_var.as_ref()?;
+                let passed = codex_mcp::passed_on(key, value, &placeholder, variable);
+                (!passed).then(|| Inexpressible::SecretEnvRenamed {
+                    key: key.clone(),
+                    input: input.name.clone(),
+                    variable: variable.clone(),
+                })
+            })
+            .collect()
+    }
+
+    /// OpenCode fills `{env:VAR}` and `{file:path}` in over its config
+    /// file's text before it reads the file (D-11), so it cannot be given
+    /// text that opens either as it is written in any value its entry
+    /// writes; its V2 shape, the one Mindweaver writes (D-12), reaches a
     /// program or an address over streamable HTTP, never server-sent
-    /// events.
+    /// events; and its extras go beside the keys its entry may write in
+    /// either of its shapes, never over one.
     fn for_opencode(&self) -> Vec<Inexpressible> {
-        match self.transport {
-            Transport::Sse(_) => vec![Inexpressible::ServerSentEvents],
-            Transport::Stdio(_) | Transport::Http(_) => Vec::new(),
+        // Where an input stands, the renderer writes a reference of its
+        // own, so text is held to this only around one; but not in a
+        // program's command or its folder, which it writes as the
+        // definition holds them, no input's kind being written there.
+        let placeholders: Vec<String> = self
+            .inputs
+            .iter()
+            .map(|input| written(&input.name))
+            .collect();
+        let substituted = |at: String, text: &str, placeholders: &[String]| {
+            SUBSTITUTED
+                .into_iter()
+                .find(|opening| opens(text, placeholders, opening))
+                .map(|opening| Inexpressible::TextSubstituted { at, opening })
+        };
+        let mut shapes = Vec::new();
+        if let Transport::Sse(_) = self.transport {
+            shapes.push(Inexpressible::ServerSentEvents);
         }
+        match &self.transport {
+            Transport::Stdio(stdio) => {
+                shapes.extend(substituted(
+                    String::from("transport.command"),
+                    &stdio.command,
+                    &[],
+                ));
+                for (index, arg) in stdio.args.iter().enumerate() {
+                    shapes.extend(substituted(
+                        format!("transport.args[{index}]"),
+                        arg,
+                        &placeholders,
+                    ));
+                }
+                for (key, value) in &stdio.env {
+                    shapes.extend(substituted(
+                        keyed("transport.env", key),
+                        value,
+                        &placeholders,
+                    ));
+                }
+                if let Some(cwd) = &stdio.cwd {
+                    shapes.extend(substituted(String::from("transport.cwd"), cwd, &[]));
+                }
+            }
+            Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                shapes.extend(substituted(
+                    String::from("transport.url"),
+                    endpoint.url.as_str(),
+                    &placeholders,
+                ));
+                for (key, value) in &endpoint.headers {
+                    shapes.extend(substituted(
+                        keyed("transport.headers", key),
+                        value,
+                        &placeholders,
+                    ));
+                }
+            }
+        }
+        let entry = opencode_mcp::keys(self.transport.kind());
+        shapes.extend(
+            self.extras_for(Agent::OpenCode)
+                .into_iter()
+                .flatten()
+                .filter(|(key, _)| entry.contains(&key.as_str()))
+                .map(|(key, _)| Inexpressible::ExtraRepeated { key: key.clone() }),
+        );
+        shapes
     }
 
     /// Every header, by its name as written, that holds `input` and is not
     /// a header Codex reads a secret into: the input as its whole value,
-    /// or `Authorization` holding `Bearer` and the input, in either case.
+    /// or `Authorization` holding `Bearer` and the input, in either case,
+    /// the first header so named ([`codex_mcp::bearer`]).
     fn composite_headers(&self, input: &InputName) -> Vec<String> {
         let (Transport::Http(endpoint) | Transport::Sse(endpoint)) = &self.transport else {
             return Vec::new();
@@ -224,16 +528,43 @@ impl McpDefinition {
             .iter()
             .filter(|(_, value)| value.contains(&placeholder))
             .filter(|(header, value)| {
-                let whole = **value == placeholder;
-                let bearer = header.eq_ignore_ascii_case("authorization")
-                    && value.split_once(' ').is_some_and(|(scheme, token)| {
-                        scheme.eq_ignore_ascii_case("bearer") && token == placeholder
-                    });
-                !whole && !bearer
+                **value != placeholder
+                    && !codex_mcp::bearer(&endpoint.headers, header, &placeholder)
             })
             .map(|(header, _)| header.clone())
             .collect()
     }
+}
+
+/// What OpenCode fills in over its config file's text before it reads it:
+/// `{env:NAME}`, a variable's value, which #18's runs saw it do in the
+/// command, the environment, the URL and the headers, and `{file:path}`, a
+/// file's contents, its documentation's word.
+const SUBSTITUTED: [&str; 2] = ["{env:", "{file:"];
+
+/// Whether `text` holds `opening` anywhere but where one of `placeholders`
+/// stands: what a reference an agent fills in opens with, written as it
+/// is, Claude's `${` or one of OpenCode's [`SUBSTITUTED`].
+///
+/// Any `opening`, rather than only what an agent's pattern takes: for
+/// Claude 2.1.318 (read from its binary) a name and then `}`, or `:-`, a
+/// default and `}`. One that pattern passes over may be closed by a
+/// reference the renderer writes after it (`${a:-{token}}`,
+/// `{env:a{token}`), and a later agent may take more. Never one just
+/// before a placeholder, which the renderer writes as the text and then
+/// its reference: Claude's `$${VAR}`, the `$` and then the variable's
+/// value.
+fn opens(text: &str, placeholders: &[String], opening: &str) -> bool {
+    // A placeholder holds no brace inside, so no two of them overlap, and
+    // splitting at each in turn splits at all of them.
+    let mut pieces = vec![text];
+    for placeholder in placeholders {
+        pieces = pieces
+            .into_iter()
+            .flat_map(|piece| piece.split(placeholder.as_str()))
+            .collect();
+    }
+    pieces.iter().any(|piece| piece.contains(opening))
 }
 
 #[cfg(test)]

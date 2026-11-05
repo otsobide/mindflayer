@@ -51,8 +51,10 @@ use crate::agents_md::{self, AgentsMdError};
 use crate::artifact::{ArtifactError, ValidationIssue};
 use crate::browse::{BrowseError, BrowseFailure};
 use crate::catalog::DiscoveryFailure;
+use crate::claude_mcp::{self, ClaudeMcpError};
 use crate::claude_md::{self, ClaudeMdError, Fallback};
 use crate::claude_rules::{self, ClaudeRulesError};
+use crate::codex_mcp::{self, CodexMcpError};
 use crate::config_entry::{EntryError, FileError};
 use crate::contents::ContentsError;
 use crate::create::CreateError;
@@ -67,6 +69,7 @@ use crate::lifecycle::LifecycleError;
 use crate::lock::LockError;
 use crate::mcp::{Inexpressible, McpError};
 use crate::migrate::{MigrateError, NamesFailure, ProjectFailure, Refusal};
+use crate::opencode_mcp::{self, OpenCodeMcpError};
 use crate::policy::PolicyError;
 use crate::port::GitError;
 use crate::reapply::{ReapplyError, ReapplyFailure};
@@ -199,11 +202,15 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("browse::BrowseError", BrowseError::CODES),
     ("browse::BrowseFailure", BrowseFailure::CODES),
     ("catalog::DiscoveryFailure", DiscoveryFailure::CODES),
+    ("claude_mcp::ClaudeMcpError", ClaudeMcpError::CODES),
+    ("claude_mcp::Warning", claude_mcp::Warning::CODES),
     ("claude_md::ClaudeMdError", ClaudeMdError::CODES),
     ("claude_md::Fallback", Fallback::CODES),
     ("claude_md::Warning", claude_md::Warning::CODES),
     ("claude_rules::ClaudeRulesError", ClaudeRulesError::CODES),
     ("claude_rules::Warning", claude_rules::Warning::CODES),
+    ("codex_mcp::CodexMcpError", CodexMcpError::CODES),
+    ("codex_mcp::Warning", codex_mcp::Warning::CODES),
     ("config_entry::EntryError", EntryError::CODES),
     ("config_entry::file::FileError", FileError::CODES),
     ("contents::ContentsError", ContentsError::CODES),
@@ -234,6 +241,8 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("migrate::Refusal", Refusal::CODES),
     ("migrate::project::ProjectFailure", ProjectFailure::CODES),
     ("migrate::names::NamesFailure", NamesFailure::CODES),
+    ("opencode_mcp::OpenCodeMcpError", OpenCodeMcpError::CODES),
+    ("opencode_mcp::Warning", opencode_mcp::Warning::CODES),
     ("policy::PolicyError", PolicyError::CODES),
     ("reapply::ReapplyError", ReapplyError::CODES),
     ("reapply::ReapplyFailure", ReapplyFailure::CODES),

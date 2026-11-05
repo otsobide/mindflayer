@@ -16,12 +16,12 @@
 //! their own entry. Nothing here knows about workspaces, so it takes none.
 
 use std::fs;
-use std::io::{self, Write as _};
+use std::io::{self, Read as _, Write as _};
 use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
-use super::{edit_document, get, Edit, EntryError, Format, Value};
+use super::{document, edit_document, get, loose_json, Edit, EntryError, Format, Value};
 
 use crate::code::codes;
 
@@ -31,6 +31,9 @@ pub struct ConfigFile {
     root: PathBuf,
     route: PathBuf,
     format: Format,
+    /// The most bytes it is read for, when the caller bounds it
+    /// ([`capped`](Self::capped)).
+    cap: Option<u64>,
 }
 
 /// What [`ConfigFile::edit`] did to the file.
@@ -42,9 +45,13 @@ pub enum Written {
     /// The file was replaced whole, through a temporary and a rename onto
     /// its path as spelled, with its permissions kept.
     Changed,
-    /// The entry already held what was asked, so the file was left alone, its
-    /// modification time included.
+    /// The entry already held what was asked, or the file held something
+    /// its caller keeps ([`ConfigFile::take`]), so the file was left alone,
+    /// its modification time included.
     Unchanged,
+    /// The file was taken away: what it held was nothing its caller keeps
+    /// ([`ConfigFile::take`]).
+    Removed,
 }
 
 /// Why a config file could not be read or written.
@@ -60,6 +67,8 @@ pub enum FileError {
     NotAFile { path: PathBuf },
     #[error("{path}: not UTF-8 text")]
     NotText { path: PathBuf },
+    #[error("{path}: larger than the {cap} bytes it is read up to, so it was not read")]
+    TooLarge { path: PathBuf, cap: u64 },
     #[error("{path}: cannot be read: {source}")]
     Read {
         path: PathBuf,
@@ -86,6 +95,7 @@ codes!(FileError {
     Self::NotAFolder { .. } => "config_not_a_folder",
     Self::NotAFile { .. } => "config_not_a_file",
     Self::NotText { .. } => "config_not_text",
+    Self::TooLarge { .. } => "config_too_large",
     Self::Read { .. } => "config_read_failed",
     Self::Write { .. } => "config_write_failed",
 } carried {
@@ -117,7 +127,25 @@ impl ConfigFile {
             root,
             route,
             format,
+            cap: None,
         })
+    }
+
+    /// The same file, refused rather than read when it holds more than
+    /// `bytes`.
+    ///
+    /// The caller's to say, as the format is, since how large a file of
+    /// its agent's can be is the caller's to know. A bound rather than
+    /// none for a file that is read whole, held in a tree of every byte
+    /// and parsed again to check what an edit wrote: one somebody filled
+    /// with something else is refused before it is held in memory over and
+    /// over. Counted as it is read rather than by the size the file says
+    /// it has, so one that grows in between is cut off all the same.
+    pub fn capped(self, bytes: u64) -> Self {
+        ConfigFile {
+            cap: Some(bytes),
+            ..self
+        }
     }
 
     /// Where the file is.
@@ -171,15 +199,73 @@ impl ConfigFile {
         }
     }
 
+    /// Take the file away when `empty` says the text it holds, and the
+    /// document that text is, are nothing its caller keeps, and leave it as
+    /// it is otherwise.
+    ///
+    /// What a caller that made the file asks when what it is taking out is
+    /// all that is left in it, a file nobody else wrote in being nothing to
+    /// leave behind. Which
+    /// documents are empty is the caller's to say, as the key path is:
+    /// `{"mcpServers": {}}` is nothing in `.mcp.json`, and something in a
+    /// file that holds other settings beside it. The text is handed too,
+    /// since the document holds no comment: in a format that has them, one
+    /// somebody wrote is something, and only the text says it is there.
+    ///
+    /// Read as an edit reads it, so a file that does not parse is refused
+    /// rather than judged, and one not there is [`Written::Unchanged`]. The
+    /// route is looked at again just before the file goes, as it is before
+    /// a write: a file that has become a link is refused, and what it points
+    /// at is never this folder's to take.
+    pub fn take(&self, empty: impl FnOnce(&str, &Value) -> bool) -> Result<Written, FileError> {
+        let Some(text) = self.read()? else {
+            return Ok(Written::Unchanged);
+        };
+        let held = document(self.format, &text).map_err(|source| self.entry_error(source))?;
+        if !empty(&text, &held) {
+            return Ok(Written::Unchanged);
+        }
+        let Some(path) = self.walk()? else {
+            return Ok(Written::Unchanged);
+        };
+        fs::remove_file(&path).map_err(|source| FileError::Write { path, source })?;
+        Ok(Written::Removed)
+    }
+
+    /// Whether the file would be JSON but for comments and trailing commas
+    /// ([`loose_json`]), whatever format it is read in: `false` when it is
+    /// not there. Read as an edit reads it, through the same route and up
+    /// to the same cap.
+    pub fn is_loose_json(&self) -> Result<bool, FileError> {
+        Ok(self.read()?.is_some_and(|text| loose_json(&text)))
+    }
+
     /// The file's text, `None` when it is not there.
     fn read(&self) -> Result<Option<String>, FileError> {
         let Some(path) = self.walk()? else {
             return Ok(None);
         };
-        let bytes = fs::read(&path).map_err(|source| FileError::Read {
+        let read_error = |source| FileError::Read {
             path: path.clone(),
             source,
-        })?;
+        };
+        let mut file = fs::File::open(&path).map_err(read_error)?;
+        let mut bytes = Vec::new();
+        match self.cap {
+            // One byte past the cap is enough to know it is past.
+            Some(cap) => {
+                (&mut file)
+                    .take(cap.saturating_add(1))
+                    .read_to_end(&mut bytes)
+                    .map_err(read_error)?;
+                if bytes.len() as u64 > cap {
+                    return Err(FileError::TooLarge { path, cap });
+                }
+            }
+            None => {
+                file.read_to_end(&mut bytes).map_err(read_error)?;
+            }
+        }
         String::from_utf8(bytes)
             .map(Some)
             .map_err(|_| FileError::NotText { path })

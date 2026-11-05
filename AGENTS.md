@@ -21,9 +21,10 @@ true afterwards. Its "Decisions" section holds what the owner already chose for
 the roadmap, and the one choice still pending: read it before changing a
 format, installing, MCP, credentials or the server, and carry a decision out
 rather than reopen it. `docs/agents.md` records where Claude Code, Codex and
-OpenCode read skills and rules, each fact verified on the binary or docs-only
-with a fallback: an agent path in code cites it, and a change that disagrees
-with it starts there.
+OpenCode read skills and rules, and what they make of MCP servers, each fact
+verified on the binary, docs-only with a fallback, or pending a probe run: an
+agent path in code cites it, and a change that disagrees with it starts
+there.
 
 ## Commands
 
@@ -142,8 +143,8 @@ runs it, looks at every image it wrote, and commits them.
 
 `scripts/agent-probe/probe.sh` runs the real coding agents against their APIs
 with your own login, in a temp home under `target/`, to check where they read
-skills and rules. It is never run by CI or `make test`; don't run it unless
-asked.
+skills and rules and what they make of a project's MCP servers. It is never
+run by CI or `make test`; don't run it unless asked.
 
 ## Layout
 
@@ -158,8 +159,13 @@ under `apps/` with its own `Makefile`:
   MCP server's definition declares, one TOML file a server in a format of
   its own (`mcp`), which names a server can be given (`mcp::name`), what in
   one looks like a token written as it is (`mcp/token.rs`), what each
-  agent cannot be given of one, as a renderer will ask and `show` says
-  (`mcp::Inexpressible`, `mcp::Expressibility`), and what `add` is told of
+  agent cannot be given of one, as a renderer asks and `show` says
+  (`mcp::Inexpressible`, `mcp::Expressibility`), among it the variables
+  Claude reads as empty toward a remote server (`mcp/blanked.rs`), one
+  rendered into Claude's `.mcp.json` as its one entry and taken out again
+  (`claude_mcp`), into Codex's `.codex/config.toml` the same way
+  (`codex_mcp`), and into OpenCode's `opencode.json`, in either of its
+  shapes (`opencode_mcp`), and what `add` is told of
   how one is started or reached, a program or an address, and the
   definition it writes from it (`mcp::Given`), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
@@ -386,8 +392,11 @@ of the reference, `docs/reference.md`, in what the commands print, so
 changing an example's summary line means changing the reference too.
 
 Outside `apps/`, `scripts/agent-probe/` holds the agent probe: `probe.sh`
-isolates a run and checks the real home is left alone, and `<agent>.sh` holds
-one agent's checks (only `claude.sh` so far). `scripts/serves-panel.sh` is
+isolates a run and checks the real home is left alone, `<agent>.sh` holds
+one agent's checks (`claude.sh`, and `codex.sh` and `opencode.sh`, which
+check MCP servers only so far), and `mcp.sh` and `mcp_server.py` are what the
+MCP checks share, the second a stand-in MCP server that writes down what an
+agent started it with and sent it. `scripts/serves-panel.sh` is
 what `make cli/release/check` runs: it starts a release's `mindweaver ui` with a
 home of its own and every agent home empty, and asks it for the panel.
 `docs/api/schemas` holds the API's JSON Schemas, a file a root, which the
@@ -741,8 +750,44 @@ These are easy to break from a single file without noticing.
     entry is kept. What an edit wrote is read back and refused unless only
     the entry changed, and a file that does not parse is refused, never
     rewritten. A changed file goes through `replace_bytes_unresolved`,
-    keeping its permissions; a new one is made with `create_new`. The module
-    knows no agent: the file, the key path and the entry are the caller's.
+    keeping its permissions; a new one is made with `create_new`; and one is
+    taken away only through `ConfigFile::take`, when its caller says what it
+    holds is nothing. The module knows no agent: the file, the key path,
+    the entry, how much of a file is read (`ConfigFile::capped`) and which
+    documents are empty are the caller's. Claude's `.mcp.json`
+    (`claude_mcp`) is read as strict JSON up to 2 MiB, one holding a comment
+    or a trailing comma refused (`mcp_json_not_strict`) rather than given an
+    entry Claude would never load; its entry always says its `type`, writes
+    each input as `${VAR}`, asks `McpDefinition::inexpressible` what Claude
+    cannot be given and writes no approval; and the file goes with its last
+    server only when the caller says Mindweaver made it and nothing else is
+    in it (`config_entry::holds_only`). Codex's `.codex/config.toml`
+    (`codex_mcp`) is TOML up to 2 MiB, its table written with each key only
+    when it holds something and each input only where a key names its
+    variable (`env_vars`, `env_http_headers`, `bearer_token_env_var`, the
+    shapes `passed_on` and `bearer` say and the report asks of a secret),
+    never `experimental_environment` nor `environment_id`; it reads, never
+    writes, the user's `config.toml` in the Codex home `AgentHomes` gives,
+    refusing a name it holds (`codex_mcp_collision`) and warning of a
+    project it does not mark trusted (`codex_mcp_untrusted`), refuses a
+    project whose file is inside an agent's own folder, takes its file
+    away only when taking the entry out of the text leaves it blank, since
+    a comment is somebody's and the document holds none, and leaves
+    `.codex` when its file goes. OpenCode's (`opencode_mcp`) is the first
+    of `opencode.json`, `opencode.jsonc`, `.opencode/opencode.json` and
+    `.opencode/opencode.jsonc` there is, a link counting so that it is
+    refused, and `opencode.json` made when none is, each read as JSONC up
+    to 2 MiB, as OpenCode reads all four; its entry is V2's minimal
+    `mcp.servers.<name>`, and V1's `mcp.<name>` with `enabled` only in a
+    file that keeps a server so (a server replaced in the shape it stands
+    in, one in both refused, `opencode_mcp_twice`, and V1's written
+    without `cwd`, `opencode_mcp_v1_cwd`), each input as `{env:VAR}` and
+    what OpenCode cannot be given the report's (`text_substituted` among
+    it); it refuses a project whose file is inside an agent's own folder
+    (`opencode_mcp_user_scope`), as Codex's does; and only the
+    `opencode.json` Mindweaver made goes with its last server, when what
+    taking the server out leaves is the objects on the way, empty, and no
+    comment (`config_entry::jsonc_commented`).
   - `ui --token-file` (`TokenFile`, in `src/commands/ui.rs`) makes its
     file with `create_new`, mode 0600 on Unix, so whatever is at the path,
     a link included, is refused and never written over or through, and
@@ -1013,7 +1058,8 @@ These are easy to break from a single file without noticing.
   `install_with` hands to once it holds the lock) and
   `install::rules::update_held`, which take none of their own. A new
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
-  `agents_md::render`, `claude_rules::render`, `claude_md::render` and
+  `claude_mcp::render` and `remove`, `codex_mcp::render` and `remove`,
+  `opencode_mcp::render` and `remove`, `agents_md::render`, `claude_rules::render`, `claude_md::render` and
   `MindProject::change_settings` take none, since
   the writers that call them hold it, and `assign::install` and
   `uninstall` none across their batch, leaving it to each project's
@@ -1165,8 +1211,11 @@ These are easy to break from a single file without noticing.
   `Lookup::given` decides them once per command line, into the `Lookup`
   (`Lookup::agents`), and install is the first to take them, to refuse a
   copy inside one, as `agents_md::render` and `claude_rules::render` take
-  them to refuse rules there, and `claude_md` to leave the user memory file
-  out of what keeps Claude from reading `AGENTS.md`. `tui::execute` hands each line the TUI's own
+  them to refuse rules there, `claude_md` to leave the user memory file
+  out of what keeps Claude from reading `AGENTS.md`,
+  `codex_mcp::render` to refuse a `.codex/config.toml` inside one and to
+  read, never write, the Codex home's `config.toml`, and
+  `opencode_mcp::render` to refuse OpenCode's config inside one. `tui::execute` hands each line the TUI's own
   with the rest of its `Lookup`, and so does its install screen: a command
   the TUI runs carries none of the four options, so it would decide them
   again from the environment.
@@ -1423,7 +1472,21 @@ These are easy to break from a single file without noticing.
   token in a file, the names a server may and may not be given, `name`,
   `unwritable`, `reserved`, `claimed`, `twin`, and each shape an agent
   cannot be given, `secret_argument`, `secret_in_url`,
-  `composite_secret_header`; what `add` is told of one, `given_program`,
+  `composite_secret_header`, `composite_secret_env` (and `stdio` itself,
+  its secret under a name of its own), beside `whole_secret_env`, which
+  Codex is given, and the variables Claude empties toward a
+  remote server and passes on, `blanked_variables` and `passed_variables`,
+  read where `header_read_from`, `url_read_from` and `env_read_from` say,
+  and the text Claude reads a reference in and the text it does not,
+  `references` and `not_references`, and the text OpenCode fills in and
+  the text it does not, `substitutions` and `not_substitutions`, written
+  where `with_text` says;
+  what Claude's entry is refused for or given beside it, `unread_input` and
+  `with_claude_extras`; what Codex is given whole, `program_for_codex`,
+  `address_for_codex`, `whole_header_for_codex`, `plain_program` and
+  `plain_address`, and given beside it, `with_codex_extras`; what OpenCode
+  is given beside its entry, `with_opencode_extras`; what `add` is
+  told of one, `given_program`,
   `given_address`, `given`, and the shapes it refuses, `given_unfit`,
   `given_with_literal`, `given_repeating` and `given_refused_unread`; and
   `InputNameMother` and `VariableNameMother` for its values, with what each
@@ -1474,7 +1537,11 @@ These are easy to break from a single file without noticing.
   spawns a binary (`common::spawn`) clears those variables
   (`common::CLEARED`), sets only the ones it is about, and sets
   `HOME` (`USERPROFILE` on Windows) to a temp dir. Not to empty: the standard
-  library then falls back to the account's real home. Keep it that way.
+  library then falls back to the account's real home. Keep it that way. A
+  core test about what an agent's own folder holds, the user's Codex
+  `config.toml` a server's name collides with or that marks a project
+  trusted, makes that folder in a temp dir and hands it over in
+  `AgentHomes` (`codex_mcp_test.rs`'s `codex_home`).
 - Git sources are built in-process with `gix` (`common::repository`): no
   network and no `git` binary. A CLI fixture's project is a repository given
   `mind init` (`common::new_project`), so a local install keeps its copies out

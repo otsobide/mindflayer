@@ -28,7 +28,8 @@
 //! the markers are.
 //!
 //! [`get`] and [`edit`] work on text, which is what the tests hold to the
-//! byte; [`ConfigFile`] reads the text from a file and writes it back.
+//! byte; [`ConfigFile`] reads the text from a file and writes it back, and
+//! takes the file away when its caller says what is left is nothing.
 
 use std::fmt::{self, Write as _};
 
@@ -257,6 +258,55 @@ pub(crate) fn document(format: Format, text: &str) -> Result<Value, EntryError> 
     }
 }
 
+/// Whether `text` would be JSON but for comments and trailing commas, the
+/// two things JSONC adds to it: one written for a reader looser than a
+/// strict one, rather than one no reader takes, which a caller that reads
+/// a file as [`Format::Json`] may want to say apart.
+///
+/// Not [`get`] in [`Format::Jsonc`], which takes, as jsonc-parser does
+/// whatever its options say, a raw control character in a string and
+/// whitespace JSON does not allow, neither of them anything JSONC adds.
+pub fn loose_json(text: &str) -> bool {
+    json::loose(text)
+}
+
+/// Whether `document` holds nothing but the entry at `key`, or not even
+/// that: each object on the way to it holding the next key of the path
+/// alone, and the entry whatever it holds.
+///
+/// What a caller that made a file asks before it takes the file away with
+/// the last entry it wrote ([`ConfigFile::take`]): `{"mcpServers": {}}`
+/// holds nothing beside `mcpServers.github`, and a key somebody wrote
+/// anywhere on the way is something. Still the caller's to ask, as which
+/// documents are empty is, since a file that keeps settings of its own
+/// beside its entries is something whatever it holds. Enough only in a
+/// format with no comments: a document holds none, so a caller whose file
+/// can hold them asks the text `take` hands it too ([`jsonc_commented`]).
+pub fn holds_only(document: &Value, key: &[&str]) -> bool {
+    let Some((first, rest)) = key.split_first() else {
+        return true;
+    };
+    let Value::Object(members) = document else {
+        return false;
+    };
+    members
+        .iter()
+        .all(|(name, value)| name == first && holds_only(value, rest))
+}
+
+/// Whether `text`, read as JSONC, holds a comment anywhere: what a caller
+/// whose file is JSONC asks of what taking its entry out of the text leaves
+/// before it takes the file away ([`ConfigFile::take`]), since the document
+/// [`holds_only`] reads holds none, and one somebody wrote is something.
+///
+/// Where the parser finds them, as [`loose_json`] reads them, so a `//` in
+/// a string is the string's. `false` for a text that does not read as
+/// JSONC, whose reader takes no comment of it, and for strict JSON, which
+/// holds none.
+pub fn jsonc_commented(text: &str) -> bool {
+    json::commented(text)
+}
+
 /// The value at `key` in `document`, `None` when a key on the way is missing.
 fn lookup<'a>(document: &'a Value, key: &[&str]) -> Result<Option<&'a Value>, EntryError> {
     let mut current = document;
@@ -436,6 +486,28 @@ impl From<&str> for Value {
 impl From<String> for Value {
     fn from(value: String) -> Self {
         Value::String(value)
+    }
+}
+
+/// A value as the `toml` crate reads it, an MCP definition's extras among
+/// them, which a renderer passes on: every value as it is, and a date and
+/// time, which JSON has none of and so neither has this type, as the text
+/// it is written in, as an entry read from a TOML file holds one.
+impl From<&::toml::Value> for Value {
+    fn from(value: &::toml::Value) -> Self {
+        match value {
+            ::toml::Value::String(text) => Value::String(text.clone()),
+            ::toml::Value::Integer(number) => Value::Integer(*number),
+            ::toml::Value::Float(number) => Value::Float(*number),
+            ::toml::Value::Boolean(flag) => Value::Bool(*flag),
+            ::toml::Value::Datetime(moment) => Value::String(moment.to_string()),
+            ::toml::Value::Array(values) => Value::Array(values.iter().map(Value::from).collect()),
+            ::toml::Value::Table(table) => Value::object(
+                table
+                    .iter()
+                    .map(|(key, value)| (key.clone(), Value::from(value))),
+            ),
+        }
     }
 }
 

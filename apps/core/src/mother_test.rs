@@ -564,6 +564,31 @@ fn every_server_name_a_mother_draws_breaks_or_keeps_the_rule_it_is_named_for() {
 }
 
 #[test]
+fn every_definition_named_for_what_codex_is_given_whole_holds_what_it_says_and_is_given_it() {
+    use crate::mcp::McpDefinition;
+
+    let name = McpMother::name();
+    for (text, inputs) in [
+        (McpMother::program_for_codex(&name), vec!["api_key"]),
+        (McpMother::address_for_codex(&name), vec!["token"]),
+        (McpMother::whole_header_for_codex(&name), vec!["token"]),
+        (McpMother::plain_program(&name), vec![]),
+        (McpMother::plain_address(&name), vec![]),
+    ] {
+        let definition = McpDefinition::parse(&text).unwrap();
+        let declared: Vec<&str> = definition
+            .inputs
+            .iter()
+            .map(|input| input.name.as_str())
+            .collect();
+        assert_eq!(declared, inputs, "{text}");
+        assert_eq!(definition.issues(), [], "{text}");
+        let entry = crate::codex_mcp::entry(&definition);
+        assert!(entry.is_ok(), "{entry:?}\n{text}");
+    }
+}
+
+#[test]
 fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so() {
     use crate::mcp::{Inexpressible, McpDefinition};
 
@@ -593,12 +618,112 @@ fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so()
         ),
         (McpMother::whole_secret_header(&name), Agent::Codex, None),
         (
+            McpMother::stdio(&name),
+            Agent::Codex,
+            Some("secret_env_renamed"),
+        ),
+        (McpMother::whole_secret_env(&name), Agent::Codex, None),
+        (
+            McpMother::composite_secret_env(&name),
+            Agent::Codex,
+            Some("secret_env_composite"),
+        ),
+        (McpMother::program_for_codex(&name), Agent::Codex, None),
+        (McpMother::plain_program(&name), Agent::Codex, None),
+        (McpMother::plain_address(&name), Agent::Codex, None),
+        (McpMother::address_for_codex(&name), Agent::Codex, None),
+        (McpMother::whole_header_for_codex(&name), Agent::Codex, None),
+        (
+            McpMother::with_codex_extras(&name, "command = \"other\"\n"),
+            Agent::Codex,
+            Some("extra_repeated"),
+        ),
+        (
+            McpMother::with_codex_extras(&name, "environment_id = \"cloud\"\n"),
+            Agent::Codex,
+            Some("extra_withheld"),
+        ),
+        (
             McpMother::sse(&name),
             Agent::OpenCode,
             Some("sse_unsupported"),
         ),
     ];
-    for (text, agent, code) in shapes {
+    let (_, blanked) = random::pick(&McpMother::blanked_variables());
+    let (_, passed) = random::pick(&McpMother::passed_variables());
+    let read_from = [
+        (
+            McpMother::header_read_from(&name, &blanked),
+            Agent::Claude,
+            Some("variable_blanked"),
+        ),
+        (
+            McpMother::url_read_from(&name, &blanked),
+            Agent::Claude,
+            Some("variable_blanked"),
+        ),
+        (
+            McpMother::header_read_from(&name, &passed),
+            Agent::Claude,
+            None,
+        ),
+        (
+            McpMother::env_read_from(&name, &blanked),
+            Agent::Claude,
+            Some("cwd_unsupported"),
+        ),
+    ];
+    let (_, reference) = random::pick(&McpMother::references());
+    let (_, not_reference) = random::pick(&McpMother::not_references());
+    let place = random::pick(&["command", "args", "env", "url", "headers"]);
+    let texts = [
+        (
+            McpMother::with_text(&name, place, &reference).0,
+            Agent::Claude,
+            Some("text_expanded"),
+        ),
+        (
+            McpMother::with_text(&name, "args", &not_reference).0,
+            Agent::Claude,
+            None,
+        ),
+        (
+            McpMother::with_claude_extras(&name, "type = \"other\"\n"),
+            Agent::Claude,
+            Some("extra_repeated"),
+        ),
+    ];
+    let (_, substitution) = random::pick(&McpMother::substitutions());
+    let (_, not_substitution) = random::pick(&McpMother::not_substitutions());
+    let filled = random::pick(&["command", "args", "env", "cwd", "url", "headers"]);
+    let opencode = [
+        (
+            McpMother::with_text(&name, filled, &substitution).0,
+            Agent::OpenCode,
+            Some("text_substituted"),
+        ),
+        (
+            McpMother::with_text(&name, "args", &not_substitution).0,
+            Agent::OpenCode,
+            None,
+        ),
+        (
+            McpMother::with_opencode_extras(&name, "enabled = false\n"),
+            Agent::OpenCode,
+            Some("extra_repeated"),
+        ),
+        (
+            McpMother::with_opencode_extras(&name, "timeout = 5000\n"),
+            Agent::OpenCode,
+            None,
+        ),
+    ];
+    for (text, agent, code) in shapes
+        .into_iter()
+        .chain(read_from)
+        .chain(texts)
+        .chain(opencode)
+    {
         let definition = read(text);
         assert_eq!(definition.issues(), [], "{agent:?} {code:?}");
         let said: Vec<&str> = definition

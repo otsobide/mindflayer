@@ -633,7 +633,10 @@ fn show_says_what_a_server_is_for_how_it_is_started_and_what_is_supplied_for_it(
              claude: given it without what it has no place for:\n    \
              - the transport's `cwd` is left out, since a program is started there in no folder \
              it is told\n  \
-             codex: given it whole\n  \
+             codex: given none of it:\n    \
+             - secret input `api_key` is written as environment variable `API_KEY`, and a \
+             program is given a variable there only whole, under its own name, \
+             `EXAMPLE_API_KEY`\n  \
              opencode: given it whole\n",
             file.display(),
         )

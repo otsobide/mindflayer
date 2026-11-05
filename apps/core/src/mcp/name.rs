@@ -111,7 +111,7 @@ fn is_keyed(name: &str) -> bool {
 /// Claude's own servers, and the two keys OpenCode reads in its `mcp`
 /// table beside the servers, where its V1 shape keys each server
 /// (`mcp.<name>`), so a server named so would be read as that key there.
-const fn reserved(agent: Agent) -> &'static [&'static str] {
+pub(crate) const fn reserved(agent: Agent) -> &'static [&'static str] {
     match agent {
         Agent::Claude => &[
             "workspace",
