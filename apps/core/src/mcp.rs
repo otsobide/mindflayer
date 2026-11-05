@@ -267,9 +267,11 @@ impl McpDefinition {
     /// Everything wrong with it as a definition, in the order it is worth
     /// fixing: a description with nothing in it, a transport that names
     /// nothing to start or reach, an input whose name no placeholder can be
-    /// written of or whose variable not every agent can refer to, a secret
-    /// read from no variable at all, a token written as it is in a value of
-    /// the transport, an input declared twice, and an input no value uses
+    /// written of, a token written where its variable's name goes or a
+    /// variable not every agent can refer to, a secret read from no
+    /// variable at all, a token written as it is in a value of the
+    /// transport or of the extras, an input declared twice, and an input no
+    /// value uses
     /// where its kind says, each in the order written: one written in the
     /// address's userinfo said as that, since it is written where its kind
     /// says, only in a part no address is kept with.
@@ -293,14 +295,30 @@ impl McpDefinition {
                 field: field.to_owned(),
             });
         }
-        for input in &self.inputs {
+        for (index, input) in self.inputs.iter().enumerate() {
             let mut named = Vec::new();
             if !input.name.is_writable() {
                 named.push(ValidationIssue::InputNameMalformed {
                     name: input.name.to_string(),
                 });
             }
+            // The value pasted where its variable's name goes, the likeliest
+            // way a token reaches this file, and one every renderer would
+            // write into its agent's reference: a GitHub token is letters,
+            // digits and underscores, so it passes for a variable. Said as
+            // a token, and never as a variable no agent can refer to, whose
+            // message would print it whole.
+            let pasted = input
+                .env_var
+                .as_ref()
+                .map(|variable| token::found(variable, &[]))
+                .unwrap_or_default();
+            named.extend(pasted.iter().map(|prefix| ValidationIssue::SecretLiteral {
+                at: format!("inputs[{index}].env_var"),
+                prefix: (*prefix).to_owned(),
+            }));
             match &input.env_var {
+                Some(_) if !pasted.is_empty() => {}
                 Some(variable) if !variable.is_portable() => {
                     named.push(ValidationIssue::EnvVarMalformed {
                         name: input.name.to_string(),
@@ -370,11 +388,16 @@ impl McpDefinition {
         issues
     }
 
-    /// Where each token written as it is stands in the transport, by the
-    /// key that leads to it, and what it starts with: a program's `args`,
-    /// then its `env`, or an address's `url`, then its `headers`, each in
-    /// the order written, every placeholder of a declared input taken out
+    /// Where each token written as it is stands in the transport or the
+    /// extras, by the key that leads to it, and what it starts with: a
+    /// program's `args`, then its `env`, or an address's `url`, then its
+    /// `headers`, each in the order written, then every text the extras
+    /// hold, at any depth, every placeholder of a declared input taken out
     /// first. Not its `command`, which names a program, nor `cwd`.
+    ///
+    /// The extras too, since each agent's are passed on to its entry as
+    /// they are: a token there reaches the agent's config as surely as one
+    /// in the transport does.
     fn literals(&self) -> Vec<(String, &'static str)> {
         let placeholders: Vec<String> = self
             .inputs
@@ -405,6 +428,18 @@ impl McpDefinition {
                         literals.push((keyed("transport.headers", key), prefix));
                     }
                 }
+            }
+        }
+        let mut texts = Vec::new();
+        for (agent, table) in &self.extras {
+            let at = keyed("extras", agent);
+            for (key, value) in table {
+                texts_in(keyed(&at, key), value, &mut texts);
+            }
+        }
+        for (at, text) in texts {
+            for prefix in found(text) {
+                literals.push((at.clone(), prefix));
             }
         }
         literals
@@ -580,6 +615,30 @@ fn keyed(table: &str, key: &str) -> String {
         format!("{table}.{key}")
     } else {
         format!("{table}.{}", toml::Value::String(key.to_owned()))
+    }
+}
+
+/// Every text `value` holds, at any depth, beside the path that leads to
+/// it from `at`, as TOML spells it: a table's keys through [`keyed`], an
+/// array's items by their index. Matched on every kind of value, so one
+/// TOML adds says whether it holds text.
+fn texts_in<'a>(at: String, value: &'a toml::Value, into: &mut Vec<(String, &'a str)>) {
+    match value {
+        toml::Value::String(text) => into.push((at, text)),
+        toml::Value::Array(values) => {
+            for (index, value) in values.iter().enumerate() {
+                texts_in(format!("{at}[{index}]"), value, into);
+            }
+        }
+        toml::Value::Table(table) => {
+            for (key, value) in table {
+                texts_in(keyed(&at, key), value, into);
+            }
+        }
+        toml::Value::Integer(_)
+        | toml::Value::Float(_)
+        | toml::Value::Boolean(_)
+        | toml::Value::Datetime(_) => {}
     }
 }
 

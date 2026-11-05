@@ -449,10 +449,22 @@ fn every_input_name_and_variable_the_rules_refuse_is_said_once() {
 }
 
 #[test]
-fn a_token_written_as_it_is_in_any_value_of_a_transport_is_said_where_it_is_and_never_whole() {
+fn a_token_written_as_it_is_anywhere_an_agent_is_given_it_is_said_where_it_is_and_never_whole() {
     let name = random::kebab();
     for (prefix, token) in McpMother::tokens() {
-        for place in ["args", "env", "headers", "url", "userinfo"] {
+        // Every value of the transport, the name of a variable, where a
+        // token pasted for its value passes for one, and the extras, at
+        // any depth, which an agent's entry is given as they are.
+        for place in [
+            "args",
+            "env",
+            "headers",
+            "url",
+            "userinfo",
+            "env_var",
+            "extras",
+            "extras_args",
+        ] {
             let (text, at) = McpMother::with_literal(&name, place, &token);
 
             let issues = parsed(&text).issues();
@@ -486,7 +498,7 @@ fn a_token_written_as_it_is_in_any_value_of_a_transport_is_said_where_it_is_and_
 fn what_starts_as_a_token_does_and_is_none_is_not_said_to_be_one() {
     let name = random::kebab();
     for (why, text) in McpMother::not_tokens() {
-        for place in ["args", "env", "headers"] {
+        for place in ["args", "env", "headers", "extras", "extras_args"] {
             let (definition, _) = McpMother::with_literal(&name, place, &text);
 
             assert_eq!(

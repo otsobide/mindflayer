@@ -498,7 +498,9 @@ impl McpMother {
 
     /// `name`'s definition holding `token` as it is, written where `place`
     /// says (`args`, `env`, `headers`, `url`, or `userinfo`, the user of
-    /// the address), beside where `validate` says it is.
+    /// the address; `env_var`, pasted where a secret input's variable is
+    /// named; or `extras`, in a table of Claude's, and `extras_args`, in an
+    /// array of Codex's), beside where `validate` says it is.
     pub fn with_literal(name: &str, place: &str, token: &str) -> (String, String) {
         let quoted = toml::Value::String(token.to_owned()).to_string();
         match place {
@@ -541,6 +543,29 @@ impl McpMother {
                     1,
                 ),
                 String::from("transport.url"),
+            ),
+            "env_var" => (
+                Self::stdio(name).replacen(
+                    "env_var = \"EXAMPLE_API_KEY\"",
+                    &format!("env_var = {quoted}"),
+                    1,
+                ),
+                String::from("inputs[0].env_var"),
+            ),
+            "extras" => (
+                Self::stdio(name).replacen(
+                    "timeout = 30000\n",
+                    &format!("timeout = 30000\nheaders = {{ X-Service-Key = {quoted} }}\n"),
+                    1,
+                ),
+                String::from("extras.claude.headers.X-Service-Key"),
+            ),
+            "extras_args" => (
+                format!(
+                    "{}\n[extras.codex]\nargs = [\"--key\", {quoted}]\n",
+                    Self::stdio(name)
+                ),
+                String::from("extras.codex.args[1]"),
             ),
             other => panic!("{other} is no place a definition writes a value"),
         }

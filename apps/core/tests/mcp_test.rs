@@ -734,6 +734,37 @@ fn contents_given_whole_are_held_to_the_format_and_to_the_files_name() {
     );
 }
 
+#[test]
+fn a_token_pasted_for_a_variable_or_written_in_the_extras_is_written_by_no_change() {
+    let (_dir, project, folder) = authoring();
+    let (_, token) = McpMother::token();
+    let github = McpMother::stdio("github");
+    for place in ["env_var", "extras", "extras_args"] {
+        let (leaky, at) = McpMother::with_literal("leaky", place, &token);
+        write(&folder, &[("github.toml", &github), ("leaky.toml", &leaky)]);
+        let clean = lifecycle::find(&project, &Reference::parse("mcp:github")).unwrap();
+        let held = lifecycle::find(&project, &Reference::parse("mcp:leaky")).unwrap();
+        let (contents, _) = McpMother::with_literal("github", place, &token);
+
+        let edited = lifecycle::replace_contents(None, &project, &clean, contents.as_bytes(), None)
+            .unwrap_err();
+        let renamed = lifecycle::rename(None, &project, &held, "sealed").unwrap_err();
+
+        assert_eq!(edited.code(), "edit_contents_unfit", "{place}: {edited}");
+        assert_eq!(renamed.code(), "rename_unfit", "{place}: {renamed}");
+        assert!(
+            renamed.to_string().contains(&format!("`{at}`")),
+            "{renamed}"
+        );
+        assert_eq!(
+            fs::read_to_string(folder.join("github.toml")).unwrap(),
+            github,
+            "{place}"
+        );
+        assert!(folder.join("leaky.toml").is_file() && !folder.join("sealed.toml").exists());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // What a message calls them
 // ---------------------------------------------------------------------------

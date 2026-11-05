@@ -2997,9 +2997,11 @@ untouched.
 A secret is never written in the file either: an input with `secret = true`
 names the `env_var` it is read from, and each agent's entry will refer to
 that variable in the agent's own way. A value of `args`, `env`, `headers` or
-`url` holding what looks like a token (a `Bearer` value, or one starting
-`sk-`, `ghp_` or `github_pat_`) outside an input's braces is refused, and
-said by where it is and what it starts with, never by the token.
+`url`, or of `extras`, holding what looks like a token (a `Bearer` value, or
+one starting `sk-`, `ghp_` or `github_pat_`) outside an input's braces is
+refused, and so is one written as an `env_var`, where the variable's name
+goes: each is said by where it is and what it starts with, never by the
+token.
 
 They are listed beside the skills and rules, and narrowed with `mcp`:
 

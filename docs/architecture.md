@@ -778,6 +778,20 @@ user is found too, and kept as its prefix alone. Every token a test needs is
 put together at run time from parts (`McpMother::tokens`), so no file in
 the repository holds one and no secret scanner stops a push.
 
+Two places beside the transport reach an agent's entry, and are judged the
+same way. An input's `env_var` is written into each agent's reference, and
+the value pasted where its variable's name goes is the likeliest way a token
+reaches the file: a GitHub token is letters, digits and underscores, so it
+passes for a variable. One there is `secret_literal` at `inputs[N].env_var`,
+said instead of `env_var_malformed`, whose message names the variable whole.
+And the extras are passed on to each agent's entry as they are, so every
+text they hold, at any depth, is judged as a value of the transport is
+(`extras.claude.headers.X-Api-Key`, `extras.codex.args[1]`). Still left out
+are a program's `command`, which names one, its `cwd`, an input's name,
+which a renderer turns into a reference and never writes as text, and the
+keys that describe the server rather than reach it, its description and
+provenance ([open questions](#open-questions)).
+
 ### What each agent cannot be given of a server
 
 A definition every agent reads alike is not one every agent can be given:
@@ -10292,7 +10306,11 @@ it once as it closes.
   named and nothing else: an AWS key, a Slack token, or a password in an
   address's userinfo shaped like none of them, passes, the last kept out of
   the definition as every address's userinfo is, but not out of its file. A
-  shape added is one line of `mcp/token.rs`'s table.
+  shape added is one line of `mcp/token.rs`'s table. Nor does it read a
+  definition's description or provenance, which say what a server is and
+  are written into no entry yet: a renderer that writes either (#90 to #92)
+  adds it to `McpDefinition::literals`, where the transport's values and
+  the extras are looked through.
 - **Names that clash by case across holders.** Two definitions clash by
   case only in one folder: a project's own `github` and the library's
   `GitHub` are told nothing of each other until an install (#93) would put
