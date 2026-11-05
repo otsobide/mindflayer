@@ -361,7 +361,29 @@ pub fn render(
 /// one Mindweaver made, so another of [`FILES`] chosen in its place, once it
 /// is gone, stays whatever it holds. `.opencode` is never taken away.
 pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, OpenCodeMcpError> {
-    let (file, route) = config(root)?;
+    remove_from(root, chosen(root)?, name, created)
+}
+
+/// [`remove`], from OpenCode's config file at `route`, one of [`FILES`],
+/// rather than from the first of them there is: for a server recorded in
+/// the file it was written into, which another of the four may have come
+/// before since, as [`servers`] reads one where its record says. Taken out
+/// of the first instead, it would be a server of the name somebody keeps
+/// there, and the one written left behind.
+///
+/// A route that is none of [`FILES`] holds no server OpenCode reads, so
+/// nothing is taken out of it ([`Written::Unchanged`]), as [`servers`]
+/// finds none an entry could be told by there.
+pub fn remove_from(
+    root: &Path,
+    route: &str,
+    name: &str,
+    created: bool,
+) -> Result<Written, OpenCodeMcpError> {
+    if !FILES.contains(&route) {
+        return Ok(Written::Unchanged);
+    }
+    let file = ConfigFile::new(root, route, Format::Jsonc)?.capped(MAX_BYTES);
     let standing = standing(&file, name)?;
     // Taken whole when the server is all it holds, rather than written
     // without it first only to be taken away.
