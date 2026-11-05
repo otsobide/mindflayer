@@ -402,6 +402,42 @@ fn options_no_definition_can_hold_together_are_refused_by_the_grammar() {
 }
 
 #[test]
+fn an_option_given_no_equals_sign_is_refused_without_saying_what_it_was_given() {
+    for (prefix, token) in McpMother::tokens() {
+        let rest = token[prefix.len()..].trim_start().to_owned();
+        for (option, options) in ServerOptionsMother::unpaired(&token) {
+            for lead in [&["mind"][..], &["mind", "weaver"][..], &["mindweaver"][..]] {
+                let mut words: Vec<&str> = lead.to_vec();
+                words.extend(["add", "mcp", "github", "GitHub"]);
+                words.extend(options.iter().map(String::as_str));
+
+                let error = if lead == ["mindweaver"] {
+                    WeaverCli::try_parse_from(&words).unwrap_err()
+                } else {
+                    Cli::try_parse_from(&words).unwrap_err()
+                };
+
+                assert_eq!(error.kind(), clap::error::ErrorKind::ValueValidation);
+                assert_eq!(
+                    error.to_string(),
+                    format!(
+                        "error: invalid value for '{option}': give it as a name, `=` and what \
+                         goes with it (what was given is not repeated, since it may be a \
+                         secret)\n\
+                         \n\
+                         Usage: {} add [OPTIONS] <KIND> <NAME> <DESCRIPTION>\n\
+                         \n\
+                         For more information, try '--help'.\n",
+                        lead.join(" ")
+                    )
+                );
+                assert!(!error.to_string().contains(&rest), "{error}");
+            }
+        }
+    }
+}
+
+#[test]
 fn add_takes_a_servers_transport_from_a_template_and_sets_its_name_and_description() {
     let dir = workspace();
     let templates = dir.path().join(WEAVER_DIR).join("templates");

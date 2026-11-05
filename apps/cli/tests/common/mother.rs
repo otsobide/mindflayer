@@ -305,4 +305,39 @@ impl ServerOptionsMother {
             ),
         ]
     }
+
+    /// Each option taking `NAME=VALUE` given `token` with no `=`, as one
+    /// is given a secret by mistake, after the transport it needs, beside
+    /// the option as its refusal names it: the token with its name left
+    /// out, or a header written as curl takes one.
+    pub fn unpaired(token: &str) -> Vec<(&'static str, Vec<String>)> {
+        let program = |option: &str, value: String| {
+            vec![
+                String::from("--command"),
+                String::from("npx"),
+                format!("--{option}"),
+                value,
+            ]
+        };
+        let address = |option: &str, value: String| {
+            vec![
+                String::from("--url"),
+                String::from("https://example.com/mcp"),
+                format!("--{option}"),
+                value,
+            ]
+        };
+        vec![
+            ("--env <KEY=VALUE>", program("env", token.to_owned())),
+            (
+                "--header <NAME=VALUE>",
+                address("header", format!("Authorization: {token}")),
+            ),
+            (
+                "--secret-header <NAME=VAR>",
+                address("secret-header", token.to_owned()),
+            ),
+            ("--url-var <NAME=VAR>", address("url-var", token.to_owned())),
+        ]
+    }
 }

@@ -4,9 +4,11 @@
 //! place. The binaries parse with these types and so does every line the TUI
 //! runs, which is why a feature cannot reach the TUI without a command.
 
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use clap::builder::{PossibleValuesParser, TypedValueParser};
+use clap::builder::{PossibleValuesParser, StringValueParser, TypedValueParser};
+use clap::error::ErrorKind;
 use clap::{ArgGroup, Args, Parser, Subcommand};
 use mindweaver_core::mcp::{self, Address, Program};
 use mindweaver_core::scan::DEFAULT_DEPTH;
@@ -1129,7 +1131,7 @@ pub struct ServerOptions {
     #[arg(
         long,
         value_name = "KEY=VALUE",
-        value_parser = pair,
+        value_parser = Pair,
         requires = "command",
         conflicts_with_all = ["url", "template"]
     )]
@@ -1169,7 +1171,7 @@ pub struct ServerOptions {
     #[arg(
         long = "header",
         value_name = "NAME=VALUE",
-        value_parser = pair,
+        value_parser = Pair,
         requires = "url",
         conflicts_with_all = ["command", "template"]
     )]
@@ -1180,7 +1182,7 @@ pub struct ServerOptions {
     #[arg(
         long = "secret-header",
         value_name = "NAME=VAR",
-        value_parser = pair,
+        value_parser = Pair,
         requires = "url",
         conflicts_with_all = ["command", "template"]
     )]
@@ -1201,7 +1203,7 @@ pub struct ServerOptions {
     #[arg(
         long = "url-var",
         value_name = "NAME=VAR",
-        value_parser = pair,
+        value_parser = Pair,
         requires = "url",
         conflicts_with_all = ["command", "template"]
     )]
@@ -1420,10 +1422,38 @@ pub enum GatherCommand {
 /// `--secret-header` and `--url-var` take. The name before it, since no
 /// variable's or header's name holds one, and the value after it whole,
 /// whatever it holds, another `=` included.
-fn pair(text: &str) -> Result<(String, String), String> {
-    text.split_once('=')
-        .map(|(name, value)| (name.to_owned(), value.to_owned()))
-        .ok_or_else(|| String::from("give it as a name, `=` and what goes with it"))
+///
+/// A parser of its own rather than a function clap wraps, which says a
+/// value it refuses whole: one given no `=` is as likely a secret whose
+/// name was left out (`--env $TOKEN`) or a header written as curl takes one
+/// (`--header "Authorization: Bearer ..."`), and said, it would land
+/// wherever the error goes, a terminal or a CI log. So it is never said.
+#[derive(Debug, Clone, Copy)]
+struct Pair;
+
+impl TypedValueParser for Pair {
+    type Value = (String, String);
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&clap::Arg>,
+        value: &OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        let text = StringValueParser::new().parse_ref(cmd, arg, value)?;
+        let Some((name, value)) = text.split_once('=') else {
+            let option = arg.map(ToString::to_string).unwrap_or_default();
+            let refused = clap::Error::raw(
+                ErrorKind::ValueValidation,
+                format!(
+                    "invalid value for '{option}': give it as a name, `=` and what goes with \
+                     it (what was given is not repeated, since it may be a secret)"
+                ),
+            );
+            return Err(refused.format(&mut cmd.clone()));
+        };
+        Ok((name.to_owned(), value.to_owned()))
+    }
 }
 
 /// What `--shell` takes, from core's list rather than spelled again here, as

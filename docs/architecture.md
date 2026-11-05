@@ -908,7 +908,11 @@ conflicts with the other's and with `--template` as well as requiring its
 own, since clap passes over a requirement that conflicts with something
 given, and would take `--header` with `--command`, or `--arg` with
 `--template`, and drop it; a `Given` cannot say any of it, so core needs no
-rule for it. Everything else is core's (`create::plan`): what `add` writes
+rule for it. An option taking `NAME=VALUE` given no `=` is refused by a
+parser of its own (`parse::Pair`), which never says what it was given:
+clap says a value it refuses whole, and one with no `=` is as likely a
+secret whose name was left out, or a header written as curl takes one,
+`Authorization: Bearer` and the token. Everything else is core's (`create::plan`): what `add` writes
 is held to the strict function `validate`, `rename` and `edit --contents`
 hold a definition to, before a byte is written. Its name, to the keys
 every agent takes, to what each keeps for itself and to the definitions
