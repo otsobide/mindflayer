@@ -8,8 +8,9 @@ installing into several folders (#34), the managed block in `AGENTS.md`
 (#42), Claude's rule files (#43), the predicate that decides how Claude
 reaches the block (#44), the names a suggestion ranks a repository by (#58),
 what an MCP server's definition is held to for each agent (#87), the
-entry Claude's `.mcp.json` is given of one (#90), and the MCP renderers
-and installs to come (#91 to #94).
+entry Claude's `.mcp.json` is given of one (#90) and the one Codex's
+`.codex/config.toml` is (#91), and the MCP renderers and installs to come
+(#92 to #94).
 [docs/architecture.md](architecture.md) says what Mindweaver does with these
 facts and why; this page says what the agents do.
 
@@ -642,7 +643,10 @@ stands now that #18's runs have been made:
 | Codex | A secret argument cannot be expressed. | docs-only | [D-11](architecture.md#d-11-mcp-secrets-are-environment-references) and #87; #18's Codex runs were not made (no Codex subscription) |
 | Codex | A secret inside a URL cannot be expressed. | docs-only | [D-11](architecture.md#d-11-mcp-secrets-are-environment-references) and #87; #18's Codex runs were not made (no Codex subscription) |
 | Codex | A secret header cannot be expressed other than as its whole value (`env_http_headers`) or as `Authorization: Bearer ${VAR}` (`bearer_token_env_var`). | docs-only | [D-11](architecture.md#d-11-mcp-secrets-are-environment-references) and #87; #18's Codex runs were not made (no Codex subscription) |
+| Codex | A secret in a program's environment cannot be expressed other than as the whole value of the variable named as the one it is read from: `env_vars` passes a variable on under its own name. | docs-only | [config-reference](https://learn.chatgpt.com/docs/config-file/config-reference) and #91, by D-11's reasoning; #18's Codex runs were not made (no Codex subscription), and `codex-mcp-trusted`'s `PROBE_MCP_ENV_SOURCE` would show the name a variable is passed on under |
 | Codex | A server over sse cannot be expressed. | docs-only | #87; #18's Codex runs were not made (no Codex subscription) |
+| Codex | A server of a name `$CODEX_HOME/config.toml` holds under `mcp_servers` is merged with the project's key by key, so the project's is refused. | docs-only | [config-reference](https://learn.chatgpt.com/docs/config-file/config-reference) and #91; `codex-mcp-collision` below was not run, and would say whether a warning would do |
+| Codex | `experimental_environment` and `environment_id`, by their names the environment it runs a server in, are never written, an extra for Codex giving one refused. | docs-only | #91; none of #18's checks covers them |
 | OpenCode | A server over sse cannot be expressed in its V2 shape, the one Mindweaver writes. | docs-only | #87 and [D-12](architecture.md#d-12-opencode-gets-the-v2-mcp-shape); none of #18's checks covers it |
 | Claude Code | A program's `cwd` cannot be expressed: its entry is written without it. | docs-only | #87; none of #18's checks covers it |
 | Claude Code | A variable it keeps from a remote server, a credential of its own or of a tool on the machine (`ANTHROPIC_API_KEY`, `NPM_TOKEN`, `SONAR_TOKEN`, `HTTPS_PROXY`, `OTEL_*`, `GIT_CONFIG_*` and more, each under `INPUT_` too where Claude looks there), is read as empty where `${VAR}` is expanded in a remote server's `url` or `headers`, so an input of an address read from one cannot be expressed. | docs-only | #90, read from Claude Code 2.1.318's binary, in any case as it compares them, and listed in `apps/core/src/mcp/blanked.rs`; none of #18's checks names one. A run putting one of them in `claude-mcp`'s header would move it. A name Mindweaver lists that Claude passes on refuses Claude a server it could reach, and one it misses reaches the server empty, which Claude's log says ("credential variable(s) that are never expanded toward a remote server"). |
@@ -1034,9 +1038,57 @@ that decides whether #91 refuses a name a lower layer holds or only warns.
 | `probe-stdio` as the user's http server | pending |
 | `probe-http`, which collides with nothing: whether the collision costs the other servers | pending |
 
-The first three outcomes break more than the one name, so #91 refuses it, as
-it plans; the others leave the rest of the configuration working, so a
-warning would do.
+The first three outcomes break more than the one name, so #91 refuses it,
+as it does while no run has said otherwise; the others leave the rest of the
+configuration working, so a warning would do.
+
+#### What Mindweaver writes there
+
+`codex_mcp` (#91) renders a definition as one table,
+`[mcp_servers.<name>]`, on what the
+[config-reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+says, through `config_entry` in TOML, every byte outside it kept. None of it
+was run, so all of it is docs-only, and every result above stays pending:
+
+- A program as `command`, `args`, `env`, `env_vars` and `cwd`, and an
+  address as `url`, `http_headers`, `env_http_headers` and
+  `bearer_token_env_var`, each only when it holds something, the
+  definition's extras for Codex beside them.
+- Each input only where a key names its variable: `env_vars` for a
+  program's environment variable that is the input whole under the
+  variable's own name, `env_http_headers` for a header that is the input
+  whole, and `bearer_token_env_var` for the first `Authorization` header
+  holding `Bearer` and the input. Every other value is written as the
+  definition holds it, `${VAR}` among it, which Codex reads as the text it
+  is (`codex-mcp-trusted` expects `${PROBE_MCP_ARG}` as written).
+- A secret written anywhere else refuses the server, as the table above
+  says (`secret_in_argument`, `secret_in_url`, `secret_header_composite`,
+  `secret_env_composite`, `secret_env_renamed`), and so does sse
+  (`sse_unsupported`). An input that is no secret written there refuses it
+  too (`codex_mcp_input_in_text`): it could be given only as its value,
+  which no install hands the renderer yet (#93).
+- Never `experimental_environment` nor `environment_id`: an extra giving
+  one refuses the server (`extra_withheld`).
+- A name `$CODEX_HOME/config.toml` holds under `mcp_servers` refuses the
+  server (`codex_mcp_collision`), docs-only: a run of `codex-mcp-collision`
+  would decide whether a warning would do. The Codex home is the one
+  Mindweaver is given (`--codex-home`, then `$CODEX_HOME`, then
+  `~/.codex`); with none given there is no user's config to read, and
+  nothing collides.
+- A project that `$CODEX_HOME/config.toml` does not mark `trusted` is
+  written all the same, and said (`codex_mcp_untrusted`), since Codex reads
+  its file only in a trusted project (`codex-mcp-untrusted` expects neither
+  server to start otherwise). Mindweaver looks up `[projects."<path>"]
+  trust_level` under the project's root as it is linked and as its links
+  resolve to; which path Codex keys a project by, the folder it starts in
+  or the repository's root above it, is docs-only, so a project trusted
+  under another is warned of. With no Codex home given, nothing marks it
+  trusted, and that is said.
+- The file is read up to 2 MiB, made with `.codex` when it is not there,
+  and taken away with its last server only when Mindweaver made it and
+  nothing else is in it; `.codex` stays. A project whose
+  `.codex/config.toml` is Codex's own, one at the user's home while
+  `$CODEX_HOME` is `~/.codex`, is refused (`codex_mcp_user_scope`).
 
 ### OpenCode's `opencode.json`
 
@@ -1330,6 +1382,8 @@ servers](#mcp-servers).
 | #91 | A trusted project's `.codex/config.toml` loads, and an untrusted one's does not. | pending (`codex-mcp-trusted`, `codex-mcp-untrusted`) |
 | #91 | `env_vars`, `env_http_headers` and `bearer_token_env_var` fill a value from a variable. | pending (`codex-mcp-trusted`) |
 | #91 | A server of the same name in `$CODEX_HOME/config.toml`, with another transport, breaks the whole configuration or leaves one layer's standing. | pending, recorded (`codex-mcp-collision`) |
+| #91 | `env_vars` passes a variable on to a program under its own name, so a secret in a program's environment is given only whole, under its variable's name. | pending (`codex-mcp-trusted`, its `PROBE_MCP_ENV_SOURCE`) |
+| #91 | Codex keys a trusted project in `[projects."<path>"]` by its root, as it is linked or as its links resolve to. | docs-only: none of #18's checks trusts a project under another path, and the warning that leans on it costs no entry |
 | #92 | V2's `mcp.servers` loads in V2 (2.2.5 and 2.1.3) and in 1.19.4, and V1's `mcp.<name>` loads in V2. | verified (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`) |
 | #92 | `{env:}` expands in the command, the environment, the URL and the headers, through V2's background server too when that server holds the variable. | verified (all four OpenCode runs, the V2 ones on 2.2.5 and 2.1.3) |
 | #92, #96 | Whose environment V2's background server fills `{env:}` from: the asking client's, or its own. | verified: its own, on 2.2.5 and 2.1.3; a server started apart filled none of the five from the asking list (`opencode-mcp-service`) |
