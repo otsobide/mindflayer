@@ -94,8 +94,9 @@ scripts/diff.sh main
 /// shows, built as somebody would build it, a command at a time:
 ///
 /// - its library holds the skills `review`, with a script and a reference
-///   beside its `SKILL.md`, and `lint`, and the rules `git/commits` and
-///   `style/comments`;
+///   beside its `SKILL.md`, and `lint`, the rules `git/commits` and
+///   `style/comments`, and the MCP server `github`, a program started with
+///   a secret its environment is given;
 /// - `api`, for Claude and Codex and local, authors `deploy`, and received
 ///   `review` and `git/commits`, as they were written: nothing to do;
 /// - `web`, for Claude and OpenCode and shared, received `lint`, changed in
@@ -119,6 +120,26 @@ fn workspace(home: &Path) -> PathBuf {
     ] {
         weaver(&root, &["add", kind, name, description]).unwrap();
     }
+    // The snapshot carries it as it carries every kind, with nothing in the
+    // panel to learn it.
+    weaver(
+        &root,
+        &[
+            "add",
+            "mcp",
+            "github",
+            "GitHub's issues, pull requests and code",
+            "--command",
+            "npx",
+            "--arg",
+            "-y",
+            "--arg",
+            "@modelcontextprotocol/server-github",
+            "--secret-env",
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+        ],
+    )
+    .unwrap();
     // Before anything installs it, so every copy is of this one.
     write_files(
         &own_directory_for(&root, Kind::Skill).join("review"),

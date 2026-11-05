@@ -535,6 +535,12 @@ fn a_project_a_mind_toml_marks_is_read_only_from_the_folder_it_names() {
     for kind in Kind::ALL {
         let folders = stood(&project, kind);
 
+        // A kind added since a `mind.toml` was written is kept nowhere in
+        // one, and is read from no folder.
+        if Directories::default_for(kind).is_none() {
+            assert_eq!(folders, [], "{kind:?}");
+            continue;
+        }
         assert_eq!(folders.len(), 1, "{kind:?}: {folders:?}");
         let (_, agents, authored, shared) = &folders[0];
         assert!(

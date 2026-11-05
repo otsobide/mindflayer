@@ -290,7 +290,7 @@ fn a_rule_is_refused_before_anything_is_read() {
     .unwrap_err();
 
     assert!(
-        matches!(&refused, AdoptError::Rule { name } if name == "lint"),
+        matches!(&refused, AdoptError::NotASkill { name, .. } if name == "lint"),
         "{refused:?}"
     );
     assert_eq!(refused.code(), "adopt_not_a_skill");

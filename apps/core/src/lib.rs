@@ -43,6 +43,7 @@ pub mod ledger;
 pub mod lifecycle;
 mod lines;
 pub mod lock;
+pub mod mcp;
 pub mod migrate;
 #[cfg(any(test, feature = "mother"))]
 pub mod mother;
@@ -85,6 +86,7 @@ pub use known::{Known, KnownWorkspace};
 pub use ledger::{Ledger, LedgerError, SourceKind, FLAYER_LEDGER_FILE, LEDGER_FILE};
 pub use lifecycle::{LifecycleError, Target};
 pub use lock::{LockError, WorkspaceLock};
+pub use mcp::{McpDefinition, McpError, MCP_FORMAT};
 pub use names::Names;
 pub use port::{Clock, Remote};
 pub use reapply::{Change, ReapplyError};

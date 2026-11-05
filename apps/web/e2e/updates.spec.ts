@@ -27,9 +27,15 @@ function changeTheLibrary(at: Places) {
   succeed(at, 'mindweaver', at.workspace, ['edit', `skill:${UPDATED}`, '--editor', `cp ${since}`])
 }
 
-/** Go to a page from the sidebar, as a person does, and wait for it to be drawn. */
-async function visit(page: Page, name: string) {
+/**
+ * Go to a page from the sidebar, as a person does, and wait for it to be
+ * drawn: its own panel, `panel` by its test id, first, since the click
+ * returns while the page it leaves is still drawn, and that page holds a
+ * main and an answered snapshot too, which is all `drawn` looks for.
+ */
+async function visit(page: Page, name: string, panel: string) {
   await page.getByTestId('sidebar').getByRole('link', { name, exact: true }).click()
+  await expect(page.getByTestId(panel)).toBeVisible()
   await drawn(page)
 }
 
@@ -46,7 +52,7 @@ test('a library skill changed shows outdated, and updating every project brings 
   // Edited is said over outdated: `beta`'s copy asks for a forced update.
   await expect(row(page, beta).getByTestId('outdated')).toHaveText('none')
 
-  await visit(page, 'Updates')
+  await visit(page, 'Updates', 'updates')
   const outdated = page.getByTestId('state-outdated').getByTestId('row')
   await expect(outdated).toHaveCount(1)
   await expect(outdated.getByTestId('project')).toHaveText(alpha)
@@ -71,7 +77,7 @@ test('a library skill changed shows outdated, and updating every project brings 
 
   await expect(page.getByTestId('state-outdated').getByTestId('row')).toHaveCount(0)
   await expect(page.getByTestId('state-edited').getByTestId('row').getByTestId('left')).toContainText(left)
-  await visit(page, 'Projects')
+  await visit(page, 'Projects', 'projects')
   for (const project of UPDATING) {
     await expect(row(page, project).getByTestId('outdated')).toHaveText('none')
   }
@@ -117,7 +123,7 @@ test('removing a library skill shows what removing it everywhere does first, the
 
   // What the removal left, edited with nothing offering it any more, is
   // listed with the forced uninstall that alone takes it out.
-  await visit(page, 'Updates')
+  await visit(page, 'Updates', 'updates')
   const left = page.getByTestId('state-edited').getByTestId('row')
   await expect(left.getByTestId('project')).toHaveText(beta)
   await expect(left.getByTestId('left')).toContainText('only a forced uninstall takes it out')

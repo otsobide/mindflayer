@@ -229,7 +229,8 @@ const EXPECTED: &str = r#"{
   },
   "kinds": [
     "skill",
-    "rule"
+    "rule",
+    "mcp"
   ],
   "agents": [
     "claude",
@@ -272,6 +273,10 @@ const EXPECTED: &str = r#"{
         {
           "kind": "rule",
           "count": 1
+        },
+        {
+          "kind": "mcp",
+          "count": 0
         }
       ],
       "states": [
@@ -315,6 +320,10 @@ const EXPECTED: &str = r#"{
         {
           "kind": "rule",
           "count": 1
+        },
+        {
+          "kind": "mcp",
+          "count": 0
         }
       ],
       "states": [
@@ -357,6 +366,10 @@ const EXPECTED: &str = r#"{
         },
         {
           "kind": "rule",
+          "count": 0
+        },
+        {
+          "kind": "mcp",
           "count": 0
         }
       ],
@@ -402,6 +415,10 @@ const EXPECTED: &str = r#"{
       {
         "kind": "rule",
         "path": ".mindweaver/library/rules"
+      },
+      {
+        "kind": "mcp",
+        "path": ".mindweaver/library/mcp"
       }
     ],
     "artifacts": [
@@ -552,6 +569,10 @@ const EXPECTED: &str = r#"{
           {
             "kind": "rule",
             "count": 1
+          },
+          {
+            "kind": "mcp",
+            "count": 0
           }
         ],
         "states": [
@@ -622,6 +643,10 @@ const EXPECTED: &str = r#"{
           },
           {
             "kind": "rule",
+            "count": 0
+          },
+          {
+            "kind": "mcp",
             "count": 0
           }
         ],
@@ -736,7 +761,15 @@ const EXPECTED: &str = r#"{
   "boxes": [
     {
       "entry": "api",
-      "closed": [],
+      "closed": [
+        {
+          "kind": "mcp",
+          "why": {
+            "code": "not_installable",
+            "message": "MCP servers cannot be installed into a project yet"
+          }
+        }
+      ],
       "held": [
         {
           "kind": "skill",
@@ -766,6 +799,13 @@ const EXPECTED: &str = r#"{
         },
         {
           "kind": "rule",
+          "why": {
+            "code": "not_a_project",
+            "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+          }
+        },
+        {
+          "kind": "mcp",
           "why": {
             "code": "not_a_project",
             "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"

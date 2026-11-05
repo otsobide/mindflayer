@@ -148,7 +148,16 @@ under `apps/` with its own `Makefile`:
 
 - `apps/core` (`mindweaver-core`): the engine. Projects, a project's settings
   (`settings`, the marker from v3 on), workspaces, which workspace a command
-  uses (`resolve`), the shell code that activates one (`activate`), kinds, the
+  uses (`resolve`), the shell code that activates one (`activate`), kinds
+  (`kind`: skills, rules and MCP servers, and the `Layout` each is kept in,
+  a folder, a file at any depth or a file directly in its folder), what an
+  MCP server's definition declares, one TOML file a server in a format of
+  its own (`mcp`), which names a server can be given (`mcp::name`), what in
+  one looks like a token written as it is (`mcp/token.rs`), what each
+  agent cannot be given of one, as a renderer will ask and `show` says
+  (`mcp::Inexpressible`, `mcp::Expressibility`), and what `add` is told of
+  how one is started or reached, a program or an address, and the
+  definition it writes from it (`mcp::Given`), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
   (through `port::Remote`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
@@ -225,7 +234,9 @@ under `apps/` with its own `Makefile`:
   templates), `read` (list, show, validate), `status`, `settings` (agents,
   share, targets), `gather`, `install`, `update` and `migrate` (each at both
   levels), `adopt` (mindweaver adopt) and `ui` (the panel, at both levels).
-  `src/render.rs` holds `Outcome`,
+  `add mcp`'s options for how a server is started or reached are one
+  struct both binaries flatten (`ServerOptions`), which hands core a
+  `mcp::Given`. `src/render.rs` holds `Outcome`,
   `Failure` and `Warning` (a stderr line, with its code beside it), the
   table helpers and the envelope every `--json` prints (`json`, and
   `as_json`, which lays a text outcome out in it),
@@ -416,8 +427,10 @@ These are easy to break from a single file without noticing.
   artifact's name or a revision holds the value in `value`, never a
   `String`: one held to a rule (`ContentHash`, `ProjectId`, `Redacted`) is
   made only the way its rule allows, so no `From<String>`, and one named
-  apart (`ArtifactName`, `Origin`, `Revision`) holds any text, since core
-  reads leniently. A new value joins `value` through its `text_value!`
+  apart (`ArtifactName`, `Origin`, `Revision`, and an MCP server's
+  `InputName` and `VariableName`) holds any text, since core reads
+  leniently, the last two judged by a rule they say of themselves and are
+  not made by (`is_writable`, `is_portable`). A new value joins `value` through its `text_value!`
   macro, so it reads as its text and goes out as one, said in TypeScript
   and JSON Schema as a `String` is, and no contract moves
   (`make web/types/check`, `make api/schemas/check`); its store's adapter
@@ -762,7 +775,12 @@ These are easy to break from a single file without noticing.
   rules in one render that keeps an orphaned rule as it is
   (`install::rules::update_held`); it leaves an `Edited` one, every copy of
   it, unless forced, and says an `Orphaned` one without failing. An
-  uninstall removes the copies its record names and nothing else. No copy
+  uninstall removes the copies its record names and nothing else. No
+  install writes an MCP server yet (`install::installs`, refused as
+  `not_installable` wherever a project is asked where one goes, which every
+  project's boxes in the snapshot say), nor does an adoption or a gather;
+  `add` writes a definition where its holder keeps servers, as it writes a
+  skill, and records nothing, writing nothing into an agent's config. No copy
   holds a skill's top-level `.claude-plugin`
   (`install::LeftOut`), and none lands inside an agent's own folder
   (`InstallError::UserScope`). A v3 project is listed from its agents' folders
@@ -837,7 +855,34 @@ These are easy to break from a single file without noticing.
   warning, never a reason to hide the rule. `mind add --template` refuses that
   same list (`artifact::rule_issues`) for the rule it is about to write, and
   `edit --contents` refuses it, and a rule with nothing to say, for the one
-  it is given (`artifact::rule_text_issues`), before a byte is written.
+  it is given (`artifact::rule_text_issues`), before a byte is written. An
+  MCP server's definition (`mcp::McpDefinition`) is read from its `format`
+  first, one from a newer format refused as that (`mcp_format_too_new`), and
+  a file that does not read is a failure beside the rest; one that reads is
+  listed whatever is wrong with it, and `validate` says what (a transport
+  naming nothing to start or reach, an input no value uses, a name that is
+  not its file's, one no agent keys a server by, `^[A-Za-z0-9_-]+$`, one an
+  agent keeps for itself, in any case, and two beside each other that
+  differ only by case, an input no placeholder can be written of or read
+  from a variable no agent can refer to, a secret read from no variable,
+  and a token written as it is in a transport, an input's name or its
+  `env_var` or the extras, said by where it is and what it starts with and
+  never whole, an input named so said of nothing else),
+  which `add`, `edit --contents` and `rename` refuse to leave behind
+  (`artifact::mcp_strict_issues`, and
+  `mcp_name_strict_issues` for a name alone, both reading what sits beside
+  it off the folder written in, `lifecycle::twins_beside`). `anthropic-skills`
+  is only warned of. What an agent cannot be given of one is never a reason
+  to call it invalid: core says it (`McpDefinition::inexpressible`), `show`
+  says it, and a renderer asks it before it writes. `add` writes one from
+  a command line's options (`ServerOptions`, a `mcp::Given`) or from a
+  template, held to the same strict function, every secret it declares
+  only the name of the variable it is read from; what no definition can
+  hold (both transports, an option of the other's, a transport or any
+  option of one with `--template`) is the grammar's to refuse, and what no
+  definition's rule can judge, a key given twice and an address typed with
+  a credential, core refuses with codes of its own (`add_mcp_key_repeated`,
+  `add_mcp_url_userinfo`).
 - **Loaded and gathered content is untrusted.**
   - So is a task's every value, which a browser will fill in: it reaches
     its command as that value, never as an option or a command. The task
@@ -994,7 +1039,14 @@ These are easy to break from a single file without noticing.
   read past, read as written and changed by nothing but `mind migrate`; and
   `settings.toml` at `SETTINGS_TOML_VERSION` whatever it sets, which `mind
   init` writes (`MindProject::init_asked`, which fills in each folder it was
-  not told about). Each version is written in one file
+  not told about that has a default). A kind added since markers said where
+  each kind lives has no default (`Directories::default_for`, `None` for MCP
+  servers): no `mind.toml` reads a folder for it, `mind init` and `mind
+  migrate` name none, and a workspace keeps it in its library unless its
+  marker names a folder for it, which none `mindweaver init` writes does, so
+  no marker's version moved. An
+  MCP server's definition carries a format of its own (`MCP_FORMAT`), refused
+  from a newer one as a marker is. Each version is written in one file
   (`MarkerFile::of_version`), and one found in another is refused. Any of the
   three makes a directory a project (`MindProject::is_marked`), and the
   newest wins when more than one is there. See `DIRECTORIES_VERSION` for how
@@ -1322,13 +1374,26 @@ These are easy to break from a single file without noticing.
   running a Mindflayer build's `flayer-deactivate` first where a shell has
   it, and setting nothing of the old activation's; a workspace's name
   reaches a prompt only through `activate::prompt`.
-- **`Kind` and `Agent` are closed enums.** To add a kind, follow "Adding a
+- **`Kind` and `Agent` are closed enums.** `Kind` is `Skill`, `Rule` and
+  `Mcp`, each kept in a `Layout` (`Directory`, `Files`, or `Flat` for a
+  file directly in its folder, whose name becomes a config key and so is
+  never a route). To add a kind, follow "Adding a
   third kind" in the architecture doc, and to add an agent, "Adding an agent",
   which starts in `docs/agents.md`. Either way the compiler's exhaustive
   matches are the checklist: the target table's `standard`, and `read` behind
   `Agent::reads`, match every kind and agent with no wildcard, so neither
   compiles until it says where it goes and where it reads; `at_root`, behind
-  `Agent::reads_at_root`, matches every agent the same way.
+  `Agent::reads_at_root`, matches every agent the same way. So do the
+  matches that say what a kind is not yet given: a default folder beside
+  the code (`Directories::default_for`), an install (`install::installs`,
+  behind the refusal in `install::targets`), a scaffold
+  (`create::scaffolds`), and the words a sentence names it by
+  (`Kind::noun`, `Kind::plural`), which every message and count asks rather
+  than spelling `{kind}s`. And the matches on the agent that say which MCP
+  servers' names it keeps for itself (`mcp::name`'s `reserved` and
+  `claimed`) and what it cannot be given of a definition
+  (`McpDefinition::inexpressible`), each from docs/agents.md's "MCP
+  servers".
   "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
   agent home's field, option and place in `common::PINNED` and `CLEARED`.
 
@@ -1344,10 +1409,24 @@ These are easy to break from a single file without noticing.
   `ArtifactNameMother`, `RevisionMother`, `ProjectIdMother`), per record the
   ledger keeps (`InstallRecordMother`, `TargetMother`, `SourceMother`,
   `GatheredMother`, `MovedMother`, `EntryMother`), for a skill's and a
-  rule's text (`SkillMother`, `RuleMother`), a project's settings
+  rule's text (`SkillMother`, `RuleMother`), an MCP server's definition,
+  one for each transport and one for each shape a rule or an agent is
+  about (`McpMother`: `misnamed`, `secret_without_variable`, a token of each
+  shape drawn from parts at run time, `tokens` and `with_literal`, never a
+  token in a file, the names a server may and may not be given, `name`,
+  `unwritable`, `reserved`, `claimed`, `twin`, and each shape an agent
+  cannot be given, `secret_argument`, `secret_in_url`,
+  `composite_secret_header`; what `add` is told of one, `given_program`,
+  `given_address`, `given`, and the shapes it refuses, `given_unfit`,
+  `given_with_literal`, `given_repeating` and `given_refused_unread`; and
+  `InputNameMother` and `VariableNameMother` for its values, with what each
+  rule refuses), a project's settings
   (`SettingsMother`), the URLs a credential can be typed into (`UrlMother`,
   each form beside what redacting leaves of it) and what lives on the disk
-  (`WorkspaceMother`, `ProjectMother`, `GitRepositoryMother`, `ShelfMother`),
+  (`WorkspaceMother`, `ProjectMother`, among it a project a version 1 or 2
+  build made, `version_1` and `older`, one a `settings.json` marks as a
+  version 3 build wrote it, `json`, and one that names a folder for MCP
+  servers, `with_mcp`, `GitRepositoryMother`, `ShelfMother`),
   and what a Mindflayer build left under its names (`MindflayerMother`:
   a workspace in a `.mindflayer`, and a project's blocks, exclude lines and
   rule files for Claude as that build wrote them, records included).
@@ -1366,7 +1445,9 @@ These are easy to break from a single file without noticing.
   feature, which no build of a binary turns on. The CLI's suites add mothers
   of what only a command takes (`tests/common/mother.rs`: `ValueMother`,
   `OlderBuildMother`, `MindflayerShellMother`, the activation a Mindflayer
-  build printed); the server depends on no mindweaver crate, so its
+  build printed, and `ServerOptionsMother`, the options a command line
+  gives what `McpMother` makes by and those the grammar refuses together);
+  the server depends on no mindweaver crate, so its
   suites keep all of theirs there (hosts, origins, tokens and headers). A new value object gets a mother and a section of
   `tests/value_test.rs`, which holds every value to one set of laws
   (`reads_as_its_text`) and to its rule both ways, and a new port a
@@ -1394,8 +1475,9 @@ These are easy to break from a single file without noticing.
   puts its copies is asked of core (`common::copies`). A test about what a
   project an older Mindweaver made does, a copy installed in the folder it
   authors in, makes one with `common::older_project`, and one about a
-  project a `settings.json` marks with `common::json_project`, which writes
-  the file as a version 3 `mind init` did. What git would list is
+  project a `settings.json` marks with `common::json_project`, which has
+  `ProjectMother::json` write the file as a version 3 `mind init` did. What
+  git would list is
   asked of gix too (`common::untracked`), and a core fixture has git track
   its files by writing the index with gix (`common::indexed`). A core test
   about which `CLAUDE.md` Claude finds first holds its temporary folder to
@@ -1507,7 +1589,12 @@ These are easy to break from a single file without noticing.
   starts the server the same way, from the fixture's folder. A spec reads
   the server from `served`, what the CLI says from `listing()`, `mindweaver
   list --json` in its envelope, and opens a page with `panel.open`, through
-  the launch link, as a person does. Every test fails on a CSP violation or
+  the launch link, as a person does. After a click that opens another page,
+  it acts through what only that page draws (the add page's form, by its
+  name, and `exact` labels inside it), never a label or a name the page it
+  leaves could match too: the click returns while that page is still
+  drawn, and Playwright matches either in any case and anywhere in it.
+  Every test fails on a CSP violation or
   an uncaught error on its page (`watch`), and `csp.spec.ts` holds the watch
   to seeing one. No spec changes the shared workspace: a test that changes
   something takes a workspace and a `mindweaver ui` of its own (`own`, built by

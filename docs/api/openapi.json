@@ -446,6 +446,7 @@
           "name_not_kebab_case",
           "name_segment_too_long",
           "name_directory_mismatch",
+          "name_file_mismatch",
           "description_empty",
           "description_too_long",
           "compatibility_empty",
@@ -458,6 +459,18 @@
           "front_matter_unparsed",
           "paths_not_strings",
           "description_not_a_string",
+          "transport_incomplete",
+          "input_repeated",
+          "input_unreferenced",
+          "input_in_userinfo",
+          "input_name_malformed",
+          "env_var_malformed",
+          "secret_without_env_var",
+          "secret_literal",
+          "mcp_name_not_a_key",
+          "mcp_name_reserved",
+          "mcp_name_claimed",
+          "mcp_name_case_clash",
           "browse_missing",
           "browse_not_a_folder",
           "browse_unlisted",
@@ -521,6 +534,11 @@
           "add_exists",
           "add_manifest_unwritable",
           "add_write_failed",
+          "add_mcp_unscaffolded",
+          "add_transport_not_mcp",
+          "add_mcp_key_repeated",
+          "add_mcp_url_userinfo",
+          "add_mcp_unfit",
           "exclude_key_invalid",
           "exclude_pattern_invalid",
           "exclude_path_unnamable",
@@ -560,6 +578,7 @@
           "rule_not_recorded",
           "rule_section_unread",
           "rules_block_unedited",
+          "not_installable",
           "install_unfit",
           "install_overlaps",
           "kept_by_a_load",
@@ -602,15 +621,19 @@
           "ambiguous_name",
           "rename_name_unfit",
           "rename_skill_nested",
+          "rename_mcp_nested",
           "rename_unfit",
           "rename_unchanged",
           "rename_target_exists",
           "rename_front_matter_unreadable",
+          "rename_definition_unreadable",
           "rename_rewrite_failed",
           "change_outside",
           "edit_contents_not_text",
           "edit_front_matter_unreadable",
           "edit_name_changed",
+          "edit_definition_unreadable",
+          "edit_mcp_name_changed",
           "edit_contents_unfit",
           "edit_hash_malformed",
           "edit_stale",
@@ -618,6 +641,16 @@
           "change_failed",
           "workspace_busy",
           "lock_open_failed",
+          "mcp_unparsed",
+          "mcp_format_missing",
+          "mcp_format_too_new",
+          "mcp_format_unknown",
+          "mcp_malformed",
+          "secret_in_argument",
+          "secret_in_url",
+          "secret_header_composite",
+          "sse_unsupported",
+          "cwd_unsupported",
           "migrate_refused",
           "migrate_marker_backup_failed",
           "migrate_move_failed",
@@ -1463,7 +1496,8 @@
         "description": "A kind of artifact, by the word a command line takes for it.",
         "enum": [
           "skill",
-          "rule"
+          "rule",
+          "mcp"
         ],
         "type": "string"
       },
@@ -4850,6 +4884,33 @@
           {
             "properties": {
               "code": {
+                "const": "name_file_mismatch"
+              },
+              "file": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "file",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
                 "const": "description_empty"
               },
               "message": {
@@ -5094,6 +5155,318 @@
             },
             "required": [
               "code",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "transport_incomplete"
+              },
+              "field": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "transport": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "transport",
+              "field",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "input_repeated"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "input_unreferenced"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "kind",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "input_in_userinfo"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "input_name_malformed"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "env_var_malformed"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "variable": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "variable",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "secret_without_env_var"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "code": {
+                "const": "secret_literal"
+              },
+              "message": {
+                "type": "string"
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "at",
+              "prefix",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "mcp_name_not_a_key"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "code": {
+                "const": "mcp_name_reserved"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "reserved": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "agent",
+              "reserved",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "claimed": {
+                "type": "string"
+              },
+              "code": {
+                "const": "mcp_name_claimed"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "agent",
+              "claimed",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "mcp_name_case_clash"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "twin": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "twin",
               "warning",
               "message"
             ],

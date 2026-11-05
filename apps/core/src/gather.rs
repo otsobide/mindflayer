@@ -468,7 +468,7 @@ fn harvest(
     // answer this question before it can be added.
     match request.kind {
         Kind::Skill => {}
-        Kind::Rule => return Err(GatherError::NotGatherable { kind: request.kind }),
+        Kind::Rule | Kind::Mcp => return Err(GatherError::NotGatherable { kind: request.kind }),
     }
     let Layout::Directory { manifest } = request.kind.layout() else {
         return Err(GatherError::NotGatherable { kind: request.kind });
@@ -779,7 +779,7 @@ pub enum GatherError {
     CredentialsInUrl { url: String },
     #[error("{url}: has no `{subdirectory}` folder to gather from")]
     NoSuchFolder { subdirectory: String, url: String },
-    #[error("{kind}s cannot be gathered yet")]
+    #[error("{} cannot be gathered yet", .kind.plural())]
     NotGatherable { kind: Kind },
     #[error("{path}: cannot be read: {source}")]
     Read {

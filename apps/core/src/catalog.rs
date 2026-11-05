@@ -133,10 +133,11 @@ impl Catalog {
                 // asks.
                 match kind {
                     Kind::Skill => self.load_directories(root, manifest, project),
-                    Kind::Rule => unreachable!("a rule is not a directory"),
+                    Kind::Rule | Kind::Mcp => unreachable!("{kind} is not a directory"),
                 }
             }
             Layout::Files { extension } => self.load_files(root, extension, project),
+            Layout::Flat { extension } => self.load_flat(root, extension, project),
         }
     }
 
@@ -266,7 +267,7 @@ impl Catalog {
             // has to say whether it is ever on the shelf.
             match kind {
                 Kind::Skill => {}
-                Kind::Rule => continue,
+                Kind::Rule | Kind::Mcp => continue,
             }
             let Layout::Directory { manifest } = kind.layout() else {
                 continue;
@@ -382,6 +383,7 @@ impl Catalog {
         let found = match kind.layout() {
             Layout::Directory { manifest } => catalog.directories_in(root, manifest),
             Layout::Files { extension } => catalog.files_in(root, extension),
+            Layout::Flat { extension } => catalog.flat_in(root, extension),
         };
         (found, catalog.failures)
     }
@@ -412,6 +414,8 @@ impl Catalog {
                 entries
             }
             Layout::Files { extension } => catalog.walk(root, extension).1,
+            // Nothing below the folder is ever one of them.
+            Layout::Flat { .. } => Vec::new(),
         };
         folders.retain(|folder| folder != root);
         folders.sort();
@@ -469,6 +473,57 @@ impl Catalog {
     /// leaving out what is hidden.
     fn files_in(&mut self, root: &Path, extension: &str) -> Vec<PathBuf> {
         self.walk(root, extension).0
+    }
+
+    /// One MCP server's definition per file with `extension` directly in
+    /// `root`, named by its stem.
+    fn load_flat(&mut self, root: &Path, extension: &str, project: &Path) -> Vec<Artifact> {
+        let mut found = Vec::new();
+        let files = self.flat_in(root, extension);
+        // Every name the folder's files give, whether or not each reads, for
+        // each definition to be told of the others named as it is in
+        // another case, which a file system that folds case would hold as
+        // one file ([`crate::mcp::name`]).
+        let stems: Vec<String> = files
+            .iter()
+            .filter_map(|path| path.file_stem()?.to_str().map(str::to_owned))
+            .collect();
+        for path in files {
+            let Some(name) = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .map(str::to_owned)
+            else {
+                self.failures.push(DiscoveryFailure::UnusableName { path });
+                continue;
+            };
+            match Artifact::mcp(&path, name, project) {
+                Ok(artifact) => found.push(artifact),
+                Err(error) => self.failures.push(error.into()),
+            }
+        }
+        for artifact in &mut found {
+            let twins = crate::mcp::name::twins(artifact.name(), stems.iter().map(String::as_str));
+            artifact.twinned(twins);
+        }
+        found
+    }
+
+    /// Every file with `extension` directly in `root`, in order, leaving
+    /// out what is hidden.
+    ///
+    /// Never one in a folder below it: a name is a key in an agent's config,
+    /// which holds no folder, so a file further down would be listed under a
+    /// name no install could key it by, or under its stem alone beside
+    /// another of that stem. A link is followed to tell a file from a folder,
+    /// as it is for a rule.
+    fn flat_in(&mut self, root: &Path, extension: &str) -> Vec<PathBuf> {
+        let Some(mut entries) = self.read_dir(root) else {
+            return Vec::new();
+        };
+        entries.retain(|path| !is_hidden(path) && has_extension(path, extension) && path.is_file());
+        entries.sort();
+        entries
     }
 
     /// Every file with `extension` at any depth under `root`, in order,

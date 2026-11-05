@@ -2374,6 +2374,15 @@ fn with_the_default_workspace_not_made_the_tui_opens_on_it_empty() {
     assert!(drawn.contains("nothing on the shelf"), "{drawn}");
     assert!(drawn.contains("Projects (0)"), "{drawn}");
     assert!(drawn.contains("nothing here yet"), "{drawn}");
+    // Where each kind goes, a kind named as a sentence names more than one.
+    assert!(
+        drawn.contains("skills go in .mindweaver/library/skills/"),
+        "{drawn}"
+    );
+    assert!(
+        drawn.contains("MCP servers go in .mindweaver/library/mcp/"),
+        "{drawn}"
+    );
     assert!(app
         .message
         .as_ref()
@@ -2664,6 +2673,70 @@ fn a_projects_own_skill_that_cannot_be_read_takes_the_row_its_agents_copy_has() 
 
     assert!(!alpha.join("skills/deploy").exists());
     assert!(claudes.join("SKILL.md").is_file());
+}
+
+#[test]
+fn the_tui_lists_mcp_servers_as_rows_beside_skills_and_rules_at_both_levels() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let program = [
+        "--command",
+        "npx",
+        "--arg",
+        "-y",
+        "--secret-env",
+        "GITHUB_TOKEN",
+    ];
+    let mut line = vec!["add", "mcp", "github", "GitHub's issues"];
+    line.extend(program);
+    weaver(dir.path(), &line).unwrap();
+    weaver(dir.path(), &["add", "skill", "deploy", "Ship it"]).unwrap();
+    let alpha = dir.path().join("alpha");
+    mindweaver_core::mother::ProjectMother::with_mcp(
+        &alpha,
+        &mindweaver_core::Agent::ALL,
+        mindweaver_core::Share::Shared,
+    );
+    weaver(dir.path(), &["link", "alpha"]).unwrap();
+    let mut line = vec!["add", "mcp", "sentry", "Sentry's issues"];
+    line.extend([
+        "--url",
+        "https://mcp.sentry.dev/mcp",
+        "--bearer-env",
+        "SENTRY_TOKEN",
+    ]);
+    mind(&alpha, &line).unwrap();
+    let mut app = tui_in(dir.path());
+
+    let rows = |app: &App| -> Vec<(Kind, String)> {
+        app.member()
+            .unwrap()
+            .holdings
+            .as_ref()
+            .unwrap()
+            .items
+            .iter()
+            .map(|item| (item.kind, item.name.clone()))
+            .collect()
+    };
+    assert_eq!(app.member().unwrap().name, "alpha");
+    assert_eq!(rows(&app), [(Kind::Mcp, String::from("sentry"))]);
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("mcp   sentry"), "{drawn}");
+    assert!(drawn.contains("Sentry's issues"), "{drawn}");
+
+    press_key(&mut app, KeyCode::Up);
+    assert!(app.member().unwrap().own);
+    assert_eq!(
+        rows(&app),
+        [
+            (Kind::Skill, String::from("deploy")),
+            (Kind::Mcp, String::from("github")),
+        ]
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("mcp   github"), "{drawn}");
+    assert!(drawn.contains("GitHub's issues"), "{drawn}");
 }
 
 // ---------------------------------------------------------------------------

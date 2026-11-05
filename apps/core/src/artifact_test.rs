@@ -23,6 +23,7 @@ fn skill(name: &str, description: &str, directory: &str) -> Artifact {
         placement: Placement::authored(),
         others: Vec::new(),
         differ: false,
+        twins: Vec::new(),
     }
 }
 
@@ -50,6 +51,7 @@ fn declaring(name: &str, summary: Option<&str>, manifest: RuleManifest) -> Artif
         placement: Placement::authored(),
         others: Vec::new(),
         differ: false,
+        twins: Vec::new(),
     }
 }
 
@@ -570,6 +572,16 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
             }),
         ),
         (
+            ValidationIssue::NameFileMismatch {
+                name: String::from("github"),
+                file: String::from("gh.toml"),
+            },
+            serde_json::json!({
+                "code": "name_file_mismatch", "name": "github", "file": "gh.toml",
+                "warning": false,
+            }),
+        ),
+        (
             ValidationIssue::DescriptionEmpty,
             serde_json::json!({"code": "description_empty", "warning": false}),
         ),
@@ -620,6 +632,108 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
         (
             ValidationIssue::DescriptionNotAString,
             serde_json::json!({"code": "description_not_a_string", "warning": true}),
+        ),
+        (
+            ValidationIssue::TransportIncomplete {
+                transport: String::from("stdio"),
+                field: String::from("command"),
+            },
+            serde_json::json!({
+                "code": "transport_incomplete", "transport": "stdio", "field": "command",
+                "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::InputRepeated {
+                name: String::from("token"),
+            },
+            serde_json::json!({"code": "input_repeated", "name": "token", "warning": false}),
+        ),
+        (
+            ValidationIssue::InputUnreferenced {
+                name: String::from("tenant"),
+                kind: crate::mcp::InputKind::UrlVar,
+            },
+            serde_json::json!({
+                "code": "input_unreferenced", "name": "tenant", "kind": "url_var",
+                "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::InputInUserinfo {
+                name: String::from("key"),
+            },
+            serde_json::json!({"code": "input_in_userinfo", "name": "key", "warning": false}),
+        ),
+        (
+            ValidationIssue::InputNameMalformed {
+                name: String::from("api}key"),
+            },
+            serde_json::json!({"code": "input_name_malformed", "name": "api}key", "warning": false}),
+        ),
+        (
+            ValidationIssue::EnvVarMalformed {
+                name: String::from("token"),
+                variable: String::from("GH-TOKEN"),
+            },
+            serde_json::json!({
+                "code": "env_var_malformed", "name": "token", "variable": "GH-TOKEN",
+                "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::SecretWithoutEnvVar {
+                name: String::from("token"),
+            },
+            serde_json::json!({"code": "secret_without_env_var", "name": "token", "warning": false}),
+        ),
+        (
+            ValidationIssue::SecretLiteral {
+                at: String::from("transport.env.API_KEY"),
+                prefix: String::from("sk-"),
+            },
+            serde_json::json!({
+                "code": "secret_literal", "at": "transport.env.API_KEY", "prefix": "sk-",
+                "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::McpNameNotAKey {
+                name: String::from("git.hub"),
+            },
+            serde_json::json!({"code": "mcp_name_not_a_key", "name": "git.hub", "warning": false}),
+        ),
+        (
+            ValidationIssue::McpNameReserved {
+                name: String::from("Servers"),
+                agent: Agent::OpenCode,
+                reserved: String::from("servers"),
+            },
+            serde_json::json!({
+                "code": "mcp_name_reserved", "name": "Servers", "agent": "opencode",
+                "reserved": "servers", "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::McpNameClaimed {
+                name: String::from("anthropic-skills"),
+                agent: Agent::Claude,
+                claimed: String::from("anthropic-skills"),
+            },
+            serde_json::json!({
+                "code": "mcp_name_claimed", "name": "anthropic-skills", "agent": "claude",
+                "claimed": "anthropic-skills", "warning": true,
+            }),
+        ),
+        (
+            ValidationIssue::McpNameCaseClash {
+                name: String::from("github"),
+                twin: String::from("GitHub"),
+            },
+            serde_json::json!({
+                "code": "mcp_name_case_clash", "name": "github", "twin": "GitHub",
+                "warning": false,
+            }),
         ),
     ];
     assert_eq!(

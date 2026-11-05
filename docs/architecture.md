@@ -257,13 +257,17 @@ made only the way its rule allows:
   `Redacted`, a URL or words that may quote one, made only through
   `Redacted::new`, which takes every credential out. A function handed one
   need not check it again: the rule is the type.
-- **Named apart**: `ArtifactName`, `Origin` and `Revision`, which hold any
-  text, since core reads leniently ([strict when writing, lenient when
+- **Named apart**: `ArtifactName`, `Origin` and `Revision`, and an MCP
+  server's `InputName` and `VariableName`, which hold any text, since core
+  reads leniently ([strict when writing, lenient when
   reading](#strict-when-writing-lenient-when-reading)) and a name on the
   disk that breaks a rule is listed all the same, but each a type of its
   own so that one is never handed where another is meant. `Origin` writes
   itself out redacted whatever built it, since a source's address is part
-  of it.
+  of it. `InputName` and `VariableName` each say a rule they are not made
+  by (`is_writable`, `is_portable`), for `validate` to ask
+  ([what an MCP server's definition
+  declares](#what-an-mcp-servers-definition-declares)).
 
 A `String` for each was what core had, and it said nothing of what it held:
 a hash could be passed where a name was meant, and a URL still carrying a
@@ -353,13 +357,14 @@ writer doing, and gains every rule with no change to one.
 
 ## The kinds, and how a kind is described
 
-An artifact is a skill or a rule, and the difference is a **payload**, not a
-field:
+An artifact is a skill, a rule or an MCP server's definition, and the
+difference is a **payload**, not a field:
 
 ```rust
 pub enum Declared {
     Skill(SkillManifest),
     Rule(RuleManifest),
+    Mcp(McpDefinition),
 }
 ```
 
@@ -377,16 +382,22 @@ pub enum Layout {
     Directory { manifest: &'static str },   // skills
     /// One file per artifact, at any depth.
     Files { extension: &'static str },      // rules
+    /// One file per artifact, directly in the kind's folder.
+    Flat { extension: &'static str },       // MCP servers
 }
 ```
 
 Discovery matches on `Layout` and nothing else has to know the difference. The
-two shapes decide the nesting rule between them: a skill's directory belongs to
+shapes decide the nesting rule between them: a skill's directory belongs to
 the skill, assets and all, so walking into it would turn its own files into
 artifacts; skills are therefore flat. A rule is a loose file, so folders under
 `rules/` are free to group, and a rule's name is its **route** without the
 extension. `git/no-force-push` and `ci/no-force-push` are two rules; the stem
-alone would make them one name for two files.
+alone would make them one name for two files. An MCP server's name becomes a
+key in each agent's config file (D-10), which holds no folder, so its file
+sits directly in `mcp/` and its name is the stem: a definition further down
+would be listed under a name no install could key it by, or under its stem
+beside another of that stem, so a folder below is never walked.
 
 `Kind` is a closed enum. Every kind ships in this crate, so every `match` is
 exhaustive and the compiler is the checklist for adding the next one. A
@@ -581,7 +592,11 @@ so the block and those files never disagree on it.
   what it is given whole, so it asks the same of it before a byte is
   written: a skill's through `artifact::strict_issues`, a rule's through
   `artifact::rule_text_issues`, which is `rule_issues` and having nothing to
-  say ([contents given whole](#contents-given-whole)). An editor's edit is
+  say ([contents given whole](#contents-given-whole)). An MCP server's
+  definition `add` writes, from a command line or a template, is held to
+  everything `validate` would call it invalid for
+  (`artifact::mcp_strict_issues`), as `rename` and `edit --contents` hold
+  one ([adding one](#adding-an-mcp-server)). An editor's edit is
   not refused anything: the file is written by the time Mindweaver sees it,
   and `edit` says what it broke.
 - **Warned about** when gathering, which takes the skill anyway, as the
@@ -599,6 +614,350 @@ so the block and those files never disagree on it.
   edit the copy, which leaves it edited, never updated again unless forced.
   The TUI's `✗` follows the same line.
 
+### What an MCP server's definition declares
+
+One file a server, `mcp/<name>.toml`, in TOML, the format the markers are
+written in, and in a format of its own, `format = 1` (`MCP_FORMAT`), since a
+definition is copied and loaded with no marker beside it to say what it is.
+It is read by `McpDefinition::parse`, in `apps/core/src/mcp.rs`, which reads
+`format` before anything else, so a definition in a newer one is refused as
+that (`mcp_format_too_new`) whatever else it holds, rather than as a shape
+this build does not know:
+
+| Key | | Read as |
+|---|---|---|
+| `format` | required | `1`; a newer one is refused, one never written too |
+| `name` | required | the server's name, held to its file's stem by `validate` (`name_file_mismatch`), to the keys every agent takes and to what each keeps for itself ([which names a server is given](#which-names-an-mcp-server-is-given)) |
+| `description` | required | what it is for, its first line what a listing shows |
+| `transport` | required | `type = "stdio"` with `command`, `args`, `env` and `cwd`; or `"http"` or `"sse"` with `url` and `headers` |
+| `inputs` | optional | each a `name`, a `kind` (`env`, `header`, `arg` or `url_var`), and optionally a `description`, `required`, `secret` and the `env_var` it is read from |
+| `provenance` | optional | `registry`, `upstream_name`, `version` and `fetched_at`, as a registry said them |
+| `extras` | optional | a table for each agent, by its name, passed through for its renderer |
+
+Neutral rather than one agent's shape, and a subset of the MCP registry's
+`server.json` rather than that file as it is (D-10): an agent's own shape
+would make every other agent's a translation of it, and `server.json` holds
+what no agent reads and none of what an input needs to say. An input is
+what somebody supplies when an agent starts the server, never a value the
+file holds (D-11): it is written between braces where its value goes,
+`{token}`, as the registry writes a variable, and its kind says where that
+may be (a value of a program's `env`, one of its `args`, a value of an
+address's `headers`, or its `url`). A brace naming no input is left as it is
+written, so a JSON argument means what it says. Each renderer turns a
+reference into its agent's own syntax (#90 to #92); D-11's words for what
+an agent cannot express, a secret argument or one inside a URL, are the
+kinds of input this names.
+
+Beside its name and its secrets ([a secret is an environment
+reference](#a-secret-is-an-environment-reference)), `validate` holds a
+definition to its format, each a problem it reports rather than a file
+refused, so the definition is still listed: the file reads, the transport
+names what it needs to start or reach the server (`transport_incomplete`),
+every input is named so that its placeholder can be written
+(`input_name_malformed`) and, read from a variable, from one every agent
+can refer to (`env_var_malformed`), and every input is used where its kind
+says (`input_unreferenced`), once (`input_repeated`). A key the format does
+not define is read past, as a skill's front matter's is.
+
+An address is held as a `value::Redacted`, as every URL core keeps is, so a
+credential typed into its userinfo is not kept. An input written there went
+with it, so `validate` says it is written where no agent is given it
+(`input_in_userinfo`), never that it is used nowhere while telling where it
+already is: the names of the inputs only its userinfo held are kept beside
+the address (`Endpoint::withheld`), read off the text as written before it
+is redacted, and none of the text around them. An input's name and the
+variable it is read from are `value::InputName` and `value::VariableName`,
+named apart, read whatever they hold, and judged by a rule each says of
+itself and is not made by. An input's name is letters, digits, hyphens and
+underscores (`InputName::is_writable`), the alphabet a server's name is
+held to, so a `}` never ends a placeholder early nor a `{` opens another;
+and a variable's is the name POSIX gives one (`VariableName::is_portable`),
+the one every agent's reference holds alike, where Claude's `${VAR}` reads
+`:-` after a name as a default and OpenCode's `{env:VAR}` ends at a `}`.
+
+No escape is needed for a value that has to hold an input's placeholder
+as text, `{token}` while an input is named `token`, and format 1 has none:
+an input's name is the definition's own to choose, so such a value names
+its input otherwise, and since an input's name holds only those
+characters, a brace around anything else (`{"debug":true}`) is never one.
+An escape would be a new format, which an older build would read as text;
+what stays open is an import that cannot choose
+([open questions](#open-questions)). The extras are kept as the TOML they
+are, which has floats, so `Declared` and `Artifact` are `PartialEq` and no
+longer `Eq`: holding them as text to keep `Eq` would hand a renderer a
+string to parse again.
+
+`show` prints a definition's description, then how the server is started or
+reached (`transport:`) and what is supplied for it (`inputs:`), each laid
+out by `reading::ShownTransport` and `reading::ShownInput`, then how each
+agent is given it ([what each agent cannot be
+given](#what-each-agent-cannot-be-given-of-a-server)). Not its file, as a
+skill's body is printed below its front matter: every key an agent is
+given is laid out above, the file is at the path heading it, and `--json`
+holds it whole as `body`. A definition is written by `add` from how a
+command line says the server is started or reached, or from a template
+([adding one](#adding-an-mcp-server)); installing one waits for the
+renderers (`not_installable`), gathering one and adopting one too.
+`add`, `edit --contents` and `rename` hold a definition to every problem
+`validate` reports (`artifact::mcp_strict_issues`, a name an agent only
+uses for its own being a warning and no problem), its name to its file as
+a skill's is to its folder, and what sits beside it to what is in the
+folder it is written in, and rename rewrites the `name` value through
+`toml_edit`, the comment on its line kept (`mcp::declaring`, which `add`
+sets a template's `name` and `description` by).
+
+### Which names an MCP server is given
+
+A server's name is the key each agent's config names it by, and its
+definition's file (D-10), so it is held to what every agent keys a server
+by, `^[A-Za-z0-9_-]+$` (`mcp::name`), and to the 64 characters every name
+is: wider than the kebab-case of a skill's and a rule's names, which #86
+held a server's to until #87 said which names an agent takes. Kebab-case is
+what an agent is asked to invoke a skill by; nobody invokes a server by its
+name, and kebab-case would call `GitHub` or `my_server` invalid for a rule
+no agent has. `rename` and `add` refuse a name through
+`artifact::mcp_name_strict_issues`, the strict half of what `validate` says
+of it. An install's filing asks less
+(`install::is_installable_name`, through `mcp::name::is_key`): that the name
+is a key every agent takes and one file's name, never whether an agent keeps
+it for itself, so a reserved name is refused by `validate` and by whatever
+writes the definition, not by the filing (#93, which installs one, decides
+whether it asks more).
+
+Two names that differ only by case are one name. A file system that folds
+case, macOS's and Windows' by default, cannot hold `GitHub.toml` beside
+`github.toml`, so a library holding both is another library on a
+teammate's machine, though an agent's config would key the two apart. So
+discovery tells each definition of the others in its folder named as it is
+in another case, and `validate` calls each invalid (`mcp_name_case_clash`);
+`add`, `rename` and `edit --contents` read the same off the folder they
+write in (`lifecycle::twins_beside`), a rename that changes only a name's
+case excepted, and refuse it through the one strict function, a draft is
+judged as it would be once written, and a definition loaded on its own,
+as `edit` loads the file its editor closed on, is told the same
+(`lifecycle::load`), so that `edit`'s verdict is `validate`'s. Listing the
+first of the two and passing over the other was the alternative, and would
+hide a server the moment somebody added its twin.
+
+Neither change repairs a pair of twins that each hold another problem as
+well (a token written as it is, a secret naming no variable).
+`edit --contents` keeps the file's name, so contents that fix the other
+problem are refused for the clash they cannot remove, and `rename` holds
+the definition it renames to every problem `validate` reports, so it asks
+for the other one fixed first. No command makes such a pair, which comes
+of a hand edit or of a pull from a repository written where case is not
+folded, so it is repaired as it was made: in an editor (`edit` without
+`--contents`, which refuses nothing, since the file is written by the time
+Mindweaver sees it, and says what is left), by hand, or by removing one. A
+skill whose folder a hand edit named against the rules, its description
+empty too, is in the same place. Letting `edit --contents` pass over a
+clash its contents neither add nor could remove was the alternative, and
+would write a definition `validate` still calls invalid, which strict when
+writing refuses; the panel, which has no editor, is left with removing one
+([open questions](#open-questions)).
+
+A name an agent keeps for itself is refused (`mcp_name_reserved`), in any
+case, since two names that differ by case alone are one: Claude Code's
+`workspace`, `claude-in-chrome` and `computer-use`, and the names colliding
+case-insensitively with its `Claude Preview` and `Claude Browser`; and
+OpenCode's `servers` and `timeout`, keys its `mcp` table holds beside the
+servers its V1 shape keys there (D-12). `Claude Preview` and `Claude
+Browser` hold a space no key can, so the rule as #87 wrote it would hold
+nothing: Mindweaver takes them to cover each spelling of that space a key
+can hold, an underscore, a hyphen or nothing (`claude_preview`,
+`claude-preview`, `claudepreview`), in any case. Which of those Claude
+compares is not known without #18's run, and holding all three costs no
+name anybody would give a server of their own; a hyphen written as an
+underscore elsewhere is another name (`claude_in_chrome`).
+`anthropic-skills`, the name Claude gives the skills Anthropic provides, is
+only warned of (`mcp_name_claimed`, a `ValidationIssue::is_warning`): Claude
+refuses no server by it, and a definition named so is valid. Each agent's
+names are a table matched on the agent with no wildcard, docs-only in
+[docs/agents.md](agents.md#mcp-servers).
+
+### A secret is an environment reference
+
+D-11 says a secret input must be an environment reference, and #86's inputs
+hold no value: one is supplied when an agent starts the server, and never
+written in the file. So what the rule asks of the model is that a secret
+input name the variable it is read from (`env_var`), which every agent's
+reference will name, Claude's `${VAR}`, Codex's `env_vars`,
+`env_http_headers` and `bearer_token_env_var`, OpenCode's `{env:VAR}`: one
+naming none could reach an agent only as its value written into the entry,
+and is invalid (`secret_without_env_var`). An input that is no secret may
+name none, its value being somebody's to give when it is installed (#89),
+and written as it is.
+
+The other way to hold a secret in a definition is to write it where an
+input would go. A value of the transport's `args`, `env`, `headers` or `url`
+that holds what looks like a token outside an input's placeholder is
+invalid, with a code of its own (`secret_literal`): a `Bearer` value, or one
+starting `sk-`, GitHub's `ghp_` (and `gho_`, `ghu_`, `ghs_` and `ghr_`, its
+other tokens' prefixes) or `github_pat_`, long enough and at the start of a
+word, an `sk-` key holding a digit as one drawn at random does and a
+package named in words does not (`mcp/token.rs`). It is a heuristic, and
+says so: no rule tells a credential from text shaped like one, and a false
+alarm costs a definition somebody can still write with an input, where a
+miss costs a token committed with the project. A value an input is written
+into is judged without its placeholder, so `Bearer {token}` holds none, and
+a brace naming no input is text, judged as text. The issue says where the
+token is, by its key path (`transport.env.API_KEY`, `transport.args[4]`),
+and what it starts with, never the rest, in its message and its JSON, since
+the message goes wherever `validate` is read. An address is judged as it
+was written, before it is redacted, as the inputs its userinfo held are
+(`Endpoint::tokens`, beside `withheld`), so a token typed as an address's
+user is found too, and kept as its prefix alone. Every token a test needs is
+put together at run time from parts (`McpMother::tokens`), so no file in
+the repository holds one and no secret scanner stops a push.
+
+Two places beside the transport reach an agent's entry, and are judged the
+same way. An input's `env_var` is written into each agent's reference, and
+the value pasted where its variable's name goes is the likeliest way a token
+reaches the file: a GitHub token is letters, digits and underscores, so it
+passes for a variable. One there is `secret_literal` at `inputs[N].env_var`,
+said instead of `env_var_malformed`, whose message names the variable whole.
+And the extras are passed on to each agent's entry as they are, so every
+text they hold, at any depth, is judged as a value of the transport is
+(`extras.claude.headers.X-Api-Key`, `extras.codex.args[1]`). So is an
+input's name, though a renderer turns it into a reference and never writes
+it as text: `add` names an input after the variable it is told to read it
+from, so a token pasted there lands
+in the name as surely as in `env_var`, and the file holds it. One there is
+`secret_literal` at `inputs[N].name`, and nothing else is said of that
+input until it is renamed, since every other word about it (declared twice,
+used nowhere, read from no variable) would print its name whole. Still
+left out are a program's `command`, which names one, its `cwd`, the keys of
+its `env` and an address's `headers`, and the keys that describe the
+server rather than reach it, its description and provenance ([open
+questions](#open-questions)).
+
+### What each agent cannot be given of a server
+
+A definition every agent reads alike is not one every agent can be given:
+D-11 refuses an agent a shape it cannot express rather than write a literal
+for it. So core says, for each agent, what a definition holds that the
+agent cannot be given as it is written (`McpDefinition::inexpressible`),
+matched on the agent with no wildcard, so a new one says what it cannot
+express before it compiles. Each is an `Inexpressible`, with a code of its
+own, which the renderer for the agent (#90 to #92) asks before it writes
+anything, and refuses the agent by or writes the entry without
+(`Inexpressible::refuses`):
+
+| Agent | Cannot be given | Then |
+|---|---|---|
+| Codex | a secret argument (`secret_in_argument`) | refused |
+| Codex | a secret inside a URL (`secret_in_url`) | refused |
+| Codex | a secret header beside other text, but `Authorization: Bearer` and the token (`secret_header_composite`) | refused |
+| Codex, OpenCode | server-sent events (`sse_unsupported`), which OpenCode's V2 shape, the one D-12 writes, does not take | refused |
+| Claude Code | a program's folder (`cwd_unsupported`) | written without it |
+
+Codex has no interpolation, so a secret reaches a server there only through
+the keys that name a variable: `env_vars` for a program's environment,
+`env_http_headers` for a header that is the secret whole, and
+`bearer_token_env_var` for `Authorization: Bearer`. `show` says every
+agent's (`McpDefinition::expressibility`) between the description and the
+file, and `show --json` the same as `expressibility`, each shape by its code
+under `refused` or `dropped`, and `null` for a skill or a rule: a name
+added, so no version moved.
+
+None of it is `validate`'s. A shape one agent cannot express says nothing
+wrong with the definition, which every other agent is given whole, and a
+server that speaks only sse is no less a server for Codex having no way to
+reach it. Called invalid, it would fail a project's `validate` for a server
+nobody meant for Codex; warned of, it would be said of the same server on
+every `validate` for as long as it is kept, with nothing its owner could
+change but the server. So it is said where an agent is about to be given
+it, by its renderer, and by `show` whenever asked.
+
+### Adding an MCP server
+
+`mindweaver add mcp NAME DESCRIPTION` (`mind add mcp` in a project whose
+settings name a folder for servers) writes a definition from how an agent
+starts the server, `--command` with `--arg`, `--env K=V`, `--secret-env
+VAR` and `--arg-env VAR`, or where it reaches one, `--url` with `--sse`,
+`--header K=V`, `--secret-header H=VAR`, `--bearer-env VAR` and `--url-var
+NAME=VAR`. Core is told what they say as an `mcp::Given`, a program or an
+address and never both, and writes the definition's text from it
+(`Given::text`): a template of its own, made with `create_new`, its comments
+saying what each part is for, as a marker's say what each key is, and
+every value quoted as TOML quotes one, so a value holding a quote or a line
+break reads back as typed.
+
+Every value is a name or a literal the definition holds as #86's model
+does. `--env` and `--header` write a value as typed, judged as every value
+of a transport is, so one shaped like a token is refused. Every other
+option declares an input read from the variable it names, never given a
+value (D-11), and named after that variable, so its placeholder says which
+one (`{GITHUB_TOKEN}`). Which of those is a secret is said once, in
+`given.rs`: what reaches a server through its environment (`--secret-env`,
+the variable passed on under its own name, the shape Codex's `env_vars`
+gives one) or a header (`--secret-header`, the header's whole value,
+Codex's `env_http_headers`; `--bearer-env`, `Authorization: Bearer` and the
+token, Codex's `bearer_token_env_var`) is; what goes into its arguments
+(`--arg-env`) or its address (`--url-var`) is not, being what a process
+list, a log or a proxy shows, and what Codex reads no secret into. A secret
+argument, or one in an address, is written by hand, and `show` says Codex
+is given none of it. `add` says nothing of whether an input is `required`,
+which it cannot know.
+
+What no definition can hold is the grammar's to refuse, before core is
+told anything: both transports, an option of one with the other or with
+neither, and a transport, or any option of one, with `--template`, which
+says how a server is started as surely. Each option of one transport
+conflicts with the other's and with `--template` as well as requiring its
+own, since clap passes over a requirement that conflicts with something
+given, and would take `--header` with `--command`, or `--arg` with
+`--template`, and drop it; a `Given` cannot say any of it, so core needs no
+rule for it. An option taking `NAME=VALUE` given no `=` is refused by a
+parser of its own (`parse::Pair`), which never says what it was given:
+clap says a value it refuses whole, and one with no `=` is as likely a
+secret whose name was left out, or a header written as curl takes one,
+`Authorization: Bearer` and the token. Everything else is core's (`create::plan`): what `add` writes
+is held to the strict function `validate`, `rename` and `edit --contents`
+hold a definition to, before a byte is written. Its name, to the keys
+every agent takes, to what each keeps for itself and to the definitions
+beside it named as it is in another case (`add_name_unfit`), then the
+definition as it would read (`add_mcp_unfit`, every issue `validate` would
+call it invalid for, a token said by where it is and what it starts with,
+never whole): `add` refuses exactly what `validate` would call invalid,
+with no copy of a rule. Three things beside it are no definition's to
+judge, and refused with codes of their own: a transport given for a skill
+or a rule (`add_transport_not_mcp`); a key of `env` or `headers` given
+twice, by two options or one twice, which no TOML file holds
+(`add_mcp_key_repeated`, as given, so two headers in another case are two
+keys, as the file and `validate` hold them); and an address typed with
+something before its host (`add_mcp_url_userinfo`, by
+`url::carries_credentials`, the test a gather refuses a URL by), which the
+file would keep though the definition never does, said without it. Since
+no definition holds either for `validate` to judge, each is looked through
+for a token as `validate` looks through a value (`mcp::token_in`): a key
+that looks like one is said by what it starts with, and so is an address
+whose query or path still holds one once its userinfo is gone, said as the
+address alone. An `add mcp` given nothing to write a transport from is `add_mcp_unscaffolded`, the code #86 gave that
+condition, which now says what to give rather than to write the file by
+hand: a code is never moved to another condition, and this is the one it
+named.
+
+A template for a server is a definition of its own, `<template>.toml` in a
+holder's templates folder, found as every template is ([templates live
+inside the markers](#templates-live-inside-the-markers)). `add mcp NAME
+DESCRIPTION --template T` takes its transport and its inputs as they are
+and sets its `name` and `description` through `toml_edit`, every other byte
+kept, comments included, then reads it back to make sure only those two
+changed (`mcp::declaring`, the rewrite `rename` makes of a name), and holds
+the result to the same strict function. No `{{name}}` is filled in a
+server's template, as a skill's body is: a placeholder pasted into TOML
+breaks it at the first quote a description holds, and none of a server's
+values needs its name. None is built in.
+
+The TUI's add form steps through the kinds `add` writes from a name and a
+description alone (`create::scaffolds`), which a server, needing how it is
+started, is not: a form of fields for a transport is a form of its own, and
+offering the kind with a name and a description would offer a choice only
+to refuse it. The panel's page adding one is #96's ([open
+questions](#open-questions)), and its task the same `add` line, so it
+writes one from a template already and says core's refusal otherwise.
+
 ### Adding a third kind
 
 A variant on `Kind`, its folder and layout, a variant on `Declared`, a
@@ -610,6 +969,42 @@ what `lifecycle::replace_contents` holds contents to, the refusal in
 agent), which the compiler lists, since the matches are exhaustive. Reports need nothing:
 columns, labels and counts are all driven from `Kind::ALL` and from what the
 catalog actually found.
+
+MCP servers were the third (#86), and the first whose payload is no folder
+and no file an agent reads, so they needed what the first two did not:
+
+- **A layout of their own**, `Layout::Flat`, since a name that becomes a key
+  in a config file can be no route, and every match on the layout answers
+  for it (where an artifact's file is, where one of a name goes, what a
+  removal takes away, what a read of it for the panel is bounded by).
+- **No folder by default.** `Directories::default_for` answers `None` for a
+  kind with no folder unless a marker names one, so a `mind.toml`, which
+  names the folders of the kinds it knew, reads no `mcp/` at a project's
+  root, a version 1 one none inside `.mind`, and neither `mind init` nor
+  `mind migrate` names one ([where a project keeps its
+  artifacts](#where-a-project-keeps-its-artifacts)). A workspace keeps one
+  in its library unless its marker names a folder for it, which none
+  `mindweaver init` writes does (D-05).
+- **Words of its own in a sentence**, `Kind::noun` and `Kind::plural`
+  (`MCP server`, `MCP servers`), since a message spelled `{kind}s` holds a
+  kind to having a slug a sentence can make a plural of, which an
+  abbreviation is not. The slug and the folder are both `mcp`, which `mind
+  list mcp` takes in either place.
+- **Saying what no release does yet**, by a predicate each a front end can
+  ask: `install::installs`, behind the refusal in `install::targets` that
+  every install, adoption and survey of a project meets, and
+  `create::scaffolds`, whether `add` writes a kind from a name and a
+  description alone, which the TUI's add form steps through, so neither
+  screen offers a choice only to refuse it; `add mcp` is told the rest by
+  its options ([adding one](#adding-an-mcp-server)). Each is a match on
+  the kind with no wildcard.
+- **Where an agent reads it**: nowhere in `Agent::reads` or the target
+  table, since each agent reads its servers as entries of its own config
+  file, the files `Agent::reads_files` names already ([what says an agent
+  works in a project](agents.md#what-says-an-agent-works-in-a-project),
+  whose table names `.mcp.json`, `.codex/config.toml` and `opencode.json`,
+  until #18 adds the MCP section with what each agent does with them). The
+  renderers that write there are #90 to #94's.
 
 ## The two levels
 
@@ -756,7 +1151,19 @@ folder at the root, which for the default workspace is the home directory;
 that is also what lets a kind added later land in every workspace's library,
 whatever its marker says. `own` names those kinds in the holder it hands out,
 since a `MindProject` asked about a kind nobody named answers with a folder
-beside the code.
+beside the code, or, for a kind added later, none.
+
+MCP servers are that kind (#86): every workspace keeps its own in
+`library/mcp` in its folder, `.mindweaver/library/mcp`, or
+`.mindflayer/library/mcp` in one a Mindflayer build made, and never in an
+`mcp` at its root, however old its marker. `mindweaver init` writes no line
+for them: the marker's comment already says a kind it does not name is in
+the library, so the line would tell a reader nothing, and leaving it out
+keeps the marker a new workspace gets the one an older build wrote, which
+is also what the mother of a Mindflayer build's workspace has to make. One
+that names `mcp` keeps its servers there, as a marker naming any kind does.
+No version moved: an older build reading a marker that names `mcp` reads
+past a key it does not know, and one that names none says nothing to it.
 
 A workspace made before the library keeps the folders its marker names,
 `skills` and `rules` beside the projects as `mindweaver init` used to write them,
@@ -942,10 +1349,27 @@ had and list nothing without saying why. `DIRECTORIES_VERSION` is what draws
 that line.
 
 What a kind left out means is the marker's version's to say, and version 3
-says something else again. In a `mind.toml` it is the default beside the code;
-in a project's settings it is no folder at all, so a kind added later, MCP
-servers say, is never given a folder at the project's root that nobody asked
-for. `MindProject::directory_for` answers `None` for such a kind. A reader
+says something else again. In a `mind.toml` it is the default beside the code,
+for the kinds that have one; in a project's settings it is no folder at all,
+so a kind added later is never given a folder at the project's root that
+nobody asked for. MCP servers were the first (#86), and have no default even
+in a `mind.toml` (`Directories::default_for`, matched on the kind with no
+wildcard): a `mind.toml` names the folders of the kinds it knew, a version
+1 one kept those inside `.mind`, and a folder called `mcp` at a repository's
+root is as likely to be the code of a server as anywhere definitions go, so a
+project an older Mindweaver made reads none, at its root or in `.mind`, and
+says nothing of one. Nor does `mind init` name one in the `settings.toml` it
+writes, nor `mind migrate` in the one it moves a project to, for the same
+reason, so `mind init` makes no `mcp/` beside the code: a project that
+authors its own definitions names the folder in `[directories]` by hand, and
+adding one where it names none is refused with that said
+(`WorkspaceError::NoDirectory`, which says to `mind migrate` first for a
+project marked by anything but a `settings.toml`). Naming one by default was
+the other way, and would have needed no version (a build that reads settings
+reads past a key it does not know, and misreads nothing), but it would make
+every new project's `mcp/` a Mindweaver folder, server code and all. A
+`mind.toml` that names `mcp` by hand is read as naming it, as it is read for
+any kind: the rule is the default's, not the key's. `MindProject::directory_for` answers `None` for such a kind. A reader
 finds nothing there, an absence and not a failure, as in a folder nobody has
 made; what needs the folder (adding an artifact, renaming one) asks
 `required_directory`, which refuses with `NoDirectory`. Installing does not
@@ -1470,6 +1894,15 @@ An older marker is read the way it was written, never refused, and moved
 forward only when somebody asks: a workspace's own folders by `mindweaver migrate
 --library`, a project's `mind.toml` or `settings.json` by `mind migrate`
 ([moving a project to its settings](#moving-a-project-to-its-settings)).
+An MCP server's definition carries a format of its own, `format = 1`
+(`MCP_FORMAT`), since it is an artifact, copied and gathered with no marker
+beside it, and is refused from a newer format as a marker is ([what an MCP
+server's definition declares](#what-an-mcp-servers-definition-declares)).
+Adding the kind moved no marker's version: a new `weaver.toml` and a new
+`settings.toml` name no folder for it, so they read to an older build as
+they did, and one that names `mcp` by hand names a key an older build reads
+past.
+
 Four lines are drawn so far, all project-marker versions, since a
 workspace's number says nothing about how a project keeps its artifacts:
 `DIRECTORIES_VERSION`, before which every kind lived inside `.mind`;
@@ -1703,6 +2136,19 @@ type derives `Serialize` from the start:
   slug, said in TypeScript as `FolderIs`, since `Is` alone says nothing in
   a folder of the panel's types), and what it could not read or name a
   `code::Said` of `browse::BrowseFailure`.
+- **Said by `show` since #87**: what each agent cannot be given of an MCP
+  server (`mcp::Expressibility`), the agent by its name and each shape a
+  `code::Said` of `mcp::Inexpressible`, under `refused` or `dropped`, a
+  field added to `reading::Shown`.
+- **Said by `show` since #88**: how an MCP server is started or reached
+  (`reading::ShownTransport`, its `type` a word, `mcp::TransportType`, by
+  the slug the format writes, and its address a `value::Redacted`) and
+  what is supplied for it (`reading::ShownInput`, its `kind` a word,
+  `mcp::InputKind`, by its slug, and a secret by the variable it is read
+  from alone), as `transport` and `inputs`, fields added to
+  `reading::Shown`. One record for every transport rather than a variant
+  each, so its `type` is the word the format writes, never one a derive
+  spells from a variant; a key of the other transport goes out empty.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -6852,6 +7298,18 @@ a person's browser trades it. The security smoke tests send requests of
 their own: one with the cookie the link set, one with the token as
 Bearer, and one with neither.
 
+A page a click leads to is acted on through what that page alone draws.
+The router loads a page's code the first time it is opened, so a click on
+a link returns while the page it leaves is still drawn, and Playwright
+matches a label or a name in any case and anywhere in it unless told
+`exact`. The add page's `Name`, looked for anywhere, was once the
+library's filter ("Filter each skill by name or summary"), and the name
+typed into it went into the filter, or nowhere once the library made way
+for the add page (#238). So a spec finds the fields it fills inside what
+the page draws once it is ready, the add page's form by its name, and a
+spec that only reads waits for a test id or an address only the page it
+arrives at has; never for a fixed time, which a slower runner outlasts.
+
 The specs hold the panel to the CLI: the overview's cards to the rows
 `mindweaver list --json` prints, counted from them rather than read from a
 count beside them; each project's page to what the listing says of that
@@ -7702,7 +8160,11 @@ somebody has said where it goes and where it reads. Its arm in `files`,
 behind `Agent::reads_files`, says which files in a project it reads, which
 `Agent::reads_at_root` names by the name at the root each sits under, for a
 suggestion to rank by ([which to link first](#which-to-link-first)), and
-the panel watches ([live updates](#live-updates)). The
+the panel watches ([live updates](#live-updates)). Its arms in `mcp::name`'s
+`reserved` and `claimed` say which MCP servers' names it keeps for itself,
+and its arm in `McpDefinition::inexpressible` what it cannot be given of a
+definition, each from the "MCP servers" table in
+[docs/agents.md](agents.md#mcp-servers). The
 compiler lists every match on `Agent`, since each is exhaustive, but not what
 is not a match:
 
@@ -8448,9 +8910,12 @@ lock is not re-entrant, and nothing here knows about workspaces.
 ## Creating and changing artifacts
 
 `mind add` writes the least that passes `validate`: a skill's front matter and
-a heading, a rule's opening line. The name is checked by
-`artifact::name_issues`, the function `validate` itself uses, so a name the tool
-creates is one the tool accepts. The front matter is serialized rather than
+a heading, a rule's opening line, and an MCP server's definition from how a
+command line says it is started or reached ([adding
+one](#adding-an-mcp-server)). The name is checked by
+`artifact::name_issues`, the function `validate` itself uses, or a server's
+by `artifact::mcp_name_strict_issues`, so a name the tool creates is one
+the tool accepts. The front matter is serialized rather than
 formatted, because a description is free text, and one containing `: ` would
 otherwise be written as YAML that does not parse back into what was typed.
 
@@ -8520,6 +8985,11 @@ A rule template that does not say where `{{description}}` goes gets it as a
 heading on top of its body, below any front matter it declares. On top of the
 file, the heading would push the fences down a line, where they stop being
 front matter.
+
+An MCP server's template is a definition, `<template>.toml`, found as a rule
+template is but by its own extension (`Layout::Flat`), whose `name` and
+`description` `add` sets through `toml_edit` and nothing else, as `rename`
+sets a name ([adding one](#adding-an-mcp-server)).
 
 ### Finding what to change
 
@@ -9135,7 +9605,7 @@ one machine at a time.
 
 ## Decisions
 
-The roadmap in [#15](https://github.com/otsobide/mindflayer/issues/15) rests on
+The roadmap in [#15](https://github.com/otsobide/mindweaver/issues/15) rests on
 twenty-six decisions: twenty-two validated by the owner on 2026-10-26,
 [D-24](#d-24-the-local-server-is-a-versioned-http-api) on 2026-11-03 with the
 milestone it opens, [D-25](#d-25-core-is-values-and-ports), asked for by the
@@ -9363,6 +9833,13 @@ which puts `~/skills` and `~/rules` in the home directory; and moving only the
 home workspace's library, which leaves two layouts to explain. Unblocks #52,
 #53 and #86.
 
+#86 carried out the part about a kind added later: MCP servers are kept in
+`library/mcp` in every workspace's folder, a marker naming no folder for
+them, as every marker written before them does, and a new one too ([the
+workspace's own artifacts](#the-workspaces-own-artifacts)). A marker naming
+`mcp` by hand is followed, as one naming any kind is, which "whatever its
+`weaver.toml` says" was not meant to undo.
+
 ### D-06: Projects keep authoring beside the code
 
 Amended by the owner. Projects keep authoring their own skills and rules beside
@@ -9490,6 +9967,16 @@ since `codex mcp add` writes only Codex's user config, never a project's, and
 re-serializes every entry there, though they may return for user scope (D-22).
 Unblocks #18, #86, #89, #93 and #94.
 
+#86 added the definitions: `Kind::Mcp`, one `<name>.toml` a server in
+`format = 1`, its inputs written between braces where their value goes, as
+the registry writes a variable ([what an MCP server's definition
+declares](#what-an-mcp-servers-definition-declares)), listed, shown,
+validated, renamed and removed by the lifecycle every kind goes through.
+Nothing installs one yet (`not_installable`). #88 added one from the
+command line, from how an agent starts or reaches it or from a template
+([adding one](#adding-an-mcp-server)), and laid out what `show` says of
+its transport and inputs.
+
 ### D-11: MCP secrets are environment references
 
 A secret is written as a reference in each agent's own syntax (Claude `${VAR}`;
@@ -9505,6 +9992,18 @@ Claude and Codex cannot match; and, for now, a `mind mcp run` wrapper reading
 the OS keychain, which may come later as an opt-in but makes every teammate
 depend on the binary and does not cover remote headers. Unblocks #18, #86, #87,
 #90, #91 and #92.
+
+#87 carried out what a definition can hold of it ([a secret is an
+environment reference](#a-secret-is-an-environment-reference)): a secret
+input names the variable it is read from, and a token written as it is in
+a transport is refused, said by where it is and what it starts with. What
+each agent cannot express is core's report, asked by its renderer before it
+writes ([what each agent cannot be given](#what-each-agent-cannot-be-given-of-a-server)),
+and never a reason to call a definition invalid, which the other agents are
+given whole. #88's `add mcp` takes a secret only as the name of the
+variable it is read from (`--secret-env`, `--secret-header`,
+`--bearer-env`), each in a shape every agent, Codex included, can be given,
+and refuses a value shaped like a token where a value is written as typed.
 
 ### D-12: OpenCode gets the V2 MCP shape
 
@@ -9816,7 +10315,9 @@ versioned](#formats-are-versioned)). The GitHub repository is renamed,
 otsobide/mindflayer to otsobide/mindweaver, once the code says Mindweaver:
 the owner's step, not an issue's. Rejected: one change for both, which
 would have moved every user's workspace in the same PR as every
-identifier; and `weaver` for the binary. Unblocks #228 and #229.
+identifier; and `weaver` for the binary. Unblocks #228 and #229. The
+repository was renamed on 2026-11-04, once #228 and #229 reached `main`
+(#232); GitHub sends the old address on to the new one.
 
 Carrying it out, #228 kept a few more names as they were, each for #229 to
 decide: the codes `path_in_mindflayer` and `x_mindflayer_required`, since a
@@ -9951,6 +10452,83 @@ it once as it closes.
   the read types that hold them were. Each joins `value` when a rule is
   found that it holds, as `ProjectId` did; one with no rule of its own, a
   name named apart, joins when a mix-up between two of them is found.
+- **What #18's run would move of an MCP server.** Every name an agent
+  keeps for itself and every shape it cannot express is docs-only
+  ([docs/agents.md](agents.md#mcp-servers)): which spelling of `Claude
+  Preview` Claude compares, whether Codex keeps a name of its own, whether
+  OpenCode's V1 line takes sse where its V2 shape does not. A fact the run
+  moves changes one table in `mcp::name` or one arm of
+  `McpDefinition::inexpressible`.
+- **A secret in a program's environment, for Codex.** Codex passes a
+  variable on to a program under its own name (`env_vars`), so a secret
+  written as the whole value of the `env` key its variable is named by is
+  given as it is. One written beside other text there, or under a key other
+  than its variable's, has no spelling in Codex either, by D-11's reasoning,
+  but D-11 and #87 list only arguments, URLs and headers, so the report says
+  nothing of it yet. #91, which writes Codex's entries, decides it, and the
+  report is the one place it is added.
+- **Tokens of other shapes.** The check for a literal knows the shapes #87
+  named and nothing else: an AWS key, a Slack token, or a password in an
+  address's userinfo shaped like none of them, passes, the last kept out of
+  the definition as every address's userinfo is, but not out of its file. A
+  shape added is one line of `mcp/token.rs`'s table. Nor does it read a
+  key of a program's `env` or of an address's `headers`, which names a
+  variable or a header and is written into an entry as such, nor a
+  definition's description or provenance, which say what a server is and
+  are written into no entry yet: a renderer that writes either (#90 to #92)
+  adds it to `McpDefinition::literals`, where the transport's values and
+  the extras are looked through.
+- **Twins the panel cannot repair.** Two definitions that clash by case and
+  each hold another problem are repaired in an editor or by hand
+  ([which names a server is given](#which-names-an-mcp-server-is-given)),
+  and the panel has neither: `edit --contents` and `rename` refuse each,
+  so removing one is all it can do. Whether a change of contents passes
+  over a problem those contents cannot change (a clash, or a reserved name
+  a hand-made file is filed under), as a rule's contents are never refused
+  for its route, waits for the panel's page for MCP servers, which is
+  where it would be met.
+- **Names that clash by case across holders.** Two definitions clash by
+  case only in one folder: a project's own `github` and the library's
+  `GitHub` are told nothing of each other until an install (#93) would put
+  both in one agent's config, which is then the install's to refuse.
+- **What a command line cannot say of a server.** `add mcp` puts every
+  `--arg-env` after the `--arg`s, since clap hands each option's values
+  apart and their order between two options is lost; an argument read
+  from a variable in the middle is written by hand, or `add` reads the
+  options in the order typed (`ArgMatches::indices_of`) and `Given` keeps
+  one list of both. An input is named after the variable it is read from,
+  so one variable read in two places (`--secret-env TOKEN --arg-env
+  TOKEN`) is two inputs of one name, which `validate` refuses
+  (`input_repeated`), where a definition written by hand names them apart.
+  Nor does `add` say an input is `required`, a secret argument or one in
+  an address, a program's `cwd`, provenance or extras: each is written by
+  hand, and a front end with a form of its own for them (#96) is the place
+  a need for any is met.
+- **What the panel draws of an MCP server.** The snapshot carries the kind
+  as it carries every kind, and no view changed for it, but three pages
+  draw it as they draw the others where it is not: an artifact's page puts
+  its definition, which is TOML, through the markdown renderer, as the body
+  a skill's front matter is cut from, and lays out none of what `show`
+  says of its transport and inputs (`reading::ShownTransport`,
+  `ShownInput`, which no query of the panel's answers yet); the page
+  adding one offers `mcp` among the kinds, writes one from a template of
+  the kind, and otherwise says core's refusal (`add_mcp_unscaffolded`)
+  once a name is typed, since its task (`Task::Add`) carries no transport;
+  and the projects table gains a column, which at the README's width
+  pushes its `stale` column out of view. Each wants a view of its own, or
+  a word from core (whether a kind's file is markdown, which kinds `add`
+  writes from a name and a description alone, `create::scaffolds`), with
+  #96, rather than a special case here: a transport the page asks for goes
+  to the backend in the task, for the task module to spell as `add mcp`'s
+  options, each value after its option as every value is.
+- **An imported value holding its own placeholder as text.** Format 1 has
+  no escape, and needs none while a definition's author chooses its inputs'
+  names ([what an MCP server's definition
+  declares](#what-an-mcp-servers-definition-declares)). A registry entry
+  (#106) whose value holds `{name}` as text while it declares a variable of
+  that name is the one case an author does not choose: the import renames
+  the input, or the format gains an escape, which an older build would read
+  as text.
 
 - **A known workspace that has gone is offered nothing.** The page of
   loads and the header's switcher list it, with why it does not open, and
@@ -10146,6 +10724,22 @@ it once as it closes.
   document in JavaScript, so it is slower than a browser at the same work
   and says nothing of painting. The browser suite times nothing; a bound
   there would be one more number a runner's load moves.
+- **An unload's run once took five and a half seconds.** In one run of
+  CI's Chromium, `e2e/loads.spec.ts` found the unload's command dialog
+  still drawn five seconds after Run was clicked (#238). The trace CI kept
+  says why: the dialog was the unload's own, its buttons held as they are
+  while a run goes on, and the server answered the run 5508 ms after it
+  was sent, half a second after the spec stopped waiting, where the load
+  before it, a change to the same marker, took 952 ms. A snapshot asked
+  meanwhile was answered in 9 ms, so what waited was the writer thread,
+  or the line it ran, which is one `edit_array` under the workspace's
+  lock. Nearly six hundred runs here, on the debug and the release
+  binaries, with the browser's CPU throttled and with the whole run held
+  to two cores, never took longer than about half a second. What the run
+  waited on (another writer holding the lock, something in the line, or
+  the runner) waits for a run that says how long each line took and how
+  long it waited for the lock (#240); the spec is left as it is, since a
+  longer wait there would hide a run a person waits for too.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has

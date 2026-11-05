@@ -22,8 +22,9 @@ browser, `mindweaver ui`, which this page tours.
 - A **project** is a repository with a small `.mind` folder, kept out of git
   unless your team shares it, naming the agents that work there.
 - A **workspace** is the folder your projects sit in. Its `.mindweaver` links
-  them, keeps a **library** of skills and rules of its own, and a **shelf**
-  of skills gathered from git repositories.
+  them, keeps a **library** of skills and rules of its own, and the
+  definitions of the MCP servers its projects use, and a **shelf** of skills
+  gathered from git repositories.
 - **Installing** copies a skill or a rule from either into a project, into
   each folder its agents read, and remembers what it wrote: that is what lets
   Mindweaver update it or take it out later, and leave everything else alone.
@@ -35,7 +36,7 @@ Windows are tested only on request. It installs from source, with a recent
 stable Rust, and Node 24 with pnpm to build the panel:
 
 ```bash
-git clone https://github.com/otsobide/mindflayer mindweaver
+git clone https://github.com/otsobide/mindweaver
 cd mindweaver
 make install
 ```
@@ -62,12 +63,12 @@ do.
 
 ### Overview
 
-What the workspace holds at a glance: the projects it links, the skills and
-rules in them and in its library, the installs that have fallen behind or
-been changed by hand, what is on the shelf, and anything that could not be
-read.
+What the workspace holds at a glance: the projects it links, the skills,
+rules and MCP servers in them and in its library, the installs that have
+fallen behind or been changed by hand, what is on the shelf, and anything
+that could not be read.
 
-![The overview: cards counting projects, skills, rules, outdated and edited installs, and the shelf](docs/images/overview.png)
+![The overview: cards counting projects, skills, rules, MCP servers, outdated and edited installs, and the shelf](docs/images/overview.png)
 
 ### Projects
 
@@ -100,8 +101,10 @@ from its row, after which Mindweaver manages it like anything it installed.
 
 ### The library
 
-The workspace's own skills and rules, each with the projects holding a copy
-and how every copy stands.
+The workspace's own skills, rules and MCP servers, each with the projects
+holding a copy and how every copy stands. An MCP server is a definition
+`mindweaver add mcp` writes into the library ([MCP servers](#mcp-servers)),
+which Mindweaver lists and checks but does not install into a project yet.
 
 ![The library's skills, each with the projects that hold a copy and its state there](docs/images/library.png)
 
@@ -283,6 +286,27 @@ offers them to yours.
 the formats Mindweaver reads and writes, `--json`, the TUI, and upgrading
 from an older Mindweaver.
 
+## MCP servers
+
+The library keeps the MCP servers your projects use beside its skills and
+rules, a definition each, written by one command from how an agent starts
+the server:
+
+```bash
+mindweaver add mcp github "GitHub's issues, pull requests and code" \
+  --command npx --arg -y --arg @modelcontextprotocol/server-github \
+  --secret-env GITHUB_PERSONAL_ACCESS_TOKEN
+```
+
+or from where it reaches one, with `--url`. Give a secret as the name of
+the environment variable an agent reads it from (`--secret-env`,
+`--secret-header` or `--bearer-env`), never as its value: `--env` and
+`--header` write what they are given as it is, and refuse only a value that
+looks like a token. `mindweaver show mcp:github` says how each agent will be
+given it; installing one into a project comes next. [What an MCP server
+looks like](docs/reference.md#what-an-mcp-server-looks-like) has every
+option, and the rest.
+
 ## Learn more
 
 - [The reference](docs/reference.md): every command, with what it prints.
@@ -296,9 +320,9 @@ from an older Mindweaver.
 ## Roadmap
 
 What comes next is planned as
-[milestones](https://github.com/otsobide/mindflayer/milestones), each ending
+[milestones](https://github.com/otsobide/mindweaver/milestones), each ending
 with something usable on real repositories, and each issue in them is one pull
-request. [#15](https://github.com/otsobide/mindflayer/issues/15) tracks the
+request. [#15](https://github.com/otsobide/mindweaver/issues/15) tracks the
 whole plan, and the decisions it rests on are recorded in
 [docs/architecture.md](docs/architecture.md#decisions).
 

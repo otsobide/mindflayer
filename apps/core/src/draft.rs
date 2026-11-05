@@ -85,7 +85,10 @@ pub fn added(
         Ok(template) => template,
         Err(error) => return Judged::refused(error.code(), &error),
     };
-    let scaffold = match create::plan(project, kind, name, description, template.as_ref()) {
+    let start = template
+        .as_ref()
+        .map_or(create::Start::Scratch, create::Start::Template);
+    let scaffold = match create::plan(project, kind, name, description, start) {
         Ok(scaffold) => scaffold,
         Err(error) => return Judged::refused(error.code(), &error),
     };
@@ -130,6 +133,21 @@ pub fn edited(
             project.root(),
             contents,
         )),
+        // Told of what sits beside it, as discovery tells it, so that the
+        // verdict is the one `validate` gives once it is written.
+        Kind::Mcp => Artifact::mcp_holding(
+            &target.path,
+            target.name.to_string(),
+            project.root(),
+            contents,
+        )
+        .ok()
+        .map(|mut artifact| {
+            if let Some(folder) = target.path.parent() {
+                artifact.twinned(lifecycle::twins_beside(folder, &target.name, &target.path));
+            }
+            artifact
+        }),
     };
     Judged {
         issues: artifact

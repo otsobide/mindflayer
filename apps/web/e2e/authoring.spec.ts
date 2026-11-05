@@ -95,9 +95,17 @@ test('a change made on disk while the editor is open makes the save fail with co
 test('a skill added from a template and one renamed are what mindweaver add and mindweaver rename write', async ({ page, own }) => {
   await own.open('/library?kind=skill')
   await page.getByTestId('new').click()
-  await page.getByLabel('Name').fill('deploy-docs')
-  await page.getByLabel('Description').fill('Publish the docs')
-  await page.getByRole('radio', { name: /^full/ }).click()
+  // In the add page's form, which the page draws once it is loaded and the
+  // snapshot answered, rather than by label anywhere on the page: the click
+  // returns while the library is still drawn, and a label matched as
+  // Playwright matches one by default, in any case and anywhere in the
+  // name, finds the library's filter ("Filter each skill by name or
+  // summary"), so the name went into the filter, or nowhere once the
+  // library made way for the add page.
+  const form = page.getByRole('form', { name: 'The new one' })
+  await form.getByLabel('Name', { exact: true }).fill('deploy-docs')
+  await form.getByLabel('Description', { exact: true }).fill('Publish the docs')
+  await form.getByRole('radio', { name: /^full/ }).click()
   await expect(page.getByTestId('verdict')).toContainText('mindweaver add would write it.')
   await page.getByTestId('add').click()
   const dialog = page.getByRole('dialog')

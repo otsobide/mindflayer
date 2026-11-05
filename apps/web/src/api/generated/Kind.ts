@@ -3,4 +3,4 @@
 /**
  * A kind of artifact, by the word a command line takes for it.
  */
-export type Kind = "skill" | "rule";
+export type Kind = "skill" | "rule" | "mcp";

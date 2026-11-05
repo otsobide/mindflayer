@@ -131,8 +131,10 @@ pub struct Adopted {
 /// Why a skill could not be adopted, before anything was written.
 #[derive(Debug, Error)]
 pub enum AdoptError {
-    #[error("rule `{name}` is not adopted: only a skill somebody keeps in an agent's folder is")]
-    Rule { name: String },
+    /// Named for what it is not, and holding what it is, so a kind added
+    /// is refused by the one condition, with the one code.
+    #[error("{kind} `{name}` is not adopted: only a skill somebody keeps in an agent's folder is")]
+    NotASkill { kind: Kind, name: String },
     #[error("{project} holds no skill `{name}` where an install of it would go ({folders}), so there is nothing to adopt")]
     NotHeld {
         project: String,
@@ -195,7 +197,7 @@ pub enum AdoptError {
 }
 
 codes!(AdoptError {
-    Self::Rule { .. } => "adopt_not_a_skill",
+    Self::NotASkill { .. } => "adopt_not_a_skill",
     Self::NotHeld { .. } => "adopt_not_held",
     Self::Installed { .. } => "adopt_already_installed",
     Self::Authored { .. } => "adopt_authored",
@@ -404,7 +406,11 @@ fn plan_with(
         // `AGENTS.md`, rendered from the library; one somebody wrote is no
         // folder to copy, and taking rules out of a hand-written `AGENTS.md`
         // is a change of its own.
-        Some(Kind::Rule) => return Err(AdoptError::Rule { name }),
+        //
+        // A server an agent is given is an entry in its own config file,
+        // never a folder to copy either; adopting one is a change of its own,
+        // once one is installed (#94).
+        Some(kind @ (Kind::Rule | Kind::Mcp)) => return Err(AdoptError::NotASkill { kind, name }),
     }
     let kind = Kind::Skill;
     // Joined onto the project's folders below, and onto the library's.

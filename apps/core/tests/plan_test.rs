@@ -815,7 +815,11 @@ fn a_kind_a_project_has_nowhere_to_put_closes_its_boxes_by_the_code_a_plan_locks
         .collect();
     assert_eq!(
         closed,
-        [(Kind::Skill, "no_target"), (Kind::Rule, "no_target")]
+        [
+            (Kind::Skill, "no_target"),
+            (Kind::Rule, "no_target"),
+            (Kind::Mcp, "not_installable"),
+        ]
     );
     assert_eq!(boxes.held, []);
     let plan = fixture.planned(&[cell("bare", "skill:deploy", "workspace", true)]);

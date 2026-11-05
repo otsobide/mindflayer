@@ -9,6 +9,8 @@
 
 mod common;
 
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -588,7 +590,46 @@ struct Shown {
     compatibility: Option<String>,
     metadata: Option<serde_json::Map<String, Value>>,
     paths: Option<Vec<String>>,
+    transport: Option<Transport>,
+    inputs: Option<Vec<Input>>,
+    expressibility: Option<Vec<Expressibility>>,
     body: String,
+}
+
+/// How an MCP server is started or reached, as `show --json` prints it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Transport {
+    #[serde(rename = "type")]
+    transport: String,
+    command: Option<String>,
+    args: Vec<String>,
+    env: BTreeMap<String, String>,
+    cwd: Option<String>,
+    url: Option<String>,
+    headers: BTreeMap<String, String>,
+}
+
+/// One input of an MCP server, as `show --json` prints it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Input {
+    name: String,
+    kind: String,
+    description: Option<String>,
+    required: bool,
+    secret: bool,
+    env_var: Option<String>,
+}
+
+/// What one agent cannot be given of an MCP server, as `show --json`
+/// prints it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Expressibility {
+    agent: String,
+    refused: Vec<Said>,
+    dropped: Vec<Said>,
 }
 
 #[test]
@@ -629,7 +670,111 @@ fn show_as_json_holds_what_the_text_shows() {
         dir.path().join("skills").join("deploy").join("SKILL.md")
     );
     assert_eq!(deploy.paths, None);
+    assert!(deploy.transport.is_none() && deploy.inputs.is_none());
+    assert!(deploy.expressibility.is_none());
     assert!(warnings.is_empty());
+    assert!(json.ok && text.ok);
+}
+
+#[test]
+fn show_as_json_says_what_each_agent_cannot_be_given_of_a_server_as_the_text_does() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("events.toml"),
+        mindweaver_core::mother::McpMother::sse("events"),
+    )
+    .unwrap();
+
+    let text = weaver(dir.path(), &["show", "mcp:events"]).unwrap();
+    let json = weaver(dir.path(), &["show", "mcp:events", "--json"]).unwrap();
+
+    let (shown, warnings): (Vec<Shown>, _) = enveloped(&json);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let report = shown[0].expressibility.as_ref().expect("a server's report");
+    let agents: Vec<&str> = report.iter().map(|one| one.agent.as_str()).collect();
+    assert_eq!(agents, ["claude", "codex", "opencode"]);
+    for one in report {
+        assert!(one.dropped.is_empty(), "{one:?}");
+        let codes: Vec<&str> = one.refused.iter().map(|said| said.code.as_str()).collect();
+        let expected: &[&str] = if one.agent == "claude" {
+            &[]
+        } else {
+            &["sse_unsupported"]
+        };
+        assert_eq!(codes, expected, "{}", one.agent);
+        for said in &one.refused {
+            assert!(
+                text.stdout.contains(&format!("    - {}\n", said.message)),
+                "{}",
+                text.stdout
+            );
+        }
+    }
+    assert!(json.ok && text.ok);
+}
+
+#[test]
+fn show_as_json_lays_out_a_servers_transport_and_inputs_as_the_text_does() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("linear.toml"),
+        mindweaver_core::mother::McpMother::http("linear"),
+    )
+    .unwrap();
+
+    let text = weaver(dir.path(), &["show", "mcp:linear"]).unwrap();
+    let json = weaver(dir.path(), &["show", "mcp:linear", "--json"]).unwrap();
+
+    let (shown, warnings): (Vec<Shown>, _) = enveloped(&json);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let transport = shown[0].transport.as_ref().expect("a server's transport");
+    assert_eq!(transport.transport, "http");
+    assert_eq!(
+        (&transport.command, &transport.cwd),
+        (&None, &None),
+        "{transport:?}"
+    );
+    assert!(transport.args.is_empty() && transport.env.is_empty());
+    let url = transport.url.as_deref().expect("an address");
+    assert!(
+        text.stdout
+            .contains(&format!("transport: http\n  url: {url}\n  headers:\n")),
+        "{}",
+        text.stdout
+    );
+    for (header, value) in &transport.headers {
+        assert!(
+            text.stdout.contains(&format!("    {header}: {value}\n")),
+            "{}",
+            text.stdout
+        );
+    }
+    let inputs = shown[0].inputs.as_ref().expect("a server's inputs");
+    let said: Vec<(&str, &str, bool)> = inputs
+        .iter()
+        .map(|input| (input.name.as_str(), input.kind.as_str(), input.secret))
+        .collect();
+    assert_eq!(
+        said,
+        [("tenant", "url_var", false), ("token", "header", true)]
+    );
+    for input in inputs {
+        let variable = input.env_var.as_deref().expect("a variable");
+        assert!(
+            text.stdout
+                .contains(&format!("  {}: {}", input.name, input.kind))
+                && text.stdout.contains(&format!("read from ${variable}\n")),
+            "{}",
+            text.stdout
+        );
+        assert!(input.required && input.description.is_none(), "{input:?}");
+    }
     assert!(json.ok && text.ok);
 }
 

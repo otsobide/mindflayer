@@ -131,13 +131,13 @@ pub enum Refusal {
     /// The folder a kind is kept in, or one above it inside the workspace, is
     /// a link: what is in it lives wherever that leads, a dotfiles repository
     /// say, and a rename would take it out of there.
-    #[error("{folder}: a link to {target}, so moving the workspace's {kind}s would take them out of wherever it leads; move them yourself, or point the workspace's marker at the library")]
+    #[error("{folder}: a link to {target}, so moving the workspace's {kinds} would take them out of wherever it leads; move them yourself, or point the workspace's marker at the library", kinds = .kind.plural())]
     Linked {
         kind: Kind,
         folder: PathBuf,
         target: PathBuf,
     },
-    #[error("{folder}: the workspace keeps its {kind}s there, and it overlaps {with}, so which files are the workspace's is not clear; move them yourself")]
+    #[error("{folder}: the workspace keeps its {kinds} there, and it overlaps {with}, so which files are the workspace's is not clear; move them yourself", kinds = .kind.plural())]
     Tangled {
         kind: Kind,
         folder: PathBuf,

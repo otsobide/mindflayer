@@ -9,6 +9,7 @@ export type ValidationIssue =
   | { code: "name_not_kebab_case", segment: string, warning: boolean, message: string }
   | { code: "name_segment_too_long", segment: string, length: number, warning: boolean, message: string }
   | { code: "name_directory_mismatch", name: string, directory: string, warning: boolean, message: string }
+  | { code: "name_file_mismatch", name: string, file: string, warning: boolean, message: string }
   | { code: "description_empty", warning: boolean, message: string }
   | { code: "description_too_long", length: number, warning: boolean, message: string }
   | { code: "compatibility_empty", warning: boolean, message: string }
@@ -20,4 +21,16 @@ export type ValidationIssue =
   | { code: "content_empty", warning: boolean, message: string }
   | { code: "front_matter_unparsed", reason: string, warning: boolean, message: string }
   | { code: "paths_not_strings", warning: boolean, message: string }
-  | { code: "description_not_a_string", warning: boolean, message: string };
+  | { code: "description_not_a_string", warning: boolean, message: string }
+  | { code: "transport_incomplete", transport: string, field: string, warning: boolean, message: string }
+  | { code: "input_repeated", name: string, warning: boolean, message: string }
+  | { code: "input_unreferenced", name: string, kind: string, warning: boolean, message: string }
+  | { code: "input_in_userinfo", name: string, warning: boolean, message: string }
+  | { code: "input_name_malformed", name: string, warning: boolean, message: string }
+  | { code: "env_var_malformed", name: string, variable: string, warning: boolean, message: string }
+  | { code: "secret_without_env_var", name: string, warning: boolean, message: string }
+  | { code: "secret_literal", at: string, prefix: string, warning: boolean, message: string }
+  | { code: "mcp_name_not_a_key", name: string, warning: boolean, message: string }
+  | { code: "mcp_name_reserved", name: string, agent: string, reserved: string, warning: boolean, message: string }
+  | { code: "mcp_name_claimed", name: string, agent: string, claimed: string, warning: boolean, message: string }
+  | { code: "mcp_name_case_clash", name: string, twin: string, warning: boolean, message: string };
