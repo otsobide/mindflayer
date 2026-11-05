@@ -9,6 +9,7 @@
 mod common;
 
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 use common::contract;
 use common::*;
@@ -3100,4 +3101,123 @@ fn a_workspace_gone_since_it_was_switched_to_can_still_be_left() {
         snapshot_of(&backend),
         (json!(root.to_str().unwrap()), json!("above"))
     );
+}
+
+// ---------------------------------------------------------------------------
+// The log of how long each line took
+// ---------------------------------------------------------------------------
+
+/// The backend over the workspace at `root`, as [`backend`] launches it,
+/// saying how long each line took to what it hands back.
+fn logging(root: &Path) -> (Checked, Arc<Mutex<Vec<String>>>) {
+    let lines = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&lines);
+    let log: mindweaver_cli::backend::Log =
+        Arc::new(move |line: &str| sink.lock().unwrap().push(line.to_owned()));
+    let backend = PanelBackend::launch(root, &Lookup::default())
+        .unwrap()
+        .logging(log);
+    (Checked(backend), lines)
+}
+
+/// A logged line with each of its times, `3ms`, written `Nms`, and those
+/// times in the order it says them.
+fn times(line: &str) -> (String, Vec<std::time::Duration>) {
+    let mut times = Vec::new();
+    let said: Vec<String> = line
+        .split(' ')
+        .map(|word| {
+            let (bare, after) = word
+                .strip_suffix(',')
+                .map_or((word, ""), |bare| (bare, ","));
+            match bare
+                .strip_suffix("ms")
+                .and_then(|millis| millis.parse().ok())
+            {
+                Some(millis) => {
+                    times.push(std::time::Duration::from_millis(millis));
+                    format!("Nms{after}")
+                }
+                None => word.to_owned(),
+            }
+        })
+        .collect();
+    (said.join(" "), times)
+}
+
+/// Each line of a task, once it has run, by its place among them rather
+/// than its words, which are the request's: how long it took, and how much
+/// of that it waited for a workspace's lock, none here. Nothing is said of
+/// a read, which runs no line.
+#[test]
+fn each_line_a_task_runs_is_logged_with_how_long_it_took() {
+    let dir = workspace_with_two_unlinked();
+    let (backend, lines) = logging(dir.path());
+    let gamma = dir.path().join("gamma");
+    fs::remove_dir_all(gamma.join(".mind")).unwrap();
+
+    backend.query(query(json!({"type": "snapshot"}))).unwrap();
+    let outcome = backend
+        .run(task(
+            json!({"type": "init_and_link", "path": gamma.to_str().unwrap()}),
+        ))
+        .unwrap();
+
+    assert!(outcome.ok, "{outcome:?}");
+    let said: Vec<(String, Vec<std::time::Duration>)> = lines
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|line| times(line))
+        .collect();
+    let words: Vec<&str> = said.iter().map(|(words, _)| words.as_str()).collect();
+    assert_eq!(
+        words,
+        [
+            "run: line 1 of 2 took Nms, Nms of it waiting for a workspace's lock",
+            "run: line 2 of 2 took Nms, Nms of it waiting for a workspace's lock",
+        ]
+    );
+    for (_, times) in &said {
+        assert_eq!(times[1], std::time::Duration::ZERO, "{said:?}");
+    }
+}
+
+/// A line kept out of the workspace by another writer holding its lock says
+/// how long it waited for it, and which process held it: this one, whose
+/// other thread stands in for another writer, as a lock held on another
+/// handle keeps it out as another process would.
+#[test]
+fn a_line_kept_waiting_for_the_workspace_s_lock_says_how_long_and_by_whom() {
+    let dir = workspace_with_two_unlinked();
+    let (backend, lines) = logging(dir.path());
+    let gamma = dir.path().join("gamma");
+    let held = WeaverWorkspace::open(dir.path()).unwrap().lock().unwrap();
+    let hold = std::time::Duration::from_millis(200);
+    let letting_go = std::thread::spawn(move || {
+        std::thread::sleep(hold);
+        drop(held);
+    });
+
+    let outcome = backend
+        .run(task(
+            json!({"type": "link", "path": gamma.to_str().unwrap()}),
+        ))
+        .unwrap();
+    letting_go.join().unwrap();
+
+    assert!(outcome.ok, "{outcome:?}");
+    let lines = lines.lock().unwrap();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    let (words, times) = times(&lines[0]);
+    assert_eq!(
+        words,
+        format!(
+            "run: line 1 of 1 took Nms, Nms of it waiting for a workspace's lock, which \
+             process {} held",
+            std::process::id()
+        )
+    );
+    assert!(times[1] > std::time::Duration::ZERO, "{lines:?}");
+    assert!(times[1] <= times[0], "{lines:?}");
 }

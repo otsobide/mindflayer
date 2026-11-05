@@ -5830,6 +5830,19 @@ job queued before it, which the run's request line, said once it is
 answered, cannot tell from the run's own time or from what carrying the
 answer took (#240). None of them says what a task was or which lines it
 ran, which are the request's body.
+
+The server knows a task and not its lines, so the CLI's backend says what
+it can of each, in the log its front end hands it as it hands the server
+one (`PanelBackend::logging`): once a line has run, by its place among the
+task's lines, how long it took and how much of that it waited for a
+workspace's lock another writer held, and which process held it when one
+did and said so, `run: line 1 of 1 took 5402ms, 0ms of it waiting for a
+workspace's lock`. Core counts those waits on the thread that waited
+(`lock::waits`), rather than each writer handing back how long it
+waited, which would carry a duration through every writer and every
+caller of one for the one front end that asks. Between them the lines
+say where a slow run's time went: behind another job on the writer
+thread, behind another writer of the workspace, or in the line itself.
 The value of a `token` parameter is replaced by `<redacted>` however its name
 is encoded, decoded the way the exchange decodes it to find it; and the token
 is scrubbed from anywhere else in the line, upper-cased or pasted into a path,
@@ -9581,7 +9594,10 @@ How the lock behaves, and why:
   that a command kept waiting by a process that has stopped answering says
   so rather than looks hung. The error is collected like any other: the CLI
   prints it, and the install screen prints it under the line it was running
-  and goes on to the next.
+  and goes on to the next. A wait that ends in the lock is said nowhere,
+  but counted on the thread that waited, with the holder it found, for a
+  front end that asks what some work it ran waited (`lock::waits`), as
+  the panel's log does ([the log](#the-log)).
 - **Who holds it, in a file of its own.** The writer holding the lock writes
   its process id to `.mindweaver/lock.pid`, and takes it away while it still
   holds the lock, so it never names a writer that has let go. Not in `lock`
