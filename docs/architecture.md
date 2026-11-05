@@ -10805,19 +10805,45 @@ it once as it closes.
 - **An unload's run once took five and a half seconds.** In one run of
   CI's Chromium, `e2e/loads.spec.ts` found the unload's command dialog
   still drawn five seconds after Run was clicked (#238). The trace CI kept
-  says why: the dialog was the unload's own, its buttons held as they are
-  while a run goes on, and the server answered the run 5508 ms after it
-  was sent, half a second after the spec stopped waiting, where the load
-  before it, a change to the same marker, took 952 ms. A snapshot asked
-  meanwhile was answered in 9 ms, so what waited was the writer thread,
-  or the line it ran, which is one `edit_array` under the workspace's
-  lock. Nearly six hundred runs here, on the debug and the release
-  binaries, with the browser's CPU throttled and with the whole run held
-  to two cores, never took longer than about half a second. What the run
-  waited on (another writer holding the lock, something in the line, or
-  the runner) waits for a run that says how long each line took and how
-  long it waited for the lock (#240); the spec is left as it is, since a
-  longer wait there would hide a run a person waits for too.
+  says the dialog was the unload's own, its buttons held as they are while
+  a run goes on, and the server answered the run 5508 ms after it was
+  sent, half a second after the spec stopped waiting, where the load
+  before it, a change to the same marker, took 952 ms, and a snapshot
+  asked meanwhile 9 ms. Read further (#240), it says where in the run the
+  time went. The event stream told the unload had started and that the
+  workspace had changed, and never that it finished before it closed; the
+  snapshot asked on hearing the change, 1.6 s after the run was sent, was
+  byte for byte the one from before the load, so the marker had been
+  renamed into place about 1.2 s in. The answer came four seconds after
+  that, written while the server stopped on the Ctrl-C the test's teardown
+  sent it half a second before (`Connection: close`). All the line had
+  left to do then was read the marker back, let go of the lock, taking
+  `lock.pid` away, and say what it did, and the writer thread to keep the
+  run and tell the stream: none of it waits on anything of the panel's.
+  Not the workspace's lock, which it held already, and which nothing else
+  in that test takes, its twin being a copy elsewhere; not the writer's
+  queue, which held it alone; not the event bus, a broadcast that never
+  blocks a sender, whose lock the stop took at once; not a subprocess, of
+  which an unload runs none; nor resolving the workspace, which `-W` names
+  and the preview had resolved in 1.5 ms. In that run writes were slow,
+  the load taking 952 ms where it takes a few milliseconds here, and
+  reads were not, which
+  is how waiting on a disk looks: CI's runner keeps its temporary folder,
+  where the suite builds its workspaces, on a disk two browsers recording
+  their traces, the other worker's install and its ledger's commits share,
+  where this machine's is a RAM disk. The likeliest cause, and not shown:
+  300 runs of the spec here, on the release binaries, the whole Chromium
+  suite on two workers held to four processors with `taskset`, every test
+  traced as CI traces it, never took longer than 15 ms to answer an
+  unload, half of them 2.4 ms or less, nor 217 ms to answer any of the
+  5060 runs of every spec beside them. So nothing is changed for it, and
+  the spec is left as it is, since a longer wait there would hide a run a
+  person waits for too. A test that fails keeps instead its own server's
+  log, which says how long each run waited its turn, ran and waited for a
+  workspace's lock, and how long the machine kept tasks waiting for its
+  disk while it ran ([end to end, in a
+  browser](#end-to-end-in-a-browser)). Should the next say the disk, what
+  to change is where the suite works on CI, not a timeout.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has
