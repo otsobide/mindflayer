@@ -517,6 +517,7 @@
           "config_not_a_folder",
           "config_not_a_file",
           "config_not_text",
+          "config_too_large",
           "config_read_failed",
           "config_write_failed",
           "contents_route_unfit",

@@ -295,3 +295,53 @@ fn a_root_reached_through_a_link_is_the_caller_s_and_is_followed() {
     assert_eq!(written, Written::Created);
     assert!(real.path().join(".mcp.json").is_file());
 }
+
+#[test]
+fn a_file_past_its_cap_is_refused_unread_and_left_as_it_is() {
+    let root = TempDir::new().unwrap();
+    let path = root.path().join(".mcp.json");
+    fs::write(&path, MCP).unwrap();
+    let cap = MCP.len() as u64;
+
+    // Exactly at the cap it is read as any file is.
+    let file = ConfigFile::new(root.path(), ".mcp.json", Format::Json)
+        .unwrap()
+        .capped(cap);
+    assert!(file.get(&["mcpServers", "filesystem"]).unwrap().is_some());
+
+    let file = ConfigFile::new(root.path(), ".mcp.json", Format::Json)
+        .unwrap()
+        .capped(cap - 1);
+    for result in [
+        file.get(&["mcpServers", "filesystem"]).map(|_| ()),
+        file.edit(&["mcpServers", "github"], &Edit::Insert(github()))
+            .map(|_| ()),
+    ] {
+        let error = result.unwrap_err();
+        assert!(
+            matches!(&error, FileError::TooLarge { cap: refused, .. } if *refused == cap - 1),
+            "{error}"
+        );
+        assert_eq!(error.code(), "config_too_large");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "{}: larger than the {} bytes it is read up to, so it was not read",
+                path.display(),
+                cap - 1
+            )
+        );
+    }
+    assert_eq!(fs::read_to_string(&path).unwrap(), MCP);
+}
+
+#[test]
+fn a_capped_file_not_there_yet_is_made_as_any_is() {
+    let root = TempDir::new().unwrap();
+    let written = ConfigFile::new(root.path(), ".mcp.json", Format::Json)
+        .unwrap()
+        .capped(1)
+        .edit(&["mcpServers", "github"], &Edit::Insert(github()))
+        .unwrap();
+    assert_eq!(written, Written::Created);
+}

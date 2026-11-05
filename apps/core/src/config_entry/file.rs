@@ -16,7 +16,7 @@
 //! their own entry. Nothing here knows about workspaces, so it takes none.
 
 use std::fs;
-use std::io::{self, Write as _};
+use std::io::{self, Read as _, Write as _};
 use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
@@ -31,6 +31,9 @@ pub struct ConfigFile {
     root: PathBuf,
     route: PathBuf,
     format: Format,
+    /// The most bytes it is read for, when the caller bounds it
+    /// ([`capped`](Self::capped)).
+    cap: Option<u64>,
 }
 
 /// What [`ConfigFile::edit`] did to the file.
@@ -60,6 +63,8 @@ pub enum FileError {
     NotAFile { path: PathBuf },
     #[error("{path}: not UTF-8 text")]
     NotText { path: PathBuf },
+    #[error("{path}: larger than the {cap} bytes it is read up to, so it was not read")]
+    TooLarge { path: PathBuf, cap: u64 },
     #[error("{path}: cannot be read: {source}")]
     Read {
         path: PathBuf,
@@ -86,6 +91,7 @@ codes!(FileError {
     Self::NotAFolder { .. } => "config_not_a_folder",
     Self::NotAFile { .. } => "config_not_a_file",
     Self::NotText { .. } => "config_not_text",
+    Self::TooLarge { .. } => "config_too_large",
     Self::Read { .. } => "config_read_failed",
     Self::Write { .. } => "config_write_failed",
 } carried {
@@ -117,7 +123,25 @@ impl ConfigFile {
             root,
             route,
             format,
+            cap: None,
         })
+    }
+
+    /// The same file, refused rather than read when it holds more than
+    /// `bytes`.
+    ///
+    /// The caller's to say, as the format is, since how large a file of
+    /// its agent's can be is the caller's to know. A bound rather than
+    /// none for a file that is read whole, held in a tree of every byte
+    /// and parsed again to check what an edit wrote: one somebody filled
+    /// with something else is refused before it is held in memory over and
+    /// over. Counted as it is read rather than by the size the file says
+    /// it has, so one that grows in between is cut off all the same.
+    pub fn capped(self, bytes: u64) -> Self {
+        ConfigFile {
+            cap: Some(bytes),
+            ..self
+        }
     }
 
     /// Where the file is.
@@ -176,10 +200,27 @@ impl ConfigFile {
         let Some(path) = self.walk()? else {
             return Ok(None);
         };
-        let bytes = fs::read(&path).map_err(|source| FileError::Read {
+        let read_error = |source| FileError::Read {
             path: path.clone(),
             source,
-        })?;
+        };
+        let mut file = fs::File::open(&path).map_err(read_error)?;
+        let mut bytes = Vec::new();
+        match self.cap {
+            // One byte past the cap is enough to know it is past.
+            Some(cap) => {
+                (&mut file)
+                    .take(cap.saturating_add(1))
+                    .read_to_end(&mut bytes)
+                    .map_err(read_error)?;
+                if bytes.len() as u64 > cap {
+                    return Err(FileError::TooLarge { path, cap });
+                }
+            }
+            None => {
+                file.read_to_end(&mut bytes).map_err(read_error)?;
+            }
+        }
         String::from_utf8(bytes)
             .map(Some)
             .map_err(|_| FileError::NotText { path })
