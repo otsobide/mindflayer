@@ -990,10 +990,20 @@ not write. Each run asks `opencode mcp list` from the project, with
 
 | Run | Binary | Shape | How |
 |---|---|---|---|
-| `opencode-mcp-v2` | V2: 2.2.5, then 2.1.3 | V2 | `--standalone`: a private server in the list's own process and environment |
-| `opencode-mcp-v1-shape` | V2: 2.2.5, then 2.1.3 | V1 | `--standalone` |
+| `opencode-mcp-v2` | V2: 2.2.5, then 2.1.3 | V2 | a private server in the list's environment: `opencode serve` on a port of its own, asked with `--server`; in 2.1.3, whose list takes no `--server`, the temp home's background server, which the list starts on a port of its own and which is stopped after |
+| `opencode-mcp-v1-shape` | V2: 2.2.5, then 2.1.3 | V1 | the same |
 | `opencode-mcp-service` | V2: 2.2.5, then 2.1.3 | V2 | through V2's background server, the way a person runs OpenCode, read twice: below |
-| `opencode-mcp-1-19` | 1.19.4 | V2 | in process, with `--print-logs --log-level DEBUG` |
+| `opencode-mcp-1-19` | 1.19.4 | V2 | in process, with `--print-logs --log-level DEBUG`, its data, state and cache folders its own |
+
+A V2 list is asked again, a few seconds apart and five times at most, while
+it says `pending` or that no server is configured. The first list a V2
+server gives for a folder says none is, in 2.2.5 and 2.1.3 alike: that
+request is what boots the folder's services, and their MCP servers are read
+from the configuration in the background while it is answered; the second
+lists them. So `--standalone` is not used: its server lives for one list,
+and every answer it gives is a first one. 1.19.4 gets folders of its own
+because V2's runs leave their database in the temp home's, which 1.19.4
+refuses to open ("Database is not empty and has no session table").
 
 The background server is the question in `opencode-mcp-service`: whether it
 fills `{env:}` from the environment of the client that asks, or from its
@@ -1006,12 +1016,11 @@ way, so the run reads it twice, each reading in a project of its own:
 - **Started apart** (`opencode-mcp-service`). `opencode service start`,
   from an environment holding the two switches and `PROBE_MCP_PYTHON`
   alone, as a server started at login or from another shell would be; then
-  the list, from the project with all five variables, asked again up to
-  five times, a few seconds apart, while it says `pending`; then `opencode
-  service stop`. What each reference became says whose environment filled
-  it: the values if the list's, empty if the server's own. A start that
-  fails skips the list, which would start a server from its own environment
-  in its place.
+  the list, from the project with all five variables, asked again as every
+  V2 list is (above); then `opencode service stop`. What each reference
+  became says whose environment filled it: the values if the list's, empty
+  if the server's own. A start that fails skips the list, which would start
+  a server from its own environment in its place.
 - **Started by the list** (`opencode-mcp-service.inherited`). The list,
   asked the same way, starts the server itself, which then holds the list's
   variables, and the server is stopped after. Every reference is expected to
@@ -1079,10 +1088,12 @@ packages, and a run that disagrees fails or records it.
   `cli_auth_credentials_store = "file"` has it read the copied `auth.json`;
   a ChatGPT login is refreshed past about eight days.
 - OpenCode 2.2.5, 2.1.3 and 1.19.4: `opencode mcp list` connects to each
-  server, as 1.19.4's handler and 2.2.5's status values say; `--standalone`
-  runs a private server in 2.2.5 and 2.1.3, whose binary has the same
-  option and `opencode service` commands; 1.19.4 turns `mcp.servers` into
-  its own entries, as its binary's conversion does. In V2, `opencode
+  server, as 1.19.4's handler and 2.2.5's status values say; `opencode serve
+  --port` with `OPENCODE_SERVER_PASSWORD` runs a private server a 2.2.5 list
+  reaches with `--server`, where 2.1.3's list has neither `--server` nor
+  `--standalone`, and both have the `opencode service` commands; 1.19.4
+  turns `mcp.servers` into its own entries, as its binary's conversion does.
+  In V2, `opencode
   service start` returns once the background server answers, `opencode
   service stop` returns once it is gone, and `opencode service set port`
   keeps the port in the service settings under `$XDG_CONFIG_HOME/opencode`,

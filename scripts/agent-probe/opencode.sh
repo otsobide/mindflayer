@@ -225,7 +225,7 @@ opencode_expect() {
 opencode_mcp_v2() {
 	local run=opencode-mcp-v2
 	opencode_scenario $run "$stage/$run" v2
-	opencode_list $run "$stage/$run" "$PROBE_OPENCODE_BIN" --standalone
+	opencode_private_list $run "$stage/$run"
 	opencode_expect $run "D-12: mcp.servers in $opencode_v2_version"
 }
 
@@ -233,7 +233,7 @@ opencode_mcp_v2() {
 opencode_mcp_v1_shape() {
 	local run=opencode-mcp-v1-shape
 	opencode_scenario $run "$stage/$run" v1
-	opencode_list $run "$stage/$run" "$PROBE_OPENCODE_BIN" --standalone
+	opencode_private_list $run "$stage/$run"
 	opencode_expect $run "D-12: V1's mcp.<name> in $opencode_v2_version"
 }
 
@@ -283,18 +283,84 @@ with socket.socket() as s:
 	return 1
 }
 
-# opencode_service_list <name> <dir>: the list through the background
-# server, which it starts when none is running. One asked before the server
-# has connected says pending, so it is asked again, a few seconds apart,
-# until it says nothing is. Stopping the server is the caller's.
+# opencode_unsettled <name>: whether the list kept as <name> is one to ask
+# again. One asked before a server has connected says pending; and the first
+# list a V2 server is asked for a folder says no server is configured at
+# all, since that request is what boots the folder's services, and its MCP
+# servers are read from the configuration in the background while the
+# answer goes out (2.2.5, seen in a temp home: the second ask lists them).
+opencode_unsettled() {
+	grep -q -e pending -e 'No MCP servers configured' -- "$results/$1.list"
+}
+
+# opencode_service_list <name> <dir> [options...]: the list through the
+# background server, which it starts when none is running, or through the
+# server the options name, asked again, a few seconds apart, while it is
+# unsettled (opencode_unsettled). Stopping the server is the caller's.
 opencode_service_list() {
 	local name=$1 dir=$2 attempt
+	shift 2
 	for attempt in 1 2 3 4 5; do
-		opencode_list "$name" "$dir" "$PROBE_OPENCODE_BIN"
-		grep -q pending -- "$results/$name.list" || break
+		opencode_list "$name" "$dir" "$PROBE_OPENCODE_BIN" "$@"
+		opencode_unsettled "$name" || break
 		sleep 3
 	done
 	say "  asked $attempt time(s)"
+}
+
+# opencode_private_list <name> <dir>: the list from a private server of its
+# own, started from that folder in the list's environment, as `mcp list
+# --standalone` starts one: a server in the list's own environment, which
+# nothing else asks. `--standalone` itself cannot be used: its server lives
+# for one list, so every answer is a first one, which says no server is
+# configured (opencode_unsettled), and 2.1.3 has no such flag. The password
+# is the run's own, for this server alone, and it is stopped once the list
+# has settled.
+#
+# 2.1.3's list takes no `--server` either, so there the list reaches the
+# temp home's background server, which it starts itself and which then
+# holds the list's environment, as a private server does; on a port of its
+# own (opencode_own_port), since the channel's fixed one may be the
+# operator's own server, and stopped after.
+opencode_private_list() {
+	local name=$1 dir=$2 port pid waited=0 help
+	# Read whole, then looked at: grep -q stopping early would fail the
+	# pipeline under pipefail, and read as no such flag.
+	help=$(cd "$dir" && env "${opencode_env[@]}" timeout 60 "$PROBE_OPENCODE_BIN" mcp list --help 2>&1) || true
+	if [[ $help != *--server* ]]; then
+		say "  (this list takes no --server: through the background server it starts)"
+		if opencode_own_port "$name" "$dir"; then
+			opencode_service_list "$name" "$dir"
+			opencode_service "$name" stop "$dir" stop
+			verdict "$name" 0 "$opencode_service_status" 'service stop' 'the server the list started is gone before the next run'
+		else
+			: >"$results/$name.list"
+		fi
+		return 0
+	fi
+	port=$("$mcp_python" -I -c 'import socket
+with socket.socket() as s:
+    s.bind(("127.0.0.1", 0))
+    print(s.getsockname()[1])')
+	local opencode_env=("${opencode_env[@]}" OPENCODE_SERVER_PASSWORD=probe-run-only)
+	(cd "$dir" && exec env "${opencode_env[@]}" timeout --kill-after=10 300 \
+		"$PROBE_OPENCODE_BIN" serve --port "$port") </dev/null >"$results/$name.serve" 2>&1 &
+	pid=$!
+	until grep -q 'server listening' -- "$results/$name.serve"; do
+		if ((waited >= 60)) || ! kill -0 "$pid" 2>/dev/null; then
+			say "  the private server did not start:"
+			head -n 5 -- "$results/$name.serve" | sed 's/^/    /'
+			kill "$pid" 2>/dev/null || true
+			wait "$pid" 2>/dev/null || true
+			: >"$results/$name.list"
+			return 0
+		fi
+		sleep 1
+		waited=$((waited + 1))
+	done
+	opencode_service_list "$name" "$dir" --server "http://127.0.0.1:$port"
+	kill "$pid" 2>/dev/null || true
+	wait "$pid" 2>/dev/null || true
 }
 
 # opencode_record <run> <what the shape shows>: what a run that asks whose
@@ -376,6 +442,14 @@ opencode_mcp_service() {
 opencode_mcp_1_19() {
 	local run=opencode-mcp-1-19
 	opencode_scenario $run "$stage/$run" v2
+	# Data, state and cache folders of its own: V2's runs leave their
+	# database in the temp home's, which 1.19.4 refuses to open ("Database
+	# is not empty and has no session table"). HOME and the config folders
+	# stay the temp home's, which the clean-home checks hold empty.
+	local opencode_env=("${opencode_env[@]}"
+		"XDG_DATA_HOME=$mount_root/home-1-19/.local/share"
+		"XDG_STATE_HOME=$mount_root/home-1-19/.local/state"
+		"XDG_CACHE_HOME=$mount_root/home-1-19/.cache")
 	opencode_list $run "$stage/$run" "$PROBE_OPENCODE_V1_BIN" --print-logs --log-level DEBUG
 	opencode_expect $run "D-12: mcp.servers in $opencode_v1"
 }
