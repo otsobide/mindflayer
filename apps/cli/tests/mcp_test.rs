@@ -208,6 +208,61 @@ fn validate_counts_a_server_in_words_and_says_what_is_wrong_with_one() {
 }
 
 #[test]
+fn validate_reports_a_reserved_name_and_a_literal_token_and_never_the_token() {
+    let dir = library();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::write(folder.join("Workspace.toml"), McpMother::stdio("Workspace")).unwrap();
+    let (prefix, token) = McpMother::token();
+    let (leaky, at) = McpMother::with_literal("leaky", "env", &token);
+    fs::write(folder.join("leaky.toml"), leaky).unwrap();
+    fs::write(
+        folder.join("anthropic-skills.toml"),
+        McpMother::sse("anthropic-skills"),
+    )
+    .unwrap();
+
+    let failure = weaver(dir.path(), &["validate", "mcp"]).unwrap();
+
+    assert!(!failure.ok);
+    assert_eq!(
+        failure.stdout,
+        format!(
+            "Workspace: 1 problem\n  \
+             - `Workspace` is a name Claude Code keeps for a server of its own (`workspace`), \
+             so no server of yours can be keyed by it\n\
+             anthropic-skills: ok, 1 warning\n  \
+             - warning: `anthropic-skills` is the name Claude Code gives the skills Anthropic \
+             provides (`anthropic-skills`), so a server of yours by it may be taken for theirs; \
+             it is written all the same\n\
+             github: ok\n\
+             leaky: 1 problem\n  \
+             - `{at}` holds what looks like a token, starting `{prefix}`, and a definition holds \
+             no secret: declare a secret input read from an environment variable, and write it \
+             there between braces\n\
+             \n\
+             4 MCP servers checked, 2 invalid\n"
+        )
+    );
+    // Said where it is and what it starts with, never what follows.
+    let rest = token[prefix.len()..].trim_start();
+    let json = weaver(dir.path(), &["validate", "mcp", "--json"]).unwrap();
+    assert!(!failure.stdout.contains(rest) && !json.stdout.contains(rest));
+    let (data, _): (serde_json::Value, _) = enveloped(&json);
+    let codes: Vec<&str> = data["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|checked| checked["issues"].as_array().unwrap())
+        .map(|issue| issue["code"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        codes,
+        ["mcp_name_reserved", "mcp_name_claimed", "secret_literal"]
+    );
+    assert_eq!(data["invalid"], 2);
+}
+
+#[test]
 fn a_server_is_renamed_and_removed_as_every_kind_is() {
     let dir = library();
     let folder = own_directory_for(dir.path(), Kind::Mcp);
