@@ -30,19 +30,33 @@ const gradient = useId()
         rx="8"
         :fill="`url(#${gradient})`"
       />
+      <!--
+        A spider, which weaves, seen from above: its legs long and bent
+        once, which is what tells it from a beetle or a tick at 16 pixels,
+        and thinner than the body's outline, which would otherwise close
+        the gaps between them at that size.
+      -->
       <path
-        d="M9 15a7 7 0 0 1 14 0Z"
+        d="M14.3 12.7 11.1 9.1 10.4 6M13.9 14.2 9.6 12.3 7 11M13.9 16 9.6 17.6 7 20.4M14.5 17.4 11.3 21.4 10.5 25.4M17.7 12.7 20.9 9.1 21.6 6M18.1 14.2 22.4 12.3 25 11M18.1 16 22.4 17.6 25 20.4M17.5 17.4 20.7 21.4 21.5 25.4"
+        stroke="#fff"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <circle
+        cx="16"
+        cy="13.4"
+        r="2.5"
+        fill="#fff"
+      />
+      <ellipse
+        cx="16"
+        cy="20"
+        rx="3.5"
+        ry="4.3"
         class="fill-white/15"
         stroke="#fff"
         stroke-width="2"
-        stroke-linejoin="round"
-      />
-      <path
-        d="M12 15v4c0 1.6-.8 2.8-2 3.5M16 15v8M20 15v4c0 1.6.8 2.8 2 3.5"
-        stroke="#fff"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
       />
       <defs>
         <linearGradient

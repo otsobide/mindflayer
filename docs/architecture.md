@@ -142,6 +142,215 @@ waits on the watcher's debounce, and would come in an order no literal
 example could hold. Unix alone, as the guide's lines are a POSIX shell's
 and the server is stopped by `kill`.
 
+### The CLI end to end, a use case a test
+
+Every other suite of the CLI's stops short of the process: it parses a line
+with the real parsers and runs it inside the test (`common::mind`,
+`common::weaver`), its options pinned so it reaches no real home. What lies
+between a person's shell and that function goes untested there: the
+binaries' `main`, the environment they read, the exit status, which stream
+a line goes to, and standard input. `apps/cli/tests/e2e_test.rs` crosses it,
+one use case a test: it builds the world that use case needs, runs one
+command line in it as the built binary, and holds the exit status, stdout
+and stderr word for word, and what the command left on the disk. It runs in
+`test (cli)` with every other suite of the app, a target of its own and not
+a job, as the tests are split by app and by nothing else ([in `make test`,
+and in CI](#in-make-test-and-in-ci)).
+
+**The world is built, never shared.** Each test makes its own (`Scenario`,
+in `tests/e2e/scenario.rs`), in a temporary folder, so any one runs alone
+and none can depend on another having run. What a person or a git server
+makes is made directly: folders, a repository to be a project (gix, so no
+`git` binary), a file an editor saved, a source of skills committed once
+and again. What Mindweaver keeps is made only by its commands (`given`),
+each held to exit 0 with nothing on stderr, as the panel's browser suite
+builds its fixture: a step that warned would be building something other
+than what the test names, and a database written by hand would test what no
+command writes. What an older build made is the one exception, since no
+command of this build writes it: a project marked by a `mind.toml` is made
+by core's `MindProject::init`, kept to write that marker for such a test,
+and the rest of its state by the commands, as for any other.
+
+**The line run is the line typed.** A command is the binary
+(`CARGO_BIN_EXE_mind`, `CARGO_BIN_EXE_mindweaver`) started from the folder
+the line is typed in, with an environment holding only `PATH` and the
+scenario's home, rather than the developer's with `MINDWEAVER_*`,
+`MINDFLAYER_*` and the agent homes taken out: what any other variable would
+change is a test's to say, for that command alone, as an activated workspace is. No option is
+added to the line, which the in-process suites must do (`common::PINNED`)
+since they share one process and its environment. Words are split as a
+shell would (`shell-words`), and a leading `~` is the home.
+
+**Paths read as the reference's.** The folder is read as `/home` in what a
+command prints, and its home is `you`, so an expected output reads
+`/home/you/Projects/collapse` where the reference does, and a test is the
+reference's example with its scenario around it. A test may spell a path in
+a line from `/home` too. What would still differ from run to run is spelled
+from the scenario: the commit a source is on (`head`), a project's id
+(`project_id`). A source is gathered by its path from the workspace, never
+its absolute one: a table pads every row to its longest, so a temporary
+folder's length would leak into the spaces of every row, and the shelf
+folder a source is gathered into is named from it.
+
+Rejected: case files read by a runner (trycmd's `.toml` and `.md`), which
+would put the input and the output side by side with no Rust, but leave the
+scenario to a folder copied in, which builds Mindweaver's state by hand, or
+to steps in a format of their own. A test in Rust builds the world with the
+commands, names the use case in its own name, as every suite here does, and
+says what it holds on the disk besides the output, as an install's copies.
+
+Unix alone: a Windows path, its drive and its backslashes, never reads as
+the reference's, so every use case printing one would fail there for how
+the path is spelled.
+
+### The server end to end, a request a test
+
+The server has no binary: what a person or a script runs is `mindweaver ui`,
+which serves it over the CLI's backend. Its suites run against a fake
+backend, `backend_test` drives the real one with no port bound,
+`ui_test` checks every route and guard on the suites' common fixtures,
+and `api_guide_test` replays the guide's one walk-through; none of them
+is a use case built for itself. `apps/cli/tests/api_e2e_test.rs` is, as
+`e2e_test` is for the command line: each test builds the world it needs
+with the CLI suite's `Scenario`, types `mindweaver ui --no-open` in one of
+its folders, in the same environment as every command there, reads where it listens and its token
+from the link it prints, and sends one request over loopback as curl
+sends it (`tests/api_e2e/served.rs`), holding its status and its answer,
+and what it left: on the disk, in what a command reads next, or in what
+the server tells or prints after. It lives in the CLI's crate because the
+binary does, and runs in `test (cli)`.
+
+**A part of an answer, as a script reads it.** An answer is held whole
+where it is small (a preview, a run, a refusal, a plan), and otherwise
+the part the use case is about, picked by a JSON pointer as the guide
+picks one with jq (`answers_at`): the snapshot holds times, and a
+project's tally and templates would make every test about a project hold
+what it is not about. The paths in a request are spelled under `/home`,
+and read back so in an answer, as in the CLI's suite. Every answer to a
+route the API describes is held to its OpenAPI document besides
+(`common/contract.rs`), so a use case meeting one outside it fails.
+
+**What only the API leaves is built through it.** Mindweaver's state is
+made by the commands (`given`), as in the CLI's suite; what is the
+server's alone, the transcript of what it ran, is made by tasks held to
+run clean (`Served::given`), since no command writes it.
+
+**An event is waited for, never counted.** The watcher takes in what
+happens together before it tells it, so how many `changed` events a
+change makes depends on the machine: a test reads the stream until the
+event it is about (`Stream::until`) and holds that one, and leaves the
+others out of what a run is told (`command_started`, `command_finished`).
+
+Rejected: the suite in `apps/server`, finding `mindweaver` in `target/`.
+Cargo names a binary to the tests of its own crate alone
+(`CARGO_BIN_EXE_<name>`), so the server would need the CLI as a
+dev-dependency, which `crate_test` refuses since the CLI depends on it, or
+a path guessed from the build's layout. Unix alone, as the server is
+stopped by a SIGINT `kill` sends.
+
+### Core end to end, a call a test
+
+Core has no binary and prints nothing: to the CLI, the TUI and the panel it
+is its public API, whose answers they render and whose read types they
+print as JSON. Its suites hold a module each, or a flow through several
+built by its mothers over values drawn afresh (`flows_test`), each to the
+Rust values it returns. `apps/core/tests/e2e_test.rs` holds it as a front
+end meets it, one use case a test: it builds the world that use case needs
+(`World`, in `tests/e2e/world.rs`), makes one public call in it, as a
+command makes it, and holds what core answered as a front end reads it,
+and what it left on the disk. It runs in `test (core)`.
+
+**Mindweaver's state is made by core's own calls.** As the CLI's suite
+makes it with the commands, never by hand: each step is the call a command
+makes for it, `MindProject::init_asked` for `mind init`,
+`WeaverWorkspace::init` and `known::remember` for `mindweaver init`,
+`WeaverWorkspace::link`, `lifecycle::add`, `assign::install`, handed what a
+front end hands them (the home, and the agents' own folders under it,
+`AgentHomes::defaults_under`), and held to go cleanly: an install that
+added nothing, or left something out, would be building another world than
+the one the test names.
+
+**An answer is read as a front end reads it.** A read type is held as its
+JSON, every path under the world read as `/home`, the home being
+`/home/you`, so an answer reads as the reference's and the API guide's do:
+that is the contract every front end prints, and a field named otherwise
+fails here as it would fail a script. A refusal is held by its `code()`,
+which a front end acts on, and its words, which it shows. What a change
+did is held on the disk and in the snapshot every front end reads next.
+
+**A gather names its source by its absolute path.** The tests share their
+process's folder, so a source cannot be named from the workspace as the
+CLI's suite names it, and the shelf folder a gather names from the address
+spells the temporary folder out: a test holds that folder by its shape,
+and every skill gathered to lie in it, rather than word for word.
+
+Unix alone, as the other two: a Windows path never reads as the
+reference's.
+
+### The TUI end to end, in a terminal of its own
+
+The screen's suite drives its state with key events and renders it into
+ratatui's test backend, so what lies between that and a person is never
+run there: the event loops, raw mode and the alternate screen, keys as a
+terminal sends them, and the transcript printed once the window is given
+back. `apps/cli/tests/tui_e2e_test.rs` runs the binary in a
+pseudo-terminal, one use case a test, on the CLI suite's scenario.
+
+**The terminal is the screen's own.** crossterm reads the window's size
+from `/dev/tty`, the controlling terminal, and not from what its standard
+streams are: a child of the test, in the test's session, would be sized
+by the developer's terminal, or by none under CI. So the screen is started
+as a shell starts a job, the leader of a session of its own with the
+pseudo-terminal as its controlling one (`setsid`, then `TIOCSCTTY`, in
+`pre_exec`), at a size the test sets, 120 by 24. rustix, which crossterm
+builds already, opens the terminal; `vt100` reads what is drawn on it back
+as rows, the one crate the suite adds beside vte.
+
+**A test waits for what is drawn, never sleeps.** The screen draws when it
+is ready and again when something changes, so each step waits, bounded,
+until the rows show what it expects, and fails with the screen as it was.
+The one pause is after an escape: one read together with the key after it
+is that key with Alt held, in any terminal, and a person's next key comes
+later than a test's.
+
+**The terminal answers where its cursor is.** ratatui asks before it
+clears the screen (`ESC [ 6 n`, a device status report), which the
+screen does when it takes its window back from an editor, and gives up
+drawing when no answer comes within two seconds. Every terminal a person
+uses answers it, and a pseudo-terminal read by a parser does not, so the
+suite answers as a terminal does, with where the cursor is when it was
+asked: on the thread that reads what the screen writes, with a parser of
+its own fed everything, so an answer never waits on a test's next step.
+The editor itself is the use case's (`EDITOR`, given to that one
+screen), one that writes and waits for a key, so a test sees the window
+while it is the editor's, off the alternate screen, before the screen
+draws itself again.
+
+**A gather waits on a server the test holds.** A source on the disk is
+gathered before a key could stop it, so the suite serves one on loopback
+that holds each request until the test lets it answer, and answers that
+there is no such repository. A gather waiting on the network takes a
+cancel only once it hears back, as [a gather runs
+apart](#a-gather-runs-apart) says: so the test waits until the server
+has read the request, presses `esc` or Ctrl-C, sees the cancel said, and
+only then lets the server answer, when the gather stops with nothing on
+the shelf, no clone in the cache and nothing in the ledger. A server that
+never answered would hold the gather until the HTTP client gave up,
+thirty seconds on; one answering at once would race the key, which is how
+a first version of these tests passed only when the key came before the
+connection. A stand-in runner, as the screen's own suite uses, would stop
+a gather that is not gix's.
+
+**A row with a path in a box is held by what it says.** The screen pads a
+box's rows to its width around the path it shows, so a path read back as
+`/home` is shorter than the one drawn, and the box's edge moves: such a
+row is held by its text, every other row word for word.
+
+Rejected: expect-style crates (rexpect, expectrl) that match a stream of
+bytes, which an alternate screen redrawn cell by cell never reads as a
+row, and portable-pty, which brings crates of its own for what rustix,
+built already, does in a few calls.
+
 ### No em dash in what the repository says
 
 The owner finds the em dash reads as machine-written, so none is written:
@@ -5810,9 +6019,40 @@ folder in each repository would reach it with one `node_modules`.
 
 The server prints nothing of its own accord. A front end that wants a log hands
 `Server::log` a function, and gets a line per request once it is answered,
-like `GET /api/v1/transcript 200`: the method, the path and query, the status.
+like `GET /api/v1/transcript 200 3ms`: the method, the path and query, the
+status, and how long the answer took, in whole milliseconds, from the request
+reaching the server to the answer's head, so an event stream's says how long
+it took to open rather than how long it stayed open. How long, because a log
+is most often read for a request that took too long, and a client's clock
+cannot tell the server's part of that from its own (#240).
 Never a header, since the cookie and the Bearer token travel in them, and never
 a body.
+
+The writer thread says what it did with each job in the same log, in lines
+`log::Log` builds as it builds a request's: a run once it is taken off the
+queue and its lines are worked out, `run: 0ms waiting its turn, 1ms working
+out its 1 line`, before any of them runs, so a run that never ends is said
+to have started; again once they have run, however that went, `run: 5402ms
+running its 1 line`; and a switch once it is made or refused, `switch: 0ms
+waiting its turn, 3ms switching`. Waiting its turn is the time behind every
+job queued before it, which the run's request line, said once it is
+answered, cannot tell from the run's own time or from what carrying the
+answer took (#240). None of them says what a task was or which lines it
+ran, which are the request's body.
+
+The server knows a task and not its lines, so the CLI's backend says what
+it can of each, in the log its front end hands it as it hands the server
+one (`PanelBackend::logging`, which `mindweaver ui --log` hands both,
+[launching it](#launching-it-mindweaver-ui)): once a line has run, by its place among the
+task's lines, how long it took and how much of that it waited for a
+workspace's lock another writer held, and which process held it when one
+did and said so, `run: line 1 of 1 took 5402ms, 0ms of it waiting for a
+workspace's lock`. Core counts those waits on the thread that waited
+(`lock::waits`), rather than each writer handing back how long it
+waited, which would carry a duration through every writer and every
+caller of one for the one front end that asks. Between them the lines
+say where a slow run's time went: behind another job on the writer
+thread, behind another writer of the workspace, or in the line itself.
 The value of a `token` parameter is replaced by `<redacted>` however its name
 is encoded, decoded the way the exchange decodes it to find it; and the token
 is scrubbed from anywhere else in the line, upper-cased or pasted into a path,
@@ -5950,6 +6190,24 @@ printed nowhere the link was not, and `TokenFile` has no `Debug` to print
 it with. Nor can the panel ask for a file: a front end with no terminal
 refuses `ui` whatever its options (`Refusal::Panel`), so a browser never
 names one for it to write.
+
+`--log` hands the server and the backend one log ([the log](#the-log)),
+which writes each line to stderr as it is said, after the time of day, in
+UTC to the millisecond (`04:20:59.756Z`): as it is said, since it is for
+watching a panel serve, or for reading beside a browser's trace of the same
+minutes, and either needs it while the panel runs; the time of day alone,
+which is what that reading asks for, in UTC, which needs no timezone looked
+up and is what a trace and CI's log say their times in. Off unless asked
+for, since a line a request is too many for a terminal somebody is using,
+and on stderr rather than in a file of its own, which would be one more
+path to refuse when something is there: whoever starts the panel sends
+stderr where they like. Without it, stderr says what it always has. Its
+help and the reference say what a line holds as the log lays it out: a
+request's path and query, so a read's line names the folders and entries
+it asked for, and never the token, a header or a body, so neither what a
+change was sent nor which commands it ran. Not "nothing a request sent",
+which a read sends in its query, and which somebody passing a log on
+would take at its word.
 
 The runtime is tokio's with one thread: every query goes to the blocking pool
 and every run to the server's writer thread, so it only moves bytes. `--dev`
@@ -7427,6 +7685,51 @@ links against libraries Playwright installs only on Debian and Ubuntu
 (`BROWSERS=chromium`), and WebKit in CI. A failed test keeps its trace,
 every action with the page and the requests at each step, in
 `test-results/`, and CI adds the HTML report.
+
+A trace times each request from the browser, so it says a run took
+seconds, and not where they went: an unload once took five and a half on
+CI, which its trace could say no more of (#240). So a test's own
+`mindweaver ui` is started with `--log` (`serve`, in `e2e/environment.ts`),
+its stderr kept for as long as it runs, and a test that fails keeps it
+beside its trace, once the server has stopped and said all it will, as
+`mindweaver-ui.log` in its folder of `test-results/`, attached to the
+report too (`close`, in `e2e/panel.ts`): every request with how long its
+answer took, and every run with how long it waited its turn, how long
+each of its lines took and how much of that it waited for a workspace's
+lock ([the log](#the-log)), each after the time of day, to read beside the
+trace. Not the config's server, whose stderr Playwright prints, which
+would put a line for every request of every test in the run's output; no
+spec runs a change on it. `e2e/log.spec.ts` holds a run from the panel to
+being said there, as it starts, as its line runs and as it ends, with its
+request, and never the token or the body the run was sent.
+
+The log says where a run's time went among the server's parts, and not
+whether the machine kept all of them waiting: the unload's line had
+written its marker a second in, and took four more to let go of the lock
+and finish, where every read beside it took its usual milliseconds, as
+waiting on a disk shared by a whole suite and two browsers would look.
+So every test that fails keeps how long the machine stalled while it ran
+(`stalls`, in `e2e/panel.ts`), as `pressure.txt` beside the trace: for its
+processors, its memory and its disk, how long at least one task was kept
+waiting for each, and how long every task that would run was, from the
+totals Linux keeps in `/proc/pressure` read as the test's first fixture
+starts and again after its last one stops, so it is the test's own time
+rather than an average of the minutes around it (`stalled`), then each file
+as it read the second time. Nothing on a system without them, where there
+is nothing to read.
+
+Both are kept only for a test that ended other than it was expected to,
+decided in one place for both (`keep`), and held by tests that pass: one
+made to fail would fail the suite, and `test.fail()` makes none that keeps
+anything, a test marked so that fails having ended as expected. So
+`e2e/log.spec.ts` hands `keep` and both teardowns (`close`, `keepStalls`)
+a stand-in for a test's `TestInfo` that failed (`ending`), and finds the
+server's log kept whole once it has stopped, the token redacted where the
+launch link carried it, and the pressure kept for each file Linux has;
+and nothing kept, nor anything asked of what would be, for a test that
+passed, or one marked to fail that failed.
+Rather than a nested run of Playwright over a spec made to fail, which
+would need a config and a fixture of its own beside the driver's.
 
 ### The README's screenshots
 
@@ -9564,7 +9867,10 @@ How the lock behaves, and why:
   that a command kept waiting by a process that has stopped answering says
   so rather than looks hung. The error is collected like any other: the CLI
   prints it, and the install screen prints it under the line it was running
-  and goes on to the next.
+  and goes on to the next. A wait that ends in the lock is said nowhere,
+  but counted on the thread that waited, with the holder it found, for a
+  front end that asks what some work it ran waited (`lock::waits`), as
+  the panel's log does ([the log](#the-log)).
 - **Who holds it, in a file of its own.** The writer holding the lock writes
   its process id to `.mindweaver/lock.pid`, and takes it away while it still
   holds the lock, so it never names a writer that has let go. Not in `lock`
@@ -10727,19 +11033,45 @@ it once as it closes.
 - **An unload's run once took five and a half seconds.** In one run of
   CI's Chromium, `e2e/loads.spec.ts` found the unload's command dialog
   still drawn five seconds after Run was clicked (#238). The trace CI kept
-  says why: the dialog was the unload's own, its buttons held as they are
-  while a run goes on, and the server answered the run 5508 ms after it
-  was sent, half a second after the spec stopped waiting, where the load
-  before it, a change to the same marker, took 952 ms. A snapshot asked
-  meanwhile was answered in 9 ms, so what waited was the writer thread,
-  or the line it ran, which is one `edit_array` under the workspace's
-  lock. Nearly six hundred runs here, on the debug and the release
-  binaries, with the browser's CPU throttled and with the whole run held
-  to two cores, never took longer than about half a second. What the run
-  waited on (another writer holding the lock, something in the line, or
-  the runner) waits for a run that says how long each line took and how
-  long it waited for the lock (#240); the spec is left as it is, since a
-  longer wait there would hide a run a person waits for too.
+  says the dialog was the unload's own, its buttons held as they are while
+  a run goes on, and the server answered the run 5508 ms after it was
+  sent, half a second after the spec stopped waiting, where the load
+  before it, a change to the same marker, took 952 ms, and a snapshot
+  asked meanwhile 9 ms. Read further (#240), it says where in the run the
+  time went. The event stream told the unload had started and that the
+  workspace had changed, and never that it finished before it closed; the
+  snapshot asked on hearing the change, 1.6 s after the run was sent, was
+  byte for byte the one from before the load, so the marker had been
+  renamed into place about 1.2 s in. The answer came four seconds after
+  that, written while the server stopped on the Ctrl-C the test's teardown
+  sent it half a second before (`Connection: close`). All the line had
+  left to do then was read the marker back, let go of the lock, taking
+  `lock.pid` away, and say what it did, and the writer thread to keep the
+  run and tell the stream: none of it waits on anything of the panel's.
+  Not the workspace's lock, which it held already, and which nothing else
+  in that test takes, its twin being a copy elsewhere; not the writer's
+  queue, which held it alone; not the event bus, a broadcast that never
+  blocks a sender, whose lock the stop took at once; not a subprocess, of
+  which an unload runs none; nor resolving the workspace, which `-W` names
+  and the preview had resolved in 1.5 ms. In that run writes were slow,
+  the load taking 952 ms where it takes a few milliseconds here, and
+  reads were not, which
+  is how waiting on a disk looks: CI's runner keeps its temporary folder,
+  where the suite builds its workspaces, on a disk two browsers recording
+  their traces, the other worker's install and its ledger's commits share,
+  where this machine's is a RAM disk. The likeliest cause, and not shown:
+  300 runs of the spec here, on the release binaries, the whole Chromium
+  suite on two workers held to four processors with `taskset`, every test
+  traced as CI traces it, never took longer than 15 ms to answer an
+  unload, half of them 2.4 ms or less, nor 217 ms to answer any of the
+  5060 runs of every spec beside them. So nothing is changed for it, and
+  the spec is left as it is, since a longer wait there would hide a run a
+  person waits for too. A test that fails keeps instead its own server's
+  log, which says how long each run waited its turn, ran and waited for a
+  workspace's lock, and how long the machine kept tasks waiting for its
+  disk while it ran ([end to end, in a
+  browser](#end-to-end-in-a-browser)). Should the next say the disk, what
+  to change is where the suite works on CI, not a timeout.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has

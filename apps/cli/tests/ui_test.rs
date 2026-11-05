@@ -564,6 +564,99 @@ fn ctrl_c_stops_the_panel_which_prints_what_it_changed() {
     );
 }
 
+/// `line` as the log lays it out, the time of day it was said and what
+/// was said, with every time in that written `Nms`: what a test holds a
+/// line to, apart from the times no test can say beforehand.
+fn logged(line: &str) -> String {
+    let (at, said) = line
+        .split_once(' ')
+        .unwrap_or_else(|| panic!("no time of day before {line:?}"));
+    let clock: Vec<&str> = at
+        .strip_suffix('Z')
+        .unwrap_or_else(|| panic!("not in UTC: {line:?}"))
+        .split([':', '.'])
+        .collect();
+    assert!(
+        clock.len() == 4
+            && clock.iter().zip([2, 2, 2, 3]).all(
+                |(part, width)| part.len() == width && part.bytes().all(|b| b.is_ascii_digit())
+            ),
+        "not a time of day: {line:?}"
+    );
+    said.split(' ')
+        .map(|word| {
+            let (bare, after) = word
+                .strip_suffix(',')
+                .map_or((word, ""), |bare| (bare, ","));
+            match bare.strip_suffix("ms") {
+                Some(millis)
+                    if !millis.is_empty() && millis.bytes().all(|b| b.is_ascii_digit()) =>
+                {
+                    format!("Nms{after}")
+                }
+                _ => word.to_owned(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// With `--log`, every request the panel answers is said on stderr after the
+/// note, once answered, and every run as the writer thread takes it, as
+/// each of its lines has run, and as it ends, each after the time of day it
+/// was said at; never the token, though the link and every request carried
+/// it, nor what a request sent. Without it, the note alone, as ever
+/// ([`ctrl_c_stops_the_panel_which_prints_what_it_changed`]).
+#[cfg(unix)]
+#[test]
+fn with_log_each_request_and_run_is_said_on_stderr_and_never_the_token() {
+    let dir = workspace_with_own();
+    let home = TempDir::new().unwrap();
+    let mut panel = serve_with("mindweaver", dir.path(), home.path(), &["--log"]);
+    panel.snapshot();
+    let install = json!({
+        "type": "install",
+        "projects": ["alpha"],
+        "kind": "skill",
+        "name": "commit-style",
+        "from": null,
+    });
+    let (status, ran) = panel.post("/api/v1/tasks", install);
+    assert_eq!(status, 200, "{ran}");
+
+    let (exited, _, said) = interrupt(&mut panel);
+
+    assert!(exited.success(), "{exited:?}");
+    assert!(!said.contains(&panel.token), "{said}");
+    assert!(
+        !said.contains("commit-style"),
+        "what the run was sent: {said}"
+    );
+    let mut lines = said.lines();
+    assert_eq!(
+        lines.next(),
+        Some(
+            format!(
+                "note: serving the workspace at {} on {} until Ctrl-C",
+                dir.path().display(),
+                panel.address
+            )
+            .as_str()
+        )
+    );
+    assert_eq!(
+        lines.map(logged).collect::<Vec<_>>(),
+        [
+            "GET /api/v1/snapshot 200 Nms",
+            "run: Nms waiting its turn, Nms working out its 1 line",
+            "run: line 1 of 1 took Nms, Nms of it waiting for a workspace's lock",
+            "run: Nms running its 1 line",
+            "POST /api/v1/tasks 200 Nms",
+        ],
+        "{said}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The token file
 // ---------------------------------------------------------------------------

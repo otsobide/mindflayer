@@ -58,6 +58,41 @@ fn right_enters_the_skills_and_left_comes_back() {
 }
 
 #[test]
+fn h_j_k_and_l_move_as_the_arrows_do_either_way_round() {
+    let (_dir, workspace, ledger) = shelved(&["collapse", "tanukeys"], &["deploy", "lint"]);
+    let mut screen = screen_for(&workspace, &ledger);
+
+    press(&mut screen, &[KeyCode::Char('j')]);
+    assert_eq!(screen.current().unwrap().name(), "tanukeys");
+    press(&mut screen, &[KeyCode::Char('k'), KeyCode::Char('l')]);
+    assert_eq!(screen.current().unwrap().name(), "collapse");
+    assert_eq!(screen.focus, Focus::Offers);
+    press(&mut screen, &[KeyCode::Char('j'), KeyCode::Char(' ')]);
+    let drawn = rendered(&screen);
+    assert!(drawn.contains("[ ] deploy"), "{drawn}");
+    assert!(drawn.contains("[x] lint"), "{drawn}");
+    press(&mut screen, &[KeyCode::Char('k'), KeyCode::Char(' ')]);
+    assert_eq!(screen.counts(), (2, 0));
+    press(&mut screen, &[KeyCode::Char('h')]);
+    assert_eq!(screen.focus, Focus::Projects);
+
+    // Turned round, by artifact: the same keys over its two columns.
+    press(&mut screen, &[KeyCode::Char('v')]);
+    assert_eq!(screen.focus, Focus::Artifacts);
+    press(&mut screen, &[KeyCode::Char('j')]);
+    assert_eq!(screen.chosen().unwrap().candidate.name(), "lint");
+    press(&mut screen, &[KeyCode::Char('l')]);
+    assert_eq!(screen.focus, Focus::Receivers);
+    press(&mut screen, &[KeyCode::Char('j')]);
+    assert_eq!(screen.receiver, 1);
+    press(&mut screen, &[KeyCode::Char('k'), KeyCode::Char('h')]);
+    assert_eq!(screen.receiver, 0);
+    assert_eq!(screen.focus, Focus::Artifacts);
+    press(&mut screen, &[KeyCode::Char('k')]);
+    assert_eq!(screen.chosen().unwrap().candidate.name(), "deploy");
+}
+
+#[test]
 fn space_marks_a_skill_and_the_screen_says_what_is_waiting() {
     let (_dir, workspace, ledger) = shelved(&["collapse"], &["deploy"]);
     let mut screen = screen_for(&workspace, &ledger);

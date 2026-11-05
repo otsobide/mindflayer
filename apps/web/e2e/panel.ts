@@ -1,14 +1,15 @@
 /*
  * What the specs share: the server the config started, a page opened
  * through its launch link as a person opens it, and what the CLI says of the
- * same workspace, to hold the page to.
+ * same workspace, to hold the page to; and what a test that fails keeps
+ * beside its trace, to say where its time went.
  */
-import { cpSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { cpSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { test as base, expect, type Page } from '@playwright/test'
+import { test as base, expect, type Page, type TestInfo } from '@playwright/test'
 import type { Envelope } from '../src/api/generated/Envelope'
 import type { Listing } from '../src/api/generated/Listing'
-import { given, look, run, serve, type Places } from './environment.ts'
+import { given, look, run, serve, type Places, type Serving } from './environment.ts'
 import { assignable, authorable, changeable, loadable, updatable } from './fixture.ts'
 
 /** The server under test, as the link it printed says. */
@@ -97,7 +98,15 @@ export interface Own extends Panel {
   at: Places
   /** The copy, as every command names it. */
   twin: Places
-  served: Served
+  /** Its `mindweaver ui`, which the fixture stops once the test is done (`close`). */
+  served: Serving
+  /**
+   * What its `mindweaver ui` has said on stderr so far, a line at a time:
+   * where it serves, then its log, every request it answered and every
+   * run, each after the time of day and with how long it took. What a
+   * test that fails keeps beside its trace (`close`).
+   */
+  log(): string[]
 }
 
 /**
@@ -117,8 +126,19 @@ const BUILDERS = { changeable, assignable, updatable, authorable, loadable }
  */
 const HOMED: readonly (keyof typeof BUILDERS)[] = ['loadable']
 
-export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, own: Own, building: keyof typeof BUILDERS }>({
+export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, own: Own, building: keyof typeof BUILDERS, stalls: void }>({
   building: ['changeable', { option: true }],
+
+  // How long the machine stalled while each test ran, kept beside the
+  // trace of one that failed, from its first fixture to its last: what
+  // says whether a run that took seconds waited on the machine rather
+  // than on anything of the panel's (`stalled`).
+  stalls: [async ({}, use, testInfo) => {
+    const before = pressure()
+    const started = Date.now()
+    await use()
+    await keepStalls(testInfo, before, started)
+  }, { auto: true }],
 
   served: async ({}, use) => {
     await use(served())
@@ -148,8 +168,9 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
   // Under the run's temporary folder, which the driver removes, and served
   // with the run's home, which the driver holds to stay as it was made, or
   // one of its own beside it, held here the same way once the server has
-  // stopped.
-  own: async ({ page, building }, use) => {
+  // stopped. Its log is kept beside the trace of a test that failed, once
+  // the server has stopped and said all it will.
+  own: async ({ page, building }, use, testInfo) => {
     const at = given()
     const folder = mkdtempSync(join(at.scratch, 'own-'))
     const homed = HOMED.includes(building)
@@ -159,10 +180,11 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
     cpSync(mine.workspace, twin.workspace, { recursive: true })
     const made = homed ? look(mine.home) : undefined
     const server = await serve(mine)
+    const log = () => server.said().split('\n').filter(line => line !== '')
     try {
-      await use({ at: mine, twin, served: server, open: (path = '/') => open(page, server, path) })
+      await use({ at: mine, twin, served: server, log, open: (path = '/') => open(page, server, path) })
     } finally {
-      await server.stop()
+      await close(testInfo, server)
     }
     if (made) {
       expect(look(mine.home), `the home of its own, ${mine.home}, is as it was made`).toEqual(made)
@@ -171,6 +193,124 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
 })
 
 export { expect }
+
+/** What Linux says tasks stall on, each in a file of `/proc/pressure`. */
+const RESOURCES = ['cpu', 'memory', 'io'] as const
+
+/** What `/proc/pressure` says of each resource. */
+export type Pressure = Partial<Record<typeof RESOURCES[number], string>>
+
+/**
+ * Each of `/proc/pressure`'s files as it reads now, and none that cannot be
+ * read: none at all on another system, or under a kernel built without it.
+ * Read by any account.
+ */
+export function pressure(): Pressure {
+  const read: Pressure = {}
+  for (const resource of RESOURCES) {
+    try {
+      read[resource] = readFileSync(`/proc/pressure/${resource}`, 'utf8')
+    } catch {
+      // Not there to read, which says nothing of the test.
+    }
+  }
+  return read
+}
+
+/** The microseconds a pressure file's `some` or `full` line says tasks have stalled in all. */
+function total(file: string | undefined, line: 'some' | 'full'): number | undefined {
+  const found = file?.match(new RegExp(String.raw`^${line} .*\btotal=(\d+)\s*$`, 'm'))
+  return found ? Number(found[1]) : undefined
+}
+
+/**
+ * How long tasks stalled on each resource between two readings, `took`
+ * milliseconds apart, as a failed test keeps it in `pressure.txt`: a line
+ * for each, `io: some 4120ms, full 3870ms of 6213ms`, then each file as it
+ * read the second time, its averages over the last ten seconds, minute
+ * and five minutes among them. `some` is how long at least one task was
+ * kept waiting for it, and `full` how long every task that would run was.
+ *
+ * From the totals rather than the averages, so it is the test's own time,
+ * not the minutes around it. An unload once took five and a half seconds
+ * on CI, whose runner a whole suite and two browsers share, while reads
+ * beside it took their usual milliseconds (#240): how long its disk kept
+ * writers waiting then is what would have said whether the machine was
+ * the cause.
+ */
+export function stalled(before: Pressure, after: Pressure, took: number): string {
+  const lines: string[] = []
+  for (const resource of RESOURCES) {
+    const said = (['some', 'full'] as const).flatMap((line) => {
+      const from = total(before[resource], line)
+      const to = total(after[resource], line)
+      return from === undefined || to === undefined ? [] : [`${line} ${Math.round((to - from) / 1000)}ms`]
+    })
+    if (said.length > 0) {
+      lines.push(`${resource}: ${said.join(', ')} of ${took}ms`)
+    }
+  }
+  for (const resource of RESOURCES) {
+    if (after[resource] !== undefined) {
+      lines.push('', `/proc/pressure/${resource}:`, after[resource].trimEnd())
+    }
+  }
+  return `${lines.join('\n')}\n`
+}
+
+/**
+ * What keeping a file beside a test's trace reads of its `TestInfo`: how
+ * it ended, how it was expected to, where its files go and how one is
+ * attached to the report. No more, so `log.spec.ts` can hand `keep` a
+ * test that failed, which no test that passes is, and which `test.fail()`
+ * cannot make either: a test marked so that fails ended as expected.
+ */
+export type Ending = Pick<TestInfo, 'status' | 'expectedStatus' | 'outputPath' | 'attach'>
+
+/**
+ * Keep what `said` gives as `name` beside the trace of a test that ended
+ * other than it was expected to, in its folder of `test-results`, which CI
+ * uploads, and attached to the report; nothing, and `said` never asked,
+ * for one that ended as expected. Whether a test failed is decided here
+ * alone, for every fixture that keeps something, so the one decision is
+ * the one `log.spec.ts` holds.
+ */
+export async function keep(ending: Ending, name: string, said: () => string): Promise<void> {
+  if (ending.status === ending.expectedStatus) {
+    return
+  }
+  const path = ending.outputPath(name)
+  writeFileSync(path, said())
+  await ending.attach(name, { path, contentType: 'text/plain' })
+}
+
+/**
+ * Stop a test's own `mindweaver ui`, then keep all it said beside the trace
+ * of a test that failed, as `mindweaver-ui.log` (`keep`): every request it
+ * answered with how long the answer took, and every run with how long it
+ * waited its turn behind the runs before it, how long each of its lines
+ * took and how much of that it waited for a workspace's lock. Once it has
+ * stopped, so it has said all it will. The trace times each request from
+ * the browser, which says that a run took seconds but not where they went
+ * (#240). Never the token, which the server keeps out of its log. The own
+ * fixture's teardown.
+ */
+export async function close(ending: Ending, server: Serving): Promise<void> {
+  await server.stop()
+  await keep(ending, 'mindweaver-ui.log', () => server.said())
+}
+
+/**
+ * Keep how long the machine stalled since `before` was read, at `started`,
+ * beside the trace of a test that failed, as `pressure.txt` (`keep`,
+ * `stalled`); nothing where Linux said nothing to read. The `stalls`
+ * fixture's teardown.
+ */
+export async function keepStalls(ending: Ending, before: Pressure, started: number): Promise<void> {
+  if (Object.keys(before).length > 0) {
+    await keep(ending, 'pressure.txt', () => stalled(before, pressure(), Date.now() - started))
+  }
+}
 
 /**
  * Wait until the page is drawn: its panel there, the snapshot answered, and
