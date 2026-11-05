@@ -8547,10 +8547,11 @@ on the binary by `scripts/agent-probe` or marked docs-only with a fallback.
 A change to an agent path cites it; this section is about how Mindweaver
 finds the agents' own folders, not what the agents do in them.
 
-Checks to come read what an agent reads for every project, not only what a
-project holds: Claude's user memory, which `claude_md` leaves out of what
-keeps Claude from reading `AGENTS.md` (#44), Codex's config, OpenCode's
-configuration folder and the skills in `~/.agents` (#91, #96). Those folders
+Some checks look at what an agent reads for every project, not only at what
+a project holds: Claude's user memory, which `claude_md` leaves out of what
+keeps Claude from reading `AGENTS.md` (#44), and Codex's `config.toml`,
+which `codex_mcp::render` reads (#91). Checks to come read OpenCode's
+configuration folder and the skills in `~/.agents` (#96). Those folders
 come in the way home does. `--claude-config-dir`, `--codex-home`,
 `--opencode-config-dir` and `--agents-dir` are global options on both parsers,
 and `homes::agent_homes` takes each from its option, then from the variable
@@ -8591,13 +8592,20 @@ question](#open-questions).
 Installing is the first to take them, to refuse a copy inside one ([never
 into an agent's own folder](#never-into-an-agents-own-folder)), and
 rendering a project's rules takes them to refuse a block of them there ([how
-a rule reaches the agents](#how-a-rule-reaches-the-agents)). They are
+a rule reaches the agents](#how-a-rule-reaches-the-agents)), as rendering an
+MCP server into Codex's `.codex/config.toml` takes them to refuse a file
+inside one (`codex_mcp_user_scope`). They are
 decided once per command line, with the workspace to use, into the same
 `Lookup` (`Lookup::given`), which the TUI keeps and hands to every line it
 runs (`tui::execute`), its install screen's among them: a line the TUI runs
 carries none of the four options, so deciding them again would read the
 environment the TUI was opened in, and a test that drives the TUI would reach
-the real folders. Nothing reads what is in them yet.
+the real folders. One file in them is read, and none written:
+`codex_mcp::render` reads `config.toml` in the Codex home `AgentHomes`
+gives, through a link and up to 2 MiB, to refuse a server's name it holds
+already and to warn of a project it does not mark trusted ([Codex's
+`.codex/config.toml`](#codexs-codexconfigtoml)). With no Codex home given
+it reads nothing.
 
 ## How a rule reaches the agents
 

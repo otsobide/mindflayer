@@ -1196,8 +1196,10 @@ These are easy to break from a single file without noticing.
   `Lookup::given` decides them once per command line, into the `Lookup`
   (`Lookup::agents`), and install is the first to take them, to refuse a
   copy inside one, as `agents_md::render` and `claude_rules::render` take
-  them to refuse rules there, and `claude_md` to leave the user memory file
-  out of what keeps Claude from reading `AGENTS.md`. `tui::execute` hands each line the TUI's own
+  them to refuse rules there, `claude_md` to leave the user memory file
+  out of what keeps Claude from reading `AGENTS.md`, and
+  `codex_mcp::render` to refuse a `.codex/config.toml` inside one and to
+  read, never write, the Codex home's `config.toml`. `tui::execute` hands each line the TUI's own
   with the rest of its `Lookup`, and so does its install screen: a command
   the TUI runs carries none of the four options, so it would decide them
   again from the environment.
