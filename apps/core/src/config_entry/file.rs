@@ -21,7 +21,7 @@ use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
-use super::{document, edit_document, get, Edit, EntryError, Format, Value};
+use super::{document, edit_document, get, loose_json, Edit, EntryError, Format, Value};
 
 use crate::code::codes;
 
@@ -227,6 +227,14 @@ impl ConfigFile {
         };
         fs::remove_file(&path).map_err(|source| FileError::Write { path, source })?;
         Ok(Written::Removed)
+    }
+
+    /// Whether the file would be JSON but for comments and trailing commas
+    /// ([`loose_json`]), whatever format it is read in: `false` when it is
+    /// not there. Read as an edit reads it, through the same route and up
+    /// to the same cap.
+    pub fn is_loose_json(&self) -> Result<bool, FileError> {
+        Ok(self.read()?.is_some_and(|text| loose_json(&text)))
     }
 
     /// The file's text, `None` when it is not there.

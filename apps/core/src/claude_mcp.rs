@@ -223,11 +223,13 @@ pub fn render(root: &Path, definition: &McpDefinition) -> Result<Rendered, Claud
     let entry = entry(definition)?;
     let file = config(root)?;
     let key = [SERVERS, entry.name.as_str()];
-    let edit = match file.get(&key).map_err(|error| loose(root, error))? {
+    let edit = match file.get(&key).map_err(|error| loose(&file, error))? {
         None => Edit::Insert(entry.value.clone()),
         Some(_) => Edit::Replace(entry.value.clone()),
     };
-    let written = file.edit(&key, &edit).map_err(|error| loose(root, error))?;
+    let written = file
+        .edit(&key, &edit)
+        .map_err(|error| loose(&file, error))?;
     Ok(Rendered {
         file: file.path(),
         written,
@@ -251,7 +253,7 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, ClaudeM
     if created {
         let taken = file
             .take(|document| holds_only(document, name))
-            .map_err(|error| loose(root, error))?;
+            .map_err(|error| loose(&file, error))?;
         if taken == Written::Removed {
             return Ok(taken);
         }
@@ -259,13 +261,13 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, ClaudeM
     let key = [SERVERS, name];
     if file
         .get(&key)
-        .map_err(|error| loose(root, error))?
+        .map_err(|error| loose(&file, error))?
         .is_none()
     {
         return Ok(Written::Unchanged);
     }
     file.edit(&key, &Edit::Remove)
-        .map_err(|error| loose(root, error))
+        .map_err(|error| loose(&file, error))
 }
 
 /// What is said of an entry written all the same.
@@ -321,10 +323,12 @@ fn config(root: &Path) -> Result<ConfigFile, ClaudeMcpError> {
 }
 
 /// `error`, said as [`ClaudeMcpError::NotStrict`] when the file it was
-/// refused for is not strict JSON and reads all the same as JSON with
-/// comments and trailing commas: a file somebody wrote for a reader looser
-/// than Claude's, rather than one broken for every reader.
-fn loose(root: &Path, error: FileError) -> ClaudeMcpError {
+/// refused for is not strict JSON and would be but for comments and
+/// trailing commas ([`ConfigFile::is_loose_json`]): a file somebody wrote
+/// for a reader looser than Claude's, rather than one broken for every
+/// reader, which a raw control character or a no-break space between its
+/// tokens makes it, and which keeps the error it was refused with.
+fn loose(file: &ConfigFile, error: FileError) -> ClaudeMcpError {
     let FileError::Entry {
         path,
         source:
@@ -336,21 +340,18 @@ fn loose(root: &Path, error: FileError) -> ClaudeMcpError {
     else {
         return error.into();
     };
-    let looser = ConfigFile::new(root, FILE, Format::Jsonc)
-        .map(|file| file.capped(MAX_BYTES))
-        .and_then(|file| file.get(&[SERVERS]));
-    match looser {
-        Err(FileError::Entry {
-            source: EntryError::Malformed { .. },
-            ..
-        }) => ClaudeMcpError::File(FileError::Entry {
+    // Read again for this alone: a read that fails now leaves the file
+    // said as it was refused.
+    if file.is_loose_json().unwrap_or(false) {
+        ClaudeMcpError::NotStrict { path, detail }
+    } else {
+        ClaudeMcpError::File(FileError::Entry {
             path,
             source: EntryError::Malformed {
                 format: Format::Json,
                 detail,
             },
-        }),
-        _ => ClaudeMcpError::NotStrict { path, detail },
+        })
     }
 }
 

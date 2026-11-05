@@ -9139,7 +9139,10 @@ to that, because in 0.34 the CST's own parse lets a comment through
 `allow_comments: false`. Two things no option of its covers are refused in
 JSON by a scan of the text once it has parsed: a control character written as
 itself in a string, and whitespace other than space, tab, LF and CR between
-tokens, both of which `JSON.parse` refuses.
+tokens, both of which `JSON.parse` refuses. `loose_json` holds a text to the
+same scan outside its comments, once it reads as JSONC, for a caller that
+says a file JSON but for comments and trailing commas apart from one no
+reader takes.
 
 Where a library keeps less than every byte, the module makes up the
 difference, and the tests pin what is left:
@@ -9305,7 +9308,11 @@ holding a comment or a trailing comma loses Claude every server in it, so
 it is refused saying so (`mcp_json_not_strict`) and left as it is, rather
 than given an entry Claude would never load or rewritten into one it would,
 which is its owner's to do; it is told from a file no reader takes, which
-keeps `config_malformed`, by being read again as JSONC. No approval is
+keeps `config_malformed`, by being read again as JSONC and held, outside
+its comments, to the scan strict JSON is held to
+(`config_entry::loose_json`): a raw control character in a string or a
+no-break space between tokens is no looser reader's either, and a JSONC
+read alone would take both. No approval is
 written: a person approves a project's servers when Claude asks, and a `-p`
 run starts every server the file names, approved or not.
 

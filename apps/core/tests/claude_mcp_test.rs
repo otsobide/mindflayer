@@ -374,6 +374,10 @@ fn a_comment_or_a_trailing_comma_is_refused_saying_claude_loads_none_of_the_file
             "{\n  \"mcpServers\": {\n    \"a\": {\"command\": \"x\"},\n  }\n}\n",
             "Trailing commas are not allowed",
         ),
+        (
+            "{\n  // the team's \"servers\", caf\u{e9}\u{a0}\n  \"mcpServers\": {}\n}\n",
+            "Comments are not allowed",
+        ),
     ] {
         let root = TempDir::new().unwrap();
         let path = root.path().join(FILE);
@@ -403,16 +407,38 @@ fn a_comment_or_a_trailing_comma_is_refused_saying_claude_loads_none_of_the_file
 
 #[test]
 fn a_file_no_reader_takes_is_refused_as_any_config_file_is() {
-    let root = TempDir::new().unwrap();
-    let broken = "{\n  \"mcpServers\": \n";
-    fs::write(root.path().join(FILE), broken).unwrap();
+    let name = McpMother::name();
+    for (broken, detail) in [
+        (
+            "{\n  \"mcpServers\": \n",
+            "Expected value after colon in object property",
+        ),
+        (
+            "{\n  \"mcpServers\": {\"a\": {\"command\": \"tab\there\"}}\n}\n",
+            "U+0009 in a string, not escaped,",
+        ),
+        ("{\n  \"mcpServers\":\u{a0}{}\n}\n", "U+00A0 between tokens"),
+        ("// the team's, to come\n", "Comments are not allowed"),
+        // A comment beside it makes it no looser reader's either.
+        (
+            "{\n  // the team's\n  \"mcpServers\": {\"a\": {\"command\": \"tab\there\"}}\n}\n",
+            "Comments are not allowed",
+        ),
+    ] {
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join(FILE), broken).unwrap();
 
-    let error =
-        claude_mcp::render(root.path(), &parsed(&McpMother::http(&McpMother::name()))).unwrap_err();
-
-    assert_eq!(error.code(), "config_malformed", "{error}");
-    assert!(matches!(error, ClaudeMcpError::File(_)), "{error}");
-    assert_eq!(read(root.path()), broken);
+        for result in [
+            claude_mcp::render(root.path(), &parsed(&McpMother::http(&name))).map(|_| ()),
+            claude_mcp::remove(root.path(), "a", true).map(|_| ()),
+        ] {
+            let error = result.unwrap_err();
+            assert_eq!(error.code(), "config_malformed", "{broken:?}: {error}");
+            assert!(matches!(error, ClaudeMcpError::File(_)), "{error}");
+            assert!(error.to_string().contains(detail), "{broken:?}: {error}");
+        }
+        assert_eq!(read(root.path()), broken);
+    }
 }
 
 #[test]

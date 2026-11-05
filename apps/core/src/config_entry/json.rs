@@ -21,11 +21,13 @@
 
 use std::fmt::Write as _;
 
+use jsonc_parser::common::Range;
 use jsonc_parser::cst::{
     CstContainerNode, CstInputValue, CstLeafNode, CstNewlineKind, CstNode, CstObject,
     CstObjectProp, CstRootNode,
 };
-use jsonc_parser::{CollectOptions, ParseOptions};
+use jsonc_parser::tokens::Token;
+use jsonc_parser::{CollectOptions, CommentCollectionStrategy, ParseOptions};
 
 use super::{display, number, quote, unique, Edit, EntryError, Format, Value};
 
@@ -62,9 +64,40 @@ fn parse(format: Format, text: &str) -> Result<CstRootNode, EntryError> {
     jsonc_parser::parse_to_ast(text, &CollectOptions::default(), &options(format))
         .map_err(malformed)?;
     if format == Format::Json {
-        strict(text)?;
+        strict(text, &[])?;
     }
     CstRootNode::parse(text, &options(format)).map_err(malformed)
+}
+
+/// Whether `text` would be JSON but for comments and trailing commas, the
+/// two things JSONC adds to it: one written for a reader looser than a
+/// strict one, rather than one no reader takes.
+///
+/// Read as JSONC, holding a value as [`document`] asks, and then held
+/// outside its comments to what [`strict`] holds JSON to, which
+/// jsonc-parser takes whatever its options say: a raw control character or
+/// a no-break space is no more JSONC's than JSON's. Its comments are where
+/// the parser found them, so a quote or any character inside one is read
+/// as the comment it is.
+pub(super) fn loose(text: &str) -> bool {
+    let collect = CollectOptions {
+        comments: CommentCollectionStrategy::AsTokens,
+        tokens: true,
+    };
+    let Ok(parsed) = jsonc_parser::parse_to_ast(text, &collect, &options(Format::Jsonc)) else {
+        return false;
+    };
+    if parsed.value.is_none() {
+        return false;
+    }
+    let comments: Vec<Range> = parsed
+        .tokens
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|token| matches!(token.token, Token::CommentLine(_) | Token::CommentBlock(_)))
+        .map(|token| token.range)
+        .collect();
+    strict(text, &comments).is_ok()
 }
 
 /// Refuse two things RFC 8259 does not allow, which jsonc-parser 0.34 takes
@@ -76,11 +109,17 @@ fn parse(format: Format, text: &str) -> Result<CstRootNode, EntryError> {
 ///
 /// A scan of the text rather than a walk of the CST: the text has parsed by
 /// now, so outside its strings it holds nothing but tokens, every one of
-/// them printable ASCII, and whitespace.
-fn strict(text: &str) -> Result<(), EntryError> {
+/// them printable ASCII, and whitespace, and the `comments` it is handed,
+/// in the order they stand, which are passed over whole.
+fn strict(text: &str, comments: &[Range]) -> Result<(), EntryError> {
     let mut string = false;
     let mut escape = false;
+    let mut comments = comments.iter().peekable();
     for (at, character) in text.char_indices() {
+        while comments.next_if(|comment| comment.end <= at).is_some() {}
+        if comments.peek().is_some_and(|comment| comment.start <= at) {
+            continue;
+        }
         let refused = if string {
             match character {
                 _ if escape => {
