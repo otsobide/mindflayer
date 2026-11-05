@@ -21,9 +21,10 @@ true afterwards. Its "Decisions" section holds what the owner already chose for
 the roadmap, and the one choice still pending: read it before changing a
 format, installing, MCP, credentials or the server, and carry a decision out
 rather than reopen it. `docs/agents.md` records where Claude Code, Codex and
-OpenCode read skills and rules, each fact verified on the binary or docs-only
-with a fallback: an agent path in code cites it, and a change that disagrees
-with it starts there.
+OpenCode read skills and rules, and what they make of MCP servers, each fact
+verified on the binary, docs-only with a fallback, or pending a probe run: an
+agent path in code cites it, and a change that disagrees with it starts
+there.
 
 ## Commands
 
@@ -142,8 +143,8 @@ runs it, looks at every image it wrote, and commits them.
 
 `scripts/agent-probe/probe.sh` runs the real coding agents against their APIs
 with your own login, in a temp home under `target/`, to check where they read
-skills and rules. It is never run by CI or `make test`; don't run it unless
-asked.
+skills and rules and what they make of a project's MCP servers. It is never
+run by CI or `make test`; don't run it unless asked.
 
 ## Layout
 
@@ -386,8 +387,11 @@ of the reference, `docs/reference.md`, in what the commands print, so
 changing an example's summary line means changing the reference too.
 
 Outside `apps/`, `scripts/agent-probe/` holds the agent probe: `probe.sh`
-isolates a run and checks the real home is left alone, and `<agent>.sh` holds
-one agent's checks (only `claude.sh` so far). `scripts/serves-panel.sh` is
+isolates a run and checks the real home is left alone, `<agent>.sh` holds
+one agent's checks (`claude.sh`, and `codex.sh` and `opencode.sh`, which
+check MCP servers only so far), and `mcp.sh` and `mcp_server.py` are what the
+MCP checks share, the second a stand-in MCP server that writes down what an
+agent started it with and sent it. `scripts/serves-panel.sh` is
 what `make cli/release/check` runs: it starts a release's `mindweaver ui` with a
 home of its own and every agent home empty, and asks it for the panel.
 `docs/api/schemas` holds the API's JSON Schemas, a file a root, which the

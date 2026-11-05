@@ -975,9 +975,9 @@ Browser` hold a space no key can, so the rule as #87 wrote it would hold
 nothing: Mindweaver takes them to cover each spelling of that space a key
 can hold, an underscore, a hyphen or nothing (`claude_preview`,
 `claude-preview`, `claudepreview`), in any case. Which of those Claude
-compares is not known without #18's run, and holding all three costs no
-name anybody would give a server of their own; a hyphen written as an
-underscore elsewhere is another name (`claude_in_chrome`).
+compares is not known, since none of #18's checks asks it, and holding all
+three costs no name anybody would give a server of their own; a hyphen
+written as an underscore elsewhere is another name (`claude_in_chrome`).
 `anthropic-skills`, the name Claude gives the skills Anthropic provides, is
 only warned of (`mcp_name_claimed`, a `ValidationIssue::is_warning`): Claude
 refuses no server by it, and a definition named so is valid. Each agent's
@@ -1211,8 +1211,9 @@ and no file an agent reads, so they needed what the first two did not:
   table, since each agent reads its servers as entries of its own config
   file, the files `Agent::reads_files` names already ([what says an agent
   works in a project](agents.md#what-says-an-agent-works-in-a-project),
-  whose table names `.mcp.json`, `.codex/config.toml` and `opencode.json`,
-  until #18 adds the MCP section with what each agent does with them). The
+  whose table names `.mcp.json`, `.codex/config.toml` and `opencode.json`;
+  [MCP servers](agents.md#mcp-servers) says what each agent does with
+  them). The
   renderers that write there are #90 to #94's.
 
 ## The two levels
@@ -10284,6 +10285,44 @@ command line, from how an agent starts or reaches it or from a template
 ([adding one](#adding-an-mcp-server)), and laid out what `show` says of
 its transport and inputs.
 
+Checking it, #18 added MCP checks to `scripts/agent-probe`, run by hand.
+Claude Code's and OpenCode's ran on 2026-11-05; Codex's were not run, since
+the owner has no Codex subscription, so what they bear on stands as
+expected ([docs/agents.md, MCP servers](agents.md#mcp-servers)). What each
+result bears on, and what came of it:
+
+- **An approved `.mcp.json` entry with a `type` loads in Claude**
+  (`claude-mcp`): verified, so #90's shape stands. A `-p` run also started
+  the entry nobody approved, so approval gates nothing there, and an entry
+  #90 writes runs in a `-p` session as soon as the file holds it.
+- **An http entry with no `type`** (`claude-mcp-untyped`, recorded): Claude
+  drops it alone and never reaches its URL, and the file's other servers
+  load. #90 writes `type` whatever comes of it, and need refuse no file for
+  holding such an entry; #96 may report it.
+- **A comment or a trailing comma in `.mcp.json`** (`claude-mcp-comment`,
+  `claude-mcp-comma`, recorded): Claude refuses the file whole ("MCP config
+  is not valid JSON"), none of its servers loading. So #90 reads
+  `.mcp.json` as strict JSON, and one holding either is refused, saying
+  why, rather than given an entry Claude will never load.
+- **A trusted project's `.codex/config.toml` loads, an untrusted one's does
+  not** (`codex-mcp-trusted`, `codex-mcp-untrusted`): not run, taken as
+  expected. Were an untrusted project's servers started, #91's trust
+  warning would go. Were a trusted one's not, Codex cannot be reached at
+  project scope, and this decision comes back for Codex, with D-22's user
+  scope. #94 counts a server installed into an untrusted project as
+  reaching no Codex, as #91 warns.
+- **A server of the same name in the user's `config.toml`**
+  (`codex-mcp-collision`, recorded): not run, so it settles nothing, and
+  #91's open choice is #91's to make without it: refusing a name a lower
+  layer holds is the reading that is safe whatever Codex does.
+- **V2's `mcp.servers` loads in V2 and in 1.19.4, and V1's `mcp.<name>` in
+  V2** (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`):
+  verified on 2.2.5, 2.1.3 and 1.19.4, so #92 writes D-12's minimal V2
+  entry, and keeps V1's shape in a file that already uses it.
+- **Each agent loads its servers from the file the target table will name**
+  (every run): verified for `.mcp.json` and `opencode.json`, taken as
+  expected for `.codex/config.toml`. #93's MCP targets stand.
+
 ### D-11: MCP secrets are environment references
 
 A secret is written as a reference in each agent's own syntax (Claude `${VAR}`;
@@ -10311,6 +10350,38 @@ given whole. #88's `add mcp` takes a secret only as the name of the
 variable it is read from (`--secret-env`, `--secret-header`,
 `--bearer-env`), each in a shape every agent, Codex included, can be given,
 and refuses a value shaped like a token where a value is written as typed.
+
+Checking it, #18's checks put a reference in every place a renderer would,
+naming a variable with a value of its own, and read what a stand-in server
+was started with or sent ([docs/agents.md, MCP
+servers](agents.md#mcp-servers)). Claude Code's and OpenCode's ran on
+2026-11-05, Codex's not. What each bears on, and what came of it:
+
+- **Claude expands `${VAR}` in `args`, `env`, `url` and `headers`, also
+  inside a longer value** (`claude-mcp`): verified, so #87's report gives
+  Claude every place, and #90 writes the reference in each.
+- **Codex passes `${VAR}` on as written, in `args`, `env` and `url`**
+  (`codex-mcp-trusted`): not run, taken as expected. This is why Codex
+  cannot express a secret argument or a secret inside a URL. Were Codex to
+  expand one after all, #87 would drop that shape from Codex's list, and
+  #91 would write the reference.
+- **`env_vars`, `env_http_headers` and `bearer_token_env_var` fill a value
+  from a variable** (`codex-mcp-trusted`): not run, taken as expected. One
+  that does not would leave its shape inexpressible in Codex: #87 would
+  list it and #91 refuse it, where it means to write it.
+- **OpenCode expands `{env:}` in the command, the environment, the URL and
+  the headers, in both lines** (`opencode-mcp-v2`, `opencode-mcp-v1-shape`,
+  `opencode-mcp-1-19`): verified on 2.2.5, 2.1.3 and 1.19.4, the command's
+  first word and a reference inside a longer value included.
+- **What V2's background server fills `{env:}` from**
+  (`opencode-mcp-service`, recorded): its own environment, on 2.2.5 and
+  2.1.3. A server started apart, without the variables, filled none of the
+  five from the list that asked; one the list started itself filled all
+  five. So in V2 a reference holds only once its variable has reached the
+  server, started from a shell that has it or given it with `opencode
+  service set env`, and "works without Mindweaver running" needs saying
+  again for V2: #92 would warn of it, and #96 would check the server's
+  variables. That change is the owner's, here, and stays open until made.
 
 ### D-12: OpenCode gets the V2 MCP shape
 
@@ -10639,8 +10710,8 @@ back as it was, the ledger dumps and the markers under
 `apps/core/tests/fixtures` and the version 2 `mind.toml` that only tests
 still write. A new marker's comments name the new product and commands,
 and so do the examples' (`examples/.mindflayer/flayer.toml`, whose path
-alone is #229's), which changes no format. The agent probe is renamed on #18's branch, which
-was changing it at the same time (open questions). `make install` and `make dev/link`
+alone is #229's), which changes no format. The agent probe was renamed with #18,
+whose branch was changing it at the same time. `make install` and `make dev/link`
 leave a `flayer` or an `mf` an older build put on the PATH where it is,
 the user's to remove ([the reference](reference.md#getting-started) says
 how).
@@ -10759,13 +10830,13 @@ it once as it closes.
   the read types that hold them were. Each joins `value` when a rule is
   found that it holds, as `ProjectId` did; one with no rule of its own, a
   name named apart, joins when a mix-up between two of them is found.
-- **What #18's run would move of an MCP server.** Every name an agent
-  keeps for itself and every shape it cannot express is docs-only
-  ([docs/agents.md](agents.md#mcp-servers)): which spelling of `Claude
-  Preview` Claude compares, whether Codex keeps a name of its own, whether
-  OpenCode's V1 line takes sse where its V2 shape does not. A fact the run
-  moves changes one table in `mcp::name` or one arm of
-  `McpDefinition::inexpressible`.
+- **What no run has moved of an MCP server.** Every name an agent keeps
+  for itself and every shape it cannot express is docs-only
+  ([docs/agents.md](agents.md#mcp-servers)), since none of #18's checks
+  asks it: which spelling of `Claude Preview` Claude compares, whether
+  Codex keeps a name of its own, whether OpenCode's V1 line takes sse where
+  its V2 shape does not. A fact a later run moves changes one table in
+  `mcp::name` or one arm of `McpDefinition::inexpressible`.
 - **A secret in a program's environment, for Codex.** Codex passes a
   variable on to a program under its own name (`env_vars`), so a secret
   written as the whole value of the `env` key its variable is named by is
@@ -11834,15 +11905,29 @@ it once as it closes.
   that is the `AGENTS.md` through a link, Claude reads the block through
   both, and whether it loads the one file twice is not recorded.
 - **Codex and OpenCode on their binaries.** #17 ran only Claude Code, so
-  every Codex and OpenCode fact in [docs/agents.md](agents.md) is docs-only,
-  each with a fallback. Its checks 2 (OpenCode given the same skill in both
-  folders) and 5 (Codex and project trust), and the Codex and OpenCode halves
-  of 1 and 4, are what a `codex.sh` and an `opencode.sh` beside the probe
-  would run. #34 relies on them already, writing `.agents/skills` for both
+  every Codex and OpenCode fact about skills and rules in
+  [docs/agents.md](agents.md) is docs-only, each with a fallback. Its checks
+  2 (OpenCode given the same skill in both folders) and 5 (Codex and project
+  trust), and the Codex and OpenCode halves of 1 and 4, are what `codex.sh`
+  and `opencode.sh` beside the probe would run beside the MCP checks they
+  hold now (#18). #34 relies on them already, writing `.agents/skills` for both
   and trusting OpenCode with identical copies in two folders, and #42 will.
   The [target table](#agents-and-where-each-kind-reaches-them)'s
   `.agents/skills` for Codex and OpenCode rests on them too; were one to read
   elsewhere, its arm in `standard` is the one line to change.
+- **Codex's MCP facts are docs-only.** #18's checks ran on 2026-11-05 for
+  Claude Code 2.1.318 and OpenCode 2.2.5, 2.1.3 and 1.19.4, and not for
+  Codex, since the owner has no Codex subscription
+  ([docs/agents.md](agents.md#mcp-servers)). What #87 and #91 build on for
+  Codex stands as its documentation and binary say, and D-10 and D-11 say
+  what each result would change; `codex.sh` holds the runs for when there
+  is a login to make them with.
+- **Whose environment fills OpenCode's references.** V2's background
+  server fills `{env:}` from its own environment, not from the client's
+  that asks (D-11, the run of 2026-11-05), so a secret given to a V2
+  server Mindweaver did not start reaches it only through the shell that
+  started it or `opencode service set env`. Whether #92 warns of it, and
+  #96 checks the server's variables, is the owner's to say.
 - **Folders an agent reads and is sent nothing in.** A project marked by its
   settings is read in its agents' targets and in its authored folder, not in
   every folder they read ([read where its agents
@@ -12191,13 +12276,6 @@ it once as it closes.
   same lockfile, on whatever Node the image has, rather than embed the one
   `test (web)` tested; a variable telling `make web/build/if-node` to take
   `dist/` as it is would settle it, at the price of a knob only CI turns.
-- **The agent probe still says Mindflayer.** `scripts/agent-probe/` runs
-  neither binary: it writes the blocks and Claude's rules folder itself,
-  spelled as a Mindflayer build spelled them, which this build still reads,
-  and its comments name the product the old way
-  ([D-26](#d-26-the-product-is-mindweaver)), as the runs docs/agents.md
-  records do. #228 and #229 left it as it was, since #18 was changing the
-  same scripts on a branch of its own, and its rename is made there.
 - **A writer waiting while a workspace is moved to the new names.** The
   move holds the workspace's lock, which is on a file in the folder it
   renames, and follows it there; a writer that opened the lock file before
