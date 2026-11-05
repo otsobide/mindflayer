@@ -1,4 +1,5 @@
-//! One line per request, with the launch token taken out.
+//! One line per request, and per job the writer thread takes, with the
+//! launch token taken out.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -48,6 +49,68 @@ impl Log {
             &format!("{method} {target} {status} {}", millis(took)),
             self.token.as_str(),
         )
+    }
+}
+
+/// How the writer thread's work on a task went before any of it ran, for
+/// the line that says so ([`Log::planned`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Planned {
+    /// Its lines were worked out, this many, and it runs.
+    Lines(usize),
+    /// The backend refused its lines, so none of it runs.
+    Refused,
+    /// The backend panicked working them out.
+    Panicked,
+}
+
+impl Log {
+    /// Say `line`, with the token taken out wherever it turns up, as every
+    /// line the server logs is, whoever built it.
+    fn say(&self, line: &str) {
+        (self.sink)(&scrub(line, self.token.as_str()));
+    }
+
+    /// A task taken off the writer thread's queue, `queued` after it was
+    /// sent, and its lines worked out in `working`, as `planned` says:
+    /// `run: 0ms waiting its turn, 1ms working out its 1 line`. Said before
+    /// any line runs, so a run that never ends is still said to have
+    /// started, and when.
+    pub(crate) fn planned(&self, queued: Duration, working: Duration, planned: Planned) {
+        let waited = format!(
+            "run: {} waiting its turn, {}",
+            millis(queued),
+            millis(working)
+        );
+        self.say(&match planned {
+            Planned::Lines(1) => format!("{waited} working out its 1 line"),
+            Planned::Lines(lines) => format!("{waited} working out its {lines} lines"),
+            Planned::Refused => format!("{waited} working out its lines, which were refused"),
+            Planned::Panicked => {
+                format!("{waited} working out its lines, which panicked")
+            }
+        });
+    }
+
+    /// A task's `lines` run, in `took`, however that went: `run: 5402ms
+    /// running its 1 line`.
+    pub(crate) fn ran(&self, took: Duration, lines: usize) {
+        let lines = match lines {
+            1 => String::from("1 line"),
+            lines => format!("{lines} lines"),
+        };
+        self.say(&format!("run: {} running its {lines}", millis(took)));
+    }
+
+    /// A switch taken off the writer thread's queue, `queued` after it was
+    /// sent, and made, or refused, in `took`: `switch: 0ms waiting its
+    /// turn, 3ms switching`.
+    pub(crate) fn switched(&self, queued: Duration, took: Duration) {
+        self.say(&format!(
+            "switch: {} waiting its turn, {} switching",
+            millis(queued),
+            millis(took)
+        ));
     }
 }
 

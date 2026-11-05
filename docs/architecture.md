@@ -5818,6 +5818,18 @@ is most often read for a request that took too long, and a client's clock
 cannot tell the server's part of that from its own (#240).
 Never a header, since the cookie and the Bearer token travel in them, and never
 a body.
+
+The writer thread says what it did with each job in the same log, in lines
+`log::Log` builds as it builds a request's: a run once it is taken off the
+queue and its lines are worked out, `run: 0ms waiting its turn, 1ms working
+out its 1 line`, before any of them runs, so a run that never ends is said
+to have started; again once they have run, however that went, `run: 5402ms
+running its 1 line`; and a switch once it is made or refused, `switch: 0ms
+waiting its turn, 3ms switching`. Waiting its turn is the time behind every
+job queued before it, which the run's request line, said once it is
+answered, cannot tell from the run's own time or from what carrying the
+answer took (#240). None of them says what a task was or which lines it
+ran, which are the request's body.
 The value of a `token` parameter is replaced by `<redacted>` however its name
 is encoded, decoded the way the exchange decodes it to find it; and the token
 is scrubbed from anywhere else in the line, upper-cased or pasted into a path,

@@ -4,12 +4,14 @@ use std::io;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::{mpsc, Arc};
 use std::thread;
+use std::time::Instant;
 
 use serde_json::json;
 use tokio::sync::oneshot;
 
 use crate::code::Condition;
 use crate::events::{Event, Events};
+use crate::log::{Log, Planned};
 use crate::transcript::{Ran, Transcript};
 use crate::watcher::Watcher;
 use crate::{Backend, Refusal};
@@ -32,16 +34,18 @@ pub(crate) struct Failed {
     pub(crate) message: &'static str,
 }
 
-/// What waits its turn on the thread, and where to say how it went: a
-/// task to run, or a switch of what the backend acts on, which takes its
-/// turn as a task does, so it never lands while one runs.
+/// What waits its turn on the thread, when it was queued, and where to say
+/// how it went: a task to run, or a switch of what the backend acts on,
+/// which takes its turn as a task does, so it never lands while one runs.
 enum Job<B: Backend> {
     Run {
         task: B::Task,
+        sent: Instant,
         reply: oneshot::Sender<Done>,
     },
     Switch {
         to: B::Switch,
+        sent: Instant,
         reply: oneshot::Sender<Switched>,
     },
 }
@@ -62,15 +66,17 @@ pub(crate) struct Writer<B: Backend> {
 
 impl<B: Backend> Writer<B> {
     /// Start the thread, recording every run in `transcript`, telling
-    /// `events` as each starts and finishes and as a switch is taken, and
-    /// having `watcher` watch what the backend names after a switch. It
-    /// lives as long as somebody can still queue a task, and ends when the
-    /// last router holding this writer is dropped.
+    /// `events` as each starts and finishes and as a switch is taken,
+    /// having `watcher` watch what the backend names after a switch, and
+    /// saying in `log`, when there is one, how long each job waited its
+    /// turn and took. It lives as long as somebody can still queue a task,
+    /// and ends when the last router holding this writer is dropped.
     pub(crate) fn start(
         backend: Arc<B>,
         transcript: Transcript,
         events: Events,
         watcher: Arc<Watcher>,
+        log: Option<Arc<Log>>,
     ) -> io::Result<Self> {
         let (queue, jobs) = mpsc::channel::<Job<B>>();
         thread::Builder::new()
@@ -78,13 +84,17 @@ impl<B: Backend> Writer<B> {
             .spawn(move || {
                 // Nobody may be waiting any more: a client that gives up
                 // does not take its task back, which has already run.
+                let log = log.as_deref();
                 for job in jobs {
                     match job {
-                        Job::Run { task, reply } => {
-                            let _ = reply.send(perform(&*backend, task, &transcript, &events));
+                        Job::Run { task, sent, reply } => {
+                            let took = Took { sent, log };
+                            let _ =
+                                reply.send(perform(&*backend, task, &transcript, &events, took));
                         }
-                        Job::Switch { to, reply } => {
-                            let _ = reply.send(switch(&*backend, to, &watcher, &events));
+                        Job::Switch { to, sent, reply } => {
+                            let took = Took { sent, log };
+                            let _ = reply.send(switch(&*backend, to, &watcher, &events, took));
                         }
                     }
                 }
@@ -96,8 +106,9 @@ impl<B: Backend> Writer<B> {
     /// to have run, or to have been refused.
     pub(crate) async fn run(&self, task: B::Task) -> Done {
         let (reply, done) = oneshot::channel();
+        let sent = Instant::now();
         self.queue
-            .send(Job::Run { task, reply })
+            .send(Job::Run { task, sent, reply })
             .map_err(|_| stopped())?;
         done.await.map_err(|_| stopped())?
     }
@@ -106,8 +117,9 @@ impl<B: Backend> Writer<B> {
     /// for it to have been taken, or refused.
     pub(crate) async fn switch(&self, to: B::Switch) -> Switched {
         let (reply, done) = oneshot::channel();
+        let sent = Instant::now();
         self.queue
-            .send(Job::Switch { to, reply })
+            .send(Job::Switch { to, sent, reply })
             .map_err(|_| stopped())?;
         done.await.map_err(|_| stopped())?
     }
@@ -119,6 +131,19 @@ fn stopped() -> Failed {
         condition: Condition::WriterStopped,
         message: "the thread that runs tasks has stopped",
     }
+}
+
+/// When a job was queued, and the log to say how long it waited and took
+/// in, if the front end gave one.
+///
+/// Said around the backend's calls rather than worked out from the reply:
+/// a request line says only how long the whole answer took, and a run that
+/// took seconds could have waited behind another, been slow to work out,
+/// or been slow to run, which a log says apart (#240).
+#[derive(Clone, Copy)]
+struct Took<'a> {
+    sent: Instant,
+    log: Option<&'a Log>,
 }
 
 /// The backend panicked, as `message` says where, so there is no answer
@@ -141,6 +166,12 @@ fn panicked(message: &'static str) -> Failed {
 /// is told once the run is in the transcript, as the reply is sent, so
 /// whoever asks for the transcript on hearing it finds the run there.
 ///
+/// Said in the log, when there is one, once its lines are worked out, with
+/// how long it waited its turn and how long they took to work out, and
+/// again once they have run, however that went, with how long they took
+/// ([`Took`]): the first before any line runs, so a run that never ends
+/// is said to have started.
+///
 /// A backend that panics has a bug, but the thread outlives it so the
 /// tasks queued behind can still run. An outcome that will not serialize is
 /// still a run that happened, so it is recorded as an error beside the
@@ -152,9 +183,21 @@ fn perform<B: Backend>(
     task: B::Task,
     transcript: &Transcript,
     events: &Events,
+    took: Took<'_>,
 ) -> Done {
     let failed = || panicked("the backend panicked while running the task");
-    let lines = match panic::catch_unwind(AssertUnwindSafe(|| backend.preview(&task))) {
+    let queued = took.sent.elapsed();
+    let working = Instant::now();
+    let planned = panic::catch_unwind(AssertUnwindSafe(|| backend.preview(&task)));
+    if let Some(log) = took.log {
+        let planned = match &planned {
+            Ok(Ok(preview)) => Planned::Lines(preview.lines.len()),
+            Ok(Err(_)) => Planned::Refused,
+            Err(_) => Planned::Panicked,
+        };
+        log.planned(queued, working.elapsed(), planned);
+    }
+    let lines = match planned {
         Ok(Ok(preview)) => preview.lines,
         // A refused task ran nothing, so it is no run to replay.
         Ok(Err(refusal)) => return Ok(Err(refusal)),
@@ -163,7 +206,12 @@ fn perform<B: Backend>(
     events.publish(Event::CommandStarted {
         lines: lines.clone(),
     });
-    let done = match panic::catch_unwind(AssertUnwindSafe(move || backend.run(task))) {
+    let running = Instant::now();
+    let ran = panic::catch_unwind(AssertUnwindSafe(move || backend.run(task)));
+    if let Some(log) = took.log {
+        log.ran(running.elapsed(), lines.len());
+    }
+    let done = match ran {
         Ok(Ok(outcome)) => {
             let outcome = serde_json::to_value(outcome).unwrap_or_else(
                 |error| json!({ "error": format!("the backend's outcome is not JSON: {error}") }),
@@ -190,11 +238,22 @@ fn perform<B: Backend>(
 /// Told for a backend that panics too, which may have switched before it
 /// did: reading everything again is how the panel finds out, and costs
 /// nothing when nothing moved. Not for a refusal, which switched nothing.
-fn switch<B: Backend>(backend: &B, to: B::Switch, watcher: &Watcher, events: &Events) -> Switched {
+fn switch<B: Backend>(
+    backend: &B,
+    to: B::Switch,
+    watcher: &Watcher,
+    events: &Events,
+    took: Took<'_>,
+) -> Switched {
+    let queued = took.sent.elapsed();
+    let switching = Instant::now();
     let switched = panic::catch_unwind(AssertUnwindSafe(move || backend.switch(to)));
     if !matches!(switched, Ok(Err(_))) {
         watcher.again();
         events.switched();
+    }
+    if let Some(log) = took.log {
+        log.switched(queued, switching.elapsed());
     }
     switched.map_err(|_| panicked("the backend panicked while switching"))
 }

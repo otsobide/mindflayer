@@ -16,7 +16,7 @@ async fn every_request_is_logged_once_answered() {
     get(&server, "/api/v1/transcript?view=all", Auth::Nothing).await;
     get(&server, "/api/nowhere", token).await;
 
-    let lines = lines.lock().unwrap();
+    let lines = request_lines(&lines);
     let said: Vec<&str> = lines.iter().map(|line| untimed(line).0).collect();
     assert_eq!(
         said,
@@ -61,7 +61,7 @@ async fn a_logged_line_says_how_long_the_answer_took() {
     drop(release);
     assert_eq!(run.await.unwrap().status, StatusCode::OK);
 
-    let lines = lines.lock().unwrap();
+    let lines = request_lines(&lines);
     assert_eq!(lines.len(), 2, "{lines:#?}");
     let (read, read_took) = untimed(&lines[0]);
     let (ran, run_took) = untimed(&lines[1]);
@@ -69,6 +69,128 @@ async fn a_logged_line_says_how_long_the_answer_took() {
     assert_eq!(ran, "POST /api/v1/tasks 200");
     assert!(run_took >= held, "{lines:#?}");
     assert!(read_took < run_took, "{lines:#?}");
+}
+
+/// Every request's line, in the order they were answered, without the
+/// writer thread's.
+fn request_lines(lines: &Mutex<Vec<String>>) -> Vec<String> {
+    lines
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|line| !line.starts_with("run: ") && !line.starts_with("switch: "))
+        .cloned()
+        .collect()
+}
+
+/// Every line the writer thread said, in the order it said them, without
+/// the request lines around them: each with its times written `Nms`, and
+/// those times.
+fn writer_lines(lines: &Mutex<Vec<String>>) -> Vec<(String, Vec<Duration>)> {
+    lines
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|line| line.starts_with("run: ") || line.starts_with("switch: "))
+        .map(|line| times(line))
+        .collect()
+}
+
+/// In the order the thread took them, each run's wait for its turn and the
+/// time its lines took to work out, said before any runs, then how long
+/// they ran once they have: a run queued behind one held waits its turn
+/// for as long as the hold, which the first says it ran for.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_writer_says_how_long_each_run_waited_its_turn_and_ran() {
+    let fake = Fake::default();
+    let hold = Arc::clone(&fake.hold);
+    let (server, lines) = launch_logging(fake);
+    let server = Arc::new(server);
+    let write = |task: Value| {
+        let server = Arc::clone(&server);
+        tokio::spawn(async move {
+            post(&server, "/api/v1/tasks", Auth::Bearer(server.token()), task).await
+        })
+    };
+    let release = Release(Arc::clone(&hold));
+    let first = write(json!({ "name": "first", "hold": true }));
+    let reached = Arc::clone(&hold);
+    tokio::task::spawn_blocking(move || reached.reached())
+        .await
+        .unwrap();
+    let said = writer_lines(&lines);
+    assert_eq!(
+        said.len(),
+        1,
+        "said to have started while it runs: {said:#?}"
+    );
+
+    let second = write(json!({ "name": "second" }));
+    // Given time to arrive, so all of the hold below is time it waited.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let held = Duration::from_millis(150);
+    tokio::time::sleep(held).await;
+    drop(release);
+    assert_eq!(first.await.unwrap().status, StatusCode::OK);
+    assert_eq!(second.await.unwrap().status, StatusCode::OK);
+
+    let said = writer_lines(&lines);
+    let started = "run: Nms waiting its turn, Nms working out its 1 line";
+    let ran = "run: Nms running its 1 line";
+    let words: Vec<&str> = said.iter().map(|(words, _)| words.as_str()).collect();
+    assert_eq!(words, [started, ran, started, ran], "{said:#?}");
+    assert!(
+        said[1].1[0] >= held,
+        "the first ran for the hold: {said:#?}"
+    );
+    assert!(said[2].1[0] >= held, "the second waited for it: {said:#?}");
+    assert!(
+        said[0].1[0] < held,
+        "the first waited for nothing: {said:#?}"
+    );
+}
+
+/// A task whose lines are refused is said to have been, and nothing runs;
+/// one whose run panics is still said to have run, and for how long; and
+/// a switch takes its turn as a run does, and is said so.
+#[tokio::test]
+async fn the_writer_says_what_came_of_a_refusal_a_panic_and_a_switch() {
+    let (server, lines) = launch_logged();
+    let token = Auth::Bearer(server.token());
+
+    post(
+        &server,
+        "/api/v1/tasks",
+        token,
+        json!({ "name": "no", "refuse": true }),
+    )
+    .await;
+    post(
+        &server,
+        "/api/v1/tasks",
+        token,
+        json!({ "name": "bug", "panic": true }),
+    )
+    .await;
+    post(
+        &server,
+        "/api/v1/switch",
+        token,
+        json!({ "to": "elsewhere" }),
+    )
+    .await;
+
+    let said = writer_lines(&lines);
+    let words: Vec<&str> = said.iter().map(|(words, _)| words.as_str()).collect();
+    assert_eq!(
+        words,
+        [
+            "run: Nms waiting its turn, Nms working out its lines, which were refused",
+            "run: Nms waiting its turn, Nms working out its 1 line",
+            "run: Nms running its 1 line",
+            "switch: Nms waiting its turn, Nms switching",
+        ]
+    );
 }
 
 #[tokio::test]

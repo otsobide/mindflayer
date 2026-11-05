@@ -232,6 +232,7 @@ fn route<B: Backend>(
             transcript.clone(),
             events.clone(),
             Arc::clone(&watcher),
+            log.clone(),
         )?,
         _watcher: watcher,
         backend,

@@ -385,6 +385,31 @@ pub fn launch_logging(fake: Fake) -> (Listening, Arc<Mutex<Vec<String>>>) {
     (server, lines)
 }
 
+/// A logged line with every time it says, `3ms`, written `Nms`, and those
+/// times in the order it says them: what a test holds a line of the writer
+/// thread's to, whose times are in the middle of it.
+pub fn times(line: &str) -> (String, Vec<Duration>) {
+    let mut said = Vec::new();
+    let mut times = Vec::new();
+    for word in line.split(' ') {
+        let (bare, after) = match word.strip_suffix(',') {
+            Some(bare) => (bare, ","),
+            None => (word, ""),
+        };
+        match bare
+            .strip_suffix("ms")
+            .and_then(|millis| millis.parse().ok())
+        {
+            Some(millis) => {
+                times.push(Duration::from_millis(millis));
+                said.push(format!("Nms{after}"));
+            }
+            None => said.push(word.to_owned()),
+        }
+    }
+    (said.join(" "), times)
+}
+
 /// A logged line without the time it says at its end, ` 3ms`, and that
 /// time: what a test holds a line's words to, apart from a time no test
 /// can say beforehand.

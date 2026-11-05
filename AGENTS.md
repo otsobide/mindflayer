@@ -284,7 +284,8 @@ under `apps/` with its own `Makefile`:
   `src/transcript.rs` what
   the session ran, `src/events.rs` the bus `/api/v1/events` streams,
   `src/watcher.rs` what watches the paths the backend names and tells the
-  bus what changed, `src/log.rs` the redacting request log,
+  bus what changed, `src/log.rs` the redacting log, a line for each
+  request and for each job the writer takes, with how long it took,
   `src/panel.rs` the embedded panel (`apps/web/dist`), and under its
   `schema` feature `src/schema.rs` the roots of the API's schemas it gives
   of its own (`Preview`, `Ran`, `Event`, `Refused`) and its part of the
