@@ -55,7 +55,7 @@ use crate::agent::Agent;
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
 use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
-use crate::mcp::{Inexpressible, McpDefinition, Transport, TransportType};
+use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
 use crate::value::{ArtifactName, InputName, VariableName};
 
 /// Where Claude reads a project's servers, from its root.
@@ -363,40 +363,11 @@ fn holds_only(document: &Value, name: &str) -> bool {
 }
 
 /// `text` with each placeholder of an input in `read` written as Claude's
-/// reference to the variable it is read from, and every other byte as it
-/// is, a brace naming no input among them: a `${` among them refuses the
-/// entry before this is asked ([`Inexpressible::TextExpanded`]).
-///
-/// In one pass from the left, so a reference written in place of one
-/// placeholder is never read again as another: `${A}` holds `{A}`, which
-/// another input may be named.
+/// reference to the variable it is read from, `${VAR}`, and every other
+/// byte as it is, a brace naming no input among them: a `${` among them
+/// refuses the entry before this is asked ([`Inexpressible::TextExpanded`]).
 fn referring(text: &str, read: &[(&InputName, &VariableName)]) -> String {
-    let mut written = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(open) = rest.find('{') {
-        written.push_str(&rest[..open]);
-        let after = &rest[open + 1..];
-        let named = after.find('}').and_then(|close| {
-            let name = &after[..close];
-            read.iter()
-                .find(|(input, _)| input.as_str() == name)
-                .map(|(_, variable)| (close, variable))
-        });
-        match named {
-            Some((close, variable)) => {
-                written.push_str("${");
-                written.push_str(variable.as_str());
-                written.push('}');
-                rest = &after[close + 1..];
-            }
-            None => {
-                written.push('{');
-                rest = after;
-            }
-        }
-    }
-    written.push_str(rest);
-    written
+    mcp::referring(text, read, |variable| format!("${{{variable}}}"))
 }
 
 #[cfg(test)]
