@@ -19,6 +19,9 @@
 //! on, see to no record, and a front end that added with them would leave a
 //! stale one in place.
 //!
+//! [`create`]: crate::create::create
+//! [`create_from`]: crate::create::create_from
+//!
 //! Changing a record opens the ledger to write, which scrubs it first
 //! ([`WeaverWorkspace::ledger_to_write`]), so each result that may also hands
 //! back what that took out ([`Scrub`]) for the front end to say. Said
@@ -34,7 +37,7 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
 use crate::code::codes;
-use crate::create::{create, create_from, CreateError};
+use crate::create::{scaffold, CreateError, Start};
 use crate::frontmatter;
 use crate::gather::Scrub;
 use crate::hash;
@@ -44,7 +47,6 @@ use crate::ledger::Carried;
 use crate::mcp::McpDefinition;
 use crate::paths;
 use crate::skill::SkillManifest;
-use crate::template::Template;
 use crate::value::{ArtifactName, ContentHash};
 use crate::workspace::{
     replace_bytes_unresolved, replace_file, MindProject, WeaverWorkspace, WorkspaceError,
@@ -127,26 +129,29 @@ pub struct Added {
     pub scrub: Scrub,
 }
 
-/// Write a new artifact into `project`, from `template` when one is given
-/// ([`create`], [`create_from`]), and drop any record of an install under its
-/// name.
+/// Write a new artifact into `project`, from what `start` says beside its
+/// name and its description (from scratch, a template, or for an MCP
+/// server how it is started or reached, as [`create`], [`create_from`] and
+/// [`create_server`] write one), and drop any record of an install under
+/// its name.
 ///
 /// `workspace` is the one the front end consulted about the project, given
 /// rather than found by walking up from it: a walk misses every workspace
 /// that links the project from somewhere that is not above it. With none,
 /// there is no record to drop.
+///
+/// [`create`]: crate::create::create
+/// [`create_from`]: crate::create::create_from
+/// [`create_server`]: crate::create::create_server
 pub fn add(
     workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
     description: &str,
-    template: Option<&Template>,
+    start: Start<'_>,
 ) -> Result<Added, CreateError> {
-    let artifact = match template {
-        None => create(project, kind, name, description),
-        Some(template) => create_from(project, kind, name, description, template),
-    }?;
+    let artifact = scaffold(project, kind, name, description, start)?;
     let mut scrub = Scrub::default();
     let stale = disowned(workspace, project, kind, name, artifact.path(), &mut scrub);
     Ok(Added {
@@ -1052,12 +1057,12 @@ fn rename_mcp(
             path: target.path.clone(),
             source,
         })?;
-        Some(
-            rewrite_key(&source, to).map_err(|reason| LifecycleError::Rewrite {
+        Some(crate::mcp::declaring(&source, to, None).map_err(|reason| {
+            LifecycleError::Rewrite {
                 path: target.path.clone(),
                 reason,
-            })?,
-        )
+            }
+        })?)
     } else {
         None
     };
@@ -1101,37 +1106,6 @@ fn rename_mcp(
         path: file,
         artifact: Some(artifact),
     })
-}
-
-/// A definition with its `name` set to `to` and every other byte as it was,
-/// the comment on its line included: rewritten through `toml_edit`, as a
-/// marker is, and read back to make sure the one value changed what it was
-/// meant to and nothing else.
-fn rewrite_key(source: &str, to: &str) -> Result<String, String> {
-    let before = McpDefinition::parse(source).map_err(|error| error.to_string())?;
-    let mut document: toml_edit::DocumentMut = source
-        .parse()
-        .map_err(|error: toml_edit::TomlError| error.to_string())?;
-    let Some(value) = document
-        .get_mut("name")
-        .and_then(toml_edit::Item::as_value_mut)
-    else {
-        return Err(String::from(
-            "its `name` is not a value at the top of the file",
-        ));
-    };
-    let decor = value.decor().clone();
-    *value = toml_edit::Value::from(to);
-    *value.decor_mut() = decor;
-    let rewritten = document.to_string();
-
-    let after = McpDefinition::parse(&rewritten).map_err(|error| error.to_string())?;
-    if after != named(&before, to) {
-        return Err(String::from(
-            "rewriting that value would change more than the name",
-        ));
-    }
-    Ok(rewritten)
 }
 
 /// `definition`, declaring `to` as its name.

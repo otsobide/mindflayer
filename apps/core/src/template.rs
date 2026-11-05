@@ -104,8 +104,9 @@ impl Template {
         }
     }
 
-    /// The text of a rule template.
-    pub(crate) fn rule_text(&self) -> Result<String, TemplateError> {
+    /// The text of a template that is one file: a rule's, or an MCP
+    /// server's definition.
+    pub(crate) fn text(&self) -> Result<String, TemplateError> {
         match &self.origin {
             Origin::BuiltIn => Ok(built_in(&self.name)
                 .first()
@@ -262,7 +263,7 @@ fn on_disk(directory: &Path) -> Result<Vec<Template>, TemplateError> {
                 Layout::Directory { manifest } if path.join(manifest).is_file() => {
                     path.file_name().and_then(|name| name.to_str())
                 }
-                Layout::Files { extension }
+                Layout::Files { extension } | Layout::Flat { extension }
                     if path.is_file()
                         && path
                             .extension()
@@ -270,7 +271,7 @@ fn on_disk(directory: &Path) -> Result<Vec<Template>, TemplateError> {
                 {
                     path.file_stem().and_then(|stem| stem.to_str())
                 }
-                _ => None,
+                Layout::Directory { .. } | Layout::Files { .. } | Layout::Flat { .. } => None,
             };
             if let Some(name) = name.filter(|name| !name.starts_with('.')) {
                 found.push(Template {

@@ -383,7 +383,7 @@ fn contents_given_whole_that_name_a_server_otherwise_are_refused() {
 }
 
 #[test]
-fn adding_installing_and_gathering_a_server_are_refused_with_what_to_do() {
+fn adding_a_server_told_nothing_of_its_transport_and_installing_one_are_refused_with_what_to_do() {
     let dir = library();
     let folder = own_directory_for(dir.path(), Kind::Mcp);
     new_project(&dir.path().join("app"));
@@ -396,8 +396,9 @@ fn adding_installing_and_gathering_a_server_are_refused_with_what_to_do() {
     assert_eq!(
         added.error.to_string(),
         format!(
-            "an MCP server cannot be added yet, since `add` takes no command or address to \
-             start or reach it by; write its definition as <name>.toml in {}",
+            "an MCP server is added with how an agent starts it, `--command`, or where it \
+             reaches it, `--url`, or from a `--template` that says so; or write its definition \
+             as <name>.toml in {}",
             folder.display()
         )
     );

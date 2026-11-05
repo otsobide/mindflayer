@@ -573,6 +573,54 @@ impl McpDefinition {
     }
 }
 
+/// `source`, a definition's text, with its `name` set to `name` and, when
+/// one is given, its `description` to `description`, every other byte as
+/// it was, the comment on each one's line among them: rewritten through
+/// `toml_edit`, as a marker is, and read back to make sure the values
+/// changed what they were meant to and nothing else.
+///
+/// What `rename` writes, and what `add` makes of a template: the one way a
+/// definition somebody wrote is given another name.
+pub(crate) fn declaring(
+    source: &str,
+    name: &str,
+    description: Option<&str>,
+) -> Result<String, String> {
+    let before = McpDefinition::parse(source).map_err(|error| error.to_string())?;
+    let mut document: toml_edit::DocumentMut = source
+        .parse()
+        .map_err(|error: toml_edit::TomlError| error.to_string())?;
+    let mut set = vec![("name", name)];
+    set.extend(description.map(|description| ("description", description)));
+    for (key, to) in &set {
+        let Some(value) = document
+            .get_mut(key)
+            .and_then(toml_edit::Item::as_value_mut)
+        else {
+            return Err(format!("its `{key}` is not a value at the top of the file"));
+        };
+        let decor = value.decor().clone();
+        *value = toml_edit::Value::from(*to);
+        *value.decor_mut() = decor;
+    }
+    let rewritten = document.to_string();
+
+    let after = McpDefinition::parse(&rewritten).map_err(|error| error.to_string())?;
+    let wanted = McpDefinition {
+        name: ArtifactName::from(name),
+        description: description.map_or_else(|| before.description.clone(), str::to_owned),
+        ..before
+    };
+    if after != wanted {
+        let keys: Vec<String> = set.iter().map(|(key, _)| format!("`{key}`")).collect();
+        return Err(format!(
+            "rewriting it would change more than its {}",
+            keys.join(" and ")
+        ));
+    }
+    Ok(rewritten)
+}
+
 /// Why a file is not a definition this build can read.
 ///
 /// Each one refuses the file, as front matter that does not parse refuses a

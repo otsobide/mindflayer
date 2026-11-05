@@ -15,6 +15,7 @@ use std::fs;
 use std::io::{self, Read as _};
 use std::path::Path;
 
+use mindweaver_core::create::Start;
 use mindweaver_core::everywhere::{self, EverywhereError, Plan, Step};
 use mindweaver_core::install::{InstallError, Removed};
 use mindweaver_core::lifecycle::{self, Edited, Record};
@@ -47,15 +48,9 @@ pub(crate) fn add_to(
         .map(|template| template::find(workspace, holder, kind, template))
         .transpose()
         .map_err(CliError::from)?;
-    let added = lifecycle::add(
-        workspace,
-        holder,
-        kind,
-        name,
-        description,
-        template.as_ref(),
-    )
-    .map_err(CliError::from)?;
+    let start = template.as_ref().map_or(Start::Scratch, Start::Template);
+    let added = lifecycle::add(workspace, holder, kind, name, description, start)
+        .map_err(CliError::from)?;
     let mut outcome = Outcome::plain(format!(
         "created {} {} at {}\n",
         added.artifact.kind(),
