@@ -453,8 +453,9 @@ fn a_token_written_as_it_is_anywhere_an_agent_is_given_it_is_said_where_it_is_an
     let name = random::kebab();
     for (prefix, token) in McpMother::tokens() {
         // Every value of the transport, the name of a variable, where a
-        // token pasted for its value passes for one, and the extras, at
-        // any depth, which an agent's entry is given as they are.
+        // token pasted for its value passes for one, the name of an input,
+        // which `add` names after the variable it is told, and the extras,
+        // at any depth, which an agent's entry is given as they are.
         for place in [
             "args",
             "env",
@@ -462,6 +463,7 @@ fn a_token_written_as_it_is_anywhere_an_agent_is_given_it_is_said_where_it_is_an
             "url",
             "userinfo",
             "env_var",
+            "input",
             "extras",
             "extras_args",
         ] {
@@ -491,6 +493,40 @@ fn a_token_written_as_it_is_anywhere_an_agent_is_given_it_is_said_where_it_is_an
                 "{said}\n{sent}"
             );
         }
+    }
+}
+
+#[test]
+fn an_input_named_as_a_token_is_said_as_one_alone_and_never_by_its_name() {
+    let name = random::kebab();
+    for (prefix, token) in McpMother::tokens() {
+        let (text, at) = McpMother::with_literal(&name, "input", &token);
+        // Used nowhere, read from no variable and declared twice: each of
+        // which would be said by its name.
+        let text = format!(
+            "{}\n[[inputs]]\nname = {}\nkind = \"header\"\n",
+            text.replacen("env_var = \"EXAMPLE_API_KEY\"\n", "", 1),
+            toml::Value::String(token.clone())
+        );
+
+        let issues = parsed(&text).issues();
+
+        let rest = token[prefix.len()..].trim_start();
+        for issue in &issues {
+            let said = issue.to_string();
+            let sent = serde_json::to_string(issue).unwrap();
+            assert!(
+                !said.contains(rest) && !sent.contains(rest),
+                "{said}\n{sent}"
+            );
+        }
+        assert!(
+            issues.contains(&ValidationIssue::SecretLiteral {
+                at: at.clone(),
+                prefix: prefix.to_owned(),
+            }),
+            "{issues:?}"
+        );
     }
 }
 

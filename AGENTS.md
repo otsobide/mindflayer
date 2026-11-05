@@ -860,8 +860,9 @@ These are easy to break from a single file without noticing.
   agent keeps for itself, in any case, and two beside each other that
   differ only by case, an input no placeholder can be written of or read
   from a variable no agent can refer to, a secret read from no variable,
-  and a token written as it is in a transport, an input's `env_var` or the
-  extras, said by where it is and what it starts with and never whole),
+  and a token written as it is in a transport, an input's name or its
+  `env_var` or the extras, said by where it is and what it starts with and
+  never whole, an input named so said of nothing else),
   which `edit --contents` and `rename` refuse to leave behind
   (`artifact::mcp_strict_issues`, and
   `mcp_name_strict_issues` for a name alone, both reading what sits beside

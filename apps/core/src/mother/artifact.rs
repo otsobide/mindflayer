@@ -499,11 +499,23 @@ impl McpMother {
     /// `name`'s definition holding `token` as it is, written where `place`
     /// says (`args`, `env`, `headers`, `url`, or `userinfo`, the user of
     /// the address; `env_var`, pasted where a secret input's variable is
-    /// named; or `extras`, in a table of Claude's, and `extras_args`, in an
-    /// array of Codex's), beside where `validate` says it is.
+    /// named; `input`, as a secret input's name, written where it goes as
+    /// its placeholder; or `extras`, in a table of Claude's, and
+    /// `extras_args`, in an array of Codex's), beside where `validate`
+    /// says it is.
     pub fn with_literal(name: &str, place: &str, token: &str) -> (String, String) {
         let quoted = toml::Value::String(token.to_owned()).to_string();
         match place {
+            "input" => (
+                Self::stdio(name)
+                    .replacen("name = \"api_key\"", &format!("name = {quoted}"), 1)
+                    .replacen(
+                        "\"{api_key}\"",
+                        &toml::Value::String(format!("{{{token}}}")).to_string(),
+                        1,
+                    ),
+                String::from("inputs[0].name"),
+            ),
             "args" => (
                 Self::stdio(name).replacen(
                     "\"{workspace}\"]",

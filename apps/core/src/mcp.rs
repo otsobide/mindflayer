@@ -266,7 +266,8 @@ impl McpDefinition {
 
     /// Everything wrong with it as a definition, in the order it is worth
     /// fixing: a description with nothing in it, a transport that names
-    /// nothing to start or reach, an input whose name no placeholder can be
+    /// nothing to start or reach, a token written as an input's name, which
+    /// is then said of it alone, an input whose name no placeholder can be
     /// written of, a token written where its variable's name goes or a
     /// variable not every agent can refer to, a secret read from no
     /// variable at all, a token written as it is in a value of the
@@ -295,9 +296,25 @@ impl McpDefinition {
                 field: field.to_owned(),
             });
         }
+        // An input whose name holds a token is said as that alone: every
+        // other word about it would print its name whole, wherever the
+        // message goes. `add` names an input after the variable it is told
+        // to read, so a token pasted there lands in the name as surely as
+        // in the variable.
+        let hidden: Vec<bool> = self
+            .inputs
+            .iter()
+            .map(|input| !token::found(&input.name, &[]).is_empty())
+            .collect();
         for (index, input) in self.inputs.iter().enumerate() {
             let mut named = Vec::new();
-            if !input.name.is_writable() {
+            named.extend(token::found(&input.name, &[]).iter().map(|prefix| {
+                ValidationIssue::SecretLiteral {
+                    at: format!("inputs[{index}].name"),
+                    prefix: (*prefix).to_owned(),
+                }
+            }));
+            if !hidden[index] && !input.name.is_writable() {
                 named.push(ValidationIssue::InputNameMalformed {
                     name: input.name.to_string(),
                 });
@@ -318,6 +335,7 @@ impl McpDefinition {
                 prefix: (*prefix).to_owned(),
             }));
             match &input.env_var {
+                _ if hidden[index] => {}
                 Some(_) if !pasted.is_empty() => {}
                 Some(variable) if !variable.is_portable() => {
                     named.push(ValidationIssue::EnvVarMalformed {
@@ -354,8 +372,15 @@ impl McpDefinition {
                 issues.push(issue);
             }
         }
+        let shown = || {
+            self.inputs
+                .iter()
+                .zip(&hidden)
+                .filter(|(_, hidden)| !**hidden)
+                .map(|(input, _)| input)
+        };
         let mut seen: Vec<&InputName> = Vec::new();
-        for input in &self.inputs {
+        for input in shown() {
             if seen.contains(&&input.name) {
                 let repeated = ValidationIssue::InputRepeated {
                     name: input.name.to_string(),
@@ -367,7 +392,7 @@ impl McpDefinition {
             }
             seen.push(&input.name);
         }
-        for input in &self.inputs {
+        for input in shown() {
             if self.references(input) {
                 continue;
             }

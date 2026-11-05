@@ -810,11 +810,18 @@ passes for a variable. One there is `secret_literal` at `inputs[N].env_var`,
 said instead of `env_var_malformed`, whose message names the variable whole.
 And the extras are passed on to each agent's entry as they are, so every
 text they hold, at any depth, is judged as a value of the transport is
-(`extras.claude.headers.X-Api-Key`, `extras.codex.args[1]`). Still left out
-are a program's `command`, which names one, its `cwd`, an input's name,
-which a renderer turns into a reference and never writes as text, and the
-keys that describe the server rather than reach it, its description and
-provenance ([open questions](#open-questions)).
+(`extras.claude.headers.X-Api-Key`, `extras.codex.args[1]`). So is an
+input's name, though a renderer turns it into a reference and never writes
+it as text: `add` names an input after the variable it is told to read it
+from, so a token pasted there lands
+in the name as surely as in `env_var`, and the file holds it. One there is
+`secret_literal` at `inputs[N].name`, and nothing else is said of that
+input until it is renamed, since every other word about it (declared twice,
+used nowhere, read from no variable) would print its name whole. Still
+left out are a program's `command`, which names one, its `cwd`, the keys of
+its `env` and an address's `headers`, and the keys that describe the
+server rather than reach it, its description and provenance ([open
+questions](#open-questions)).
 
 ### What each agent cannot be given of a server
 
@@ -10331,6 +10338,8 @@ it once as it closes.
   address's userinfo shaped like none of them, passes, the last kept out of
   the definition as every address's userinfo is, but not out of its file. A
   shape added is one line of `mcp/token.rs`'s table. Nor does it read a
+  key of a program's `env` or of an address's `headers`, which names a
+  variable or a header and is written into an entry as such, nor a
   definition's description or provenance, which say what a server is and
   are written into no entry yet: a renderer that writes either (#90 to #92)
   adds it to `McpDefinition::literals`, where the transport's values and
