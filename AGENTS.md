@@ -152,7 +152,10 @@ under `apps/` with its own `Makefile`:
   (`kind`: skills, rules and MCP servers, and the `Layout` each is kept in,
   a folder, a file at any depth or a file directly in its folder), what an
   MCP server's definition declares, one TOML file a server in a format of
-  its own (`mcp`), the
+  its own (`mcp`), which names a server can be given (`mcp::name`), what in
+  one looks like a token written as it is (`mcp/token.rs`), and what each
+  agent cannot be given of one, as a renderer will ask and `show` says
+  (`mcp::Inexpressible`, `mcp::Expressibility`), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
   (through `port::Remote`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
@@ -422,7 +425,8 @@ These are easy to break from a single file without noticing.
   made only the way its rule allows, so no `From<String>`, and one named
   apart (`ArtifactName`, `Origin`, `Revision`, and an MCP server's
   `InputName` and `VariableName`) holds any text, since core reads
-  leniently. A new value joins `value` through its `text_value!`
+  leniently, the last two judged by a rule they say of themselves and are
+  not made by (`is_writable`, `is_portable`). A new value joins `value` through its `text_value!`
   macro, so it reads as its text and goes out as one, said in TypeScript
   and JSON Schema as a `String` is, and no contract moves
   (`make web/types/check`, `make api/schemas/check`); its store's adapter
@@ -852,8 +856,18 @@ These are easy to break from a single file without noticing.
   a file that does not read is a failure beside the rest; one that reads is
   listed whatever is wrong with it, and `validate` says what (a transport
   naming nothing to start or reach, an input no value uses, a name that is
-  not its file's), which `edit --contents` and `rename` refuse to leave
-  behind (`artifact::mcp_strict_issues`).
+  not its file's, one no agent keys a server by, `^[A-Za-z0-9_-]+$`, one an
+  agent keeps for itself, in any case, and two beside each other that
+  differ only by case, an input no placeholder can be written of or read
+  from a variable no agent can refer to, a secret read from no variable,
+  and a token written as it is in a transport, said by where it is and
+  what it starts with and never whole), which `edit --contents` and
+  `rename` refuse to leave behind (`artifact::mcp_strict_issues`, and
+  `mcp_name_strict_issues` for a name alone, both reading what sits beside
+  it off the folder written in, `lifecycle::twins_beside`). `anthropic-skills`
+  is only warned of. What an agent cannot be given of one is never a reason
+  to call it invalid: core says it (`McpDefinition::inexpressible`), `show`
+  says it, and a renderer asks it before it writes.
 - **Loaded and gathered content is untrusted.**
   - So is a task's every value, which a browser will fill in: it reaches
     its command as that value, never as an option or a command. The task
@@ -1360,7 +1374,11 @@ These are easy to break from a single file without noticing.
   behind the refusal in `install::targets`), a scaffold
   (`create::scaffolds`), and the words a sentence names it by
   (`Kind::noun`, `Kind::plural`), which every message and count asks rather
-  than spelling `{kind}s`.
+  than spelling `{kind}s`. And the matches on the agent that say which MCP
+  servers' names it keeps for itself (`mcp::name`'s `reserved` and
+  `claimed`) and what it cannot be given of a definition
+  (`McpDefinition::inexpressible`), each from docs/agents.md's "MCP
+  servers".
   "Adding an agent" also lists what no match covers: `Agent::ALL`, and an
   agent home's field, option and place in `common::PINNED` and `CLEARED`.
 
@@ -1377,8 +1395,14 @@ These are easy to break from a single file without noticing.
   ledger keeps (`InstallRecordMother`, `TargetMother`, `SourceMother`,
   `GatheredMother`, `MovedMother`, `EntryMother`), for a skill's and a
   rule's text (`SkillMother`, `RuleMother`), an MCP server's definition,
-  one for each transport (`McpMother`, and `InputNameMother` and
-  `VariableNameMother` for its values), a project's settings
+  one for each transport and one for each shape a rule or an agent is
+  about (`McpMother`: `misnamed`, `secret_without_variable`, a token of each
+  shape drawn from parts at run time, `tokens` and `with_literal`, never a
+  token in a file, the names a server may and may not be given, `name`,
+  `unwritable`, `reserved`, `claimed`, `twin`, and each shape an agent
+  cannot be given, `secret_argument`, `secret_in_url`,
+  `composite_secret_header`; and `InputNameMother` and `VariableNameMother`
+  for its values, with what each rule refuses), a project's settings
   (`SettingsMother`), the URLs a credential can be typed into (`UrlMother`,
   each form beside what redacting leaves of it) and what lives on the disk
   (`WorkspaceMother`, `ProjectMother`, among it a project a version 1 or 2
