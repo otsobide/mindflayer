@@ -524,8 +524,10 @@ These are easy to break from a single file without noticing.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
   The two that run until they are stopped write as they run, the TUI its
-  screen and `ui` its link, a note and the token file it is asked for, and
-  hand back their transcript.
+  screen and `ui` its link, a note, the token file it is asked for and,
+  with `--log`, a line on stderr for each request answered and each job
+  its writer takes, as it happens (`ui::on_stderr`), and hand back their
+  transcript.
   Each stderr line, and each of a `Failure`'s warnings, is a
   `render::Warning`: the text a terminal shows, word for word, and beside
   it the code of what it says (`code()` of the core error, refusal or
