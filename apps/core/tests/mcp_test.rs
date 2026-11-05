@@ -48,7 +48,7 @@ fn unrelated_mcp_folder(root: &Path) {
             ),
             ("mcp/src/main.rs", "fn main() {}\n"),
             ("mcp/github.toml", &McpMother::stdio("github")),
-            ("mcp/broken.toml", "format = 1\nname = \n"),
+            ("mcp/broken.toml", &McpMother::unreadable()),
         ],
     );
 }
@@ -318,7 +318,7 @@ fn a_file_that_is_no_definition_is_a_failure_by_its_code_and_hides_none_beside_i
         &[
             ("github.toml", &McpMother::stdio("github")),
             ("later.toml", &newer),
-            ("broken.toml", "format = 1\nname = \n"),
+            ("broken.toml", &McpMother::unreadable()),
         ],
     );
 
@@ -758,7 +758,7 @@ fn add_from_a_template_holds_what_it_writes_to_what_validate_would_say() {
         &templates,
         &[
             ("leaky.toml", &leaky),
-            ("broken.toml", "format = 1\nname = \n"),
+            ("broken.toml", &McpMother::unreadable()),
         ],
     );
 
@@ -1051,7 +1051,7 @@ fn contents_given_whole_are_held_to_the_format_and_to_the_files_name() {
 
     let renamed = replace(&McpMother::stdio("octocat")).unwrap_err();
     assert_eq!(renamed.code(), "edit_mcp_name_changed");
-    let unread = replace("format = 1\nname = \n").unwrap_err();
+    let unread = replace(&McpMother::unreadable()).unwrap_err();
     assert_eq!(unread.code(), "edit_definition_unreadable");
     let incomplete = replace(&McpMother::incomplete("github", "stdio")).unwrap_err();
     assert_eq!(incomplete.code(), "edit_contents_unfit");

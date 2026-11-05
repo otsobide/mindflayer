@@ -59,9 +59,23 @@ fn add(dir: &Path, name: &str, description: &str, options: &[&str]) -> Result<Ou
 /// `add`, told of the transport `given` says by the options a command line
 /// gives it by.
 fn add_given(dir: &Path, name: &str, given: &Given) -> Result<Outcome, Failure> {
-    let words = ServerOptionsMother::words(given);
-    let words: Vec<&str> = words.iter().map(String::as_str).collect();
-    add(dir, name, GITHUB, &words)
+    add_told(weaver, dir, Kind::Mcp, name, given)
+}
+
+/// `add <kind> <name>`, run by `run` in `dir` and told of the transport
+/// `given` says by the options a command line gives it by: at either
+/// level, and for a kind no transport is for.
+fn add_told(
+    run: fn(&Path, &[&str]) -> Result<Outcome, Failure>,
+    dir: &Path,
+    kind: Kind,
+    name: &str,
+    given: &Given,
+) -> Result<Outcome, Failure> {
+    let options = ServerOptionsMother::words(given);
+    let mut line = vec!["add", kind.slug(), name, GITHUB];
+    line.extend(options.iter().map(String::as_str));
+    run(dir, &line)
 }
 
 /// A weaver workspace in a folder of its own, made with `init`.
@@ -372,9 +386,12 @@ fn a_key_given_twice_an_address_typed_with_a_credential_and_a_skill_given_a_tran
             )
         );
     }
-    let skill = weaver(
+    let skill = add_told(
+        weaver,
         dir.path(),
-        &["add", "skill", "deploy", "Ship it", "--command", "npx"],
+        Kind::Skill,
+        "deploy",
+        &McpMother::given(),
     )
     .unwrap_err();
     assert_eq!(skill.error.code(), "add_transport_not_mcp");
@@ -932,11 +949,7 @@ fn a_project_an_older_mind_init_made_keeps_no_servers_and_says_how_to_keep_some(
         unrelated_mcp_folder(root);
 
         let listed = mind(root, &["list", "mcp"]).unwrap();
-        let added = mind(
-            root,
-            &["add", "mcp", "github", "GitHub", "--command", "npx"],
-        )
-        .unwrap_err();
+        let added = add_told(mind, root, Kind::Mcp, "github", &McpMother::given()).unwrap_err();
 
         assert!(listed.ok && listed.stderr.is_empty(), "{:?}", listed.stderr);
         assert!(!listed.stdout.contains("github"), "{}", listed.stdout);
@@ -960,18 +973,7 @@ fn a_project_mind_init_makes_lists_nothing_of_an_unrelated_mcp_folder() {
     unrelated_mcp_folder(dir.path());
 
     let listed = mind(dir.path(), &["list"]).unwrap();
-    let added = mind(
-        dir.path(),
-        &[
-            "add",
-            "mcp",
-            "github",
-            "GitHub",
-            "--url",
-            "https://example.com/mcp",
-        ],
-    )
-    .unwrap_err();
+    let added = add_told(mind, dir.path(), Kind::Mcp, "github", &McpMother::given()).unwrap_err();
 
     assert!(listed.ok && listed.stderr.is_empty(), "{:?}", listed.stderr);
     assert!(!listed.stdout.contains("github"), "{}", listed.stdout);

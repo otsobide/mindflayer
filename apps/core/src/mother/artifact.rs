@@ -404,6 +404,13 @@ impl McpMother {
         Self::stdio(name).replacen("format = 1\n", &format!("format = {format}\n"), 1)
     }
 
+    /// A file that does not read as TOML, a key given no value: no
+    /// definition at all, as discovery, a template and `edit --contents`
+    /// are each handed one.
+    pub fn unreadable() -> String {
+        String::from("format = 1\nname = \n")
+    }
+
     /// A program that names nothing to start, and an address with no
     /// address: what `validate` calls incomplete.
     pub fn incomplete(name: &str, transport: &str) -> String {

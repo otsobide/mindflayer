@@ -153,7 +153,7 @@ fn a_definition_naming_no_format_or_one_never_written_is_refused() {
 
 #[test]
 fn a_file_that_is_no_toml_is_refused_as_unparsed() {
-    let error = McpDefinition::parse("format = 1\nname = \n").unwrap_err();
+    let error = McpDefinition::parse(&McpMother::unreadable()).unwrap_err();
 
     assert!(matches!(error, McpError::Unparsed(_)), "{error}");
     assert_eq!(error.code(), "mcp_unparsed");
