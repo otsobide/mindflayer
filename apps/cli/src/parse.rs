@@ -1099,10 +1099,11 @@ impl Editing {
 /// gives one, is refused here, as grammar; whatever the definition then
 /// holds is core's to judge ([`mindweaver_core::create::create_server`]).
 ///
-/// Each option of one transport conflicts with the other's as well as
-/// requiring its own: clap passes over what an option requires when that
-/// conflicts with something given, so `--header` with `--command` would
-/// otherwise be taken, and dropped.
+/// Each option of one transport conflicts with the other's, and with
+/// `--template`, as well as requiring its own: clap passes over what an
+/// option requires when that conflicts with something given, so `--header`
+/// with `--command`, or `--arg` with `--template`, would otherwise be
+/// taken, and dropped.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
 #[command(next_help_heading = "MCP server")]
 pub struct ServerOptions {
@@ -1119,7 +1120,7 @@ pub struct ServerOptions {
         value_name = "ARG",
         allow_hyphen_values = true,
         requires = "command",
-        conflicts_with = "url"
+        conflicts_with_all = ["url", "template"]
     )]
     pub args: Vec<String>,
 
@@ -1130,7 +1131,7 @@ pub struct ServerOptions {
         value_name = "KEY=VALUE",
         value_parser = pair,
         requires = "command",
-        conflicts_with = "url"
+        conflicts_with_all = ["url", "template"]
     )]
     pub env: Vec<(String, String)>,
 
@@ -1141,7 +1142,7 @@ pub struct ServerOptions {
         long = "secret-env",
         value_name = "VAR",
         requires = "command",
-        conflicts_with = "url"
+        conflicts_with_all = ["url", "template"]
     )]
     pub secret_env: Vec<String>,
 
@@ -1152,7 +1153,7 @@ pub struct ServerOptions {
         long = "arg-env",
         value_name = "VAR",
         requires = "command",
-        conflicts_with = "url"
+        conflicts_with_all = ["url", "template"]
     )]
     pub arg_env: Vec<String>,
 
@@ -1161,7 +1162,7 @@ pub struct ServerOptions {
     pub url: Option<String>,
 
     /// Reach the address over server-sent events instead.
-    #[arg(long, requires = "url", conflicts_with = "command")]
+    #[arg(long, requires = "url", conflicts_with_all = ["command", "template"])]
     pub sse: bool,
 
     /// A header every request carries, its value written as it is.
@@ -1170,7 +1171,7 @@ pub struct ServerOptions {
         value_name = "NAME=VALUE",
         value_parser = pair,
         requires = "url",
-        conflicts_with = "command"
+        conflicts_with_all = ["command", "template"]
     )]
     pub headers: Vec<(String, String)>,
 
@@ -1181,7 +1182,7 @@ pub struct ServerOptions {
         value_name = "NAME=VAR",
         value_parser = pair,
         requires = "url",
-        conflicts_with = "command"
+        conflicts_with_all = ["command", "template"]
     )]
     pub secret_headers: Vec<(String, String)>,
 
@@ -1191,7 +1192,7 @@ pub struct ServerOptions {
         long = "bearer-env",
         value_name = "VAR",
         requires = "url",
-        conflicts_with = "command"
+        conflicts_with_all = ["command", "template"]
     )]
     pub bearer_env: Option<String>,
 
@@ -1202,7 +1203,7 @@ pub struct ServerOptions {
         value_name = "NAME=VAR",
         value_parser = pair,
         requires = "url",
-        conflicts_with = "command"
+        conflicts_with_all = ["command", "template"]
     )]
     pub url_vars: Vec<(String, String)>,
 }

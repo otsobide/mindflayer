@@ -902,11 +902,12 @@ which it cannot know.
 
 What no definition can hold is the grammar's to refuse, before core is
 told anything: both transports, an option of one with the other or with
-neither, and a transport with `--template`, which says how a server is
-started as surely. Each option of one transport conflicts with the other's
-as well as requiring its own, since clap passes over a requirement that
-conflicts with something given, and would take `--header` with
-`--command` and drop it; a `Given` cannot say any of it, so core needs no
+neither, and a transport, or any option of one, with `--template`, which
+says how a server is started as surely. Each option of one transport
+conflicts with the other's and with `--template` as well as requiring its
+own, since clap passes over a requirement that conflicts with something
+given, and would take `--header` with `--command`, or `--arg` with
+`--template`, and drop it; a `Given` cannot say any of it, so core needs no
 rule for it. Everything else is core's (`create::plan`): what `add` writes
 is held to the strict function `validate`, `rename` and `edit --contents`
 hold a definition to, before a byte is written. Its name, to the keys

@@ -3003,8 +3003,8 @@ is:
 What reaches a server through its environment or a header is a secret. What
 goes into its arguments or its address is not: a process list or a log
 shows it, and Codex reads no secret into either. An option of one transport
-given with the other, both transports, or either with `--template` is
-refused before anything is read.
+given with the other, both transports, or any of these options with
+`--template` is refused before anything is read.
 
 `github.toml`, as `add` wrote it:
 

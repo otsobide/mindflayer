@@ -370,30 +370,33 @@ fn options_no_definition_can_hold_together_are_refused_by_the_grammar() {
     let dir = workspace();
 
     // `mind add`, `mind weaver add` and `mindweaver add`, which are one
-    // grammar in three places.
+    // grammar in three places, and for every kind, whose `add` takes the
+    // same options and a template as surely.
     for (why, options) in ServerOptionsMother::conflicting() {
-        for lead in [&["mind"][..], &["mind", "weaver"][..]] {
-            let mut words = lead.to_vec();
-            words.extend(["add", "mcp", "github", "GitHub"]);
+        for kind in Kind::ALL.map(Kind::slug) {
+            for lead in [&["mind"][..], &["mind", "weaver"][..]] {
+                let mut words = lead.to_vec();
+                words.extend(["add", kind, "github", "GitHub"]);
+                words.extend(&options);
+
+                let error = Cli::try_parse_from(&words).err().map(|error| error.kind());
+
+                assert!(
+                    matches!(
+                        error,
+                        Some(
+                            clap::error::ErrorKind::ArgumentConflict
+                                | clap::error::ErrorKind::MissingRequiredArgument
+                                | clap::error::ErrorKind::ValueValidation
+                        )
+                    ),
+                    "{why}: {words:?}: {error:?}"
+                );
+            }
+            let mut words = vec!["mindweaver", "add", kind, "github", "GitHub"];
             words.extend(&options);
-
-            let kind = Cli::try_parse_from(&words).err().map(|error| error.kind());
-
-            assert!(
-                matches!(
-                    kind,
-                    Some(
-                        clap::error::ErrorKind::ArgumentConflict
-                            | clap::error::ErrorKind::MissingRequiredArgument
-                            | clap::error::ErrorKind::ValueValidation
-                    )
-                ),
-                "{why}: {words:?}: {kind:?}"
-            );
+            assert!(WeaverCli::try_parse_from(&words).is_err(), "{why}: {kind}");
         }
-        let mut words = vec!["mindweaver", "add", "mcp", "github", "GitHub"];
-        words.extend(&options);
-        assert!(WeaverCli::try_parse_from(&words).is_err(), "{why}");
     }
     assert_eq!(written(dir.path()), Vec::<String>::new());
 }

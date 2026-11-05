@@ -215,8 +215,8 @@ impl ServerOptionsMother {
 
     /// Options no definition can hold together, each beside why: two
     /// transports, an option of one with the other, or with neither, and a
-    /// transport with a template, which says how a server is started as
-    /// surely.
+    /// transport, or any option of one, with a template, which says how a
+    /// server is started as surely.
     pub fn conflicting() -> Vec<(&'static str, Vec<&'static str>)> {
         vec![
             (
@@ -249,6 +249,55 @@ impl ServerOptionsMother {
             (
                 "a template and an address",
                 vec!["--template", "internal", "--url", "https://example.com/mcp"],
+            ),
+            // Each of these requires a transport that conflicts with the
+            // template, a requirement clap would otherwise pass over.
+            (
+                "a template and an argument",
+                vec!["--template", "internal", "--arg", "-y"],
+            ),
+            (
+                "a template and a setting",
+                vec!["--template", "internal", "--env", "LOG_LEVEL=info"],
+            ),
+            (
+                "a template and a secret in the environment",
+                vec!["--template", "internal", "--secret-env", "KEY"],
+            ),
+            (
+                "a template and an argument read from a variable",
+                vec!["--template", "internal", "--arg-env", "KEY"],
+            ),
+            (
+                "a template and events",
+                vec!["--template", "internal", "--sse"],
+            ),
+            (
+                "a template and a header",
+                vec!["--template", "internal", "--header", "X-Client=me"],
+            ),
+            (
+                "a template and a secret header",
+                vec!["--template", "internal", "--secret-header", "X-Api-Key=KEY"],
+            ),
+            (
+                "a template and a bearer token",
+                vec!["--template", "internal", "--bearer-env", "KEY"],
+            ),
+            (
+                "a template and a part of the address",
+                vec!["--template", "internal", "--url-var", "tenant=TENANT"],
+            ),
+            (
+                "a template and options of both transports",
+                vec![
+                    "--template",
+                    "internal",
+                    "--secret-env",
+                    "KEY",
+                    "--bearer-env",
+                    "OTHER",
+                ],
             ),
             (
                 "a setting with no `=`",

@@ -878,10 +878,11 @@ These are easy to break from a single file without noticing.
   a command line's options (`ServerOptions`, a `mcp::Given`) or from a
   template, held to the same strict function, every secret only the name
   of the variable it is read from; what no definition can hold (both
-  transports, an option of the other's, a transport with `--template`) is
-  the grammar's to refuse, and what no definition's rule can judge, a key
-  given twice and an address typed with a credential, core refuses with
-  codes of its own (`add_mcp_key_repeated`, `add_mcp_url_userinfo`).
+  transports, an option of the other's, a transport or any option of one
+  with `--template`) is the grammar's to refuse, and what no definition's
+  rule can judge, a key given twice and an address typed with a credential,
+  core refuses with codes of its own (`add_mcp_key_repeated`,
+  `add_mcp_url_userinfo`).
 - **Loaded and gathered content is untrusted.**
   - So is a task's every value, which a browser will fill in: it reaches
     its command as that value, never as an option or a command. The task
