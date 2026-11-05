@@ -268,7 +268,7 @@ fn esc_while_a_gather_waits_on_the_server_is_taken_once_it_answers_and_nothing_i
 }
 
 #[test]
-fn ctrl_c_while_a_gather_waits_closes_the_screen_once_the_gather_has_stopped() {
+fn ctrl_c_while_a_cancel_waits_on_the_server_closes_the_screen_with_the_gathers_line() {
     let scenario = collapse_and_tanukeys();
     let server = Holding::listening();
     let url = server.url();
@@ -282,7 +282,14 @@ fn ctrl_c_while_a_gather_waits_closes_the_screen_once_the_gather_has_stopped() {
         .presses(Key::Enter)
         .shows("esc cancels");
     server.asked();
-    terminal.presses(Key::CtrlC);
+    // Cancelled first, and said to be: leaving draws nothing more, so a
+    // Ctrl-C alone gives a test nothing to wait on before the server
+    // answers, which it would then race. That the key cancels by itself is
+    // the screen's own suite's (`leaving_while_a_gather_runs_cancels_it_and_waits_for_it`).
+    terminal
+        .presses(Key::Escape)
+        .shows("cancelling, before anything is placed")
+        .presses(Key::CtrlC);
     // Left with the gather stopped, not abandoned: its line reaches the
     // transcript once the server lets it go.
     server.answers();
