@@ -340,6 +340,50 @@ impl McpMother {
         )
     }
 
+    /// The program of [`stdio`](Self::stdio) with no folder to start in:
+    /// one every agent is given whole.
+    pub fn without_cwd(name: &str) -> String {
+        Self::stdio(name).replacen("cwd = \".\"\n", "", 1)
+    }
+
+    /// The program of [`stdio`](Self::stdio), its argument a secret: what
+    /// Codex, with no interpolation, cannot be given.
+    pub fn secret_argument(name: &str) -> String {
+        Self::stdio(name).replacen("kind = \"arg\"\n", "kind = \"arg\"\nsecret = true\n", 1)
+    }
+
+    /// The address of [`http`](Self::http), its supplied part a secret:
+    /// what Codex cannot be given inside a URL.
+    pub fn secret_in_url(name: &str) -> String {
+        Self::http(name).replacen(
+            "kind = \"url_var\"\n",
+            "kind = \"url_var\"\nsecret = true\n",
+            1,
+        )
+    }
+
+    /// The address of [`http`](Self::http), its secret header written
+    /// beside other text, under a scheme other than `Bearer`: what Codex
+    /// reads from no variable.
+    pub fn composite_secret_header(name: &str) -> String {
+        Self::http(name).replacen(
+            "Authorization = \"Bearer {token}\"",
+            "Authorization = \"Token {token}\"",
+            1,
+        )
+    }
+
+    /// The address of [`http`](Self::http), its secret header the whole
+    /// value of a header of its own: what Codex reads from a variable as it
+    /// reads `Authorization: Bearer`.
+    pub fn whole_secret_header(name: &str) -> String {
+        Self::http(name).replacen(
+            "Authorization = \"Bearer {token}\"",
+            "X-Api-Key = \"{token}\"",
+            1,
+        )
+    }
+
     /// The address of [`http`](Self::http), its supplied part written in
     /// its userinfo, `https://{tenant}@example.com/mcp`, where an address
     /// is kept with no credential: what `validate` says no agent is given.

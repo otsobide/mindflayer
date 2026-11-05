@@ -41,10 +41,15 @@
 //! names no input is left as it is written, so a JSON argument such as
 //! `{"debug":true}` means what it says.
 //!
-//! Only the format is held here: a file that reads as one, a transport that
+//! The format is held here: a file that reads as one, a transport that
 //! names what it needs to start or reach the server, every input named so
 //! that its placeholder can be written and read from a variable every agent
-//! can refer to, and every input used where its kind says.
+//! can refer to, and every input used where its kind says. So are its
+//! secrets (D-11): a secret input names the variable it is read from, and no
+//! value holds what looks like a token written as it is (`token`). Beside
+//! it, which names a server can be given ([`name`]), and what each agent
+//! cannot be given of a definition ([`Inexpressible`]), which no `validate`
+//! says, since the definition is whole for every other agent.
 
 use std::collections::BTreeMap;
 
@@ -56,8 +61,11 @@ use crate::artifact::ValidationIssue;
 use crate::code::codes;
 use crate::value::{ArtifactName, InputName, Redacted, VariableName};
 
+mod expressible;
 pub(crate) mod name;
 mod token;
+
+pub use expressible::{Expressibility, Inexpressible};
 
 /// The format a definition is written in, and the newest this build reads.
 ///

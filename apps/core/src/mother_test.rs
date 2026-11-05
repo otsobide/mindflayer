@@ -484,3 +484,50 @@ fn every_server_name_a_mother_draws_breaks_or_keeps_the_rule_it_is_named_for() {
         assert_eq!(issues(&name), [], "{why}");
     }
 }
+
+#[test]
+fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so() {
+    use crate::mcp::{Inexpressible, McpDefinition};
+
+    let name = random::kebab();
+    let read = |text: String| McpDefinition::parse(&text).unwrap();
+    let shapes = [
+        (McpMother::without_cwd(&name), Agent::Claude, None),
+        (
+            McpMother::stdio(&name),
+            Agent::Claude,
+            Some("cwd_unsupported"),
+        ),
+        (
+            McpMother::secret_argument(&name),
+            Agent::Codex,
+            Some("secret_in_argument"),
+        ),
+        (
+            McpMother::secret_in_url(&name),
+            Agent::Codex,
+            Some("secret_in_url"),
+        ),
+        (
+            McpMother::composite_secret_header(&name),
+            Agent::Codex,
+            Some("secret_header_composite"),
+        ),
+        (McpMother::whole_secret_header(&name), Agent::Codex, None),
+        (
+            McpMother::sse(&name),
+            Agent::OpenCode,
+            Some("sse_unsupported"),
+        ),
+    ];
+    for (text, agent, code) in shapes {
+        let definition = read(text);
+        assert_eq!(definition.issues(), [], "{agent:?} {code:?}");
+        let said: Vec<&str> = definition
+            .inexpressible(agent)
+            .iter()
+            .map(Inexpressible::code)
+            .collect();
+        assert_eq!(said, code.into_iter().collect::<Vec<_>>(), "{agent:?}");
+    }
+}
