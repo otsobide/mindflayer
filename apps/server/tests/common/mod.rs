@@ -370,13 +370,33 @@ pub fn launch() -> (Listening, Arc<Mutex<Vec<String>>>) {
 
 /// A server over a fake that logs, and the lines it has logged so far.
 pub fn launch_logged() -> (Listening, Arc<Mutex<Vec<String>>>) {
+    launch_logging(Fake::default())
+}
+
+/// A server over `fake` that logs, for a test that holds a run at the
+/// fake's hold, and the lines it has logged so far.
+pub fn launch_logging(fake: Fake) -> (Listening, Arc<Mutex<Vec<String>>>) {
     let lines = Arc::new(Mutex::new(Vec::new()));
     let sink = Arc::clone(&lines);
-    let server = Server::new(Fake::default())
+    let server = Server::new(fake)
         .log(move |line| sink.lock().unwrap().push(line.to_owned()))
         .bind()
         .unwrap();
     (server, lines)
+}
+
+/// A logged line without the time it says at its end, ` 3ms`, and that
+/// time: what a test holds a line's words to, apart from a time no test
+/// can say beforehand.
+pub fn untimed(line: &str) -> (&str, Duration) {
+    let (said, time) = line
+        .rsplit_once(' ')
+        .unwrap_or_else(|| panic!("no time at the end of {line:?}"));
+    let millis = time
+        .strip_suffix("ms")
+        .and_then(|millis| millis.parse().ok())
+        .unwrap_or_else(|| panic!("not a time in milliseconds at the end of {line:?}"));
+    (said, Duration::from_millis(millis))
 }
 
 // ---------------------------------------------------------------------------

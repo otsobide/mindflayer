@@ -5810,7 +5810,12 @@ folder in each repository would reach it with one `node_modules`.
 
 The server prints nothing of its own accord. A front end that wants a log hands
 `Server::log` a function, and gets a line per request once it is answered,
-like `GET /api/v1/transcript 200`: the method, the path and query, the status.
+like `GET /api/v1/transcript 200 3ms`: the method, the path and query, the
+status, and how long the answer took, in whole milliseconds, from the request
+reaching the server to the answer's head, so an event stream's says how long
+it took to open rather than how long it stayed open. How long, because a log
+is most often read for a request that took too long, and a client's clock
+cannot tell the server's part of that from its own (#240).
 Never a header, since the cookie and the Bearer token travel in them, and never
 a body.
 The value of a `token` parameter is replaced by `<redacted>` however its name

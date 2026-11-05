@@ -1,8 +1,10 @@
-//! The request log: a line for every request, and never the launch token.
+//! The request log: a line for every request, with how long it took to
+//! answer, and never the launch token.
 
 mod common;
 
 use common::*;
+use std::time::Duration;
 
 #[tokio::test]
 async fn every_request_is_logged_once_answered() {
@@ -14,8 +16,10 @@ async fn every_request_is_logged_once_answered() {
     get(&server, "/api/v1/transcript?view=all", Auth::Nothing).await;
     get(&server, "/api/nowhere", token).await;
 
+    let lines = lines.lock().unwrap();
+    let said: Vec<&str> = lines.iter().map(|line| untimed(line).0).collect();
     assert_eq!(
-        *lines.lock().unwrap(),
+        said,
         [
             "POST /api/v1/judge 200",
             "POST /api/v1/tasks 200",
@@ -23,6 +27,48 @@ async fn every_request_is_logged_once_answered() {
             "GET /api/nowhere 404",
         ]
     );
+}
+
+/// From the request reaching the server to its answer: a run held for a
+/// while says at least that while, and a read sent while it is held, which
+/// waits for no run, says less.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_logged_line_says_how_long_the_answer_took() {
+    let fake = Fake::default();
+    let hold = Arc::clone(&fake.hold);
+    let (server, lines) = launch_logging(fake);
+    let server = Arc::new(server);
+    let release = Release(Arc::clone(&hold));
+    let sent = Arc::clone(&server);
+    let run = tokio::spawn(async move {
+        let token = Auth::Bearer(sent.token());
+        post(
+            &sent,
+            "/api/v1/tasks",
+            token,
+            json!({ "name": "slow", "hold": true }),
+        )
+        .await
+    });
+    let reached = Arc::clone(&hold);
+    tokio::task::spawn_blocking(move || reached.reached())
+        .await
+        .unwrap();
+
+    get(&server, "/api/v1/transcript", Auth::Bearer(server.token())).await;
+    let held = Duration::from_millis(150);
+    tokio::time::sleep(held).await;
+    drop(release);
+    assert_eq!(run.await.unwrap().status, StatusCode::OK);
+
+    let lines = lines.lock().unwrap();
+    assert_eq!(lines.len(), 2, "{lines:#?}");
+    let (read, read_took) = untimed(&lines[0]);
+    let (ran, run_took) = untimed(&lines[1]);
+    assert_eq!(read, "GET /api/v1/transcript 200");
+    assert_eq!(ran, "POST /api/v1/tasks 200");
+    assert!(run_took >= held, "{lines:#?}");
+    assert!(read_took < run_took, "{lines:#?}");
 }
 
 #[tokio::test]
@@ -65,10 +111,10 @@ async fn the_token_never_appears_in_a_logged_line() {
             "the token is in {line:?}"
         );
     }
-    assert_eq!(lines[0], "GET /?token=<redacted> 303");
-    assert_eq!(lines[1], "GET /?view=1&%74oken=<redacted> 303");
-    assert_eq!(lines[2], "GET /?token=<redacted> 401");
-    assert_eq!(lines[6], "GET /api/<redacted> 404");
+    assert_eq!(untimed(&lines[0]).0, "GET /?token=<redacted> 303");
+    assert_eq!(untimed(&lines[1]).0, "GET /?view=1&%74oken=<redacted> 303");
+    assert_eq!(untimed(&lines[2]).0, "GET /?token=<redacted> 401");
+    assert_eq!(untimed(&lines[6]).0, "GET /api/<redacted> 404");
 }
 
 #[tokio::test]

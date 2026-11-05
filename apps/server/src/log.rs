@@ -1,6 +1,7 @@
 //! One line per request, with the launch token taken out.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use axum::extract::{Request, State};
 use axum::http::Uri;
@@ -29,26 +30,50 @@ impl Log {
         Self { sink, token }
     }
 
-    /// `GET /api/v1/transcript 200`: the method, what was asked for and the
-    /// status. Headers never, since the cookie and the Bearer token are in
-    /// them, and no body, since a body is the user's business.
-    fn line(&self, method: &str, uri: &Uri, status: u16) -> String {
+    /// `GET /api/v1/transcript 200 3ms`: the method, what was asked for,
+    /// the status and how long it took to answer. Headers never, since the
+    /// cookie and the Bearer token are in them, and no body, since a body is
+    /// the user's business.
+    ///
+    /// How long, because what a log is read for is most often a request
+    /// that took too long, and a client's own clock cannot tell the
+    /// server's part of that from its own (#240).
+    fn line(&self, method: &str, uri: &Uri, status: u16, took: Duration) -> String {
         let mut target = uri.path().to_owned();
         if let Some(query) = uri.query() {
             target.push('?');
             target.push_str(&redact(query));
         }
-        scrub(&format!("{method} {target} {status}"), self.token.as_str())
+        scrub(
+            &format!("{method} {target} {status} {}", millis(took)),
+            self.token.as_str(),
+        )
     }
 }
 
-/// Write one line for a request once it has been answered.
+/// Write one line for a request once it has been answered, with how long
+/// that took: from the request reaching the server to its answer's head,
+/// so an event stream's is how long it took to open, not how long it
+/// stayed open.
 pub(crate) async fn record(State(log): State<Arc<Log>>, request: Request, next: Next) -> Response {
+    let started = Instant::now();
     let method = request.method().clone();
     let uri = request.uri().clone();
     let response = next.run(request).await;
-    (log.sink)(&log.line(method.as_str(), &uri, response.status().as_u16()));
+    (log.sink)(&log.line(
+        method.as_str(),
+        &uri,
+        response.status().as_u16(),
+        started.elapsed(),
+    ));
     response
+}
+
+/// `took` in whole milliseconds, as every line says a time: `3ms`, `0ms`
+/// for less than one. Coarser would hide the difference between a read
+/// and a write, and finer is no help in reading why one took seconds.
+fn millis(took: Duration) -> String {
+    format!("{}ms", took.as_millis())
 }
 
 /// A query string with the value of every `token` parameter replaced,
