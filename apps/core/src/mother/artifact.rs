@@ -355,6 +355,20 @@ impl McpMother {
         Self::stdio(name).replacen("kind = \"arg\"\n", "kind = \"arg\"\nsecret = true\n", 1)
     }
 
+    /// The program of [`stdio`](Self::stdio), its argument no secret and
+    /// read from no variable: a value somebody gives, which a definition
+    /// may leave unsaid and no entry can refer to.
+    pub fn unread_input(name: &str) -> String {
+        Self::stdio(name).replacen("env_var = \"EXAMPLE_WORKSPACE\"\n", "", 1)
+    }
+
+    /// The program of [`stdio`](Self::stdio) with no folder to start in,
+    /// its extras for Claude `extras`, the lines of a TOML table, in place
+    /// of the timeout it holds.
+    pub fn with_claude_extras(name: &str, extras: &str) -> String {
+        Self::without_cwd(name).replacen("timeout = 30000\n", extras, 1)
+    }
+
     /// The address of [`http`](Self::http), its supplied part a secret:
     /// what Codex cannot be given inside a URL.
     pub fn secret_in_url(name: &str) -> String {
@@ -385,6 +399,202 @@ impl McpMother {
             "X-Api-Key = \"{token}\"",
             1,
         )
+    }
+
+    /// The address of [`http`](Self::http), its secret header read from
+    /// `variable`.
+    pub fn header_read_from(name: &str, variable: &str) -> String {
+        Self::http(name).replacen(
+            "env_var = \"EXAMPLE_TOKEN\"",
+            &format!("env_var = {}", toml::Value::String(variable.to_owned())),
+            1,
+        )
+    }
+
+    /// The address of [`http`](Self::http), its supplied part read from
+    /// `variable`.
+    pub fn url_read_from(name: &str, variable: &str) -> String {
+        Self::http(name).replacen(
+            "env_var = \"EXAMPLE_TENANT\"",
+            &format!("env_var = {}", toml::Value::String(variable.to_owned())),
+            1,
+        )
+    }
+
+    /// The program of [`stdio`](Self::stdio), its secret environment read
+    /// from `variable`.
+    pub fn env_read_from(name: &str, variable: &str) -> String {
+        Self::stdio(name).replacen(
+            "env_var = \"EXAMPLE_API_KEY\"",
+            &format!("env_var = {}", toml::Value::String(variable.to_owned())),
+            1,
+        )
+    }
+
+    /// Variables Claude Code reads as empty in a remote server's `url` and
+    /// `headers`, each beside why, in a case drawn afresh: one of each list
+    /// and each shape it keeps from one.
+    pub fn blanked_variables() -> Vec<(&'static str, String)> {
+        let word = random::word().to_ascii_uppercase();
+        let digits = random::drawn_from(random::DIGITS, random::between(1, 3));
+        let mut variables = vec![
+            ("Claude's own key", String::from("ANTHROPIC_API_KEY")),
+            ("a package registry's token", String::from("NPM_TOKEN")),
+            ("a review service's token", String::from("SONAR_TOKEN")),
+            (
+                "a proxy a tool is sent through",
+                String::from("https_proxy"),
+            ),
+            (
+                "a registry's token under a workflow's input",
+                String::from("INPUT_NPM_TOKEN"),
+            ),
+            (
+                "a background session's, kept only as it is",
+                String::from("CLAUDE_BG_RV_AUTH"),
+            ),
+            (
+                "telemetry's settings",
+                String::from("OTEL_EXPORTER_OTLP_HEADERS"),
+            ),
+            ("git's configuration", format!("GIT_CONFIG_VALUE_{digits}")),
+            (
+                "git's configuration whole",
+                String::from("GIT_CONFIG_PARAMETERS"),
+            ),
+            (
+                "a Cargo registry's token",
+                format!("CARGO_REGISTRIES_{word}_TOKEN"),
+            ),
+            (
+                "a Cargo registry's token under a workflow's input",
+                format!("INPUT_CARGO_REGISTRIES_{word}_TOKEN"),
+            ),
+        ];
+        for (_, variable) in &mut variables {
+            *variable = Self::recased(variable);
+        }
+        variables
+    }
+
+    /// Variables Claude Code passes on to a remote server, each beside
+    /// why: each near one it reads as empty, and none of them.
+    pub fn passed_variables() -> Vec<(&'static str, String)> {
+        let word = random::word().to_ascii_uppercase();
+        vec![
+            ("GitHub's token", String::from("GITHUB_TOKEN")),
+            ("Hugging Face's token", String::from("HF_TOKEN")),
+            ("a server's own", String::from("EXAMPLE_TOKEN")),
+            (
+                "a background session's under a workflow's input",
+                String::from("INPUT_CLAUDE_BG_RV_AUTH"),
+            ),
+            (
+                "telemetry's prefix inside a word",
+                format!("{word}_OTEL_KEY"),
+            ),
+            (
+                "git's count of its settings",
+                String::from("GIT_CONFIG_COUNT"),
+            ),
+            (
+                "git's setting with no number",
+                String::from("GIT_CONFIG_KEY_"),
+            ),
+            (
+                "a Cargo registry's with no name",
+                String::from("CARGO_REGISTRIES__TOKEN"),
+            ),
+            ("more after a name", String::from("NPM_TOKEN_FILE")),
+        ]
+    }
+
+    /// Texts Claude Code reads a reference to a variable in, each beside
+    /// why, the variable's name drawn afresh: what a definition means as
+    /// it is written, and Claude would expand.
+    pub fn references() -> Vec<(&'static str, String)> {
+        let variable = random::word().to_ascii_uppercase();
+        vec![
+            ("a variable whole", format!("${{{variable}}}")),
+            ("inside a longer value", format!("--home=${{{variable}}}/x")),
+            (
+                "with a default",
+                format!("${{{variable}:-{}}}", random::word()),
+            ),
+            ("with an empty default", format!("${{{variable}:-}}")),
+            (
+                "closed by the reference written for an input",
+                String::from("${a:-{workspace}}"),
+            ),
+        ]
+    }
+
+    /// Texts that open no reference Claude reads as they are, each beside
+    /// why, written in a value of the program of
+    /// [`without_cwd`](Self::without_cwd) where its placeholders are
+    /// written as references, its `args` or its `env`: one stands beside
+    /// the placeholder of its input `workspace`.
+    pub fn not_references() -> Vec<(&'static str, String)> {
+        vec![
+            ("a variable as a shell writes it", String::from("$HOME/x")),
+            (
+                "a dollar before a placeholder",
+                String::from("${workspace}"),
+            ),
+            ("a brace naming no input", String::from(r#"{"debug":true}"#)),
+            ("a dollar and a brace apart", String::from("$ {x}")),
+        ]
+    }
+
+    /// `name`'s definition holding `text` as it is, written where `place`
+    /// says (`command`, `args` or `env` of the program of
+    /// [`without_cwd`](Self::without_cwd), or `url` or `headers` of the
+    /// address of [`http`](Self::http)), beside where `show` says it is.
+    pub fn with_text(name: &str, place: &str, text: &str) -> (String, String) {
+        let quoted = toml::Value::String(text.to_owned()).to_string();
+        match place {
+            "command" => (
+                Self::without_cwd(name).replacen(
+                    "command = \"npx\"",
+                    &format!("command = {quoted}"),
+                    1,
+                ),
+                String::from("transport.command"),
+            ),
+            "args" => (
+                Self::without_cwd(name).replacen(
+                    "\"{workspace}\"]",
+                    &format!("\"{{workspace}}\", {quoted}]"),
+                    1,
+                ),
+                String::from("transport.args[4]"),
+            ),
+            "env" => (
+                Self::without_cwd(name).replacen(
+                    "LOG_LEVEL = \"info\"",
+                    &format!("LOG_LEVEL = {quoted}"),
+                    1,
+                ),
+                String::from("transport.env.LOG_LEVEL"),
+            ),
+            "url" => (
+                Self::http(name).replacen(
+                    "/mcp\"",
+                    &format!("/mcp?q={}\"", &quoted[1..quoted.len() - 1]),
+                    1,
+                ),
+                String::from("transport.url"),
+            ),
+            "headers" => (
+                Self::http(name).replacen(
+                    "Authorization = \"Bearer {token}\"",
+                    &format!("Authorization = \"Bearer {{token}}\", X-Extra = {quoted}"),
+                    1,
+                ),
+                String::from("transport.headers.X-Extra"),
+            ),
+            other => panic!("{other} is no place Claude expands text in"),
+        }
     }
 
     /// The address of [`http`](Self::http), its supplied part written in

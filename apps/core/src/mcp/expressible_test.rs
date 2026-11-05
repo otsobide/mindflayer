@@ -121,6 +121,132 @@ fn neither_codex_nor_opencode_can_be_given_server_sent_events() {
 }
 
 #[test]
+fn claude_cannot_be_given_an_address_read_from_a_variable_it_keeps_from_one() {
+    let name = random::kebab();
+    for (why, variable) in McpMother::blanked_variables() {
+        let blanked = |input: &str| {
+            vec![Inexpressible::VariableBlanked {
+                input: named(input),
+                variable: VariableName::from(variable.as_str()),
+            }]
+        };
+        for (text, input) in [
+            (McpMother::header_read_from(&name, &variable), "token"),
+            (McpMother::url_read_from(&name, &variable), "tenant"),
+        ] {
+            assert_eq!(
+                by_agent(&text),
+                [
+                    ("claude", blanked(input)),
+                    ("codex", vec![]),
+                    ("opencode", vec![])
+                ],
+                "{why}: {text}"
+            );
+        }
+    }
+}
+
+#[test]
+fn claude_is_given_an_address_read_from_a_variable_it_passes_on_and_a_program_from_any() {
+    let name = random::kebab();
+    for (why, variable) in McpMother::passed_variables() {
+        let text = McpMother::header_read_from(&name, &variable);
+        assert_eq!(
+            parsed(&text).inexpressible(Agent::Claude),
+            [],
+            "{why}: {text}"
+        );
+    }
+    // A program's environment is no remote server's.
+    for (why, variable) in McpMother::blanked_variables() {
+        let text = McpMother::env_read_from(&name, &variable).replacen("cwd = \".\"\n", "", 1);
+        assert_eq!(
+            parsed(&text).inexpressible(Agent::Claude),
+            [],
+            "{why}: {text}"
+        );
+    }
+}
+
+#[test]
+fn claude_cannot_be_given_extras_giving_a_key_its_entry_writes_from_the_transport() {
+    let name = random::kebab();
+    for key in ["type", "command", "args", "env"] {
+        let text = McpMother::with_claude_extras(&name, &format!("{key} = \"other\"\n"));
+        assert_eq!(
+            by_agent(&text),
+            [
+                (
+                    "claude",
+                    vec![Inexpressible::ExtraRepeated {
+                        key: key.to_owned()
+                    }]
+                ),
+                ("codex", vec![]),
+                ("opencode", vec![])
+            ],
+            "{key}"
+        );
+    }
+    // A key of a program's entry is none of an address's, which takes it
+    // beside its own.
+    for (key, repeated) in [("url", true), ("headers", true), ("command", false)] {
+        let text = format!(
+            "{}\n[extras.claude]\n{key} = \"other\"\n",
+            McpMother::http(&name)
+        );
+        let expected = if repeated {
+            vec![Inexpressible::ExtraRepeated {
+                key: key.to_owned(),
+            }]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            parsed(&text).inexpressible(Agent::Claude),
+            expected,
+            "{key}"
+        );
+    }
+}
+
+#[test]
+fn claude_cannot_be_given_text_it_reads_as_a_reference_where_no_input_stands() {
+    let name = random::kebab();
+    for (why, reference) in McpMother::references() {
+        for place in ["command", "args", "env", "url", "headers"] {
+            let (text, at) = McpMother::with_text(&name, place, &reference);
+            assert_eq!(
+                by_agent(&text),
+                [
+                    ("claude", vec![Inexpressible::TextExpanded { at }]),
+                    ("codex", vec![]),
+                    ("opencode", vec![])
+                ],
+                "{why} in {place}: {text}"
+            );
+        }
+    }
+    for (why, written) in McpMother::not_references() {
+        for place in ["args", "env"] {
+            let (text, _) = McpMother::with_text(&name, place, &written);
+            assert_eq!(
+                parsed(&text).inexpressible(Agent::Claude),
+                [],
+                "{why} in {place}: {text}"
+            );
+        }
+    }
+    // The command is written as it is held, a placeholder in it too.
+    let (text, at) = McpMother::with_text(&name, "command", "${workspace}");
+    assert_eq!(
+        parsed(&text).inexpressible(Agent::Claude),
+        [Inexpressible::TextExpanded { at }]
+    );
+}
+
+#[test]
 fn a_shape_an_agent_cannot_express_is_nothing_validate_says() {
     let name = random::kebab();
     for text in [
@@ -129,6 +255,8 @@ fn a_shape_an_agent_cannot_express_is_nothing_validate_says() {
         McpMother::secret_in_url(&name),
         McpMother::composite_secret_header(&name),
         McpMother::sse(&name),
+        McpMother::header_read_from(&name, "NPM_TOKEN"),
+        McpMother::with_text(&name, "headers", "${NPM_TOKEN}").0,
     ] {
         let definition = parsed(&text);
 
@@ -158,6 +286,16 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
         },
         Inexpressible::ServerSentEvents,
         Inexpressible::WorkingDirectory,
+        Inexpressible::VariableBlanked {
+            input: named("token"),
+            variable: VariableName::from("NPM_TOKEN"),
+        },
+        Inexpressible::TextExpanded {
+            at: String::from("transport.args[0]"),
+        },
+        Inexpressible::ExtraRepeated {
+            key: String::from("type"),
+        },
     ];
     assert_eq!(
         shapes.len(),
@@ -177,6 +315,9 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
             ("secret_header_composite", true),
             ("sse_unsupported", true),
             ("cwd_unsupported", false),
+            ("variable_blanked", true),
+            ("text_expanded", true),
+            ("extra_repeated", true),
         ]
     );
 }

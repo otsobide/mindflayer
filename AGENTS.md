@@ -159,8 +159,11 @@ under `apps/` with its own `Makefile`:
   MCP server's definition declares, one TOML file a server in a format of
   its own (`mcp`), which names a server can be given (`mcp::name`), what in
   one looks like a token written as it is (`mcp/token.rs`), what each
-  agent cannot be given of one, as a renderer will ask and `show` says
-  (`mcp::Inexpressible`, `mcp::Expressibility`), and what `add` is told of
+  agent cannot be given of one, as a renderer asks and `show` says
+  (`mcp::Inexpressible`, `mcp::Expressibility`), among it the variables
+  Claude reads as empty toward a remote server (`mcp/blanked.rs`), one
+  rendered into Claude's `.mcp.json` as its one entry and taken out again
+  (`claude_mcp`), and what `add` is told of
   how one is started or reached, a program or an address, and the
   definition it writes from it (`mcp::Given`), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
@@ -745,8 +748,18 @@ These are easy to break from a single file without noticing.
     entry is kept. What an edit wrote is read back and refused unless only
     the entry changed, and a file that does not parse is refused, never
     rewritten. A changed file goes through `replace_bytes_unresolved`,
-    keeping its permissions; a new one is made with `create_new`. The module
-    knows no agent: the file, the key path and the entry are the caller's.
+    keeping its permissions; a new one is made with `create_new`; and one is
+    taken away only through `ConfigFile::take`, when its caller says what it
+    holds is nothing. The module knows no agent: the file, the key path,
+    the entry, how much of a file is read (`ConfigFile::capped`) and which
+    documents are empty are the caller's. Claude's `.mcp.json`
+    (`claude_mcp`) is read as strict JSON up to 2 MiB, one holding a comment
+    or a trailing comma refused (`mcp_json_not_strict`) rather than given an
+    entry Claude would never load; its entry always says its `type`, writes
+    each input as `${VAR}`, asks `McpDefinition::inexpressible` what Claude
+    cannot be given and writes no approval; and the file goes with its last
+    server only when the caller says Mindweaver made it and nothing else is
+    in it.
   - `ui --token-file` (`TokenFile`, in `src/commands/ui.rs`) makes its
     file with `create_new`, mode 0600 on Unix, so whatever is at the path,
     a link included, is refused and never written over or through, and
@@ -1017,6 +1030,7 @@ These are easy to break from a single file without noticing.
   `install_with` hands to once it holds the lock) and
   `install::rules::update_held`, which take none of their own. A new
   writer takes it the same way, inside core; `config_entry::ConfigFile`,
+  `claude_mcp::render` and `remove`,
   `agents_md::render`, `claude_rules::render`, `claude_md::render` and
   `MindProject::change_settings` take none, since
   the writers that call them hold it, and `assign::install` and
@@ -1427,7 +1441,13 @@ These are easy to break from a single file without noticing.
   token in a file, the names a server may and may not be given, `name`,
   `unwritable`, `reserved`, `claimed`, `twin`, and each shape an agent
   cannot be given, `secret_argument`, `secret_in_url`,
-  `composite_secret_header`; what `add` is told of one, `given_program`,
+  `composite_secret_header`, and the variables Claude empties toward a
+  remote server and passes on, `blanked_variables` and `passed_variables`,
+  read where `header_read_from`, `url_read_from` and `env_read_from` say,
+  and the text Claude reads a reference in and the text it does not,
+  `references` and `not_references`, written where `with_text` says;
+  what Claude's entry is refused for or given beside it, `unread_input` and
+  `with_claude_extras`; what `add` is told of one, `given_program`,
   `given_address`, `given`, and the shapes it refuses, `given_unfit`,
   `given_with_literal`, `given_repeating` and `given_refused_unread`; and
   `InputNameMother` and `VariableNameMother` for its values, with what each

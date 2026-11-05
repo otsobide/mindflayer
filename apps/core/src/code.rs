@@ -51,6 +51,7 @@ use crate::agents_md::{self, AgentsMdError};
 use crate::artifact::{ArtifactError, ValidationIssue};
 use crate::browse::{BrowseError, BrowseFailure};
 use crate::catalog::DiscoveryFailure;
+use crate::claude_mcp::{self, ClaudeMcpError};
 use crate::claude_md::{self, ClaudeMdError, Fallback};
 use crate::claude_rules::{self, ClaudeRulesError};
 use crate::config_entry::{EntryError, FileError};
@@ -199,6 +200,8 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("browse::BrowseError", BrowseError::CODES),
     ("browse::BrowseFailure", BrowseFailure::CODES),
     ("catalog::DiscoveryFailure", DiscoveryFailure::CODES),
+    ("claude_mcp::ClaudeMcpError", ClaudeMcpError::CODES),
+    ("claude_mcp::Warning", claude_mcp::Warning::CODES),
     ("claude_md::ClaudeMdError", ClaudeMdError::CODES),
     ("claude_md::Fallback", Fallback::CODES),
     ("claude_md::Warning", claude_md::Warning::CODES),

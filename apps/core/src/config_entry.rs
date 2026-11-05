@@ -28,7 +28,8 @@
 //! the markers are.
 //!
 //! [`get`] and [`edit`] work on text, which is what the tests hold to the
-//! byte; [`ConfigFile`] reads the text from a file and writes it back.
+//! byte; [`ConfigFile`] reads the text from a file and writes it back, and
+//! takes the file away when its caller says what is left is nothing.
 
 use std::fmt::{self, Write as _};
 
@@ -255,6 +256,18 @@ pub(crate) fn document(format: Format, text: &str) -> Result<Value, EntryError> 
         Format::Json | Format::Jsonc => json::document(format, text),
         Format::Toml => toml::document(text),
     }
+}
+
+/// Whether `text` would be JSON but for comments and trailing commas, the
+/// two things JSONC adds to it: one written for a reader looser than a
+/// strict one, rather than one no reader takes, which a caller that reads
+/// a file as [`Format::Json`] may want to say apart.
+///
+/// Not [`get`] in [`Format::Jsonc`], which takes, as jsonc-parser does
+/// whatever its options say, a raw control character in a string and
+/// whitespace JSON does not allow, neither of them anything JSONC adds.
+pub fn loose_json(text: &str) -> bool {
+    json::loose(text)
 }
 
 /// The value at `key` in `document`, `None` when a key on the way is missing.

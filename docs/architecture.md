@@ -1059,15 +1059,46 @@ anything, and refuses the agent by or writes the entry without
 | Codex | a secret header beside other text, but `Authorization: Bearer` and the token (`secret_header_composite`) | refused |
 | Codex, OpenCode | server-sent events (`sse_unsupported`), which OpenCode's V2 shape, the one D-12 writes, does not take | refused |
 | Claude Code | a program's folder (`cwd_unsupported`) | written without it |
+| Claude Code | an input of an address read from a variable it reads as empty toward a remote server (`variable_blanked`) | refused |
+| Claude Code | `${` written as it is in a command, an argument, the environment, the URL or a header, where no input stands (`text_expanded`) | refused |
+| Claude Code | an extra for it giving a key its entry is written with from the transport, `type`, `command`, `args` and `env` or `url` and `headers` (`extra_repeated`) | refused |
 
 Codex has no interpolation, so a secret reaches a server there only through
 the keys that name a variable: `env_vars` for a program's environment,
 `env_http_headers` for a header that is the secret whole, and
-`bearer_token_env_var` for `Authorization: Bearer`. `show` says every
+`bearer_token_env_var` for `Authorization: Bearer`. Claude expands a
+reference everywhere, but toward a remote server it reads as empty the
+credentials of its own and of the tools on a machine (`ANTHROPIC_API_KEY`,
+`NPM_TOKEN`, `HTTPS_PROXY` and the like), so that a repository's
+`.mcp.json` cannot send them to a server of its choosing: an input of an
+address read from one would reach its server with nothing in it, so the
+server is refused Claude rather than written for it to fail. Which names
+those are was read from Claude Code 2.1.318's binary, docs-only, and is a
+table of its own (`mcp/blanked.rs`): the names Claude keeps from a remote
+server in every environment, in any case and under a workflow input's
+`INPUT_` where Claude looks there, and the shapes it keeps whatever they
+are called (`OTEL_`, git's `GIT_CONFIG_*`, a Cargo registry's token). A
+program's environment is no remote server's, and is given whole. And
+since Claude expands `${VAR}` and `${VAR:-default}` wherever it expands an
+input's reference, text a definition writes there as it is, `${HOME}` in an
+argument, would reach the server as a variable's value, a default or
+nothing, where a brace naming no input means what it says: any `${`
+outside an input's placeholder refuses the server Claude, rather than only
+what 2.1.318's pattern takes (a name, then `}` or `:-`), since a reference
+written for an input after it may close what it opens. A `$` just before a
+placeholder is the `$` and the value, and stays. Claude's extras go beside
+its entry, never over a key the entry writes (`claude_mcp::keys`), which
+would leave one of the two lost. `show` says every
 agent's (`McpDefinition::expressibility`) between the description and the
 file, and `show --json` the same as `expressibility`, each shape by its code
 under `refused` or `dropped`, and `null` for a skill or a rule: a name
 added, so no version moved.
+
+An input read from no variable is not among them, though Claude's renderer
+refuses it (`claude_mcp_input_unread`): every agent could be given its
+value as it is, and none is given it only because no install hands a
+renderer one yet (#93, in the open questions). Said here, `show` would
+call every agent refused a server each of them can take.
 
 None of it is `validate`'s. A shape one agent cannot express says nothing
 wrong with the definition, which every other agent is given whole, and a
@@ -9076,7 +9107,8 @@ An MCP server reaches an agent as one entry in that agent's own config file
 and the agents' own CLIs', so `config_entry` changes the one entry it is asked
 to and keeps every other byte. It knows no agent: which file, which key path
 and what an entry holds are the caller's, and the agents' shapes are #90 to
-#92's. Nothing calls it yet.
+#92's: Claude's `.mcp.json` is the first to call it ([Claude Code's
+`.mcp.json`](#claude-codes-mcpjson)), and nothing installs through it yet.
 
 An entry is found by its key path, the keys of the objects that lead to it
 (`["mcpServers", "github"]`), and holds a `config_entry::Value`. Its own type
@@ -9108,7 +9140,10 @@ to that, because in 0.34 the CST's own parse lets a comment through
 `allow_comments: false`. Two things no option of its covers are refused in
 JSON by a scan of the text once it has parsed: a control character written as
 itself in a string, and whitespace other than space, tab, LF and CR between
-tokens, both of which `JSON.parse` refuses.
+tokens, both of which `JSON.parse` refuses. `loose_json` holds a text to the
+same scan outside its comments, once it reads as JSONC, for a caller that
+says a file JSON but for comments and trailing commas apart from one no
+reader takes.
 
 Where a library keeps less than every byte, the module makes up the
 difference, and the tests pin what is left:
@@ -9208,9 +9243,89 @@ made, with the folders on its route, by `create_dir` and `create_new`, where a
 rename would put it over one an agent's CLI made after the read found none. A
 replace that changes nothing writes nothing, modification time included.
 
+A caller may bound what a file is read for (`ConfigFile::capped`), and a
+file past it is refused before it is held in memory (`config_too_large`),
+counted as it is read rather than by the size the file says it has. The
+bound is the caller's, as the format is, since how large a file of its
+agent's can be is the caller's to know.
+
+A file is taken away only through `ConfigFile::take`, and only when its
+caller says what it holds is nothing it keeps: which documents those are
+is the caller's to say, as the key path is, since `{"mcpServers": {}}` is
+nothing in `.mcp.json` and something in a file that keeps other settings
+beside it. It is read as an edit reads it, so a file that does not parse is
+refused rather than judged, and the route is looked at again before the
+file goes, so one that has become a link is refused and what it points at
+kept.
+
 The caller holds the workspace's lock, as an install does, so two of
 Mindweaver's writers take turns over one file. `ConfigFile` takes none: the
 lock is not re-entrant, and nothing here knows about workspaces.
+
+### Claude Code's `.mcp.json`
+
+`claude_mcp` (#90) gives Claude a server as one entry of the project's
+`.mcp.json`, `mcpServers.<name>`, written and taken out through
+`ConfigFile`, every byte outside it kept. What it builds on is #18's runs
+on Claude Code 2.1.318 ([docs/agents.md, Claude Code's
+`.mcp.json`](agents.md#claude-codes-mcpjson)), which it takes as they
+came out rather than deciding again.
+
+The entry (`claude_mcp::entry`) is a program's `{type, command, args, env}`
+or an address's `{type, url, headers}`, every key written whether or not it
+holds anything, so a definition has one entry and one canonical form, the
+form whose digest the ledger will keep (#93). `type` is always written:
+Claude drops an http entry without one, alone, and one somebody else wrote
+so is no reason to refuse the file. Each input is written where its
+placeholder stands as `${VAR}`, the variable it is read from (D-11), which
+Claude expands in `args`, `env`, `url` and `headers`, inside a longer value
+too, in one pass from the left, so a reference is never read again as a
+placeholder: `${A}` holds `{A}`, which another input may be named. A brace
+naming no input stays as it is written, and a `${` written as it is, which
+Claude would read as a reference, refuses the entry (`text_expanded`,
+[what each agent cannot be given](#what-each-agent-cannot-be-given-of-a-server)).
+The command is written as the definition holds it: no input's kind puts
+one there, and that Claude expands a reference in it as well is its docs'
+word and its binary's, which no run tried. Claude's extras are passed on
+beside the entry, never over a key it writes (`extra_repeated`, a shape
+of the report, since `claude_mcp::keys` says which keys those are to
+`McpDefinition::inexpressible` too), and a TOML date and time as its
+text, as `config_entry` reads one.
+
+What Claude cannot be given is `McpDefinition::inexpressible`'s to say,
+asked before the file is read, and never a second copy of its rule: a
+refusing shape refuses the entry with the shape's own code, and a program's
+`cwd` is left out and said. So is sse, written with a warning that Claude's
+docs call it deprecated (`claude_mcp_sse_deprecated`). A definition
+`validate` calls invalid is refused before anything else
+(`claude_mcp_unfit`), so a token written as it is never reaches a file, and
+so is an input read from no variable (`claude_mcp_input_unread`), which an
+entry could be given only as its value, and which `show` does not say:
+it is no agent's limit, but a value no install hands the renderer yet.
+
+The file is read as strict JSON, as Claude reads it, and up to 2 MiB
+(`claude_mcp::MAX_BYTES`): a project's servers come to a few KiB. A file
+holding a comment or a trailing comma loses Claude every server in it, so
+it is refused saying so (`mcp_json_not_strict`) and left as it is, rather
+than given an entry Claude would never load or rewritten into one it would,
+which is its owner's to do; it is told from a file no reader takes, which
+keeps `config_malformed`, by being read again as JSONC and held, outside
+its comments, to the scan strict JSON is held to
+(`config_entry::loose_json`): a raw control character in a string or a
+no-break space between tokens is no looser reader's either, and a JSONC
+read alone would take both. No approval is
+written: a person approves a project's servers when Claude asks, and a `-p`
+run starts every server the file names, approved or not.
+
+`render` replaces an entry of the name where it stands or adds it after
+the servers there, making the file with `create_new` when it is not there
+yet (`Written::Created`, which the caller keeps), and leaves a file that
+already holds the entry as it is. `remove` takes the entry out, and the
+file with it when the caller says Mindweaver made it and nothing else is
+left, no other server and nothing beside them, in one step rather than a
+write and then a removal, as `agents_md` takes away an `AGENTS.md` it made.
+Whose entry it is, and whether Mindweaver made the file, are the ledger's
+to say (#93), and the install's to ask (#94): nothing here reads either.
 
 ## Creating and changing artifacts
 
@@ -10283,7 +10398,11 @@ validated, renamed and removed by the lifecycle every kind goes through.
 Nothing installs one yet (`not_installable`). #88 added one from the
 command line, from how an agent starts or reaches it or from a template
 ([adding one](#adding-an-mcp-server)), and laid out what `show` says of
-its transport and inputs.
+its transport and inputs. #90 renders one into Claude's `.mcp.json` as
+its one entry and takes it out again ([Claude Code's
+`.mcp.json`](#claude-codes-mcpjson)), handing back the entry's canonical
+form for the fingerprint; installing it, and the record, are #93's and
+#94's.
 
 Checking it, #18 added MCP checks to `scripts/agent-probe`, run by hand.
 Claude Code's and OpenCode's ran on 2026-11-05; Codex's were not run, since
@@ -10350,6 +10469,11 @@ given whole. #88's `add mcp` takes a secret only as the name of the
 variable it is read from (`--secret-env`, `--secret-header`,
 `--bearer-env`), each in a shape every agent, Codex included, can be given,
 and refuses a value shaped like a token where a value is written as typed.
+#90 writes each input as `${VAR}` in Claude's entry, and finds in
+Claude's binary a shape it cannot be given: an input of an address read
+from a variable Claude reads as empty toward a remote server, a credential
+of its own or of a tool on the machine, which #87's report now says
+(`variable_blanked`), so the renderer refuses it.
 
 Checking it, #18's checks put a reference in every place a renderer would,
 naming a variable with a value of its own, and read what a stand-in server
@@ -12110,11 +12234,33 @@ it once as it closes.
   path as spelled, as `ConfigFile` does, would close it, at the price of
   replacing the link to a file inside the project that some teams keep
   between `AGENTS.md` and `CLAUDE.md`.
-- **A config file left empty by its last entry.** Removing the last server
-  leaves `"mcpServers": {}` in a JSON file, and a `.codex/config.toml` that
-  Mindweaver made holding nothing, and the file stays, with any folder made for
-  it. Removing them needs a record that Mindweaver made them, which the
-  ledger's MCP rows (#93) could carry.
+- **A config file left empty by its last entry.** `claude_mcp::remove`
+  takes `.mcp.json` away with its last server when its caller says
+  Mindweaver made it and nothing else is left, through `ConfigFile::take`;
+  without that word it leaves `"mcpServers": {}`, as a `.codex/config.toml`
+  Mindweaver made is left holding nothing, with any folder made for it.
+  Which files Mindweaver made is a record the ledger's MCP rows (#93) carry,
+  as `created_files` does for an `AGENTS.md`, and whether Codex's renderer
+  takes its file and folder away is #91's.
+- **An input given a value rather than a variable.** An input that is no
+  secret may name no variable, its value being somebody's to give, and
+  Claude's entry then has nothing to refer to: `claude_mcp` refuses it
+  (`claude_mcp_input_unread`), which `show`'s report of each agent does
+  not say, since it is no agent's limit. A value given when the server is
+  installed is #93's to hand the renderer, which would then write it as it
+  is, held to what a value of the transport is held to.
+- **Variables Claude empties that the table does not follow.** What Claude
+  keeps from a remote server was read from 2.1.318's binary
+  (`mcp/blanked.rs`), and only what it keeps in every environment: a
+  credential-shaped name under a packaging tool's prefix
+  (`ORG_GRADLE_PROJECT_`, `POETRY_`, `CONAN_`, `BUNDLE_`, `INPUT_`), which
+  it judges by a pattern of words, and what it empties only in some
+  environments (under GitHub Actions or `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`,
+  every credential-shaped name but GitHub's own tokens) are written, and
+  reach the server empty there. So is the shorter list it empties in a
+  program's `args` and `env`, its own session's, which no server's input is
+  read from. A run with one of them in `claude-mcp`'s header, or a newer
+  Claude, changes the table.
 - **The palette in two places.** `src/theme.ts` names the palette for Nuxt
   UI, and `main.css` spells it out as the variables Nuxt UI's colours plugin
   would have written at run time. The build test holds the two to each

@@ -21,6 +21,7 @@ pub mod artifact;
 pub mod assign;
 pub mod browse;
 pub mod catalog;
+pub mod claude_mcp;
 pub mod claude_md;
 pub mod claude_rules;
 pub mod code;
