@@ -130,32 +130,62 @@ fn text_is_written_as_it_is_since_codex_reads_no_reference_in_it() {
 }
 
 #[test]
-fn each_shape_codex_cannot_be_given_refuses_the_entry_by_its_code() {
+fn each_shape_codex_cannot_be_given_refuses_the_entry_by_its_code_and_reason() {
     let name = McpMother::name();
-    for (text, code) in [
-        (McpMother::stdio(&name), "secret_env_renamed"),
+    for (text, code, reason) in [
+        (
+            McpMother::stdio(&name),
+            "secret_env_renamed",
+            "secret input `api_key` is written as environment variable `API_KEY`, and a program \
+             is given a variable there only whole, under its own name, `EXAMPLE_API_KEY`",
+        ),
         (
             McpMother::composite_secret_env(&name),
             "secret_env_composite",
+            "secret input `api_key` is written in environment variable `EXAMPLE_API_KEY` beside \
+             other text, and a program is given a variable there only whole, under its own name",
         ),
-        (McpMother::secret_argument(&name), "secret_in_argument"),
-        (McpMother::secret_in_url(&name), "secret_in_url"),
+        (
+            McpMother::secret_argument(&name),
+            "secret_in_argument",
+            "secret input `workspace` is written in the transport's `args`, which hold no \
+             reference to an environment variable there",
+        ),
+        (
+            McpMother::secret_in_url(&name),
+            "secret_in_url",
+            "secret input `tenant` is written in the transport's `url`, which holds no reference \
+             to an environment variable there",
+        ),
         (
             McpMother::composite_secret_header(&name),
             "secret_header_composite",
+            "secret input `token` is written in header `Authorization` beside other text, and a \
+             header is read from an environment variable there only as its whole value, or as \
+             `Authorization: Bearer` and the token",
         ),
-        (McpMother::sse(&name), "sse_unsupported"),
+        (
+            McpMother::sse(&name),
+            "sse_unsupported",
+            "the sse transport, server-sent events, is not one taken there",
+        ),
         (
             McpMother::with_codex_extras(&name, "env_vars = [\"OTHER\"]\n"),
             "extra_repeated",
+            "its extras for the agent give `env_vars`, a key the entry there is written with \
+             from the transport, so one of the two would be lost",
         ),
         (
             McpMother::with_codex_extras(&name, "experimental_environment = \"remote\"\n"),
             "extra_withheld",
+            "its extras for the agent give `experimental_environment`, a key for the environment \
+             it runs a server in, which is never written there",
         ),
         (
             McpMother::with_codex_extras(&name, "environment_id = \"cloud\"\n"),
             "extra_withheld",
+            "its extras for the agent give `environment_id`, a key for the environment it runs \
+             a server in, which is never written there",
         ),
     ] {
         let error = entry(&parsed(&text)).unwrap_err();
@@ -164,23 +194,12 @@ fn each_shape_codex_cannot_be_given_refuses_the_entry_by_its_code() {
             matches!(error, CodexMcpError::Inexpressible { .. }),
             "{error}"
         );
-        assert!(
-            error
-                .to_string()
-                .starts_with(&format!("`{name}` cannot be given to Codex: ")),
-            "{error}"
+        assert_eq!(
+            error.to_string(),
+            format!("`{name}` cannot be given to Codex: {reason}"),
+            "{code}"
         );
     }
-
-    let error = entry(&parsed(&McpMother::stdio(&name))).unwrap_err();
-    assert_eq!(
-        error.to_string(),
-        format!(
-            "`{name}` cannot be given to Codex: secret input `api_key` is written as environment \
-             variable `API_KEY`, and a program is given a variable there only whole, under its \
-             own name, `EXAMPLE_API_KEY`"
-        )
-    );
 }
 
 #[test]
