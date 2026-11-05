@@ -646,5 +646,21 @@ fn each_input_kind_is_written_as_the_format_spells_it() {
         assert_eq!(kind.slug(), slug);
         let read: InputKind = toml::Value::String(slug.to_owned()).try_into().unwrap();
         assert_eq!(read, kind);
+        assert_eq!(serde_json::to_value(kind).unwrap(), slug);
+    }
+}
+
+#[test]
+fn each_transport_is_said_by_the_word_its_type_is_written_as() {
+    for (text, word) in [
+        (McpMother::stdio(&random::kebab()), "stdio"),
+        (McpMother::http(&random::kebab()), "http"),
+        (McpMother::sse(&random::kebab()), "sse"),
+    ] {
+        let transport = parsed(&text).transport;
+
+        assert_eq!(transport.slug(), word);
+        assert_eq!(transport.kind().slug(), word);
+        assert_eq!(serde_json::to_value(transport.kind()).unwrap(), word);
     }
 }

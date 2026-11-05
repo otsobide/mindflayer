@@ -83,7 +83,7 @@ fn list_json_carries_each_server_as_it_carries_every_kind() {
 }
 
 #[test]
-fn show_says_what_a_server_is_for_and_prints_its_definition() {
+fn show_says_what_a_server_is_for_how_it_is_started_and_what_is_supplied_for_it() {
     let dir = library();
     let file = own_directory_for(dir.path(), Kind::Mcp).join("github.toml");
 
@@ -93,16 +93,73 @@ fn show_says_what_a_server_is_for_and_prints_its_definition() {
         shown.stdout,
         format!(
             "github\n{}\n\n{GITHUB}\n\n\
+             transport: stdio\n  \
+             command: npx\n  \
+             args:\n    \
+             - -y\n    \
+             - @example/server\n    \
+             - --workspace\n    \
+             - {{workspace}}\n  \
+             env:\n    \
+             API_KEY: {{api_key}}\n    \
+             LOG_LEVEL: info\n  \
+             cwd: .\n\
+             \n\
+             inputs:\n  \
+             api_key: env, secret, required, read from $EXAMPLE_API_KEY\n    \
+             The key the server signs in with\n  \
+             workspace: arg, read from $EXAMPLE_WORKSPACE\n\
+             \n\
              agents:\n  \
              claude: given it without what it has no place for:\n    \
              - the transport's `cwd` is left out, since a program is started there in no folder \
              it is told\n  \
              codex: given it whole\n  \
-             opencode: given it whole\n\
-             \n{}",
+             opencode: given it whole\n",
             file.display(),
-            fs::read_to_string(&file).unwrap()
         )
+    );
+    assert!(shown.ok && shown.stderr.is_empty(), "{:?}", shown.stderr);
+}
+
+#[test]
+fn show_lays_an_address_out_by_its_url_and_headers_and_never_its_credential() {
+    let dir = library();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    let text = McpMother::sse("events").replacen(
+        "https://example.com/sse",
+        "https://me:hunter2@example.com/sse",
+        1,
+    );
+    fs::write(folder.join("events.toml"), text).unwrap();
+
+    let shown = weaver(dir.path(), &["show", "mcp:events"]).unwrap();
+    let json = weaver(dir.path(), &["show", "mcp:events", "--json"]).unwrap();
+
+    assert!(
+        shown.stdout.contains(
+            "transport: sse\n  \
+             url: https://example.com/sse\n  \
+             headers:\n    \
+             X-Api-Key: {key}\n\
+             \n\
+             inputs:\n  \
+             key: header, secret, read from $EXAMPLE_KEY\n\
+             \n\
+             agents:\n"
+        ),
+        "{}",
+        shown.stdout
+    );
+    let (data, warnings): (serde_json::Value, _) = enveloped(&json);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(data[0]["transport"]["url"], "https://example.com/sse");
+    // Kept out of the text and the transport alike; the body is the file,
+    // which holds what it was written with.
+    assert!(!shown.stdout.contains("hunter2"), "{}", shown.stdout);
+    assert!(
+        !data[0]["transport"].to_string().contains("hunter2"),
+        "{data}"
     );
 }
 
@@ -122,9 +179,9 @@ fn show_says_which_agent_is_given_none_of_a_server_and_why() {
 
     let sse = "    - the sse transport, server-sent events, is not one taken there\n";
     assert!(
-        events.stdout.contains(&format!(
+        events.stdout.ends_with(&format!(
             "agents:\n  claude: given it whole\n  codex: given none of it:\n{sse}  \
-             opencode: given none of it:\n{sse}\n"
+             opencode: given none of it:\n{sse}"
         )),
         "{}",
         events.stdout

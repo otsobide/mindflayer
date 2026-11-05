@@ -8,6 +8,7 @@ use std::path::Path;
 use tempfile::TempDir;
 
 use super::*;
+use crate::mother::{McpMother, UrlMother};
 
 /// The skill `name` written into a folder of skills under `root`, holding
 /// `text` as its `SKILL.md`, and read.
@@ -69,6 +70,7 @@ fn a_skill_shown_says_what_it_declares_and_its_body_in_order() {
             r#""allowed_tools":["Bash","Read"],"license":"MIT","#,
             r#""compatibility":"Requires git","#,
             r#""metadata":{"version":"1.0","author":"acme"},"paths":null,"#,
+            r#""transport":null,"inputs":null,"#,
             r#""expressibility":null,"body":"\nRun the pipeline.\n"}"#,
         )
     );
@@ -103,6 +105,112 @@ fn a_rule_shown_says_only_what_a_rule_can_declare() {
     let bare = value(&bare, dir.path());
     assert_eq!(bare["metadata"], serde_json::Value::Null);
     assert_eq!(bare["file"], "<root>/rules/bare.md");
+}
+
+/// The MCP server `name` written as a definition in a folder of servers
+/// under `root`, holding `text`, and read.
+fn server(root: &Path, name: &str, text: &str) -> Artifact {
+    let file = root.join("mcp").join(format!("{name}.toml"));
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, text).unwrap();
+    Artifact::mcp(file, name.to_owned(), root).unwrap()
+}
+
+#[test]
+fn a_server_shown_lays_out_its_transport_and_inputs_by_their_words() {
+    let dir = TempDir::new().unwrap();
+    let program = server(dir.path(), "github", &McpMother::stdio("github"));
+    let address = server(dir.path(), "linear", &McpMother::http("linear"));
+
+    let program = value(&Shown::of(&program).unwrap(), dir.path());
+    let address = value(&Shown::of(&address).unwrap(), dir.path());
+
+    // Every name, each word as the format writes it, and a key of the
+    // other transport empty rather than left out.
+    assert_eq!(
+        program["transport"],
+        serde_json::json!({
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@example/server", "--workspace", "{workspace}"],
+            "env": {"API_KEY": "{api_key}", "LOG_LEVEL": "info"},
+            "cwd": ".",
+            "url": null,
+            "headers": {},
+        })
+    );
+    assert_eq!(
+        program["inputs"],
+        serde_json::json!([
+            {
+                "name": "api_key",
+                "kind": "env",
+                "description": "The key the server signs in with",
+                "required": true,
+                "secret": true,
+                "env_var": "EXAMPLE_API_KEY",
+            },
+            {
+                "name": "workspace",
+                "kind": "arg",
+                "description": null,
+                "required": false,
+                "secret": false,
+                "env_var": "EXAMPLE_WORKSPACE",
+            },
+        ])
+    );
+    assert_eq!(
+        address["transport"],
+        serde_json::json!({
+            "type": "http",
+            "command": null,
+            "args": [],
+            "env": {},
+            "cwd": null,
+            "url": "https://{tenant}.example.com/mcp",
+            "headers": {"Authorization": "Bearer {token}"},
+        })
+    );
+    assert_eq!(address["inputs"][0]["kind"], "url_var");
+    assert_eq!(address["inputs"][1]["kind"], "header");
+}
+
+#[test]
+fn a_server_shown_holds_its_address_without_the_credential_it_was_typed_with() {
+    let dir = TempDir::new().unwrap();
+    for credentialed in UrlMother::every_credentialed() {
+        let text =
+            McpMother::sse("events").replacen("https://example.com/sse", &credentialed.typed, 1);
+        let events = server(dir.path(), "events", &text);
+
+        let shown = Shown::of(&events).unwrap();
+
+        let transport = shown.transport.as_ref().expect("a server's transport");
+        assert_eq!(transport.transport, TransportType::Sse);
+        assert_eq!(
+            transport.url.as_ref().map(|url| url.as_str()),
+            Some(credentialed.clean.as_str())
+        );
+        let sent = serde_json::to_string(&shown.transport).unwrap();
+        assert!(!sent.contains(&credentialed.secret), "{sent}");
+    }
+}
+
+#[test]
+fn a_skill_or_a_rule_shown_has_no_transport_and_no_inputs() {
+    let dir = TempDir::new().unwrap();
+    let deploy = skill(
+        dir.path(),
+        "deploy",
+        "---\nname: deploy\ndescription: Ship it\n---\n",
+    );
+    let commits = rule(dir.path(), "commits", "# Commits\n");
+
+    for artifact in [&deploy, &commits] {
+        let shown = Shown::of(artifact).unwrap();
+        assert_eq!((shown.transport, shown.inputs), (None, None));
+    }
 }
 
 #[test]

@@ -54,7 +54,7 @@
 use std::collections::BTreeMap;
 
 use serde::de::{self, Deserializer};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
 use crate::artifact::ValidationIssue;
@@ -117,14 +117,58 @@ pub enum Transport {
 }
 
 impl Transport {
-    /// How the format writes it, as `type`.
-    pub const fn slug(&self) -> &'static str {
+    /// Which transport it is, as its `type` names it.
+    pub const fn kind(&self) -> TransportType {
         match self {
-            Transport::Stdio(_) => "stdio",
-            Transport::Http(_) => "http",
-            Transport::Sse(_) => "sse",
+            Transport::Stdio(_) => TransportType::Stdio,
+            Transport::Http(_) => TransportType::Http,
+            Transport::Sse(_) => TransportType::Sse,
         }
     }
+
+    /// How the format writes it, as `type`.
+    pub const fn slug(&self) -> &'static str {
+        self.kind().slug()
+    }
+}
+
+/// Which of the transports a definition names, with nothing it holds: the
+/// word its `type` is written as, for what `show` says of one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TransportType {
+    /// A program, [`Transport::Stdio`].
+    Stdio,
+    /// An address over streamable HTTP, [`Transport::Http`].
+    Http,
+    /// An address over server-sent events, [`Transport::Sse`].
+    Sse,
+}
+
+impl TransportType {
+    /// How the format writes it, as `type`.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            TransportType::Stdio => "stdio",
+            TransportType::Http => "http",
+            TransportType::Sse => "sse",
+        }
+    }
+}
+
+/// By the word the format writes as `type`, rather than derived: a derive
+/// spells the variant, and what a report calls a transport is the word a
+/// definition is written with, which renaming a variant must not change.
+impl Serialize for TransportType {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
+    /// How an agent starts an MCP server or reaches it, by the word its
+    /// definition writes as its transport's `type`.
+    TransportType by slug { Stdio, Http, Sse }
 }
 
 /// A program an agent starts.
@@ -217,6 +261,22 @@ impl InputKind {
             InputKind::UrlVar => "the transport's `url`",
         }
     }
+}
+
+/// By the word the format writes as an input's `kind`, rather than derived,
+/// for the reason a transport's `type` is: what is read and what is
+/// reported are the one word.
+impl Serialize for InputKind {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
+    /// Where an MCP server's input may be written in its transport, by the
+    /// word its definition writes as the input's `kind`.
+    InputKind by slug { Env, Header, Arg, UrlVar }
 }
 
 /// Where a definition imported from a registry came from, as the registry
