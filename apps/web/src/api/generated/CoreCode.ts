@@ -114,6 +114,7 @@ export type CoreCode =
   | "codex_mcp_input_unread"
   | "codex_mcp_input_in_text"
   | "codex_mcp_user_scope"
+  | "codex_mcp_collision"
   | "config_malformed"
   | "entry_no_key"
   | "entry_not_an_object"

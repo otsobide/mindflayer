@@ -33,6 +33,20 @@ fn write(root: &Path, text: &str) {
     fs::write(root.join(FILE), text).unwrap();
 }
 
+/// A Codex home of its own, in a temporary folder, holding `config` as its
+/// `config.toml` when one is given: never the user's own.
+fn codex_home(config: Option<&str>) -> (TempDir, AgentHomes) {
+    let home = TempDir::new().unwrap();
+    if let Some(config) = config {
+        fs::write(home.path().join("config.toml"), config).unwrap();
+    }
+    let homes = AgentHomes {
+        codex_home: Some(home.path().to_path_buf()),
+        ..AgentHomes::default()
+    };
+    (home, homes)
+}
+
 /// The names in `dir`, sorted: what a write leaves beside the file.
 fn names(dir: &Path) -> Vec<String> {
     let mut names: Vec<_> = fs::read_dir(dir)
@@ -476,6 +490,116 @@ fn a_definition_codex_is_refused_is_written_nowhere() {
         codex_mcp::render(root.path(), &parsed(&text), &AgentHomes::default()).unwrap_err();
         assert_eq!(read(root.path()), TEAMS, "{code}");
     }
+}
+
+/// A user's own `config.toml`, holding `server` among their own servers.
+fn users(server: &str) -> String {
+    format!(
+        "model = \"gpt-5-codex\"\n\n\
+         [mcp_servers.docs]\ncommand = \"docs-mcp\"\n\n\
+         [mcp_servers.{server}]\nurl = \"http://localhost:3000/mcp\"\n"
+    )
+}
+
+#[test]
+fn a_server_the_user_s_own_config_names_already_is_refused_and_nothing_written() {
+    let name = McpMother::name();
+    let definition = parsed(&McpMother::address_for_codex(&name));
+    let (home, homes) = codex_home(Some(&users(&name)));
+
+    for theirs in [None, Some(TEAMS)] {
+        let root = TempDir::new().unwrap();
+        if let Some(theirs) = theirs {
+            write(root.path(), theirs);
+        }
+
+        let error = codex_mcp::render(root.path(), &definition, &homes).unwrap_err();
+
+        assert_eq!(error.code(), "codex_mcp_collision");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "`{name}` cannot be given to Codex: {} holds a server `{name}` already, and \
+                 Codex reads a project's servers over the user's key by key, so the two would be \
+                 read as one server made of both",
+                home.path().join("config.toml").display()
+            )
+        );
+        match theirs {
+            None => assert!(names(root.path()).is_empty()),
+            Some(theirs) => assert_eq!(read(root.path()), theirs),
+        }
+    }
+    assert_eq!(
+        fs::read_to_string(home.path().join("config.toml")).unwrap(),
+        users(&name)
+    );
+}
+
+#[test]
+fn a_server_is_given_beside_the_user_s_others_and_with_no_user_s_config_to_read() {
+    let name = McpMother::name();
+    let definition = parsed(&McpMother::address_for_codex(&name));
+    let (_other, others) = codex_home(Some(&users("other")));
+    let (_empty, empty) = codex_home(None);
+
+    for homes in [others, empty, AgentHomes::default()] {
+        let root = TempDir::new().unwrap();
+        let rendered = codex_mcp::render(root.path(), &definition, &homes).unwrap();
+        assert_eq!(rendered.written, Written::Created, "{homes:?}");
+    }
+}
+
+#[test]
+fn a_user_s_config_that_does_not_read_is_refused_by_what_it_is() {
+    let name = McpMother::name();
+    let definition = parsed(&McpMother::address_for_codex(&name));
+    for (config, code) in [
+        ("[mcp_servers\n", "config_malformed"),
+        ("mcp_servers = 1\n", "entry_not_an_object"),
+    ] {
+        let (home, homes) = codex_home(Some(config));
+        let root = TempDir::new().unwrap();
+
+        let error = codex_mcp::render(root.path(), &definition, &homes).unwrap_err();
+
+        assert_eq!(error.code(), code, "{error}");
+        assert!(
+            error
+                .to_string()
+                .starts_with(&home.path().join("config.toml").display().to_string()),
+            "{error}"
+        );
+        assert!(names(root.path()).is_empty());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_user_s_config_kept_elsewhere_and_linked_in_is_read_through_the_link() {
+    let name = McpMother::name();
+    let kept = TempDir::new().unwrap();
+    fs::write(kept.path().join("config.toml"), users(&name)).unwrap();
+    let (home, homes) = codex_home(None);
+    std::os::unix::fs::symlink(
+        kept.path().join("config.toml"),
+        home.path().join("config.toml"),
+    )
+    .unwrap();
+    let root = TempDir::new().unwrap();
+
+    let error = codex_mcp::render(
+        root.path(),
+        &parsed(&McpMother::address_for_codex(&name)),
+        &homes,
+    )
+    .unwrap_err();
+
+    assert_eq!(error.code(), "codex_mcp_collision");
+    assert_eq!(
+        fs::read_to_string(kept.path().join("config.toml")).unwrap(),
+        users(&name)
+    );
 }
 
 #[test]

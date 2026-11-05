@@ -50,12 +50,27 @@
 //! user's home while `$CODEX_HOME` is `~/.codex`, is refused
 //! ([`CodexMcpError::UserScope`]), as an install's copy is there.
 //!
+//! Codex merges a project's servers over the user's own, those of
+//! `$CODEX_HOME/config.toml`, key by key, so a server of the name there and
+//! the project's would be read as one made of both. A name the user's
+//! config holds already is refused ([`CodexMcpError::Collision`]), read
+//! from the Codex home [`AgentHomes`] gives and nowhere else. Refused
+//! rather than warned of, though which it should be is what #18's
+//! `codex-mcp-collision` would decide, and that was never run: a merge that
+//! breaks more than the one name, the whole configuration or the other
+//! servers, is the outcome a refusal is right for, and until a run says
+//! the merge leaves the rest working, a refusal is the side to be wrong
+//! on. With no Codex home given there is no user's config to read, and
+//! nothing collides, as in a home holding no `config.toml`.
+//!
 //! Nothing here knows of the ledger. Whether an entry of the name is
 //! Mindweaver's to replace or take out, and whether Mindweaver made the
 //! file, are the caller's, as its record says (#93, #94); and the caller
 //! holds the workspace's lock, as one calling [`ConfigFile`] does.
 
 use std::collections::BTreeMap;
+use std::fs;
+use std::io::{self, Read as _};
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -73,6 +88,10 @@ pub const FILE: &str = ".codex/config.toml";
 
 /// The table in [`FILE`] that holds every server by its name.
 pub const SERVERS: &str = "mcp_servers";
+
+/// The user's own config in Codex's home, the layer a project's [`FILE`]
+/// is merged over.
+pub const USER_FILE: &str = "config.toml";
 
 /// The most a [`FILE`] is read for: 2 MiB, as Claude's `.mcp.json` is.
 ///
@@ -270,7 +289,8 @@ pub struct Rendered {
 ///
 /// The entry is made first ([`entry`]), so a definition refused reads and
 /// writes nothing. A file inside one of `homes` is refused before it is
-/// read. The file is read up to [`MAX_BYTES`] and written through
+/// read, and so is a name the user's config in the Codex home `homes`
+/// gives already holds a server under. The file is read up to [`MAX_BYTES`] and written through
 /// [`ConfigFile`], which keeps every byte outside the entry, makes a new
 /// file with `create_new` and leaves one that already holds the entry as
 /// it is.
@@ -285,6 +305,14 @@ pub fn render(
         return Err(CodexMcpError::UserScope { file, home, reader });
     }
     let key = [SERVERS, entry.name.as_str()];
+    if let Some(user) = UserConfig::read(homes)? {
+        if user.get(&key)?.is_some() {
+            return Err(CodexMcpError::Collision {
+                name: entry.name.to_string(),
+                config: user.path,
+            });
+        }
+    }
     let edit = match file.get(&key)? {
         None => Edit::Insert(entry.value.clone()),
         Some(_) => Edit::Replace(entry.value.clone()),
@@ -329,6 +357,67 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, CodexMc
 /// The project's [`FILE`], read up to [`MAX_BYTES`].
 fn config(root: &Path) -> Result<ConfigFile, CodexMcpError> {
     Ok(ConfigFile::new(root, FILE, Format::Toml)?.capped(MAX_BYTES))
+}
+
+/// The user's [`USER_FILE`] in the Codex home, as text: only read, never
+/// written.
+struct UserConfig {
+    path: PathBuf,
+    text: String,
+}
+
+impl UserConfig {
+    /// The user's config in the Codex home `homes` gives, read through a
+    /// link and up to [`MAX_BYTES`]; `None` when no home is given, or it
+    /// holds no such file.
+    ///
+    /// Through a link, where a project's [`FILE`] is refused one: it is
+    /// read and never written, and a user's config kept in a repository of
+    /// their settings is most often linked into the home. Refused when it
+    /// does not read as TOML, as Codex refuses it: whether it names a
+    /// server cannot be told of a file that does not parse.
+    fn read(homes: &AgentHomes) -> Result<Option<Self>, CodexMcpError> {
+        let Some(home) = &homes.codex_home else {
+            return Ok(None);
+        };
+        let path = home.join(USER_FILE);
+        let failed = |source| FileError::Read {
+            path: path.clone(),
+            source,
+        };
+        let file = match fs::File::open(&path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(source) => return Err(failed(source).into()),
+        };
+        let mut bytes = Vec::new();
+        // One byte past the cap is enough to know it is past.
+        file.take(MAX_BYTES + 1)
+            .read_to_end(&mut bytes)
+            .map_err(failed)?;
+        if bytes.len() as u64 > MAX_BYTES {
+            return Err(FileError::TooLarge {
+                path,
+                cap: MAX_BYTES,
+            }
+            .into());
+        }
+        let Ok(text) = String::from_utf8(bytes) else {
+            return Err(FileError::NotText { path }.into());
+        };
+        Ok(Some(UserConfig { path, text }))
+    }
+
+    /// What the user's config holds at `key`.
+    fn get(&self, key: &[&str]) -> Result<Option<Value>, CodexMcpError> {
+        config_entry::get(Format::Toml, &self.text, key).map_err(|source| {
+            FileError::Entry {
+                path: self.path.clone(),
+                source,
+            }
+            .into()
+        })
+    }
 }
 
 /// The keys Codex's entry may be written with from a transport of `kind`,
@@ -437,6 +526,12 @@ pub enum CodexMcpError {
         home: PathBuf,
         reader: &'static str,
     },
+    #[error(
+        "`{name}` cannot be given to Codex: {config} holds a server `{name}` already, and Codex \
+         reads a project's servers over the user's key by key, so the two would be read as one \
+         server made of both"
+    )]
+    Collision { name: String, config: PathBuf },
     #[error(transparent)]
     File(#[from] FileError),
 }
@@ -446,6 +541,7 @@ codes!(CodexMcpError {
     Self::InputUnread { .. } => "codex_mcp_input_unread",
     Self::InputInText { .. } => "codex_mcp_input_in_text",
     Self::UserScope { .. } => "codex_mcp_user_scope",
+    Self::Collision { .. } => "codex_mcp_collision",
 } carried {
     Self::Inexpressible { shape, .. } => shape,
     Self::File(error) => error,
