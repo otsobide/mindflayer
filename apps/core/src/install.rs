@@ -1719,6 +1719,7 @@ pub(crate) fn install_held(
                     content_hash: None,
                 })
                 .collect(),
+            entries: Vec::new(),
         },
     )?;
     let mut detail = format!("{name} into {}", project.name());

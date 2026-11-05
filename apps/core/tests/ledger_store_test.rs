@@ -25,8 +25,9 @@ use mindweaver_core::ledger::{
 };
 use mindweaver_core::mother::ledger::RouteMother;
 use mindweaver_core::mother::{
-    random, ArtifactNameMother, ContentHashMother, InstallRecordMother, OriginMother,
-    ProjectIdMother, RedactedMother, RevisionMother, TargetMother, UrlMother,
+    random, ArtifactNameMother, ContentHashMother, EntryTargetMother, InstallRecordMother,
+    McpMother, OriginMother, ProjectIdMother, RedactedMother, RevisionMother, TargetMother,
+    UrlMother,
 };
 use mindweaver_core::value::{ArtifactName, Origin, Redacted};
 use mindweaver_core::{Agent, Clock, Kind, Ledger, ProjectId, SourceKind, LEDGER_FILE};
@@ -164,6 +165,9 @@ every_store![
     an_installation_from_before_hashes_reads_back_with_neither_origin_nor_hash,
     each_copy_keeps_the_hash_of_its_own_it_was_given,
     an_installation_recording_no_copy_still_reads_back,
+    a_servers_installation_reads_back_with_every_entry_it_wrote_and_no_copy,
+    installing_a_server_again_replaces_its_entries_whole,
+    forgetting_a_servers_installation_takes_its_entries,
     an_installation_belongs_to_its_project_and_its_kind_alone,
     installing_a_name_again_replaces_its_record_and_its_copies_whole,
     installations_and_records_are_in_name_order_and_copies_in_path_order_each_once,
@@ -263,10 +267,12 @@ const ACTIONS: [Action; 5] = [
     Action::Adopt,
 ];
 
-/// `record` with its copies in path order: what a store hands back is the
-/// same copies, and in which order it lists them the port leaves to it.
+/// `record` with its copies in path order and its entries in agent order:
+/// what a store hands back is the same copies and entries, and in which
+/// order it lists them the port leaves to it.
 fn sorted(mut record: InstallRecord) -> InstallRecord {
     record.targets.sort_by(|a, b| a.path.cmp(&b.path));
+    record.entries.sort_by_key(|entry| entry.agent);
     record
 }
 
@@ -486,6 +492,65 @@ fn an_installation_recording_no_copy_still_reads_back(mut store: Store) {
         );
     }
     assert!(store.holds("collapse").unwrap());
+}
+
+fn a_servers_installation_reads_back_with_every_entry_it_wrote_and_no_copy(mut store: Store) {
+    let name = McpMother::name();
+    let server = InstallRecordMother::mcp(&name);
+
+    store.installed("collapse", &server).unwrap();
+
+    store.reopen();
+    assert_eq!(
+        recorded(&store, "collapse", Kind::Mcp, &name),
+        Some(server.clone()),
+        "{name}"
+    );
+    assert_eq!(store.records("collapse", Kind::Mcp).unwrap(), [server]);
+    // An entry is no copy: nothing of a server is recorded by a path.
+    assert_eq!(
+        store.copies("collapse", Kind::Mcp).unwrap(),
+        Vec::<String>::new()
+    );
+    assert!(store.holds("collapse").unwrap());
+}
+
+fn installing_a_server_again_replaces_its_entries_whole(mut store: Store) {
+    let name = McpMother::name();
+    let first = InstallRecordMother::mcp(&name);
+    let again = InstallRecord {
+        entries: vec![EntryTargetMother::of(Agent::Codex, &name)],
+        ..first.clone()
+    };
+
+    store.installed("collapse", &first).unwrap();
+    store.installed("collapse", &again).unwrap();
+
+    store.reopen();
+    let read = recorded(&store, "collapse", Kind::Mcp, &name).expect("recorded");
+    assert_eq!(read.entries, again.entries, "{name}");
+    assert_ne!(read.entries[0].fingerprint, first.entries[1].fingerprint);
+}
+
+fn forgetting_a_servers_installation_takes_its_entries(mut store: Store) {
+    let name = McpMother::name();
+    let server = InstallRecordMother::mcp(&name);
+    store.installed("collapse", &server).unwrap();
+
+    assert!(store.uninstalled("collapse", Kind::Mcp, &name).unwrap());
+    // Recorded again with none, none of the old ones come back with it.
+    let bare = InstallRecord {
+        entries: Vec::new(),
+        ..server
+    };
+    store.installed("collapse", &bare).unwrap();
+
+    store.reopen();
+    assert_eq!(
+        recorded(&store, "collapse", Kind::Mcp, &name),
+        Some(bare),
+        "{name}"
+    );
 }
 
 fn an_installation_belongs_to_its_project_and_its_kind_alone(mut store: Store) {

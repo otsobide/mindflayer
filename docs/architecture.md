@@ -3209,9 +3209,11 @@ one only to migrate it ([A read leaves the ledger as it finds
 it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
 Six things are recorded: the **sources** gathered from, the **artifacts** on
-the shelf and which source each came from, the **installations** (which skill
-or rule Mindweaver put into which project, from where, every copy it wrote and
-a hash of what it wrote), the **files Mindweaver made** in a project, which it
+the shelf and which source each came from, the **installations** (which skill,
+rule or MCP server Mindweaver put into which project, from where, every copy it
+wrote and a hash of what it wrote, or for a server every entry it wrote into
+an agent's config file and the fingerprint of each), the **files Mindweaver
+made** in a project, which it
 may take away again, the **projects** by the id each was last seen holding,
 and an **action log**. The log keeps failures too: a log
 of only what worked cannot answer the question anybody opens it with.
@@ -3229,7 +3231,7 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
-The schema has had five versions, each a block in the SQLite store's
+The schema has had six versions, each a block in the SQLite store's
 migration (`adapter::sqlite::Sqlite::migrate`) and a
 constant beside it:
 
@@ -3257,6 +3259,16 @@ constant beside it:
    one route an id, and on `installations`, the `project_id` each record was
    made for, so a project that moved is found again by its id ([an entry
    whose project moved](#an-entry-whose-project-moved), #57).
+6. `installation_entries`, one row for each entry an MCP server's
+   installation wrote into an agent's config file
+   ([D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent)): the agent,
+   the file as a route from the project, the server's name it is keyed by,
+   and the `fingerprint` of what was written ([the
+   fingerprint](#the-fingerprint)), one entry an agent (#93). A table of its
+   own rather than more targets: a target is a copy found by its path, and
+   an entry is found by its key in a file every server of the project
+   shares. The definition's origin is the installation's `origin`, which
+   version 3 added, so the step adds nothing for it.
 
 An older ledger is migrated step by step, so one made two versions ago ends
 where one made today begins, and two rules hold for every step:
@@ -3302,7 +3314,8 @@ to what a step is filled from, and the reason for it holds: what it is handed
 is what the projects hold, not how today's code spells something. A project
 a `mind.toml` marks, an entry that will not open and an id two linked
 directories hold are handed in for none, and their records keep their route
-alone. D-04's states (#47) took no step of their own:
+alone. Version 6 fills in nothing: no build before it installed an MCP
+server. D-04's states (#47) took no step of their own:
 what tells them apart is the hash each copy was written with, which versions
 3 and 4 keep, and what the place it came from offers now, which is read where
 it is offered rather than kept. A record with no hash is held to its offer
@@ -9264,7 +9277,7 @@ again over an entry somebody reformatted leaves their layout alone.
 
 An entry can carry no mark of its own: OpenCode refuses keys it does not know,
 `codex --strict-config` fails on them, and `.mcp.json` allows no comments. So
-what the ledger will keep of an entry Mindweaver wrote (#93) is its fingerprint,
+what the ledger keeps of an entry Mindweaver wrote (#93) is its fingerprint,
 `hash::fingerprint`, the recipe's one definition beside a copy's `hash::tree`
 and a file's `hash::bytes`: the SHA-256 of the entry's canonical JSON form,
 which each renderer's `Entry::fingerprint` takes of the entry it makes and

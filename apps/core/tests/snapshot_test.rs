@@ -144,6 +144,7 @@ fn fixture() -> Fixture {
                         content_hash: None,
                     })
                     .collect(),
+                entries: Vec::new(),
             },
         )
         .unwrap();

@@ -806,7 +806,10 @@ These are easy to break from a single file without noticing.
     project at the workspace's root is that project's (D-03).
 - **Mindweaver only manages what it installed.** The ledger's record of an
   install (one installation, a target for each copy it wrote, its origin and
-  the `hash::tree` of what it wrote, that hash's one definition) is what
+  the `hash::tree` of what it wrote, that hash's one definition, or for an
+  MCP server an entry target for each entry it wrote into an agent's config
+  file, keyed by the agent, with the `hash::fingerprint` of what it wrote,
+  schema 6's `installation_entries`) is what
   allows overwriting and deleting. An install writes a copy in every target
   `install::targets` gives (each folder the project's agents read, or the one
   a `mind.toml` names), built from one tree and put in place together or not
@@ -1466,8 +1469,9 @@ These are easy to break from a single file without noticing.
   `apps/core/src/mother/`), never by hand where a mother makes it: one per
   value object (`ContentHashMother`, `RedactedMother`, `OriginMother`,
   `ArtifactNameMother`, `RevisionMother`, `ProjectIdMother`), per record the
-  ledger keeps (`InstallRecordMother`, `TargetMother`, `SourceMother`,
-  `GatheredMother`, `MovedMother`, `EntryMother`), for a skill's and a
+  ledger keeps (`InstallRecordMother`, `TargetMother`, `EntryTargetMother`,
+  `SourceMother`, `GatheredMother`, `MovedMother`, `EntryMother`), for a
+  skill's and a
   rule's text (`SkillMother`, `RuleMother`), an MCP server's definition,
   one for each transport and one for each shape a rule or an agent is
   about (`McpMother`: `misnamed`, `secret_without_variable`, a token of each

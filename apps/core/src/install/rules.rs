@@ -781,6 +781,7 @@ impl Wanted {
                 .and_then(|record| record.content_hash.clone())
                 .or_else(|| Some(hash::bytes(&self.bytes))),
             targets,
+            entries: Vec::new(),
         }
     }
 }
@@ -1287,6 +1288,7 @@ fn render_held(
                 origin: Some(rule.origin.clone()),
                 content_hash,
                 targets,
+                entries: Vec::new(),
             }
         })
         .collect();
@@ -1683,6 +1685,7 @@ fn copy_in_held(
                     content_hash: Some(held.clone()),
                 })
                 .collect(),
+            entries: Vec::new(),
         },
     )?;
     let detail = format!("{name} into {}", project.name());

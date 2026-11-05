@@ -32,6 +32,7 @@ use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::adapter::sqlite::Sqlite;
+use crate::agent::Agent;
 use crate::code::codes;
 use crate::kind::Kind;
 use crate::port::{Clock, LedgerStore};
@@ -207,7 +208,7 @@ impl Outcome {
 }
 
 /// What the ledger records of one installation into a project: what went
-/// in, from where, and every copy it wrote.
+/// in, from where, and every copy or entry it wrote.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallRecord {
     pub kind: Kind,
@@ -226,6 +227,10 @@ pub struct InstallRecord {
     pub content_hash: Option<ContentHash>,
     /// Every copy it wrote, by path.
     pub targets: Vec<Target>,
+    /// Every entry it wrote into an agent's config file, one an agent: an
+    /// MCP server's, which is written as entries rather than copies (D-10).
+    /// None for a skill's or a rule's.
+    pub entries: Vec<EntryTarget>,
 }
 
 /// One copy an installation wrote.
@@ -243,6 +248,27 @@ pub struct Target {
     /// for a skill's copies, every one of which holds the tree the
     /// installation's hash names.
     pub content_hash: Option<ContentHash>,
+}
+
+/// One entry an MCP server's installation wrote into an agent's config file
+/// (D-10): what a copy is to a skill's.
+///
+/// Apart from [`Target`], which is a copy found by its path, one path each:
+/// an entry is found by its key in a file every server of the project
+/// shares, so what tells Mindweaver's from somebody's is the key in that
+/// file, and what tells it untouched is the fingerprint of what the key
+/// holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntryTarget {
+    /// The agent whose config file it is in.
+    pub agent: Agent,
+    /// The file, as a route from the project, `/` separated, as
+    /// [`Agent::mcp_file`] named it when the entry was written.
+    pub file: String,
+    /// The key the entry is under in that file: the server's name.
+    pub name: ArtifactName,
+    /// [`crate::hash::fingerprint`] of the entry as it was written.
+    pub fingerprint: ContentHash,
 }
 
 /// Where one installation's copies are once its project has moved from a

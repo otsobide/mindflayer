@@ -36,7 +36,8 @@ pub use fixture::{
     GitRepositoryMother, MindflayerMother, ProjectMother, ShelfMother, WorkspaceMother,
 };
 pub use ledger::{
-    EntryMother, GatheredMother, InstallRecordMother, MovedMother, SourceMother, TargetMother,
+    EntryMother, EntryTargetMother, GatheredMother, InstallRecordMother, MovedMother, SourceMother,
+    TargetMother,
 };
 pub use settings::SettingsMother;
 pub use url::{Credentialed, UrlMother};

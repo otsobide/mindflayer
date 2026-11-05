@@ -143,6 +143,7 @@ fn where_an_artifact_is_held_is_every_copy_found_and_every_place_recorded() {
             target(".claude/skills/deploy"),
             target(".agents/skills/deploy"),
         ],
+        entries: Vec::new(),
     };
     let found = || {
         vec![
