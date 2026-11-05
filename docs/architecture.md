@@ -8408,8 +8408,24 @@ the block](#how-claude-reaches-the-block)). The block is no folder
 a copy goes into, one file every agent shares, so it is rendered outside the
 table ([how a rule reaches the agents](#how-a-rule-reaches-the-agents)), and
 so are Claude's files, which follow how Claude reaches the block rather than
-an agent alone ([installing rules](#installing-rules)). MCP servers, entries
-in each agent's own config file, come in M6.
+an agent alone ([installing rules](#installing-rules)).
+
+Nor have MCP servers, which reach an agent as one entry in its own config
+file ([D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent)). Which file
+that is, `Agent::mcp_file` says, the table's MCP targets, asked of the
+renderer that writes the file rather than spelled a second time, so the
+file the ledger records an entry under is the one it is written into:
+
+| Kind | Claude | Codex | OpenCode |
+|---|---|---|---|
+| MCP server | `.mcp.json` | `.codex/config.toml` | the first of `opencode.json`, `opencode.jsonc`, `.opencode/opencode.json`, `.opencode/opencode.jsonc` there is, or `opencode.json` |
+
+A function of the project's root rather than a row of the table, which is
+pure: OpenCode's is whichever of its four files the project holds
+([OpenCode's `opencode.json`](#opencodes-opencodejson)), looked for on disk,
+and only that one can fail. `Agent::reads_files` names the same files, all
+four of OpenCode's among them, so a front end watching a project watches
+whichever one a snapshot reads.
 
 `TargetTable::targets(kind, agents)` gives one target (`AgentTarget`) per
 location, each with the agents it is for: all three agents take a skill in two
@@ -10679,9 +10695,11 @@ result bears on, and what came of it:
   V2** (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`):
   verified on 2.2.5, 2.1.3 and 1.19.4, so #92 writes D-12's minimal V2
   entry, and keeps V1's shape in a file that already uses it.
-- **Each agent loads its servers from the file the target table will name**
+- **Each agent loads its servers from the file the target table names**
   (every run): verified for `.mcp.json` and `opencode.json`, taken as
-  expected for `.codex/config.toml`. #93's MCP targets stand.
+  expected for `.codex/config.toml`. #93's MCP targets stand
+  (`Agent::mcp_file`, [agents, and where each kind reaches
+  them](#agents-and-where-each-kind-reaches-them)).
 
 ### D-11: MCP secrets are environment references
 

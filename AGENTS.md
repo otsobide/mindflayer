@@ -430,7 +430,10 @@ These are easy to break from a single file without noticing.
   locked, by the code the command refuses it with (`Standing::refused`).
   Where an agent reads
   (`Agent::reads`) is kept apart from where it is sent a copy: OpenCode reads
-  `.claude/skills` and is sent nothing there. Which folders a project is read
+  `.claude/skills` and is sent nothing there. Which config file an agent is
+  given an MCP server's entry in is core's too (`Agent::mcp_file`), asked of
+  the renderer that writes it, OpenCode's the first of its four there is.
+  Which folders a project is read
   from is core's too (`Catalog::folders`), and so are the names at a
   project's root that show an agent works there (`Agent::reads_at_root`) and
   the order `mindweaver scan --suggest` ranks what it finds in (`scan::Order`),

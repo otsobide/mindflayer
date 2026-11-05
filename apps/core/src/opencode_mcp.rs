@@ -435,13 +435,14 @@ fn config(root: &Path) -> Result<(ConfigFile, &'static str), OpenCodeMcpError> {
 }
 
 /// The first of [`FILES`] there is at `root`, as the issue (#92) orders
-/// them, or [`FILE`] when none is.
+/// them, or [`FILE`] when none is: what [`Agent::mcp_file`] says of
+/// OpenCode, so the file an entry is recorded in is the one written into.
 ///
 /// Whatever is there counts, a link or a folder too, so that the file's
 /// route refuses it ([`ConfigFile`]) rather than a server being written
 /// into another beside it. A `.opencode` that is no folder holds none of
 /// them, as OpenCode finds none in it.
-fn chosen(root: &Path) -> Result<&'static str, OpenCodeMcpError> {
+pub(crate) fn chosen(root: &Path) -> Result<&'static str, FileError> {
     for route in FILES {
         let path = root.join(route);
         match fs::symlink_metadata(&path) {
@@ -451,7 +452,7 @@ fn chosen(root: &Path) -> Result<&'static str, OpenCodeMcpError> {
                     error.kind(),
                     io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
                 ) => {}
-            Err(source) => return Err(FileError::Read { path, source }.into()),
+            Err(source) => return Err(FileError::Read { path, source }),
         }
     }
     Ok(FILE)
