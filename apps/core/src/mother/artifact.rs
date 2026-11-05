@@ -395,6 +395,21 @@ impl McpMother {
             )
     }
 
+    /// The program of [`program_for_codex`](Self::program_for_codex) with
+    /// no input, every value written as it is: what every agent is given as
+    /// the definition holds it.
+    pub fn plain_program(name: &str) -> String {
+        Self::program_for_codex(name)
+            .replacen("EXAMPLE_API_KEY = \"{api_key}\", ", "", 1)
+            .replacen(
+                "[[inputs]]\nname = \"api_key\"\nkind = \"env\"\n\
+                 description = \"The key the server signs in with\"\nrequired = true\n\
+                 secret = true\nenv_var = \"EXAMPLE_API_KEY\"\n\n",
+                "",
+                1,
+            )
+    }
+
     /// The program of [`program_for_codex`](Self::program_for_codex), its
     /// extras for Codex `extras`, the lines of a TOML table, in place of
     /// the timeout it holds.
@@ -475,6 +490,20 @@ impl McpMother {
             .replacen(
                 "[[inputs]]\nname = \"tenant\"\nkind = \"url_var\"\nrequired = true\n\
                  env_var = \"EXAMPLE_TENANT\"\n\n",
+                "",
+                1,
+            )
+    }
+
+    /// The address of [`address_for_codex`](Self::address_for_codex) with
+    /// no input, its one header written as it is: what every agent is given
+    /// as the definition holds it.
+    pub fn plain_address(name: &str) -> String {
+        Self::address_for_codex(name)
+            .replacen("Authorization = \"Bearer {token}\", ", "", 1)
+            .replacen(
+                "[[inputs]]\nname = \"token\"\nkind = \"header\"\nrequired = true\n\
+                 secret = true\nenv_var = \"EXAMPLE_TOKEN\"\n\n",
                 "",
                 1,
             )

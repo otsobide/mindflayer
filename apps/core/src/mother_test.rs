@@ -604,6 +604,8 @@ fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so()
             Some("secret_env_composite"),
         ),
         (McpMother::program_for_codex(&name), Agent::Codex, None),
+        (McpMother::plain_program(&name), Agent::Codex, None),
+        (McpMother::plain_address(&name), Agent::Codex, None),
         (McpMother::address_for_codex(&name), Agent::Codex, None),
         (McpMother::whole_header_for_codex(&name), Agent::Codex, None),
         (

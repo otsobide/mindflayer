@@ -36,21 +36,35 @@
 //! names say the environment Codex runs a server in ([`WITHHELD`]): the
 //! transport writes neither, and extras giving one refuse the entry.
 //!
-//! Each key is written only when it holds something, since Codex reads a
-//! key left out as empty and a `cwd` or a `bearer_token_env_var` has no
-//! empty value to write: a definition still has one entry, and one
-//! canonical form, the form whose digest the ledger will keep (#93), its
-//! members sorted, so an entry Codex or a person writes again in another
-//! layout is the one Mindweaver wrote.
+//! Each key is written only when it holds something: a `cwd` or a
+//! `bearer_token_env_var` has no empty value to write, and an empty `env`
+//! would be a table of its own holding nothing. A definition still has one
+//! entry, and one canonical form, the form whose digest the ledger will
+//! keep (#93), its members sorted, so an entry Codex or a person writes
+//! again in another layout is the one Mindweaver wrote.
+//!
+//! The file is TOML, read up to [`MAX_BYTES`] and edited through
+//! toml_edit, and made with `create_new`, `.codex` with it, when it is not
+//! there yet. It is never one Codex reads for every project: a project
+//! whose `.codex/config.toml` is inside an agent's own folder, one at the
+//! user's home while `$CODEX_HOME` is `~/.codex`, is refused
+//! ([`CodexMcpError::UserScope`]), as an install's copy is there.
+//!
+//! Nothing here knows of the ledger. Whether an entry of the name is
+//! Mindweaver's to replace or take out, and whether Mindweaver made the
+//! file, are the caller's, as its record says (#93, #94); and the caller
+//! holds the workspace's lock, as one calling [`ConfigFile`] does.
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::agent::Agent;
+use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
-use crate::config_entry::Value;
+use crate::config_entry::{self, ConfigFile, Edit, FileError, Format, Value, Written};
+use crate::install;
 use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
 use crate::value::{ArtifactName, InputName, VariableName};
 
@@ -59,6 +73,14 @@ pub const FILE: &str = ".codex/config.toml";
 
 /// The table in [`FILE`] that holds every server by its name.
 pub const SERVERS: &str = "mcp_servers";
+
+/// The most a [`FILE`] is read for: 2 MiB, as Claude's `.mcp.json` is.
+///
+/// A project's servers and the settings beside them come to a few KiB, so
+/// a file past this is not one somebody keeps them in, and it would be
+/// held in memory whole, as text, as a tree of every byte and as what an
+/// edit is checked against.
+pub const MAX_BYTES: u64 = 2 * 1024 * 1024;
 
 /// What Codex is given of a definition: its table under [`SERVERS`], and
 /// what is said of it.
@@ -231,6 +253,84 @@ pub fn entry(definition: &McpDefinition) -> Result<Entry, CodexMcpError> {
     })
 }
 
+/// What [`render`] did.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rendered {
+    /// The project's [`FILE`].
+    pub file: PathBuf,
+    /// [`Written::Created`] when the file was not there and is made now,
+    /// which the caller keeps, to hand back to [`remove`] as `created`.
+    pub written: Written,
+    pub entry: Entry,
+}
+
+/// Write `definition`'s entry into the [`FILE`] at `root`, a project's
+/// root, in place of one of the same name or after the servers already
+/// there, and make the file, and `.codex`, when it is not there yet.
+///
+/// The entry is made first ([`entry`]), so a definition refused reads and
+/// writes nothing. A file inside one of `homes` is refused before it is
+/// read. The file is read up to [`MAX_BYTES`] and written through
+/// [`ConfigFile`], which keeps every byte outside the entry, makes a new
+/// file with `create_new` and leaves one that already holds the entry as
+/// it is.
+pub fn render(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<Rendered, CodexMcpError> {
+    let entry = entry(definition)?;
+    let file = config(root)?;
+    if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.path()]) {
+        return Err(CodexMcpError::UserScope { file, home, reader });
+    }
+    let key = [SERVERS, entry.name.as_str()];
+    let edit = match file.get(&key)? {
+        None => Edit::Insert(entry.value.clone()),
+        Some(_) => Edit::Replace(entry.value.clone()),
+    };
+    let written = file.edit(&key, &edit)?;
+    Ok(Rendered {
+        file: file.path(),
+        written,
+        entry,
+    })
+}
+
+/// Take the entry keyed `name` out of the [`FILE`] at `root`, every other
+/// byte as it was, and take the file away with it when `created`, that
+/// Mindweaver made it, and nothing else is left in it: no other server,
+/// and nothing beside [`SERVERS`].
+///
+/// [`Written::Removed`] when the file went, [`Written::Changed`] when the
+/// entry did and the file stays, and [`Written::Unchanged`] when there was
+/// no such entry, nor a file to take. A file Mindweaver made that somebody
+/// has written in since is theirs too, and stays. `.codex` stays whatever
+/// is left in it: it is Codex's own folder, which may hold what else Codex
+/// keeps for the project, and which folder Mindweaver made is no record
+/// anybody keeps.
+pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, CodexMcpError> {
+    let file = config(root)?;
+    // Taken whole when the entry is all it holds, rather than written
+    // without it first only to be taken away.
+    if created {
+        let taken = file.take(|document| config_entry::holds_only(document, &[SERVERS, name]))?;
+        if taken == Written::Removed {
+            return Ok(taken);
+        }
+    }
+    let key = [SERVERS, name];
+    if file.get(&key)?.is_none() {
+        return Ok(Written::Unchanged);
+    }
+    Ok(file.edit(&key, &Edit::Remove)?)
+}
+
+/// The project's [`FILE`], read up to [`MAX_BYTES`].
+fn config(root: &Path) -> Result<ConfigFile, CodexMcpError> {
+    Ok(ConfigFile::new(root, FILE, Format::Toml)?.capped(MAX_BYTES))
+}
+
 /// The keys Codex's entry may be written with from a transport of `kind`,
 /// in the order written, each only when it holds something.
 ///
@@ -328,14 +428,27 @@ pub enum CodexMcpError {
         input: InputName,
         at: String,
     },
+    #[error(
+        "{file} is inside {home}, which {reader} reads for every project, so no server is \
+         written into it: Mindweaver gives a server to one project at a time"
+    )]
+    UserScope {
+        file: PathBuf,
+        home: PathBuf,
+        reader: &'static str,
+    },
+    #[error(transparent)]
+    File(#[from] FileError),
 }
 
 codes!(CodexMcpError {
     Self::Unfit { .. } => "codex_mcp_unfit",
     Self::InputUnread { .. } => "codex_mcp_input_unread",
     Self::InputInText { .. } => "codex_mcp_input_in_text",
+    Self::UserScope { .. } => "codex_mcp_user_scope",
 } carried {
     Self::Inexpressible { shape, .. } => shape,
+    Self::File(error) => error,
 });
 
 #[cfg(test)]
