@@ -975,9 +975,9 @@ Browser` hold a space no key can, so the rule as #87 wrote it would hold
 nothing: Mindweaver takes them to cover each spelling of that space a key
 can hold, an underscore, a hyphen or nothing (`claude_preview`,
 `claude-preview`, `claudepreview`), in any case. Which of those Claude
-compares is not known without #18's run, and holding all three costs no
-name anybody would give a server of their own; a hyphen written as an
-underscore elsewhere is another name (`claude_in_chrome`).
+compares is not known, since none of #18's checks asks it, and holding all
+three costs no name anybody would give a server of their own; a hyphen
+written as an underscore elsewhere is another name (`claude_in_chrome`).
 `anthropic-skills`, the name Claude gives the skills Anthropic provides, is
 only warned of (`mcp_name_claimed`, a `ValidationIssue::is_warning`): Claude
 refuses no server by it, and a definition named so is valid. Each agent's
@@ -1211,8 +1211,9 @@ and no file an agent reads, so they needed what the first two did not:
   table, since each agent reads its servers as entries of its own config
   file, the files `Agent::reads_files` names already ([what says an agent
   works in a project](agents.md#what-says-an-agent-works-in-a-project),
-  whose table names `.mcp.json`, `.codex/config.toml` and `opencode.json`,
-  until #18 adds the MCP section with what each agent does with them). The
+  whose table names `.mcp.json`, `.codex/config.toml` and `opencode.json`;
+  [MCP servers](agents.md#mcp-servers) says what each agent does with
+  them). The
   renderers that write there are #90 to #94's.
 
 ## The two levels
@@ -10828,13 +10829,13 @@ it once as it closes.
   the read types that hold them were. Each joins `value` when a rule is
   found that it holds, as `ProjectId` did; one with no rule of its own, a
   name named apart, joins when a mix-up between two of them is found.
-- **What #18's run would move of an MCP server.** Every name an agent
-  keeps for itself and every shape it cannot express is docs-only
-  ([docs/agents.md](agents.md#mcp-servers)): which spelling of `Claude
-  Preview` Claude compares, whether Codex keeps a name of its own, whether
-  OpenCode's V1 line takes sse where its V2 shape does not. A fact the run
-  moves changes one table in `mcp::name` or one arm of
-  `McpDefinition::inexpressible`.
+- **What no run has moved of an MCP server.** Every name an agent keeps
+  for itself and every shape it cannot express is docs-only
+  ([docs/agents.md](agents.md#mcp-servers)), since none of #18's checks
+  asks it: which spelling of `Claude Preview` Claude compares, whether
+  Codex keeps a name of its own, whether OpenCode's V1 line takes sse where
+  its V2 shape does not. A fact a later run moves changes one table in
+  `mcp::name` or one arm of `McpDefinition::inexpressible`.
 - **A secret in a program's environment, for Codex.** Codex passes a
   variable on to a program under its own name (`env_vars`), so a secret
   written as the whole value of the `env` key its variable is named by is
@@ -11913,13 +11914,19 @@ it once as it closes.
   The [target table](#agents-and-where-each-kind-reaches-them)'s
   `.agents/skills` for Codex and OpenCode rests on them too; were one to read
   elsewhere, its arm in `standard` is the one line to change.
-- **The MCP facts are pending.** #18 wrote the MCP checks and did not run
-  them: they make paid calls on the owner's account, so the owner runs them
-  ([docs/agents.md](agents.md#mcp-servers)). Until then, what #87 and #90 to
-  #94 build on is docs-only or read from the installed packages, and D-10
-  and D-11 say what each result would change. The checks run OpenCode's V2
-  on `PATH`, 2.2.5 at the time of writing, and in a second pass, which
-  calls no model, the 2.1.3 D-12 names, of the 2.1.x line #18 names.
+- **Codex's MCP facts are docs-only.** #18's checks ran on 2026-11-05 for
+  Claude Code 2.1.318 and OpenCode 2.2.5, 2.1.3 and 1.19.4, and not for
+  Codex, since the owner has no Codex subscription
+  ([docs/agents.md](agents.md#mcp-servers)). What #87 and #91 build on for
+  Codex stands as its documentation and binary say, and D-10 and D-11 say
+  what each result would change; `codex.sh` holds the runs for when there
+  is a login to make them with.
+- **Whose environment fills OpenCode's references.** V2's background
+  server fills `{env:}` from its own environment, not from the client's
+  that asks (D-11, the run of 2026-11-05), so a secret given to a V2
+  server Mindweaver did not start reaches it only through the shell that
+  started it or `opencode service set env`. Whether #92 warns of it, and
+  #96 checks the server's variables, is the owner's to say.
 - **Folders an agent reads and is sent nothing in.** A project marked by its
   settings is read in its agents' targets and in its authored folder, not in
   every folder they read ([read where its agents
