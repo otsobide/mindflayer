@@ -80,24 +80,37 @@ fn parse(format: Format, text: &str) -> Result<CstRootNode, EntryError> {
 /// the parser found them, so a quote or any character inside one is read
 /// as the comment it is.
 pub(super) fn loose(text: &str) -> bool {
+    match comments(text) {
+        Some((comments, true)) => strict(text, &comments).is_ok(),
+        Some((_, false)) | None => false,
+    }
+}
+
+/// Whether `text`, read as JSONC, holds a comment anywhere, a text that
+/// holds nothing else included: `false` when it does not read as JSONC,
+/// whose reader takes no comment of it.
+pub(super) fn commented(text: &str) -> bool {
+    comments(text).is_some_and(|(comments, _)| !comments.is_empty())
+}
+
+/// Where each comment of `text` is, read as JSONC, where the parser found
+/// it, so that a quote or a brace inside one is read as the comment it is,
+/// and whether `text` holds a value beside them: `None` when it does not
+/// read as JSONC.
+fn comments(text: &str) -> Option<(Vec<Range>, bool)> {
     let collect = CollectOptions {
         comments: CommentCollectionStrategy::AsTokens,
         tokens: true,
     };
-    let Ok(parsed) = jsonc_parser::parse_to_ast(text, &collect, &options(Format::Jsonc)) else {
-        return false;
-    };
-    if parsed.value.is_none() {
-        return false;
-    }
-    let comments: Vec<Range> = parsed
+    let parsed = jsonc_parser::parse_to_ast(text, &collect, &options(Format::Jsonc)).ok()?;
+    let comments = parsed
         .tokens
         .unwrap_or_default()
         .into_iter()
         .filter(|token| matches!(token.token, Token::CommentLine(_) | Token::CommentBlock(_)))
         .map(|token| token.range)
         .collect();
-    strict(text, &comments).is_ok()
+    Some((comments, parsed.value.is_some()))
 }
 
 /// Refuse two things RFC 8259 does not allow, which jsonc-parser 0.34 takes
