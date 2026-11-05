@@ -1,8 +1,8 @@
 //! An MCP server installed into a project, an entry in the config file of
-//! each agent it names (D-10), and taken back out: what each file holds
-//! afterwards, what the ledger records of it, what is refused and what is
-//! left as it was, each file built here in a temporary folder, none in a
-//! real agent's home.
+//! each agent it names (D-10), brought up to date and taken back out: what
+//! each file holds afterwards, what the ledger records of it, what is
+//! refused and what is left as it was, each file built here in a temporary
+//! folder, none in a real agent's home.
 
 mod common;
 
@@ -14,6 +14,7 @@ use mindweaver_core::install::{
 };
 use mindweaver_core::ledger::InstallRecord;
 use mindweaver_core::mother::McpMother;
+use mindweaver_core::update::{self, Step};
 use mindweaver_core::{
     claude_mcp, codex_mcp, exclude, opencode_mcp, Agent, AgentHomes, Directories, Kind, Ledger,
     McpDefinition, MindProject, Share, WeaverWorkspace,
@@ -125,6 +126,33 @@ impl Fixture {
 
     fn uninstall(&self, edits: Edits) -> Removed {
         self.try_uninstall(edits).unwrap()
+    }
+
+    /// Update the project, the server's installation and nothing else of it,
+    /// and say what was planned for it and what came of writing it.
+    fn update(&self, edits: Edits) -> update::Update {
+        let applied = update::apply(
+            &self.workspace,
+            std::slice::from_ref(&self.project),
+            &[],
+            edits,
+            &AgentHomes::default(),
+        )
+        .unwrap();
+        let mut planned = applied.plan.projects;
+        assert_eq!(planned.len(), 1, "{planned:?}");
+        let mut installations = planned.remove(0).installations;
+        assert_eq!(installations.len(), 1, "{installations:?}");
+        installations.remove(0)
+    }
+
+    /// How the installation stands as a whole, as an update reads it.
+    fn installation(&self) -> Option<Standing> {
+        install::standings(&self.workspace, &self.ledger, &self.project, Kind::Mcp)
+            .unwrap()
+            .into_iter()
+            .find(|(name, _)| *name == self.name)
+            .map(|(_, standing)| standing)
     }
 
     /// Every config file of the project's agents, by agent, and what each
@@ -616,6 +644,99 @@ fn an_entry_in_a_file_git_tracks_in_a_local_project_refuses_the_uninstall() {
     let refused = fixture.try_uninstall(Edits::Forced).unwrap_err();
 
     assert_eq!(refused.code(), "mcp_entry_unedited", "{refused}");
+    assert_eq!(fixture.files(), before);
+    assert!(fixture.record().is_some());
+}
+
+#[test]
+fn an_entry_edited_by_hand_reads_as_edited_and_an_update_leaves_it_until_forced() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+    fixture.install();
+    let text = fixture.read(".mcp.json").unwrap();
+    fixture.write(".mcp.json", &text.replacen("\"npx\"", "\"bunx\"", 1));
+    let before = fixture.files();
+
+    assert_eq!(
+        fixture.standings(),
+        [
+            (Agent::Claude, Standing::Edited),
+            (Agent::Codex, Standing::Current),
+            (Agent::OpenCode, Standing::Current),
+        ]
+    );
+    assert_eq!(fixture.installation(), Some(Standing::Edited));
+
+    let left = fixture.update(Edits::Kept);
+
+    assert_eq!(left.step, Step::Leave(vec![fixture.file(Agent::Claude)]));
+    assert!(left.done.is_none());
+    assert_eq!(fixture.files(), before);
+    assert_eq!(fixture.installation(), Some(Standing::Edited));
+
+    let forced = fixture.update(Edits::Forced);
+
+    assert_eq!(
+        forced.step,
+        Step::WriteOver(vec![fixture.file(Agent::Claude)])
+    );
+    assert!(forced.done.unwrap().is_ok());
+    assert_eq!(fixture.read(".mcp.json").unwrap(), text);
+    assert_eq!(fixture.installation(), Some(Standing::Current));
+}
+
+#[test]
+fn an_outdated_entry_is_written_again_and_a_missing_one_put_back() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+    fixture.install();
+    let before = fixture.read(".mcp.json").unwrap();
+    // The library's definition starts its program otherwise now.
+    fixture.define(&McpMother::plain_program(&fixture.name).replacen("\"npx\"", "\"bunx\"", 1));
+    assert_eq!(fixture.installation(), Some(Standing::Outdated));
+
+    let refreshed = fixture.update(Edits::Kept);
+
+    assert_eq!(refreshed.step, Step::Refresh);
+    assert!(matches!(
+        refreshed.done.unwrap().unwrap().installed,
+        Installed::Updated { .. }
+    ));
+    let after = fixture.read(".mcp.json").unwrap();
+    assert_eq!(after, before.replacen("\"npx\"", "\"bunx\"", 1));
+    assert_eq!(
+        fixture.standings(),
+        Agent::ALL.map(|agent| (agent, Standing::Current))
+    );
+
+    fs::remove_file(fixture.file(Agent::OpenCode)).unwrap();
+    assert_eq!(fixture.installation(), Some(Standing::Missing));
+
+    let put_back = fixture.update(Edits::Kept);
+
+    assert_eq!(
+        put_back.step,
+        Step::PutBack(vec![fixture.file(Agent::OpenCode)])
+    );
+    assert!(put_back.done.unwrap().is_ok());
+    assert!(fixture
+        .read("opencode.json")
+        .unwrap()
+        .contains(&fixture.name));
+    assert_eq!(fixture.read(".mcp.json").unwrap(), after);
+    assert_eq!(fixture.installation(), Some(Standing::Current));
+}
+
+#[test]
+fn a_server_nothing_offers_any_more_is_said_by_an_update_and_left() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+    fixture.install();
+    let before = fixture.files();
+    let folder = fixture.workspace.own().directory_for(Kind::Mcp).unwrap();
+    fs::remove_file(folder.join(format!("{}.toml", fixture.name))).unwrap();
+
+    let orphaned = fixture.update(Edits::Forced);
+
+    assert_eq!(orphaned.step, Step::Orphaned);
+    assert!(orphaned.done.is_none());
     assert_eq!(fixture.files(), before);
     assert!(fixture.record().is_some());
 }
