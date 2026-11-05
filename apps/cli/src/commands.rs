@@ -193,8 +193,10 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             name,
             description,
             template,
+            server,
         } => {
             let project = project_here(&directory)?;
+            let given = server.given();
             match template {
                 // The workspace lends the template, so one that cannot be
                 // read refuses the add: passed over, it would let a farther
@@ -206,13 +208,20 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                         workspace.as_ref(),
                         &project,
                         *kind,
-                        name,
-                        description,
+                        (name, description),
                         Some(template),
+                        given.as_ref(),
                     )
                 }
                 None => consulting(&project, lookup, |workspace| {
-                    add_to(workspace, &project, *kind, name, description, None)
+                    add_to(
+                        workspace,
+                        &project,
+                        *kind,
+                        (name, description),
+                        None,
+                        given.as_ref(),
+                    )
                 }),
             }
         }
@@ -515,15 +524,16 @@ fn run_weaver(
             name,
             description,
             template,
+            server,
         } => {
             let workspace = workspace_here(directory, lookup)?;
             add_to(
                 Some(&workspace),
                 &workspace.holder(project.as_deref())?,
                 *kind,
-                name,
-                description,
+                (name, description),
                 template.as_deref(),
+                server.given().as_ref(),
             )
         }
         WeaverCommand::Edit {

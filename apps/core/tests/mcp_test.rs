@@ -11,11 +11,15 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use mindweaver_core::create::{create_server, Start};
 use mindweaver_core::lifecycle;
+use mindweaver_core::mcp::{Address, Given, McpDefinition};
 use mindweaver_core::mother::{
-    McpMother, MindflayerMother, ProjectMother, SettingsMother, SkillMother, WorkspaceMother,
+    McpMother, MindflayerMother, ProjectMother, SettingsMother, SkillMother, UrlMother,
+    WorkspaceMother,
 };
 use mindweaver_core::reading::Shown;
+use mindweaver_core::template;
 use mindweaver_core::{
     create, Agent, Catalog, CreateError, Declared, Directories, DiscoveryFailure, Kind,
     LifecycleError, MarkerFile, MindProject, Reference, Share, ValidationIssue, WeaverWorkspace,
@@ -44,7 +48,7 @@ fn unrelated_mcp_folder(root: &Path) {
             ),
             ("mcp/src/main.rs", "fn main() {}\n"),
             ("mcp/github.toml", &McpMother::stdio("github")),
-            ("mcp/broken.toml", "format = 1\nname = \n"),
+            ("mcp/broken.toml", &McpMother::unreadable()),
         ],
     );
 }
@@ -314,7 +318,7 @@ fn a_file_that_is_no_definition_is_a_failure_by_its_code_and_hides_none_beside_i
         &[
             ("github.toml", &McpMother::stdio("github")),
             ("later.toml", &newer),
-            ("broken.toml", "format = 1\nname = \n"),
+            ("broken.toml", &McpMother::unreadable()),
         ],
     );
 
@@ -479,6 +483,333 @@ fn add_is_refused_for_a_server_saying_where_to_write_one() {
     assert_eq!(fs::read_dir(&folder).unwrap().count(), 0);
 }
 
+/// Every file `folder` holds, by its name, with what it holds: what a
+/// refusal is held to leaving as it was.
+fn held(folder: &Path) -> Vec<(String, String)> {
+    let mut held: Vec<(String, String)> = fs::read_dir(folder)
+        .map(|entries| {
+            entries
+                .map(|entry| {
+                    let path = entry.unwrap().path();
+                    let text = fs::read_to_string(&path).unwrap_or_default();
+                    (
+                        path.file_name().unwrap().to_string_lossy().into_owned(),
+                        text,
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    held.sort();
+    held
+}
+
+/// Add the server `name` to `project`, told `given` of how it is started
+/// or reached.
+fn add_server(
+    project: &MindProject,
+    name: &str,
+    given: &Given,
+) -> Result<lifecycle::Added, CreateError> {
+    lifecycle::add(
+        None,
+        project,
+        Kind::Mcp,
+        name,
+        &SkillMother::description(),
+        Start::Server(given),
+    )
+}
+
+#[test]
+fn add_writes_a_server_from_what_it_is_told_that_validate_finds_nothing_wrong_with() {
+    let (_dir, project, folder) = authoring();
+    for _ in 0..20 {
+        let given = McpMother::given();
+        let name = McpMother::name();
+        let description = SkillMother::description();
+
+        let added = lifecycle::add(
+            None,
+            &project,
+            Kind::Mcp,
+            &name,
+            &description,
+            Start::Server(&given),
+        )
+        .unwrap();
+
+        let file = folder.join(format!("{name}.toml"));
+        assert_eq!(added.artifact.file(), file);
+        assert_eq!(
+            fs::read_to_string(&file).unwrap(),
+            given.text(&name, &description)
+        );
+        let (names, failures) = servers(&project);
+        assert!(names.contains(&name) && failures.is_empty(), "{failures:?}");
+        let found = lifecycle::find(&project, &Reference::parse(&format!("mcp:{name}"))).unwrap();
+        assert_eq!(found.artifact.unwrap().validate(), [], "{given:?}");
+        assert_eq!(found.name, name.as_str());
+    }
+}
+
+#[test]
+fn add_refuses_what_validate_would_call_invalid_and_writes_nothing() {
+    let (_dir, project, folder) = authoring();
+    write(&folder, &[("github.toml", &McpMother::stdio("github"))]);
+    let before = held(&folder);
+    let given = McpMother::given();
+
+    for (name, _, _) in McpMother::reserved() {
+        let refused = add_server(&project, &name, &given).unwrap_err();
+        assert_eq!(refused.code(), "add_name_unfit", "{name}: {refused}");
+    }
+    let twin = McpMother::twin("github");
+    let clash = add_server(&project, &twin, &given).unwrap_err();
+    assert_eq!(clash.code(), "add_name_unfit", "{clash}");
+    assert!(clash.to_string().contains("differ only by case"), "{clash}");
+    for (why, given, code) in McpMother::given_unfit() {
+        let refused = add_server(&project, &McpMother::name(), &given).unwrap_err();
+
+        assert_eq!(refused.code(), "add_mcp_unfit", "{why}: {refused}");
+        let CreateError::Definition { issues, .. } = &refused else {
+            panic!("{why}: {refused:?}");
+        };
+        assert!(
+            issues.iter().any(|issue| issue.code() == code),
+            "{why}: {issues:?}"
+        );
+    }
+    assert_eq!(held(&folder), before);
+}
+
+#[test]
+fn add_refuses_a_token_given_as_it_is_saying_where_and_never_the_token() {
+    let (_dir, project, folder) = authoring();
+
+    for (prefix, token) in McpMother::tokens() {
+        for place in ["arg", "env", "header", "url", "secret_env"] {
+            let (given, at) = McpMother::given_with_literal(place, &token);
+
+            let refused = add_server(&project, &McpMother::name(), &given).unwrap_err();
+
+            assert_eq!(refused.code(), "add_mcp_unfit", "{place}: {refused}");
+            let said = refused.to_string();
+            let rest = token[prefix.len()..].trim_start();
+            assert!(
+                said.contains(&format!("`{at}`")) && said.contains(&format!("`{prefix}`")),
+                "{place}: {said}"
+            );
+            assert!(!said.contains(rest), "{place}: {said}");
+            // Nor in what a front end is told of each issue.
+            let CreateError::Definition { issues, .. } = &refused else {
+                panic!("{place}: {refused:?}");
+            };
+            let sent = serde_json::to_string(issues).unwrap();
+            assert!(!sent.contains(rest), "{place}: {sent}");
+        }
+        // Nor where it is refused before a definition is read, which says
+        // what it refuses rather than where `validate` would.
+        for (why, given, code) in McpMother::given_refused_unread(&token) {
+            let refused = add_server(&project, &McpMother::name(), &given).unwrap_err();
+
+            assert_eq!(refused.code(), code, "{why}: {refused}");
+            let said = refused.to_string();
+            let rest = token[prefix.len()..].trim_start();
+            assert!(said.contains(&format!("`{prefix}`")), "{why}: {said}");
+            assert!(!said.contains(rest), "{why}: {said}");
+        }
+    }
+    assert_eq!(held(&folder), []);
+}
+
+#[test]
+fn add_refuses_a_key_given_twice_and_an_address_typed_with_a_credential() {
+    let (_dir, project, folder) = authoring();
+
+    for (why, given, repeated) in McpMother::given_repeating() {
+        let refused = add_server(&project, &McpMother::name(), &given).unwrap_err();
+
+        assert_eq!(refused.code(), "add_mcp_key_repeated", "{why}: {refused}");
+        assert_eq!(
+            refused.to_string(),
+            format!(
+                "`{}` is given twice for the transport's `{}`, which holds each key once",
+                repeated.key, repeated.table
+            )
+        );
+    }
+    for credentialed in UrlMother::every_credentialed() {
+        let given = Given::Address(Address {
+            url: credentialed.typed.clone(),
+            ..Address::default()
+        });
+
+        let refused = add_server(&project, &McpMother::name(), &given).unwrap_err();
+
+        assert_eq!(refused.code(), "add_mcp_url_userinfo", "{refused}");
+        let said = refused.to_string();
+        assert!(!said.contains(&credentialed.secret), "{said}");
+        assert!(
+            said.starts_with(&format!("`{}`", credentialed.clean)),
+            "{said}"
+        );
+    }
+    assert_eq!(held(&folder), []);
+}
+
+#[test]
+fn add_refuses_a_transport_for_a_kind_no_agent_starts() {
+    let (_dir, project, _folder) = authoring();
+    let given = McpMother::given();
+
+    for (kind, noun) in [(Kind::Skill, "skill"), (Kind::Rule, "rule")] {
+        let refused = lifecycle::add(
+            None,
+            &project,
+            kind,
+            "deploy",
+            "Ship it",
+            Start::Server(&given),
+        )
+        .unwrap_err();
+
+        assert_eq!(refused.code(), "add_transport_not_mcp");
+        assert_eq!(
+            refused.to_string(),
+            format!(
+                "`--command` and `--url` say how an MCP server is started or reached, and a \
+                 {noun} is neither started nor reached"
+            )
+        );
+        assert!(!project.root().join(kind.folder()).join("deploy").exists());
+    }
+}
+
+#[test]
+fn add_from_a_template_takes_its_transport_and_sets_its_name_and_description() {
+    let (_dir, project, folder) = authoring();
+    let templates = project.mind_dir().join("templates");
+    let commented = format!(
+        "# Our internal servers.\n{}",
+        McpMother::http("internal").replacen(
+            "name = \"internal\"\n",
+            "name = \"internal\" # what agents key it by\n",
+            1,
+        )
+    );
+    write(&templates, &[("internal.toml", &commented)]);
+    let template = template::find(None, &project, Kind::Mcp, "internal").unwrap();
+    let listed = template::templates(None, &project).unwrap();
+    let description = SkillMother::description();
+
+    let added = lifecycle::add(
+        None,
+        &project,
+        Kind::Mcp,
+        "billing",
+        &description,
+        Start::Template(&template),
+    )
+    .unwrap();
+    let quoted = lifecycle::add(
+        None,
+        &project,
+        Kind::Mcp,
+        "ledger",
+        "The \"ledger\", and its \\ entries",
+        Start::Template(&template),
+    )
+    .unwrap();
+
+    assert!(
+        listed
+            .iter()
+            .any(|each| each.kind == Kind::Mcp && each.name == "internal"),
+        "{listed:?}"
+    );
+    let written = fs::read_to_string(folder.join("billing.toml")).unwrap();
+    let was = McpDefinition::parse(&commented).unwrap().description;
+    assert_eq!(
+        written,
+        commented
+            .replacen("name = \"internal\" #", "name = \"billing\" #", 1)
+            .replacen(
+                &format!("description = {}", toml::Value::String(was)),
+                &format!("description = {}", toml::Value::String(description)),
+                1
+            )
+    );
+    assert_eq!(added.artifact.validate(), []);
+    assert_eq!(
+        quoted.artifact.summary(),
+        Some("The \"ledger\", and its \\ entries")
+    );
+    assert_eq!(quoted.artifact.validate(), []);
+}
+
+#[test]
+fn add_from_a_template_holds_what_it_writes_to_what_validate_would_say() {
+    let (_dir, project, folder) = authoring();
+    let templates = project.mind_dir().join("templates");
+    let (prefix, token) = McpMother::token();
+    let (leaky, _) = McpMother::with_literal("leaky", "env", &token);
+    write(
+        &templates,
+        &[
+            ("leaky.toml", &leaky),
+            ("broken.toml", &McpMother::unreadable()),
+        ],
+    );
+
+    let leaky = template::find(None, &project, Kind::Mcp, "leaky").unwrap();
+    let broken = template::find(None, &project, Kind::Mcp, "broken").unwrap();
+    let refused = |template| {
+        lifecycle::add(
+            None,
+            &project,
+            Kind::Mcp,
+            "ours",
+            "Ours",
+            Start::Template(template),
+        )
+        .unwrap_err()
+    };
+
+    let leaked = refused(&leaky);
+    assert_eq!(leaked.code(), "add_mcp_unfit", "{leaked}");
+    assert!(!leaked
+        .to_string()
+        .contains(token[prefix.len()..].trim_start()));
+    assert_eq!(refused(&broken).code(), "add_manifest_unwritable");
+    assert_eq!(held(&folder), []);
+    // And what a front end is told of each before is what `add` says.
+    for (template, code) in [
+        ("leaky", "add_mcp_unfit"),
+        ("broken", "add_manifest_unwritable"),
+    ] {
+        let judged = mindweaver_core::draft::added(
+            None,
+            &project,
+            Kind::Mcp,
+            "ours",
+            "Ours",
+            Some(template),
+        );
+        assert_eq!(
+            judged.refused.map(|said| said.code),
+            Some(code),
+            "{template}"
+        );
+    }
+    let unscaffolded =
+        mindweaver_core::draft::added(None, &project, Kind::Mcp, "ours", "Ours", None);
+    assert_eq!(
+        unscaffolded.refused.map(|said| said.code),
+        Some("add_mcp_unscaffolded")
+    );
+}
+
 #[test]
 fn add_is_refused_in_a_project_that_keeps_no_servers_before_anything_else() {
     let dir = TempDir::new().unwrap();
@@ -497,6 +828,7 @@ fn add_is_refused_in_a_project_that_keeps_no_servers_before_anything_else() {
         ),
     ] {
         let error = create(&project, Kind::Mcp, "github", "GitHub").unwrap_err();
+        let told = create_server(&project, "github", "GitHub", &McpMother::given()).unwrap_err();
 
         assert_eq!(
             error.to_string(),
@@ -505,6 +837,8 @@ fn add_is_refused_in_a_project_that_keeps_no_servers_before_anything_else() {
                 project.root().display()
             )
         );
+        assert_eq!(told.to_string(), error.to_string());
+        assert_eq!(told.code(), "no_folder");
 
         assert!(
             matches!(
@@ -717,7 +1051,7 @@ fn contents_given_whole_are_held_to_the_format_and_to_the_files_name() {
 
     let renamed = replace(&McpMother::stdio("octocat")).unwrap_err();
     assert_eq!(renamed.code(), "edit_mcp_name_changed");
-    let unread = replace("format = 1\nname = \n").unwrap_err();
+    let unread = replace(&McpMother::unreadable()).unwrap_err();
     assert_eq!(unread.code(), "edit_definition_unreadable");
     let incomplete = replace(&McpMother::incomplete("github", "stdio")).unwrap_err();
     assert_eq!(incomplete.code(), "edit_contents_unfit");

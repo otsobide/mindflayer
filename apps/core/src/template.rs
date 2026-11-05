@@ -1,11 +1,14 @@
-//! Starting points for `mind add`: a skill folder or a rule file to begin
-//! from, instead of the least that passes `validate`.
+//! Starting points for `mind add`: a skill folder, a rule file or an MCP
+//! server's definition to begin from, instead of the least that passes
+//! `validate`, or, for a server, the options saying how it is started.
 //!
 //! Templates are Mindweaver's, not the agents', so they live inside the
 //! markers rather than beside the code: `.mind/templates/` for one project,
 //! `.mindweaver/templates/` for every project a workspace manages. A skill
 //! template is a folder holding a `SKILL.md` and whatever else the skill
-//! should start with; a rule template is one markdown file. Of two templates
+//! should start with; a rule template is one markdown file; a server's is
+//! one `.toml` file, a definition of its own whose name and description
+//! `add` sets, taking its transport and inputs as they are. Of two templates
 //! of one kind and one name, the closer wins (the project's over the
 //! workspace's over the one built in), the way a saved workflow or a git
 //! setting is looked up.
@@ -30,7 +33,7 @@ pub const TEMPLATES_DIR: &str = "templates";
 pub enum Origin {
     /// Shipped with Mindweaver.
     BuiltIn,
-    /// A skill folder or a rule file on disk.
+    /// A skill folder, a rule file or a server's definition on disk.
     Path(PathBuf),
 }
 
@@ -104,8 +107,9 @@ impl Template {
         }
     }
 
-    /// The text of a rule template.
-    pub(crate) fn rule_text(&self) -> Result<String, TemplateError> {
+    /// The text of a template that is one file: a rule's, or an MCP
+    /// server's definition.
+    pub(crate) fn text(&self) -> Result<String, TemplateError> {
         match &self.origin {
             Origin::BuiltIn => Ok(built_in(&self.name)
                 .first()
@@ -235,8 +239,8 @@ fn search_path(workspace: Option<&WeaverWorkspace>, project: &MindProject) -> Ve
 }
 
 /// The templates in one folder: each folder holding a manifest is a skill
-/// template, each markdown file a rule template. A folder that is not there
-/// holds none.
+/// template, each markdown file a rule template, and each `.toml` file an
+/// MCP server's. A folder that is not there holds none.
 fn on_disk(directory: &Path) -> Result<Vec<Template>, TemplateError> {
     let entries = match fs::read_dir(directory) {
         Ok(entries) => entries,
@@ -262,7 +266,7 @@ fn on_disk(directory: &Path) -> Result<Vec<Template>, TemplateError> {
                 Layout::Directory { manifest } if path.join(manifest).is_file() => {
                     path.file_name().and_then(|name| name.to_str())
                 }
-                Layout::Files { extension }
+                Layout::Files { extension } | Layout::Flat { extension }
                     if path.is_file()
                         && path
                             .extension()
@@ -270,7 +274,7 @@ fn on_disk(directory: &Path) -> Result<Vec<Template>, TemplateError> {
                 {
                     path.file_stem().and_then(|stem| stem.to_str())
                 }
-                _ => None,
+                Layout::Directory { .. } | Layout::Files { .. } | Layout::Flat { .. } => None,
             };
             if let Some(name) = name.filter(|name| !name.starts_with('.')) {
                 found.push(Template {

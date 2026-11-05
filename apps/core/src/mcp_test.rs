@@ -153,7 +153,7 @@ fn a_definition_naming_no_format_or_one_never_written_is_refused() {
 
 #[test]
 fn a_file_that_is_no_toml_is_refused_as_unparsed() {
-    let error = McpDefinition::parse("format = 1\nname = \n").unwrap_err();
+    let error = McpDefinition::parse(&McpMother::unreadable()).unwrap_err();
 
     assert!(matches!(error, McpError::Unparsed(_)), "{error}");
     assert_eq!(error.code(), "mcp_unparsed");
@@ -453,8 +453,9 @@ fn a_token_written_as_it_is_anywhere_an_agent_is_given_it_is_said_where_it_is_an
     let name = random::kebab();
     for (prefix, token) in McpMother::tokens() {
         // Every value of the transport, the name of a variable, where a
-        // token pasted for its value passes for one, and the extras, at
-        // any depth, which an agent's entry is given as they are.
+        // token pasted for its value passes for one, the name of an input,
+        // which `add` names after the variable it is told, and the extras,
+        // at any depth, which an agent's entry is given as they are.
         for place in [
             "args",
             "env",
@@ -462,6 +463,7 @@ fn a_token_written_as_it_is_anywhere_an_agent_is_given_it_is_said_where_it_is_an
             "url",
             "userinfo",
             "env_var",
+            "input",
             "extras",
             "extras_args",
         ] {
@@ -491,6 +493,40 @@ fn a_token_written_as_it_is_anywhere_an_agent_is_given_it_is_said_where_it_is_an
                 "{said}\n{sent}"
             );
         }
+    }
+}
+
+#[test]
+fn an_input_named_as_a_token_is_said_as_one_alone_and_never_by_its_name() {
+    let name = random::kebab();
+    for (prefix, token) in McpMother::tokens() {
+        let (text, at) = McpMother::with_literal(&name, "input", &token);
+        // Used nowhere, read from no variable and declared twice: each of
+        // which would be said by its name.
+        let text = format!(
+            "{}\n[[inputs]]\nname = {}\nkind = \"header\"\n",
+            text.replacen("env_var = \"EXAMPLE_API_KEY\"\n", "", 1),
+            toml::Value::String(token.clone())
+        );
+
+        let issues = parsed(&text).issues();
+
+        let rest = token[prefix.len()..].trim_start();
+        for issue in &issues {
+            let said = issue.to_string();
+            let sent = serde_json::to_string(issue).unwrap();
+            assert!(
+                !said.contains(rest) && !sent.contains(rest),
+                "{said}\n{sent}"
+            );
+        }
+        assert!(
+            issues.contains(&ValidationIssue::SecretLiteral {
+                at: at.clone(),
+                prefix: prefix.to_owned(),
+            }),
+            "{issues:?}"
+        );
     }
 }
 
@@ -610,5 +646,21 @@ fn each_input_kind_is_written_as_the_format_spells_it() {
         assert_eq!(kind.slug(), slug);
         let read: InputKind = toml::Value::String(slug.to_owned()).try_into().unwrap();
         assert_eq!(read, kind);
+        assert_eq!(serde_json::to_value(kind).unwrap(), slug);
+    }
+}
+
+#[test]
+fn each_transport_is_said_by_the_word_its_type_is_written_as() {
+    for (text, word) in [
+        (McpMother::stdio(&random::kebab()), "stdio"),
+        (McpMother::http(&random::kebab()), "http"),
+        (McpMother::sse(&random::kebab()), "sse"),
+    ] {
+        let transport = parsed(&text).transport;
+
+        assert_eq!(transport.slug(), word);
+        assert_eq!(transport.kind().slug(), word);
+        assert_eq!(serde_json::to_value(transport.kind()).unwrap(), word);
     }
 }

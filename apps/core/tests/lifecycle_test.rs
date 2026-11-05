@@ -4,6 +4,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use mindweaver_core::create::Start;
 use mindweaver_core::hash;
 use mindweaver_core::install::{self, InstallError, Standing};
 use mindweaver_core::ledger::{Ledger, SourceKind};
@@ -996,7 +997,7 @@ fn what_a_project_authors_beside_its_agents_copies_leaves_their_record_alone() {
         Kind::Skill,
         "deploy",
         "Our own",
-        None,
+        Start::Scratch,
     )
     .unwrap();
     assert_eq!(added.stale.unwrap(), Record::Untouched);
@@ -1076,7 +1077,7 @@ fn removing_the_copy_in_a_folder_the_project_authors_in_leaves_the_others_instal
         Kind::Skill,
         "deploy",
         "Our own",
-        None,
+        Start::Scratch,
     )
     .unwrap();
     assert_eq!(added.stale.unwrap(), Record::Untouched);
@@ -1367,7 +1368,7 @@ fn adding_where_an_installed_copy_was_deleted_by_hand_drops_its_record() {
         Kind::Skill,
         "deploy",
         "Mine now",
-        None,
+        Start::Scratch,
     )
     .unwrap();
 
@@ -1430,7 +1431,7 @@ fn adding_a_rule_beside_an_installed_one_that_reaches_no_agent_keeps_its_record(
         Kind::Rule,
         "rust/errors",
         "Our own",
-        None,
+        Start::Scratch,
     )
     .unwrap();
 
@@ -1453,7 +1454,7 @@ fn adding_touches_no_record_but_one_under_the_name_it_writes() {
         Kind::Skill,
         "notes",
         "Mine",
-        None,
+        Start::Scratch,
     )
     .unwrap();
 
@@ -1475,7 +1476,7 @@ fn a_change_asks_only_a_workspace_that_manages_the_project_and_creates_no_ledger
         Kind::Skill,
         "deploy",
         "Ship it",
-        None,
+        Start::Scratch,
     )
     .unwrap();
     workspace.link(&project).unwrap();
@@ -1485,10 +1486,11 @@ fn a_change_asks_only_a_workspace_that_manages_the_project_and_creates_no_ledger
         Kind::Rule,
         "deploy",
         "How we ship",
-        None,
+        Start::Scratch,
     )
     .unwrap();
-    let alone = lifecycle::add(None, &project, Kind::Skill, "notes", "Mine", None).unwrap();
+    let alone =
+        lifecycle::add(None, &project, Kind::Skill, "notes", "Mine", Start::Scratch).unwrap();
 
     for added in [unmanaged, managed, alone] {
         assert_eq!(added.stale.unwrap(), Record::Untouched);
@@ -1515,7 +1517,7 @@ fn a_record_that_cannot_be_dropped_is_reported_and_the_change_stands() {
         Kind::Skill,
         "deploy",
         "Mine now",
-        None,
+        Start::Scratch,
     )
     .unwrap();
 

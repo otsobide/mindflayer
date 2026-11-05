@@ -15,9 +15,11 @@ use std::fs;
 use std::io::{self, Read as _};
 use std::path::Path;
 
+use mindweaver_core::create::Start;
 use mindweaver_core::everywhere::{self, EverywhereError, Plan, Step};
 use mindweaver_core::install::{InstallError, Removed};
 use mindweaver_core::lifecycle::{self, Edited, Record};
+use mindweaver_core::mcp;
 use mindweaver_core::template::{self, Origin, Template};
 use mindweaver_core::{
     paths, AgentHomes, Kind, MindProject, Reference, Standing, Target, WeaverWorkspace,
@@ -35,27 +37,31 @@ use crate::{CliError, Editing, Failure, Given, Outcome, Warning};
 /// What a dry run that would delete something ends with.
 const UNREMOVED: &str = "nothing removed: add --yes to go ahead\n";
 
+/// `add`, at either level: `kind` `name`, described as `description`, from
+/// the template `template` names, or for an MCP server from how `server`
+/// says an agent starts or reaches it, or else from scratch; core judges
+/// each before a byte is written ([`lifecycle::add`]).
 pub(crate) fn add_to(
     workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     kind: Kind,
-    name: &str,
-    description: &str,
+    (name, description): (&str, &str),
     template: Option<&str>,
+    server: Option<&mcp::Given>,
 ) -> Result<Outcome, Failure> {
     let template = template
         .map(|template| template::find(workspace, holder, kind, template))
         .transpose()
         .map_err(CliError::from)?;
-    let added = lifecycle::add(
-        workspace,
-        holder,
-        kind,
-        name,
-        description,
-        template.as_ref(),
-    )
-    .map_err(CliError::from)?;
+    // One or the other, never both: the grammar refuses a transport given
+    // with a template, which says how a server is started as surely.
+    let start = match (&template, server) {
+        (Some(template), _) => Start::Template(template),
+        (None, Some(given)) => Start::Server(given),
+        (None, None) => Start::Scratch,
+    };
+    let added = lifecycle::add(workspace, holder, kind, name, description, start)
+        .map_err(CliError::from)?;
     let mut outcome = Outcome::plain(format!(
         "created {} {} at {}\n",
         added.artifact.kind(),

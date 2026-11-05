@@ -46,6 +46,16 @@
       "description": "The file it is read from: a skill's `SKILL.md`, or the rule itself.",
       "type": "string"
     },
+    "inputs": {
+      "description": "What somebody supplies for an MCP server, each input in the order\nits definition declares them, every one by the variable it is read\nfrom and never by a value, which no definition holds: none for a\nskill or a rule.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ShownInput"
+      }
+    },
     "kind": {
       "$ref": "#/$defs/Kind"
     },
@@ -93,6 +103,17 @@
         "string",
         "null"
       ]
+    },
+    "transport": {
+      "description": "How an MCP server is started or reached, as its definition says:\nnone for a skill or a rule, which no agent starts.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ShownTransport"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
@@ -108,6 +129,8 @@
     "compatibility",
     "metadata",
     "paths",
+    "transport",
+    "inputs",
     "expressibility",
     "body"
   ],
@@ -149,6 +172,16 @@
         "dropped"
       ]
     },
+    "InputKind": {
+      "description": "Where an MCP server's input may be written in its transport, by the\nword its definition writes as the input's `kind`.",
+      "type": "string",
+      "enum": [
+        "env",
+        "header",
+        "arg",
+        "url_var"
+      ]
+    },
     "Kind": {
       "description": "A kind of artifact, by the word a command line takes for it.",
       "type": "string",
@@ -173,6 +206,116 @@
       "required": [
         "code",
         "message"
+      ]
+    },
+    "ShownInput": {
+      "description": "One input of an MCP server, as `show` lays it out: what it is called\nwhere it is written, where that may be, by the word its definition\nwrites as `kind`, and the variable it is read from.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "description": "What it is, for whoever supplies it, when the definition says.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "env_var": {
+          "description": "The environment variable an agent reads it from: what a secret is\nsaid by, its value being nowhere in the definition.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/InputKind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "secret": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "description",
+        "required",
+        "secret",
+        "env_var"
+      ]
+    },
+    "ShownTransport": {
+      "description": "How an MCP server is started or reached, as `show` lays it out: the\ntransport by the word its definition writes as `type`, then what that\ntransport holds, as written, a key of the other transport empty.\n\nOne record for every transport rather than a variant each, so that its\n`type` goes out as the word the format writes ([`TransportType::slug`])\nrather than one a derive would spell from a variant. Its address is held\nas the definition holds it, without any credential its userinfo was\ntyped with ([`Redacted`]).",
+      "type": "object",
+      "properties": {
+        "args": {
+          "description": "What the program is started with, in order.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "command": {
+          "description": "The program an agent starts; none for an address.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "description": "The folder the program is started in, when the definition names\none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "env": {
+          "description": "What the program's environment is given, each value as written,\nan input's placeholder among it.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "headers": {
+          "description": "What every request to the address carries, each value as written.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "type": {
+          "description": "`stdio` for a program, `http` or `sse` for an address.",
+          "$ref": "#/$defs/TransportType"
+        },
+        "url": {
+          "description": "Where the server is; none for a program.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "command",
+        "args",
+        "env",
+        "cwd",
+        "url",
+        "headers"
+      ]
+    },
+    "TransportType": {
+      "description": "How an agent starts an MCP server or reaches it, by the word its\ndefinition writes as its transport's `type`.",
+      "type": "string",
+      "enum": [
+        "stdio",
+        "http",
+        "sse"
       ]
     }
   }

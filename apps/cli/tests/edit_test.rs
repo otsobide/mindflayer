@@ -41,7 +41,9 @@ impl Edited {
         let name = match kind {
             Kind::Skill => ArtifactNameMother::random(),
             Kind::Rule => ArtifactNameMother::route(),
-            Kind::Mcp => unreachable!("`add` writes no MCP server, so none is edited here"),
+            Kind::Mcp => {
+                unreachable!("these lines give no transport for `add` to write a server from")
+            }
         }
         .into_string();
         let edited = Edited {

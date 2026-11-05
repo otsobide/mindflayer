@@ -85,7 +85,10 @@ pub fn added(
         Ok(template) => template,
         Err(error) => return Judged::refused(error.code(), &error),
     };
-    let scaffold = match create::plan(project, kind, name, description, template.as_ref()) {
+    let start = template
+        .as_ref()
+        .map_or(create::Start::Scratch, create::Start::Template);
+    let scaffold = match create::plan(project, kind, name, description, start) {
         Ok(scaffold) => scaffold,
         Err(error) => return Judged::refused(error.code(), &error),
     };

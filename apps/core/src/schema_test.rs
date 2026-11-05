@@ -15,6 +15,7 @@ use crate::described::field_serializers;
 use crate::install::Place;
 use crate::kind::Kind;
 use crate::ledger::SourceKind;
+use crate::mcp::{InputKind, TransportType};
 use crate::resolve::Reason;
 use crate::scan;
 use crate::settings::{ProjectId, Share};
@@ -242,6 +243,17 @@ fn every_word_type_s_schema_says_the_words_serde_writes() {
         Does::Orphaned,
         Does::Unsure,
     ]);
+    says_the_words_serde_writes(&[
+        TransportType::Stdio,
+        TransportType::Http,
+        TransportType::Sse,
+    ]);
+    says_the_words_serde_writes(&[
+        InputKind::Env,
+        InputKind::Header,
+        InputKind::Arg,
+        InputKind::UrlVar,
+    ]);
 }
 
 /// A word type's schema goes by the name its TypeScript does, a scan's
@@ -356,6 +368,8 @@ fn a_skill_s_metadata_holds_to_its_schema_as_an_object() {
         compatibility: None,
         metadata,
         paths: None,
+        transport: None,
+        inputs: None,
         expressibility: None,
         body: String::new(),
     };

@@ -280,7 +280,7 @@
           "folder": false,
           "path": "github.toml",
           "refused": null,
-          "size": 508
+          "size": 825
         }
       ],
       "kind": "mcp",
@@ -299,15 +299,15 @@
   {
     "answer": {
       "file": "github.toml",
-      "hash": "64f21997563753d6dab1e9357205151b5ff8ae900eb4e9d4dd5f1854f847a6b5",
+      "hash": "1e5027bb14be6697d3d9a48b8ebccff3c553d77b2631d0a6b386fd1586d54721",
       "kind": "mcp",
       "manifest": {
-        "body": "format = 1\nname = \"github\"\ndescription = \"GitHub's issues, pull requests and code\"\n\n[transport]\ntype = \"stdio\"\ncommand = \"npx\"\nargs = [\"-y\", \"@example/server\", \"--workspace\", \"{workspace}\"]\nenv = { API_KEY = \"{api_key}\", LOG_LEVEL = \"info\" }\ncwd = \".\"\n\n[[inputs]]\nname = \"api_key\"\nkind = \"env\"\ndescription = \"The key the server signs in with\"\nrequired = true\nsecret = true\nenv_var = \"EXAMPLE_API_KEY\"\n\n[[inputs]]\nname = \"workspace\"\nkind = \"arg\"\nenv_var = \"EXAMPLE_WORKSPACE\"\n\n[extras.claude]\ntimeout = 30000\n",
+        "body": "# An MCP server, as Mindweaver keeps it: each agent's own entry for it\n# is written from this file, and `show` says how each agent is given it.\nformat = 1\nname = \"github\"\ndescription = \"GitHub's issues, pull requests and code\"\n\n# How an agent starts it: the program, what it is started with, and what\n# its environment is given beside the agent's own.\n[transport]\ntype = \"stdio\"\ncommand = \"npx\"\nargs = [\"-y\", \"@modelcontextprotocol/server-github\"]\nenv = { GITHUB_PERSONAL_ACCESS_TOKEN = \"{GITHUB_PERSONAL_ACCESS_TOKEN}\" }\n\n# What is supplied when an agent starts it, each written between braces\n# where it goes and read from the environment variable it names: no value\n# is written here, and a secret never.\n[[inputs]]\nname = \"GITHUB_PERSONAL_ACCESS_TOKEN\"\nkind = \"env\"\nsecret = true\nenv_var = \"GITHUB_PERSONAL_ACCESS_TOKEN\"\n",
         "front_matter": null
       },
       "name": "github",
-      "size": 508,
-      "text": "format = 1\nname = \"github\"\ndescription = \"GitHub's issues, pull requests and code\"\n\n[transport]\ntype = \"stdio\"\ncommand = \"npx\"\nargs = [\"-y\", \"@example/server\", \"--workspace\", \"{workspace}\"]\nenv = { API_KEY = \"{api_key}\", LOG_LEVEL = \"info\" }\ncwd = \".\"\n\n[[inputs]]\nname = \"api_key\"\nkind = \"env\"\ndescription = \"The key the server signs in with\"\nrequired = true\nsecret = true\nenv_var = \"EXAMPLE_API_KEY\"\n\n[[inputs]]\nname = \"workspace\"\nkind = \"arg\"\nenv_var = \"EXAMPLE_WORKSPACE\"\n\n[extras.claude]\ntimeout = 30000\n",
+      "size": 825,
+      "text": "# An MCP server, as Mindweaver keeps it: each agent's own entry for it\n# is written from this file, and `show` says how each agent is given it.\nformat = 1\nname = \"github\"\ndescription = \"GitHub's issues, pull requests and code\"\n\n# How an agent starts it: the program, what it is started with, and what\n# its environment is given beside the agent's own.\n[transport]\ntype = \"stdio\"\ncommand = \"npx\"\nargs = [\"-y\", \"@modelcontextprotocol/server-github\"]\nenv = { GITHUB_PERSONAL_ACCESS_TOKEN = \"{GITHUB_PERSONAL_ACCESS_TOKEN}\" }\n\n# What is supplied when an agent starts it, each written between braces\n# where it goes and read from the environment variable it names: no value\n# is written here, and a secret never.\n[[inputs]]\nname = \"GITHUB_PERSONAL_ACCESS_TOKEN\"\nkind = \"env\"\nsecret = true\nenv_var = \"GITHUB_PERSONAL_ACCESS_TOKEN\"\n",
       "withheld": null
     },
     "query": {

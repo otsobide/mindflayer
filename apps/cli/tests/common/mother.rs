@@ -7,6 +7,7 @@
 
 use std::path::Path;
 
+use mindweaver_core::mcp::Given;
 use mindweaver_core::mother::random;
 use mindweaver_core::WeaverWorkspace;
 
@@ -159,5 +160,184 @@ impl MindflayerShellMother {
             .expect("the code undoes an older activation first")
             .replace("MINDWEAVER_WORKSPACE", "MINDFLAYER_WORKSPACE")
             .replace("mindweaver-deactivate", "flayer-deactivate")
+    }
+}
+
+/// Makes the options `add mcp` is told a server's transport by: those a
+/// command line gives what core's `McpMother` makes by, and those no
+/// definition can hold together, which the grammar refuses.
+pub struct ServerOptionsMother;
+
+impl ServerOptionsMother {
+    /// The options a command line gives `given` by, in the order the
+    /// grammar lists them, each value joined to its option by `=`, so one
+    /// led by a dash reads as the value it is.
+    pub fn words(given: &Given) -> Vec<String> {
+        let mut words = Vec::new();
+        let mut give = |option: &str, value: &str| words.push(format!("--{option}={value}"));
+        match given {
+            Given::Program(program) => {
+                give("command", &program.command);
+                for arg in &program.args {
+                    give("arg", arg);
+                }
+                for (key, value) in &program.env {
+                    give("env", &format!("{key}={value}"));
+                }
+                for variable in &program.secret_env {
+                    give("secret-env", variable);
+                }
+                for variable in &program.arg_env {
+                    give("arg-env", variable);
+                }
+            }
+            Given::Address(address) => {
+                give("url", &address.url);
+                for (key, value) in &address.headers {
+                    give("header", &format!("{key}={value}"));
+                }
+                for (header, variable) in &address.secret_headers {
+                    give("secret-header", &format!("{header}={variable}"));
+                }
+                if let Some(variable) = &address.bearer {
+                    give("bearer-env", variable);
+                }
+                for (name, variable) in &address.url_vars {
+                    give("url-var", &format!("{name}={variable}"));
+                }
+                if address.events {
+                    words.push(String::from("--sse"));
+                }
+            }
+        }
+        words
+    }
+
+    /// Options no definition can hold together, each beside why: two
+    /// transports, an option of one with the other, or with neither, and a
+    /// transport, or any option of one, with a template, which says how a
+    /// server is started as surely.
+    pub fn conflicting() -> Vec<(&'static str, Vec<&'static str>)> {
+        vec![
+            (
+                "a program and an address",
+                vec!["--command", "npx", "--url", "https://example.com/mcp"],
+            ),
+            (
+                "a header for a program",
+                vec!["--command", "npx", "--header", "X-Client=me"],
+            ),
+            (
+                "a secret header for a program",
+                vec!["--command", "npx", "--secret-header", "X-Api-Key=KEY"],
+            ),
+            ("events for a program", vec!["--command", "npx", "--sse"]),
+            (
+                "an argument for an address",
+                vec!["--url", "https://example.com/mcp", "--arg", "-y"],
+            ),
+            (
+                "a secret in the environment of an address",
+                vec!["--url", "https://example.com/mcp", "--secret-env", "KEY"],
+            ),
+            ("an argument with nothing to start", vec!["--arg", "-y"]),
+            ("events with no address", vec!["--sse"]),
+            (
+                "a template and a program",
+                vec!["--template", "internal", "--command", "npx"],
+            ),
+            (
+                "a template and an address",
+                vec!["--template", "internal", "--url", "https://example.com/mcp"],
+            ),
+            // Each of these requires a transport that conflicts with the
+            // template, a requirement clap would otherwise pass over.
+            (
+                "a template and an argument",
+                vec!["--template", "internal", "--arg", "-y"],
+            ),
+            (
+                "a template and a setting",
+                vec!["--template", "internal", "--env", "LOG_LEVEL=info"],
+            ),
+            (
+                "a template and a secret in the environment",
+                vec!["--template", "internal", "--secret-env", "KEY"],
+            ),
+            (
+                "a template and an argument read from a variable",
+                vec!["--template", "internal", "--arg-env", "KEY"],
+            ),
+            (
+                "a template and events",
+                vec!["--template", "internal", "--sse"],
+            ),
+            (
+                "a template and a header",
+                vec!["--template", "internal", "--header", "X-Client=me"],
+            ),
+            (
+                "a template and a secret header",
+                vec!["--template", "internal", "--secret-header", "X-Api-Key=KEY"],
+            ),
+            (
+                "a template and a bearer token",
+                vec!["--template", "internal", "--bearer-env", "KEY"],
+            ),
+            (
+                "a template and a part of the address",
+                vec!["--template", "internal", "--url-var", "tenant=TENANT"],
+            ),
+            (
+                "a template and options of both transports",
+                vec![
+                    "--template",
+                    "internal",
+                    "--secret-env",
+                    "KEY",
+                    "--bearer-env",
+                    "OTHER",
+                ],
+            ),
+            (
+                "a setting with no `=`",
+                vec!["--command", "npx", "--env", "KEY"],
+            ),
+        ]
+    }
+
+    /// Each option taking `NAME=VALUE` given `token` with no `=`, as one
+    /// is given a secret by mistake, after the transport it needs, beside
+    /// the option as its refusal names it: the token with its name left
+    /// out, or a header written as curl takes one.
+    pub fn unpaired(token: &str) -> Vec<(&'static str, Vec<String>)> {
+        let program = |option: &str, value: String| {
+            vec![
+                String::from("--command"),
+                String::from("npx"),
+                format!("--{option}"),
+                value,
+            ]
+        };
+        let address = |option: &str, value: String| {
+            vec![
+                String::from("--url"),
+                String::from("https://example.com/mcp"),
+                format!("--{option}"),
+                value,
+            ]
+        };
+        vec![
+            ("--env <KEY=VALUE>", program("env", token.to_owned())),
+            (
+                "--header <NAME=VALUE>",
+                address("header", format!("Authorization: {token}")),
+            ),
+            (
+                "--secret-header <NAME=VAR>",
+                address("secret-header", token.to_owned()),
+            ),
+            ("--url-var <NAME=VAR>", address("url-var", token.to_owned())),
+        ]
     }
 }

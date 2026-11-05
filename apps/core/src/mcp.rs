@@ -54,7 +54,7 @@
 use std::collections::BTreeMap;
 
 use serde::de::{self, Deserializer};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
 use crate::artifact::ValidationIssue;
@@ -62,10 +62,12 @@ use crate::code::codes;
 use crate::value::{ArtifactName, InputName, Redacted, VariableName};
 
 mod expressible;
+mod given;
 pub(crate) mod name;
 mod token;
 
 pub use expressible::{Expressibility, Inexpressible};
+pub use given::{Address, Given, Program, Repeated};
 
 /// The format a definition is written in, and the newest this build reads.
 ///
@@ -117,14 +119,58 @@ pub enum Transport {
 }
 
 impl Transport {
-    /// How the format writes it, as `type`.
-    pub const fn slug(&self) -> &'static str {
+    /// Which transport it is, as its `type` names it.
+    pub const fn kind(&self) -> TransportType {
         match self {
-            Transport::Stdio(_) => "stdio",
-            Transport::Http(_) => "http",
-            Transport::Sse(_) => "sse",
+            Transport::Stdio(_) => TransportType::Stdio,
+            Transport::Http(_) => TransportType::Http,
+            Transport::Sse(_) => TransportType::Sse,
         }
     }
+
+    /// How the format writes it, as `type`.
+    pub const fn slug(&self) -> &'static str {
+        self.kind().slug()
+    }
+}
+
+/// Which of the transports a definition names, with nothing it holds: the
+/// word its `type` is written as, for what `show` says of one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum TransportType {
+    /// A program, [`Transport::Stdio`].
+    Stdio,
+    /// An address over streamable HTTP, [`Transport::Http`].
+    Http,
+    /// An address over server-sent events, [`Transport::Sse`].
+    Sse,
+}
+
+impl TransportType {
+    /// How the format writes it, as `type`.
+    pub const fn slug(self) -> &'static str {
+        match self {
+            TransportType::Stdio => "stdio",
+            TransportType::Http => "http",
+            TransportType::Sse => "sse",
+        }
+    }
+}
+
+/// By the word the format writes as `type`, rather than derived: a derive
+/// spells the variant, and what a report calls a transport is the word a
+/// definition is written with, which renaming a variant must not change.
+impl Serialize for TransportType {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
+    /// How an agent starts an MCP server or reaches it, by the word its
+    /// definition writes as its transport's `type`.
+    TransportType by slug { Stdio, Http, Sse }
 }
 
 /// A program an agent starts.
@@ -219,6 +265,22 @@ impl InputKind {
     }
 }
 
+/// By the word the format writes as an input's `kind`, rather than derived,
+/// for the reason a transport's `type` is: what is read and what is
+/// reported are the one word.
+impl Serialize for InputKind {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.slug())
+    }
+}
+
+#[cfg(any(feature = "ts", feature = "schema"))]
+crate::described::words! {
+    /// Where an MCP server's input may be written in its transport, by the
+    /// word its definition writes as the input's `kind`.
+    InputKind by slug { Env, Header, Arg, UrlVar }
+}
+
 /// Where a definition imported from a registry came from, as the registry
 /// said it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -266,7 +328,8 @@ impl McpDefinition {
 
     /// Everything wrong with it as a definition, in the order it is worth
     /// fixing: a description with nothing in it, a transport that names
-    /// nothing to start or reach, an input whose name no placeholder can be
+    /// nothing to start or reach, a token written as an input's name, which
+    /// is then said of it alone, an input whose name no placeholder can be
     /// written of, a token written where its variable's name goes or a
     /// variable not every agent can refer to, a secret read from no
     /// variable at all, a token written as it is in a value of the
@@ -295,9 +358,25 @@ impl McpDefinition {
                 field: field.to_owned(),
             });
         }
+        // An input whose name holds a token is said as that alone: every
+        // other word about it would print its name whole, wherever the
+        // message goes. `add` names an input after the variable it is told
+        // to read, so a token pasted there lands in the name as surely as
+        // in the variable.
+        let hidden: Vec<bool> = self
+            .inputs
+            .iter()
+            .map(|input| !token::found(&input.name, &[]).is_empty())
+            .collect();
         for (index, input) in self.inputs.iter().enumerate() {
             let mut named = Vec::new();
-            if !input.name.is_writable() {
+            named.extend(token::found(&input.name, &[]).iter().map(|prefix| {
+                ValidationIssue::SecretLiteral {
+                    at: format!("inputs[{index}].name"),
+                    prefix: (*prefix).to_owned(),
+                }
+            }));
+            if !hidden[index] && !input.name.is_writable() {
                 named.push(ValidationIssue::InputNameMalformed {
                     name: input.name.to_string(),
                 });
@@ -318,6 +397,7 @@ impl McpDefinition {
                 prefix: (*prefix).to_owned(),
             }));
             match &input.env_var {
+                _ if hidden[index] => {}
                 Some(_) if !pasted.is_empty() => {}
                 Some(variable) if !variable.is_portable() => {
                     named.push(ValidationIssue::EnvVarMalformed {
@@ -354,8 +434,15 @@ impl McpDefinition {
                 issues.push(issue);
             }
         }
+        let shown = || {
+            self.inputs
+                .iter()
+                .zip(&hidden)
+                .filter(|(_, hidden)| !**hidden)
+                .map(|(input, _)| input)
+        };
         let mut seen: Vec<&InputName> = Vec::new();
-        for input in &self.inputs {
+        for input in shown() {
             if seen.contains(&&input.name) {
                 let repeated = ValidationIssue::InputRepeated {
                     name: input.name.to_string(),
@@ -367,7 +454,7 @@ impl McpDefinition {
             }
             seen.push(&input.name);
         }
-        for input in &self.inputs {
+        for input in shown() {
             if self.references(input) {
                 continue;
             }
@@ -486,6 +573,54 @@ impl McpDefinition {
     }
 }
 
+/// `source`, a definition's text, with its `name` set to `name` and, when
+/// one is given, its `description` to `description`, every other byte as
+/// it was, the comment on each one's line among them: rewritten through
+/// `toml_edit`, as a marker is, and read back to make sure the values
+/// changed what they were meant to and nothing else.
+///
+/// What `rename` writes, and what `add` makes of a template: the one way a
+/// definition somebody wrote is given another name.
+pub(crate) fn declaring(
+    source: &str,
+    name: &str,
+    description: Option<&str>,
+) -> Result<String, String> {
+    let before = McpDefinition::parse(source).map_err(|error| error.to_string())?;
+    let mut document: toml_edit::DocumentMut = source
+        .parse()
+        .map_err(|error: toml_edit::TomlError| error.to_string())?;
+    let mut set = vec![("name", name)];
+    set.extend(description.map(|description| ("description", description)));
+    for (key, to) in &set {
+        let Some(value) = document
+            .get_mut(key)
+            .and_then(toml_edit::Item::as_value_mut)
+        else {
+            return Err(format!("its `{key}` is not a value at the top of the file"));
+        };
+        let decor = value.decor().clone();
+        *value = toml_edit::Value::from(*to);
+        *value.decor_mut() = decor;
+    }
+    let rewritten = document.to_string();
+
+    let after = McpDefinition::parse(&rewritten).map_err(|error| error.to_string())?;
+    let wanted = McpDefinition {
+        name: ArtifactName::from(name),
+        description: description.map_or_else(|| before.description.clone(), str::to_owned),
+        ..before
+    };
+    if after != wanted {
+        let keys: Vec<String> = set.iter().map(|(key, _)| format!("`{key}`")).collect();
+        return Err(format!(
+            "rewriting it would change more than its {}",
+            keys.join(" and ")
+        ));
+    }
+    Ok(rewritten)
+}
+
 /// Why a file is not a definition this build can read.
 ///
 /// Each one refuses the file, as front matter that does not parse refuses a
@@ -596,6 +731,15 @@ fn moment<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, 
             "`fetched_at` is neither a date and time nor a string",
         )),
     }
+}
+
+/// What the first token `text` holds starts with, looked for as `validate`
+/// looks through a value: for a refusal that would say `text` before any
+/// definition holds it (a key `add` is given twice, what is kept of an
+/// address typed with a credential), which then says it by that alone,
+/// since said whole it would print the secret wherever the message goes.
+pub(crate) fn token_in(text: &str) -> Option<&'static str> {
+    token::found(text, &[]).first().copied()
 }
 
 /// How an input named `name` is written where its value goes.

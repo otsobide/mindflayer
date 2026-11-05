@@ -43,7 +43,7 @@ pub use homes::{agent_homes, default_home, Lookup};
 pub use parse::UiOptions;
 pub use parse::{
     AgentHomeOptions, AgentNames, AgentsChange, Cli, Command, Editing, GatherCommand, Given,
-    Migrated, ShareMode, TargetsChange, WeaverCli, WeaverCommand, WorkspacesCommand,
+    Migrated, ServerOptions, ShareMode, TargetsChange, WeaverCli, WeaverCommand, WorkspacesCommand,
 };
 pub use progress::ProgressLine;
 pub use render::{Failure, Outcome, Warning};

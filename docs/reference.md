@@ -247,12 +247,12 @@ lists them too, and loads any of them into the workspace it shows.
 | **MCP server** | `mcp/<name>.toml` | one TOML file each, directly in `mcp/` | how an agent starts the server or reaches it, and what somebody supplies for it: [what an MCP server looks like](#what-an-mcp-server-looks-like) |
 
 MCP servers are kept in the workspace's library, `.mindweaver/library/mcp`,
-and listed, shown, validated, renamed and removed as skills and rules are.
-Installing one into a project, as an entry in each agent's own config file,
-is not done yet, and neither is adding one with `add`: you write its
-definition by hand. A project keeps none of its own unless its settings
-name a folder for them, so an `mcp/` that holds a server's code is never
-read as definitions.
+added with `add mcp` from how an agent starts or reaches one, and listed,
+shown, validated, renamed and removed as skills and rules are. Installing
+one into a project, as an entry in each agent's own config file, is not
+done yet. A project keeps none of its own unless its settings name a
+folder for them, so an `mcp/` that holds a server's code is never read as
+definitions.
 
 Folders under `rules/` group and mean nothing else, so
 `rules/git/no-force-push.md` is the rule `git/no-force-push`. Skills are flat,
@@ -413,6 +413,12 @@ mind init --new-id         # give the project here an id of its own: for a
                            # copy made with its .mind
 mind add <KIND> <NAME> <DESCRIPTION> [--template NAME]
                            # create a skill or a rule that validates as written
+mind add mcp <NAME> <DESCRIPTION> --command CMD [--arg A]... [--env K=V]...
+         [--secret-env VAR]... [--arg-env VAR]...
+mind add mcp <NAME> <DESCRIPTION> --url URL [--sse] [--header K=V]...
+         [--secret-header H=VAR]... [--bearer-env VAR] [--url-var NAME=VAR]...
+                           # an MCP server, from how an agent starts it or
+                           # reaches it, each secret a variable's name
 mind edit <NAME> [--editor CMD]
                            # open it in $VISUAL or $EDITOR, then check it
 mind edit <NAME> --contents FILE|- [--if-unchanged SHA256]
@@ -2852,8 +2858,10 @@ mind add skill deploy "Ship the service" --template full
 `scripts/` and `references/` folders the skill format sets aside. Your own go in
 `.mind/templates/` for one project, or in the workspace's
 `.mindweaver/templates/` for every project it manages: a folder holding a
-`SKILL.md` for a skill, a markdown file for a rule. `mind templates` lists what
-is available and where each comes from; of two with one name, the closer wins.
+`SKILL.md` for a skill, a markdown file for a rule, and a definition for an
+MCP server ([what one looks like](#what-an-mcp-server-looks-like)). `mind
+templates` lists what is available and where each comes from; of two with
+one name, the closer wins.
 `mindweaver add -p` finds the workspace's wherever the project sits; `mind add`
 finds those of [the workspace named or
 activated](#choosing-a-workspace), or else the one above the project, or else
@@ -2954,27 +2962,81 @@ own (an [open question](architecture.md#open-questions)).
 An MCP server is one file in the workspace's library,
 `.mindweaver/library/mcp/<name>.toml`, saying how an agent starts the server
 or reaches it, in a format of its own that each agent's entry will be written
-from. `github.toml`:
+from. `add` writes one from how an agent starts the server, a program and
+what it is started with:
+
+```
+$ mindweaver add mcp github "GitHub's issues, pull requests and code" \
+    --command npx --arg -y --arg @modelcontextprotocol/server-github \
+    --secret-env GITHUB_PERSONAL_ACCESS_TOKEN
+created mcp github at /home/you/Projects/.mindweaver/library/mcp/github.toml
+```
+
+or from where an agent reaches it, an address and what every request to it
+carries:
+
+```
+$ mindweaver add mcp linear "Linear's issues" --url https://mcp.linear.app/mcp \
+    --bearer-env LINEAR_API_KEY
+created mcp linear at /home/you/Projects/.mindweaver/library/mcp/linear.toml
+```
+
+A secret is given as the name of the environment variable an agent reads
+it from when it starts the server (`--secret-env`, `--secret-header`,
+`--bearer-env`), never as its value. `--env` and `--header` write what they
+are given as it is: a value that looks like a token is refused, but nothing
+tells another secret from a setting, so one given there is written into the
+library. Every option takes a name or a value written as it is:
+
+| Option | | Writes |
+|---|---|---|
+| `--command CMD` | a program | `type = "stdio"` and its `command` |
+| `--arg A` | a program | one of its `args`, in order; again for each, and one led by a dash is taken as it is |
+| `--env K=V` | a program | `K` in its `env`, `V` as written |
+| `--secret-env VAR` | a program | `VAR = "{VAR}"` in its `env`, and a secret input read from `VAR`, which the program is given under that name |
+| `--arg-env VAR` | a program | `{VAR}` after the `--arg`s, and an input read from `VAR`; no secret |
+| `--url URL` | an address | `type = "http"` and its `url` |
+| `--sse` | an address | `type = "sse"` instead, server-sent events |
+| `--header K=V` | an address | `K` in its `headers`, `V` as written |
+| `--secret-header H=VAR` | an address | `H = "{VAR}"` in its `headers`, and a secret input read from `VAR` |
+| `--bearer-env VAR` | an address | `Authorization = "Bearer {VAR}"` in its `headers`, and a secret input read from `VAR` |
+| `--url-var NAME=VAR` | an address | an input `NAME` read from `VAR`, written `{NAME}` in the URL where it goes; no secret |
+
+What reaches a server through its environment or a header is a secret. What
+goes into its arguments or its address is not: a process list or a log
+shows it, and Codex reads no secret into either. An option of one transport
+given with the other, both transports, or any of these options with
+`--template` is refused before anything is read.
+
+`github.toml`, as `add` wrote it:
 
 ```toml
+# An MCP server, as Mindweaver keeps it: each agent's own entry for it
+# is written from this file, and `show` says how each agent is given it.
 format = 1
 name = "github"
 description = "GitHub's issues, pull requests and code"
 
+# How an agent starts it: the program, what it is started with, and what
+# its environment is given beside the agent's own.
 [transport]
 type = "stdio"
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-github"]
-env = { GITHUB_PERSONAL_ACCESS_TOKEN = "{token}" }
+env = { GITHUB_PERSONAL_ACCESS_TOKEN = "{GITHUB_PERSONAL_ACCESS_TOKEN}" }
 
+# What is supplied when an agent starts it, each written between braces
+# where it goes and read from the environment variable it names: no value
+# is written here, and a secret never.
 [[inputs]]
-name = "token"
+name = "GITHUB_PERSONAL_ACCESS_TOKEN"
 kind = "env"
-description = "A personal access token the server signs in with"
-required = true
 secret = true
-env_var = "GITHUB_TOKEN"
+env_var = "GITHUB_PERSONAL_ACCESS_TOKEN"
 ```
+
+A definition can be written by hand too, or changed with `mindweaver edit`,
+and holds:
 
 | Key | | Holds |
 |---|---|---|
@@ -3000,8 +3062,47 @@ that variable in the agent's own way. A value of `args`, `env`, `headers` or
 `url`, or of `extras`, holding what looks like a token (a `Bearer` value, or
 one starting `sk-`, `ghp_` or `github_pat_`) outside an input's braces is
 refused, and so is one written as an `env_var`, where the variable's name
-goes: each is said by where it is and what it starts with, never by the
-token.
+goes, or as an input's name: each is said by where it is and what it starts
+with, never by the token.
+
+`add` holds what it writes to every one of those rules before a byte is
+written, and refuses whatever `validate` would call invalid: a name an
+agent keeps for itself, one beside another that differs only by case, a
+value shaped like a token (`--env API_KEY=sk-…`, `--header
+Authorization=Bearer …`), a variable no agent can refer to, a part of the
+address the URL does not write. Beside them, it refuses what no file
+should hold: a key given twice, and an address typed with a credential,
+which it says without it; either, holding what looks like a token, is said
+by what that starts with. An option taking `NAME=VALUE` given no `=`
+(`--header "Authorization: Bearer …"`, say) is refused without repeating
+what it was given. Given neither a program nor an address, it says what it
+needs:
+
+```
+$ mindweaver add mcp computer-use "Ours" --command npx
+error: `computer-use` is a name Claude Code keeps for a server of its own (`computer-use`), so no server of yours can be keyed by it
+$ mindweaver add mcp leaky "Leaky" --command npx --env A=1 --secret-env A
+error: `A` is given twice for the transport's `env`, which holds each key once
+$ mindweaver add mcp leaky "Leaky" --url https://me:hunter2@example.com/mcp
+error: `https://example.com/mcp` was typed with something before its host, which a definition never keeps and no agent is given: send a credential in a header read from an environment variable instead (`--secret-header` or `--bearer-env`)
+$ mindweaver add mcp jira "Jira's issues"
+error: an MCP server is added with how an agent starts it, `--command`, or where it reaches it, `--url`, or from a `--template` that says so; or write its definition as <name>.toml in /home/you/Projects/.mindweaver/library/mcp
+```
+
+A definition in a templates folder, `.mindweaver/templates/<template>.toml`
+or a project's `.mind/templates/`, is a template for one: `add mcp
+--template` takes its transport and its inputs as they are, sets its `name`
+and `description`, and keeps every other byte, comments included; what it
+writes is held to the same rules. With `remote.toml` there, a copy of
+`linear.toml`:
+
+```
+$ mindweaver templates
+full    skill  built in
+remote  mcp    .mindweaver/templates/remote.toml
+$ mindweaver add mcp sentry-remote "Sentry, reached" --template remote
+created mcp sentry-remote at /home/you/Projects/.mindweaver/library/mcp/sentry-remote.toml
+```
 
 They are listed beside the skills and rules, and narrowed with `mcp`:
 
@@ -3010,15 +3111,17 @@ $ mindweaver list
 skill  commit-style       How every repo here writes commits
 rule   git/no-force-push  Never force-push a shared branch
 mcp    github             GitHub's issues, pull requests and code
-mcp    sentry             Sentry's issues and releases
+mcp    linear             Linear's issues
 
 $ mindweaver list mcp
 github  GitHub's issues, pull requests and code
-sentry  Sentry's issues and releases
+linear  Linear's issues
 ```
 
-`show` says what one is for, how each agent will be given it, then prints
-its file:
+`show` says what one is for, how an agent starts or reaches it, what is
+supplied for it, each input by the variable it is read from, and how each
+agent will be given it; `--json` says the same under `transport`, `inputs`
+and `expressibility`, beside the file whole as `body`:
 
 ```
 $ mindweaver show github
@@ -3027,41 +3130,36 @@ github
 
 GitHub's issues, pull requests and code
 
+transport: stdio
+  command: npx
+  args:
+    - -y
+    - @modelcontextprotocol/server-github
+  env:
+    GITHUB_PERSONAL_ACCESS_TOKEN: {GITHUB_PERSONAL_ACCESS_TOKEN}
+
+inputs:
+  GITHUB_PERSONAL_ACCESS_TOKEN: env, secret, read from $GITHUB_PERSONAL_ACCESS_TOKEN
+
 agents:
   claude: given it whole
   codex: given it whole
   opencode: given it whole
-
-format = 1
-name = "github"
-description = "GitHub's issues, pull requests and code"
-
-[transport]
-type = "stdio"
-command = "npx"
-args = ["-y", "@modelcontextprotocol/server-github"]
-env = { GITHUB_PERSONAL_ACCESS_TOKEN = "{token}" }
-
-[[inputs]]
-name = "token"
-kind = "env"
-description = "A personal access token the server signs in with"
-required = true
-secret = true
-env_var = "GITHUB_TOKEN"
 ```
 
 `validate` holds each to its format: a name that is its file's, a transport
 that names what it needs to start or reach the server, and every input used
-where its kind says:
+where its kind says. `sentry.toml`, written by hand, declares an `arg` input
+no argument writes:
 
 ```
 $ mindweaver validate mcp
 github: ok
+linear: ok
 sentry: 1 problem
   - input `token` is used nowhere: an input of kind `arg` is written `{token}` in one of the transport's `args`
 
-2 MCP servers checked, 1 invalid
+3 MCP servers checked, 1 invalid
 ```
 
 And to the names agents take and the secrets a file holds: a name an agent
@@ -3089,15 +3187,26 @@ value or `Authorization: Bearer` and the token; neither Codex nor
 OpenCode takes a server over sse; and Claude starts a program in no folder
 it is told, so its `cwd` is left out there. `show` says so of each, and
 `--json` says it by a code under `expressibility`. The server is no less
-valid for it, and each agent that can be given it will be: `notion.toml`,
+valid for it, and each agent that can be given it will be: `notion`,
 reached over sse, reaches Claude alone:
 
 ```
+$ mindweaver add mcp notion "Notion's pages and databases" --url https://mcp.notion.com/sse \
+    --sse --bearer-env NOTION_TOKEN
+created mcp notion at /home/you/Projects/.mindweaver/library/mcp/notion.toml
 $ mindweaver show notion
 notion
 /home/you/Projects/.mindweaver/library/mcp/notion.toml
 
 Notion's pages and databases
+
+transport: sse
+  url: https://mcp.notion.com/sse
+  headers:
+    Authorization: Bearer {NOTION_TOKEN}
+
+inputs:
+  NOTION_TOKEN: header, secret, read from $NOTION_TOKEN
 
 agents:
   claude: given it whole
@@ -3105,48 +3214,33 @@ agents:
     - the sse transport, server-sent events, is not one taken there
   opencode: given none of it:
     - the sse transport, server-sent events, is not one taken there
-
-format = 1
-name = "notion"
-description = "Notion's pages and databases"
-
-[transport]
-type = "sse"
-url = "https://mcp.notion.com/sse"
-headers = { Authorization = "Bearer {token}" }
-
-[[inputs]]
-name = "token"
-kind = "header"
-secret = true
-env_var = "NOTION_TOKEN"
 ```
 
 `mindweaver rename mcp:github octocat` moves the file and rewrites its `name`
 and nothing else, and `mindweaver remove mcp:github --yes` takes it away;
 `mindweaver edit` opens it, and `--contents` refuses a definition that does
-not read or names another server. What is not done yet is refused, saying
-so:
+not read or names another server. Installing one into a project is not done
+yet, and is refused, saying so:
 
 ```
-$ mindweaver add mcp linear "Linear's issues"
-error: an MCP server cannot be added yet, since `add` takes no command or address to start or reach it by; write its definition as <name>.toml in /home/you/Projects/.mindweaver/library/mcp
 $ mindweaver install -p collapse mcp:github
 error: MCP servers cannot be installed into a project yet
 ```
 
 A project keeps MCP servers of its own only where its settings name a folder
-for them, under `[directories]` as `mcp = "mcp"`; `mind init` names none, so
-an `mcp/` holding a server's code is not read, and adding one there says how:
+for them, under `[directories]` as `mcp = "mcp"`, and `mind add mcp` writes
+one there; `mind init` names none, so an `mcp/` holding a server's code is
+not read, and adding one there says how:
 
 ```
-$ cd collapse && mind add mcp github "GitHub"
+$ cd collapse && mind add mcp github "GitHub" --command npx
 error: /home/you/Projects/collapse: keeps no MCP servers of its own, since its settings.toml names no folder for them; its `[directories]` can name one
 ```
 
-A project an older Mindweaver made, marked by a `mind.toml` or a
-`settings.json`, keeps none either, whatever folders it has, and is pointed
-at `mind migrate` first.
+A project an older Mindweaver made keeps none either: one a `mind.toml`
+marks whatever folders it has, and one a `settings.json` marks unless its
+`directories` name a folder for them, as somebody may have written there by
+hand. Adding one to either otherwise points at `mind migrate` first.
 
 ## Upgrading
 
