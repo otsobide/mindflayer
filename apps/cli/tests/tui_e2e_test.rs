@@ -40,6 +40,9 @@ mod changing;
 #[path = "tui_e2e/screens.rs"]
 mod screens;
 
+#[path = "tui_e2e/sources.rs"]
+mod sources;
+
 #[path = "tui_e2e/starting.rs"]
 mod starting;
 

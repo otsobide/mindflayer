@@ -213,3 +213,350 @@ fn saying_no_to_mind_init_writes_nothing_into_the_repository() {
     assert_eq!(closed.shown.trim_end(), "");
     assert!(!scenario.exists("~/Projects/site/.mind"));
 }
+
+#[test]
+fn r_renames_from_a_form_that_starts_out_holding_the_old_name() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal
+        .presses(Key::Right)
+        .presses(Key::Down)
+        .types("r")
+        .shows("mind -C collapse rename skill:deploy deploy")
+        .presses(Key::CtrlU)
+        .types("ship")
+        .shows("mind -C collapse rename skill:deploy ship")
+        .presses(Key::Enter)
+        .shows(">   skill ship          authored           Ship the service to staging");
+
+    terminal.presses(Key::Escape).types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mind -C collapse rename skill:deploy ship\n",
+            "renamed skill deploy to ship at /home/you/Projects/collapse/skills/ship",
+        )
+    );
+    assert!(scenario.exists("~/Projects/collapse/skills/ship/SKILL.md"));
+    assert!(!scenario.exists("~/Projects/collapse/skills/deploy"));
+}
+
+#[test]
+fn e_hands_the_terminal_to_the_editor_and_takes_it_back_once_it_is_closed() {
+    let scenario = collapse_and_tanukeys();
+    scenario.file(
+        "~/draft.md",
+        &crate::skill("deploy", "Ship the service to production"),
+    );
+    // An editor that asks before it saves, so the test sees the terminal
+    // while it is the editor's: `sh` runs it, the file last, as git runs
+    // an editor.
+    let editor = format!(
+        "printf 'save the draft? '; read answer; cp {}",
+        scenario.at("~/draft.md").display()
+    );
+    let mut terminal = scenario.open_with("~/Projects", "mindweaver", &[("EDITOR", &editor)]);
+    terminal.shows("collapse  2");
+
+    terminal
+        .presses(Key::Right)
+        .presses(Key::Down)
+        .types("e")
+        .steps_aside()
+        .shows("save the draft?");
+    terminal
+        .types("y\r")
+        .comes_back()
+        .shows("edited skill deploy: ok");
+    terminal
+        .presses(Key::Escape)
+        .shows(">   skill deploy        authored           Ship the service to production");
+
+    terminal.presses(Key::Escape).types("q");
+    let closed = terminal.exits();
+    assert!(closed.status.success());
+    // What the editor wrote while the terminal was its own stays where it
+    // wrote it, above the transcript, as it does in a shell.
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "save the draft? y\n",
+            "$ mind -C collapse edit skill:deploy\n",
+            "edited skill deploy: ok",
+        )
+    );
+    assert_eq!(
+        scenario.read("~/Projects/collapse/skills/deploy/SKILL.md"),
+        crate::skill("deploy", "Ship the service to production")
+    );
+}
+
+#[test]
+fn an_editor_that_fails_leaves_the_artifact_as_it_was_and_the_screen_says_why() {
+    let scenario = collapse_and_tanukeys();
+    let before = scenario.read("~/Projects/collapse/skills/deploy/SKILL.md");
+    let mut terminal = scenario.open_with("~/Projects", "mindweaver", &[("EDITOR", "false")]);
+    terminal.shows("collapse  2");
+
+    terminal
+        .presses(Key::Right)
+        .presses(Key::Down)
+        .types("e")
+        .comes_back()
+        .shows("`false` failed (exit status: 1), so the file is reported on no further");
+
+    terminal.presses(Key::Escape).types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mind -C collapse edit skill:deploy\n",
+            "error: `false` failed (exit status: 1), so the file is reported on no further",
+        )
+    );
+    assert_eq!(
+        scenario.read("~/Projects/collapse/skills/deploy/SKILL.md"),
+        before
+    );
+}
+
+#[test]
+fn capital_u_unlinks_the_project_once_asked_and_leaves_its_folder_as_it_is() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal
+        .presses(Key::Down)
+        .shows("> tanukeys  0")
+        .types("U")
+        .shows("Unlink tanukeys?");
+    terminal
+        .types("y")
+        .no_longer_shows("tanukeys  0")
+        .shows("Projects (1)");
+
+    terminal.types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        "$ mindweaver unlink tanukeys\nunlinked tanukeys"
+    );
+    assert!(scenario.exists("~/Projects/tanukeys/.mind/settings.toml"));
+}
+
+#[test]
+fn capital_a_adopts_a_skill_somebody_keeps_once_asked() {
+    let scenario = collapse_and_tanukeys();
+    scenario.file(
+        "~/Projects/collapse/.claude/skills/notes/SKILL.md",
+        &crate::skill("notes", "My own notes"),
+    );
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  3");
+
+    terminal
+        .presses(Key::Right)
+        .presses(Key::Down)
+        .presses(Key::Down)
+        .shows(">   skill notes         foreign")
+        .types("A")
+        .shows("Adopt notes from collapse into the library?");
+    terminal
+        .types("y")
+        .shows("copied notes from collapse into the library");
+
+    terminal
+        .presses(Key::Escape)
+        .presses(Key::Escape)
+        .types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mindweaver adopt -p collapse --yes skill:notes\n",
+            "copied notes from collapse into the library, at /home/you/Projects/.mindweaver/library/skills/notes\n",
+            "recorded notes in collapse as installed from workspace, at .claude/skills/notes\n",
+            "recorded .agents/skills/notes missing: `mindweaver update -p collapse` puts it there\n",
+            "kept .claude/skills/notes out of git",
+        )
+    );
+    assert!(scenario.exists("~/Projects/.mindweaver/library/skills/notes/SKILL.md"));
+}
+
+#[test]
+fn capital_t_sends_skills_to_the_folders_typed_and_the_row_says_no_agent_reads_them() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal
+        .types("T")
+        .shows("Where collapse installs skills")
+        .types(".skills")
+        .shows("mind -C collapse targets set --yes skills .skills")
+        .presses(Key::Enter)
+        .shows("removed commit-style from .claude/skills/commit-style");
+    terminal.presses(Key::Escape).shows("> collapse  2  ⚠");
+
+    terminal.types("q");
+    let closed = terminal.exits();
+    assert!(
+        closed
+            .shown
+            .starts_with("$ mind -C collapse targets set --yes skills .skills\n"),
+        "{}",
+        closed.shown
+    );
+    assert_eq!(
+        scenario.files("~/Projects/collapse/.skills"),
+        ["commit-style/SKILL.md"]
+    );
+}
+
+#[test]
+fn capital_m_follows_a_project_the_scan_found_moved_with_what_was_installed_in_it() {
+    let scenario = collapse_and_tanukeys();
+    scenario.folder("~/Projects/apps");
+    std::fs::rename(
+        scenario.at("~/Projects/collapse"),
+        scenario.at("~/Projects/apps/collapse"),
+    )
+    .expect("move the project by hand");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal
+        .shows("! collapse")
+        .shows("it moved to apps/collapse: M relinks it there");
+
+    terminal
+        .types("M")
+        .shows("Relink collapse to apps/collapse?");
+    terminal.types("y").shows("> collapse  2");
+
+    terminal.types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mindweaver relink collapse apps/collapse\n",
+            "relinked collapse as apps/collapse, from collapse\n",
+            "  1 install kept with it",
+        )
+    );
+    scenario
+        .run("~/Projects", "mindweaver status -p collapse")
+        .succeeds()
+        .prints(
+            "commit-style  current   claude,codex,opencode  workspace\n\
+             deploy        authored  -\n",
+        );
+}
+
+#[test]
+fn the_share_toggle_runs_mind_share_and_hands_mind_to_the_team() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal
+        .types("t")
+        .shows("Agents and sharing for collapse")
+        .presses(Key::Enter)
+        .shows("nothing toggled yet");
+    // Past the three agents to the share mode, then over to shared.
+    terminal
+        .presses(Key::Down)
+        .presses(Key::Down)
+        .presses(Key::Down)
+        .presses(Key::Right)
+        .shows("runs         mind -C collapse share --yes shared")
+        .presses(Key::Enter)
+        .shows("set share to shared in collapse, where it was local");
+
+    terminal.presses(Key::Escape).types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mind -C collapse share --yes shared\n",
+            "set share to shared in collapse, where it was local\n",
+            "removed .mind/.gitignore, so .mind can be committed\n",
+            "stopped keeping /.agents/skills/commit-style/ out of git\n",
+            "stopped keeping /.claude/skills/commit-style/ out of git",
+        )
+    );
+    assert!(!scenario.exists("~/Projects/collapse/.mind/.gitignore"));
+}
+
+#[test]
+fn d_on_one_of_the_workspaces_own_with_e_takes_it_out_of_every_project_too() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal
+        .presses(Key::Up)
+        .shows("> ◆ Projects  1")
+        .presses(Key::Right)
+        .types("d")
+        .shows("Delete skill commit-style?")
+        .shows("e     mindweaver remove --everywhere --yes skill:commit-style");
+    terminal
+        .types("e")
+        .shows("removed commit-style from collapse");
+
+    terminal
+        .presses(Key::Escape)
+        .presses(Key::Escape)
+        .types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mindweaver remove --everywhere --yes skill:commit-style\n",
+            "removed commit-style from collapse\n",
+            "removed skill commit-style from /home/you/Projects/.mindweaver/library/skills/commit-style",
+        )
+    );
+    assert!(!scenario.exists("~/Projects/.mindweaver/library/skills/commit-style"));
+    assert!(!scenario.exists("~/Projects/collapse/.claude/skills/commit-style"));
+}
+
+#[test]
+fn u_on_the_workspaces_own_row_updates_every_project_it_links() {
+    let scenario = collapse_and_tanukeys();
+    scenario
+        .given("~/Projects", "mindweaver install -p tanukeys commit-style")
+        .file(
+            "~/Projects/.mindweaver/library/skills/commit-style/SKILL.md",
+            &crate::skill("commit-style", "How every repo here writes commits, now"),
+        );
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal
+        .presses(Key::Up)
+        .shows("> ◆ Projects  1")
+        .types("u")
+        .shows("mindweaver update --all --yes")
+        .shows("updated commit-style in collapse, from workspace")
+        .shows("updated commit-style in tanukeys, from workspace");
+
+    terminal.presses(Key::Escape).types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mindweaver update --all --yes\n",
+            "updated commit-style in collapse, from workspace\n",
+            "updated commit-style in tanukeys, from workspace",
+        )
+    );
+    scenario
+        .run("~/Projects", "mindweaver status -p tanukeys")
+        .succeeds()
+        .prints("commit-style  current  claude,codex,opencode  workspace\n");
+}

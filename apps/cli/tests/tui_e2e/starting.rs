@@ -91,3 +91,26 @@ fn quitting_where_nothing_was_made_leaves_the_folder_as_it_was() {
     assert!(closed.status.success());
     assert!(!scenario.exists("~/notes/.mindweaver"));
 }
+
+#[test]
+fn mind_in_a_project_no_workspace_links_says_why_a_workspaces_key_does_nothing_and_l_links_it() {
+    let scenario = Scenario::projects(&["collapse"]);
+    scenario
+        .repository("~/Projects/site")
+        .given("~/Projects/site", "mind init");
+    let mut terminal = scenario.open("~/Projects/site", "mind");
+    terminal.shows("a project no workspace manages");
+
+    terminal
+        .types("s")
+        .shows("that is a workspace's, and no workspace manages this project; l links it to one");
+    terminal.types("l").shows("Projects (2)").shows("> site  0");
+
+    terminal.types("q");
+    let closed = terminal.exits();
+    assert_eq!(closed.shown.trim_end(), "$ mind link\nlinked site as site");
+    scenario
+        .run("~/Projects", "mindweaver status -p site")
+        .succeeds()
+        .quiet();
+}

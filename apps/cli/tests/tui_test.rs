@@ -961,6 +961,58 @@ fn enter_on_an_artifact_shows_it_as_mind_show_does() {
 }
 
 #[test]
+fn capital_r_reads_the_disk_again_and_runs_no_line() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    press_key(&mut app, KeyCode::Down);
+    // Added from a shell beside the screen, which reads the disk when it
+    // opens and after a line of its own changed something, and not between.
+    mind(
+        &dir.path().join("beta"),
+        &["add", "skill", "later", "Added from a shell"],
+    )
+    .unwrap();
+    assert!(!tui_drawn(&app).contains("Added from a shell"));
+
+    let task = press_and_run(&mut app, KeyCode::Char('R'));
+
+    assert_eq!(task, Some(Task::Refresh));
+    assert!(Task::Refresh.commands().is_empty());
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("Added from a shell"), "{drawn}");
+    assert_eq!(app.member().unwrap().name, "beta");
+    assert!(matches!(app.mode, Mode::Browse), "{:?}", app.mode);
+    // Nothing ran, so there is nothing to repeat.
+    assert_eq!(app.transcript(), "");
+}
+
+#[test]
+fn the_keys_sheet_is_drawn_from_its_last_line_and_back_from_its_first() {
+    let dir = workspace_with_two();
+    let mut app = tui_in(dir.path());
+    let first = "Every key here runs a command you could type instead.";
+
+    press_key(&mut app, KeyCode::Char('?'));
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    let last = reader.lines.last().unwrap().1.trim().to_owned();
+    // Wide enough that no line of it wraps, so each is one row to find; and
+    // longer than the screen is high, or scrolling it would show nothing new.
+    let drawn = tui_drawn_at(&app, 200, 30);
+    assert!(drawn.contains(first), "{drawn}");
+    assert!(!drawn.contains(&last), "{drawn}");
+
+    press_key(&mut app, KeyCode::Char('G'));
+    let drawn = tui_drawn_at(&app, 200, 30);
+    assert!(drawn.contains(&last), "{drawn}");
+    assert!(!drawn.contains(first), "{drawn}");
+
+    press_key(&mut app, KeyCode::Char('g'));
+    assert!(tui_drawn_at(&app, 200, 30).contains(first));
+}
+
+#[test]
 fn a_ledger_that_will_not_open_is_said_on_each_projects_rows() {
     let dir = workspace_with_two();
     let ledger = dir.path().join(WEAVER_DIR).join("mindweaver.db");

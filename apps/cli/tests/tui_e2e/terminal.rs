@@ -38,6 +38,13 @@ const PATIENCE: Duration = Duration::from_secs(20);
 impl Scenario {
     /// `line`, typed in `at`, run in a terminal of its own.
     pub fn open(&self, at: &str, line: &str) -> Terminal<'_> {
+        self.open_with(at, line, &[])
+    }
+
+    /// `line` run in a terminal of its own, with `env` beside the
+    /// environment every command here gets: a variable the use case is
+    /// about, such as the editor `e` hands the terminal to.
+    pub fn open_with(&self, at: &str, line: &str, env: &[(&str, &str)]) -> Terminal<'_> {
         let master = pty::openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY | OpenptFlags::CLOEXEC)
             .expect("open a pseudo-terminal");
         pty::grantpt(&master).expect("grant it");
@@ -60,7 +67,9 @@ impl Scenario {
             .expect("open the terminal's other end")
             .into();
 
-        let mut command = self.command(at, line, &[("TERM", "xterm-256color")]);
+        let mut env = env.to_vec();
+        env.push(("TERM", "xterm-256color"));
+        let mut command = self.command(at, line, &env);
         command
             .stdin(Stdio::from(slave.try_clone().unwrap()))
             .stdout(Stdio::from(slave.try_clone().unwrap()))
@@ -82,11 +91,14 @@ impl Scenario {
 
         let master = File::from(master);
         let mut reading = master.try_clone().expect("a reader of the terminal");
+        let mut answering = master.try_clone().expect("a writer of the answers");
         let (sent, received) = mpsc::channel();
         std::thread::spawn(move || {
             let mut buffer = [0; 8192];
+            let mut asked = Asked::default();
             // An error once the screen has gone: EIO on Linux.
             while let Ok(read @ 1..) = reading.read(&mut buffer) {
+                asked.answer(&buffer[..read], &mut answering);
                 if sent.send(buffer[..read].to_vec()).is_err() {
                     break;
                 }
@@ -100,6 +112,63 @@ impl Scenario {
             drawn: received,
             parser: vt100::Parser::new(ROWS, COLUMNS, 0),
         }
+    }
+}
+
+/// What a terminal says when it is asked where its cursor is (`ESC [ 6 n`,
+/// a device status report), as every terminal a person uses answers it:
+/// ratatui asks before it clears the screen, which the screen does when it
+/// takes its window back from an editor, and waits two seconds for the
+/// answer before it gives up drawing.
+///
+/// Answered here, on the thread that reads what the screen writes, rather
+/// than where a test waits, so an answer never depends on whether a test is
+/// waiting when the question is asked; with a parser of its own, fed
+/// everything, so it says where the cursor is when it was asked.
+struct Asked {
+    tracking: vt100::Parser,
+    /// The end of the last read, when it could be the start of a question
+    /// the next read finishes.
+    partial: Vec<u8>,
+}
+
+/// Where is the cursor?
+const CURSOR_ASKED: &[u8] = b"\x1b[6n";
+
+impl Default for Asked {
+    fn default() -> Self {
+        Self {
+            tracking: vt100::Parser::new(ROWS, COLUMNS, 0),
+            partial: Vec::new(),
+        }
+    }
+}
+
+impl Asked {
+    /// Take in what the screen wrote, and answer each question in it.
+    fn answer(&mut self, written: &[u8], terminal: &mut File) {
+        let mut rest = std::mem::take(&mut self.partial);
+        rest.extend_from_slice(written);
+        let mut at = 0;
+        while let Some(found) = rest[at..]
+            .windows(CURSOR_ASKED.len())
+            .position(|window| window == CURSOR_ASKED)
+        {
+            let end = at + found + CURSOR_ASKED.len();
+            self.tracking.process(&rest[at..end]);
+            let (row, column) = self.tracking.screen().cursor_position();
+            // One-based, as a terminal counts.
+            let _ = write!(terminal, "\x1b[{};{}R", row + 1, column + 1);
+            at = end;
+        }
+        // A question cut in two by the read is answered once it is whole.
+        let kept = (1..CURSOR_ASKED.len())
+            .rev()
+            .find(|&length| rest[at..].ends_with(&CURSOR_ASKED[..length]))
+            .unwrap_or(0);
+        let cut = rest.len() - kept;
+        self.tracking.process(&rest[at..cut]);
+        self.partial = rest[cut..].to_vec();
     }
 }
 
@@ -234,14 +303,38 @@ impl Terminal<'_> {
         }
     }
 
+    /// Wait until the screen has given the window back to what it handed
+    /// the terminal to, an editor: off the alternate screen, the window as
+    /// the shell left it, with whatever the editor wrote since.
+    pub fn steps_aside(&mut self) -> &mut Self {
+        self.until_drawn(
+            |terminal| !terminal.parser.screen().alternate_screen(),
+            "the screen stepping aside",
+        )
+    }
+
+    /// Wait until the screen has taken its window back, once what it handed
+    /// the terminal to has closed.
+    pub fn comes_back(&mut self) -> &mut Self {
+        self.until_drawn(
+            |terminal| terminal.parser.screen().alternate_screen(),
+            "the screen drawn again",
+        )
+    }
+
     /// Wait until `ready` holds of the screen, for at most [`PATIENCE`].
     fn until(&mut self, ready: impl Fn(&str) -> bool, waiting_for: &str) -> &mut Self {
+        self.until_drawn(|terminal| ready(&terminal.screen()), waiting_for)
+    }
+
+    /// Wait until `ready` holds of the terminal, for at most [`PATIENCE`].
+    fn until_drawn(&mut self, ready: impl Fn(&Self) -> bool, waiting_for: &str) -> &mut Self {
         let started = Instant::now();
         loop {
             // What it drew already first, so a screen that has moved on
             // since the last wait is not read as it was.
             while self.take_in(Duration::ZERO) {}
-            if ready(&self.screen()) {
+            if ready(self) {
                 return self;
             }
             if started.elapsed() > PATIENCE {
@@ -306,6 +399,8 @@ pub enum Key {
     Left,
     Backspace,
     CtrlC,
+    /// Clears the line being typed, as at a shell prompt.
+    CtrlU,
 }
 
 impl Key {
@@ -320,6 +415,7 @@ impl Key {
             Key::Left => "\x1b[D",
             Key::Backspace => "\x7f",
             Key::CtrlC => "\x03",
+            Key::CtrlU => "\x15",
         }
     }
 }
