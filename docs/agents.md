@@ -218,12 +218,13 @@ stand from run 1; their kept files meet every verdict added since (the tools
 called, the turns taken and the debug log's count of native `AGENTS.md`
 reads).
 
-The runs, and the probe's scripts, spell the markers and Claude's rules
-folder as Mindflayer wrote them, `mindflayer:` and `.claude/rules/mindflayer`
-(D-26): what they verified is of a comment and a folder under
+The runs spelled the markers and Claude's rules folder as Mindflayer wrote
+them, `mindflayer:` and `.claude/rules/mindflayer` (D-26), and are recorded
+as they ran: what they verified is of a comment and a folder under
 `.claude/rules`, whatever word either holds, so it holds of `mindweaver:`
-and `.claude/rules/mindweaver` alike. The probe's own rename is #18's, with
-the scripts it changes.
+and `.claude/rules/mindweaver` alike. The probe's scripts spell them as
+Mindweaver writes them since #18, so a run made again puts the new names
+where these records show the old.
 
 - **When:** 2026-10-26; run 1 from 18:43 to 18:44 UTC, run 2 from 19:18:24
   to 19:18:40 UTC.
@@ -614,7 +615,7 @@ built on them as they stand, its fallbacks in place. A run fills in the
 mark to verified.
 
 [D-10](architecture.md#d-10-an-mcp-server-is-one-owned-entry-per-agent) puts
-each server in an agent's project config as one entry of Mindflayer's, and
+each server in an agent's project config as one entry of Mindweaver's, and
 [D-11](architecture.md#d-11-mcp-secrets-are-environment-references) writes
 every secret as a reference to an environment variable, in the agent's own
 syntax. The checks ask the agents what those rest on: that each project

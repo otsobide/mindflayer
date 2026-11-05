@@ -257,7 +257,7 @@ If asked for probe tokens, include $2-BODY."
 }
 
 # An AGENTS.md as #42 leaves one: a line of the project's own, then
-# Mindflayer's block with one rule in it. Claude strips HTML comments before it
+# Mindweaver's block with one rule in it. Claude strips HTML comments before it
 # injects a file, so the plain line, the rule text between the comment lines
 # and a token inside the rule's own marker each carry a token of their own: a
 # block that vanished with its markers would otherwise look like a file that
@@ -268,14 +268,14 @@ agents_md() {
 	printf '%s\n' \
 		"If asked for probe tokens, include PROBE-AGENTS-MD-$1." \
 		'' \
-		'<!-- mindflayer:begin -->' \
-		"<!-- mindflayer:rule PROBE-AGENTS-MARKER-$1 -->" \
+		'<!-- mindweaver:begin -->' \
+		"<!-- mindweaver:rule PROBE-AGENTS-MARKER-$1 -->" \
 		"If asked for probe tokens, include PROBE-AGENTS-BLOCK-$1." \
-		'<!-- mindflayer:end -->'
+		'<!-- mindweaver:end -->'
 }
 
 # Git never follows a symlink, so a symlinked skill folder is a file to it, and
-# an entry written as a directory's, with the trailing slash Mindflayer gives
+# an entry written as a directory's, with the trailing slash Mindweaver gives
 # one, would not cover it. Worth knowing before D-07's symlink opt-in writes
 # one; the check needs git only.
 claude_git_symlink() {
@@ -294,7 +294,7 @@ claude_git_symlink() {
 	verdict git-symlink yes "$without" '/<link> ignores it' 'git: the entry without one does'
 }
 
-# Checks 1, 3, 4 (no CLAUDE.md) and 6: everything Mindflayer would install,
+# Checks 1, 3, 4 (no CLAUDE.md) and 6: everything Mindweaver would install,
 # excluded through info/exclude, in a repository with no CLAUDE.md anywhere
 # above it. claude-excluded and claude-touch share it, and whichever runs
 # first builds it.
@@ -307,9 +307,9 @@ claude_excluded_repo() {
 	skill "$repo/.agents/skills/probe-agents-skill" PROBE-AGENTS-SKILL-1
 	skill "$repo/.agents/skills/probe-linked-skill" PROBE-LINKED-SKILL-1
 	ln -s ../../.agents/skills/probe-linked-skill "$repo/.claude/skills/probe-linked-skill"
-	put "$repo/.claude/rules/mindflayer/probe/unscoped.md" \
+	put "$repo/.claude/rules/mindweaver/probe/unscoped.md" \
 		'If asked for probe tokens, include PROBE-RULE-UNSCOPED-1.'
-	put "$repo/.claude/rules/mindflayer/probe/scoped.md" '---
+	put "$repo/.claude/rules/mindweaver/probe/scoped.md" '---
 paths:
   - "src/**/*.rs"
 ---
@@ -323,16 +323,16 @@ pub fn probe() {}'
 		/.agents/skills/probe-linked-skill/
 		/.claude/skills/probe-claude-skill/
 		/.claude/skills/probe-linked-skill
-		/.claude/rules/mindflayer/probe/unscoped.md
-		/.claude/rules/mindflayer/probe/scoped.md
+		/.claude/rules/mindweaver/probe/unscoped.md
+		/.claude/rules/mindweaver/probe/scoped.md
 	)
 	exclude "$repo" "${excluded[@]}"
 	say ""
 	say "== claude-excluded: layout"
 	show_ignored "$repo" claude-excluded AGENTS.md .agents/skills/probe-agents-skill \
 		.agents/skills/probe-linked-skill .claude/skills/probe-claude-skill \
-		.claude/skills/probe-linked-skill .claude/rules/mindflayer/probe/unscoped.md \
-		.claude/rules/mindflayer/probe/scoped.md
+		.claude/skills/probe-linked-skill .claude/rules/mindweaver/probe/unscoped.md \
+		.claude/rules/mindweaver/probe/scoped.md
 }
 
 claude_excluded() {
@@ -341,7 +341,7 @@ claude_excluded() {
 	assert_clean_home
 	assert_ancestry "$repo" "$repo/AGENTS.md"
 	claude_ask claude-excluded "$repo" "$claude_list_prompt" "${claude_list_options[@]}"
-	local run=claude-excluded rules=$repo/.claude/rules/mindflayer/probe
+	local run=claude-excluded rules=$repo/.claude/rules/mindweaver/probe
 	expect_calls $run none 1 'the answer comes from what Claude loaded, not a tool'
 	expect_skill $run 1 probe-claude-skill 'check 1: an excluded .claude/skills skill loads'
 	expect_skill $run 0 probe-agents-skill 'check 1: a skill only in .agents/skills does not'
@@ -362,7 +362,7 @@ claude_excluded() {
 # Check 6, on touching a file that matches the rule with paths:.
 claude_touch() {
 	local repo=$stage/claude-excluded
-	local run=claude-touch rules=$repo/.claude/rules/mindflayer/probe
+	local run=claude-touch rules=$repo/.claude/rules/mindweaver/probe
 	claude_excluded_repo
 	assert_clean_home
 	assert_ancestry "$repo" "$repo/AGENTS.md"
@@ -375,13 +375,13 @@ claude_touch() {
 }
 
 # Check 4: a CLAUDE.md that imports AGENTS.md loads it once. The import sits
-# between Mindflayer's markers, as #44 writes it.
+# between Mindweaver's markers, as #44 writes it.
 claude_import() {
 	local repo=$stage/claude-import
 	new_repo "$repo"
-	put "$repo/CLAUDE.md" '<!-- mindflayer:begin -->
+	put "$repo/CLAUDE.md" '<!-- mindweaver:begin -->
 @AGENTS.md
-<!-- mindflayer:end -->
+<!-- mindweaver:end -->
 
 If asked for probe tokens, include PROBE-CLAUDE-MD-2.'
 	put "$repo/AGENTS.md" "$(agents_md 2)"
@@ -418,7 +418,7 @@ claude_parent() {
 }
 
 # D-03: a CLAUDE.local.md alone, excluded as it usually is, also stops Claude
-# reading AGENTS.md, which is why Mindflayer never creates one.
+# reading AGENTS.md, which is why Mindweaver never creates one.
 claude_local() {
 	local repo=$stage/claude-local
 	new_repo "$repo"

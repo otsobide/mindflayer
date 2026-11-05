@@ -299,7 +299,7 @@ put() {
 	printf '%s\n' "$2" >"$1"
 }
 
-# Excludes paths the way Mindflayer's local mode does: anchored entries in a
+# Excludes paths the way Mindweaver's local mode does: anchored entries in a
 # marked block of $GIT_COMMON_DIR/info/exclude.
 exclude() {
 	local repo=$1 file
@@ -308,9 +308,9 @@ exclude() {
 	[[ $file == /* ]] || file=$repo/$file
 	mkdir -p -- "$(dirname "$file")"
 	{
-		printf '# mindflayer:begin\n# project .\n'
+		printf '# mindweaver:begin\n# project .\n'
 		printf '%s\n' "$@"
-		printf '# mindflayer:end\n'
+		printf '# mindweaver:end\n'
 	} >>"$file"
 }
 

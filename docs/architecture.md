@@ -10708,8 +10708,8 @@ back as it was, the ledger dumps and the markers under
 `apps/core/tests/fixtures` and the version 2 `mind.toml` that only tests
 still write. A new marker's comments name the new product and commands,
 and so do the examples' (`examples/.mindflayer/flayer.toml`, whose path
-alone is #229's), which changes no format. The agent probe is renamed on #18's branch, which
-was changing it at the same time (open questions). `make install` and `make dev/link`
+alone is #229's), which changes no format. The agent probe was renamed with #18,
+whose branch was changing it at the same time. `make install` and `make dev/link`
 leave a `flayer` or an `mf` an older build put on the PATH where it is,
 the user's to remove ([the reference](reference.md#getting-started) says
 how).
@@ -12268,13 +12268,6 @@ it once as it closes.
   same lockfile, on whatever Node the image has, rather than embed the one
   `test (web)` tested; a variable telling `make web/build/if-node` to take
   `dist/` as it is would settle it, at the price of a knob only CI turns.
-- **The agent probe still says Mindflayer.** `scripts/agent-probe/` runs
-  neither binary: it writes the blocks and Claude's rules folder itself,
-  spelled as a Mindflayer build spelled them, which this build still reads,
-  and its comments name the product the old way
-  ([D-26](#d-26-the-product-is-mindweaver)), as the runs docs/agents.md
-  records do. #228 and #229 left it as it was, since #18 was changing the
-  same scripts on a branch of its own, and its rename is made there.
 - **A writer waiting while a workspace is moved to the new names.** The
   move holds the workspace's lock, which is on a file in the folder it
   renames, and follows it there; a writer that opened the lock file before
