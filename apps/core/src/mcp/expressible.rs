@@ -35,6 +35,7 @@ use crate::claude_mcp;
 use crate::code::{codes, Said};
 use crate::codex_mcp;
 use crate::mcp::{blanked, keyed, written, Input, InputKind, McpDefinition, Transport};
+use crate::opencode_mcp;
 use crate::value::{InputName, VariableName};
 
 /// Something a definition holds that one agent cannot be given as it is
@@ -133,9 +134,9 @@ pub enum Inexpressible {
     TextSubstituted { at: String, opening: &'static str },
     /// A key the agent's extras give that its entry is written with from
     /// the transport: passed on beside it, one of the two would be lost,
-    /// and which one would be the order of a file's keys. Said of Claude
-    /// and Codex, whose entries' keys are their renderers'
-    /// (`claude_mcp::keys`, `codex_mcp::keys`).
+    /// and which one would be the order of a file's keys. Said of every
+    /// agent, whose entries' keys are their renderers' (`claude_mcp::keys`,
+    /// `codex_mcp::keys`, `opencode_mcp::keys`).
     #[error(
         "its extras for the agent give `{key}`, a key the entry there is written with from the \
          transport, so one of the two would be lost"
@@ -438,9 +439,10 @@ impl McpDefinition {
     /// OpenCode fills `{env:VAR}` and `{file:path}` in over its config
     /// file's text before it reads the file (D-11), so it cannot be given
     /// text that opens either as it is written in any value its entry
-    /// writes; and its V2 shape, the one Mindweaver writes (D-12), reaches a
+    /// writes; its V2 shape, the one Mindweaver writes (D-12), reaches a
     /// program or an address over streamable HTTP, never server-sent
-    /// events.
+    /// events; and its extras go beside the keys its entry may write in
+    /// either of its shapes, never over one.
     fn for_opencode(&self) -> Vec<Inexpressible> {
         // Where an input stands, the renderer writes a reference of its
         // own, so text is held to this only around one; but not in a
@@ -501,6 +503,14 @@ impl McpDefinition {
                 }
             }
         }
+        let entry = opencode_mcp::keys(self.transport.kind());
+        shapes.extend(
+            self.extras_for(Agent::OpenCode)
+                .into_iter()
+                .flatten()
+                .filter(|(key, _)| entry.contains(&key.as_str()))
+                .map(|(key, _)| Inexpressible::ExtraRepeated { key: key.clone() }),
+        );
         shapes
     }
 

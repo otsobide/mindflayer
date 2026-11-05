@@ -336,6 +336,53 @@ fn codex_cannot_be_given_extras_giving_a_key_its_entry_may_write_from_the_transp
 }
 
 #[test]
+fn opencode_cannot_be_given_extras_giving_a_key_its_entry_may_write_in_either_shape() {
+    let name = random::kebab();
+    for key in ["type", "command", "enabled", "environment", "cwd"] {
+        let text = McpMother::with_opencode_extras(&name, &format!("{key} = \"other\"\n"));
+        assert_eq!(
+            parsed(&text).inexpressible(Agent::OpenCode),
+            [Inexpressible::ExtraRepeated {
+                key: key.to_owned()
+            }],
+            "{key}"
+        );
+    }
+    // A key of a program's entry is none of an address's, which takes it
+    // beside its own, nor is one either shape never writes.
+    for (key, repeated) in [
+        ("url", true),
+        ("headers", true),
+        ("enabled", true),
+        ("command", false),
+        ("timeout", false),
+    ] {
+        let text = format!(
+            "{}\n[extras.opencode]\n{key} = \"other\"\n",
+            McpMother::http(&name)
+        );
+        let expected = if repeated {
+            vec![Inexpressible::ExtraRepeated {
+                key: key.to_owned(),
+            }]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            parsed(&text).inexpressible(Agent::OpenCode),
+            expected,
+            "{key}"
+        );
+    }
+    // OpenCode's extras are OpenCode's alone.
+    let text = McpMother::with_opencode_extras(&name, "env = \"other\"\n");
+    assert_eq!(
+        parsed(&text).inexpressible(Agent::Claude),
+        [Inexpressible::WorkingDirectory]
+    );
+}
+
+#[test]
 fn claude_cannot_be_given_text_it_reads_as_a_reference_where_no_input_stands() {
     let name = random::kebab();
     for (why, reference) in McpMother::references() {

@@ -432,6 +432,13 @@ impl McpMother {
         Self::whole_without_cwd(name).replacen("timeout = 30000\n", extras, 1)
     }
 
+    /// The program of [`stdio`](Self::stdio), its extras for OpenCode
+    /// `extras`, the lines of a TOML table, beside Claude's: a program
+    /// OpenCode is given whole but for what `extras` gives.
+    pub fn with_opencode_extras(name: &str, extras: &str) -> String {
+        format!("{}\n[extras.opencode]\n{extras}", Self::stdio(name))
+    }
+
     /// The program of [`whole_secret_env`](Self::whole_secret_env) with no
     /// folder to start in: one every agent is given whole, for a shape to
     /// be written into that is the only thing an agent cannot be given.

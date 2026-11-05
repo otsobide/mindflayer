@@ -50,6 +50,7 @@ pub mod migrate;
 #[cfg(any(test, feature = "mother"))]
 pub mod mother;
 pub mod names;
+pub mod opencode_mcp;
 pub mod paths;
 pub mod policy;
 pub mod port;

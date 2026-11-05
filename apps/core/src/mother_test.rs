@@ -696,7 +696,7 @@ fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so()
     let (_, substitution) = random::pick(&McpMother::substitutions());
     let (_, not_substitution) = random::pick(&McpMother::not_substitutions());
     let filled = random::pick(&["command", "args", "env", "cwd", "url", "headers"]);
-    let substitutions = [
+    let opencode = [
         (
             McpMother::with_text(&name, filled, &substitution).0,
             Agent::OpenCode,
@@ -707,12 +707,22 @@ fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so()
             Agent::OpenCode,
             None,
         ),
+        (
+            McpMother::with_opencode_extras(&name, "enabled = false\n"),
+            Agent::OpenCode,
+            Some("extra_repeated"),
+        ),
+        (
+            McpMother::with_opencode_extras(&name, "timeout = 5000\n"),
+            Agent::OpenCode,
+            None,
+        ),
     ];
     for (text, agent, code) in shapes
         .into_iter()
         .chain(read_from)
         .chain(texts)
-        .chain(substitutions)
+        .chain(opencode)
     {
         let definition = read(text);
         assert_eq!(definition.issues(), [], "{agent:?} {code:?}");
