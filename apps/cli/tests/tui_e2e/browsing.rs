@@ -99,3 +99,117 @@ fn mind_opens_on_the_project_it_runs_in_with_its_artifacts_under_the_cursor() {
         &["q quit  ? keys  enter show  e edit  r rename  d delete  u update  A adopt  a add  ← back  v validate"],
     );
 }
+
+#[test]
+fn enter_on_an_artifact_shows_it_as_mind_show_does_and_runs_nothing_to_repeat() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal
+        .presses(Key::Right)
+        .presses(Key::Down)
+        .presses(Key::Enter)
+        .shows(" mind -C collapse show skill:deploy ")
+        .shows("Ship the service to staging");
+    terminal
+        .types("q")
+        .shows(">   skill deploy        authored           Ship the service to staging");
+
+    terminal.presses(Key::Escape).types("q");
+    let closed = terminal.exits();
+    // A read changes nothing, so nothing of it is handed back.
+    assert_eq!(closed.shown.trim_end(), "");
+}
+
+#[test]
+fn the_keys_sheet_goes_to_its_last_line_and_back_to_its_first() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+    let first = "Every key here runs a command you could type instead.";
+
+    terminal.types("?").shows(first);
+    // Its last line wraps at this width: its end is on a row of its own.
+    terminal
+        .types("G")
+        .no_longer_shows(first)
+        .shows("claude, CX codex, OC opencode.");
+    terminal.types("g").shows(first);
+    terminal.types(" ").no_longer_shows(first);
+    terminal.types("q").shows("collapse  2");
+}
+
+#[test]
+fn capital_r_reads_the_disk_again_after_a_shell_beside_the_screen_changed_it() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    // Drawn first: a key typed before the screen has the terminal is the
+    // shell's, echoed where the transcript is printed.
+    terminal.shows("collapse  2");
+    terminal.presses(Key::Down).shows("> tanukeys  0");
+
+    scenario.given(
+        "~/Projects/tanukeys",
+        "mind add skill review \"Read a change\"",
+    );
+    terminal
+        .types("R")
+        .shows("> tanukeys  1")
+        .shows(">   skill review  authored           Read a change");
+
+    terminal.types("q");
+    let closed = terminal.exits();
+    assert!(closed.status.success());
+    assert_eq!(closed.shown.trim_end(), "");
+}
+
+#[test]
+fn s_shows_the_shelf_as_gather_list_says_it() {
+    let scenario = collapse_and_tanukeys();
+    scenario
+        .source(
+            "~/src/acme-skills",
+            &[(
+                "skills/lint/SKILL.md",
+                &crate::skill("lint", "Lint the code"),
+            )],
+        )
+        .given("~/Projects", "mindweaver gather git ../src/acme-skills");
+    let listed = scenario.run("~/Projects", "mindweaver gather list");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("1 on the shelf");
+
+    terminal.types("s").shows(" mindweaver gather list ");
+    for line in listed.stdout.lines() {
+        terminal.shows(line);
+    }
+
+    terminal.types("q").types("q");
+    let closed = terminal.exits();
+    assert_eq!(closed.shown.trim_end(), "");
+}
+
+#[test]
+fn w_lists_the_workspaces_this_machine_knows_with_the_one_on_screen_marked() {
+    let scenario = collapse_and_tanukeys();
+    scenario
+        .given("~", "mindweaver init")
+        .given("~/Projects", "mindweaver init")
+        .folder("~/weavers/writing")
+        .given("~/weavers/writing", "mindweaver init");
+    let known = scenario.run("~/Projects", "mindweaver workspaces");
+    assert_eq!(known.stdout.lines().count(), 3, "{}", known.stdout);
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal.types("w").shows(" mindweaver workspaces ");
+    for line in known.stdout.lines() {
+        terminal.shows(line);
+    }
+    terminal.shows("* Projects");
+
+    terminal.types("q").types("q");
+    let closed = terminal.exits();
+    assert_eq!(closed.shown.trim_end(), "");
+}
