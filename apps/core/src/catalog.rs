@@ -756,9 +756,11 @@ pub enum DiscoveryFailure {
         #[source]
         source: io::Error,
     },
-    /// An agent's config file, read for the MCP servers it holds to say how
-    /// each entry in it stands (D-23), that could not be read, as its
-    /// renderer says: every entry recorded in it then reads as missing.
+    /// An agent's config file an MCP server's entry was recorded in, read
+    /// to say how each entry in it stands (D-23), that could not be read,
+    /// as its renderer says: every entry recorded in it then reads as
+    /// missing. Never one read only for what nothing records, which holds
+    /// nothing Mindweaver wrote.
     /// Boxed, since a renderer's refusal is large beside every other failure
     /// here, and this one is rare.
     #[error("{unread}")]

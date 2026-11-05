@@ -1297,8 +1297,10 @@ project has), one row an agent: the `agent`, the `file`, the server's
 server somebody keeps there that Mindweaver did not install is `foreign`,
 and one it installed stands as an installed skill does, `edited` once what
 the file holds under its name has changed. Nothing installs a server yet, so
-for now every entry it lists is `foreign`; a config file that cannot be
-read is a warning beside the report.
+for now every entry it lists is `foreign`. A config file holding an entry
+Mindweaver installed that cannot be read is a warning beside the report,
+the entry `missing`; one holding none it installed is passed over, a link
+included, and nothing in it is listed.
 
 `--json` prints the same report in the envelope every reading command's
 `--json` shares ([machine-readable output](#machine-readable-output)): the

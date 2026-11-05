@@ -4740,11 +4740,15 @@ entry the config file of each of the project's agents holds that nothing
 records is listed as `foreign`, D-23's foreign entries, which no artifact of
 the catalog is, since a name can be somebody's in one agent's file and
 Mindweaver's in another's. Rows rather than one an artifact: what Claude's
-file holds of a server can be edited while Codex's is not. A config file
-that cannot be read, as its renderer would refuse it (`mcp_json_not_strict`
-for a `.mcp.json` holding a comment), is a failure beside the report
-(`DiscoveryFailure::Config`), and the entries recorded in it read as
-missing. A server's installation has an artifact row of its own as well,
+file holds of a server can be edited while Codex's is not. A config file an
+entry was recorded in that cannot be read, as its renderer would refuse it
+(`mcp_json_not_strict` for a `.mcp.json` holding a comment), is a failure
+beside the report (`DiscoveryFailure::Config`), and the entries recorded in
+it read as missing. One read only for what nothing records is passed over,
+and nothing in it listed: it holds nothing Mindweaver wrote, and a link
+there, as a dotfiles setup makes `.mcp.json` or `.codex`, which the agent
+follows and the renderer, built to write, refuses, would otherwise call a
+project nothing was installed into broken. A server's installation has an artifact row of its own as well,
 built as a rule's received is: missing while an entry it recorded is not
 found, otherwise as core stands it from its entries, reaching the agents
 whose entry is found, held in each of their files. The snapshot carries

@@ -309,7 +309,8 @@ pub(crate) struct Listed {
 
 /// Every entry of `project`'s agents' config files, and every one `records`
 /// recorded, as the installed view lists them (D-23), by agent in report
-/// order, then name, then file, with each file that could not be read.
+/// order, then name, then file, with each file an entry was recorded in that
+/// could not be read.
 ///
 /// `records` are the MCP installations `workspace`'s ledger records in the
 /// project and `offers` every offer of an MCP server there, which what they
@@ -318,6 +319,14 @@ pub(crate) struct Listed {
 /// which is foreign; a recorded entry is looked for in the file its record
 /// names, whichever agent it is for. A file is read once, however many
 /// entries are in it, and one that cannot be read is said once.
+///
+/// Said only where an entry was recorded, which then reads as missing: a
+/// file read only for what nothing records holds nothing Mindweaver wrote,
+/// and failing the report over it would call a project nothing was
+/// installed into broken for a file it was never asked about. A link there,
+/// as a dotfiles setup makes `.mcp.json` or `.codex`, which its agent
+/// follows and the renderer, built to write, refuses, is the common one.
+/// Nothing it holds is listed, since nothing in it can be told.
 pub(crate) fn listed(
     workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
@@ -327,7 +336,6 @@ pub(crate) fn listed(
 ) -> (Vec<Listed>, Vec<DiscoveryFailure>) {
     let root = project.root();
     let mut files = Files::new(root);
-    let mut failures = Vec::new();
     let mut listed = Vec::new();
     for record in records {
         let offered = offered_for(record, offers);
@@ -353,17 +361,11 @@ pub(crate) fn listed(
         }
     }
     for &agent in agents {
-        let route = match agent.mcp_file(root) {
-            Ok(route) => route,
-            // Only OpenCode's is looked for, and only a folder that cannot
-            // be read fails it.
-            Err(error) => {
-                failures.push(DiscoveryFailure::Config {
-                    path: root.to_path_buf(),
-                    unread: Box::new(OpenCodeMcpError::from(error).into()),
-                });
-                continue;
-            }
+        // Only OpenCode's is looked for, and only a folder that cannot be
+        // read fails it, which is passed over as a file that cannot be read
+        // is, nothing being recorded by the file it would name.
+        let Ok(route) = agent.mcp_file(root) else {
+            continue;
         };
         let recorded = |name: &str| {
             records.iter().any(|record| {
@@ -390,12 +392,23 @@ pub(crate) fn listed(
         }));
     }
     listed.sort_by(|a, b| (a.agent, &a.name, &a.file).cmp(&(b.agent, &b.name, &b.file)));
-    failures.extend(files.read.into_iter().filter_map(|((_, route), read)| {
-        read.err().map(|unread| DiscoveryFailure::Config {
-            path: root.join(route),
-            unread: Box::new(unread),
+    let written = |agent: Agent, route: &str| {
+        records
+            .iter()
+            .flat_map(|record| &record.entries)
+            .any(|entry| entry.agent == agent && entry.file == route)
+    };
+    let failures = files
+        .read
+        .into_iter()
+        .filter(|((agent, route), _)| written(*agent, route))
+        .filter_map(|((_, route), read)| {
+            read.err().map(|unread| DiscoveryFailure::Config {
+                path: root.join(route),
+                unread: Box::new(unread),
+            })
         })
-    }));
+        .collect();
     (listed, failures)
 }
 

@@ -410,6 +410,32 @@ fn a_file_that_cannot_be_read_holds_no_entry_and_says_why() {
     assert_eq!(status.projects[0].entries[0].state, State::Missing);
 }
 
+#[cfg(unix)]
+#[test]
+fn a_linked_config_file_nothing_was_written_into_fails_nothing_and_lists_nothing() {
+    let world = World::new(McpMother::plain_program);
+    // As a dotfiles setup links them, which the agents follow and a
+    // renderer, built to write, refuses.
+    let dotfiles = world.workspace.root().join("dotfiles");
+    fs::create_dir_all(dotfiles.join("codex")).unwrap();
+    let theirs = McpDefinition::parse(&McpMother::plain_program("theirs")).unwrap();
+    claude_mcp::render(&dotfiles, &theirs).unwrap();
+    std::os::unix::fs::symlink(
+        dotfiles.join(claude_mcp::FILE),
+        world.root().join(claude_mcp::FILE),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(dotfiles.join("codex"), world.root().join(".codex")).unwrap();
+
+    let (status, codes) = world.status();
+
+    assert_eq!(codes, Vec::<&str>::new());
+    assert_eq!(status.projects[0].entries, []);
+    let read = mindweaver_core::view::Project::read(&world.project, Some(&world.workspace));
+    assert_eq!(read.health, mindweaver_core::view::Health::Ok);
+    assert!(read.failures.is_empty(), "{:?}", read.failures);
+}
+
 #[test]
 fn an_opencode_entry_kept_in_v1s_shape_is_held_to_what_that_shape_is_given() {
     let world = World::new(McpMother::plain_program);

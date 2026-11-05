@@ -539,6 +539,41 @@ fn status_as_json_lists_each_server_an_agents_config_holds_that_nothing_installe
     assert_eq!(text.stdout, COLLAPSE);
 }
 
+#[cfg(unix)]
+#[test]
+fn a_config_file_linked_from_elsewhere_that_nothing_was_installed_into_leaves_status_as_it_was() {
+    let dir = TempDir::new().unwrap();
+    let projects = dir.path().join("Projects");
+    let app = projects.join("app");
+    fs::create_dir_all(&app).unwrap();
+    new_project(&app);
+    weaver(&projects, &["init"]).unwrap();
+    weaver(&projects, &["link", "app"]).unwrap();
+    let report = || {
+        [
+            weaver(&projects, &["status"]).unwrap(),
+            mind(&app, &["status"]).unwrap(),
+        ]
+    };
+    let before = report();
+
+    // As a dotfiles setup links them, which the agents follow and
+    // Mindweaver, writing nothing there, never reads through.
+    let dotfiles = dir.path().join("dotfiles");
+    fs::create_dir_all(dotfiles.join("codex")).unwrap();
+    fs::write(
+        dotfiles.join("mcp.json"),
+        "{\"mcpServers\": {\"theirs\": {\"type\": \"http\", \"url\": \"https://example.com/mcp\"}}}\n",
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(dotfiles.join("mcp.json"), app.join(".mcp.json")).unwrap();
+    std::os::unix::fs::symlink(dotfiles.join("codex"), app.join(".codex")).unwrap();
+
+    let after = report();
+    assert_eq!(after, before);
+    assert!(after.iter().all(|outcome| outcome.ok), "{after:?}");
+}
+
 #[test]
 fn a_stale_entry_in_json_says_why_in_its_data_and_its_warnings() {
     let (_dir, projects) = workspace_with_everything();
