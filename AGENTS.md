@@ -153,9 +153,11 @@ under `apps/` with its own `Makefile`:
   a folder, a file at any depth or a file directly in its folder), what an
   MCP server's definition declares, one TOML file a server in a format of
   its own (`mcp`), which names a server can be given (`mcp::name`), what in
-  one looks like a token written as it is (`mcp/token.rs`), and what each
+  one looks like a token written as it is (`mcp/token.rs`), what each
   agent cannot be given of one, as a renderer will ask and `show` says
-  (`mcp::Inexpressible`, `mcp::Expressibility`), the
+  (`mcp::Inexpressible`, `mcp::Expressibility`), and what `add` is told of
+  how one is started or reached, a program or an address, and the
+  definition it writes from it (`mcp::Given`), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
   (through `port::Remote`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
@@ -232,7 +234,9 @@ under `apps/` with its own `Makefile`:
   templates), `read` (list, show, validate), `status`, `settings` (agents,
   share, targets), `gather`, `install`, `update` and `migrate` (each at both
   levels), `adopt` (mindweaver adopt) and `ui` (the panel, at both levels).
-  `src/render.rs` holds `Outcome`,
+  `add mcp`'s options for how a server is started or reached are one
+  struct both binaries flatten (`ServerOptions`), which hands core a
+  `mcp::Given`. `src/render.rs` holds `Outcome`,
   `Failure` and `Warning` (a stderr line, with its code beside it), the
   table helpers and the envelope every `--json` prints (`json`, and
   `as_json`, which lays a text outcome out in it),
@@ -774,8 +778,9 @@ These are easy to break from a single file without noticing.
   uninstall removes the copies its record names and nothing else. No
   install writes an MCP server yet (`install::installs`, refused as
   `not_installable` wherever a project is asked where one goes, which every
-  project's boxes in the snapshot say), nor does an adoption, a gather or
-  `add`. No copy
+  project's boxes in the snapshot say), nor does an adoption or a gather;
+  `add` writes a definition where its holder keeps servers, as it writes a
+  skill, and records nothing, writing nothing into an agent's config. No copy
   holds a skill's top-level `.claude-plugin`
   (`install::LeftOut`), and none lands inside an agent's own folder
   (`InstallError::UserScope`). A v3 project is listed from its agents' folders
@@ -863,13 +868,20 @@ These are easy to break from a single file without noticing.
   and a token written as it is in a transport, an input's name or its
   `env_var` or the extras, said by where it is and what it starts with and
   never whole, an input named so said of nothing else),
-  which `edit --contents` and `rename` refuse to leave behind
+  which `add`, `edit --contents` and `rename` refuse to leave behind
   (`artifact::mcp_strict_issues`, and
   `mcp_name_strict_issues` for a name alone, both reading what sits beside
   it off the folder written in, `lifecycle::twins_beside`). `anthropic-skills`
   is only warned of. What an agent cannot be given of one is never a reason
   to call it invalid: core says it (`McpDefinition::inexpressible`), `show`
-  says it, and a renderer asks it before it writes.
+  says it, and a renderer asks it before it writes. `add` writes one from
+  a command line's options (`ServerOptions`, a `mcp::Given`) or from a
+  template, held to the same strict function, every secret only the name
+  of the variable it is read from; what no definition can hold (both
+  transports, an option of the other's, a transport with `--template`) is
+  the grammar's to refuse, and what no definition's rule can judge, a key
+  given twice and an address typed with a credential, core refuses with
+  codes of its own (`add_mcp_key_repeated`, `add_mcp_url_userinfo`).
 - **Loaded and gathered content is untrusted.**
   - So is a task's every value, which a browser will fill in: it reaches
     its command as that value, never as an option or a command. The task
@@ -1403,8 +1415,11 @@ These are easy to break from a single file without noticing.
   token in a file, the names a server may and may not be given, `name`,
   `unwritable`, `reserved`, `claimed`, `twin`, and each shape an agent
   cannot be given, `secret_argument`, `secret_in_url`,
-  `composite_secret_header`; and `InputNameMother` and `VariableNameMother`
-  for its values, with what each rule refuses), a project's settings
+  `composite_secret_header`; what `add` is told of one, `given_program`,
+  `given_address`, `given`, and the shapes it refuses, `given_unfit`,
+  `given_with_literal` and `given_repeating`; and `InputNameMother` and
+  `VariableNameMother` for its values, with what each rule refuses), a
+  project's settings
   (`SettingsMother`), the URLs a credential can be typed into (`UrlMother`,
   each form beside what redacting leaves of it) and what lives on the disk
   (`WorkspaceMother`, `ProjectMother`, among it a project a version 1 or 2
@@ -1429,7 +1444,9 @@ These are easy to break from a single file without noticing.
   feature, which no build of a binary turns on. The CLI's suites add mothers
   of what only a command takes (`tests/common/mother.rs`: `ValueMother`,
   `OlderBuildMother`, `MindflayerShellMother`, the activation a Mindflayer
-  build printed); the server depends on no mindweaver crate, so its
+  build printed, and `ServerOptionsMother`, the options a command line
+  gives what `McpMother` makes by and those the grammar refuses together);
+  the server depends on no mindweaver crate, so its
   suites keep all of theirs there (hosts, origins, tokens and headers). A new value object gets a mother and a section of
   `tests/value_test.rs`, which holds every value to one set of laws
   (`reads_as_its_text`) and to its rule both ways, and a new port a
