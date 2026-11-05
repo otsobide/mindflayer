@@ -378,6 +378,47 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, OpenCod
     Ok(file.edit(&shape.key(name), &Edit::Remove)?)
 }
 
+/// Every server OpenCode's config file at `route`, one of [`FILES`], in
+/// the project at `root` holds, by its key, with the shape it stands in,
+/// V2's under `mcp.servers` first and then V1's under `mcp`, each in the
+/// order the file holds them: none when there is no file there.
+///
+/// Read as [`render`] reads a file to write into it, as JSONC and up to
+/// [`MAX_BYTES`], so a file it would refuse to write into is refused here
+/// too, with the same code, and so is one holding a server in both shapes
+/// ([`OpenCodeMcpError::Twice`]), which `render` and `remove` refuse:
+/// which of the two OpenCode reads cannot be told. `route` rather than the
+/// file [`render`] picks, so a server is read where its record says it was
+/// written, whichever of the four comes first now.
+pub fn servers(root: &Path, route: &str) -> Result<Vec<(String, Shape, Value)>, OpenCodeMcpError> {
+    let file = ConfigFile::new(root, route, Format::Jsonc)?.capped(MAX_BYTES);
+    let Some(Value::Object(members)) = file.get(&[MCP])? else {
+        return Ok(Vec::new());
+    };
+    let mut servers = Vec::new();
+    let mut v1 = Vec::new();
+    for (key, value) in members {
+        match (key.as_str(), value) {
+            (SERVERS, Value::Object(v2)) => {
+                servers.extend(v2.into_iter().map(|(name, value)| (name, Shape::V2, value)))
+            }
+            (key, value) if !held(key) => v1.push((key.to_owned(), Shape::V1, value)),
+            _ => {}
+        }
+    }
+    if let Some((name, ..)) = v1
+        .iter()
+        .find(|(name, ..)| servers.iter().any(|(other, ..)| other == name))
+    {
+        return Err(OpenCodeMcpError::Twice {
+            path: file.path(),
+            name: name.clone(),
+        });
+    }
+    servers.extend(v1);
+    Ok(servers)
+}
+
 /// The shape a server not in `file` yet is written in: V1's when `file`
 /// keeps a server in V1's shape already, so that its servers keep one
 /// shape (D-12), and V2's otherwise.

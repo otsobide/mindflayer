@@ -391,6 +391,21 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, CodexMc
     Ok(file.edit(&key, &Edit::Remove)?)
 }
 
+/// Every server the project's [`FILE`] at `root` holds, by its key, in the
+/// order the file holds them: none when there is no file, or its
+/// [`SERVERS`] is no table of them.
+///
+/// Read as [`render`] reads the file to write into it, up to
+/// [`MAX_BYTES`], so a file it would refuse to write into is refused here
+/// too, with the same code. The user's own config is not read: what the
+/// project's file holds is what an entry stands by.
+pub fn servers(root: &Path) -> Result<Vec<(String, Value)>, CodexMcpError> {
+    match config(root)?.get(&[SERVERS])? {
+        Some(Value::Object(servers)) => Ok(servers),
+        _ => Ok(Vec::new()),
+    }
+}
+
 /// Whether `text` holds the entry keyed `name` and nothing else, or not
 /// even that: what taking the entry out of it leaves is blank.
 ///

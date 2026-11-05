@@ -820,7 +820,13 @@ These are easy to break from a single file without noticing.
   was written there and by what its origin offers now (`install::Standing`,
   `install::standings`, D-04): `Current`, `Outdated`, `Edited`, `Missing` or
   `Orphaned`, the first true of edited, orphaned, missing and outdated said
-  over the rest. An `Edited` copy refuses the whole install or uninstall as a
+  over the rest. An MCP server's entry stands in the same words, told by its
+  record, the fingerprint its agent's file holds under its name and what is
+  offered now as its renderer renders it for that agent
+  (`install::entries`, `install::entry_standings`): foreign by its name in
+  the file rather than by a path, missing when the file cannot be read too,
+  which is said with the renderer's code (`install::ConfigUnread`), and
+  each file read as its renderer reads it to write. An `Edited` copy refuses the whole install or uninstall as a
   foreign one does (`Installed::Edited`, `Removed::Edited`) unless it is
   forced (`install_with`, `uninstall_with` and `uninstall_typed` given
   `Edits::Forced`, the CLI's `--force`), and forcing never reaches a copy

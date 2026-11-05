@@ -279,6 +279,22 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, ClaudeM
         .map_err(|error| loose(&file, error))
 }
 
+/// Every server the project's [`FILE`] at `root` holds, by its key, in the
+/// order the file holds them: none when there is no file, or its
+/// [`SERVERS`] is no object of them, which Claude loads none from.
+///
+/// Read as [`render`] reads the file to write into it, strictly and up to
+/// [`MAX_BYTES`], so a file it would refuse to write into is refused here
+/// too, with the same code: what an entry stands as, and what the
+/// installed view lists, is read from the file an install would meet.
+pub fn servers(root: &Path) -> Result<Vec<(String, Value)>, ClaudeMcpError> {
+    let file = config(root)?;
+    match file.get(&[SERVERS]).map_err(|error| loose(&file, error))? {
+        Some(Value::Object(servers)) => Ok(servers),
+        _ => Ok(Vec::new()),
+    }
+}
+
 /// What is said of an entry written all the same.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Warning {

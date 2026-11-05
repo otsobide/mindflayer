@@ -9591,6 +9591,59 @@ holds, and `.opencode` is never taken away. Whose entry it is, and
 whether Mindweaver made the file, are the ledger's to say (#93), and the
 install's to ask (#94): nothing here reads either.
 
+### How an entry stands
+
+The ledger records each entry an MCP server's installation writes, one an
+agent: the agent, its file as a route from the project (`Agent::mcp_file`
+when it was written), the server's name it is keyed by, and its
+fingerprint ([why the ledger is SQLite](#why-the-ledger-is-sqlite), schema
+6). Since an entry carries no mark, that record is the one thing that makes
+it Mindweaver's (D-10), and how it stands is told by three things together
+(`install::entries`): the record, what the agent's file holds under the
+name, by its fingerprint, and what the place it came from offers now,
+rendered for that agent by its own renderer (`Entry::fingerprint`), in the
+shape OpenCode's file keeps the server in. Neither the file alone nor the
+offer alone tells it, as for a copy (D-04): an edited entry can be what is
+offered now, and an untouched one behind it.
+
+It stands in `install::Standing`'s words, said in the same order, edited
+first, then orphaned, missing and outdated, and each means of an entry
+what it means of a copy. Six of them are the issue's (#93): absent,
+current, outdated, edited, foreign and missing; orphaned is the seventh,
+as for a copy, since an entry whose definition nothing offers any more has
+nothing to be current or outdated against, and an update nothing to write
+it from. What differs is how each is told:
+
+- **Foreign** by the server's name, where a copy is told by its path: an
+  entry the agent's file holds under a name nothing records an entry of in
+  that file for that agent. A file holds every server of the project, so
+  its path tells no entry from another.
+- **Edited** by the fingerprint of what the name holds ([the
+  fingerprint](#the-fingerprint)), where a copy is told by its tree's hash:
+  an entry laid out again by Codex or by hand is current still, and one
+  whose value changed is somebody's work.
+- **Missing** while the file the record names holds nothing under the
+  name, is not there, or cannot be read, which is said beside it with the
+  renderer's code (`install::ConfigUnread`), as a block that cannot be read
+  holds none of a project's rules and the next render says why.
+- **Outdated** while what is offered now is given to the agent as another
+  entry than the one written, by its fingerprint, or as none, which an
+  install of it would then be refused for. Told an agent at a time, so a
+  change to what one agent alone is given, its extras, leaves the others
+  current.
+
+An installation stands as the first of those its entries do, edited,
+orphaned, missing, outdated, and current otherwise
+(`install::standings`), which is what an update's survey reads of it. Each
+file is read as its renderer reads it to write into it
+(`claude_mcp::servers`, `codex_mcp::servers`, `opencode_mcp::servers`):
+Claude's strictly, OpenCode's as JSONC, each up to 2 MiB, so a file an
+install would refuse to write into is refused here too, with the same
+code, and a recorded entry is looked for in the file its record names,
+OpenCode's whichever of its four that was. `install::entry_standings` says
+how one server stands for each of a project's agents, absent and foreign
+among them, which is what an install will meet in each file (#94).
+
 ## Creating and changing artifacts
 
 `mind add` writes the least that passes `validate`: a skill's front matter and
