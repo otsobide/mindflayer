@@ -92,11 +92,94 @@ fn show_says_what_a_server_is_for_and_prints_its_definition() {
     assert_eq!(
         shown.stdout,
         format!(
-            "github\n{}\n\n{GITHUB}\n\n{}",
+            "github\n{}\n\n{GITHUB}\n\n\
+             agents:\n  \
+             claude: given it without what it has no place for:\n    \
+             - the transport's `cwd` is left out, since a program is started there in no folder \
+             it is told\n  \
+             codex: given it whole\n  \
+             opencode: given it whole\n\
+             \n{}",
             file.display(),
             fs::read_to_string(&file).unwrap()
         )
     );
+}
+
+#[test]
+fn show_says_which_agent_is_given_none_of_a_server_and_why() {
+    let dir = library();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::write(folder.join("events.toml"), McpMother::sse("events")).unwrap();
+    fs::write(
+        folder.join("workspace-server.toml"),
+        McpMother::secret_argument("workspace-server"),
+    )
+    .unwrap();
+
+    let events = weaver(dir.path(), &["show", "mcp:events"]).unwrap();
+    let argued = weaver(dir.path(), &["show", "mcp:workspace-server"]).unwrap();
+
+    let sse = "    - the sse transport, server-sent events, is not one taken there\n";
+    assert!(
+        events.stdout.contains(&format!(
+            "agents:\n  claude: given it whole\n  codex: given none of it:\n{sse}  \
+             opencode: given none of it:\n{sse}\n"
+        )),
+        "{}",
+        events.stdout
+    );
+    assert!(
+        argued.stdout.contains(
+            "  codex: given none of it:\n    \
+             - secret input `workspace` is written in the transport's `args`, which hold no \
+             reference to an environment variable there\n  \
+             opencode: given it whole\n"
+        ),
+        "{}",
+        argued.stdout
+    );
+    // Shown, never refused: what an agent cannot be given is not wrong.
+    assert!(events.ok && argued.ok);
+    assert!(events.stderr.is_empty() && argued.stderr.is_empty());
+}
+
+#[test]
+fn show_json_says_what_each_agent_cannot_be_given_by_its_code() {
+    let dir = library();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::write(
+        folder.join("linear.toml"),
+        McpMother::composite_secret_header("linear"),
+    )
+    .unwrap();
+
+    let shown = weaver(dir.path(), &["show", "mcp:linear", "--json"]).unwrap();
+
+    let (data, warnings): (serde_json::Value, _) = enveloped(&shown);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let report = &data[0]["expressibility"];
+    assert_eq!(
+        report,
+        &serde_json::json!([
+            {"agent": "claude", "refused": [], "dropped": []},
+            {
+                "agent": "codex",
+                "refused": [{
+                    "code": "secret_header_composite",
+                    "message": "secret input `token` is written in header `Authorization` beside \
+                                other text, and a header is read from an environment variable \
+                                there only as its whole value, or as `Authorization: Bearer` and \
+                                the token",
+                }],
+                "dropped": [],
+            },
+            {"agent": "opencode", "refused": [], "dropped": []},
+        ])
+    );
+    let skill = weaver(dir.path(), &["show", "skill:deploy", "--json"]).unwrap();
+    let (data, _): (serde_json::Value, _) = enveloped(&skill);
+    assert_eq!(data[0]["expressibility"], serde_json::Value::Null);
 }
 
 #[test]
@@ -125,6 +208,61 @@ fn validate_counts_a_server_in_words_and_says_what_is_wrong_with_one() {
 }
 
 #[test]
+fn validate_reports_a_reserved_name_and_a_literal_token_and_never_the_token() {
+    let dir = library();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::write(folder.join("Workspace.toml"), McpMother::stdio("Workspace")).unwrap();
+    let (prefix, token) = McpMother::token();
+    let (leaky, at) = McpMother::with_literal("leaky", "env", &token);
+    fs::write(folder.join("leaky.toml"), leaky).unwrap();
+    fs::write(
+        folder.join("anthropic-skills.toml"),
+        McpMother::sse("anthropic-skills"),
+    )
+    .unwrap();
+
+    let failure = weaver(dir.path(), &["validate", "mcp"]).unwrap();
+
+    assert!(!failure.ok);
+    assert_eq!(
+        failure.stdout,
+        format!(
+            "Workspace: 1 problem\n  \
+             - `Workspace` is a name Claude Code keeps for a server of its own (`workspace`), \
+             so no server of yours can be keyed by it\n\
+             anthropic-skills: ok, 1 warning\n  \
+             - warning: `anthropic-skills` is the name Claude Code gives the skills Anthropic \
+             provides (`anthropic-skills`), so a server of yours by it may be taken for theirs; \
+             it is written all the same\n\
+             github: ok\n\
+             leaky: 1 problem\n  \
+             - `{at}` holds what looks like a token, starting `{prefix}`, and a definition holds \
+             no secret: declare a secret input read from an environment variable, and write it \
+             there between braces\n\
+             \n\
+             4 MCP servers checked, 2 invalid\n"
+        )
+    );
+    // Said where it is and what it starts with, never what follows.
+    let rest = token[prefix.len()..].trim_start();
+    let json = weaver(dir.path(), &["validate", "mcp", "--json"]).unwrap();
+    assert!(!failure.stdout.contains(rest) && !json.stdout.contains(rest));
+    let (data, _): (serde_json::Value, _) = enveloped(&json);
+    let codes: Vec<&str> = data["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|checked| checked["issues"].as_array().unwrap())
+        .map(|issue| issue["code"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        codes,
+        ["mcp_name_reserved", "mcp_name_claimed", "secret_literal"]
+    );
+    assert_eq!(data["invalid"], 2);
+}
+
+#[test]
 fn a_server_is_renamed_and_removed_as_every_kind_is() {
     let dir = library();
     let folder = own_directory_for(dir.path(), Kind::Mcp);
@@ -141,6 +279,36 @@ fn a_server_is_renamed_and_removed_as_every_kind_is() {
     assert!(folder.join("octocat.toml").is_file(), "{}", dry.error);
     weaver(dir.path(), &["remove", "mcp:octocat", "--yes"]).unwrap();
     assert!(!folder.join("octocat.toml").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn edit_says_a_server_clashes_with_one_beside_it_in_another_case_as_validate_does() {
+    let dir = library();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    let twin = McpMother::twin("github");
+    fs::write(folder.join(format!("{twin}.toml")), McpMother::stdio(&twin)).unwrap();
+
+    // A stand-in editor that changes nothing.
+    let edited = weaver(dir.path(), &["edit", "mcp:github", "--editor", "true"]).unwrap();
+    let validated = weaver(dir.path(), &["validate", "mcp:github"]).unwrap();
+
+    let problem = format!(
+        "1 problem\n  \
+         - `github` and `{twin}` differ only by case, which a file system that folds case, as \
+         macOS's and Windows' do, holds as one file, so no library holds both everywhere: \
+         rename one of them\n"
+    );
+    assert!(!edited.ok && !validated.ok);
+    assert_eq!(
+        edited.stdout,
+        format!("left mcp github unchanged: {problem}")
+    );
+    assert!(
+        validated.stdout.starts_with(&format!("github: {problem}")),
+        "{}",
+        validated.stdout
+    );
 }
 
 #[test]

@@ -726,7 +726,8 @@ fn a_revision_is_read_from_a_string_and_from_nothing_else() {
 }
 
 // ---------------------------------------------------------------------------
-// InputName and VariableName: any text, each a type of its own.
+// InputName and VariableName: any text, each a type of its own, and each
+// with a rule `validate` asks of it.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -751,6 +752,56 @@ fn a_variable_name_holds_any_text_since_which_names_a_secret_takes_is_not_its_ru
     }
     let drawn = VariableNameMother::random();
     reads_as_its_text(&drawn, &drawn.clone().into_string());
+}
+
+#[test]
+fn an_input_name_is_writable_only_of_letters_digits_hyphens_and_underscores() {
+    let alphabet = format!(
+        "{}{}{}_-",
+        random::LOWERCASE,
+        random::LOWERCASE.to_ascii_uppercase(),
+        random::DIGITS
+    );
+    for _ in 0..DRAWS {
+        let drawn = InputNameMother::random();
+        let any = InputName::from(random::drawn_from(&alphabet, random::between(1, 30)));
+
+        assert!(drawn.is_writable(), "{drawn}");
+        assert!(any.is_writable(), "{any}");
+    }
+    for (why, text) in InputNameMother::unwritable() {
+        assert!(
+            !InputName::from(text.as_str()).is_writable(),
+            "{why}: {text:?}"
+        );
+    }
+}
+
+#[test]
+fn a_variable_name_is_portable_only_as_posix_names_one() {
+    let letters = format!(
+        "{}{}_",
+        random::LOWERCASE,
+        random::LOWERCASE.to_ascii_uppercase()
+    );
+    let rest = format!("{letters}{}", random::DIGITS);
+    for _ in 0..DRAWS {
+        let drawn = VariableNameMother::random();
+        let any = VariableName::from(format!(
+            "{}{}",
+            random::drawn_from(&letters, 1),
+            random::drawn_from(&rest, random::between(0, 30))
+        ));
+
+        assert!(drawn.is_portable(), "{drawn}");
+        assert!(any.is_portable(), "{any}");
+    }
+    for (why, text) in VariableNameMother::unportable() {
+        assert!(
+            !VariableName::from(text.as_str()).is_portable(),
+            "{why}: {text:?}"
+        );
+    }
 }
 
 #[test]

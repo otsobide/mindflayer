@@ -479,7 +479,16 @@ impl Catalog {
     /// `root`, named by its stem.
     fn load_flat(&mut self, root: &Path, extension: &str, project: &Path) -> Vec<Artifact> {
         let mut found = Vec::new();
-        for path in self.flat_in(root, extension) {
+        let files = self.flat_in(root, extension);
+        // Every name the folder's files give, whether or not each reads, for
+        // each definition to be told of the others named as it is in
+        // another case, which a file system that folds case would hold as
+        // one file ([`crate::mcp::name`]).
+        let stems: Vec<String> = files
+            .iter()
+            .filter_map(|path| path.file_stem()?.to_str().map(str::to_owned))
+            .collect();
+        for path in files {
             let Some(name) = path
                 .file_stem()
                 .and_then(|stem| stem.to_str())
@@ -492,6 +501,10 @@ impl Catalog {
                 Ok(artifact) => found.push(artifact),
                 Err(error) => self.failures.push(error.into()),
             }
+        }
+        for artifact in &mut found {
+            let twins = crate::mcp::name::twins(artifact.name(), stems.iter().map(String::as_str));
+            artifact.twinned(twins);
         }
         found
     }

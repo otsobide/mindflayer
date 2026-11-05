@@ -261,6 +261,7 @@ fn a_skill_s_metadata_is_an_object_in_both() {
         compatibility: None,
         metadata: Some(vec![("team".to_owned(), "infra".to_owned())]),
         paths: None,
+        expressibility: None,
         body: String::new(),
     };
 

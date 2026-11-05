@@ -32,6 +32,16 @@
         "null"
       ]
     },
+    "expressibility": {
+      "description": "What each agent cannot be given of an MCP server's definition, every\nagent's in report order ([`crate::mcp::McpDefinition::expressibility`]):\nnone for a skill or a rule, which every agent reads as it is.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/Expressibility"
+      }
+    },
     "file": {
       "description": "The file it is read from: a skill's `SKILL.md`, or the rule itself.",
       "type": "string"
@@ -98,9 +108,47 @@
     "compatibility",
     "metadata",
     "paths",
+    "expressibility",
     "body"
   ],
   "$defs": {
+    "Agent": {
+      "description": "A coding agent, by the name `--agents` and a project's settings take.",
+      "type": "string",
+      "enum": [
+        "claude",
+        "codex",
+        "opencode"
+      ]
+    },
+    "Expressibility": {
+      "description": "What one agent cannot be given of a definition, as `show` says it: the\nagent, by the word a command line takes for it, then what refuses it\nthe definition and what it is given the definition without, each by\nits code and in its words.\n\nBoth lists empty, and the agent is given the definition whole; one\nthing refused, and it is given none of it, whatever else is dropped.",
+      "type": "object",
+      "properties": {
+        "agent": {
+          "$ref": "#/$defs/Agent"
+        },
+        "dropped": {
+          "description": "What its entry is written without, in the order the definition\nholds it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Said"
+          }
+        },
+        "refused": {
+          "description": "What it cannot be given at all, in the order the definition holds\nit: any one of them, and its renderer writes it no entry.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Said"
+          }
+        }
+      },
+      "required": [
+        "agent",
+        "refused",
+        "dropped"
+      ]
+    },
     "Kind": {
       "description": "A kind of artifact, by the word a command line takes for it.",
       "type": "string",
@@ -108,6 +156,23 @@
         "skill",
         "rule",
         "mcp"
+      ]
+    },
+    "Said": {
+      "description": "An error as a serialized type holds one: its code, for a front end to act\non, and its message, for whoever reads it.\n\nBuilt where the type is serialized, or kept in what a front end reads\n(the workspace's snapshot), in place of the error, since an error\nholds what JSON has no shape for (an `io::Error`, a parser's own), and\nonly these two are meant to leave core. Its fields are public for a\nfront end that reads the snapshot as Rust rather than as JSON, the TUI.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "description": "Written through [`redacted`](crate::url::redacted), as every URL\nis: an error can quote one, a source's among them, and what built\nthe error is no promise that it carries no credential.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
       ]
     }
   }

@@ -63,6 +63,17 @@ impl Agent {
         }
     }
 
+    /// How a sentence names it: the name of the product, as its makers
+    /// write it, where [`name`](Self::name) is the word a command line
+    /// takes.
+    pub const fn title(self) -> &'static str {
+        match self {
+            Agent::Claude => "Claude Code",
+            Agent::Codex => "Codex",
+            Agent::OpenCode => "OpenCode",
+        }
+    }
+
     /// Every folder in a project this agent reads `kind` from, whoever put
     /// what is there, each relative to the project's root.
     ///

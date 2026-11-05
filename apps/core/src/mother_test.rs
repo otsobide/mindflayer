@@ -160,7 +160,7 @@ fn every_definition_the_mother_makes_reads_as_the_transport_it_is_named_for() {
     assert!(matches!(sse.transport, Transport::Sse(_)));
     for _ in 0..DRAWS {
         let (name, text) = McpMother::random();
-        assert!(name_issues(&name).is_empty(), "{name}");
+        assert_eq!(crate::mcp::name::issues(&name), [], "{name}");
         assert_eq!(McpDefinition::parse(&text).unwrap().issues(), [], "{text}");
     }
 }
@@ -208,9 +208,54 @@ fn input_and_variable_names_are_drawn_as_they_are_usually_written() {
             variable.chars().all(|c| c.is_ascii_uppercase() || c == '_'),
             "{variable}"
         );
+        assert!(input.is_writable(), "{input}");
+        assert!(variable.is_portable(), "{variable}");
         assert_eq!(InputNameMother::create(&input), input);
         assert_eq!(VariableNameMother::create(&variable), variable);
     }
+}
+
+#[test]
+fn input_and_variable_names_named_for_breaking_their_rule_break_it() {
+    for (why, text) in InputNameMother::unwritable() {
+        assert!(
+            !InputNameMother::create(&text).is_writable(),
+            "{why}: {text:?}"
+        );
+    }
+    for (why, text) in VariableNameMother::unportable() {
+        assert!(
+            !VariableNameMother::create(&text).is_portable(),
+            "{why}: {text:?}"
+        );
+    }
+    for (prefix, token) in McpMother::tokens() {
+        let (text, at) = McpMother::with_literal(&random::kebab(), "env", &token);
+        let holding = crate::mcp::McpDefinition::parse(&text).unwrap();
+        assert_eq!(
+            holding.issues(),
+            [ValidationIssue::SecretLiteral {
+                at,
+                prefix: prefix.to_owned()
+            }]
+        );
+    }
+    let unnamed =
+        crate::mcp::McpDefinition::parse(&McpMother::secret_without_variable(&random::kebab()))
+            .unwrap();
+    assert!(matches!(
+        &unnamed.issues()[..],
+        [ValidationIssue::SecretWithoutEnvVar { .. }]
+    ));
+    let misnamed =
+        crate::mcp::McpDefinition::parse(&McpMother::misnamed(&random::kebab())).unwrap();
+    assert!(matches!(
+        &misnamed.issues()[..],
+        [
+            ValidationIssue::InputNameMalformed { .. },
+            ValidationIssue::EnvVarMalformed { .. }
+        ]
+    ));
 }
 
 #[test]
@@ -405,4 +450,84 @@ fn a_mindflayer_mother_leaves_a_projects_exclude_block_under_the_old_markers() {
         text.ends_with("# mindflayer:begin\n# project app\n/AGENTS.md\n# mindflayer:end\n"),
         "{text}"
     );
+}
+
+#[test]
+fn every_server_name_a_mother_draws_breaks_or_keeps_the_rule_it_is_named_for() {
+    use crate::mcp::name::{issues, twins};
+
+    for _ in 0..DRAWS {
+        let name = McpMother::name();
+        assert_eq!(issues(&name), [], "{name}");
+        let twin = McpMother::twin(&name);
+        assert_eq!(twins(&name, [twin.as_str()]), [twin.as_str()], "{name}");
+    }
+    for (why, name) in McpMother::unwritable() {
+        assert!(
+            issues(&name).iter().any(|issue| !issue.is_warning()),
+            "{why}: {name:?}"
+        );
+    }
+    for (name, _, _) in McpMother::reserved() {
+        assert!(matches!(
+            &issues(&name)[..],
+            [ValidationIssue::McpNameReserved { .. }]
+        ));
+    }
+    for (name, _, _) in McpMother::claimed() {
+        assert!(matches!(
+            &issues(&name)[..],
+            [ValidationIssue::McpNameClaimed { .. }]
+        ));
+    }
+    for (why, name) in McpMother::near_reserved() {
+        assert_eq!(issues(&name), [], "{why}");
+    }
+}
+
+#[test]
+fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so() {
+    use crate::mcp::{Inexpressible, McpDefinition};
+
+    let name = random::kebab();
+    let read = |text: String| McpDefinition::parse(&text).unwrap();
+    let shapes = [
+        (McpMother::without_cwd(&name), Agent::Claude, None),
+        (
+            McpMother::stdio(&name),
+            Agent::Claude,
+            Some("cwd_unsupported"),
+        ),
+        (
+            McpMother::secret_argument(&name),
+            Agent::Codex,
+            Some("secret_in_argument"),
+        ),
+        (
+            McpMother::secret_in_url(&name),
+            Agent::Codex,
+            Some("secret_in_url"),
+        ),
+        (
+            McpMother::composite_secret_header(&name),
+            Agent::Codex,
+            Some("secret_header_composite"),
+        ),
+        (McpMother::whole_secret_header(&name), Agent::Codex, None),
+        (
+            McpMother::sse(&name),
+            Agent::OpenCode,
+            Some("sse_unsupported"),
+        ),
+    ];
+    for (text, agent, code) in shapes {
+        let definition = read(text);
+        assert_eq!(definition.issues(), [], "{agent:?} {code:?}");
+        let said: Vec<&str> = definition
+            .inexpressible(agent)
+            .iter()
+            .map(Inexpressible::code)
+            .collect();
+        assert_eq!(said, code.into_iter().collect::<Vec<_>>(), "{agent:?}");
+    }
 }

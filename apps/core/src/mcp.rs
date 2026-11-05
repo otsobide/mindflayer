@@ -41,10 +41,15 @@
 //! names no input is left as it is written, so a JSON argument such as
 //! `{"debug":true}` means what it says.
 //!
-//! Only the format is held here: a file that reads as one, a transport that
-//! names what it needs to start or reach the server, and every input used
-//! where its kind says. Which names an agent takes, and what a secret has to
-//! be, are #87's, and what each agent cannot express is its renderer's.
+//! The format is held here: a file that reads as one, a transport that
+//! names what it needs to start or reach the server, every input named so
+//! that its placeholder can be written and read from a variable every agent
+//! can refer to, and every input used where its kind says. So are its
+//! secrets (D-11): a secret input names the variable it is read from, and no
+//! value holds what looks like a token written as it is (`token`). Beside
+//! it, which names a server can be given ([`name`]), and what each agent
+//! cannot be given of a definition ([`Inexpressible`]), which no `validate`
+//! says, since the definition is whole for every other agent.
 
 use std::collections::BTreeMap;
 
@@ -55,6 +60,12 @@ use thiserror::Error;
 use crate::artifact::ValidationIssue;
 use crate::code::codes;
 use crate::value::{ArtifactName, InputName, Redacted, VariableName};
+
+mod expressible;
+pub(crate) mod name;
+mod token;
+
+pub use expressible::{Expressibility, Inexpressible};
 
 /// The format a definition is written in, and the newest this build reads.
 ///
@@ -146,6 +157,13 @@ pub struct Endpoint {
     /// input is written where no agent can be given it, rather than that it
     /// is used nowhere ([`ValidationIssue::InputInUserinfo`]).
     pub withheld: Vec<InputName>,
+    /// What each token the address held as written starts with, its
+    /// userinfo included: read off the text before it is redacted, as
+    /// [`withheld`](Self::withheld) is, since a token typed there went with
+    /// it, and kept as what it starts with and never as the text, so that
+    /// `validate` says the file holds one ([`ValidationIssue::SecretLiteral`])
+    /// without the definition holding it again.
+    pub tokens: Vec<&'static str>,
 }
 
 /// One value somebody supplies when an agent starts the server.
@@ -248,10 +266,15 @@ impl McpDefinition {
 
     /// Everything wrong with it as a definition, in the order it is worth
     /// fixing: a description with nothing in it, a transport that names
-    /// nothing to start or reach, an input declared twice, and an input no
-    /// value uses where its kind says, each in the order written: one
-    /// written in the address's userinfo said as that, since it is written
-    /// where its kind says, only in a part no address is kept with.
+    /// nothing to start or reach, an input whose name no placeholder can be
+    /// written of, a token written where its variable's name goes or a
+    /// variable not every agent can refer to, a secret read from no
+    /// variable at all, a token written as it is in a value of the
+    /// transport or of the extras, an input declared twice, and an input no
+    /// value uses
+    /// where its kind says, each in the order written: one written in the
+    /// address's userinfo said as that, since it is written where its kind
+    /// says, only in a part no address is kept with.
     ///
     /// Not its name, which is the file's to say and the artifact's to judge
     /// ([`crate::artifact`]). Pure, as every check `validate` makes is.
@@ -271,6 +294,65 @@ impl McpDefinition {
                 transport: self.transport.slug().to_owned(),
                 field: field.to_owned(),
             });
+        }
+        for (index, input) in self.inputs.iter().enumerate() {
+            let mut named = Vec::new();
+            if !input.name.is_writable() {
+                named.push(ValidationIssue::InputNameMalformed {
+                    name: input.name.to_string(),
+                });
+            }
+            // The value pasted where its variable's name goes, the likeliest
+            // way a token reaches this file, and one every renderer would
+            // write into its agent's reference: a GitHub token is letters,
+            // digits and underscores, so it passes for a variable. Said as
+            // a token, and never as a variable no agent can refer to, whose
+            // message would print it whole.
+            let pasted = input
+                .env_var
+                .as_ref()
+                .map(|variable| token::found(variable, &[]))
+                .unwrap_or_default();
+            named.extend(pasted.iter().map(|prefix| ValidationIssue::SecretLiteral {
+                at: format!("inputs[{index}].env_var"),
+                prefix: (*prefix).to_owned(),
+            }));
+            match &input.env_var {
+                Some(_) if !pasted.is_empty() => {}
+                Some(variable) if !variable.is_portable() => {
+                    named.push(ValidationIssue::EnvVarMalformed {
+                        name: input.name.to_string(),
+                        variable: variable.to_string(),
+                    });
+                }
+                Some(_) => {}
+                // What "a secret input must be an environment reference"
+                // (D-11) asks of an input: a value is never in the file, so
+                // a secret is one only when it says the variable each
+                // agent's reference will name. One that names none could
+                // reach an agent only as a value written into its entry.
+                // An input that is no secret may name none: its value is
+                // somebody's to give when it is installed, and may be
+                // written as it is.
+                None if input.secret => named.push(ValidationIssue::SecretWithoutEnvVar {
+                    name: input.name.to_string(),
+                }),
+                None => {}
+            }
+            for issue in named {
+                if !issues.contains(&issue) {
+                    issues.push(issue);
+                }
+            }
+        }
+        for (at, prefix) in self.literals() {
+            let issue = ValidationIssue::SecretLiteral {
+                at,
+                prefix: prefix.to_owned(),
+            };
+            if !issues.contains(&issue) {
+                issues.push(issue);
+            }
         }
         let mut seen: Vec<&InputName> = Vec::new();
         for input in &self.inputs {
@@ -304,6 +386,63 @@ impl McpDefinition {
             }
         }
         issues
+    }
+
+    /// Where each token written as it is stands in the transport or the
+    /// extras, by the key that leads to it, and what it starts with: a
+    /// program's `args`, then its `env`, or an address's `url`, then its
+    /// `headers`, each in the order written, then every text the extras
+    /// hold, at any depth, every placeholder of a declared input taken out
+    /// first. Not its `command`, which names a program, nor `cwd`.
+    ///
+    /// The extras too, since each agent's are passed on to its entry as
+    /// they are: a token there reaches the agent's config as surely as one
+    /// in the transport does.
+    fn literals(&self) -> Vec<(String, &'static str)> {
+        let placeholders: Vec<String> = self
+            .inputs
+            .iter()
+            .map(|input| written(&input.name))
+            .collect();
+        let found = |value: &str| token::found(value, &placeholders);
+        let mut literals = Vec::new();
+        match &self.transport {
+            Transport::Stdio(stdio) => {
+                for (index, arg) in stdio.args.iter().enumerate() {
+                    for prefix in found(arg) {
+                        literals.push((format!("transport.args[{index}]"), prefix));
+                    }
+                }
+                for (key, value) in &stdio.env {
+                    for prefix in found(value) {
+                        literals.push((keyed("transport.env", key), prefix));
+                    }
+                }
+            }
+            Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                for prefix in &endpoint.tokens {
+                    literals.push((String::from("transport.url"), *prefix));
+                }
+                for (key, value) in &endpoint.headers {
+                    for prefix in found(value) {
+                        literals.push((keyed("transport.headers", key), prefix));
+                    }
+                }
+            }
+        }
+        let mut texts = Vec::new();
+        for (agent, table) in &self.extras {
+            let at = keyed("extras", agent);
+            for (key, value) in table {
+                texts_in(keyed(&at, key), value, &mut texts);
+            }
+        }
+        for (at, text) in texts {
+            for prefix in found(text) {
+                literals.push((at.clone(), prefix));
+            }
+        }
+        literals
     }
 
     /// Whether `input` is a part of an address written only in its
@@ -464,6 +603,45 @@ fn written(name: &InputName) -> String {
     format!("{{{name}}}")
 }
 
+/// `key` in the table `table` names, as TOML spells the path to it: bare
+/// when it may be, and quoted when a dot or a space in it would read as
+/// another key.
+fn keyed(table: &str, key: &str) -> String {
+    let bare = !key.is_empty()
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-');
+    if bare {
+        format!("{table}.{key}")
+    } else {
+        format!("{table}.{}", toml::Value::String(key.to_owned()))
+    }
+}
+
+/// Every text `value` holds, at any depth, beside the path that leads to
+/// it from `at`, as TOML spells it: a table's keys through [`keyed`], an
+/// array's items by their index. Matched on every kind of value, so one
+/// TOML adds says whether it holds text.
+fn texts_in<'a>(at: String, value: &'a toml::Value, into: &mut Vec<(String, &'a str)>) {
+    match value {
+        toml::Value::String(text) => into.push((at, text)),
+        toml::Value::Array(values) => {
+            for (index, value) in values.iter().enumerate() {
+                texts_in(format!("{at}[{index}]"), value, into);
+            }
+        }
+        toml::Value::Table(table) => {
+            for (key, value) in table {
+                texts_in(keyed(&at, key), value, into);
+            }
+        }
+        toml::Value::Integer(_)
+        | toml::Value::Float(_)
+        | toml::Value::Boolean(_)
+        | toml::Value::Datetime(_) => {}
+    }
+}
+
 impl From<Raw> for McpDefinition {
     fn from(raw: Raw) -> Self {
         let inputs: Vec<Input> = raw
@@ -481,8 +659,10 @@ impl From<Raw> for McpDefinition {
         // Read off the address as written and what is kept of it, here,
         // where both are at hand: once redacted, which inputs its userinfo
         // held is not known.
+        let placeholders: Vec<String> = inputs.iter().map(|input| written(&input.name)).collect();
         let endpoint = |url: String, headers| {
             let kept = Redacted::new(&url);
+            let tokens = token::found(&url, &placeholders);
             let withheld = inputs
                 .iter()
                 .map(|input| &input.name)
@@ -496,6 +676,7 @@ impl From<Raw> for McpDefinition {
                 url: kept,
                 headers,
                 withheld,
+                tokens,
             }
         };
         let transport = match raw.transport {

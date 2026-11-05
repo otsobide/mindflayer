@@ -1,6 +1,7 @@
 //! Mothers of artifacts as their files hold them: a skill's `SKILL.md`, a
 //! rule's markdown and an MCP server's definition.
 
+use crate::agent::Agent;
 use crate::mother::random;
 
 /// Makes the text of a skill's `SKILL.md`.
@@ -84,16 +85,154 @@ impl RuleMother {
 pub struct McpMother;
 
 impl McpMother {
-    /// A definition of any of the three transports, under a name an
-    /// artifact may be written under, and the text of its file.
+    /// A definition of any of the three transports, under a name a server
+    /// may be given ([`name`](Self::name)), and the text of its file.
     pub fn random() -> (String, String) {
-        let name = random::kebab();
+        let name = Self::name();
         let text = match random::between(0, 2) {
             0 => Self::stdio(&name),
             1 => Self::http(&name),
             _ => Self::sse(&name),
         };
         (name, text)
+    }
+
+    /// A name every agent keys a server by: words of letters in either case
+    /// and digits, joined by hyphens or underscores, starting with a letter,
+    /// so that it has a case to turn, and ending in a digit, so that it is
+    /// never one an agent keeps for itself, none of which holds one.
+    pub fn name() -> String {
+        let letters = format!(
+            "{}{}",
+            random::LOWERCASE,
+            random::LOWERCASE.to_ascii_uppercase()
+        );
+        let alphabet = format!("{letters}{}", random::DIGITS);
+        let mut name = random::drawn_from(&letters, 1);
+        name.push_str(&random::drawn_from(&alphabet, random::between(0, 7)));
+        for _ in 0..random::between(0, 2) {
+            name.push(random::pick(&['-', '_']));
+            name.push_str(&random::drawn_from(&alphabet, random::between(1, 8)));
+        }
+        name.push_str(&random::drawn_from(random::DIGITS, 1));
+        name
+    }
+
+    /// Names no agent keys a server by, each beside why: what `validate`
+    /// says is no key.
+    pub fn unkeyed() -> Vec<(&'static str, String)> {
+        let word = random::word();
+        vec![
+            ("a dot", format!("{word}.{word}")),
+            ("a space", format!("{word} {word}")),
+            ("a colon", format!("{word}:{word}")),
+            ("an at sign", format!("@{word}")),
+            ("a plus", format!("{word}+{word}")),
+            ("a brace", format!("{{{word}}}")),
+            ("a letter past ASCII", format!("{word}\u{e9}")),
+        ]
+    }
+
+    /// Names no MCP server may be written under, each beside why: what a
+    /// server's name is held to where every name is (empty, or past the
+    /// limit), each that is no key ([`unkeyed`](Self::unkeyed)), and one an
+    /// agent keeps for itself, `reserved`.
+    pub fn unwritable() -> Vec<(&'static str, String)> {
+        let mut names = vec![
+            ("empty", String::new()),
+            (
+                "a segment over the limit",
+                "a".repeat(crate::skill::MAX_NAME_SEGMENT_LEN + 1),
+            ),
+        ];
+        names.extend(Self::unkeyed());
+        let (reserved, _, _) = random::pick(&Self::reserved());
+        names.push(("reserved", reserved));
+        names
+    }
+
+    /// Every name an agent keeps for itself, beside the agent and the name
+    /// as it spells it, each in a case drawn afresh: and for the two of
+    /// Claude's whose space no key can hold, each spelling of it one can,
+    /// with an underscore, a hyphen or nothing in its place.
+    pub fn reserved() -> Vec<(String, Agent, &'static str)> {
+        let mut names = Vec::new();
+        for word in ["workspace", "claude-in-chrome", "computer-use"] {
+            names.push((Self::recased(word), Agent::Claude, word));
+        }
+        for word in ["Claude Preview", "Claude Browser"] {
+            for space in ["_", "-", ""] {
+                names.push((
+                    Self::recased(&word.replace(' ', space)),
+                    Agent::Claude,
+                    word,
+                ));
+            }
+        }
+        for word in ["servers", "timeout"] {
+            names.push((Self::recased(word), Agent::OpenCode, word));
+        }
+        names
+    }
+
+    /// Every name an agent uses for one of its own without refusing a
+    /// server's, beside the agent and the name as it spells it, in a case
+    /// drawn afresh.
+    pub fn claimed() -> Vec<(String, Agent, &'static str)> {
+        vec![(
+            Self::recased("anthropic-skills"),
+            Agent::Claude,
+            "anthropic-skills",
+        )]
+    }
+
+    /// Names that are near one an agent keeps for itself and are none,
+    /// each beside why.
+    pub fn near_reserved() -> Vec<(&'static str, String)> {
+        vec![
+            ("more after it", String::from("workspaces")),
+            ("less of it", String::from("claude")),
+            ("a digit after it", String::from("claude-preview-2")),
+            (
+                "a hyphen written as an underscore in a name with no space",
+                String::from("claude_in_chrome"),
+            ),
+            (
+                "two separators for one space",
+                String::from("claude__preview"),
+            ),
+            ("another word", String::from("claude-desktop")),
+        ]
+    }
+
+    /// `name` in another case, its first letter's turned: the name a
+    /// definition beside `name`'s clashes with. `name` holds a letter.
+    pub fn twin(name: &str) -> String {
+        let at = name
+            .find(|c: char| c.is_ascii_alphabetic())
+            .unwrap_or_else(|| panic!("{name} holds no letter to turn"));
+        let mut twin = name.to_owned();
+        let letter = twin.remove(at);
+        let turned = if letter.is_ascii_uppercase() {
+            letter.to_ascii_lowercase()
+        } else {
+            letter.to_ascii_uppercase()
+        };
+        twin.insert(at, turned);
+        twin
+    }
+
+    /// `word`, each of its letters in a case drawn afresh.
+    fn recased(word: &str) -> String {
+        word.chars()
+            .map(|c| {
+                if random::chance() {
+                    c.to_ascii_uppercase()
+                } else {
+                    c.to_ascii_lowercase()
+                }
+            })
+            .collect()
     }
 
     /// `name`, saying it is for `description`, reached over `transport`
@@ -201,6 +340,50 @@ impl McpMother {
         )
     }
 
+    /// The program of [`stdio`](Self::stdio) with no folder to start in:
+    /// one every agent is given whole.
+    pub fn without_cwd(name: &str) -> String {
+        Self::stdio(name).replacen("cwd = \".\"\n", "", 1)
+    }
+
+    /// The program of [`stdio`](Self::stdio), its argument a secret: what
+    /// Codex, with no interpolation, cannot be given.
+    pub fn secret_argument(name: &str) -> String {
+        Self::stdio(name).replacen("kind = \"arg\"\n", "kind = \"arg\"\nsecret = true\n", 1)
+    }
+
+    /// The address of [`http`](Self::http), its supplied part a secret:
+    /// what Codex cannot be given inside a URL.
+    pub fn secret_in_url(name: &str) -> String {
+        Self::http(name).replacen(
+            "kind = \"url_var\"\n",
+            "kind = \"url_var\"\nsecret = true\n",
+            1,
+        )
+    }
+
+    /// The address of [`http`](Self::http), its secret header written
+    /// beside other text, under a scheme other than `Bearer`: what Codex
+    /// reads from no variable.
+    pub fn composite_secret_header(name: &str) -> String {
+        Self::http(name).replacen(
+            "Authorization = \"Bearer {token}\"",
+            "Authorization = \"Token {token}\"",
+            1,
+        )
+    }
+
+    /// The address of [`http`](Self::http), its secret header the whole
+    /// value of a header of its own: what Codex reads from a variable as it
+    /// reads `Authorization: Bearer`.
+    pub fn whole_secret_header(name: &str) -> String {
+        Self::http(name).replacen(
+            "Authorization = \"Bearer {token}\"",
+            "X-Api-Key = \"{token}\"",
+            1,
+        )
+    }
+
     /// The address of [`http`](Self::http), its supplied part written in
     /// its userinfo, `https://{tenant}@example.com/mcp`, where an address
     /// is kept with no credential: what `validate` says no agent is given.
@@ -241,6 +424,192 @@ impl McpMother {
              kind = \"arg\"\n",
             Self::stdio(name)
         )
+    }
+
+    /// The program of [`stdio`](Self::stdio), its secret input named with
+    /// a brace in it, `api}key`, written where it goes all the same, and
+    /// read from a variable with hyphens, which no agent can refer to:
+    /// what `validate` says no placeholder and no reference can be made of.
+    pub fn misnamed(name: &str) -> String {
+        Self::stdio(name)
+            .replacen("name = \"api_key\"", "name = \"api}key\"", 1)
+            .replacen("\"{api_key}\"", "\"{api}key}\"", 1)
+            .replacen("\"EXAMPLE_API_KEY\"", "\"EXAMPLE-API-KEY\"", 1)
+    }
+
+    /// The program of [`stdio`](Self::stdio), its secret input naming no
+    /// variable to be read from: what `validate` says no agent can be given
+    /// but as a value a file holds.
+    pub fn secret_without_variable(name: &str) -> String {
+        Self::stdio(name).replacen("env_var = \"EXAMPLE_API_KEY\"\n", "", 1)
+    }
+
+    /// A token of each shape a definition is refused for holding, beside
+    /// what it starts with, as `validate` says it.
+    ///
+    /// Drawn afresh every run and put together from parts at run time, so
+    /// that no file in the repository holds anything shaped like a real
+    /// credential, which a secret scanner would stop a push for, and a test
+    /// cannot pass on one value it happens to spell.
+    pub fn tokens() -> Vec<(&'static str, String)> {
+        let upper = random::LOWERCASE.to_ascii_uppercase();
+        let alphanumeric = format!("{}{upper}{}", random::LOWERCASE, random::DIGITS);
+        let drawn = |length: usize| random::drawn_from(&alphanumeric, length);
+        let github = random::pick(&["ghp", "gho", "ghu", "ghs", "ghr"]);
+        let github_prefix: &'static str = match github {
+            "ghp" => "ghp_",
+            "gho" => "gho_",
+            "ghu" => "ghu_",
+            "ghs" => "ghs_",
+            _ => "ghr_",
+        };
+        vec![
+            (github_prefix, format!("{github}_{}", drawn(36))),
+            (
+                "github_pat_",
+                format!("github_pat_{}_{}", drawn(22), drawn(59)),
+            ),
+            (
+                "sk-",
+                format!(
+                    "sk-{}{}{}",
+                    random::pick(&["", "proj-", "ant-api03-"]),
+                    random::drawn_from(random::DIGITS, 1),
+                    drawn(47)
+                ),
+            ),
+            (
+                "Bearer",
+                format!(
+                    "{} {}.{}",
+                    random::pick(&["Bearer", "bearer"]),
+                    drawn(24),
+                    drawn(16)
+                ),
+            ),
+        ]
+    }
+
+    /// One token of the shapes [`tokens`](Self::tokens) draws, beside what
+    /// it starts with.
+    pub fn token() -> (&'static str, String) {
+        random::pick(&Self::tokens())
+    }
+
+    /// `name`'s definition holding `token` as it is, written where `place`
+    /// says (`args`, `env`, `headers`, `url`, or `userinfo`, the user of
+    /// the address; `env_var`, pasted where a secret input's variable is
+    /// named; or `extras`, in a table of Claude's, and `extras_args`, in an
+    /// array of Codex's), beside where `validate` says it is.
+    pub fn with_literal(name: &str, place: &str, token: &str) -> (String, String) {
+        let quoted = toml::Value::String(token.to_owned()).to_string();
+        match place {
+            "args" => (
+                Self::stdio(name).replacen(
+                    "\"{workspace}\"]",
+                    &format!("\"{{workspace}}\", {quoted}]"),
+                    1,
+                ),
+                String::from("transport.args[4]"),
+            ),
+            "env" => (
+                Self::stdio(name).replacen(
+                    "LOG_LEVEL = \"info\"",
+                    &format!("LOG_LEVEL = \"info\", SERVICE_KEY = {quoted}"),
+                    1,
+                ),
+                String::from("transport.env.SERVICE_KEY"),
+            ),
+            "headers" => (
+                Self::http(name).replacen(
+                    "Authorization = \"Bearer {token}\"",
+                    &format!("Authorization = \"Bearer {{token}}\", X-Service-Key = {quoted}"),
+                    1,
+                ),
+                String::from("transport.headers.X-Service-Key"),
+            ),
+            "url" => (
+                Self::http(name).replacen(
+                    "/mcp\"",
+                    &format!("/mcp?key={}\"", &quoted[1..quoted.len() - 1]),
+                    1,
+                ),
+                String::from("transport.url"),
+            ),
+            "userinfo" => (
+                Self::http(name).replacen(
+                    "https://{tenant}",
+                    &format!("https://{}@{{tenant}}", &quoted[1..quoted.len() - 1]),
+                    1,
+                ),
+                String::from("transport.url"),
+            ),
+            "env_var" => (
+                Self::stdio(name).replacen(
+                    "env_var = \"EXAMPLE_API_KEY\"",
+                    &format!("env_var = {quoted}"),
+                    1,
+                ),
+                String::from("inputs[0].env_var"),
+            ),
+            "extras" => (
+                Self::stdio(name).replacen(
+                    "timeout = 30000\n",
+                    &format!("timeout = 30000\nheaders = {{ X-Service-Key = {quoted} }}\n"),
+                    1,
+                ),
+                String::from("extras.claude.headers.X-Service-Key"),
+            ),
+            "extras_args" => (
+                format!(
+                    "{}\n[extras.codex]\nargs = [\"--key\", {quoted}]\n",
+                    Self::stdio(name)
+                ),
+                String::from("extras.codex.args[1]"),
+            ),
+            other => panic!("{other} is no place a definition writes a value"),
+        }
+    }
+
+    /// Texts that start the way a token does and are none, each beside
+    /// why: what `validate` lets a definition hold. Each is judged with
+    /// `{token}` an input's placeholder.
+    pub fn not_tokens() -> Vec<(&'static str, String)> {
+        let alphanumeric = format!("{}{}", random::LOWERCASE, random::DIGITS);
+        vec![
+            ("a placeholder after Bearer", String::from("Bearer {token}")),
+            (
+                "a reference in Claude's own syntax",
+                String::from("Bearer ${GITHUB_TOKEN}"),
+            ),
+            (
+                "a variable a shell expands",
+                String::from("Bearer $GITHUB_TOKEN"),
+            ),
+            (
+                "a scheme with nothing after it",
+                String::from("--auth-scheme=Bearer"),
+            ),
+            ("a short word after a scheme", String::from("Bearer abc")),
+            (
+                "a prefix inside a word",
+                format!("risk-{}", random::drawn_from(&alphanumeric, 30)),
+            ),
+            (
+                "a package named with no digit",
+                String::from("sk-mcp-server-for-every-tracker"),
+            ),
+            (
+                "a prefix cut short",
+                format!("ghp_{}", random::drawn_from(&alphanumeric, 12)),
+            ),
+            (
+                "a prefix in capitals GitHub never gives",
+                format!("GHP_{}", random::drawn_from(&alphanumeric, 36)),
+            ),
+            ("a path", String::from("/usr/local/share/sk-tools")),
+            ("a token made of an input", String::from("ghp_{token}")),
+        ]
     }
 
     /// What every definition opens with: its format, its name and what it

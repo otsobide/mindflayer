@@ -2979,10 +2979,10 @@ env_var = "GITHUB_TOKEN"
 | Key | | Holds |
 |---|---|---|
 | `format` | required | `1`; a definition written in a newer format is refused, and said to be |
-| `name` | required | the name agents will key it by, the same as its file's |
+| `name` | required | the name agents will key it by, the same as its file's: letters, digits, hyphens and underscores, none an agent keeps for itself, and no other beside it that differs only by case |
 | `description` | required | what it is for; its first line is what a listing shows |
 | `transport` | required | `type = "stdio"`, a program, with `command`, and optionally `args`, `env` and `cwd`; or `type = "http"` or `"sse"`, an address, with `url` and optionally `headers` |
-| `inputs` | optional | what somebody supplies when the agent starts the server: each a `name`, a `kind` (`env`, `header`, `arg` or `url_var`), and optionally a `description`, `required`, `secret` and the `env_var` it is read from |
+| `inputs` | optional | what somebody supplies when the agent starts the server: each a `name` (letters, digits, hyphens and underscores), a `kind` (`env`, `header`, `arg` or `url_var`), and optionally a `description`, `required`, `secret` and the `env_var` it is read from, which a secret has to name |
 | `provenance` | optional | `registry`, `upstream_name`, `version` and `fetched_at`, for one imported from a registry |
 | `extras` | optional | a table for each agent, `[extras.claude]`, passed on to its entry as it is |
 
@@ -2993,6 +2993,15 @@ where it goes, `{token}`, in a value of `env` for an `env` input, one of
 starts the server. A brace naming no input is left as it is, so an argument
 such as `{"debug":true}` means what it says. Any other key is carried along
 untouched.
+
+A secret is never written in the file either: an input with `secret = true`
+names the `env_var` it is read from, and each agent's entry will refer to
+that variable in the agent's own way. A value of `args`, `env`, `headers` or
+`url`, or of `extras`, holding what looks like a token (a `Bearer` value, or
+one starting `sk-`, `ghp_` or `github_pat_`) outside an input's braces is
+refused, and so is one written as an `env_var`, where the variable's name
+goes: each is said by where it is and what it starts with, never by the
+token.
 
 They are listed beside the skills and rules, and narrowed with `mcp`:
 
@@ -3008,7 +3017,8 @@ github  GitHub's issues, pull requests and code
 sentry  Sentry's issues and releases
 ```
 
-`show` says what one is for, then prints its file:
+`show` says what one is for, how each agent will be given it, then prints
+its file:
 
 ```
 $ mindweaver show github
@@ -3016,6 +3026,11 @@ github
 /home/you/Projects/.mindweaver/library/mcp/github.toml
 
 GitHub's issues, pull requests and code
+
+agents:
+  claude: given it whole
+  codex: given it whole
+  opencode: given it whole
 
 format = 1
 name = "github"
@@ -3047,6 +3062,64 @@ sentry: 1 problem
   - input `token` is used nowhere: an input of kind `arg` is written `{token}` in one of the transport's `args`
 
 2 MCP servers checked, 1 invalid
+```
+
+And to the names agents take and the secrets a file holds: a name an agent
+keeps for itself, in any case (Claude Code's `workspace`,
+`claude-in-chrome`, `computer-use`, and `Claude Preview` or `Claude Browser`
+spelled `claude_preview`, `claude-preview` or `claudepreview`; OpenCode's
+`servers` and `timeout`), two names beside each other that differ only by
+case, which a file system that folds case holds as one file, a secret
+naming no `env_var`, and a token written as it is are each a problem;
+`anthropic-skills`, which Claude Code gives Anthropic's own skills, is only
+a warning. A copy of `github.toml` written as `computer-use.toml`, its
+`name` changed with it:
+
+```
+$ mindweaver validate mcp:computer-use
+computer-use: 1 problem
+  - `computer-use` is a name Claude Code keeps for a server of its own (`computer-use`), so no server of yours can be keyed by it
+
+1 MCP server checked, 1 invalid
+```
+
+Not every agent can be given every server. Codex has no way to read a
+secret argument, a secret inside a URL, or a secret header but its whole
+value or `Authorization: Bearer` and the token; neither Codex nor
+OpenCode takes a server over sse; and Claude starts a program in no folder
+it is told, so its `cwd` is left out there. `show` says so of each, and
+`--json` says it by a code under `expressibility`. The server is no less
+valid for it, and each agent that can be given it will be: `notion.toml`,
+reached over sse, reaches Claude alone:
+
+```
+$ mindweaver show notion
+notion
+/home/you/Projects/.mindweaver/library/mcp/notion.toml
+
+Notion's pages and databases
+
+agents:
+  claude: given it whole
+  codex: given none of it:
+    - the sse transport, server-sent events, is not one taken there
+  opencode: given none of it:
+    - the sse transport, server-sent events, is not one taken there
+
+format = 1
+name = "notion"
+description = "Notion's pages and databases"
+
+[transport]
+type = "sse"
+url = "https://mcp.notion.com/sse"
+headers = { Authorization = "Bearer {token}" }
+
+[[inputs]]
+name = "token"
+kind = "header"
+secret = true
+env_var = "NOTION_TOKEN"
 ```
 
 `mindweaver rename mcp:github octocat` moves the file and rewrites its `name`

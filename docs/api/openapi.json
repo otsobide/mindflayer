@@ -463,6 +463,14 @@
           "input_repeated",
           "input_unreferenced",
           "input_in_userinfo",
+          "input_name_malformed",
+          "env_var_malformed",
+          "secret_without_env_var",
+          "secret_literal",
+          "mcp_name_not_a_key",
+          "mcp_name_reserved",
+          "mcp_name_claimed",
+          "mcp_name_case_clash",
           "browse_missing",
           "browse_not_a_folder",
           "browse_unlisted",
@@ -634,6 +642,11 @@
           "mcp_format_too_new",
           "mcp_format_unknown",
           "mcp_malformed",
+          "secret_in_argument",
+          "secret_in_url",
+          "secret_header_composite",
+          "sse_unsupported",
+          "cwd_unsupported",
           "migrate_refused",
           "migrate_marker_backup_failed",
           "migrate_move_failed",
@@ -5238,6 +5251,218 @@
             "required": [
               "code",
               "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "input_name_malformed"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "env_var_malformed"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "variable": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "variable",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "secret_without_env_var"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "code": {
+                "const": "secret_literal"
+              },
+              "message": {
+                "type": "string"
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "at",
+              "prefix",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "mcp_name_not_a_key"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "code": {
+                "const": "mcp_name_reserved"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "reserved": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "agent",
+              "reserved",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "claimed": {
+                "type": "string"
+              },
+              "code": {
+                "const": "mcp_name_claimed"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "agent",
+              "claimed",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "mcp_name_case_clash"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "twin": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "twin",
               "warning",
               "message"
             ],

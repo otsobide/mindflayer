@@ -20,6 +20,7 @@ use serde::{Serialize, Serializer};
 use crate::artifact::{Artifact, ArtifactError, Declared, ValidationIssue};
 use crate::catalog::DiscoveryFailure;
 use crate::kind::Kind;
+use crate::mcp::Expressibility;
 use crate::paths;
 use crate::value::ArtifactName;
 
@@ -68,6 +69,10 @@ pub struct Shown {
     pub metadata: Option<Vec<(String, String)>>,
     /// The files a rule is about, as glob patterns, when it says.
     pub paths: Option<Vec<String>>,
+    /// What each agent cannot be given of an MCP server's definition, every
+    /// agent's in report order ([`crate::mcp::McpDefinition::expressibility`]):
+    /// none for a skill or a rule, which every agent reads as it is.
+    pub expressibility: Option<Vec<Expressibility>>,
     /// What follows the front matter, as the file has it now.
     pub body: String,
 }
@@ -91,6 +96,7 @@ impl Shown {
             compatibility: None,
             metadata: None,
             paths: None,
+            expressibility: None,
             body,
         };
         match artifact.declared() {
@@ -103,8 +109,11 @@ impl Shown {
             Declared::Rule(manifest) => {
                 shown.paths = manifest.paths.stated().cloned();
             }
-            // Its transport and inputs are in the file, which is its body.
-            Declared::Mcp(_) => {}
+            // Its transport and inputs are in the file, which is its body,
+            // and what each agent cannot be given of them is core's to say.
+            Declared::Mcp(definition) => {
+                shown.expressibility = Some(definition.expressibility());
+            }
         }
         Ok(shown)
     }

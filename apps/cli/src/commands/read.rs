@@ -536,11 +536,31 @@ pub(crate) fn show(
                     let _ = writeln!(text, "{}", parts.join("\n"));
                 }
             }
-            // What it says of itself is its description; the transport and
+            // What it says of itself is its description, then what each
+            // agent cannot be given of it, as core says it; the transport and
             // the inputs are the file below it, which is its body.
             Kind::Mcp => {
                 let _ = writeln!(text, "{}", shown.description.as_deref().unwrap_or(""));
                 let _ = writeln!(text);
+                if let Some(agents) = &shown.expressibility {
+                    text.push_str("agents:\n");
+                    for one in agents {
+                        // One thing refused and the agent is given none of
+                        // it, whatever else would be left out.
+                        let verdict = if !one.refused.is_empty() {
+                            "given none of it:"
+                        } else if !one.dropped.is_empty() {
+                            "given it without what it has no place for:"
+                        } else {
+                            "given it whole"
+                        };
+                        let _ = writeln!(text, "  {}: {verdict}", one.agent);
+                        for said in one.refused.iter().chain(&one.dropped) {
+                            let _ = writeln!(text, "    - {}", printable(&said.message));
+                        }
+                    }
+                    let _ = writeln!(text);
+                }
             }
         }
         // Blank lines trimmed at both ends, not indentation: the body usually

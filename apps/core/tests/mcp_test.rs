@@ -17,8 +17,9 @@ use mindweaver_core::mother::{
 };
 use mindweaver_core::reading::Shown;
 use mindweaver_core::{
-    create, Catalog, CreateError, Declared, Directories, DiscoveryFailure, Kind, LifecycleError,
-    MarkerFile, MindProject, Reference, Share, ValidationIssue, WeaverWorkspace, WorkspaceError,
+    create, Agent, Catalog, CreateError, Declared, Directories, DiscoveryFailure, Kind,
+    LifecycleError, MarkerFile, MindProject, Reference, Share, ValidationIssue, WeaverWorkspace,
+    WorkspaceError,
 };
 use tempfile::TempDir;
 
@@ -366,7 +367,13 @@ fn validate_holds_a_server_to_its_file_its_name_rule_and_its_format() {
         &folder,
         &[
             ("gh.toml", &McpMother::stdio("github")),
-            ("Bad_Name.toml", &McpMother::sse("Bad_Name")),
+            ("bad.name.toml", &McpMother::sse("bad.name")),
+            ("Workspace.toml", &McpMother::http("Workspace")),
+            (
+                "anthropic-skills.toml",
+                &McpMother::stdio("anthropic-skills"),
+            ),
+            ("My_Server.toml", &McpMother::stdio("My_Server")),
             ("bare.toml", &McpMother::incomplete("bare", "http")),
         ],
     );
@@ -388,12 +395,37 @@ fn validate_holds_a_server_to_its_file_its_name_rule_and_its_format() {
             file: String::from("gh.toml"),
         }]
     );
+    // Held to the keys an agent takes, not to kebab-case: capitals and
+    // underscores are a server's, a dot is no agent's.
+    assert_eq!(issues("My_Server"), []);
     assert_eq!(
-        issues("Bad_Name"),
-        [ValidationIssue::NameNotKebabCase {
-            segment: String::from("Bad_Name"),
+        issues("bad.name"),
+        [ValidationIssue::McpNameNotAKey {
+            name: String::from("bad.name"),
         }]
     );
+    // A name an agent keeps for itself is refused in any case, and one it
+    // uses for its own only warned of.
+    assert_eq!(
+        issues("Workspace"),
+        [ValidationIssue::McpNameReserved {
+            name: String::from("Workspace"),
+            agent: Agent::Claude,
+            reserved: String::from("workspace"),
+        }]
+    );
+    let claimed = issues("anthropic-skills");
+    assert!(
+        matches!(
+            &claimed[..],
+            [ValidationIssue::McpNameClaimed {
+                agent: Agent::Claude,
+                ..
+            }]
+        ),
+        "{claimed:?}"
+    );
+    assert!(claimed[0].is_warning());
     assert_eq!(
         issues("bare"),
         [ValidationIssue::TransportIncomplete {
@@ -513,6 +545,121 @@ fn rename_moves_the_file_and_rewrites_its_name_keeping_every_other_byte() {
 }
 
 #[test]
+fn rename_holds_the_new_name_to_the_keys_an_agent_takes_and_to_what_none_keeps() {
+    let (_dir, project, folder) = authoring();
+    write(&folder, &[("github.toml", &McpMother::stdio("github"))]);
+    let github = lifecycle::find(&project, &Reference::parse("mcp:github")).unwrap();
+
+    for (why, to) in McpMother::unwritable() {
+        let refused = lifecycle::rename(None, &project, &github, &to).unwrap_err();
+
+        assert_eq!(refused.code(), "rename_name_unfit", "{why}: {refused}");
+        assert!(folder.join("github.toml").is_file(), "{why}");
+    }
+    // Wider than kebab-case, and a name only warned of is no reason to
+    // refuse one.
+    let wide = McpMother::name();
+    let renamed = lifecycle::rename(None, &project, &github, &wide).unwrap();
+    assert_eq!(renamed.target.name, wide.as_str());
+    assert!(folder.join(format!("{wide}.toml")).is_file(), "{wide}");
+    let claimed = lifecycle::rename(None, &project, &renamed.target, "anthropic-skills").unwrap();
+    assert_eq!(claimed.target.name, "anthropic-skills");
+    assert!(folder.join("anthropic-skills.toml").is_file());
+}
+
+#[test]
+fn two_servers_whose_names_differ_only_by_case_clash_each_with_the_other() {
+    let (_dir, project, folder) = authoring();
+    let name = McpMother::name();
+    let twin = McpMother::twin(&name);
+    write(
+        &folder,
+        &[
+            (&format!("{name}.toml"), &McpMother::stdio(&name)),
+            (&format!("{twin}.toml"), &McpMother::http(&twin)),
+            ("linear.toml", &McpMother::sse("linear")),
+        ],
+    );
+
+    let catalog = Catalog::discover_kinds(std::slice::from_ref(&project), &[Kind::Mcp]);
+    let issues = |of: &str| {
+        catalog
+            .artifacts()
+            .iter()
+            .find(|artifact| artifact.name() == of)
+            .unwrap_or_else(|| panic!("no {of}"))
+            .validate()
+    };
+
+    assert_eq!(
+        issues(&name),
+        [ValidationIssue::McpNameCaseClash {
+            name: name.clone(),
+            twin: twin.clone(),
+        }]
+    );
+    assert_eq!(
+        issues(&twin),
+        [ValidationIssue::McpNameCaseClash {
+            name: twin.clone(),
+            twin: name.clone(),
+        }]
+    );
+    assert!(!issues(&name)[0].is_warning());
+    assert_eq!(issues("linear"), []);
+}
+
+#[test]
+fn no_change_leaves_a_server_beside_one_named_as_it_is_in_another_case() {
+    let (_dir, project, folder) = authoring();
+    write(
+        &folder,
+        &[
+            ("github.toml", &McpMother::stdio("github")),
+            ("linear.toml", &McpMother::http("linear")),
+        ],
+    );
+    let linear = lifecycle::find(&project, &Reference::parse("mcp:linear")).unwrap();
+
+    let renamed = lifecycle::rename(None, &project, &linear, "GitHub").unwrap_err();
+    assert_eq!(renamed.code(), "rename_name_unfit", "{renamed}");
+    assert!(
+        renamed.to_string().contains("differ only by case"),
+        "{renamed}"
+    );
+    assert!(folder.join("linear.toml").is_file());
+
+    // A server renamed only in case is beside no other of its name.
+    let github = lifecycle::find(&project, &Reference::parse("mcp:github")).unwrap();
+    let recased = lifecycle::rename(None, &project, &github, "GitHub").unwrap();
+    assert_eq!(recased.target.name, "GitHub");
+
+    // Contents given whole are held to what sits beside them, as
+    // `validate` holds them once written, and so is what a front end is
+    // told of them before.
+    write(&folder, &[("LINEAR.toml", &McpMother::sse("LINEAR"))]);
+    let linear = lifecycle::find(&project, &Reference::parse("mcp:linear")).unwrap();
+    let text = McpMother::http("linear");
+    let edited =
+        lifecycle::replace_contents(None, &project, &linear, text.as_bytes(), None).unwrap_err();
+    assert_eq!(edited.code(), "edit_contents_unfit", "{edited}");
+    let judged =
+        mindweaver_core::draft::edited(None, &project, &Reference::parse("mcp:linear"), &text);
+    assert_eq!(
+        judged.refused.map(|refused| refused.code),
+        Some("edit_contents_unfit")
+    );
+    assert!(
+        judged
+            .issues
+            .iter()
+            .any(|issue| issue.code() == "mcp_name_case_clash"),
+        "{:?}",
+        judged.issues
+    );
+}
+
+#[test]
 fn rename_refuses_a_route_a_server_it_cannot_read_and_a_name_taken() {
     let (_dir, project, folder) = authoring();
     write(
@@ -585,6 +732,37 @@ fn contents_given_whole_are_held_to_the_format_and_to_the_files_name() {
         fs::read_to_string(folder.join("github.toml")).unwrap(),
         http
     );
+}
+
+#[test]
+fn a_token_pasted_for_a_variable_or_written_in_the_extras_is_written_by_no_change() {
+    let (_dir, project, folder) = authoring();
+    let (_, token) = McpMother::token();
+    let github = McpMother::stdio("github");
+    for place in ["env_var", "extras", "extras_args"] {
+        let (leaky, at) = McpMother::with_literal("leaky", place, &token);
+        write(&folder, &[("github.toml", &github), ("leaky.toml", &leaky)]);
+        let clean = lifecycle::find(&project, &Reference::parse("mcp:github")).unwrap();
+        let held = lifecycle::find(&project, &Reference::parse("mcp:leaky")).unwrap();
+        let (contents, _) = McpMother::with_literal("github", place, &token);
+
+        let edited = lifecycle::replace_contents(None, &project, &clean, contents.as_bytes(), None)
+            .unwrap_err();
+        let renamed = lifecycle::rename(None, &project, &held, "sealed").unwrap_err();
+
+        assert_eq!(edited.code(), "edit_contents_unfit", "{place}: {edited}");
+        assert_eq!(renamed.code(), "rename_unfit", "{place}: {renamed}");
+        assert!(
+            renamed.to_string().contains(&format!("`{at}`")),
+            "{renamed}"
+        );
+        assert_eq!(
+            fs::read_to_string(folder.join("github.toml")).unwrap(),
+            github,
+            "{place}"
+        );
+        assert!(folder.join("leaky.toml").is_file() && !folder.join("sealed.toml").exists());
+    }
 }
 
 // ---------------------------------------------------------------------------
