@@ -258,6 +258,8 @@ export type CoreCode =
   | "secret_in_argument"
   | "secret_in_url"
   | "secret_header_composite"
+  | "secret_env_composite"
+  | "secret_env_renamed"
   | "sse_unsupported"
   | "cwd_unsupported"
   | "variable_blanked"

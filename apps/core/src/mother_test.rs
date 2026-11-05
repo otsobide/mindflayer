@@ -593,6 +593,17 @@ fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so()
         ),
         (McpMother::whole_secret_header(&name), Agent::Codex, None),
         (
+            McpMother::stdio(&name),
+            Agent::Codex,
+            Some("secret_env_renamed"),
+        ),
+        (McpMother::whole_secret_env(&name), Agent::Codex, None),
+        (
+            McpMother::composite_secret_env(&name),
+            Agent::Codex,
+            Some("secret_env_composite"),
+        ),
+        (
             McpMother::sse(&name),
             Agent::OpenCode,
             Some("sse_unsupported"),

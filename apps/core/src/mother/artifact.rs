@@ -252,8 +252,9 @@ impl McpMother {
         }
     }
 
-    /// A program the agent starts: an environment holding a secret and a
-    /// setting, an argument somebody supplies, and extras for Claude.
+    /// A program the agent starts: an environment holding a secret, under a
+    /// name of its own rather than its variable's, and a setting, an
+    /// argument somebody supplies, and extras for Claude.
     pub fn stdio(name: &str) -> String {
         Self::program(&Self::head(name, &SkillMother::description()))
     }
@@ -344,29 +345,61 @@ impl McpMother {
     }
 
     /// The program of [`stdio`](Self::stdio) with no folder to start in:
-    /// one every agent is given whole.
+    /// one Claude and OpenCode are given whole, and Codex, which passes a
+    /// variable on only under its own name, none of.
     pub fn without_cwd(name: &str) -> String {
         Self::stdio(name).replacen("cwd = \".\"\n", "", 1)
     }
 
-    /// The program of [`stdio`](Self::stdio), its argument a secret: what
-    /// Codex, with no interpolation, cannot be given.
+    /// The program of [`whole_secret_env`](Self::whole_secret_env), its
+    /// argument a secret: what Codex, with no interpolation, cannot be
+    /// given, and nothing else of the program.
     pub fn secret_argument(name: &str) -> String {
-        Self::stdio(name).replacen("kind = \"arg\"\n", "kind = \"arg\"\nsecret = true\n", 1)
+        Self::whole_secret_env(name).replacen(
+            "kind = \"arg\"\n",
+            "kind = \"arg\"\nsecret = true\n",
+            1,
+        )
     }
 
-    /// The program of [`stdio`](Self::stdio), its argument no secret and
-    /// read from no variable: a value somebody gives, which a definition
-    /// may leave unsaid and no entry can refer to.
+    /// The program of [`stdio`](Self::stdio), its secret the whole value of
+    /// the environment variable named as the one it is read from is: what
+    /// Codex passes on to a program (`env_vars`).
+    pub fn whole_secret_env(name: &str) -> String {
+        Self::stdio(name).replacen(
+            "API_KEY = \"{api_key}\"",
+            "EXAMPLE_API_KEY = \"{api_key}\"",
+            1,
+        )
+    }
+
+    /// The program of [`whole_secret_env`](Self::whole_secret_env), its
+    /// secret written beside other text: what Codex passes on no variable
+    /// for.
+    pub fn composite_secret_env(name: &str) -> String {
+        Self::whole_secret_env(name).replacen("\"{api_key}\"", "\"key={api_key}\"", 1)
+    }
+
+    /// The program of [`whole_secret_env`](Self::whole_secret_env), its
+    /// argument no secret and read from no variable: a value somebody
+    /// gives, which a definition may leave unsaid and no entry can refer
+    /// to.
     pub fn unread_input(name: &str) -> String {
-        Self::stdio(name).replacen("env_var = \"EXAMPLE_WORKSPACE\"\n", "", 1)
+        Self::whole_secret_env(name).replacen("env_var = \"EXAMPLE_WORKSPACE\"\n", "", 1)
     }
 
-    /// The program of [`stdio`](Self::stdio) with no folder to start in,
-    /// its extras for Claude `extras`, the lines of a TOML table, in place
-    /// of the timeout it holds.
+    /// The program of [`whole_secret_env`](Self::whole_secret_env) with no
+    /// folder to start in, its extras for Claude `extras`, the lines of a
+    /// TOML table, in place of the timeout it holds.
     pub fn with_claude_extras(name: &str, extras: &str) -> String {
-        Self::without_cwd(name).replacen("timeout = 30000\n", extras, 1)
+        Self::whole_without_cwd(name).replacen("timeout = 30000\n", extras, 1)
+    }
+
+    /// The program of [`whole_secret_env`](Self::whole_secret_env) with no
+    /// folder to start in: one every agent is given whole, for a shape to
+    /// be written into that is the only thing an agent cannot be given.
+    fn whole_without_cwd(name: &str) -> String {
+        Self::whole_secret_env(name).replacen("cwd = \".\"\n", "", 1)
     }
 
     /// The address of [`http`](Self::http), its supplied part a secret:
@@ -530,9 +563,10 @@ impl McpMother {
     }
 
     /// Texts that open no reference Claude reads as they are, each beside
-    /// why, written in a value of the program of
-    /// [`without_cwd`](Self::without_cwd) where its placeholders are
-    /// written as references, its `args` or its `env`: one stands beside
+    /// why, written in a value of the program
+    /// [`with_text`](Self::with_text) writes them in, where its
+    /// placeholders are written as references, its `args` or its `env`:
+    /// one stands beside
     /// the placeholder of its input `workspace`.
     pub fn not_references() -> Vec<(&'static str, String)> {
         vec![
@@ -548,13 +582,14 @@ impl McpMother {
 
     /// `name`'s definition holding `text` as it is, written where `place`
     /// says (`command`, `args` or `env` of the program of
-    /// [`without_cwd`](Self::without_cwd), or `url` or `headers` of the
-    /// address of [`http`](Self::http)), beside where `show` says it is.
+    /// [`whole_secret_env`](Self::whole_secret_env) with no folder to start
+    /// in, or `url` or `headers` of the address of [`http`](Self::http)),
+    /// beside where `show` says it is.
     pub fn with_text(name: &str, place: &str, text: &str) -> (String, String) {
         let quoted = toml::Value::String(text.to_owned()).to_string();
         match place {
             "command" => (
-                Self::without_cwd(name).replacen(
+                Self::whole_without_cwd(name).replacen(
                     "command = \"npx\"",
                     &format!("command = {quoted}"),
                     1,
@@ -562,7 +597,7 @@ impl McpMother {
                 String::from("transport.command"),
             ),
             "args" => (
-                Self::without_cwd(name).replacen(
+                Self::whole_without_cwd(name).replacen(
                     "\"{workspace}\"]",
                     &format!("\"{{workspace}}\", {quoted}]"),
                     1,
@@ -570,7 +605,7 @@ impl McpMother {
                 String::from("transport.args[4]"),
             ),
             "env" => (
-                Self::without_cwd(name).replacen(
+                Self::whole_without_cwd(name).replacen(
                     "LOG_LEVEL = \"info\"",
                     &format!("LOG_LEVEL = {quoted}"),
                     1,

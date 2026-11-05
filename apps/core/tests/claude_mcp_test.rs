@@ -112,7 +112,7 @@ fn a_secret_argument_is_written_as_a_reference_in_args() {
       "command": "npx",
       "args": ["-y", "@example/server", "--workspace", "${{EXAMPLE_WORKSPACE}}"],
       "env": {{
-        "API_KEY": "${{EXAMPLE_API_KEY}}",
+        "EXAMPLE_API_KEY": "${{EXAMPLE_API_KEY}}",
         "LOG_LEVEL": "info"
       }},
       "timeout": 30000
