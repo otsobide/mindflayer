@@ -55,8 +55,9 @@ use crate::value::{ArtifactName, ContentHash, Origin};
 use crate::workspace::{MindProject, WeaverWorkspace};
 
 /// Why an agent's config file could not be read for the MCP servers it
-/// holds: what its renderer says, as it would say it refusing to write into
-/// the file, with the renderer's code.
+/// holds, or an entry written into it or taken out of it: what its renderer
+/// says, as it would say it refusing to write into the file, with the
+/// renderer's code.
 #[derive(Debug, Error)]
 pub enum ConfigUnread {
     #[error(transparent)]
@@ -75,9 +76,9 @@ codes!(ConfigUnread {} carried {
 
 /// One server an agent's config file holds.
 #[derive(Debug, Clone)]
-struct Held {
+pub(super) struct Held {
     /// The key it is under.
-    name: String,
+    pub name: String,
     /// The fingerprint of what the key holds.
     fingerprint: ContentHash,
     /// For OpenCode, the shape it stands in, which what is offered is
@@ -89,7 +90,7 @@ struct Held {
 /// of MCP servers, each by its key, as its renderer reads the file: none
 /// when there is no file there, or `route` names no file the agent reads
 /// its servers from, which can be only a record somebody wrote by hand.
-fn held(root: &Path, agent: Agent, route: &str) -> Result<Vec<Held>, ConfigUnread> {
+pub(super) fn held(root: &Path, agent: Agent, route: &str) -> Result<Vec<Held>, ConfigUnread> {
     // Matched on the agent with every one named in the last arm, so an
     // agent added says how its file is read before it compiles.
     let servers: Vec<(String, Option<Shape>, crate::config_entry::Value)> = match agent {

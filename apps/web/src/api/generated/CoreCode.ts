@@ -194,6 +194,7 @@ export type CoreCode =
   | "rule_section_unread"
   | "rules_block_unedited"
   | "not_installable"
+  | "mcp_unreached"
   | "install_unfit"
   | "install_overlaps"
   | "kept_by_a_load"

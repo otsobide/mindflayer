@@ -463,7 +463,9 @@ pub fn apply(
             // Matched on the kind, so a third one has to say how it is
             // written.
             let rendered = match update.kind {
-                // A definition's is refused as its install is, saying why.
+                // A server's entries, one installation's in several
+                // files, are written through the install's own body, as a
+                // skill's copies are.
                 Kind::Skill | Kind::Mcp => false,
                 Kind::Rule => rendered_together,
             };
