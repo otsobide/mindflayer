@@ -54,7 +54,7 @@ use thiserror::Error;
 use crate::agent::Agent;
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
-use crate::config_entry::{ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
+use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
 use crate::mcp::{Inexpressible, McpDefinition, Transport, TransportType};
 use crate::value::{ArtifactName, InputName, VariableName};
 
@@ -358,15 +358,7 @@ fn loose(file: &ConfigFile, error: FileError) -> ClaudeMcpError {
 /// Whether `document` holds nothing but the server keyed `name`, or not
 /// even that: nothing a person wrote beside an entry of Mindweaver's.
 fn holds_only(document: &Value, name: &str) -> bool {
-    let Value::Object(members) = document else {
-        return false;
-    };
-    members.iter().all(|(key, value)| match value {
-        Value::Object(servers) if key == SERVERS => {
-            servers.iter().all(|(server, _)| server == name)
-        }
-        _ => false,
-    })
+    config_entry::holds_only(document, &[SERVERS, name])
 }
 
 /// `text` with each placeholder of an input in `read` written as Claude's

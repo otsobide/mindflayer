@@ -270,6 +270,28 @@ pub fn loose_json(text: &str) -> bool {
     json::loose(text)
 }
 
+/// Whether `document` holds nothing but the entry at `key`, or not even
+/// that: each object on the way to it holding the next key of the path
+/// alone, and the entry whatever it holds.
+///
+/// What a caller that made a file asks before it takes the file away with
+/// the last entry it wrote ([`ConfigFile::take`]), in every format alike:
+/// `{"mcpServers": {}}` holds nothing beside `mcpServers.github`, and a key
+/// somebody wrote anywhere on the way is something. Still the caller's to
+/// ask, as which documents are empty is, since a file that keeps settings
+/// of its own beside its entries is something whatever it holds.
+pub fn holds_only(document: &Value, key: &[&str]) -> bool {
+    let Some((first, rest)) = key.split_first() else {
+        return true;
+    };
+    let Value::Object(members) = document else {
+        return false;
+    };
+    members
+        .iter()
+        .all(|(name, value)| name == first && holds_only(value, rest))
+}
+
 /// The value at `key` in `document`, `None` when a key on the way is missing.
 fn lookup<'a>(document: &'a Value, key: &[&str]) -> Result<Option<&'a Value>, EntryError> {
     let mut current = document;
