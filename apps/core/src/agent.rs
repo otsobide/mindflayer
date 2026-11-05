@@ -1,7 +1,8 @@
 //! What core knows about the agents that read what Mindweaver manages.
 //!
 //! Which agents there are ([`Agent`]), where each kind goes in a project for
-//! each of them to read it ([`TargetTable`]), every folder in a project each
+//! each of them to read it ([`TargetTable`], and for an MCP server's entry
+//! the config file [`Agent::mcp_file`] names), every folder in a project each
 //! reads it from, whoever put it there ([`Agent::reads`]), and where each
 //! keeps what it reads for every project ([`AgentHomes`]). The checks that will need those
 //! last folders (Claude's user memory, Codex's config, the skills in
@@ -21,9 +22,13 @@ use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::agents_md;
+use crate::claude_mcp;
 use crate::claude_md::{CLAUDE_LOCAL_MD, CLAUDE_MD};
 use crate::code::codes;
+use crate::codex_mcp;
+use crate::config_entry::FileError;
 use crate::kind::Kind;
+use crate::opencode_mcp;
 
 /// A coding agent Mindweaver puts skills and rules where it reads them.
 ///
@@ -143,6 +148,28 @@ impl Agent {
         files.sort();
         files
     }
+
+    /// The config file this agent is given an MCP server's entry in, in the
+    /// project at `root`, as a route from it, `/` separated: where D-10
+    /// writes a server's one entry for it, and what the ledger records the
+    /// entry under.
+    ///
+    /// Asked of the renderer that writes the file, never spelled again here,
+    /// so the file an entry is recorded in is the file it is written into:
+    /// Claude's `.mcp.json` ([`claude_mcp::FILE`]) and Codex's
+    /// `.codex/config.toml` ([`codex_mcp::FILE`]) wherever the project is,
+    /// and OpenCode's the first of its four config files there is, or the
+    /// `opencode.json` made when none is ([`opencode_mcp::FILES`]). Not a
+    /// row of the [`TargetTable`], which is pure: which of OpenCode's files
+    /// it is depends on what the project holds, so that one is looked for on
+    /// disk, and only that one can fail.
+    pub fn mcp_file(self, root: &Path) -> Result<&'static str, FileError> {
+        match self {
+            Agent::Claude => Ok(claude_mcp::FILE),
+            Agent::Codex => Ok(codex_mcp::FILE),
+            Agent::OpenCode => opencode_mcp::chosen(root),
+        }
+    }
 }
 
 /// The files `agent` reads in a project, beside the folders [`read`] names,
@@ -150,26 +177,39 @@ impl Agent {
 ///
 /// One arm per agent with no wildcard, as `read`'s, so a new agent does not
 /// compile until somebody has said what it reads there. Each configuration
-/// file is the one D-10 puts an MCP server's entry in.
+/// file is one D-10 puts an MCP server's entry in, named by the renderer
+/// that writes it, as [`Agent::mcp_file`] names it.
 fn files(agent: Agent) -> Vec<PathBuf> {
-    let at_root = |names: &[&str]| names.iter().map(PathBuf::from).collect::<Vec<_>>();
+    // Joined a folder at a time, as `standard` joins them, so a route with a
+    // folder in it has one kind of separator on Windows too.
+    let at_root = |routes: &[&str]| {
+        routes
+            .iter()
+            .map(|route| route.split('/').collect::<PathBuf>())
+            .collect::<Vec<_>>()
+    };
     match agent {
         // Verified on Claude Code 2.1.309: `CLAUDE.md`, `CLAUDE.local.md`,
         // and `AGENTS.md` natively when neither is there. `.mcp.json`, its
-        // project's MCP servers, is docs-only.
-        Agent::Claude => at_root(&[CLAUDE_MD, CLAUDE_LOCAL_MD, agents_md::FILE, ".mcp.json"]),
+        // project's MCP servers, verified on 2.1.318 (`claude-mcp`).
+        Agent::Claude => at_root(&[
+            CLAUDE_MD,
+            CLAUDE_LOCAL_MD,
+            agents_md::FILE,
+            claude_mcp::FILE,
+        ]),
         // Docs-only: `AGENTS.md`, or `AGENTS.override.md` in its place, and
-        // a trusted project's `.codex/config.toml`, joined a folder at a
-        // time as `standard` joins them, so it has one kind of separator on
-        // Windows too.
-        Agent::Codex => {
-            let mut files = at_root(&[agents_md::FILE, agents_md::OVERRIDE]);
-            files.push(Path::new(".codex").join("config.toml"));
+        // a trusted project's `.codex/config.toml`.
+        Agent::Codex => at_root(&[agents_md::FILE, agents_md::OVERRIDE, codex_mcp::FILE]),
+        // Docs-only: `AGENTS.md`, the `CLAUDE.md` V1 reads when there is no
+        // `AGENTS.md`, and each of the four files its project's
+        // configuration may be in, the first of them there is the one read,
+        // so a snapshot reading the one there is reads one named here.
+        Agent::OpenCode => {
+            let mut files = at_root(&[agents_md::FILE, CLAUDE_MD]);
+            files.extend(at_root(&opencode_mcp::FILES));
             files
         }
-        // Docs-only: `AGENTS.md`, the `CLAUDE.md` V1 reads when there is no
-        // `AGENTS.md`, and `opencode.json`, its project's configuration.
-        Agent::OpenCode => at_root(&[agents_md::FILE, CLAUDE_MD, "opencode.json"]),
     }
 }
 
@@ -301,8 +341,9 @@ impl fmt::Display for UnknownAgent {
 /// with none is a kind that reaches that agent some other way, or not at
 /// all, which is every rule: D-03 puts rules in a block of `AGENTS.md`, one
 /// file every agent shares rather than a folder a copy goes in, rendered
-/// outside the table ([`crate::install::rules`]), and every MCP server, which
-/// will be an entry in each agent's own file (D-10).
+/// outside the table ([`crate::install::rules`]), and every MCP server, an
+/// entry in each agent's own config file (D-10), which [`Agent::mcp_file`]
+/// names, since OpenCode's is looked for on disk.
 ///
 /// Pure: no entry is looked for on disk, and every location is relative to
 /// a project's root.
@@ -398,7 +439,8 @@ fn standard(kind: Kind, agent: Agent) -> Option<PathBuf> {
         (Kind::Skill, Agent::Codex | Agent::OpenCode) => Some(Path::new(".agents").join("skills")),
         (Kind::Rule, Agent::Claude | Agent::Codex | Agent::OpenCode) => None,
         // An entry in each agent's own config file, rendered outside the
-        // table as a rule's section is (D-10), which no release writes yet.
+        // table as a rule's section is (D-10), in the file `Agent::mcp_file`
+        // names, which no release writes yet.
         (Kind::Mcp, Agent::Claude | Agent::Codex | Agent::OpenCode) => None,
     }
 }

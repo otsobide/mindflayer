@@ -327,6 +327,7 @@ pub fn apply(
                     content_hash: None,
                 })
                 .collect(),
+            entries: Vec::new(),
         },
     );
     if let Err(error) = recorded {

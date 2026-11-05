@@ -674,6 +674,7 @@ fn a_record_naming_a_copy_outside_the_project_is_refused_rather_than_removed() {
                     path: String::from("../deploy"),
                     content_hash: None,
                 }],
+                entries: Vec::new(),
             },
         )
         .unwrap();

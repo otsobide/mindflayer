@@ -11,6 +11,7 @@ use mindweaver_core::gather::{self, Request};
 use mindweaver_core::hash;
 use mindweaver_core::install::{self, Installed, Offer};
 use mindweaver_core::ledger::{backup_path, InstallRecord, Target, SCHEMA_VERSION};
+use mindweaver_core::mother::{InstallRecordMother, McpMother};
 use mindweaver_core::AgentHomes;
 use mindweaver_core::{Kind, Ledger, MindProject, ProjectId, WeaverWorkspace, LEDGER_FILE};
 use rusqlite::types::Value;
@@ -77,6 +78,9 @@ const VERSION_3: &str = include_str!("fixtures/ledger-v3.sql");
 
 /// What schema 4 wrote, dumped from a ledger it made.
 const VERSION_4: &str = include_str!("fixtures/ledger-v4.sql");
+
+/// What schema 5 wrote, dumped from a ledger it made.
+const VERSION_5: &str = include_str!("fixtures/ledger-v5.sql");
 
 /// A ledger file in `dir` holding what `fixture` describes, untouched by
 /// anything of this build's.
@@ -395,6 +399,7 @@ fn a_version_2_installation_reads_back_through_the_ledger() {
                 path: String::from("skills/deploy"),
                 content_hash: None,
             }],
+            entries: Vec::new(),
         })
     );
 }
@@ -596,6 +601,115 @@ fn a_version_4_ledger_is_copied_aside_and_the_copy_opens_at_version_4() {
     ] {
         assert_eq!(rows(&copy, query), rows(&before, query), "{query}");
     }
+}
+
+#[test]
+fn a_version_5_ledger_keeps_every_row_it_had_and_its_installations_gain_no_entry() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_5);
+    let before = as_written(VERSION_5);
+
+    let ledger = Ledger::open(&path).unwrap();
+
+    let after = Connection::open(&path).unwrap();
+    assert_eq!(version_of(&after), SCHEMA_VERSION);
+    for query in [
+        "SELECT * FROM sources ORDER BY id",
+        "SELECT * FROM artifacts ORDER BY id",
+        "SELECT * FROM actions ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT * FROM installation_targets ORDER BY installation_id, path",
+        "SELECT * FROM created_files ORDER BY project, path",
+        "SELECT * FROM projects ORDER BY id",
+    ] {
+        let kept = rows(&after, query);
+        assert_eq!(kept, rows(&before, query), "{query}");
+        assert!(!kept.is_empty(), "{query} reads nothing to compare");
+    }
+    // No build of schema 5 installed a server, so nothing is filled in.
+    assert!(rows(&after, "SELECT * FROM installation_entries").is_empty());
+    let review = ledger
+        .installation("tanukeys", Kind::Skill, "review")
+        .unwrap()
+        .unwrap();
+    assert_eq!(review.targets.len(), 2);
+    assert!(review.entries.is_empty());
+}
+
+#[test]
+fn a_version_5_ledger_records_a_servers_entries_once_migrated() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_5);
+    let name = McpMother::name();
+    let server = InstallRecordMother::mcp(&name);
+
+    let ledger = Ledger::open(&path).unwrap();
+    ledger.installed("tanukeys", &server).unwrap();
+    drop(ledger);
+
+    let read = Ledger::open(&path)
+        .unwrap()
+        .installation("tanukeys", Kind::Mcp, &name)
+        .unwrap();
+    assert_eq!(read, Some(server));
+    // Under the id the schema 5 ledger knew the project by.
+    let after = Connection::open(&path).unwrap();
+    assert_eq!(
+        rows(
+            &after,
+            "SELECT project_id FROM installations WHERE kind = 'mcp'"
+        ),
+        [[text("c00c03a1f3c6676732405a8bf90a2d48")]]
+    );
+}
+
+#[test]
+fn a_version_5_ledger_is_copied_aside_and_the_copy_opens_at_version_5() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_5);
+    let before = as_written(VERSION_5);
+
+    Ledger::open(&path).unwrap();
+
+    let backup = dir.path().join("mindweaver.db.v5.bak");
+    assert_eq!(backup_path(&path, 5), backup);
+    let copy = Connection::open(&backup).unwrap();
+    assert_eq!(version_of(&copy), 5);
+    for query in [
+        "SELECT * FROM sources ORDER BY id",
+        "SELECT * FROM installations ORDER BY id",
+        "SELECT * FROM installation_targets ORDER BY installation_id, path",
+        "SELECT * FROM created_files ORDER BY project, path",
+        "SELECT * FROM projects ORDER BY id",
+        "SELECT type, name, sql FROM sqlite_master ORDER BY name",
+    ] {
+        assert_eq!(rows(&copy, query), rows(&before, query), "{query}");
+    }
+}
+
+#[test]
+fn a_ledger_of_a_schema_after_this_builds_is_refused_and_left_as_it_is() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_5);
+    Connection::open(&path)
+        .unwrap()
+        .pragma_update(None, "user_version", SCHEMA_VERSION + 1)
+        .unwrap();
+
+    let error = Ledger::open(&path).unwrap_err();
+
+    assert_eq!(error.code(), "ledger_too_new");
+    assert_eq!(
+        version_of(&Connection::open(&path).unwrap()),
+        SCHEMA_VERSION + 1
+    );
+    assert!(rows(
+        &Connection::open(&path).unwrap(),
+        "SELECT name FROM sqlite_master WHERE name = 'installation_entries'"
+    )
+    .is_empty());
+    assert!(!backup_path(&path, SCHEMA_VERSION + 1).exists());
+    assert!(!backup_path(&path, 5).exists());
 }
 
 /// A workspace linking `names`, each a project marked by its settings under

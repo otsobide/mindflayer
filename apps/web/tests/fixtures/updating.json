@@ -346,6 +346,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "api",
       "failures": [],
       "health": "attention",
@@ -490,6 +491,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "web",
       "failures": [
         {
@@ -579,6 +581,7 @@
       "agents": [],
       "artifacts": [],
       "directories": [],
+      "entries": [],
       "entry": "gone",
       "failures": [],
       "health": "stale",

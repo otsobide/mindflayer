@@ -363,7 +363,8 @@ fn each_agent_reads_its_instructions_its_configuration_and_its_folders_at_a_proj
             ".opencode",
             "AGENTS.md",
             "CLAUDE.md",
-            "opencode.json"
+            "opencode.json",
+            "opencode.jsonc"
         ]
     );
 }
@@ -395,8 +396,45 @@ fn each_agent_reads_its_instruction_files_and_its_configuration_file_in_a_projec
     );
     assert_eq!(
         files_of(Agent::OpenCode),
-        ["AGENTS.md", "CLAUDE.md", "opencode.json"]
+        [
+            ".opencode/opencode.json",
+            ".opencode/opencode.jsonc",
+            "AGENTS.md",
+            "CLAUDE.md",
+            "opencode.json",
+            "opencode.jsonc"
+        ]
     );
+}
+
+#[test]
+fn each_agent_is_given_an_mcp_servers_entry_in_the_config_file_its_renderer_writes() {
+    let root = tempfile::TempDir::new().unwrap();
+    let file = |agent: Agent| agent.mcp_file(root.path()).unwrap();
+
+    assert_eq!(file(Agent::Claude), ".mcp.json");
+    assert_eq!(file(Agent::Codex), ".codex/config.toml");
+    // OpenCode's is made when none of its four is there, and is otherwise
+    // the first there is, whichever it is.
+    assert_eq!(file(Agent::OpenCode), "opencode.json");
+    for (index, route) in opencode_mcp::FILES.iter().enumerate().rev() {
+        let path = root.path().join(route);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, "{}\n").unwrap();
+        assert_eq!(
+            file(Agent::OpenCode),
+            *route,
+            "none of the {index} before it there"
+        );
+    }
+    // Every file it names is one the agent reads.
+    for agent in Agent::ALL {
+        let route = file(agent);
+        assert!(
+            files_of(agent).iter().any(|read| read == route),
+            "{agent} is given {route}, which it is not said to read"
+        );
+    }
 }
 
 #[test]

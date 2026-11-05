@@ -90,9 +90,10 @@ use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
 use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
+use crate::hash;
 use crate::install;
 use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
-use crate::value::{ArtifactName, InputName, VariableName};
+use crate::value::{ArtifactName, ContentHash, InputName, VariableName};
 
 /// Where Codex reads a project's servers, from its root.
 pub const FILE: &str = ".codex/config.toml";
@@ -133,6 +134,13 @@ impl Entry {
     /// as tables: the same server however it is laid out.
     pub fn canonical(&self) -> String {
         self.value.canonical()
+    }
+
+    /// The entry's fingerprint, [`hash::fingerprint`] of its
+    /// [canonical form](Self::canonical): what the ledger keeps of it once
+    /// it is written, and what one an agent's file holds is told by.
+    pub fn fingerprint(&self) -> ContentHash {
+        hash::fingerprint(&self.canonical())
     }
 }
 
@@ -381,6 +389,21 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, CodexMc
         return Ok(Written::Unchanged);
     }
     Ok(file.edit(&key, &Edit::Remove)?)
+}
+
+/// Every server the project's [`FILE`] at `root` holds, by its key, in the
+/// order the file holds them: none when there is no file, or its
+/// [`SERVERS`] is no table of them.
+///
+/// Read as [`render`] reads the file to write into it, up to
+/// [`MAX_BYTES`], so a file it would refuse to write into is refused here
+/// too, with the same code. The user's own config is not read: what the
+/// project's file holds is what an entry stands by.
+pub fn servers(root: &Path) -> Result<Vec<(String, Value)>, CodexMcpError> {
+    match config(root)?.get(&[SERVERS])? {
+        Some(Value::Object(servers)) => Ok(servers),
+        _ => Ok(Vec::new()),
+    }
 }
 
 /// Whether `text` holds the entry keyed `name` and nothing else, or not

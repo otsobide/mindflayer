@@ -618,7 +618,8 @@ not open); then a git repository holding something an agent reads at its
 root, named on the row; then any other repository. What counts as an agent's
 is what Claude Code, Codex and OpenCode read there: `AGENTS.md`,
 `AGENTS.override.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.mcp.json`,
-`opencode.json`, `.claude`, `.agents`, `.codex` and `.opencode`
+`opencode.json`, `opencode.jsonc`, `.claude`, `.agents`, `.codex` and
+`.opencode`
 ([where each agent reads](agents.md#what-says-an-agent-works-in-a-project)).
 It still links nothing and makes nothing a project: a suggestion is a line
 to type, or a row to tick on [the minds screen](#the-tui), which lists them
@@ -1289,6 +1290,23 @@ a warning names the agents that read none of its folders, and `unreached` in
 the JSON says the same; and one given a rule some of its agents read nowhere,
 which `missed` in the JSON says.
 
+`entries` in the JSON lists each MCP server's entry in the config files of
+the project's agents (`.mcp.json` for Claude Code, `.codex/config.toml` for
+Codex, OpenCode's `opencode.json` or whichever of its config files the
+project has), one row an agent: the `agent`, the `file`, the server's
+`name`, its `state` and, for one Mindweaver installed, its `origin`. A
+server somebody keeps there that Mindweaver did not install is `foreign`,
+and one it installed stands as an installed skill does, `edited` once what
+the file holds under its name has changed. Nothing installs a server yet, so
+for now every entry it lists is `foreign`. A config file holding an entry
+Mindweaver installed that cannot be read is a warning beside the report,
+the entry `missing`; one holding none it installed is passed over, a link
+included, and nothing in it is listed. The text lists each `foreign` one
+as a row of its own, kind `mcp`, with the agent whose file holds it, as a
+foreign copy is listed; one Mindweaver installed is the row of its
+installation, which says how it stands and which agents it reaches, as an
+installed skill's row does.
+
 `--json` prints the same report in the envelope every reading command's
 `--json` shares ([machine-readable output](#machine-readable-output)): the
 data, the warnings the text says on stderr, each again with its code, and a
@@ -1320,7 +1338,8 @@ $ mindweaver status -p tanukeys --json
             "agents": [],
             "origin": "load:../src/mindweaver/examples"
           }
-        ]
+        ],
+        "entries": []
       }
     ]
   },
@@ -1386,7 +1405,9 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   project says where it authors each kind, its settings and templates, and
   every artifact it holds: its state, the agents that read it, where it came
   from, where each copy is, what `validate` says of it, and for a file that
-  does not read, `unread`, with why. Its `tally` counts them, by kind and by
+  does not read, `unread`, with why, and in `entries` each MCP server's entry
+  its agents' config files hold, as `status` lists them. Its `tally` counts
+  the artifacts, by kind and by
   state, and its `health` says how it stands as a whole, in the words the
   [control panel](#control-panel) sorts by: `ok`, `attention`, `broken` or
   `stale`. `mind list --json` reads the project against the workspace that

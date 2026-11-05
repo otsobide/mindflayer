@@ -174,6 +174,20 @@ fn a_files_bytes_hash_to_their_sha256_whatever_the_file_is_called() {
 }
 
 #[test]
+fn an_entrys_fingerprint_is_the_sha256_of_its_canonical_text() {
+    // Pinned, as a tree's is: the SHA-256 of the canonical text and
+    // nothing else, so `config_entry`'s pinned fingerprint of the same
+    // entry is this one.
+    let canonical = r#"{"args":["-y","@modelcontextprotocol/server-github"],"command":"npx","env":{"GITHUB_TOKEN":"${GITHUB_TOKEN}"}}"#;
+    assert_eq!(
+        fingerprint(canonical),
+        "8018e6426ad14596754b46ee1abfc8f9281866b8648b31f965b853eeb4ff7d19"
+    );
+    assert_eq!(fingerprint(canonical), bytes(canonical.as_bytes()));
+    assert!(is_digest(&fingerprint("")));
+}
+
+#[test]
 fn a_digest_is_64_hex_digits_in_either_case_and_nothing_else() {
     let digest = bytes(b"");
     assert!(is_digest(&digest));

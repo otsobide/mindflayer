@@ -176,8 +176,9 @@ under `apps/` with its own `Makefile`:
   `CLAUDE.md` that makes it (`claude_md`), installing a rule through those
   three, or as a copy into a project a `mind.toml` marks (`install::rules`),
   changing a project's agents or share mode and carrying its installs along
-  (`reapply`), what each project holds, from where and for which agents
-  (`status`), finding a project that moved again by its id and giving a
+  (`reapply`), what each project holds, from where and for which agents,
+  each MCP server's entry in its agents' config files among it, as it stands
+  (`status`, `status::EntryStatus`, told in `install::entries`), finding a project that moved again by its id and giving a
   copy made with its `.mind` one of its own (`relink`), the workspaces this
   machine knows, a list the default
   workspace keeps, and those a front end on one may switch to
@@ -430,7 +431,10 @@ These are easy to break from a single file without noticing.
   locked, by the code the command refuses it with (`Standing::refused`).
   Where an agent reads
   (`Agent::reads`) is kept apart from where it is sent a copy: OpenCode reads
-  `.claude/skills` and is sent nothing there. Which folders a project is read
+  `.claude/skills` and is sent nothing there. Which config file an agent is
+  given an MCP server's entry in is core's too (`Agent::mcp_file`), asked of
+  the renderer that writes it, OpenCode's the first of its four there is.
+  Which folders a project is read
   from is core's too (`Catalog::folders`), and so are the names at a
   project's root that show an agent works there (`Agent::reads_at_root`) and
   the order `mindweaver scan --suggest` ranks what it finds in (`scan::Order`),
@@ -803,7 +807,10 @@ These are easy to break from a single file without noticing.
     project at the workspace's root is that project's (D-03).
 - **Mindweaver only manages what it installed.** The ledger's record of an
   install (one installation, a target for each copy it wrote, its origin and
-  the `hash::tree` of what it wrote, that hash's one definition) is what
+  the `hash::tree` of what it wrote, that hash's one definition, or for an
+  MCP server an entry target for each entry it wrote into an agent's config
+  file, keyed by the agent, with the `hash::fingerprint` of what it wrote,
+  schema 6's `installation_entries`) is what
   allows overwriting and deleting. An install writes a copy in every target
   `install::targets` gives (each folder the project's agents read, or the one
   a `mind.toml` names), built from one tree and put in place together or not
@@ -814,7 +821,13 @@ These are easy to break from a single file without noticing.
   was written there and by what its origin offers now (`install::Standing`,
   `install::standings`, D-04): `Current`, `Outdated`, `Edited`, `Missing` or
   `Orphaned`, the first true of edited, orphaned, missing and outdated said
-  over the rest. An `Edited` copy refuses the whole install or uninstall as a
+  over the rest. An MCP server's entry stands in the same words, told by its
+  record, the fingerprint its agent's file holds under its name and what is
+  offered now as its renderer renders it for that agent
+  (`install::entries`, `install::entry_standings`): foreign by its name in
+  the file rather than by a path, missing when the file cannot be read too,
+  which is said with the renderer's code (`install::ConfigUnread`), and
+  each file read as its renderer reads it to write. An `Edited` copy refuses the whole install or uninstall as a
   foreign one does (`Installed::Edited`, `Removed::Edited`) unless it is
   forced (`install_with`, `uninstall_with` and `uninstall_typed` given
   `Edits::Forced`, the CLI's `--force`), and forcing never reaches a copy
@@ -1463,8 +1476,9 @@ These are easy to break from a single file without noticing.
   `apps/core/src/mother/`), never by hand where a mother makes it: one per
   value object (`ContentHashMother`, `RedactedMother`, `OriginMother`,
   `ArtifactNameMother`, `RevisionMother`, `ProjectIdMother`), per record the
-  ledger keeps (`InstallRecordMother`, `TargetMother`, `SourceMother`,
-  `GatheredMother`, `MovedMother`, `EntryMother`), for a skill's and a
+  ledger keeps (`InstallRecordMother`, `TargetMother`, `EntryTargetMother`,
+  `SourceMother`, `GatheredMother`, `MovedMother`, `EntryMother`), for a
+  skill's and a
   rule's text (`SkillMother`, `RuleMother`), an MCP server's definition,
   one for each transport and one for each shape a rule or an agent is
   about (`McpMother`: `misnamed`, `secret_without_variable`, a token of each

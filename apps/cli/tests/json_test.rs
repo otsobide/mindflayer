@@ -62,6 +62,7 @@ struct Project {
     health: String,
     directories: Vec<Directory>,
     artifacts: Vec<Held>,
+    entries: Vec<Value>,
     tally: Value,
     templates: Vec<Template>,
     unreached: Vec<Value>,

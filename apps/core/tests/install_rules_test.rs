@@ -136,6 +136,7 @@ fn a_project_a_mind_toml_marks_gets_a_copy_of_the_rule_filed_by_its_route() {
                 path: String::from("rules/git/no-force-push.md"),
                 content_hash: Some(held),
             }],
+            entries: Vec::new(),
         }]
     );
     assert!(matches!(
@@ -630,6 +631,7 @@ fn record(route: &str, source: &str, targets: Vec<Target>) -> InstallRecord {
         origin: Some(WORKSPACE_ORIGIN.into()),
         content_hash: Some(hash::bytes(source.as_bytes())),
         targets,
+        entries: Vec::new(),
     }
 }
 

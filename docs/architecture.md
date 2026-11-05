@@ -2429,6 +2429,12 @@ type derives `Serialize` from the start:
   `reading::Shown`. One record for every transport rather than a variant
   each, so its `type` is the word the format writes, never one a derive
   spells from a variant; a key of the other transport goes out empty.
+- **Listed by `status` and the snapshot since #93**: each MCP server's
+  entry in a project's agents' config files (`status::EntryStatus`), its
+  agent by its name, its file a route from the project, its state the word
+  an artifact's is said in and its origin a `value::Origin`, as `entries`,
+  a field added to `ProjectStatus` and `view::Project`, which moves
+  neither `ENVELOPE_VERSION` nor `view::FORMAT`.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -2621,6 +2627,11 @@ read, built and ordered in core from the read types the commands print:
   how a readable copy of the name elsewhere stands, the report's), the
   rules a project's `AGENTS.md` block holds among them
   ([D-23](#d-23-what-a-project-received-is-an-installed-view));
+- each MCP server's entry in a project's agents' config files, one an
+  agent, an installed one as it stands and somebody's as `foreign`
+  (`entries`, as `status` lists them, [what each project
+  has](#what-each-project-has)), read from the ledger and those files, as
+  D-23 has it, since discovery parses no config file;
 - the workspaces it loads, each with how many of its own it offers; its
   shelf and the sources it is filled from; the workspaces this machine
   knows, each with whether it loads it and by which entry, and whether it
@@ -3209,9 +3220,11 @@ one only to migrate it ([A read leaves the ledger as it finds
 it](#a-read-leaves-the-ledger-as-it-finds-it)).
 
 Six things are recorded: the **sources** gathered from, the **artifacts** on
-the shelf and which source each came from, the **installations** (which skill
-or rule Mindweaver put into which project, from where, every copy it wrote and
-a hash of what it wrote), the **files Mindweaver made** in a project, which it
+the shelf and which source each came from, the **installations** (which skill,
+rule or MCP server Mindweaver put into which project, from where, every copy it
+wrote and a hash of what it wrote, or for a server every entry it wrote into
+an agent's config file and the fingerprint of each), the **files Mindweaver
+made** in a project, which it
 may take away again, the **projects** by the id each was last seen holding,
 and an **action log**. The log keeps failures too: a log
 of only what worked cannot answer the question anybody opens it with.
@@ -3229,7 +3242,7 @@ A source's shelf folder is stored rather than derived: two URLs can reduce to
 the same readable name, and where a source's files went is a fact about the
 past that must not move when the naming rule changes.
 
-The schema has had five versions, each a block in the SQLite store's
+The schema has had six versions, each a block in the SQLite store's
 migration (`adapter::sqlite::Sqlite::migrate`) and a
 constant beside it:
 
@@ -3257,6 +3270,16 @@ constant beside it:
    one route an id, and on `installations`, the `project_id` each record was
    made for, so a project that moved is found again by its id ([an entry
    whose project moved](#an-entry-whose-project-moved), #57).
+6. `installation_entries`, one row for each entry an MCP server's
+   installation wrote into an agent's config file
+   ([D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent)): the agent,
+   the file as a route from the project, the server's name it is keyed by,
+   and the `fingerprint` of what was written ([the
+   fingerprint](#the-fingerprint)), one entry an agent (#93). A table of its
+   own rather than more targets: a target is a copy found by its path, and
+   an entry is found by its key in a file every server of the project
+   shares. The definition's origin is the installation's `origin`, which
+   version 3 added, so the step adds nothing for it.
 
 An older ledger is migrated step by step, so one made two versions ago ends
 where one made today begins, and two rules hold for every step:
@@ -3302,7 +3325,8 @@ to what a step is filled from, and the reason for it holds: what it is handed
 is what the projects hold, not how today's code spells something. A project
 a `mind.toml` marks, an entry that will not open and an id two linked
 directories hold are handed in for none, and their records keep their route
-alone. D-04's states (#47) took no step of their own:
+alone. Version 6 fills in nothing: no build before it installed an MCP
+server. D-04's states (#47) took no step of their own:
 what tells them apart is the hash each copy was written with, which versions
 3 and 4 keep, and what the place it came from offers now, which is read where
 it is offered rather than kept. A record with no hash is held to its offer
@@ -4704,6 +4728,36 @@ cannot be read holds none of them, and the next render says why. A rule
 copied into a project a `mind.toml` marks is discovered as its copy, as a
 skill is. A name the project authors a rule of too keeps the one entry
 discovery gives it, as a skill's does.
+
+What a project received as MCP servers is entries in its agents' config
+files, which discovery never parses (D-23), so each is listed from the
+ledger and those files too (#93): in `entries` (`status::EntryStatus`), one
+row an agent's entry, its agent, its file, the server's name, its state and
+its origin, by agent in report order and then name. Every entry an
+installation recorded is listed, looked for in the file its record names,
+whichever agent it is for, as [it stands](#how-an-entry-stands); and every
+entry the config file of each of the project's agents holds that nothing
+records is listed as `foreign`, D-23's foreign entries, which no artifact of
+the catalog is, since a name can be somebody's in one agent's file and
+Mindweaver's in another's. Rows rather than one an artifact: what Claude's
+file holds of a server can be edited while Codex's is not. A config file an
+entry was recorded in that cannot be read, as its renderer would refuse it
+(`mcp_json_not_strict` for a `.mcp.json` holding a comment), is a failure
+beside the report (`DiscoveryFailure::Config`), and the entries recorded in
+it read as missing. One read only for what nothing records is passed over,
+and nothing in it listed: it holds nothing Mindweaver wrote, and a link
+there, as a dotfiles setup makes `.mcp.json` or `.codex`, which the agent
+follows and the renderer, built to write, refuses, would otherwise call a
+project nothing was installed into broken. A server's installation has an artifact row of its own as well,
+built as a rule's received is: missing while an entry it recorded is not
+found, otherwise as core stands it from its entries, reaching the agents
+whose entry is found, held in each of their files. The snapshot carries
+the same `entries` on each project ([the read model](#the-read-model)), and
+a project a `mind.toml` marks, which names no agent, lists none. The text
+of `status` lists each foreign entry as a row of its own, kind `mcp`, with
+the agent whose file holds it, so whoever reads it is told of a server
+somebody keeps there as of a foreign copy; an entry Mindweaver wrote is
+told by its installation's row, which the table has already.
 
 Each rule a project marked by its settings received that some of its agents
 read nowhere is named in `missed`, with those agents, and is a warning beside
@@ -8408,8 +8462,24 @@ the block](#how-claude-reaches-the-block)). The block is no folder
 a copy goes into, one file every agent shares, so it is rendered outside the
 table ([how a rule reaches the agents](#how-a-rule-reaches-the-agents)), and
 so are Claude's files, which follow how Claude reaches the block rather than
-an agent alone ([installing rules](#installing-rules)). MCP servers, entries
-in each agent's own config file, come in M6.
+an agent alone ([installing rules](#installing-rules)).
+
+Nor have MCP servers, which reach an agent as one entry in its own config
+file ([D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent)). Which file
+that is, `Agent::mcp_file` says, the table's MCP targets, asked of the
+renderer that writes the file rather than spelled a second time, so the
+file the ledger records an entry under is the one it is written into:
+
+| Kind | Claude | Codex | OpenCode |
+|---|---|---|---|
+| MCP server | `.mcp.json` | `.codex/config.toml` | the first of `opencode.json`, `opencode.jsonc`, `.opencode/opencode.json`, `.opencode/opencode.jsonc` there is, or `opencode.json` |
+
+A function of the project's root rather than a row of the table, which is
+pure: OpenCode's is whichever of its four files the project holds
+([OpenCode's `opencode.json`](#opencodes-opencodejson)), looked for on disk,
+and only that one can fail. `Agent::reads_files` names the same files, all
+four of OpenCode's among them, so a front end watching a project watches
+whichever one a snapshot reads.
 
 `TargetTable::targets(kind, agents)` gives one target (`AgentTarget`) per
 location, each with the agents it is for: all three agents take a skill in two
@@ -9248,8 +9318,11 @@ again over an entry somebody reformatted leaves their layout alone.
 
 An entry can carry no mark of its own: OpenCode refuses keys it does not know,
 `codex --strict-config` fails on them, and `.mcp.json` allows no comments. So
-what the ledger will keep of an entry Mindweaver wrote (#93) is its
-fingerprint, `Value::fingerprint`: the SHA-256 of its canonical JSON form, as
+what the ledger keeps of an entry Mindweaver wrote (#93) is its fingerprint,
+`hash::fingerprint`, the recipe's one definition beside a copy's `hash::tree`
+and a file's `hash::bytes`: the SHA-256 of the entry's canonical JSON form,
+which each renderer's `Entry::fingerprint` takes of the entry it makes and
+`Value::fingerprint` of one a file holds, as
 [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785), the JSON Canonicalization
 Scheme, writes it. Members sorted by UTF-16 code units at every depth, no
 whitespace, strings escaped only where JSON must be, and numbers written as
@@ -9559,6 +9632,59 @@ holds, and `.opencode` is never taken away. Whose entry it is, and
 whether Mindweaver made the file, are the ledger's to say (#93), and the
 install's to ask (#94): nothing here reads either.
 
+### How an entry stands
+
+The ledger records each entry an MCP server's installation writes, one an
+agent: the agent, its file as a route from the project (`Agent::mcp_file`
+when it was written), the server's name it is keyed by, and its
+fingerprint ([why the ledger is SQLite](#why-the-ledger-is-sqlite), schema
+6). Since an entry carries no mark, that record is the one thing that makes
+it Mindweaver's (D-10), and how it stands is told by three things together
+(`install::entries`): the record, what the agent's file holds under the
+name, by its fingerprint, and what the place it came from offers now,
+rendered for that agent by its own renderer (`Entry::fingerprint`), in the
+shape OpenCode's file keeps the server in. Neither the file alone nor the
+offer alone tells it, as for a copy (D-04): an edited entry can be what is
+offered now, and an untouched one behind it.
+
+It stands in `install::Standing`'s words, said in the same order, edited
+first, then orphaned, missing and outdated, and each means of an entry
+what it means of a copy. Six of them are the issue's (#93): absent,
+current, outdated, edited, foreign and missing; orphaned is the seventh,
+as for a copy, since an entry whose definition nothing offers any more has
+nothing to be current or outdated against, and an update nothing to write
+it from. What differs is how each is told:
+
+- **Foreign** by the server's name, where a copy is told by its path: an
+  entry the agent's file holds under a name nothing records an entry of in
+  that file for that agent. A file holds every server of the project, so
+  its path tells no entry from another.
+- **Edited** by the fingerprint of what the name holds ([the
+  fingerprint](#the-fingerprint)), where a copy is told by its tree's hash:
+  an entry laid out again by Codex or by hand is current still, and one
+  whose value changed is somebody's work.
+- **Missing** while the file the record names holds nothing under the
+  name, is not there, or cannot be read, which is said beside it with the
+  renderer's code (`install::ConfigUnread`), as a block that cannot be read
+  holds none of a project's rules and the next render says why.
+- **Outdated** while what is offered now is given to the agent as another
+  entry than the one written, by its fingerprint, or as none, which an
+  install of it would then be refused for. Told an agent at a time, so a
+  change to what one agent alone is given, its extras, leaves the others
+  current.
+
+An installation stands as the first of those its entries do, edited,
+orphaned, missing, outdated, and current otherwise
+(`install::standings`), which is what an update's survey reads of it. Each
+file is read as its renderer reads it to write into it
+(`claude_mcp::servers`, `codex_mcp::servers`, `opencode_mcp::servers`):
+Claude's strictly, OpenCode's as JSONC, each up to 2 MiB, so a file an
+install would refuse to write into is refused here too, with the same
+code, and a recorded entry is looked for in the file its record names,
+OpenCode's whichever of its four that was. `install::entry_standings` says
+how one server stands for each of a project's agents, absent and foreign
+among them, which is what an install will meet in each file (#94).
+
 ## Creating and changing artifacts
 
 `mind add` writes the least that passes `validate`: a skill's front matter and
@@ -9801,7 +9927,12 @@ copy. A skill's record naming no target, which only a build from before
 targets wrote, is dropped by name as records were. A rule's naming none is
 one a build writes, for a rule that reaches no agent the project names
 ([installing rules](#installing-rules)), and a change to the project's own
-rule of that route reaches nothing it installed, so it stays.
+rule of that route reaches nothing it installed, so it stays. So does an MCP
+server's, which records an entry in each agent's config file and never a
+copy ([D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent)): adding,
+renaming or removing the project's own server of that name reaches none of
+them, and dropping the record would leave what Mindweaver wrote there
+somebody's, never updated or taken out again.
 
 And only that copy's part of the record (`Ledger::uninstalled_copy`,
 `Ledger::renamed_copy`), in one transaction: settings can make the folder a
@@ -10059,9 +10190,9 @@ variant, as a kind or an agent does.
 What counts as an agent's is a name at the root, never what a file holds:
 `Agent::reads_at_root` gives, for each agent, the folder each place it reads
 a kind from sits in, taken from `Agent::reads` (`.claude` for
-`.claude/skills`), its instruction files, and the file
-[D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent) puts its project's
-MCP servers in, each resting on a fact in
+`.claude/skills`), its instruction files, and each file
+[D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent) may put its
+project's MCP servers in, each resting on a fact in
 [docs/agents.md](agents.md#what-says-an-agent-works-in-a-project). It lives
 with the agent rather than in the scan or a front end, behind a match on
 every agent with no wildcard, so an agent added, or a folder an agent is
@@ -10676,9 +10807,11 @@ result bears on, and what came of it:
   V2** (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`):
   verified on 2.2.5, 2.1.3 and 1.19.4, so #92 writes D-12's minimal V2
   entry, and keeps V1's shape in a file that already uses it.
-- **Each agent loads its servers from the file the target table will name**
+- **Each agent loads its servers from the file the target table names**
   (every run): verified for `.mcp.json` and `opencode.json`, taken as
-  expected for `.codex/config.toml`. #93's MCP targets stand.
+  expected for `.codex/config.toml`. #93's MCP targets stand
+  (`Agent::mcp_file`, [agents, and where each kind reaches
+  them](#agents-and-where-each-kind-reaches-them)).
 
 ### D-11: MCP secrets are environment references
 
@@ -12522,8 +12655,18 @@ it once as it closes.
   either way, made by Mindweaver or not: it is Codex's own folder, and
   which folder Mindweaver made is no record anybody keeps, so a project
   given a server and then none keeps an empty `.codex`, which git does not
-  see. Which files Mindweaver made is a record the ledger's MCP rows (#93)
-  carry, as `created_files` does for an `AGENTS.md`.
+  see. Which files Mindweaver made is `created_files`' to record, as it
+  records an `AGENTS.md`, which an install of a server will note its config
+  file in (#94): the ledger's entries (#93) record each entry, not the
+  file it is in.
+- **An entry left in an OpenCode file that no longer comes first.** A
+  recorded entry is looked for in the file its record names
+  ([how an entry stands](#how-an-entry-stands)), so one written into
+  `.opencode/opencode.json` reads as current after somebody adds an
+  `opencode.json`, which comes first among the four and is the one a new
+  entry goes into. Whether OpenCode reads all four or the first is
+  docs-only; if the first, the entry reaches OpenCode no more, and an
+  update would have to say so, or move it.
 - **An input given a value rather than a variable.** An input that is no
   secret may name no variable, its value being somebody's to give, and
   Claude's entry then has nothing to refer to: `claude_mcp` refuses it
@@ -12534,8 +12677,9 @@ it once as it closes.
   part of the address `add --arg-env` and `--url-var` write
   (`codex_mcp_input_in_text`): every server `add` writes with either
   reaches Codex only once a value is handed. A value given when the server
-  is installed is #93's to hand the renderer, which would then write it as
-  it is, held to what a value of the transport is held to.
+  is installed is an install's to hand the renderer (#94), which would then
+  write it as it is, held to what a value of the transport is held to; the
+  ledger's record of an entry (#93) keeps its fingerprint, not its values.
 - **Variables Claude empties that the table does not follow.** What Claude
   keeps from a remote server was read from 2.1.318's binary
   (`mcp/blanked.rs`), and only what it keeps in every environment: a

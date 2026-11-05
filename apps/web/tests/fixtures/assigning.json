@@ -454,6 +454,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "api",
       "failures": [],
       "health": "ok",
@@ -580,6 +581,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "web",
       "failures": [
         {
@@ -692,6 +694,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "docs",
       "failures": [],
       "health": "attention",
@@ -780,6 +783,7 @@
           "path": "rules"
         }
       ],
+      "entries": [],
       "entry": "bare",
       "failures": [],
       "health": "ok",
@@ -857,6 +861,7 @@
       "agents": [],
       "artifacts": [],
       "directories": [],
+      "entries": [],
       "entry": "gone",
       "failures": [],
       "health": "stale",

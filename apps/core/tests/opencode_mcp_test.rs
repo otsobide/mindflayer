@@ -319,7 +319,7 @@ fn an_entry_laid_out_again_is_still_the_one_mindweaver_wrote() {
     let key = ["mcp", "servers", name.as_str()];
     assert_eq!(
         file.get(&key).unwrap().unwrap().fingerprint(),
-        rendered.entry.value.fingerprint()
+        rendered.entry.fingerprint()
     );
 
     // As a person might write it again: on one line, its keys in another

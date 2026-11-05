@@ -3,7 +3,9 @@
 
 use crate::agent::Agent;
 use crate::kind::Kind;
-use crate::ledger::{Entry, Gathered, InstallRecord, Moved, Source, SourceKind, Target};
+use crate::ledger::{
+    Entry, EntryTarget, Gathered, InstallRecord, Moved, Source, SourceKind, Target,
+};
 use crate::mother::random;
 use crate::mother::url::UrlMother;
 use crate::mother::value::{
@@ -91,6 +93,39 @@ impl TargetMother {
     }
 }
 
+/// Makes [`EntryTarget`]s, the entries an MCP server's installation wrote.
+pub struct EntryTargetMother;
+
+impl EntryTargetMother {
+    /// An entry of the server `name` for one agent or another, in the file
+    /// that agent reads its servers from in a project holding none of
+    /// OpenCode's other files.
+    pub fn random(name: &str) -> EntryTarget {
+        Self::of(random::pick(&Agent::ALL), name)
+    }
+
+    /// The entry of the server `name` for `agent`, in its file, holding
+    /// what some definition rendered.
+    pub fn of(agent: Agent, name: &str) -> EntryTarget {
+        let file = match agent {
+            Agent::Claude => crate::claude_mcp::FILE,
+            Agent::Codex => crate::codex_mcp::FILE,
+            Agent::OpenCode => crate::opencode_mcp::FILE,
+        };
+        Self::create(agent, file, name, ContentHashMother::random())
+    }
+
+    /// Exactly what it is given.
+    pub fn create(agent: Agent, file: &str, name: &str, fingerprint: ContentHash) -> EntryTarget {
+        EntryTarget {
+            agent,
+            file: file.to_owned(),
+            name: ArtifactName::from(name),
+            fingerprint,
+        }
+    }
+}
+
 /// Makes [`InstallRecord`]s.
 pub struct InstallRecordMother;
 
@@ -136,6 +171,24 @@ impl InstallRecordMother {
         )
     }
 
+    /// The MCP server `name`, installed from the workspace's own as an entry
+    /// in each agent's config file, and no copy.
+    pub fn mcp(name: &str) -> InstallRecord {
+        InstallRecord {
+            entries: Agent::ALL
+                .iter()
+                .map(|agent| EntryTargetMother::of(*agent, name))
+                .collect(),
+            ..Self::create(
+                Kind::Mcp,
+                name,
+                Some(OriginMother::workspace()),
+                None,
+                Vec::new(),
+            )
+        }
+    }
+
     /// A record a build from before schema 3 wrote: neither where it came
     /// from nor a hash of what it wrote.
     pub fn before_hashes(name: &str) -> InstallRecord {
@@ -161,6 +214,7 @@ impl InstallRecordMother {
             origin,
             content_hash,
             targets,
+            entries: Vec::new(),
         }
     }
 }
@@ -226,10 +280,11 @@ impl RouteMother {
 }
 
 impl InstallRecordMother {
-    /// Any record a store may be handed: a skill or a rule, under a name of
-    /// any script, from somewhere or from before origins were kept, with a
-    /// hash or without, and none or several copies, each for one agent or
-    /// for none and holding a hash of its own or not.
+    /// Any record a store may be handed: a skill, a rule or an MCP server,
+    /// under a name of any script, from somewhere or from before origins
+    /// were kept, with a hash or without, and none or several copies, each
+    /// for one agent or for none and holding a hash of its own or not; and
+    /// an MCP server's with an entry for some of the agents, one each.
     ///
     /// Wider than [`random`](Self::random), which is a skill as an install
     /// writes one today: a store keeps what it is handed, and a record an
@@ -253,6 +308,14 @@ impl InstallRecordMother {
                 }
             })
             .collect();
+        let entries = match kind {
+            Kind::Mcp => Agent::ALL
+                .into_iter()
+                .filter(|_| random::chance())
+                .map(|agent| EntryTargetMother::of(agent, &name))
+                .collect(),
+            Kind::Skill | Kind::Rule => Vec::new(),
+        };
         InstallRecord {
             kind,
             name,
@@ -260,6 +323,7 @@ impl InstallRecordMother {
             origin: random::chance().then(OriginMother::random),
             content_hash: random::chance().then(ContentHashMother::random),
             targets,
+            entries,
         }
     }
 }

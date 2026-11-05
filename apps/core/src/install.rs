@@ -47,10 +47,12 @@ use crate::url::redacted;
 use crate::value::{ArtifactName, ContentHash, Origin};
 use crate::workspace::{same_directory, Loaded, MindProject, WeaverWorkspace, WorkspaceError};
 
+pub(crate) mod entries;
 mod plan;
 pub mod rules;
 mod standing;
 
+pub use entries::{entry_standings, ConfigUnread, ForAgent};
 pub use plan::{holding, plan, Asked, Cell, Change, Clash, Conflict, Locked, Plan, PlanError};
 pub use standing::Standing;
 pub(crate) use standing::{Found, Surveyed};
@@ -109,7 +111,7 @@ fn edited(
             rules::block_file(project.root()).as_ref(),
             &offered,
         ),
-        Kind::Mcp => standing::mcp_copies(project, &record),
+        Kind::Mcp => entries::told(workspace, project, &record, &offered).0,
     };
     Ok(looked
         .into_iter()
@@ -1058,11 +1060,7 @@ fn told(
             let standing = standing::rule_standing(workspace, &record, &copies, &offered);
             (copies, standing)
         }
-        Kind::Mcp => {
-            let copies = standing::mcp_copies(project, &record);
-            let standing = standing::mcp_standing(&copies, !offered.is_empty());
-            (copies, standing)
-        }
+        Kind::Mcp => entries::told(workspace, project, &record, &offered),
     };
     let offered = offered.into_iter().cloned().collect();
     Surveyed {
@@ -1719,6 +1717,7 @@ pub(crate) fn install_held(
                     content_hash: None,
                 })
                 .collect(),
+            entries: Vec::new(),
         },
     )?;
     let mut detail = format!("{name} into {}", project.name());
@@ -2117,7 +2116,8 @@ pub(crate) fn recorded_copy(
 /// installed. The installation goes with its last copy. A record from before
 /// installations had targets names none, and is dropped as it was; a rule's
 /// naming none reaches no agent the project names, and stays, since the
-/// change reached nothing it installed.
+/// change reached nothing it installed, and so does an MCP server's, whose
+/// entries are in its agents' config files, where no change reaches (D-10).
 ///
 /// In a local project, `at` stops being kept out of git with its record:
 /// what is there now, or is written there next, is its author's, and a line
@@ -2560,9 +2560,7 @@ fn standing(
         // Only into a project a `mind.toml` marks, as a copy of its file: one
         // marked by its settings has its rules told by `rules::survey`.
         Kind::Rule => standing::of_rule(workspace, project, record, None, &offered),
-        Kind::Mcp => {
-            standing::mcp_standing(&standing::mcp_copies(project, record), !offered.is_empty())
-        }
+        Kind::Mcp => entries::told(workspace, project, record, &offered).1,
     }
 }
 
