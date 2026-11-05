@@ -454,3 +454,109 @@ fn capital_m_follows_a_project_the_scan_found_moved_with_what_was_installed_in_i
              deploy        authored  -\n",
         );
 }
+
+#[test]
+fn the_share_toggle_runs_mind_share_and_hands_mind_to_the_team() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal
+        .types("t")
+        .shows("Agents and sharing for collapse")
+        .presses(Key::Enter)
+        .shows("nothing toggled yet");
+    // Past the three agents to the share mode, then over to shared.
+    terminal
+        .presses(Key::Down)
+        .presses(Key::Down)
+        .presses(Key::Down)
+        .presses(Key::Right)
+        .shows("runs         mind -C collapse share --yes shared")
+        .presses(Key::Enter)
+        .shows("set share to shared in collapse, where it was local");
+
+    terminal.presses(Key::Escape).types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mind -C collapse share --yes shared\n",
+            "set share to shared in collapse, where it was local\n",
+            "removed .mind/.gitignore, so .mind can be committed\n",
+            "stopped keeping /.agents/skills/commit-style/ out of git\n",
+            "stopped keeping /.claude/skills/commit-style/ out of git",
+        )
+    );
+    assert!(!scenario.exists("~/Projects/collapse/.mind/.gitignore"));
+}
+
+#[test]
+fn d_on_one_of_the_workspaces_own_with_e_takes_it_out_of_every_project_too() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal
+        .presses(Key::Up)
+        .shows("> ◆ Projects  1")
+        .presses(Key::Right)
+        .types("d")
+        .shows("Delete skill commit-style?")
+        .shows("e     mindweaver remove --everywhere --yes skill:commit-style");
+    terminal
+        .types("e")
+        .shows("removed commit-style from collapse");
+
+    terminal
+        .presses(Key::Escape)
+        .presses(Key::Escape)
+        .types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mindweaver remove --everywhere --yes skill:commit-style\n",
+            "removed commit-style from collapse\n",
+            "removed skill commit-style from /home/you/Projects/.mindweaver/library/skills/commit-style",
+        )
+    );
+    assert!(!scenario.exists("~/Projects/.mindweaver/library/skills/commit-style"));
+    assert!(!scenario.exists("~/Projects/collapse/.claude/skills/commit-style"));
+}
+
+#[test]
+fn u_on_the_workspaces_own_row_updates_every_project_it_links() {
+    let scenario = collapse_and_tanukeys();
+    scenario
+        .given("~/Projects", "mindweaver install -p tanukeys commit-style")
+        .file(
+            "~/Projects/.mindweaver/library/skills/commit-style/SKILL.md",
+            &crate::skill("commit-style", "How every repo here writes commits, now"),
+        );
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
+    terminal.shows("collapse  2");
+
+    terminal
+        .presses(Key::Up)
+        .shows("> ◆ Projects  1")
+        .types("u")
+        .shows("mindweaver update --all --yes")
+        .shows("updated commit-style in collapse, from workspace")
+        .shows("updated commit-style in tanukeys, from workspace");
+
+    terminal.presses(Key::Escape).types("q");
+    let closed = terminal.exits();
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mindweaver update --all --yes\n",
+            "updated commit-style in collapse, from workspace\n",
+            "updated commit-style in tanukeys, from workspace",
+        )
+    );
+    scenario
+        .run("~/Projects", "mindweaver status -p tanukeys")
+        .succeeds()
+        .prints("commit-style  current  claude,codex,opencode  workspace\n");
+}

@@ -91,3 +91,34 @@ fn the_minds_screen_makes_a_ticked_repository_a_project_and_links_it() {
         )
     );
 }
+
+#[test]
+fn the_install_screen_turned_round_with_v_marks_projects_for_one_artifact_with_the_vim_keys() {
+    let scenario = collapse_and_tanukeys();
+    let mut terminal = scenario.open("~/Projects", "mindweaver install");
+    terminal.shows("Skills in collapse");
+
+    terminal
+        .types("v")
+        .shows("Projects for commit-style")
+        .types("l")
+        .types("j")
+        .types(" ")
+        .shows("1 to install, 0 to remove")
+        .types("h")
+        .types("a")
+        .shows("Install 1, remove 0?");
+    // Opened from the shell, the screen closes once it applies, and runs
+    // its lines on the way out.
+    terminal.types("y");
+    let closed = terminal.exits();
+    assert!(closed.status.success());
+    assert_eq!(
+        closed.shown.trim_end(),
+        concat!(
+            "$ mindweaver install -p tanukeys --from workspace skill:commit-style\n",
+            "installed commit-style into tanukeys, from workspace",
+        )
+    );
+    assert!(scenario.exists("~/Projects/tanukeys/.claude/skills/commit-style/SKILL.md"));
+}
