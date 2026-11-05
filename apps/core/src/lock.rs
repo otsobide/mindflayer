@@ -21,6 +21,7 @@
 //! process dies, however it dies, so nothing has to decide whether a process
 //! named in a file is still running, which each platform answers differently.
 
+use std::cell::Cell;
 use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -63,6 +64,75 @@ pub const HOLDER_FILE: &str = "lock.pid";
 const FIRST_PAUSE: Duration = Duration::from_millis(2);
 const LONGEST_PAUSE: Duration = Duration::from_millis(100);
 
+/// How long writers were kept out of a workspace by a lock another writer
+/// held, and by which process: what [`waits`] says of the work it ran.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Waited {
+    /// Every wait added up, one that ended busy among them: zero when every
+    /// lock the work asked for was free.
+    pub total: Duration,
+    /// The process the last wait found holding the lock, when the holder
+    /// had said who it was ([`HOLDER_FILE`]), as [`LockError::Busy`] names
+    /// it.
+    pub holder: Option<u32>,
+}
+
+impl Waited {
+    const NONE: Waited = Waited {
+        total: Duration::ZERO,
+        holder: None,
+    };
+
+    /// These waits and then `later`'s, the holder the latest one named.
+    fn then(self, later: Waited) -> Waited {
+        Waited {
+            total: self.total.saturating_add(later.total),
+            holder: later.holder.or(self.holder),
+        }
+    }
+}
+
+thread_local! {
+    /// The waits of the writers this thread has run since the innermost
+    /// [`waits`] began. Per thread, since a writer runs on the thread that
+    /// asked it to, and a wait on another is another command's.
+    static WAITED: Cell<Waited> = const { Cell::new(Waited::NONE) };
+}
+
+/// Run `work`, and say how long the writers it ran on this thread were kept
+/// waiting for a workspace's lock another writer held, and by which
+/// process.
+///
+/// For a front end that runs commands for somebody watching, to tell a
+/// command that was slow from one that waited its turn behind another
+/// writer, which neither says of itself once it has finished (#240).
+/// Counted here rather than handed back by every writer, which would carry
+/// a duration through each of core's writers and every front end's call of
+/// one, for the one front end that asks. Nested, the outer one counts the
+/// inner one's waits too.
+pub fn waits<T>(work: impl FnOnce() -> T) -> (T, Waited) {
+    /// Puts back what was counted before, with what was counted since added,
+    /// however `work` ends: a panic caught further up leaves the count
+    /// around it with this one's waits in it, rather than lose them, or
+    /// everything counted before.
+    struct Resume(Waited);
+    impl Drop for Resume {
+        fn drop(&mut self) {
+            WAITED.with(|waited| waited.set(self.0.then(waited.get())));
+        }
+    }
+    let resume = Resume(WAITED.with(|waited| waited.replace(Waited::NONE)));
+    let value = work();
+    let waited = WAITED.with(Cell::get);
+    drop(resume);
+    (value, waited)
+}
+
+/// Count a wait of `total` for a lock `holder` held on this thread.
+fn count(total: Duration, holder: Option<u32>) {
+    WAITED.with(|waited| waited.set(waited.get().then(Waited { total, holder })));
+}
+
 /// A workspace held for a change, until this is dropped.
 ///
 /// Not re-entrant: a writer holding it that asks for it again waits for
@@ -96,12 +166,19 @@ impl WorkspaceLock {
                 source,
             })?;
         let holder = dir.join(HOLDER_FILE);
+        let started = Instant::now();
         // None for a wait too long to add to now, which is a wait with no end.
-        let deadline = Instant::now().checked_add(wait);
+        let deadline = started.checked_add(wait);
         let mut pause = FIRST_PAUSE;
+        // Once another writer has kept this one out: the last holder that
+        // said who it was, if any did.
+        let mut kept: Option<Option<u32>> = None;
         loop {
             match file.try_lock() {
                 Ok(()) => {
+                    if let Some(by) = kept {
+                        count(started.elapsed(), by);
+                    }
                     // Best effort: the lock is what keeps writers apart, and
                     // the id only says who has it. One that cannot be written
                     // costs a waiting writer the name, not the wait.
@@ -112,13 +189,17 @@ impl WorkspaceLock {
                     });
                 }
                 Err(TryLockError::WouldBlock) => {
+                    let pid = holding(&holder);
+                    let by = pid.or(kept.flatten());
+                    kept = Some(by);
                     let left = deadline.map_or(LONGEST_PAUSE, |deadline| {
                         deadline.saturating_duration_since(Instant::now())
                     });
                     if left.is_zero() {
+                        count(started.elapsed(), by);
                         return Err(LockError::Busy {
                             path,
-                            pid: holding(&holder),
+                            pid,
                             waited: wait,
                         });
                     }
