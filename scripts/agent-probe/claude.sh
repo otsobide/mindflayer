@@ -552,7 +552,10 @@ claude_mcp() {
 	verdict $run /probe-http/probe-url-value "$(mcp_http_path "$http" /probe-http/)" 'http path' 'D-11: ${VAR} in url is expanded'
 	verdict $run probe-header-value "$(mcp_http_header "$http" /probe-http/ x-probe-header)" 'header X-Probe-Header' 'D-11: ${VAR} in headers is expanded'
 	verdict $run 'Bearer probe-token-value' "$(mcp_http_header "$http" /probe-http/ authorization)" 'header Authorization' 'D-11: and inside a longer value'
-	verdict $run none "$(mcp_handshake "$results/$run.probe-unapproved.jsonl")" 'probe-unapproved stand-in' 'an entry nobody approved is not started'
+	# Started all the same: a -p run starts every server .mcp.json names,
+	# approved or not (2.1.318, the run of 2026-11-05), so approval gates
+	# nothing there, and nothing Mindweaver writes waits on one.
+	verdict $run loaded "$(mcp_handshake "$results/$run.probe-unapproved.jsonl")" 'probe-unapproved stand-in' 'a -p run starts an entry nobody approved too'
 	observe $run 'probe-unapproved in init' "$(claude_mcp_status $run probe-unapproved)" 'what -p says of an entry not approved'
 }
 
