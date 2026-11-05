@@ -102,10 +102,9 @@ from its row, after which Mindweaver manages it like anything it installed.
 ### The library
 
 The workspace's own skills, rules and MCP servers, each with the projects
-holding a copy and how every copy stands. An MCP server is a definition you
-write into the library by hand for now, which Mindweaver lists and checks
-but does not install into a project yet ([what one looks
-like](docs/reference.md#what-an-mcp-server-looks-like)).
+holding a copy and how every copy stands. An MCP server is a definition
+`mindweaver add mcp` writes into the library ([MCP servers](#mcp-servers)),
+which Mindweaver lists and checks but does not install into a project yet.
 
 ![The library's skills, each with the projects that hold a copy and its state there](docs/images/library.png)
 
@@ -286,6 +285,26 @@ offers them to yours.
 [The reference](docs/reference.md) has every command with what it prints,
 the formats Mindweaver reads and writes, `--json`, the TUI, and upgrading
 from an older Mindweaver.
+
+## MCP servers
+
+The library keeps the MCP servers your projects use beside its skills and
+rules, a definition each, written by one command from how an agent starts
+the server:
+
+```bash
+mindweaver add mcp github "GitHub's issues, pull requests and code" \
+  --command npx --arg -y --arg @modelcontextprotocol/server-github \
+  --secret-env GITHUB_PERSONAL_ACCESS_TOKEN
+```
+
+or from where it reaches one, with `--url`. A secret is given only as the
+name of the environment variable an agent reads it from, never as its
+value, so nothing Mindweaver writes holds one, and a value that looks like
+a token is refused. `mindweaver show mcp:github` says how each agent will be
+given it; installing one into a project comes next. [What an MCP server
+looks like](docs/reference.md#what-an-mcp-server-looks-like) has every
+option, and the rest.
 
 ## Learn more
 
