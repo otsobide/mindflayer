@@ -7,8 +7,9 @@ servers. Mindweaver's agent adapters build on it: the target table (#28),
 installing into several folders (#34), the managed block in `AGENTS.md`
 (#42), Claude's rule files (#43), the predicate that decides how Claude
 reaches the block (#44), the names a suggestion ranks a repository by (#58),
-what an MCP server's definition is held to for each agent (#87), and the
-MCP renderers and installs to come (#90 to #94).
+what an MCP server's definition is held to for each agent (#87), the
+entry Claude's `.mcp.json` is given of one (#90), and the MCP renderers
+and installs to come (#91 to #94).
 [docs/architecture.md](architecture.md) says what Mindweaver does with these
 facts and why; this page says what the agents do.
 
@@ -644,6 +645,7 @@ stands now that #18's runs have been made:
 | Codex | A server over sse cannot be expressed. | docs-only | #87; #18's Codex runs were not made (no Codex subscription) |
 | OpenCode | A server over sse cannot be expressed in its V2 shape, the one Mindweaver writes. | docs-only | #87 and [D-12](architecture.md#d-12-opencode-gets-the-v2-mcp-shape); none of #18's checks covers it |
 | Claude Code | A program's `cwd` cannot be expressed: its entry is written without it. | docs-only | #87; none of #18's checks covers it |
+| Claude Code | A variable it keeps from a remote server, a credential of its own or of a tool on the machine (`ANTHROPIC_API_KEY`, `NPM_TOKEN`, `SONAR_TOKEN`, `HTTPS_PROXY`, `OTEL_*`, `GIT_CONFIG_*` and more, each under `INPUT_` too where Claude looks there), is read as empty where `${VAR}` is expanded in a remote server's `url` or `headers`, so an input of an address read from one cannot be expressed. | docs-only | #90, read from Claude Code 2.1.318's binary, in any case as it compares them, and listed in `apps/core/src/mcp/blanked.rs`; none of #18's checks names one. A run putting one of them in `claude-mcp`'s header would move it. A name Mindweaver lists that Claude passes on refuses Claude a server it could reach, and one it misses reaches the server empty, which Claude's log says ("credential variable(s) that are never expanded toward a remote server"). |
 
 
 ### Running them
@@ -899,6 +901,36 @@ MCP config is not valid JSON` with the file's path, `scope=project`, and
 no server of the file started. A file somebody wrote with a comment or a
 trailing comma has none of its servers loaded, which #90 says rather than
 repairs.
+
+#### What Mindweaver writes there
+
+`claude_mcp` (#90) renders a definition as one entry, `mcpServers.<name>`,
+on what the runs above and the [mcp](https://code.claude.com/docs/en/mcp)
+docs say, through `config_entry`, every byte outside the entry kept:
+
+- A program as `{type, command, args, env}` and an address as `{type,
+  url, headers}`, `type` always, as `claude-mcp` wrote them, so no entry
+  of Mindweaver's is one Claude drops for having none
+  (`claude-mcp-untyped`). One somebody else wrote without it costs the
+  file nothing else, and refuses nothing.
+- Each input as `${VAR}`, the variable it is read from, where its
+  placeholder stands in `args`, `env`, `url` or `headers`, whole or inside
+  a longer value (`claude-mcp`, verified). The `command` is written as the
+  definition holds it: the docs say `${VAR}` expands there too, and the
+  binary expands it as it does the arguments, but no input's kind is
+  written there and no run tried it, so nothing rests on it (docs-only).
+- An input of an address read from a variable Claude keeps from a remote
+  server refuses the entry (`variable_blanked`), as the table above says
+  (docs-only), and a program's `cwd` is left out (`cwd_unsupported`).
+- sse is written, with a warning that the [mcp](https://code.claude.com/docs/en/mcp)
+  docs call it deprecated in favour of streamable HTTP (docs-only).
+- The file is read as strict JSON, up to 2 MiB. One holding a comment or a
+  trailing comma, which loses Claude every server it names
+  (`claude-mcp-comment`, `claude-mcp-comma`), is refused
+  (`mcp_json_not_strict`) and left as it is, never repaired.
+- No approval is written, neither `enabledMcpjsonServers` nor anything
+  else: a person approves a project's servers when Claude asks, and a `-p`
+  run starts every server the file names, approved or not (`claude-mcp`).
 
 ### Codex's `.codex/config.toml`
 
@@ -1287,6 +1319,9 @@ servers](#mcp-servers).
 | #87, #90 | Claude expands `${VAR}` in `args`, `env`, `url` and `headers`, also inside a longer value. | verified (`claude-mcp`) |
 | #87, #91 | Codex passes `${VAR}` in `args`, `env` and `url` on as written, so it cannot express a secret argument or a secret inside a URL. | pending (`codex-mcp-trusted`) |
 | #90 | An approved `.mcp.json` entry with a `type` loads; what an http entry without one, a comment and a trailing comma do to the file. | verified (`claude-mcp`): it loads, and so does one nobody approved, in `-p`; an http entry without a type is dropped alone, never reached; a comment or a trailing comma loses the whole file (the three runs after it) |
+| #90 | Claude expands `${VAR}` in a program's `command`. | docs-only: [mcp](https://code.claude.com/docs/en/mcp) and the binary; no run tried it, and no input is written there |
+| #90 | Claude reads a credential it keeps from a remote server as empty in its `url` and `headers` (`apps/core/src/mcp/blanked.rs`). | docs-only: read from 2.1.318's binary; none of #18's checks names one |
+| #90 | Claude's docs call the sse transport deprecated. | docs-only: [mcp](https://code.claude.com/docs/en/mcp) |
 | #91 | A trusted project's `.codex/config.toml` loads, and an untrusted one's does not. | pending (`codex-mcp-trusted`, `codex-mcp-untrusted`) |
 | #91 | `env_vars`, `env_http_headers` and `bearer_token_env_var` fill a value from a variable. | pending (`codex-mcp-trusted`) |
 | #91 | A server of the same name in `$CODEX_HOME/config.toml`, with another transport, breaks the whole configuration or leaves one layer's standing. | pending, recorded (`codex-mcp-collision`) |
