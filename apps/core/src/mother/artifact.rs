@@ -355,6 +355,20 @@ impl McpMother {
         Self::stdio(name).replacen("kind = \"arg\"\n", "kind = \"arg\"\nsecret = true\n", 1)
     }
 
+    /// The program of [`stdio`](Self::stdio), its argument no secret and
+    /// read from no variable: a value somebody gives, which a definition
+    /// may leave unsaid and no entry can refer to.
+    pub fn unread_input(name: &str) -> String {
+        Self::stdio(name).replacen("env_var = \"EXAMPLE_WORKSPACE\"\n", "", 1)
+    }
+
+    /// The program of [`stdio`](Self::stdio) with no folder to start in,
+    /// its extras for Claude `extras`, the lines of a TOML table, in place
+    /// of the timeout it holds.
+    pub fn with_claude_extras(name: &str, extras: &str) -> String {
+        Self::without_cwd(name).replacen("timeout = 30000\n", extras, 1)
+    }
+
     /// The address of [`http`](Self::http), its supplied part a secret:
     /// what Codex cannot be given inside a URL.
     pub fn secret_in_url(name: &str) -> String {
