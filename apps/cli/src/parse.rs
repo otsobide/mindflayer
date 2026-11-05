@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{ArgGroup, Args, Parser, Subcommand};
+use mindweaver_core::mcp::{self, Address, Program};
 use mindweaver_core::scan::DEFAULT_DEPTH;
+use mindweaver_core::value::{InputName, VariableName};
 use mindweaver_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
 
 /// Manage the agent skills in a mind project.
@@ -140,22 +142,27 @@ pub enum Command {
         new_id: bool,
     },
 
-    /// Create a skill or a rule in this project.
+    /// Create a skill, a rule or an MCP server in this project.
     Add {
-        /// What to create: `skill` or `rule`.
+        /// What to create: `skill`, `rule` or `mcp`.
         kind: Kind,
 
         /// Its name: `deploy`, or a route like `git/no-force-push` for a rule.
         name: String,
 
         /// One line saying what it is: a skill's description, a rule's
-        /// opening line.
+        /// opening line, what an MCP server is for.
         description: String,
 
         /// Start from a template instead: `full`, or one of yours in
         /// `.mind/templates` or the workspace's `.mindweaver/templates`.
         #[arg(long, value_name = "NAME")]
         template: Option<String>,
+
+        // Boxed, being most of what a line can say: every other command
+        // would otherwise be as large.
+        #[command(flatten)]
+        server: Box<ServerOptions>,
     },
 
     /// Open one artifact in your editor, or replace what it holds.
@@ -510,27 +517,33 @@ pub enum WeaverCommand {
         json: bool,
     },
 
-    /// Create a skill or a rule: the workspace's own, or a project's.
+    /// Create a skill, a rule or an MCP server: the workspace's own, or a
+    /// project's.
     Add {
         /// A project this workspace manages, by name or path, instead of the
         /// workspace itself.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,
 
-        /// What to create: `skill` or `rule`.
+        /// What to create: `skill`, `rule` or `mcp`.
         kind: Kind,
 
         /// Its name: `deploy`, or a route like `git/no-force-push` for a rule.
         name: String,
 
         /// One line saying what it is: a skill's description, a rule's
-        /// opening line.
+        /// opening line, what an MCP server is for.
         description: String,
 
         /// Start from a template instead: `full`, or one in
         /// `.mindweaver/templates` or the project's `.mind/templates`.
         #[arg(long, value_name = "NAME")]
         template: Option<String>,
+
+        // Boxed, being most of what a line can say: every other command
+        // would otherwise be as large.
+        #[command(flatten)]
+        server: Box<ServerOptions>,
     },
 
     /// Open one of the workspace's own artifacts, or a project's, in your
@@ -1074,6 +1087,160 @@ impl Editing {
     }
 }
 
+/// How an agent starts an MCP server or reaches it, for `add mcp`: a
+/// program, `--command` and what it is started with, or an address,
+/// `--url` and what a request to it carries.
+///
+/// One struct for both binaries' `add`, as [`Editing`] is for `edit`. Every
+/// value is a name or a literal the definition holds as it is: `--env` and
+/// `--header` a value written as typed, every other option a variable an
+/// input is read from, never its value. What no definition can hold, both
+/// transports, or an option of one with the other or with a template that
+/// gives one, is refused here, as grammar; whatever the definition then
+/// holds is core's to judge ([`mindweaver_core::create::create_server`]).
+///
+/// Each option of one transport conflicts with the other's as well as
+/// requiring its own: clap passes over what an option requires when that
+/// conflicts with something given, so `--header` with `--command` would
+/// otherwise be taken, and dropped.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Args)]
+#[command(next_help_heading = "MCP server")]
+pub struct ServerOptions {
+    /// The program an agent starts the server with.
+    #[arg(long, value_name = "COMMAND", conflicts_with = "template")]
+    pub command: Option<String>,
+
+    /// An argument the program is started with; again for each, in order.
+    //
+    // Led by a dash as often as not (`-y`, `--stdio`), so taken as a value
+    // whatever it starts with: `--arg=-y` is never needed.
+    #[arg(
+        long = "arg",
+        value_name = "ARG",
+        allow_hyphen_values = true,
+        requires = "command",
+        conflicts_with = "url"
+    )]
+    pub args: Vec<String>,
+
+    /// A variable the program's environment is given, its value written as
+    /// it is.
+    #[arg(
+        long,
+        value_name = "KEY=VALUE",
+        value_parser = pair,
+        requires = "command",
+        conflicts_with = "url"
+    )]
+    pub env: Vec<(String, String)>,
+
+    /// A secret the program's environment is given, read from the variable
+    /// VAR when an agent starts it and passed on under that name; never its
+    /// value.
+    #[arg(
+        long = "secret-env",
+        value_name = "VAR",
+        requires = "command",
+        conflicts_with = "url"
+    )]
+    pub secret_env: Vec<String>,
+
+    /// An argument read from the variable VAR when an agent starts the
+    /// program, after those --arg gives. No secret: a process list shows
+    /// it.
+    #[arg(
+        long = "arg-env",
+        value_name = "VAR",
+        requires = "command",
+        conflicts_with = "url"
+    )]
+    pub arg_env: Vec<String>,
+
+    /// The address an agent reaches the server at, over streamable HTTP.
+    #[arg(long, value_name = "URL", conflicts_with_all = ["command", "template"])]
+    pub url: Option<String>,
+
+    /// Reach the address over server-sent events instead.
+    #[arg(long, requires = "url", conflicts_with = "command")]
+    pub sse: bool,
+
+    /// A header every request carries, its value written as it is.
+    #[arg(
+        long = "header",
+        value_name = "NAME=VALUE",
+        value_parser = pair,
+        requires = "url",
+        conflicts_with = "command"
+    )]
+    pub headers: Vec<(String, String)>,
+
+    /// A secret header, its whole value read from the variable VAR when an
+    /// agent starts the server; never its value.
+    #[arg(
+        long = "secret-header",
+        value_name = "NAME=VAR",
+        value_parser = pair,
+        requires = "url",
+        conflicts_with = "command"
+    )]
+    pub secret_headers: Vec<(String, String)>,
+
+    /// A secret sent as `Authorization: Bearer` and the token, read from
+    /// the variable VAR; never its value.
+    #[arg(
+        long = "bearer-env",
+        value_name = "VAR",
+        requires = "url",
+        conflicts_with = "command"
+    )]
+    pub bearer_env: Option<String>,
+
+    /// A part of the address, written `{NAME}` in the URL, read from the
+    /// variable VAR. No secret: an address is what a log shows.
+    #[arg(
+        long = "url-var",
+        value_name = "NAME=VAR",
+        value_parser = pair,
+        requires = "url",
+        conflicts_with = "command"
+    )]
+    pub url_vars: Vec<(String, String)>,
+}
+
+impl ServerOptions {
+    /// What core is told of the server's transport: none when neither a
+    /// program nor an address is given, and then the grammar has let no
+    /// other option of either through.
+    pub fn given(&self) -> Option<mcp::Given> {
+        if let Some(command) = &self.command {
+            return Some(mcp::Given::Program(Program {
+                command: command.clone(),
+                args: self.args.clone(),
+                env: self.env.clone(),
+                secret_env: self.secret_env.iter().map(VariableName::from).collect(),
+                arg_env: self.arg_env.iter().map(VariableName::from).collect(),
+            }));
+        }
+        let url = self.url.as_ref()?;
+        Some(mcp::Given::Address(Address {
+            url: url.clone(),
+            events: self.sse,
+            headers: self.headers.clone(),
+            secret_headers: self
+                .secret_headers
+                .iter()
+                .map(|(header, variable)| (header.clone(), VariableName::from(variable)))
+                .collect(),
+            bearer: self.bearer_env.as_deref().map(VariableName::from),
+            url_vars: self
+                .url_vars
+                .iter()
+                .map(|(name, variable)| (InputName::from(name), VariableName::from(variable)))
+                .collect(),
+        }))
+    }
+}
+
 /// What `workspaces` does to the list besides showing it.
 #[derive(Debug, Subcommand)]
 pub enum WorkspacesCommand {
@@ -1246,6 +1413,16 @@ pub enum GatherCommand {
         #[arg(long)]
         json: bool,
     },
+}
+
+/// `NAME=VALUE`, split at its first `=`: what `--env`, `--header`,
+/// `--secret-header` and `--url-var` take. The name before it, since no
+/// variable's or header's name holds one, and the value after it whole,
+/// whatever it holds, another `=` included.
+fn pair(text: &str) -> Result<(String, String), String> {
+    text.split_once('=')
+        .map(|(name, value)| (name.to_owned(), value.to_owned()))
+        .ok_or_else(|| String::from("give it as a name, `=` and what goes with it"))
 }
 
 /// What `--shell` takes, from core's list rather than spelled again here, as

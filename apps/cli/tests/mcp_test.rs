@@ -1,11 +1,15 @@
-//! MCP servers at the command line: listed beside skills and rules, shown,
-//! validated, renamed and removed as every kind is, and what no release
-//! does with one yet refused, saying what to do instead.
+//! MCP servers at the command line: added from how an agent starts or
+//! reaches one, listed beside skills and rules, shown, validated, renamed
+//! and removed as every kind is, and what no release does with one yet
+//! refused, saying what to do instead.
 
 mod common;
 
+use common::mother::ServerOptionsMother;
 use common::*;
-use mindweaver_core::mother::McpMother;
+use mindweaver_core::mcp::{Address, Given};
+use mindweaver_core::mother::{McpMother, ProjectMother, SettingsMother, UrlMother};
+use mindweaver_core::{Agent, Share};
 
 const GITHUB: &str = "GitHub's issues, pull requests and code";
 
@@ -39,6 +43,441 @@ fn unrelated_mcp_folder(root: &Path) {
     fs::write(folder.join("Cargo.toml"), "[package]\nname = \"server\"\n").unwrap();
     fs::write(folder.join("src/main.rs"), "fn main() {}\n").unwrap();
     fs::write(folder.join("github.toml"), McpMother::stdio("github")).unwrap();
+}
+
+/// `mindweaver add mcp <name> <description>` in `dir`, told of its
+/// transport by `options`.
+fn add(dir: &Path, name: &str, description: &str, options: &[&str]) -> Result<Outcome, Failure> {
+    let mut line = vec!["add", "mcp", name, description];
+    line.extend_from_slice(options);
+    weaver(dir, &line)
+}
+
+/// `add`, told of the transport `given` says by the options a command line
+/// gives it by.
+fn add_given(dir: &Path, name: &str, given: &Given) -> Result<Outcome, Failure> {
+    let words = ServerOptionsMother::words(given);
+    let words: Vec<&str> = words.iter().map(String::as_str).collect();
+    add(dir, name, GITHUB, &words)
+}
+
+/// A weaver workspace in a folder of its own, made with `init`.
+fn workspace() -> TempDir {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    dir
+}
+
+/// Every file the library's folder of servers under `dir` holds, by name.
+fn written(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(own_directory_for(dir, Kind::Mcp))
+        .map(|entries| {
+            entries
+                .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+#[test]
+fn add_writes_a_program_from_its_options_that_validate_passes_with_no_warning() {
+    let dir = workspace();
+    let file = own_directory_for(dir.path(), Kind::Mcp).join("github.toml");
+
+    let added = add(
+        dir.path(),
+        "github",
+        GITHUB,
+        &[
+            "--command",
+            "npx",
+            "--arg",
+            "-y",
+            "--arg",
+            "@modelcontextprotocol/server-github",
+            "--secret-env",
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+        ],
+    )
+    .unwrap();
+    let validated = weaver(dir.path(), &["validate"]).unwrap();
+
+    assert_eq!(
+        added.stdout,
+        format!("created mcp github at {}\n", file.display())
+    );
+    assert!(added.stderr.is_empty(), "{:?}", added.stderr);
+    assert_eq!(
+        fs::read_to_string(&file).unwrap(),
+        format!(
+            "# An MCP server, as Mindweaver keeps it: each agent's own entry for it\n\
+             # is written from this file, and `show` says how each agent is given it.\n\
+             format = 1\n\
+             name = \"github\"\n\
+             description = \"{GITHUB}\"\n\
+             \n\
+             # How an agent starts it: the program, what it is started with, and what\n\
+             # its environment is given beside the agent's own.\n\
+             [transport]\n\
+             type = \"stdio\"\n\
+             command = \"npx\"\n\
+             args = [\"-y\", \"@modelcontextprotocol/server-github\"]\n\
+             env = {{ GITHUB_PERSONAL_ACCESS_TOKEN = \"{{GITHUB_PERSONAL_ACCESS_TOKEN}}\" }}\n\
+             \n\
+             # What is supplied when an agent starts it, each written between braces\n\
+             # where it goes and read from the environment variable it names: no value\n\
+             # is written here, and a secret never.\n\
+             [[inputs]]\n\
+             name = \"GITHUB_PERSONAL_ACCESS_TOKEN\"\n\
+             kind = \"env\"\n\
+             secret = true\n\
+             env_var = \"GITHUB_PERSONAL_ACCESS_TOKEN\"\n"
+        )
+    );
+    assert_eq!(
+        validated.stdout,
+        "github: ok\n\n1 MCP server checked, 0 invalid\n"
+    );
+    assert!(
+        validated.ok && validated.stderr.is_empty(),
+        "{:?}",
+        validated.stderr
+    );
+}
+
+#[test]
+fn add_writes_an_address_with_its_headers_and_every_secret_read_from_a_variable() {
+    let dir = workspace();
+
+    add(
+        dir.path(),
+        "linear",
+        "Linear's issues",
+        &[
+            "--url",
+            "https://mcp.linear.app/mcp",
+            "--header",
+            "X-Client=mindweaver",
+            "--bearer-env",
+            "LINEAR_API_KEY",
+        ],
+    )
+    .unwrap();
+    let shown = weaver(dir.path(), &["show", "mcp:linear"]).unwrap();
+
+    assert!(
+        shown.stdout.contains(
+            "\nLinear's issues\n\n\
+             transport: http\n  \
+             url: https://mcp.linear.app/mcp\n  \
+             headers:\n    \
+             Authorization: Bearer {LINEAR_API_KEY}\n    \
+             X-Client: mindweaver\n\
+             \n\
+             inputs:\n  \
+             LINEAR_API_KEY: header, secret, read from $LINEAR_API_KEY\n\
+             \n\
+             agents:\n  \
+             claude: given it whole\n  \
+             codex: given it whole\n  \
+             opencode: given it whole\n"
+        ),
+        "{}",
+        shown.stdout
+    );
+}
+
+#[test]
+fn every_transport_is_written_from_its_options_as_core_writes_it_from_what_it_is_told() {
+    let dir = workspace();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+
+    for given in [
+        McpMother::given_program(),
+        McpMother::given_address(false),
+        McpMother::given_address(true),
+    ] {
+        let name = McpMother::name();
+
+        add_given(dir.path(), &name, &given).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(folder.join(format!("{name}.toml"))).unwrap(),
+            given.text(&name, GITHUB),
+            "{given:?}"
+        );
+    }
+    let validated = weaver(dir.path(), &["validate", "mcp"]).unwrap();
+    assert!(
+        validated.ok && validated.stderr.is_empty(),
+        "{}",
+        validated.stdout
+    );
+    assert!(
+        !validated.stdout.contains("warning"),
+        "{}",
+        validated.stdout
+    );
+}
+
+#[test]
+fn a_literal_secret_and_a_reserved_name_are_refused_and_nothing_is_written() {
+    let dir = workspace();
+    let (prefix, token) = McpMother::token();
+    let rest = token[prefix.len()..].trim_start();
+    let (reserved, agent, word) = McpMother::reserved()
+        .into_iter()
+        .find(|(_, agent, _)| *agent == Agent::Claude)
+        .expect("a name Claude keeps");
+
+    let refused = add_given(dir.path(), &reserved, &McpMother::given_program()).unwrap_err();
+
+    assert_eq!(refused.error.code(), "add_name_unfit");
+    assert_eq!(
+        refused.error.to_string(),
+        format!(
+            "`{reserved}` is a name {} keeps for a server of its own (`{word}`), so no server \
+             of yours can be keyed by it",
+            agent.title()
+        )
+    );
+    for place in ["env", "header"] {
+        let (given, at) = McpMother::given_with_literal(place, &token);
+
+        let refused = add_given(dir.path(), "leaky", &given).unwrap_err();
+
+        assert_eq!(refused.error.code(), "add_mcp_unfit");
+        assert_eq!(
+            refused.error.to_string(),
+            format!(
+                "`leaky` would be a definition `validate` calls invalid, so nothing was \
+                 written: `{at}` holds what looks like a token, starting `{prefix}`, and a \
+                 definition holds no secret: declare a secret input read from an environment \
+                 variable, and write it there between braces"
+            )
+        );
+        assert!(!refused.error.to_string().contains(rest));
+    }
+    assert_eq!(written(dir.path()), Vec::<String>::new());
+}
+
+#[test]
+fn no_token_given_anywhere_is_said_whole_by_the_refusal() {
+    let dir = workspace();
+
+    for (prefix, token) in McpMother::tokens() {
+        let rest = token[prefix.len()..].trim_start().to_owned();
+        for place in ["arg", "env", "header", "url", "secret_env"] {
+            let (given, at) = McpMother::given_with_literal(place, &token);
+
+            let refused = add_given(dir.path(), &McpMother::name(), &given).unwrap_err();
+
+            let said = refused.error.to_string();
+            assert_eq!(refused.error.code(), "add_mcp_unfit", "{place}: {said}");
+            assert!(said.contains(&format!("`{at}`")), "{place}: {said}");
+            assert!(!said.contains(&rest), "{place}: {said}");
+        }
+    }
+    assert_eq!(written(dir.path()), Vec::<String>::new());
+}
+
+#[test]
+fn add_holds_a_server_to_the_one_beside_it_in_another_case_and_to_validates_rules() {
+    let dir = workspace();
+    add_given(dir.path(), "github", &McpMother::given_program()).unwrap();
+    let twin = McpMother::twin("github");
+
+    let clash = add_given(dir.path(), &twin, &McpMother::given_program()).unwrap_err();
+
+    assert_eq!(clash.error.code(), "add_name_unfit");
+    assert_eq!(
+        clash.error.to_string(),
+        format!(
+            "`{twin}` and `github` differ only by case, which a file system that folds case, as \
+             macOS's and Windows' do, holds as one file, so no library holds both everywhere: \
+             rename one of them"
+        )
+    );
+    for (why, given, code) in McpMother::given_unfit() {
+        let refused = add_given(dir.path(), &McpMother::name(), &given).unwrap_err();
+        assert_eq!(refused.error.code(), "add_mcp_unfit", "{why}");
+        assert!(
+            refused.error.to_string().contains("calls invalid"),
+            "{why}: {code}: {}",
+            refused.error
+        );
+    }
+    assert_eq!(written(dir.path()), ["github.toml"]);
+}
+
+#[test]
+fn a_key_given_twice_an_address_typed_with_a_credential_and_a_skill_given_a_transport_are_refused()
+{
+    let dir = workspace();
+
+    for (why, given, repeated) in McpMother::given_repeating() {
+        let refused = add_given(dir.path(), &McpMother::name(), &given).unwrap_err();
+
+        assert_eq!(refused.error.code(), "add_mcp_key_repeated", "{why}");
+        assert_eq!(
+            refused.error.to_string(),
+            format!(
+                "`{}` is given twice for the transport's `{}`, which holds each key once",
+                repeated.key, repeated.table
+            )
+        );
+    }
+    for credentialed in UrlMother::every_credentialed() {
+        let given = Given::Address(Address {
+            url: credentialed.typed.clone(),
+            ..Address::default()
+        });
+
+        let refused = add_given(dir.path(), &McpMother::name(), &given).unwrap_err();
+
+        assert_eq!(refused.error.code(), "add_mcp_url_userinfo");
+        assert_eq!(
+            refused.error.to_string(),
+            format!(
+                "`{}` was typed with something before its host, which a definition never keeps \
+                 and no agent is given: send a credential in a header read from an environment \
+                 variable instead (`--secret-header` or `--bearer-env`)",
+                credentialed.clean
+            )
+        );
+    }
+    let skill = weaver(
+        dir.path(),
+        &["add", "skill", "deploy", "Ship it", "--command", "npx"],
+    )
+    .unwrap_err();
+    assert_eq!(skill.error.code(), "add_transport_not_mcp");
+    assert_eq!(
+        skill.error.to_string(),
+        "`--command` and `--url` say how an MCP server is started or reached, and a skill is \
+         neither started nor reached"
+    );
+    assert_eq!(written(dir.path()), Vec::<String>::new());
+    assert!(!own_directory_for(dir.path(), Kind::Skill)
+        .join("deploy")
+        .exists());
+}
+
+#[test]
+fn options_no_definition_can_hold_together_are_refused_by_the_grammar() {
+    let dir = workspace();
+
+    // `mind add`, `mind weaver add` and `mindweaver add`, which are one
+    // grammar in three places.
+    for (why, options) in ServerOptionsMother::conflicting() {
+        for lead in [&["mind"][..], &["mind", "weaver"][..]] {
+            let mut words = lead.to_vec();
+            words.extend(["add", "mcp", "github", "GitHub"]);
+            words.extend(&options);
+
+            let kind = Cli::try_parse_from(&words).err().map(|error| error.kind());
+
+            assert!(
+                matches!(
+                    kind,
+                    Some(
+                        clap::error::ErrorKind::ArgumentConflict
+                            | clap::error::ErrorKind::MissingRequiredArgument
+                            | clap::error::ErrorKind::ValueValidation
+                    )
+                ),
+                "{why}: {words:?}: {kind:?}"
+            );
+        }
+        let mut words = vec!["mindweaver", "add", "mcp", "github", "GitHub"];
+        words.extend(&options);
+        assert!(WeaverCli::try_parse_from(&words).is_err(), "{why}");
+    }
+    assert_eq!(written(dir.path()), Vec::<String>::new());
+}
+
+#[test]
+fn add_takes_a_servers_transport_from_a_template_and_sets_its_name_and_description() {
+    let dir = workspace();
+    let templates = dir.path().join(WEAVER_DIR).join("templates");
+    fs::create_dir_all(&templates).unwrap();
+    fs::write(templates.join("internal.toml"), McpMother::http("internal")).unwrap();
+
+    let listed = weaver(dir.path(), &["templates"]).unwrap();
+    let added = add(
+        dir.path(),
+        "billing",
+        "Billing's ledger",
+        &["--template", "internal"],
+    )
+    .unwrap();
+    let shown = weaver(dir.path(), &["show", "mcp:billing"]).unwrap();
+    let validated = weaver(dir.path(), &["validate", "mcp"]).unwrap();
+
+    assert_eq!(
+        listed.stdout,
+        "full      skill  built in\n\
+         internal  mcp    .mindweaver/templates/internal.toml\n"
+    );
+    assert!(
+        added.stdout.starts_with("created mcp billing at "),
+        "{}",
+        added.stdout
+    );
+    assert!(
+        shown.stdout.contains(
+            "\nBilling's ledger\n\ntransport: http\n  url: https://{tenant}.example.com/mcp\n"
+        ),
+        "{}",
+        shown.stdout
+    );
+    assert_eq!(
+        validated.stdout,
+        "billing: ok\n\n1 MCP server checked, 0 invalid\n"
+    );
+}
+
+#[test]
+fn mind_add_mcp_writes_a_server_where_a_projects_settings_name_a_folder_for_them() {
+    let dir = TempDir::new().unwrap();
+    let toml = dir.path().join("toml");
+    let json = dir.path().join("json");
+    ProjectMother::with_mcp(&toml, &Agent::ALL, Share::Local);
+    ProjectMother::json(
+        &json,
+        &SettingsMother::authoring().with(Kind::Mcp, "servers"),
+    );
+
+    for (root, folder) in [(&toml, "mcp"), (&json, "servers")] {
+        let added = mind(
+            root,
+            &[
+                "add",
+                "mcp",
+                "github",
+                GITHUB,
+                "--command",
+                "npx",
+                "--secret-env",
+                "GITHUB_TOKEN",
+            ],
+        )
+        .unwrap();
+        let validated = mind(root, &["validate", "mcp"]).unwrap();
+
+        let file = root.join(folder).join("github.toml");
+        assert_eq!(
+            added.stdout,
+            format!("created mcp github at {}\n", file.display())
+        );
+        assert!(file.is_file());
+        assert_eq!(
+            validated.stdout,
+            "github: ok\n\n1 MCP server checked, 0 invalid\n"
+        );
+    }
 }
 
 #[test]
@@ -126,39 +565,43 @@ fn show_says_what_a_server_is_for_how_it_is_started_and_what_is_supplied_for_it(
 fn show_lays_an_address_out_by_its_url_and_headers_and_never_its_credential() {
     let dir = library();
     let folder = own_directory_for(dir.path(), Kind::Mcp);
-    let text = McpMother::sse("events").replacen(
-        "https://example.com/sse",
-        "https://me:hunter2@example.com/sse",
-        1,
-    );
+    let credentialed = UrlMother::credentialed();
+    let text = McpMother::sse("events").replacen("https://example.com/sse", &credentialed.typed, 1);
     fs::write(folder.join("events.toml"), text).unwrap();
 
     let shown = weaver(dir.path(), &["show", "mcp:events"]).unwrap();
     let json = weaver(dir.path(), &["show", "mcp:events", "--json"]).unwrap();
 
     assert!(
-        shown.stdout.contains(
+        shown.stdout.contains(&format!(
             "transport: sse\n  \
-             url: https://example.com/sse\n  \
+             url: {}\n  \
              headers:\n    \
-             X-Api-Key: {key}\n\
+             X-Api-Key: {{key}}\n\
              \n\
              inputs:\n  \
              key: header, secret, read from $EXAMPLE_KEY\n\
              \n\
-             agents:\n"
-        ),
+             agents:\n",
+            credentialed.clean
+        )),
         "{}",
         shown.stdout
     );
     let (data, warnings): (serde_json::Value, _) = enveloped(&json);
     assert!(warnings.is_empty(), "{warnings:?}");
-    assert_eq!(data[0]["transport"]["url"], "https://example.com/sse");
+    assert_eq!(data[0]["transport"]["url"], credentialed.clean.as_str());
     // Kept out of the text and the transport alike; the body is the file,
     // which holds what it was written with.
-    assert!(!shown.stdout.contains("hunter2"), "{}", shown.stdout);
     assert!(
-        !data[0]["transport"].to_string().contains("hunter2"),
+        !shown.stdout.contains(&credentialed.secret),
+        "{}",
+        shown.stdout
+    );
+    assert!(
+        !data[0]["transport"]
+            .to_string()
+            .contains(&credentialed.secret),
         "{data}"
     );
 }
@@ -426,7 +869,11 @@ fn a_project_an_older_mind_init_made_keeps_no_servers_and_says_how_to_keep_some(
         unrelated_mcp_folder(root);
 
         let listed = mind(root, &["list", "mcp"]).unwrap();
-        let added = mind(root, &["add", "mcp", "github", "GitHub"]).unwrap_err();
+        let added = mind(
+            root,
+            &["add", "mcp", "github", "GitHub", "--command", "npx"],
+        )
+        .unwrap_err();
 
         assert!(listed.ok && listed.stderr.is_empty(), "{:?}", listed.stderr);
         assert!(!listed.stdout.contains("github"), "{}", listed.stdout);
@@ -450,7 +897,18 @@ fn a_project_mind_init_makes_lists_nothing_of_an_unrelated_mcp_folder() {
     unrelated_mcp_folder(dir.path());
 
     let listed = mind(dir.path(), &["list"]).unwrap();
-    let added = mind(dir.path(), &["add", "mcp", "github", "GitHub"]).unwrap_err();
+    let added = mind(
+        dir.path(),
+        &[
+            "add",
+            "mcp",
+            "github",
+            "GitHub",
+            "--url",
+            "https://example.com/mcp",
+        ],
+    )
+    .unwrap_err();
 
     assert!(listed.ok && listed.stderr.is_empty(), "{:?}", listed.stderr);
     assert!(!listed.stdout.contains("github"), "{}", listed.stdout);
