@@ -130,13 +130,21 @@ pub fn edited(
             project.root(),
             contents,
         )),
+        // Told of what sits beside it, as discovery tells it, so that the
+        // verdict is the one `validate` gives once it is written.
         Kind::Mcp => Artifact::mcp_holding(
             &target.path,
             target.name.to_string(),
             project.root(),
             contents,
         )
-        .ok(),
+        .ok()
+        .map(|mut artifact| {
+            if let Some(folder) = target.path.parent() {
+                artifact.twinned(lifecycle::twins_beside(folder, &target.name, &target.path));
+            }
+            artifact
+        }),
     };
     Judged {
         issues: artifact

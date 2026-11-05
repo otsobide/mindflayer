@@ -568,6 +568,98 @@ fn rename_holds_the_new_name_to_the_keys_an_agent_takes_and_to_what_none_keeps()
 }
 
 #[test]
+fn two_servers_whose_names_differ_only_by_case_clash_each_with_the_other() {
+    let (_dir, project, folder) = authoring();
+    let name = McpMother::name();
+    let twin = McpMother::twin(&name);
+    write(
+        &folder,
+        &[
+            (&format!("{name}.toml"), &McpMother::stdio(&name)),
+            (&format!("{twin}.toml"), &McpMother::http(&twin)),
+            ("linear.toml", &McpMother::sse("linear")),
+        ],
+    );
+
+    let catalog = Catalog::discover_kinds(std::slice::from_ref(&project), &[Kind::Mcp]);
+    let issues = |of: &str| {
+        catalog
+            .artifacts()
+            .iter()
+            .find(|artifact| artifact.name() == of)
+            .unwrap_or_else(|| panic!("no {of}"))
+            .validate()
+    };
+
+    assert_eq!(
+        issues(&name),
+        [ValidationIssue::McpNameCaseClash {
+            name: name.clone(),
+            twin: twin.clone(),
+        }]
+    );
+    assert_eq!(
+        issues(&twin),
+        [ValidationIssue::McpNameCaseClash {
+            name: twin.clone(),
+            twin: name.clone(),
+        }]
+    );
+    assert!(!issues(&name)[0].is_warning());
+    assert_eq!(issues("linear"), []);
+}
+
+#[test]
+fn no_change_leaves_a_server_beside_one_named_as_it_is_in_another_case() {
+    let (_dir, project, folder) = authoring();
+    write(
+        &folder,
+        &[
+            ("github.toml", &McpMother::stdio("github")),
+            ("linear.toml", &McpMother::http("linear")),
+        ],
+    );
+    let linear = lifecycle::find(&project, &Reference::parse("mcp:linear")).unwrap();
+
+    let renamed = lifecycle::rename(None, &project, &linear, "GitHub").unwrap_err();
+    assert_eq!(renamed.code(), "rename_name_unfit", "{renamed}");
+    assert!(
+        renamed.to_string().contains("differ only by case"),
+        "{renamed}"
+    );
+    assert!(folder.join("linear.toml").is_file());
+
+    // A server renamed only in case is beside no other of its name.
+    let github = lifecycle::find(&project, &Reference::parse("mcp:github")).unwrap();
+    let recased = lifecycle::rename(None, &project, &github, "GitHub").unwrap();
+    assert_eq!(recased.target.name, "GitHub");
+
+    // Contents given whole are held to what sits beside them, as
+    // `validate` holds them once written, and so is what a front end is
+    // told of them before.
+    write(&folder, &[("LINEAR.toml", &McpMother::sse("LINEAR"))]);
+    let linear = lifecycle::find(&project, &Reference::parse("mcp:linear")).unwrap();
+    let text = McpMother::http("linear");
+    let edited =
+        lifecycle::replace_contents(None, &project, &linear, text.as_bytes(), None).unwrap_err();
+    assert_eq!(edited.code(), "edit_contents_unfit", "{edited}");
+    let judged =
+        mindweaver_core::draft::edited(None, &project, &Reference::parse("mcp:linear"), &text);
+    assert_eq!(
+        judged.refused.map(|refused| refused.code),
+        Some("edit_contents_unfit")
+    );
+    assert!(
+        judged
+            .issues
+            .iter()
+            .any(|issue| issue.code() == "mcp_name_case_clash"),
+        "{:?}",
+        judged.issues
+    );
+}
+
+#[test]
 fn rename_refuses_a_route_a_server_it_cannot_read_and_a_name_taken() {
     let (_dir, project, folder) = authoring();
     write(

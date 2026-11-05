@@ -143,7 +143,10 @@ pub(crate) fn plan(
     // an agent takes, the others' to kebab-case.
     let issues = match kind {
         Kind::Skill | Kind::Rule => artifact::name_issues(name),
-        Kind::Mcp => artifact::mcp_name_strict_issues(name),
+        // Beside nothing: `add` writes no definition yet
+        // ([`CreateError::McpUnscaffolded`]), so what one would sit beside
+        // is asked once it does.
+        Kind::Mcp => artifact::mcp_name_strict_issues(name, &[]),
     };
     if !issues.is_empty() {
         return Err(CreateError::Name {

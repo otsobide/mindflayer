@@ -451,3 +451,36 @@ fn a_mindflayer_mother_leaves_a_projects_exclude_block_under_the_old_markers() {
         "{text}"
     );
 }
+
+#[test]
+fn every_server_name_a_mother_draws_breaks_or_keeps_the_rule_it_is_named_for() {
+    use crate::mcp::name::{issues, twins};
+
+    for _ in 0..DRAWS {
+        let name = McpMother::name();
+        assert_eq!(issues(&name), [], "{name}");
+        let twin = McpMother::twin(&name);
+        assert_eq!(twins(&name, [twin.as_str()]), [twin.as_str()], "{name}");
+    }
+    for (why, name) in McpMother::unwritable() {
+        assert!(
+            issues(&name).iter().any(|issue| !issue.is_warning()),
+            "{why}: {name:?}"
+        );
+    }
+    for (name, _, _) in McpMother::reserved() {
+        assert!(matches!(
+            &issues(&name)[..],
+            [ValidationIssue::McpNameReserved { .. }]
+        ));
+    }
+    for (name, _, _) in McpMother::claimed() {
+        assert!(matches!(
+            &issues(&name)[..],
+            [ValidationIssue::McpNameClaimed { .. }]
+        ));
+    }
+    for (why, name) in McpMother::near_reserved() {
+        assert_eq!(issues(&name), [], "{why}");
+    }
+}

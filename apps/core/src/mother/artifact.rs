@@ -205,6 +205,23 @@ impl McpMother {
         ]
     }
 
+    /// `name` in another case, its first letter's turned: the name a
+    /// definition beside `name`'s clashes with. `name` holds a letter.
+    pub fn twin(name: &str) -> String {
+        let at = name
+            .find(|c: char| c.is_ascii_alphabetic())
+            .unwrap_or_else(|| panic!("{name} holds no letter to turn"));
+        let mut twin = name.to_owned();
+        let letter = twin.remove(at);
+        let turned = if letter.is_ascii_uppercase() {
+            letter.to_ascii_lowercase()
+        } else {
+            letter.to_ascii_uppercase()
+        };
+        twin.insert(at, turned);
+        twin
+    }
+
     /// `word`, each of its letters in a case drawn afresh.
     fn recased(word: &str) -> String {
         word.chars()

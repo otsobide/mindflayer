@@ -660,7 +660,12 @@ fn fit(target: &Target, contents: &[u8]) -> Result<(), LifecycleError> {
                 .file_name()
                 .map(|file| file.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            artifact::mcp_strict_issues(&definition, &name, &file)
+            let twins = target
+                .path
+                .parent()
+                .map(|folder| twins_beside(folder, &name, &target.path))
+                .unwrap_or_default();
+            artifact::mcp_strict_issues(&definition, &name, &file, &twins)
         }
     };
     if issues.is_empty() {
@@ -1002,7 +1007,10 @@ fn rename_mcp(
             name: to.to_owned(),
         });
     }
-    let issues = artifact::mcp_name_strict_issues(to);
+    // Beside every definition but the one renamed, so that a name changed
+    // only in case is its own and not its twin.
+    let twins = twins_beside(directory, to, &target.path);
+    let issues = artifact::mcp_name_strict_issues(to, &twins);
     if !issues.is_empty() {
         return Err(LifecycleError::Name {
             name: to.to_owned(),
@@ -1050,7 +1058,7 @@ fn rename_mcp(
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let issues = artifact::mcp_strict_issues(&renamed, to, &file_name);
+    let issues = artifact::mcp_strict_issues(&renamed, to, &file_name, &twins);
     if !issues.is_empty() {
         return Err(LifecycleError::Unfit {
             name: target.name.to_string(),
@@ -1168,6 +1176,20 @@ fn inside(project: &MindProject, target: &Target) -> Result<PathBuf, LifecycleEr
         });
     }
     Ok(directory)
+}
+
+/// The names of the MCP servers' definitions in `folder` that are `name` in
+/// another case, the one at `file` left out: what a definition written
+/// there under `name` is held not to sit beside, as discovery holds the
+/// ones it finds ([`crate::mcp::name::twins`]), read off the same listing.
+pub(crate) fn twins_beside(folder: &Path, name: &str, file: &Path) -> Vec<ArtifactName> {
+    let (files, _) = Catalog::locate(folder, Kind::Mcp);
+    let stems: Vec<String> = files
+        .iter()
+        .filter(|other| other.as_path() != file)
+        .filter_map(|other| other.file_stem()?.to_str().map(str::to_owned))
+        .collect();
+    crate::mcp::name::twins(name, stems.iter().map(String::as_str))
 }
 
 /// Whether anything at all is at `path`, a dangling symlink included.

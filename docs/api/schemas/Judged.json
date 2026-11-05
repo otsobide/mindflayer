@@ -709,6 +709,33 @@
             "warning",
             "message"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "mcp_name_case_clash"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "twin": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "twin",
+            "warning",
+            "message"
+          ]
         }
       ]
     }

@@ -81,6 +81,9 @@ pub struct Artifact {
     /// Whether the copies its project's agents read do not all hold the
     /// same names and bytes.
     differ: bool,
+    /// The names of the definitions beside an MCP server's that are its own
+    /// in another case, as discovery found them: none for any other kind.
+    twins: Vec<ArtifactName>,
 }
 
 /// Who reads a copy where it sits, and who put it there.
@@ -284,6 +287,7 @@ impl Artifact {
             placement: Placement::authored(),
             others: Vec::new(),
             differ: false,
+            twins: Vec::new(),
         })
     }
 
@@ -326,6 +330,7 @@ impl Artifact {
             placement: Placement::authored(),
             others: Vec::new(),
             differ: false,
+            twins: Vec::new(),
         }
     }
 
@@ -373,6 +378,7 @@ impl Artifact {
             placement: Placement::authored(),
             others: Vec::new(),
             differ: false,
+            twins: Vec::new(),
         })
     }
 
@@ -496,6 +502,12 @@ impl Artifact {
         });
         self.others.extend(other.others);
         self.differ |= differs || other.differ;
+    }
+
+    /// Say which definitions beside this one are named as it is in another
+    /// case: discovery's to say, once it has loaded every one in a folder.
+    pub(crate) fn twinned(&mut self, twins: Vec<ArtifactName>) {
+        self.twins = twins;
     }
 
     /// Mark as installed each copy `recorded` says Mindweaver put where it
@@ -636,21 +648,28 @@ impl Artifact {
                 definition,
                 &self.name,
                 self.path.file_name().and_then(|name| name.to_str()),
+                &self.twins,
             ),
         }
     }
 }
 
 /// Everything wrong with a definition filed under `name`, in a file called
-/// `file` when that file has a name to compare.
+/// `file` when that file has a name to compare, beside definitions named
+/// `twins`, each its name in another case.
 ///
 /// Its name first, held to the keys every agent takes and to what each
 /// keeps for itself ([`mcp_name_issues`]), then the file it is in, then the
 /// definition itself ([`McpDefinition::issues`]). Apart from
 /// [`Artifact::validate`], as [`skill_issues`] is, so that contents given
 /// whole are judged before they are written ([`mcp_strict_issues`]).
-fn mcp_issues(definition: &McpDefinition, name: &str, file: Option<&str>) -> Vec<ValidationIssue> {
-    let mut issues = mcp_name_issues(name);
+fn mcp_issues(
+    definition: &McpDefinition,
+    name: &str,
+    file: Option<&str>,
+    twins: &[ArtifactName],
+) -> Vec<ValidationIssue> {
+    let mut issues = mcp_name_issues(name, twins);
     // The file is what an install keys the entry by and what a change finds
     // the definition by, so a `name` that says otherwise is one of two names
     // for one server.
@@ -666,35 +685,46 @@ fn mcp_issues(definition: &McpDefinition, name: &str, file: Option<&str>) -> Vec
 
 /// Everything wrong with `name` as an MCP server's: not the kebab-case
 /// every other kind's name is held to, but the keys every agent's config
-/// takes, less those an agent keeps for itself ([`crate::mcp::name`]).
-fn mcp_name_issues(name: &str) -> Vec<ValidationIssue> {
-    crate::mcp::name::issues(name)
+/// takes, less those an agent keeps for itself ([`crate::mcp::name`]), and
+/// one name with each of `twins`, which differ from it only by case.
+fn mcp_name_issues(name: &str, twins: &[ArtifactName]) -> Vec<ValidationIssue> {
+    let mut issues = crate::mcp::name::issues(name);
+    issues.extend(twins.iter().map(|twin| ValidationIssue::McpNameCaseClash {
+        name: name.to_owned(),
+        twin: twin.to_string(),
+    }));
+    issues
 }
 
 /// Whatever `name` breaks as an MCP server's that Mindweaver will not
 /// write: what [`mcp_strict_issues`] says of a definition's name, asked of
 /// a name before there is a definition to judge it with, as a rename asks
-/// of the name it is given.
-pub(crate) fn mcp_name_strict_issues(name: &str) -> Vec<ValidationIssue> {
-    mcp_name_issues(name)
+/// of the name it is given, beside the definitions named `twins`.
+pub(crate) fn mcp_name_strict_issues(name: &str, twins: &[ArtifactName]) -> Vec<ValidationIssue> {
+    mcp_name_issues(name, twins)
         .into_iter()
         .filter(|issue| !issue.is_warning())
         .collect()
 }
 
-/// Whatever a definition filed under `name`, in a file called `file`,
-/// breaks that Mindweaver will not write: every issue `validate` would call
-/// it invalid for, which in this format is every one it has.
+/// Whatever a definition filed under `name`, in a file called `file`
+/// beside definitions named `twins`, breaks that Mindweaver will not
+/// write: every issue `validate` would call it invalid for, which is all
+/// it says but a name an agent only uses for its own
+/// ([`ValidationIssue::McpNameClaimed`]), a warning.
 ///
 /// A definition's half of [`strict_issues`], judged on what it will hold
 /// before a byte of it is written, as a rule's is ([`rule_text_issues`]):
-/// contents given whole, and a definition renamed.
+/// contents given whole, and a definition renamed. `twins` are read off the
+/// folder it is written in by the change, as discovery reads them off the
+/// folder it lists, so that the two hold it to one rule.
 pub(crate) fn mcp_strict_issues(
     definition: &McpDefinition,
     name: &str,
     file: &str,
+    twins: &[ArtifactName],
 ) -> Vec<ValidationIssue> {
-    mcp_issues(definition, name, Some(file))
+    mcp_issues(definition, name, Some(file), twins)
         .into_iter()
         .filter(|issue| !issue.is_warning())
         .collect()
@@ -999,6 +1029,10 @@ pub enum ValidationIssue {
         agent: Agent,
         claimed: String,
     },
+    McpNameCaseClash {
+        name: String,
+        twin: String,
+    },
 }
 
 codes!(ValidationIssue {
@@ -1030,6 +1064,7 @@ codes!(ValidationIssue {
     Self::McpNameNotAKey { .. } => "mcp_name_not_a_key",
     Self::McpNameReserved { .. } => "mcp_name_reserved",
     Self::McpNameClaimed { .. } => "mcp_name_claimed",
+    Self::McpNameCaseClash { .. } => "mcp_name_case_clash",
 });
 
 impl ValidationIssue {
@@ -1096,7 +1131,8 @@ impl ValidationIssue {
             | ValidationIssue::SecretWithoutEnvVar { .. }
             | ValidationIssue::SecretLiteral { .. }
             | ValidationIssue::McpNameNotAKey { .. }
-            | ValidationIssue::McpNameReserved { .. } => false,
+            | ValidationIssue::McpNameReserved { .. }
+            | ValidationIssue::McpNameCaseClash { .. } => false,
         }
     }
 }
@@ -1189,6 +1225,9 @@ impl ValidationIssue {
             ],
             ValidationIssue::SecretLiteral { at, prefix } => {
                 vec![("at", Carried::Text(at)), ("prefix", Carried::Text(prefix))]
+            }
+            ValidationIssue::McpNameCaseClash { name, twin } => {
+                vec![("name", Carried::Text(name)), ("twin", Carried::Text(twin))]
             }
             ValidationIssue::McpNameReserved {
                 name,
@@ -1383,6 +1422,10 @@ impl ValidationIssue {
                 agent: Agent::Claude,
                 claimed: text(),
             },
+            ValidationIssue::McpNameCaseClash {
+                name: text(),
+                twin: text(),
+            },
         ]
     }
 }
@@ -1538,6 +1581,12 @@ impl fmt::Display for ValidationIssue {
                     agent.title()
                 ),
             },
+            ValidationIssue::McpNameCaseClash { name, twin } => write!(
+                f,
+                "`{name}` and `{twin}` differ only by case, which a file system that folds case, \
+                 as macOS's and Windows' do, holds as one file, so no library holds both \
+                 everywhere: rename one of them"
+            ),
         }
     }
 }

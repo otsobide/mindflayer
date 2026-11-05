@@ -23,6 +23,7 @@ fn skill(name: &str, description: &str, directory: &str) -> Artifact {
         placement: Placement::authored(),
         others: Vec::new(),
         differ: false,
+        twins: Vec::new(),
     }
 }
 
@@ -50,6 +51,7 @@ fn declaring(name: &str, summary: Option<&str>, manifest: RuleManifest) -> Artif
         placement: Placement::authored(),
         others: Vec::new(),
         differ: false,
+        twins: Vec::new(),
     }
 }
 
@@ -721,6 +723,16 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
             serde_json::json!({
                 "code": "mcp_name_claimed", "name": "anthropic-skills", "agent": "claude",
                 "claimed": "anthropic-skills", "warning": true,
+            }),
+        ),
+        (
+            ValidationIssue::McpNameCaseClash {
+                name: String::from("github"),
+                twin: String::from("GitHub"),
+            },
+            serde_json::json!({
+                "code": "mcp_name_case_clash", "name": "github", "twin": "GitHub",
+                "warning": false,
             }),
         ),
     ];

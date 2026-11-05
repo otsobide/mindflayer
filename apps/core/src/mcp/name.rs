@@ -25,6 +25,7 @@
 use crate::agent::Agent;
 use crate::artifact::ValidationIssue;
 use crate::skill::MAX_NAME_SEGMENT_LEN;
+use crate::value::ArtifactName;
 
 /// Everything wrong with `name` as an MCP server's, in the order it is
 /// worth fixing: nothing at all, a character no agent keys a server by, a
@@ -82,6 +83,20 @@ pub(crate) fn issues(name: &str) -> Vec<ValidationIssue> {
 /// ([`issues`]): a name is filed safely either way.
 pub fn is_key(name: &str) -> bool {
     !name.is_empty() && is_keyed(name) && name.chars().count() <= MAX_NAME_SEGMENT_LEN
+}
+
+/// Every name among `beside` that is `name` in another case: what a folder
+/// holding `name`'s definition cannot hold beside it everywhere, since a
+/// file system that folds case reads the two as one file.
+pub(crate) fn twins<'a>(
+    name: &str,
+    beside: impl IntoIterator<Item = &'a str>,
+) -> Vec<ArtifactName> {
+    beside
+        .into_iter()
+        .filter(|other| *other != name && other.eq_ignore_ascii_case(name))
+        .map(ArtifactName::from)
+        .collect()
 }
 
 /// Whether every character of `name` is one an agent keys a server by.

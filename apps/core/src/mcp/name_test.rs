@@ -103,6 +103,28 @@ fn a_name_an_agent_uses_for_its_own_is_only_worth_a_warning() {
 }
 
 #[test]
+fn a_name_s_twins_are_the_names_beside_it_that_are_it_in_another_case() {
+    let name = format!(
+        "{}{}",
+        random::word(),
+        random::drawn_from(random::DIGITS, 2)
+    );
+    let twin = McpMother::twin(&name);
+    let other = McpMother::name();
+
+    assert_ne!(twin, name);
+    assert_eq!(
+        twins(&name, [name.as_str(), twin.as_str(), other.as_str()]),
+        [twin.as_str()]
+    );
+    assert_eq!(
+        twins(&name, [name.to_ascii_uppercase().as_str()]),
+        [name.to_ascii_uppercase().as_str()]
+    );
+    assert!(twins(&name, [name.as_str(), other.as_str()]).is_empty());
+}
+
+#[test]
 fn each_agent_keeps_the_names_docs_agents_md_lists_and_codex_keeps_none() {
     let listed = |agent: Agent| -> Vec<&'static str> { reserved(agent).to_vec() };
 

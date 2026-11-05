@@ -74,6 +74,7 @@ export type CoreCode =
   | "mcp_name_not_a_key"
   | "mcp_name_reserved"
   | "mcp_name_claimed"
+  | "mcp_name_case_clash"
   | "browse_missing"
   | "browse_not_a_folder"
   | "browse_unlisted"

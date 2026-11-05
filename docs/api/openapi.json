@@ -470,6 +470,7 @@
           "mcp_name_not_a_key",
           "mcp_name_reserved",
           "mcp_name_claimed",
+          "mcp_name_case_clash",
           "browse_missing",
           "browse_not_a_folder",
           "browse_unlisted",
@@ -5430,6 +5431,33 @@
               "name",
               "agent",
               "claimed",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "mcp_name_case_clash"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "twin": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "twin",
               "warning",
               "message"
             ],
