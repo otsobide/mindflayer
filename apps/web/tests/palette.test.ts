@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises } from '@vue/test-utils'
+import { flushPromises, type VueWrapper } from '@vue/test-utils'
 import type { Planned } from '@/api/generated/Planned'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import { TransportError, type Query, type Transport } from '@/api/transport'
@@ -105,6 +105,17 @@ async function opened() {
   expect(palette(), 'the palette, opened by Ctrl+K').not.toBeNull()
 }
 
+/** The editor's text on `page`, once it is drawn, focused as a click there focuses it. */
+async function editorFocused(page: VueWrapper): Promise<HTMLElement> {
+  const content = await vi.waitFor(() => {
+    const found = page.get('[data-testid="editor"]').element.shadowRoot?.querySelector<HTMLElement>('.cm-content')
+    expect(found).toBeTruthy()
+    return found!
+  })
+  content.focus()
+  return content
+}
+
 describe('the command palette', () => {
   it('opens on Ctrl+K over any page, its search focused, and gives the focus back where it was on Escape', async () => {
     await render('/projects', fixture('workspace'))
@@ -187,12 +198,7 @@ describe('the command palette', () => {
     unmount()
 
     const editing = await render('/edit?kind=skill&name=review', answering(fixture('workspace'), [...answers(), ...drafts()]).transport)
-    const content = await vi.waitFor(() => {
-      const found = editing.page.get('[data-testid="editor"]').element.shadowRoot?.querySelector<HTMLElement>('.cm-content')
-      expect(found).toBeTruthy()
-      return found!
-    })
-    content.focus()
+    const content = await editorFocused(editing.page)
     press('k', { ctrlKey: true }, content)
     await settled()
     expect(palette()).toBeNull()
@@ -572,12 +578,7 @@ describe('the sheet of shortcuts', () => {
     unmount()
 
     const editing = await render('/edit?kind=skill&name=review', answering(fixture('workspace'), [...answers(), ...drafts()]).transport)
-    const content = await vi.waitFor(() => {
-      const found = editing.page.get('[data-testid="editor"]').element.shadowRoot?.querySelector<HTMLElement>('.cm-content')
-      expect(found).toBeTruthy()
-      return found!
-    })
-    content.focus()
+    const content = await editorFocused(editing.page)
     press('?', { shiftKey: true }, content)
     await settled()
     expect(sheet()).toBeNull()
