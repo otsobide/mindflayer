@@ -726,6 +726,23 @@ as `edit` loads the file its editor closed on, is told the same
 first of the two and passing over the other was the alternative, and would
 hide a server the moment somebody added its twin.
 
+Neither change repairs a pair of twins that each hold another problem as
+well (a token written as it is, a secret naming no variable).
+`edit --contents` keeps the file's name, so contents that fix the other
+problem are refused for the clash they cannot remove, and `rename` holds
+the definition it renames to every problem `validate` reports, so it asks
+for the other one fixed first. No command makes such a pair, which comes
+of a hand edit or of a pull from a repository written where case is not
+folded, so it is repaired as it was made: in an editor (`edit` without
+`--contents`, which refuses nothing, since the file is written by the time
+Mindweaver sees it, and says what is left), by hand, or by removing one. A
+skill whose folder a hand edit named against the rules, its description
+empty too, is in the same place. Letting `edit --contents` pass over a
+clash its contents neither add nor could remove was the alternative, and
+would write a definition `validate` still calls invalid, which strict when
+writing refuses; the panel, which has no editor, is left with removing one
+([open questions](#open-questions)).
+
 A name an agent keeps for itself is refused (`mcp_name_reserved`), in any
 case, since two names that differ by case alone are one: Claude Code's
 `workspace`, `claude-in-chrome` and `computer-use`, and the names colliding
@@ -10313,6 +10330,15 @@ it once as it closes.
   are written into no entry yet: a renderer that writes either (#90 to #92)
   adds it to `McpDefinition::literals`, where the transport's values and
   the extras are looked through.
+- **Twins the panel cannot repair.** Two definitions that clash by case and
+  each hold another problem are repaired in an editor or by hand
+  ([which names a server is given](#which-names-an-mcp-server-is-given)),
+  and the panel has neither: `edit --contents` and `rename` refuse each,
+  so removing one is all it can do. Whether a change of contents passes
+  over a problem those contents cannot change (a clash, or a reserved name
+  a hand-made file is filed under), as a rule's contents are never refused
+  for its route, waits for the panel's page for MCP servers, which is
+  where it would be met.
 - **Names that clash by case across holders.** Two definitions clash by
   case only in one folder: a project's own `github` and the library's
   `GitHub` are told nothing of each other until an install (#93) would put
