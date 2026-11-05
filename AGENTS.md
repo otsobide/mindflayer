@@ -1604,7 +1604,10 @@ These are easy to break from a single file without noticing.
   editing, adding and renaming in the library, beside a copy of it
   and served by `serve`, through
   `environment.ts` as every process is), and holds what the panel left to
-  what the same command leaves in the copy.
+  what the same command leaves in the copy. That `mindweaver ui` runs with
+  `--log`, and a test that fails keeps what it said beside its trace
+  (`keep`, in `panel.ts`), which `log.spec.ts` holds to saying a run and
+  never the token.
 - The tests of the panel's types are core's and the CLI's
   `src/typescript_test.rs`, compiled only with the `ts` feature, and named
   so `--lib typescript` picks them out: each crate's export

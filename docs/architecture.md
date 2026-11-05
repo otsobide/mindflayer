@@ -7471,6 +7471,23 @@ links against libraries Playwright installs only on Debian and Ubuntu
 every action with the page and the requests at each step, in
 `test-results/`, and CI adds the HTML report.
 
+A trace times each request from the browser, so it says a run took
+seconds, and not where they went: an unload once took five and a half on
+CI, which its trace could say no more of (#240). So a test's own
+`mindweaver ui` is started with `--log` (`serve`, in `e2e/environment.ts`),
+its stderr kept for as long as it runs, and a test that fails keeps it
+beside its trace, once the server has stopped and said all it will, as
+`mindweaver-ui.log` in its folder of `test-results/`, attached to the
+report too (`keep`, in `e2e/panel.ts`): every request with how long its
+answer took, and every run with how long it waited its turn, how long
+each of its lines took and how much of that it waited for a workspace's
+lock ([the log](#the-log)), each after the time of day, to read beside the
+trace. Not the config's server, whose stderr Playwright prints, which
+would put a line for every request of every test in the run's output; no
+spec runs a change on it. `e2e/log.spec.ts` holds a run from the panel to
+being said there, as it starts, as its line runs and as it ends, with its
+request, and never the token or what the request sent.
+
 ### The README's screenshots
 
 The README's pictures of the panel are taken, never drawn or captured by

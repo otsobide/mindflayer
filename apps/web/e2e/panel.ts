@@ -1,11 +1,12 @@
 /*
  * What the specs share: the server the config started, a page opened
  * through its launch link as a person opens it, and what the CLI says of the
- * same workspace, to hold the page to.
+ * same workspace, to hold the page to; and what a test that fails keeps
+ * beside its trace, to say where its time went.
  */
-import { cpSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { cpSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { test as base, expect, type Page } from '@playwright/test'
+import { test as base, expect, type Page, type TestInfo } from '@playwright/test'
 import type { Envelope } from '../src/api/generated/Envelope'
 import type { Listing } from '../src/api/generated/Listing'
 import { given, look, run, serve, type Places } from './environment.ts'
@@ -98,6 +99,13 @@ export interface Own extends Panel {
   /** The copy, as every command names it. */
   twin: Places
   served: Served
+  /**
+   * What its `mindweaver ui` has said on stderr so far, a line at a time:
+   * where it serves, then its log, every request it answered and every
+   * run, each after the time of day and with how long it took. What a
+   * test that fails keeps beside its trace (`keep`).
+   */
+  log(): string[]
 }
 
 /**
@@ -148,8 +156,9 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
   // Under the run's temporary folder, which the driver removes, and served
   // with the run's home, which the driver holds to stay as it was made, or
   // one of its own beside it, held here the same way once the server has
-  // stopped.
-  own: async ({ page, building }, use) => {
+  // stopped. Its log is kept beside the trace of a test that failed, once
+  // the server has stopped and said all it will.
+  own: async ({ page, building }, use, testInfo) => {
     const at = given()
     const folder = mkdtempSync(join(at.scratch, 'own-'))
     const homed = HOMED.includes(building)
@@ -159,10 +168,14 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
     cpSync(mine.workspace, twin.workspace, { recursive: true })
     const made = homed ? look(mine.home) : undefined
     const server = await serve(mine)
+    const log = () => server.said().split('\n').filter(line => line !== '')
     try {
-      await use({ at: mine, twin, served: server, open: (path = '/') => open(page, server, path) })
+      await use({ at: mine, twin, served: server, log, open: (path = '/') => open(page, server, path) })
     } finally {
       await server.stop()
+      if (testInfo.status !== testInfo.expectedStatus) {
+        await keep(testInfo, server.said())
+      }
     }
     if (made) {
       expect(look(mine.home), `the home of its own, ${mine.home}, is as it was made`).toEqual(made)
@@ -171,6 +184,22 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
 })
 
 export { expect }
+
+/**
+ * Keep what a failed test's own `mindweaver ui` said beside its trace, as
+ * `mindweaver-ui.log` in its folder of `test-results`, which CI uploads,
+ * and attached to the report: every request it answered with how long the
+ * answer took, and every run with how long it waited its turn behind the
+ * runs before it, how long each of its lines took and how much of that it
+ * waited for a workspace's lock. The trace times each request from the
+ * browser, which says that a run took seconds but not where they went
+ * (#240). Never the token, which the server keeps out of its log.
+ */
+async function keep(testInfo: TestInfo, said: string): Promise<void> {
+  const path = testInfo.outputPath('mindweaver-ui.log')
+  writeFileSync(path, said)
+  await testInfo.attach('mindweaver ui log', { path, contentType: 'text/plain' })
+}
 
 /**
  * Wait until the page is drawn: its panel there, the snapshot answered, and

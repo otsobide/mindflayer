@@ -215,10 +215,12 @@ export function succeed(at: Places, name: 'mindweaver' | 'mind', directory: stri
  * port the system picks, with nothing opened: what the config starts the
  * suite's server with, and `serve` a spec's own. With `workspace` `none` it
  * names none, and finds the one it is started in, as a person's does: what
- * the screenshots show, from a folder no other workspace is above.
+ * the screenshots show, from a folder no other workspace is above. With
+ * `log`, it says on stderr every request it answers and every run, with how
+ * long each took (`--log`).
  */
-export function ui(at: Places, workspace: 'fixture' | 'none' = 'fixture'): string[] {
-  return ['ui', '--no-open', '--port', '0', '-C', at.workspace, ...pinned(at, workspace)]
+export function ui(at: Places, workspace: 'fixture' | 'none' = 'fixture', log = false): string[] {
+  return ['ui', '--no-open', '--port', '0', ...(log ? ['--log'] : []), '-C', at.workspace, ...pinned(at, workspace)]
 }
 
 /** A `mindweaver ui` a spec started, and how to stop it. */
@@ -228,6 +230,12 @@ export interface Serving {
   token: string
   /** The link it printed, which trades the token for the cookie. */
   link: string
+  /**
+   * All it has said on stderr so far: the note saying where it serves, then
+   * its log, a line for every request answered and for every run, each
+   * after the time of day (`--log`), never holding the token.
+   */
+  said(): string
   /** Ctrl-C, as a person stops it, and wait until it has. */
   stop(): Promise<void>
 }
@@ -241,9 +249,16 @@ const LINK = /^(?<origin>http:\/\/127\.0\.0\.1:\d+)\/\?token=(?<token>[0-9a-f]+)
  * and answer once it printed its link: for a spec that changes a workspace
  * of its own, which no other spec reads. Its stdout is read, never
  * printed, so the token stays out of the log.
+ *
+ * With its log (`--log`), kept with the rest of its stderr for as long as
+ * it runs, and after (`Serving.said`): what a test that failed keeps
+ * beside its trace (panel.ts), to say where a run's time went, which a
+ * trace, timing each request from the browser, cannot (#240). Not the
+ * config's server, whose stderr Playwright prints, a line for every
+ * request of every test: no spec runs a change on it.
  */
 export function serve(at: Places, workspace: 'fixture' | 'none' = 'fixture'): Promise<Serving> {
-  const child = spawn(binary(at.bin, 'mindweaver'), ui(at, workspace), {
+  const child = spawn(binary(at.bin, 'mindweaver'), ui(at, workspace, true), {
     cwd: at.workspace,
     env: environment(at),
     stdio: ['ignore', 'pipe', 'pipe']
@@ -261,7 +276,7 @@ export function serve(at: Places, workspace: 'fixture' | 'none' = 'fixture'): Pr
       const link = LINK.exec(printed)
       if (link?.groups) {
         clearTimeout(timer)
-        resolve({ origin: link.groups.origin!, token: link.groups.token!, link: link[0], stop: () => stopped(child) })
+        resolve({ origin: link.groups.origin!, token: link.groups.token!, link: link[0], said: () => said, stop: () => stopped(child) })
       }
     })
     child.on('error', (error) => {
