@@ -298,10 +298,11 @@ mindweaver add mcp github "GitHub's issues, pull requests and code" \
   --secret-env GITHUB_PERSONAL_ACCESS_TOKEN
 ```
 
-or from where it reaches one, with `--url`. A secret is given only as the
-name of the environment variable an agent reads it from, never as its
-value, so nothing Mindweaver writes holds one, and a value that looks like
-a token is refused. `mindweaver show mcp:github` says how each agent will be
+or from where it reaches one, with `--url`. Give a secret as the name of
+the environment variable an agent reads it from (`--secret-env`,
+`--secret-header` or `--bearer-env`), never as its value: `--env` and
+`--header` write what they are given as it is, and refuse only a value that
+looks like a token. `mindweaver show mcp:github` says how each agent will be
 given it; installing one into a project comes next. [What an MCP server
 looks like](docs/reference.md#what-an-mcp-server-looks-like) has every
 option, and the rest.

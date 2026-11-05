@@ -2981,10 +2981,12 @@ $ mindweaver add mcp linear "Linear's issues" --url https://mcp.linear.app/mcp \
 created mcp linear at /home/you/Projects/.mindweaver/library/mcp/linear.toml
 ```
 
-A secret is given only as the name of the environment variable an agent
-reads it from when it starts the server, never as its value, and nothing
-`add` writes holds one. Every option takes a name or a value written as it
-is:
+A secret is given as the name of the environment variable an agent reads
+it from when it starts the server (`--secret-env`, `--secret-header`,
+`--bearer-env`), never as its value. `--env` and `--header` write what they
+are given as it is: a value that looks like a token is refused, but nothing
+tells another secret from a setting, so one given there is written into the
+library. Every option takes a name or a value written as it is:
 
 | Option | | Writes |
 |---|---|---|
