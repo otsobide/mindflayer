@@ -14,8 +14,11 @@ use mindweaver_core::{Agent, Share};
 const GITHUB: &str = "GitHub's issues, pull requests and code";
 
 /// A workspace whose library holds a skill, a rule and an MCP server: the
-/// first two added with `add`, the server's definition written into the
-/// library, as `add` writes none yet.
+/// first two added with `add`, and the server's definition written into
+/// the library, since it holds what `add` cannot write and the tests built
+/// on it read back: a `cwd`, an input that is `required` and has a
+/// `description`, named apart from the variable it is read from, and
+/// extras for Claude.
 fn library() -> TempDir {
     let dir = TempDir::new().unwrap();
     weaver(dir.path(), &["init"]).unwrap();

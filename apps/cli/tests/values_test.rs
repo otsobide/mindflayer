@@ -41,8 +41,9 @@ fn summaries(root: &Path, holder: &Holder) -> Vec<((String, String), Value)> {
         .collect()
 }
 
-/// The kinds `add` writes: an MCP server is written by hand until `add`
-/// takes what starts or reaches one.
+/// The kinds a task's `add` writes from a name and a description alone
+/// (`create::scaffolds`): an MCP server needs how it is started or reached
+/// too, which no task carries.
 const ADDED: [Kind; 2] = [Kind::Skill, Kind::Rule];
 
 /// A name no artifact `holder` holds goes by yet.
