@@ -830,6 +830,64 @@ impl McpMother {
         ]
     }
 
+    /// What `add` is told of a server holding `token` where it is refused
+    /// before any definition is read for `validate` to judge, each beside
+    /// why and the code it is refused with: as a key given twice, which no
+    /// TOML file holds, or past the host of an address typed with a
+    /// credential, whose refusal says what is left of it.
+    pub fn given_refused_unread(token: &str) -> Vec<(&'static str, Given, &'static str)> {
+        let Given::Program(program) = Self::given_program() else {
+            unreachable!("a program is given as one");
+        };
+        let Given::Address(address) = Self::given_address(false) else {
+            unreachable!("an address is given as one");
+        };
+        let twice = |value: &str| {
+            vec![
+                (token.to_owned(), value.to_owned()),
+                (token.to_owned(), value.to_owned()),
+            ]
+        };
+        vec![
+            (
+                "a token pasted twice for a secret's variable",
+                Given::Program(Program {
+                    secret_env: vec![VariableName::from(token), VariableName::from(token)],
+                    ..program.clone()
+                }),
+                "add_mcp_key_repeated",
+            ),
+            (
+                "a setting keyed by a token twice",
+                Given::Program(Program {
+                    env: twice("1"),
+                    ..program
+                }),
+                "add_mcp_key_repeated",
+            ),
+            (
+                "a header keyed by a token twice",
+                Given::Address(Address {
+                    headers: twice("x"),
+                    ..address
+                }),
+                "add_mcp_key_repeated",
+            ),
+            (
+                "an address typed with a user and a token in its query",
+                Given::Address(Address {
+                    url: format!(
+                        "https://{}:{}@example.com/mcp?key={token}",
+                        random::word(),
+                        random::word()
+                    ),
+                    ..Address::default()
+                }),
+                "add_mcp_url_userinfo",
+            ),
+        ]
+    }
+
     /// What every definition opens with: its format, its name and what it
     /// is for, each a TOML string whatever it holds.
     pub fn head(name: &str, description: &str) -> String {

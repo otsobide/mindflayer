@@ -780,15 +780,21 @@ pub enum CreateError {
         .kind.noun()
     )]
     TransportNotMcp { kind: Kind },
-    /// A key of a transport's table given twice, which no TOML file holds.
-    #[error("`{key}` is given twice for the transport's `{table}`, which holds each key once")]
+    /// A key of a transport's table given twice, which no TOML file holds:
+    /// said by what it starts with alone when it looks like a token.
+    #[error(
+        "{} is given twice for the transport's `{table}`, which holds each key once",
+        key_said(.key)
+    )]
     KeyRepeated { table: &'static str, key: String },
     /// An address typed with something before its host, its userinfo,
-    /// which the file would keep: said without it.
+    /// which the file would keep: said without it, and as the address
+    /// alone when what is left of it still looks like a token.
     #[error(
-        "`{url}` was typed with something before its host, which a definition never keeps \
+        "{} was typed with something before its host, which a definition never keeps \
          and no agent is given: send a credential in a header read from an environment \
-         variable instead (`--secret-header` or `--bearer-env`)"
+         variable instead (`--secret-header` or `--bearer-env`)",
+        address_said(.url)
     )]
     UrlUserinfo { url: Redacted },
     /// A definition, written from a command line or a template, that
@@ -804,6 +810,30 @@ pub enum CreateError {
     Artifact(#[from] ArtifactError),
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
+}
+
+/// A key `add` is given twice, as its refusal says it: between backticks,
+/// or, when it looks like a token, by what it starts with alone, as
+/// `validate` says one, since no definition holds it yet for `validate`
+/// to judge, and said whole it would print the secret.
+fn key_said(key: &str) -> String {
+    match mcp::token_in(key) {
+        Some(prefix) => format!("a key that looks like a token, starting `{prefix}`,"),
+        None => format!("`{key}`"),
+    }
+}
+
+/// What is kept of an address typed with a credential, as its refusal says
+/// it: between backticks, or, when what is left still looks like a token
+/// (one in its query, say), as the address alone, by what that starts
+/// with, for the reason [`key_said`] says a key so.
+fn address_said(url: &Redacted) -> String {
+    match mcp::token_in(url) {
+        Some(prefix) => {
+            format!("the address, which holds what looks like a token, starting `{prefix}`,")
+        }
+        None => format!("`{url}`"),
+    }
 }
 
 codes!(CreateError {

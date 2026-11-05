@@ -249,6 +249,30 @@ fn what_add_is_told_in_a_shape_named_for_a_rule_breaks_that_rule() {
 }
 
 #[test]
+fn what_add_is_told_of_a_token_it_refuses_unread_holds_it_where_it_is_named_for() {
+    use crate::mcp::Given;
+    use crate::url::{carries_credentials, redacted};
+
+    for (_, token) in McpMother::tokens() {
+        for (why, given, code) in McpMother::given_refused_unread(&token) {
+            match (code, &given) {
+                ("add_mcp_key_repeated", _) => assert_eq!(
+                    given.repeated().map(|repeated| repeated.key),
+                    Some(token.clone()),
+                    "{why}"
+                ),
+                ("add_mcp_url_userinfo", Given::Address(address)) => {
+                    assert_eq!(given.repeated(), None, "{why}");
+                    assert!(carries_credentials(&address.url), "{why}");
+                    assert!(redacted(&address.url).contains(&token), "{why}");
+                }
+                _ => panic!("{why}: {code}: {given:?}"),
+            }
+        }
+    }
+}
+
+#[test]
 fn input_and_variable_names_are_drawn_as_they_are_usually_written() {
     for _ in 0..DRAWS {
         let input = InputNameMother::random();

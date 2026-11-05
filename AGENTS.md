@@ -1418,9 +1418,9 @@ These are easy to break from a single file without noticing.
   cannot be given, `secret_argument`, `secret_in_url`,
   `composite_secret_header`; what `add` is told of one, `given_program`,
   `given_address`, `given`, and the shapes it refuses, `given_unfit`,
-  `given_with_literal` and `given_repeating`; and `InputNameMother` and
-  `VariableNameMother` for its values, with what each rule refuses), a
-  project's settings
+  `given_with_literal`, `given_repeating` and `given_refused_unread`; and
+  `InputNameMother` and `VariableNameMother` for its values, with what each
+  rule refuses), a project's settings
   (`SettingsMother`), the URLs a credential can be typed into (`UrlMother`,
   each form beside what redacting leaves of it) and what lives on the disk
   (`WorkspaceMother`, `ProjectMother`, among it a project a version 1 or 2

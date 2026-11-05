@@ -608,6 +608,17 @@ fn add_refuses_a_token_given_as_it_is_saying_where_and_never_the_token() {
             let sent = serde_json::to_string(issues).unwrap();
             assert!(!sent.contains(rest), "{place}: {sent}");
         }
+        // Nor where it is refused before a definition is read, which says
+        // what it refuses rather than where `validate` would.
+        for (why, given, code) in McpMother::given_refused_unread(&token) {
+            let refused = add_server(&project, &McpMother::name(), &given).unwrap_err();
+
+            assert_eq!(refused.code(), code, "{why}: {refused}");
+            let said = refused.to_string();
+            let rest = token[prefix.len()..].trim_start();
+            assert!(said.contains(&format!("`{prefix}`")), "{why}: {said}");
+            assert!(!said.contains(rest), "{why}: {said}");
+        }
     }
     assert_eq!(held(&folder), []);
 }

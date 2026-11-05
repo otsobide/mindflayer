@@ -733,6 +733,15 @@ fn moment<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, 
     }
 }
 
+/// What the first token `text` holds starts with, looked for as `validate`
+/// looks through a value: for a refusal that would say `text` before any
+/// definition holds it (a key `add` is given twice, what is kept of an
+/// address typed with a credential), which then says it by that alone,
+/// since said whole it would print the secret wherever the message goes.
+pub(crate) fn token_in(text: &str) -> Option<&'static str> {
+    token::found(text, &[]).first().copied()
+}
+
 /// How an input named `name` is written where its value goes.
 fn written(name: &InputName) -> String {
     format!("{{{name}}}")

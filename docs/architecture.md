@@ -928,8 +928,12 @@ twice, by two options or one twice, which no TOML file holds
 keys, as the file and `validate` hold them); and an address typed with
 something before its host (`add_mcp_url_userinfo`, by
 `url::carries_credentials`, the test a gather refuses a URL by), which the
-file would keep though the definition never does, said without it. An `add mcp` given nothing to
-write a transport from is `add_mcp_unscaffolded`, the code #86 gave that
+file would keep though the definition never does, said without it. Since
+no definition holds either for `validate` to judge, each is looked through
+for a token as `validate` looks through a value (`mcp::token_in`): a key
+that looks like one is said by what it starts with, and so is an address
+whose query or path still holds one once its userinfo is gone, said as the
+address alone. An `add mcp` given nothing to write a transport from is `add_mcp_unscaffolded`, the code #86 gave that
 condition, which now says what to give rather than to write the file by
 hand: a code is never moved to another condition, and this is the one it
 named.

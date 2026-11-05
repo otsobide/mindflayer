@@ -279,6 +279,27 @@ fn no_token_given_anywhere_is_said_whole_by_the_refusal() {
             assert!(said.contains(&format!("`{at}`")), "{place}: {said}");
             assert!(!said.contains(&rest), "{place}: {said}");
         }
+        // Nor where it is refused before a definition is read: a key given
+        // twice, or what is left of an address typed with a credential.
+        for (why, given, code) in McpMother::given_refused_unread(&token) {
+            let refused = add_given(dir.path(), &McpMother::name(), &given).unwrap_err();
+
+            assert_eq!(refused.error.code(), code, "{why}");
+            let expected = match given.repeated() {
+                Some(repeated) => format!(
+                    "a key that looks like a token, starting `{prefix}`, is given twice for the \
+                     transport's `{}`, which holds each key once",
+                    repeated.table
+                ),
+                None => format!(
+                    "the address, which holds what looks like a token, starting `{prefix}`, was \
+                     typed with something before its host, which a definition never keeps and no \
+                     agent is given: send a credential in a header read from an environment \
+                     variable instead (`--secret-header` or `--bearer-env`)"
+                ),
+            };
+            assert_eq!(refused.error.to_string(), expected, "{why}");
+        }
     }
     assert_eq!(written(dir.path()), Vec::<String>::new());
 }
