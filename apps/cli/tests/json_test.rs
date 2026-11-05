@@ -588,7 +588,18 @@ struct Shown {
     compatibility: Option<String>,
     metadata: Option<serde_json::Map<String, Value>>,
     paths: Option<Vec<String>>,
+    expressibility: Option<Vec<Expressibility>>,
     body: String,
+}
+
+/// What one agent cannot be given of an MCP server, as `show --json`
+/// prints it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Expressibility {
+    agent: String,
+    refused: Vec<Said>,
+    dropped: Vec<Said>,
 }
 
 #[test]
@@ -629,7 +640,48 @@ fn show_as_json_holds_what_the_text_shows() {
         dir.path().join("skills").join("deploy").join("SKILL.md")
     );
     assert_eq!(deploy.paths, None);
+    assert!(deploy.expressibility.is_none());
     assert!(warnings.is_empty());
+    assert!(json.ok && text.ok);
+}
+
+#[test]
+fn show_as_json_says_what_each_agent_cannot_be_given_of_a_server_as_the_text_does() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("events.toml"),
+        mindweaver_core::mother::McpMother::sse("events"),
+    )
+    .unwrap();
+
+    let text = weaver(dir.path(), &["show", "mcp:events"]).unwrap();
+    let json = weaver(dir.path(), &["show", "mcp:events", "--json"]).unwrap();
+
+    let (shown, warnings): (Vec<Shown>, _) = enveloped(&json);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let report = shown[0].expressibility.as_ref().expect("a server's report");
+    let agents: Vec<&str> = report.iter().map(|one| one.agent.as_str()).collect();
+    assert_eq!(agents, ["claude", "codex", "opencode"]);
+    for one in report {
+        assert!(one.dropped.is_empty(), "{one:?}");
+        let codes: Vec<&str> = one.refused.iter().map(|said| said.code.as_str()).collect();
+        let expected: &[&str] = if one.agent == "claude" {
+            &[]
+        } else {
+            &["sse_unsupported"]
+        };
+        assert_eq!(codes, expected, "{}", one.agent);
+        for said in &one.refused {
+            assert!(
+                text.stdout.contains(&format!("    - {}\n", said.message)),
+                "{}",
+                text.stdout
+            );
+        }
+    }
     assert!(json.ok && text.ok);
 }
 

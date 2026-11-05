@@ -69,7 +69,7 @@ fn a_skill_shown_says_what_it_declares_and_its_body_in_order() {
             r#""allowed_tools":["Bash","Read"],"license":"MIT","#,
             r#""compatibility":"Requires git","#,
             r#""metadata":{"version":"1.0","author":"acme"},"paths":null,"#,
-            r#""body":"\nRun the pipeline.\n"}"#,
+            r#""expressibility":null,"body":"\nRun the pipeline.\n"}"#,
         )
     );
 }

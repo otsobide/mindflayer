@@ -356,6 +356,7 @@ fn a_skill_s_metadata_holds_to_its_schema_as_an_object() {
         compatibility: None,
         metadata,
         paths: None,
+        expressibility: None,
         body: String::new(),
     };
 

@@ -92,11 +92,94 @@ fn show_says_what_a_server_is_for_and_prints_its_definition() {
     assert_eq!(
         shown.stdout,
         format!(
-            "github\n{}\n\n{GITHUB}\n\n{}",
+            "github\n{}\n\n{GITHUB}\n\n\
+             agents:\n  \
+             claude: given it without what it has no place for:\n    \
+             - the transport's `cwd` is left out, since a program is started there in no folder \
+             it is told\n  \
+             codex: given it whole\n  \
+             opencode: given it whole\n\
+             \n{}",
             file.display(),
             fs::read_to_string(&file).unwrap()
         )
     );
+}
+
+#[test]
+fn show_says_which_agent_is_given_none_of_a_server_and_why() {
+    let dir = library();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::write(folder.join("events.toml"), McpMother::sse("events")).unwrap();
+    fs::write(
+        folder.join("workspace-server.toml"),
+        McpMother::secret_argument("workspace-server"),
+    )
+    .unwrap();
+
+    let events = weaver(dir.path(), &["show", "mcp:events"]).unwrap();
+    let argued = weaver(dir.path(), &["show", "mcp:workspace-server"]).unwrap();
+
+    let sse = "    - the sse transport, server-sent events, is not one taken there\n";
+    assert!(
+        events.stdout.contains(&format!(
+            "agents:\n  claude: given it whole\n  codex: given none of it:\n{sse}  \
+             opencode: given none of it:\n{sse}\n"
+        )),
+        "{}",
+        events.stdout
+    );
+    assert!(
+        argued.stdout.contains(
+            "  codex: given none of it:\n    \
+             - secret input `workspace` is written in the transport's `args`, which hold no \
+             reference to an environment variable there\n  \
+             opencode: given it whole\n"
+        ),
+        "{}",
+        argued.stdout
+    );
+    // Shown, never refused: what an agent cannot be given is not wrong.
+    assert!(events.ok && argued.ok);
+    assert!(events.stderr.is_empty() && argued.stderr.is_empty());
+}
+
+#[test]
+fn show_json_says_what_each_agent_cannot_be_given_by_its_code() {
+    let dir = library();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::write(
+        folder.join("linear.toml"),
+        McpMother::composite_secret_header("linear"),
+    )
+    .unwrap();
+
+    let shown = weaver(dir.path(), &["show", "mcp:linear", "--json"]).unwrap();
+
+    let (data, warnings): (serde_json::Value, _) = enveloped(&shown);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let report = &data[0]["expressibility"];
+    assert_eq!(
+        report,
+        &serde_json::json!([
+            {"agent": "claude", "refused": [], "dropped": []},
+            {
+                "agent": "codex",
+                "refused": [{
+                    "code": "secret_header_composite",
+                    "message": "secret input `token` is written in header `Authorization` beside \
+                                other text, and a header is read from an environment variable \
+                                there only as its whole value, or as `Authorization: Bearer` and \
+                                the token",
+                }],
+                "dropped": [],
+            },
+            {"agent": "opencode", "refused": [], "dropped": []},
+        ])
+    );
+    let skill = weaver(dir.path(), &["show", "skill:deploy", "--json"]).unwrap();
+    let (data, _): (serde_json::Value, _) = enveloped(&skill);
+    assert_eq!(data[0]["expressibility"], serde_json::Value::Null);
 }
 
 #[test]
