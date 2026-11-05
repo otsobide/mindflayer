@@ -69,6 +69,7 @@ use crate::lifecycle::LifecycleError;
 use crate::lock::LockError;
 use crate::mcp::{Inexpressible, McpError};
 use crate::migrate::{MigrateError, NamesFailure, ProjectFailure, Refusal};
+use crate::opencode_mcp::{self, OpenCodeMcpError};
 use crate::policy::PolicyError;
 use crate::port::GitError;
 use crate::reapply::{ReapplyError, ReapplyFailure};
@@ -240,6 +241,8 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("migrate::Refusal", Refusal::CODES),
     ("migrate::project::ProjectFailure", ProjectFailure::CODES),
     ("migrate::names::NamesFailure", NamesFailure::CODES),
+    ("opencode_mcp::OpenCodeMcpError", OpenCodeMcpError::CODES),
+    ("opencode_mcp::Warning", opencode_mcp::Warning::CODES),
     ("policy::PolicyError", PolicyError::CODES),
     ("reapply::ReapplyError", ReapplyError::CODES),
     ("reapply::ReapplyFailure", ReapplyFailure::CODES),

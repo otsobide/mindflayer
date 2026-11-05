@@ -8,9 +8,9 @@ installing into several folders (#34), the managed block in `AGENTS.md`
 (#42), Claude's rule files (#43), the predicate that decides how Claude
 reaches the block (#44), the names a suggestion ranks a repository by (#58),
 what an MCP server's definition is held to for each agent (#87), the
-entry Claude's `.mcp.json` is given of one (#90) and the one Codex's
-`.codex/config.toml` is (#91), and the MCP renderers and installs to come
-(#92 to #94).
+entry Claude's `.mcp.json` is given of one (#90), the one Codex's
+`.codex/config.toml` is (#91) and the one OpenCode's `opencode.json` is
+(#92), and the MCP installs to come (#93, #94).
 [docs/architecture.md](architecture.md) says what Mindweaver does with these
 facts and why; this page says what the agents do.
 
@@ -651,6 +651,8 @@ stands now that #18's runs have been made:
 | Claude Code | A program's `cwd` cannot be expressed: its entry is written without it. | docs-only | #87; none of #18's checks covers it |
 | Claude Code | A variable it keeps from a remote server, a credential of its own or of a tool on the machine (`ANTHROPIC_API_KEY`, `NPM_TOKEN`, `SONAR_TOKEN`, `HTTPS_PROXY`, `OTEL_*`, `GIT_CONFIG_*` and more, each under `INPUT_` too where Claude looks there), is read as empty where `${VAR}` is expanded in a remote server's `url` or `headers`, so an input of an address read from one cannot be expressed. | docs-only | #90, read from Claude Code 2.1.318's binary, in any case as it compares them, and listed in `apps/core/src/mcp/blanked.rs`; none of #18's checks names one. A run putting one of them in `claude-mcp`'s header would move it. A name Mindweaver lists that Claude passes on refuses Claude a server it could reach, and one it misses reaches the server empty, which Claude's log says ("credential variable(s) that are never expanded toward a remote server"). |
 | Claude Code | `${` written as it is where no input stands, in the command, the arguments, the environment, the URL or the headers, cannot be expressed: Claude reads it as a reference (`${VAR}`, `${VAR:-default}`) and gives the server a variable's value, a default or nothing in its place. | verified, the command docs-only | #90; `claude-mcp` below expands a `${VAR}` the file holds in `args`, `env`, `url` and `headers`, and the [mcp](https://code.claude.com/docs/en/mcp) docs say the command too. Claude Code 2.1.318's binary takes `${`, a name and `}`, or `:-`, a default and `}`; Mindweaver refuses any `${`, since a reference it writes for an input after one may close it. A run with a `${VAR}` in the command would move that part. |
+| OpenCode | `{env:` written as it is where no input stands, in the command, the arguments, the environment, the folder, the URL or the headers, cannot be expressed in either line: both fill `{env:NAME}` in over the config file's text before they parse it, a variable's value or nothing in its place. Nor can `{file:`, which they fill in with a file's contents. | verified for `{env:}` on 2.2.5, 2.1.3 and 1.19.4; the folder and `{file:` docs-only | #92; the OpenCode runs below expand a `{env:}` the file holds in the command, its first word too, the environment, the URL and the headers, inside a longer value too, and the [config](https://opencode.ai/docs/config/) docs say `{file:path}` is filled in the same way. Mindweaver refuses any `{env:` or `{file:`, rather than only what OpenCode's pattern takes, since a reference it writes for an input after one may close it. A run with a `{file:}` in a header would move that part. |
+| OpenCode | V1's shape, `mcp.<name>`, has no key for a program's folder, where V2's has `cwd`: an entry written in V1's, into a file that keeps its servers so, is written without it. | docs-only | #92; V1's [MCP servers](https://opencode.ai/docs/mcp-servers/) docs give a local server `type`, `command`, `environment`, `enabled` and `timeout`, and none of #18's checks writes a folder. Mindweaver says what it leaves out (`opencode_mcp_v1_cwd`); were V1 to take `cwd`, a server it could be given whole starts where OpenCode starts it. |
 
 
 ### Running them
@@ -1208,6 +1210,53 @@ what it is asked to find out rather than expecting it:
 | Whose environment filled them | recorded: `the list's: 5 of 5 expanded`, `not the list's: 0 of 5 expanded` (the server's own when the five read empty), or `mixed` | `not the list's: 0 of 5 expanded` | `not the list's: 0 of 5 expanded` |
 | Each server's word in the list | recorded | `connected`, both | `connected`, both |
 
+#### What Mindweaver writes there
+
+`opencode_mcp` (#92) renders a definition as one entry under `mcp` of the
+project's OpenCode config, on what the runs above and the
+[config](https://opencode.ai/docs/config/) docs say, through
+`config_entry`, every byte outside the entry kept:
+
+- The file is the first of `opencode.json`, `opencode.jsonc`,
+  `.opencode/opencode.json` and `.opencode/opencode.jsonc` there is at the
+  project's root, and `opencode.json` is made when none is. Each is read
+  as JSONC, its comments and trailing commas kept, since OpenCode reads
+  JSON and JSONC alike, a `.json` holding a comment included (the
+  [config](https://opencode.ai/docs/config/) docs; docs-only, since every
+  run above wrote a strict `opencode.json`), up to 2 MiB. An entry
+  spliced among trailing commas is written with its own.
+- V2's shape, `mcp.servers.<name>`, which V2 and 1.19.4 load
+  (`opencode-mcp-v2`, `opencode-mcp-1-19`): a program as `{type: "local",
+  command: [command, ...args], environment, cwd}` and an address as
+  `{type: "remote", url, headers}`, each key after the command or the
+  address only when it holds something, and none of `codemode`,
+  `protocol` or `timeout.startup`, nor a key of Mindweaver's.
+- V1's shape, `mcp.<name>` with `enabled`, which V2 loads too
+  (`opencode-mcp-v1-shape`), only in a file that keeps a server so
+  already, and a server of the name is replaced in the shape it stands in.
+  V1's has no key for a program's folder, so its `cwd` is left out and
+  said (`opencode_mcp_v1_cwd`, docs-only, as the table above says). A name
+  written in both shapes is refused (`opencode_mcp_twice`).
+- Each input as `{env:VAR}`, the variable it is read from, where its
+  placeholder stands in the arguments, the environment, the URL or the
+  headers, whole or inside a longer value (the runs above, in each place).
+  The command's first word and the folder are written as the definition
+  holds them: OpenCode fills a `{env:}` in the first word too, but no
+  input's kind is written there.
+- An `{env:` or a `{file:` the definition writes as it is, where no input
+  stands, refuses the entry (`text_substituted`), as the table above says:
+  OpenCode would fill it in, where the definition means the text. So does
+  sse (`sse_unsupported`, docs-only).
+- The file goes with its last server only when it is the `opencode.json`
+  Mindweaver made and nothing else is left in it, a comment somebody wrote
+  included. A project whose file is inside an agent's own folder, one
+  whose root is `~/.config/opencode` while that is OpenCode's, is refused
+  (`opencode_mcp_user_scope`).
+- Nothing is said of whose environment fills the references, though V2's
+  background server fills them from its own (`opencode-mcp-service`):
+  whether Mindweaver says so, and doctor checks the server's variables, is
+  the owner's to decide ([D-11](architecture.md#d-11-mcp-secrets-are-environment-references)).
+
 ### Assumptions the run confirms
 
 Nothing was read from the web: what the checks assume beyond each agent's
@@ -1387,4 +1436,7 @@ servers](#mcp-servers).
 | #92 | V2's `mcp.servers` loads in V2 (2.2.5 and 2.1.3) and in 1.19.4, and V1's `mcp.<name>` loads in V2. | verified (`opencode-mcp-v2`, `opencode-mcp-1-19`, `opencode-mcp-v1-shape`) |
 | #92 | `{env:}` expands in the command, the environment, the URL and the headers, through V2's background server too when that server holds the variable. | verified (all four OpenCode runs, the V2 ones on 2.2.5 and 2.1.3) |
 | #92, #96 | Whose environment V2's background server fills `{env:}` from: the asking client's, or its own. | verified: its own, on 2.2.5 and 2.1.3; a server started apart filled none of the five from the asking list (`opencode-mcp-service`) |
+| #92 | Both lines read a project's config from `opencode.json`, `opencode.jsonc`, `.opencode/opencode.json` or `.opencode/opencode.jsonc`, each as JSONC, comments and trailing commas included. | docs-only: [config](https://opencode.ai/docs/config/); every run wrote a strict `opencode.json` |
+| #92 | Both lines fill `{file:path}` in over the config's text, as they fill `{env:}`. | docs-only: [config](https://opencode.ai/docs/config/); no run wrote one |
+| #92 | V1's shape has no key for a program's folder; V2's has `cwd`. | docs-only: V1's [MCP servers](https://opencode.ai/docs/mcp-servers/) docs, and V2's shape as #92 gives it; no run wrote a folder |
 | #93, #94 | Each agent loads its project's servers from the one file the target table will name: `.mcp.json`, `.codex/config.toml` (trusted), `opencode.json`. | verified for `.mcp.json` and `opencode.json`; docs-only for `.codex/config.toml`, whose runs were not made (every MCP run) |

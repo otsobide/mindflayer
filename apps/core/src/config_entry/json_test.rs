@@ -1,7 +1,7 @@
 //! Unit tests for `config_entry/json.rs`: what an edit through the CST keeps,
 //! byte for byte, in files written the ways people write them.
 
-use super::loose;
+use super::{commented, loose};
 use crate::config_entry::{edit, edit_document, get, Edit, EntryError, Format, Value};
 
 /// A server entry, the shape of which is nobody's in particular.
@@ -304,6 +304,31 @@ fn json_but_for_comments_and_trailing_commas_is_told_from_what_no_reader_takes()
         "// only a comment\n",
     ] {
         assert!(!loose(text), "{text:?}");
+    }
+}
+
+#[test]
+fn a_comment_anywhere_is_told_from_a_text_that_holds_none() {
+    for text in [
+        JSONC,
+        "// the team's\n{}",
+        "{\n  \"mcp\": {} // theirs\n}\n",
+        "{\"a\": /* \"b\" */ 1}",
+        "{\"a\": 1,} // beside a trailing comma\n",
+        "// only a comment\n",
+    ] {
+        assert!(commented(text), "{text:?}");
+    }
+    for text in [
+        "{}",
+        "{\"a\": [1, 2,],}",
+        // What a string holds is the string's.
+        "{\"a\": \"// no comment\", \"b\": \"/* nor this */\"}",
+        // What JSONC does not read holds no comment its reader takes.
+        "{ 'a': 1 } // JSON5's\n",
+        "",
+    ] {
+        assert!(!commented(text), "{text:?}");
     }
 }
 

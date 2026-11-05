@@ -748,6 +748,46 @@ pub(crate) fn written(name: &InputName) -> String {
     format!("{{{name}}}")
 }
 
+/// `text` with each placeholder of an input in `read` written as `spell`
+/// spells an agent's reference to the variable it is read from, and every
+/// other byte as it is, a brace naming no input among them.
+///
+/// In one pass from the left, so a reference written in place of one
+/// placeholder is never read again as another: Claude's `${A}` holds `{A}`,
+/// which another input may be named. One function for every agent that
+/// refers to a variable where a value goes, each renderer handing it the
+/// agent's spelling, rather than a copy of the pass in each.
+pub(crate) fn referring(
+    text: &str,
+    read: &[(&InputName, &VariableName)],
+    spell: impl Fn(&VariableName) -> String,
+) -> String {
+    let mut written = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('{') {
+        written.push_str(&rest[..open]);
+        let after = &rest[open + 1..];
+        let named = after.find('}').and_then(|close| {
+            let name = &after[..close];
+            read.iter()
+                .find(|(input, _)| input.as_str() == name)
+                .map(|(_, variable)| (close, variable))
+        });
+        match named {
+            Some((close, variable)) => {
+                written.push_str(&spell(variable));
+                rest = &after[close + 1..];
+            }
+            None => {
+                written.push('{');
+                rest = after;
+            }
+        }
+    }
+    written.push_str(rest);
+    written
+}
+
 /// `key` in the table `table` names, as TOML spells the path to it: bare
 /// when it may be, and quoted when a dot or a space in it would read as
 /// another key.

@@ -432,6 +432,13 @@ impl McpMother {
         Self::whole_without_cwd(name).replacen("timeout = 30000\n", extras, 1)
     }
 
+    /// The program of [`stdio`](Self::stdio), its extras for OpenCode
+    /// `extras`, the lines of a TOML table, beside Claude's: a program
+    /// OpenCode is given whole but for what `extras` gives.
+    pub fn with_opencode_extras(name: &str, extras: &str) -> String {
+        format!("{}\n[extras.opencode]\n{extras}", Self::stdio(name))
+    }
+
     /// The program of [`whole_secret_env`](Self::whole_secret_env) with no
     /// folder to start in: one every agent is given whole, for a shape to
     /// be written into that is the only thing an agent cannot be given.
@@ -666,14 +673,58 @@ impl McpMother {
         ]
     }
 
+    /// Texts OpenCode fills in over its config's text, each beside why, the
+    /// variable's name drawn afresh: what a definition means as it is
+    /// written, and OpenCode would read as a variable's value or a file's
+    /// contents.
+    pub fn substitutions() -> Vec<(&'static str, String)> {
+        let variable = random::word().to_ascii_uppercase();
+        vec![
+            ("a variable whole", format!("{{env:{variable}}}")),
+            (
+                "inside a longer value",
+                format!("--home={{env:{variable}}}/x"),
+            ),
+            (
+                "a file's contents",
+                format!("{{file:./{}}}", random::word()),
+            ),
+            ("an opening a later brace may close", String::from("{env:")),
+            (
+                "closed by the reference written for an input",
+                String::from("{env:a{workspace}"),
+            ),
+        ]
+    }
+
+    /// Texts that open nothing OpenCode fills in as they are, each beside
+    /// why, written in a value of the program
+    /// [`with_text`](Self::with_text) writes them in, where its
+    /// placeholders are written as references, its `args` or its `env`:
+    /// one is the placeholder of its input `workspace`.
+    pub fn not_substitutions() -> Vec<(&'static str, String)> {
+        vec![
+            ("a brace naming no input", String::from(r#"{"debug":true}"#)),
+            ("a reference in Claude's syntax", String::from("${HOME}")),
+            ("a word that starts as one", String::from("{environment}")),
+            ("a space after the brace", String::from("{ env:HOME}")),
+            ("an input's placeholder", String::from("{workspace}")),
+        ]
+    }
+
     /// `name`'s definition holding `text` as it is, written where `place`
     /// says (`command`, `args` or `env` of the program of
     /// [`whole_secret_env`](Self::whole_secret_env) with no folder to start
-    /// in, or `url` or `headers` of the address of [`http`](Self::http)),
-    /// beside where `show` says it is.
+    /// in, `cwd`, its folder, in the one that has one, or `url` or `headers`
+    /// of the address of [`http`](Self::http)), beside where `show` says it
+    /// is.
     pub fn with_text(name: &str, place: &str, text: &str) -> (String, String) {
         let quoted = toml::Value::String(text.to_owned()).to_string();
         match place {
+            "cwd" => (
+                Self::whole_secret_env(name).replacen("cwd = \".\"", &format!("cwd = {quoted}"), 1),
+                String::from("transport.cwd"),
+            ),
             "command" => (
                 Self::whole_without_cwd(name).replacen(
                     "command = \"npx\"",
@@ -714,7 +765,7 @@ impl McpMother {
                 ),
                 String::from("transport.headers.X-Extra"),
             ),
-            other => panic!("{other} is no place Claude expands text in"),
+            other => panic!("{other} is no place an agent fills text in"),
         }
     }
 

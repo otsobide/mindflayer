@@ -281,7 +281,7 @@ pub fn loose_json(text: &str) -> bool {
 /// documents are empty is, since a file that keeps settings of its own
 /// beside its entries is something whatever it holds. Enough only in a
 /// format with no comments: a document holds none, so a caller whose file
-/// can hold them asks the text `take` hands it too.
+/// can hold them asks the text `take` hands it too ([`jsonc_commented`]).
 pub fn holds_only(document: &Value, key: &[&str]) -> bool {
     let Some((first, rest)) = key.split_first() else {
         return true;
@@ -292,6 +292,19 @@ pub fn holds_only(document: &Value, key: &[&str]) -> bool {
     members
         .iter()
         .all(|(name, value)| name == first && holds_only(value, rest))
+}
+
+/// Whether `text`, read as JSONC, holds a comment anywhere: what a caller
+/// whose file is JSONC asks of what taking its entry out of the text leaves
+/// before it takes the file away ([`ConfigFile::take`]), since the document
+/// [`holds_only`] reads holds none, and one somebody wrote is something.
+///
+/// Where the parser finds them, as [`loose_json`] reads them, so a `//` in
+/// a string is the string's. `false` for a text that does not read as
+/// JSONC, whose reader takes no comment of it, and for strict JSON, which
+/// holds none.
+pub fn jsonc_commented(text: &str) -> bool {
+    json::commented(text)
 }
 
 /// The value at `key` in `document`, `None` when a key on the way is missing.

@@ -17,8 +17,10 @@
 //! compiles. Each fact is docs-only, from D-11 and #87, the variables
 //! Claude reads as empty toward a remote server from its binary
 //! ([`super::blanked`]), and what Codex passes on to a program from its
-//! documentation (#91); `docs/agents.md`'s "MCP servers" says what #18's
-//! runs on the binaries moved, and what a later one would.
+//! documentation (#91), but what OpenCode fills in over its config's text,
+//! `{env:}` as #18's runs saw it and `{file:}` as its documentation says
+//! (#92); `docs/agents.md`'s "MCP servers" says what #18's runs on the
+//! binaries moved, and what a later one would.
 //!
 //! Not an input read from no variable either, which a renderer refuses
 //! (`claude_mcp_input_unread`) while no install hands it the value (#93):
@@ -33,6 +35,7 @@ use crate::claude_mcp;
 use crate::code::{codes, Said};
 use crate::codex_mcp;
 use crate::mcp::{blanked, keyed, written, Input, InputKind, McpDefinition, Transport};
+use crate::opencode_mcp;
 use crate::value::{InputName, VariableName};
 
 /// Something a definition holds that one agent cannot be given as it is
@@ -119,11 +122,21 @@ pub enum Inexpressible {
          there, so the text written in it cannot be given"
     )]
     TextExpanded { at: String },
+    /// `{env:` or `{file:` written as it is in a value OpenCode is given,
+    /// where no input's placeholder stands: OpenCode fills both in over its
+    /// config file's text before it reads the file ([`SUBSTITUTED`]), a
+    /// variable's value or a file's contents in place of the text, where a
+    /// brace naming no input means what it says.
+    #[error(
+        "`{at}` holds `{opening}` as it is, which is filled in there over the file's text \
+         before it is read, so the text written in it cannot be given"
+    )]
+    TextSubstituted { at: String, opening: &'static str },
     /// A key the agent's extras give that its entry is written with from
     /// the transport: passed on beside it, one of the two would be lost,
-    /// and which one would be the order of a file's keys. Said of Claude
-    /// and Codex, whose entries' keys are their renderers'
-    /// (`claude_mcp::keys`, `codex_mcp::keys`).
+    /// and which one would be the order of a file's keys. Said of every
+    /// agent, whose entries' keys are their renderers' (`claude_mcp::keys`,
+    /// `codex_mcp::keys`, `opencode_mcp::keys`).
     #[error(
         "its extras for the agent give `{key}`, a key the entry there is written with from the \
          transport, so one of the two would be lost"
@@ -151,6 +164,7 @@ codes!(Inexpressible {
     Self::WorkingDirectory => "cwd_unsupported",
     Self::VariableBlanked { .. } => "variable_blanked",
     Self::TextExpanded { .. } => "text_expanded",
+    Self::TextSubstituted { .. } => "text_substituted",
     Self::ExtraRepeated { .. } => "extra_repeated",
     Self::ExtraWithheld { .. } => "extra_withheld",
 });
@@ -172,6 +186,7 @@ impl Inexpressible {
             | Inexpressible::ServerSentEvents
             | Inexpressible::VariableBlanked { .. }
             | Inexpressible::TextExpanded { .. }
+            | Inexpressible::TextSubstituted { .. }
             | Inexpressible::ExtraRepeated { .. }
             | Inexpressible::ExtraWithheld { .. } => true,
             Inexpressible::WorkingDirectory => false,
@@ -257,7 +272,7 @@ impl McpDefinition {
             .map(|input| written(&input.name))
             .collect();
         let expanded = |at: String, text: &str, placeholders: &[String]| {
-            opens_reference(text, placeholders).then_some(Inexpressible::TextExpanded { at })
+            opens(text, placeholders, "${").then_some(Inexpressible::TextExpanded { at })
         };
         let mut shapes = Vec::new();
         match &self.transport {
@@ -421,15 +436,82 @@ impl McpDefinition {
             .collect()
     }
 
-    /// OpenCode expands `{env:VAR}` in any string of its config (D-11),
-    /// and its V2 shape, the one Mindweaver writes (D-12), reaches a
+    /// OpenCode fills `{env:VAR}` and `{file:path}` in over its config
+    /// file's text before it reads the file (D-11), so it cannot be given
+    /// text that opens either as it is written in any value its entry
+    /// writes; its V2 shape, the one Mindweaver writes (D-12), reaches a
     /// program or an address over streamable HTTP, never server-sent
-    /// events.
+    /// events; and its extras go beside the keys its entry may write in
+    /// either of its shapes, never over one.
     fn for_opencode(&self) -> Vec<Inexpressible> {
-        match self.transport {
-            Transport::Sse(_) => vec![Inexpressible::ServerSentEvents],
-            Transport::Stdio(_) | Transport::Http(_) => Vec::new(),
+        // Where an input stands, the renderer writes a reference of its
+        // own, so text is held to this only around one; but not in a
+        // program's command or its folder, which it writes as the
+        // definition holds them, no input's kind being written there.
+        let placeholders: Vec<String> = self
+            .inputs
+            .iter()
+            .map(|input| written(&input.name))
+            .collect();
+        let substituted = |at: String, text: &str, placeholders: &[String]| {
+            SUBSTITUTED
+                .into_iter()
+                .find(|opening| opens(text, placeholders, opening))
+                .map(|opening| Inexpressible::TextSubstituted { at, opening })
+        };
+        let mut shapes = Vec::new();
+        if let Transport::Sse(_) = self.transport {
+            shapes.push(Inexpressible::ServerSentEvents);
         }
+        match &self.transport {
+            Transport::Stdio(stdio) => {
+                shapes.extend(substituted(
+                    String::from("transport.command"),
+                    &stdio.command,
+                    &[],
+                ));
+                for (index, arg) in stdio.args.iter().enumerate() {
+                    shapes.extend(substituted(
+                        format!("transport.args[{index}]"),
+                        arg,
+                        &placeholders,
+                    ));
+                }
+                for (key, value) in &stdio.env {
+                    shapes.extend(substituted(
+                        keyed("transport.env", key),
+                        value,
+                        &placeholders,
+                    ));
+                }
+                if let Some(cwd) = &stdio.cwd {
+                    shapes.extend(substituted(String::from("transport.cwd"), cwd, &[]));
+                }
+            }
+            Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                shapes.extend(substituted(
+                    String::from("transport.url"),
+                    endpoint.url.as_str(),
+                    &placeholders,
+                ));
+                for (key, value) in &endpoint.headers {
+                    shapes.extend(substituted(
+                        keyed("transport.headers", key),
+                        value,
+                        &placeholders,
+                    ));
+                }
+            }
+        }
+        let entry = opencode_mcp::keys(self.transport.kind());
+        shapes.extend(
+            self.extras_for(Agent::OpenCode)
+                .into_iter()
+                .flatten()
+                .filter(|(key, _)| entry.contains(&key.as_str()))
+                .map(|(key, _)| Inexpressible::ExtraRepeated { key: key.clone() }),
+        );
+        shapes
     }
 
     /// Every header, by its name as written, that holds `input` and is not
@@ -454,16 +536,25 @@ impl McpDefinition {
     }
 }
 
-/// Whether `text` holds `${` anywhere but where one of `placeholders`
-/// stands: what a reference Claude expands opens with, written as it is.
+/// What OpenCode fills in over its config file's text before it reads it:
+/// `{env:NAME}`, a variable's value, which #18's runs saw it do in the
+/// command, the environment, the URL and the headers, and `{file:path}`, a
+/// file's contents, its documentation's word.
+const SUBSTITUTED: [&str; 2] = ["{env:", "{file:"];
+
+/// Whether `text` holds `opening` anywhere but where one of `placeholders`
+/// stands: what a reference an agent fills in opens with, written as it
+/// is, Claude's `${` or one of OpenCode's [`SUBSTITUTED`].
 ///
-/// Any `${`, rather than only what Claude 2.1.318's pattern takes, a name
-/// and then `}`, or `:-`, a default and `}` (read from its binary): one
-/// that pattern passes over may be closed by a reference the renderer
-/// writes after it (`${a:-{token}}`), and a later Claude may take more.
-/// Never one just before a placeholder, which the renderer writes as
-/// `$${VAR}`: the `$`, then the variable's value.
-fn opens_reference(text: &str, placeholders: &[String]) -> bool {
+/// Any `opening`, rather than only what an agent's pattern takes: for
+/// Claude 2.1.318 (read from its binary) a name and then `}`, or `:-`, a
+/// default and `}`. One that pattern passes over may be closed by a
+/// reference the renderer writes after it (`${a:-{token}}`,
+/// `{env:a{token}`), and a later agent may take more. Never one just
+/// before a placeholder, which the renderer writes as the text and then
+/// its reference: Claude's `$${VAR}`, the `$` and then the variable's
+/// value.
+fn opens(text: &str, placeholders: &[String], opening: &str) -> bool {
     // A placeholder holds no brace inside, so no two of them overlap, and
     // splitting at each in turn splits at all of them.
     let mut pieces = vec![text];
@@ -473,7 +564,7 @@ fn opens_reference(text: &str, placeholders: &[String]) -> bool {
             .flat_map(|piece| piece.split(placeholder.as_str()))
             .collect();
     }
-    pieces.iter().any(|piece| piece.contains("${"))
+    pieces.iter().any(|piece| piece.contains(opening))
 }
 
 #[cfg(test)]
