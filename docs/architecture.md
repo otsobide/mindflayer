@@ -1116,6 +1116,9 @@ entry may be written with, since it writes each only when it holds
 something, and OpenCode's to every key either of its shapes may be written
 with, since which shape a server is given is its file's to say, so what
 `show` says does not turn on which a definition fills or where it goes.
+OpenCode's are held to V2's `disabled` too, which no entry writes, a
+definition having no switch for it: it is V2's word for the `enabled` V1's
+shape is written with, and beside it would mix the two shapes in one entry.
 Nor do Codex's say the environment it
 runs a server in (`experimental_environment`, `environment_id`,
 `codex_mcp::WITHHELD`): an entry of Mindweaver's is for a server the
@@ -9499,7 +9502,10 @@ The entry (`opencode_mcp::entry`) is D-12's minimal V2 shape,
 headers}`, each key after the command or the address written only when
 it holds something, as Codex's are, and no `codemode`, `protocol` or
 `timeout.startup`, on which V1 warns, nor a key of Mindweaver's, since an
-entry takes none OpenCode does not know. V1's shape, `mcp.<name>` with
+entry takes none OpenCode does not know. Nor `disabled`, which #92 gives
+a program's V2 entry: a definition has no switch for it, so the least
+entry leaves it out, and an extra giving it is refused, as one giving
+`enabled` is (`extra_repeated`). V1's shape, `mcp.<name>` with
 `enabled`, is written only into a file that keeps a server so already:
 `mcp` holding a member other than `servers` and `timeout`, the two keys it
 holds itself, which `mcp::name` refuses a server's name for, so neither is

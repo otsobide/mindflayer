@@ -338,7 +338,16 @@ fn codex_cannot_be_given_extras_giving_a_key_its_entry_may_write_from_the_transp
 #[test]
 fn opencode_cannot_be_given_extras_giving_a_key_its_entry_may_write_in_either_shape() {
     let name = random::kebab();
-    for key in ["type", "command", "enabled", "environment", "cwd"] {
+    // `disabled` too, which neither shape writes: V2's word for V1's
+    // `enabled`, it would mix the two in an entry written in V1's.
+    for key in [
+        "type",
+        "command",
+        "enabled",
+        "environment",
+        "cwd",
+        "disabled",
+    ] {
         let text = McpMother::with_opencode_extras(&name, &format!("{key} = \"other\"\n"));
         assert_eq!(
             parsed(&text).inexpressible(Agent::OpenCode),
@@ -354,6 +363,7 @@ fn opencode_cannot_be_given_extras_giving_a_key_its_entry_may_write_in_either_sh
         ("url", true),
         ("headers", true),
         ("enabled", true),
+        ("disabled", true),
         ("command", false),
         ("timeout", false),
     ] {

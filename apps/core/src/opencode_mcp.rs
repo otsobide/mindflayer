@@ -18,7 +18,11 @@
 //! definition has one entry in each shape, and one canonical form, the form
 //! whose digest the ledger will keep (#93). V1's has no key for a program's
 //! folder, so an entry written in it leaves `cwd` out, and says so
-//! ([`Warning::FolderInV1`]).
+//! ([`Warning::FolderInV1`]). V2's `disabled`, which #92 gives a program's
+//! entry, is never written: a definition has no switch for it, and the
+//! least entry leaves it out. Nor do OpenCode's extras give it ([`keys`]),
+//! since in V1's shape it would stand beside the `enabled` written there,
+//! the two shapes' switch mixed in one entry.
 //!
 //! Each input is written where its placeholder stands as `{env:VAR}`, the
 //! variable it is read from (D-11), which OpenCode fills in over the file's
@@ -249,17 +253,31 @@ pub fn entry(definition: &McpDefinition, shape: Shape) -> Result<Entry, OpenCode
 
 /// The keys OpenCode's entry may be written with from a transport of
 /// `kind`, in either shape, in the order written, each after the command or
-/// the address only when it holds something.
+/// the address only when it holds something, and V2's `disabled` after
+/// them, which is never written.
 ///
 /// What [`McpDefinition::inexpressible`] holds OpenCode's extras to, every
 /// one of them whether or not this definition or this file's shape writes
 /// it, so that what `show` says of a definition turns neither on which keys
 /// it fills nor on which file it is written into
-/// ([`Inexpressible::ExtraRepeated`]).
+/// ([`Inexpressible::ExtraRepeated`]). `disabled` among them, V2's word for
+/// the switch V1's shape is written with as `enabled`, for an address as
+/// for a program, since V1's writes `enabled` for both: an extra giving it
+/// would stand beside `enabled` in an entry written in V1's, the two shapes
+/// mixed in one entry, and what it said would turn on the file's shape.
 pub(crate) const fn keys(kind: TransportType) -> &'static [&'static str] {
     match kind {
-        TransportType::Stdio => &["type", "command", "enabled", "environment", "cwd"],
-        TransportType::Http | TransportType::Sse => &["type", "url", "enabled", "headers"],
+        TransportType::Stdio => &[
+            "type",
+            "command",
+            "enabled",
+            "environment",
+            "cwd",
+            "disabled",
+        ],
+        TransportType::Http | TransportType::Sse => {
+            &["type", "url", "enabled", "headers", "disabled"]
+        }
     }
 }
 
