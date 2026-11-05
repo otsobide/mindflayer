@@ -340,6 +340,7 @@
         "sse_unsupported",
         "cwd_unsupported",
         "variable_blanked",
+        "text_expanded",
         "migrate_refused",
         "migrate_marker_backup_failed",
         "migrate_move_failed",

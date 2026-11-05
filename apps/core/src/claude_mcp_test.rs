@@ -141,6 +141,39 @@ fn a_brace_naming_no_input_is_written_as_it_is_and_a_reference_never_read_again(
 }
 
 #[test]
+fn text_claude_reads_as_a_reference_is_refused_and_a_dollar_before_an_input_written_as_it_is() {
+    let name = McpMother::name();
+    for (why, reference) in McpMother::references() {
+        let (text, at) = McpMother::with_text(&name, "args", &reference);
+        let error = entry(&parsed(&text)).unwrap_err();
+
+        assert_eq!(error.code(), "text_expanded", "{why}");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "`{name}` cannot be given to Claude Code: `{at}` holds `${{` as it is, which opens a reference to an environment variable there, so the text written in it cannot be given"
+            ),
+            "{why}"
+        );
+    }
+
+    let (text, _) = McpMother::with_text(&name, "args", "${workspace}");
+    let Value::Object(members) = entry_of(&text).value else {
+        panic!("{text}")
+    };
+    assert_eq!(
+        members[2].1,
+        Value::array([
+            "-y",
+            "@example/server",
+            "--workspace",
+            "${EXAMPLE_WORKSPACE}",
+            "$${EXAMPLE_WORKSPACE}"
+        ])
+    );
+}
+
+#[test]
 fn extras_for_claude_are_passed_on_beside_the_entry_a_date_as_its_text() {
     let text = McpMother::with_claude_extras(
         &random::kebab(),

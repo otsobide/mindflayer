@@ -1443,7 +1443,9 @@ These are easy to break from a single file without noticing.
   cannot be given, `secret_argument`, `secret_in_url`,
   `composite_secret_header`, and the variables Claude empties toward a
   remote server and passes on, `blanked_variables` and `passed_variables`,
-  read where `header_read_from`, `url_read_from` and `env_read_from` say;
+  read where `header_read_from`, `url_read_from` and `env_read_from` say,
+  and the text Claude reads a reference in and the text it does not,
+  `references` and `not_references`, written where `with_text` says;
   what Claude's entry is refused for or given beside it, `unread_input` and
   `with_claude_extras`; what `add` is told of one, `given_program`,
   `given_address`, `given`, and the shapes it refuses, `given_unfit`,

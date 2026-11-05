@@ -24,7 +24,7 @@ use thiserror::Error;
 
 use crate::agent::Agent;
 use crate::code::{codes, Said};
-use crate::mcp::{blanked, written, InputKind, McpDefinition, Transport};
+use crate::mcp::{blanked, keyed, written, InputKind, McpDefinition, Transport};
 use crate::value::{InputName, VariableName};
 
 /// Something a definition holds that one agent cannot be given as it is
@@ -80,6 +80,16 @@ pub enum Inexpressible {
         input: InputName,
         variable: VariableName,
     },
+    /// `${` written as it is in a value Claude expands, where no input's
+    /// placeholder stands: the opening of a reference to an environment
+    /// variable there (`${VAR}`, `${VAR:-default}`), which would give the
+    /// server the variable's value, a default or nothing in place of the
+    /// text, where a brace naming no input means what it says.
+    #[error(
+        "`{at}` holds `${{` as it is, which opens a reference to an environment variable \
+         there, so the text written in it cannot be given"
+    )]
+    TextExpanded { at: String },
 }
 
 codes!(Inexpressible {
@@ -89,6 +99,7 @@ codes!(Inexpressible {
     Self::ServerSentEvents => "sse_unsupported",
     Self::WorkingDirectory => "cwd_unsupported",
     Self::VariableBlanked { .. } => "variable_blanked",
+    Self::TextExpanded { .. } => "text_expanded",
 });
 
 impl Inexpressible {
@@ -104,7 +115,8 @@ impl Inexpressible {
             | Inexpressible::SecretInUrl { .. }
             | Inexpressible::SecretHeaderComposite { .. }
             | Inexpressible::ServerSentEvents
-            | Inexpressible::VariableBlanked { .. } => true,
+            | Inexpressible::VariableBlanked { .. }
+            | Inexpressible::TextExpanded { .. } => true,
             Inexpressible::WorkingDirectory => false,
         }
     }
@@ -172,32 +184,77 @@ impl McpDefinition {
 
     /// Claude expands `${VAR}` in a program's command, arguments and
     /// environment and in an address and its headers (D-11), and reaches
-    /// every transport; its entry for a program has no folder to start it
-    /// in, and toward an address it reads the credentials it keeps from one
-    /// as empty.
+    /// every transport: so it cannot be given text there that opens a
+    /// reference as it is written, its entry for a program has no folder to
+    /// start it in, and toward an address it reads the credentials it keeps
+    /// from one as empty.
     fn for_claude(&self) -> Vec<Inexpressible> {
+        // Where an input stands, the renderer writes a reference of its
+        // own, so text is held to this only around one; but not in a
+        // program's command, which it writes as the definition holds it, no
+        // input's kind being written there.
+        let placeholders: Vec<String> = self
+            .inputs
+            .iter()
+            .map(|input| written(&input.name))
+            .collect();
+        let expanded = |at: String, text: &str, placeholders: &[String]| {
+            opens_reference(text, placeholders).then_some(Inexpressible::TextExpanded { at })
+        };
+        let mut shapes = Vec::new();
         match &self.transport {
-            Transport::Stdio(stdio) if stdio.cwd.is_some() => {
-                vec![Inexpressible::WorkingDirectory]
+            Transport::Stdio(stdio) => {
+                shapes.extend(expanded(
+                    String::from("transport.command"),
+                    &stdio.command,
+                    &[],
+                ));
+                for (index, arg) in stdio.args.iter().enumerate() {
+                    shapes.extend(expanded(
+                        format!("transport.args[{index}]"),
+                        arg,
+                        &placeholders,
+                    ));
+                }
+                for (key, value) in &stdio.env {
+                    shapes.extend(expanded(keyed("transport.env", key), value, &placeholders));
+                }
+                if stdio.cwd.is_some() {
+                    shapes.push(Inexpressible::WorkingDirectory);
+                }
             }
-            Transport::Stdio(_) => Vec::new(),
-            Transport::Http(_) | Transport::Sse(_) => self
-                .inputs
-                .iter()
-                .filter(|input| match input.kind {
-                    InputKind::Header | InputKind::UrlVar => true,
-                    // Written nowhere in an address.
-                    InputKind::Env | InputKind::Arg => false,
-                })
-                .filter_map(|input| {
-                    let variable = input.env_var.as_ref()?;
-                    blanked::by_claude(variable).then(|| Inexpressible::VariableBlanked {
-                        input: input.name.clone(),
-                        variable: variable.clone(),
-                    })
-                })
-                .collect(),
+            Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                shapes.extend(expanded(
+                    String::from("transport.url"),
+                    endpoint.url.as_str(),
+                    &placeholders,
+                ));
+                for (key, value) in &endpoint.headers {
+                    shapes.extend(expanded(
+                        keyed("transport.headers", key),
+                        value,
+                        &placeholders,
+                    ));
+                }
+                shapes.extend(
+                    self.inputs
+                        .iter()
+                        .filter(|input| match input.kind {
+                            InputKind::Header | InputKind::UrlVar => true,
+                            // Written nowhere in an address.
+                            InputKind::Env | InputKind::Arg => false,
+                        })
+                        .filter_map(|input| {
+                            let variable = input.env_var.as_ref()?;
+                            blanked::by_claude(variable).then(|| Inexpressible::VariableBlanked {
+                                input: input.name.clone(),
+                                variable: variable.clone(),
+                            })
+                        }),
+                );
+            }
         }
+        shapes
     }
 
     /// Codex has no interpolation: a secret reaches a server only through
@@ -266,6 +323,28 @@ impl McpDefinition {
             .map(|(header, _)| header.clone())
             .collect()
     }
+}
+
+/// Whether `text` holds `${` anywhere but where one of `placeholders`
+/// stands: what a reference Claude expands opens with, written as it is.
+///
+/// Any `${`, rather than only what Claude 2.1.318's pattern takes, a name
+/// and then `}`, or `:-`, a default and `}` (read from its binary): one
+/// that pattern passes over may be closed by a reference the renderer
+/// writes after it (`${a:-{token}}`), and a later Claude may take more.
+/// Never one just before a placeholder, which the renderer writes as
+/// `$${VAR}`: the `$`, then the variable's value.
+fn opens_reference(text: &str, placeholders: &[String]) -> bool {
+    // A placeholder holds no brace inside, so no two of them overlap, and
+    // splitting at each in turn splits at all of them.
+    let mut pieces = vec![text];
+    for placeholder in placeholders {
+        pieces = pieces
+            .into_iter()
+            .flat_map(|piece| piece.split(placeholder.as_str()))
+            .collect();
+    }
+    pieces.iter().any(|piece| piece.contains("${"))
 }
 
 #[cfg(test)]

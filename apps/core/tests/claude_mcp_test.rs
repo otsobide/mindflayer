@@ -446,7 +446,12 @@ fn a_definition_claude_is_refused_is_written_nowhere() {
             McpMother::with_literal(&name, "headers", &token).0,
             "claude_mcp_unfit",
         ),
-    ] {
+    ]
+    .into_iter()
+    .chain(McpMother::references().into_iter().flat_map(|(_, text)| {
+        ["args", "headers"]
+            .map(|place| (McpMother::with_text(&name, place, &text).0, "text_expanded"))
+    })) {
         let root = TempDir::new().unwrap();
         let error = claude_mcp::render(root.path(), &parsed(&text)).unwrap_err();
         assert_eq!(error.code(), code, "{error}");

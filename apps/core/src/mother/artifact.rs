@@ -509,6 +509,94 @@ impl McpMother {
         ]
     }
 
+    /// Texts Claude Code reads a reference to a variable in, each beside
+    /// why, the variable's name drawn afresh: what a definition means as
+    /// it is written, and Claude would expand.
+    pub fn references() -> Vec<(&'static str, String)> {
+        let variable = random::word().to_ascii_uppercase();
+        vec![
+            ("a variable whole", format!("${{{variable}}}")),
+            ("inside a longer value", format!("--home=${{{variable}}}/x")),
+            (
+                "with a default",
+                format!("${{{variable}:-{}}}", random::word()),
+            ),
+            ("with an empty default", format!("${{{variable}:-}}")),
+            (
+                "closed by the reference written for an input",
+                String::from("${a:-{workspace}}"),
+            ),
+        ]
+    }
+
+    /// Texts that open no reference Claude reads as they are, each beside
+    /// why, written in a value of the program of
+    /// [`without_cwd`](Self::without_cwd) where its placeholders are
+    /// written as references, its `args` or its `env`: one stands beside
+    /// the placeholder of its input `workspace`.
+    pub fn not_references() -> Vec<(&'static str, String)> {
+        vec![
+            ("a variable as a shell writes it", String::from("$HOME/x")),
+            (
+                "a dollar before a placeholder",
+                String::from("${workspace}"),
+            ),
+            ("a brace naming no input", String::from(r#"{"debug":true}"#)),
+            ("a dollar and a brace apart", String::from("$ {x}")),
+        ]
+    }
+
+    /// `name`'s definition holding `text` as it is, written where `place`
+    /// says (`command`, `args` or `env` of the program of
+    /// [`without_cwd`](Self::without_cwd), or `url` or `headers` of the
+    /// address of [`http`](Self::http)), beside where `show` says it is.
+    pub fn with_text(name: &str, place: &str, text: &str) -> (String, String) {
+        let quoted = toml::Value::String(text.to_owned()).to_string();
+        match place {
+            "command" => (
+                Self::without_cwd(name).replacen(
+                    "command = \"npx\"",
+                    &format!("command = {quoted}"),
+                    1,
+                ),
+                String::from("transport.command"),
+            ),
+            "args" => (
+                Self::without_cwd(name).replacen(
+                    "\"{workspace}\"]",
+                    &format!("\"{{workspace}}\", {quoted}]"),
+                    1,
+                ),
+                String::from("transport.args[4]"),
+            ),
+            "env" => (
+                Self::without_cwd(name).replacen(
+                    "LOG_LEVEL = \"info\"",
+                    &format!("LOG_LEVEL = {quoted}"),
+                    1,
+                ),
+                String::from("transport.env.LOG_LEVEL"),
+            ),
+            "url" => (
+                Self::http(name).replacen(
+                    "/mcp\"",
+                    &format!("/mcp?q={}\"", &quoted[1..quoted.len() - 1]),
+                    1,
+                ),
+                String::from("transport.url"),
+            ),
+            "headers" => (
+                Self::http(name).replacen(
+                    "Authorization = \"Bearer {token}\"",
+                    &format!("Authorization = \"Bearer {{token}}\", X-Extra = {quoted}"),
+                    1,
+                ),
+                String::from("transport.headers.X-Extra"),
+            ),
+            other => panic!("{other} is no place Claude expands text in"),
+        }
+    }
+
     /// The address of [`http`](Self::http), its supplied part written in
     /// its userinfo, `https://{tenant}@example.com/mcp`, where an address
     /// is kept with no credential: what `validate` says no agent is given.

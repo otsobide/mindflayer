@@ -1060,6 +1060,7 @@ anything, and refuses the agent by or writes the entry without
 | Codex, OpenCode | server-sent events (`sse_unsupported`), which OpenCode's V2 shape, the one D-12 writes, does not take | refused |
 | Claude Code | a program's folder (`cwd_unsupported`) | written without it |
 | Claude Code | an input of an address read from a variable it reads as empty toward a remote server (`variable_blanked`) | refused |
+| Claude Code | `${` written as it is in a command, an argument, the environment, the URL or a header, where no input stands (`text_expanded`) | refused |
 
 Codex has no interpolation, so a secret reaches a server there only through
 the keys that name a variable: `env_vars` for a program's environment,
@@ -1076,7 +1077,15 @@ table of its own (`mcp/blanked.rs`): the names Claude keeps from a remote
 server in every environment, in any case and under a workflow input's
 `INPUT_` where Claude looks there, and the shapes it keeps whatever they
 are called (`OTEL_`, git's `GIT_CONFIG_*`, a Cargo registry's token). A
-program's environment is no remote server's, and is given whole. `show` says every
+program's environment is no remote server's, and is given whole. And
+since Claude expands `${VAR}` and `${VAR:-default}` wherever it expands an
+input's reference, text a definition writes there as it is, `${HOME}` in an
+argument, would reach the server as a variable's value, a default or
+nothing, where a brace naming no input means what it says: any `${`
+outside an input's placeholder refuses the server Claude, rather than only
+what 2.1.318's pattern takes (a name, then `}` or `:-`), since a reference
+written for an input after it may close what it opens. A `$` just before a
+placeholder is the `$` and the value, and stays. `show` says every
 agent's (`McpDefinition::expressibility`) between the description and the
 file, and `show --json` the same as `expressibility`, each shape by its code
 under `refused` or `dropped`, and `null` for a skill or a rule: a name
@@ -9259,10 +9268,12 @@ placeholder stands as `${VAR}`, the variable it is read from (D-11), which
 Claude expands in `args`, `env`, `url` and `headers`, inside a longer value
 too, in one pass from the left, so a reference is never read again as a
 placeholder: `${A}` holds `{A}`, which another input may be named. A brace
-naming no input stays as it is written. The command is written as the
-definition holds it: no input's kind puts one there, and that Claude
-expands a reference in it as well is its docs' word and its binary's,
-which no run tried. Claude's extras are passed on beside the entry, never
+naming no input stays as it is written, and a `${` written as it is, which
+Claude would read as a reference, refuses the entry (`text_expanded`,
+[what each agent cannot be given](#what-each-agent-cannot-be-given-of-a-server)).
+The command is written as the definition holds it: no input's kind puts
+one there, and that Claude expands a reference in it as well is its docs'
+word and its binary's, which no run tried. Claude's extras are passed on beside the entry, never
 over a key it writes (`claude_mcp_extra_repeated`), which would leave one
 of the two lost, and a TOML date and time as its text, as `config_entry`
 reads one.

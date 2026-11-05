@@ -3213,7 +3213,8 @@ is told, so its `cwd` is left out there; and Claude reads a credential of
 its own or of a tool on the machine (`ANTHROPIC_API_KEY`, `NPM_TOKEN`,
 `HTTPS_PROXY` and the like) as empty in a remote server's address and
 headers, so it is given no server whose address or headers are read from
-one. `show` says so of each, and
+one, nor one that writes `${` as it is where no input stands, which it
+would read as a variable. `show` says so of each, and
 `--json` says it by a code under `expressibility`. The server is no less
 valid for it, and each agent that can be given it will be: `notion`,
 reached over sse, reaches Claude alone:

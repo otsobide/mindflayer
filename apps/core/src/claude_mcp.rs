@@ -31,7 +31,11 @@
 //! [`McpDefinition::inexpressible`]'s to say, never a second copy of its
 //! rule here, and it is asked before the file is read: a shape that
 //! refuses the agent refuses the entry, and one the entry is written
-//! without (a program's `cwd`) is a [`Warning`].
+//! without (a program's `cwd`) is a [`Warning`]. Text Claude would read
+//! as a reference where no input stands, `${` written as it is, is one
+//! that refuses (`text_expanded`): Claude would give the server a
+//! variable's value in its place, where a brace naming no input means
+//! what it says.
 //!
 //! No approval is written. A person approves a project's servers when
 //! Claude asks, and a `-p` run starts every server the file names, approved
@@ -359,7 +363,8 @@ fn holds_only(document: &Value, name: &str) -> bool {
 
 /// `text` with each placeholder of an input in `read` written as Claude's
 /// reference to the variable it is read from, and every other byte as it
-/// is, a brace naming no input among them.
+/// is, a brace naming no input among them: a `${` among them refuses the
+/// entry before this is asked ([`Inexpressible::TextExpanded`]).
 ///
 /// In one pass from the left, so a reference written in place of one
 /// placeholder is never read again as another: `${A}` holds `{A}`, which

@@ -646,6 +646,7 @@ stands now that #18's runs have been made:
 | OpenCode | A server over sse cannot be expressed in its V2 shape, the one Mindweaver writes. | docs-only | #87 and [D-12](architecture.md#d-12-opencode-gets-the-v2-mcp-shape); none of #18's checks covers it |
 | Claude Code | A program's `cwd` cannot be expressed: its entry is written without it. | docs-only | #87; none of #18's checks covers it |
 | Claude Code | A variable it keeps from a remote server, a credential of its own or of a tool on the machine (`ANTHROPIC_API_KEY`, `NPM_TOKEN`, `SONAR_TOKEN`, `HTTPS_PROXY`, `OTEL_*`, `GIT_CONFIG_*` and more, each under `INPUT_` too where Claude looks there), is read as empty where `${VAR}` is expanded in a remote server's `url` or `headers`, so an input of an address read from one cannot be expressed. | docs-only | #90, read from Claude Code 2.1.318's binary, in any case as it compares them, and listed in `apps/core/src/mcp/blanked.rs`; none of #18's checks names one. A run putting one of them in `claude-mcp`'s header would move it. A name Mindweaver lists that Claude passes on refuses Claude a server it could reach, and one it misses reaches the server empty, which Claude's log says ("credential variable(s) that are never expanded toward a remote server"). |
+| Claude Code | `${` written as it is where no input stands, in the command, the arguments, the environment, the URL or the headers, cannot be expressed: Claude reads it as a reference (`${VAR}`, `${VAR:-default}`) and gives the server a variable's value, a default or nothing in its place. | verified, the command docs-only | #90; `claude-mcp` below expands a `${VAR}` the file holds in `args`, `env`, `url` and `headers`, and the [mcp](https://code.claude.com/docs/en/mcp) docs say the command too. Claude Code 2.1.318's binary takes `${`, a name and `}`, or `:-`, a default and `}`; Mindweaver refuses any `${`, since a reference it writes for an input after one may close it. A run with a `${VAR}` in the command would move that part. |
 
 
 ### Running them
@@ -922,6 +923,10 @@ docs say, through `config_entry`, every byte outside the entry kept:
 - An input of an address read from a variable Claude keeps from a remote
   server refuses the entry (`variable_blanked`), as the table above says
   (docs-only), and a program's `cwd` is left out (`cwd_unsupported`).
+- A `${` the definition writes as it is, where no input stands, refuses
+  the entry (`text_expanded`): Claude would read it as a reference
+  (`claude-mcp`, and the docs for the command), where the definition
+  means the text.
 - sse is written, with a warning that the [mcp](https://code.claude.com/docs/en/mcp)
   docs call it deprecated in favour of streamable HTTP (docs-only).
 - The file is read as strict JSON, up to 2 MiB. One holding a comment or a
