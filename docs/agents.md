@@ -5,8 +5,9 @@ skills and rules, at project and user scope, and what each does with
 duplicates and ignored files. Mindweaver's agent adapters build on it: the
 target table (#28), installing into several folders (#34), the managed block
 in `AGENTS.md` (#42), Claude's rule files (#43), the predicate that decides
-how Claude reaches the block (#44) and the names a suggestion ranks a
-repository by (#58). [docs/architecture.md](architecture.md)
+how Claude reaches the block (#44), the names a suggestion ranks a
+repository by (#58) and what an MCP server's definition is held to for
+each agent (#87). [docs/architecture.md](architecture.md)
 says what Mindweaver does with these facts and why; this page says what the
 agents do.
 
@@ -582,6 +583,25 @@ opencode.ai/v2/docs) ([releases](https://github.com/anomalyco/opencode/releases)
 | Whether `$XDG_CONFIG_HOME` moves `~/.config/opencode`. | docs-only | The [config](https://opencode.ai/docs/config/) docs name `~/.config/opencode` and are silent on `$XDG_CONFIG_HOME`; not run. Fallback: Mindweaver takes `~/.config/opencode` whatever `$XDG_CONFIG_HOME` says, so if OpenCode follows it, a check reads the wrong folder while it is set; `--opencode-config-dir` names the right one outright. An [open question](architecture.md#open-questions). |
 | How an empty `OPENCODE_CONFIG_DIR` is read. | docs-only | The [config](https://opencode.ai/docs/config/) docs are silent; not run. Fallback: Mindweaver reads an empty variable as no folder, as it reads an empty `$MINDWEAVER_HOME`, so if the agent takes it for unset and reads its default folder, a check leaves that folder out; `--opencode-config-dir` names it outright. An [open question](architecture.md#open-questions). |
 
+## MCP servers
+
+| Agent | Rule | Mark | Source, and what would move it |
+|---|---|---|---|
+| Every agent | A server is keyed by letters, digits, hyphens and underscores, `^[A-Za-z0-9_-]+$`, in its project's config. | docs-only | #87 and [D-10](architecture.md#d-10-an-mcp-server-is-one-owned-entry-per-agent); until verified by #18's run |
+| Claude Code | `workspace`, `claude-in-chrome` and `computer-use` are names it keeps for servers of its own, refused as a server's. | docs-only | #87; until verified by #18's run |
+| Claude Code | A name colliding case-insensitively with `Claude Preview` or `Claude Browser` is refused as a server's. No key holds the space, so Mindweaver takes it to cover each in any case with the space written as `_`, `-` or nothing (`claude_preview`, `claude-preview`, `claudepreview`). | docs-only | #87; until verified by #18's run, which would also say which spelling Claude compares |
+| Claude Code | `anthropic-skills` names the skills Anthropic provides, and is not refused as a server's: Mindweaver warns of it. | docs-only | #87; until verified by #18's run |
+| OpenCode | `servers` and `timeout` are keys its `mcp` table holds itself, beside the servers its V1 shape keys there, so neither keys a server. | docs-only | #87 and [D-12](architecture.md#d-12-opencode-gets-the-v2-mcp-shape); until verified by #18's run |
+| Claude Code | An environment reference is written `${VAR}`. | docs-only | [D-11](architecture.md#d-11-mcp-secrets-are-environment-references); until verified by #18's run |
+| Codex | There is no interpolation: a variable is named only by `env_vars`, `env_http_headers` and `bearer_token_env_var`. | docs-only | [D-11](architecture.md#d-11-mcp-secrets-are-environment-references); until verified by #18's run |
+| OpenCode | An environment reference is written `{env:VAR}`. | docs-only | [D-11](architecture.md#d-11-mcp-secrets-are-environment-references); until verified by #18's run |
+| Codex | A secret argument cannot be expressed. | docs-only | [D-11](architecture.md#d-11-mcp-secrets-are-environment-references) and #87; until verified by #18's run |
+| Codex | A secret inside a URL cannot be expressed. | docs-only | [D-11](architecture.md#d-11-mcp-secrets-are-environment-references) and #87; until verified by #18's run |
+| Codex | A secret header cannot be expressed other than as its whole value (`env_http_headers`) or as `Authorization: Bearer ${VAR}` (`bearer_token_env_var`). | docs-only | [D-11](architecture.md#d-11-mcp-secrets-are-environment-references) and #87; until verified by #18's run |
+| Codex | A server over sse cannot be expressed. | docs-only | #87; until verified by #18's run |
+| OpenCode | A server over sse cannot be expressed in its V2 shape, the one Mindweaver writes. | docs-only | #87 and [D-12](architecture.md#d-12-opencode-gets-the-v2-mcp-shape); until verified by #18's run |
+| Claude Code | A program's `cwd` cannot be expressed: its entry is written without it. | docs-only | #87; until verified by #18's run |
+
 ## What says an agent works in a project
 
 `mindweaver scan --suggest` ranks a git repository holding something an agent
@@ -605,8 +625,9 @@ repository it finds, so neither hides one.
 
 ## Facts the roadmap cites
 
-Where every fact #28, #34 and #42 to #44 build on stands. A docs-only one
-carries its fallback in the tables above.
+Where every fact #28, #34, #42 to #44 and #87 build on stands. A docs-only
+one carries its fallback in the tables above, and one of #87's what would
+move it.
 
 | Issue | Fact | Mark |
 |---|---|---|
@@ -641,3 +662,10 @@ carries its fallback in the tables above.
 | #44 | An `@AGENTS.md` line of its own, outside a fence, is followed in any of Claude's files, `CLAUDE.local.md` included. | verified in `CLAUDE.md` outside the markers; docs-only for the fence and `CLAUDE.local.md` |
 | #44 | A `CLAUDE.local.md` alone stops `AGENTS.md` being read. | verified |
 | #44 | Native `AGENTS.md` reading needs Claude 2.1.277 or later. | docs-only |
+| #87 | Every agent keys an MCP server by `^[A-Za-z0-9_-]+$`. | docs-only, until #18's run |
+| #87 | Claude Code keeps `workspace`, `claude-in-chrome`, `computer-use`, and names colliding case-insensitively with `Claude Preview` and `Claude Browser`, for servers of its own. | docs-only, until #18's run |
+| #87 | Claude Code names Anthropic's own skills `anthropic-skills`, and refuses no server by it. | docs-only, until #18's run |
+| #87 | OpenCode holds `servers` and `timeout` in its `mcp` table itself, so neither keys a server. | docs-only, until #18's run |
+| #87 | Codex reads a secret only through `env_vars`, `env_http_headers` and `bearer_token_env_var`: no secret argument, none inside a URL, and no secret header but a whole value or `Authorization: Bearer`. | docs-only, until #18's run |
+| #87 | Neither Codex nor OpenCode's V2 shape takes sse. | docs-only, until #18's run |
+| #87 | Claude Code's entry for a program has no `cwd`. | docs-only, until #18's run |
