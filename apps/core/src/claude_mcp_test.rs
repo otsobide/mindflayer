@@ -204,26 +204,52 @@ fn extras_for_claude_are_passed_on_beside_the_entry_a_date_as_its_text() {
 }
 
 #[test]
-fn an_extra_holding_a_key_the_entry_writes_is_refused() {
+fn an_extra_holding_a_key_the_entry_writes_is_refused_by_its_shape() {
     let name = McpMother::name();
-    for key in ["type", "command", "args", "env"] {
+    for key in keys(TransportType::Stdio) {
         let text = McpMother::with_claude_extras(&name, &format!("{key} = \"other\"\n"));
         let error = entry(&parsed(&text)).unwrap_err();
-        assert_eq!(error.code(), "claude_mcp_extra_repeated", "{key}");
+        assert_eq!(error.code(), "extra_repeated", "{key}");
+        assert!(
+            matches!(&error, ClaudeMcpError::Inexpressible { shape: Inexpressible::ExtraRepeated { key: repeated }, .. } if repeated.as_str() == *key),
+            "{error}"
+        );
         assert_eq!(
             error.to_string(),
             format!(
-                "`{name}` cannot be given to Claude Code: its extras for Claude give `{key}`, which the entry writes from its transport"
+                "`{name}` cannot be given to Claude Code: its extras for the agent give `{key}`, a key the entry there is written with from the transport, so one of the two would be lost"
             )
         );
     }
 }
 
 #[test]
-fn an_input_read_from_no_variable_is_refused() {
+fn the_keys_an_entry_is_written_with_are_the_ones_its_extras_are_held_to() {
     let name = McpMother::name();
-    let error = entry(&parsed(&McpMother::unread_input(&name))).unwrap_err();
+    for (text, kind) in [
+        (McpMother::stdio(&name), TransportType::Stdio),
+        (McpMother::http(&name), TransportType::Http),
+        (McpMother::sse(&name), TransportType::Sse),
+    ] {
+        let Value::Object(members) = entry_of(&text).value else {
+            panic!("{text}")
+        };
+        let written: Vec<&str> = members.iter().map(|(key, _)| key.as_str()).collect();
+        assert_eq!(&written[..keys(kind).len()], keys(kind), "{kind:?}");
+    }
+}
 
+#[test]
+fn an_input_read_from_no_variable_is_refused_though_no_agent_s_report_says_it() {
+    let name = McpMother::name();
+    let definition = parsed(&McpMother::unread_input(&name));
+    let error = entry(&definition).unwrap_err();
+
+    // Every agent could be given the value, once an install hands it one.
+    assert!(definition
+        .expressibility()
+        .iter()
+        .all(|report| report.refused.is_empty()));
     assert_eq!(error.code(), "claude_mcp_input_unread");
     assert_eq!(
         error.to_string(),

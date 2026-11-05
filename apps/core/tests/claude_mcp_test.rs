@@ -446,6 +446,10 @@ fn a_definition_claude_is_refused_is_written_nowhere() {
             McpMother::with_literal(&name, "headers", &token).0,
             "claude_mcp_unfit",
         ),
+        (
+            McpMother::with_claude_extras(&name, "command = \"other\"\n"),
+            "extra_repeated",
+        ),
     ]
     .into_iter()
     .chain(McpMother::references().into_iter().flat_map(|(_, text)| {

@@ -55,7 +55,7 @@ use crate::agent::Agent;
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
 use crate::config_entry::{ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
-use crate::mcp::{Inexpressible, McpDefinition, Transport};
+use crate::mcp::{Inexpressible, McpDefinition, Transport, TransportType};
 use crate::value::{ArtifactName, InputName, VariableName};
 
 /// Where Claude reads a project's servers, from its root.
@@ -108,9 +108,11 @@ pub struct Rendered {
 /// Refused, before anything else, when `validate` would call the
 /// definition invalid ([`artifact::mcp_strict_issues`]), so a token it
 /// holds as it is never reaches a file; then for anything
-/// [`McpDefinition::inexpressible`] says refuses Claude; and for an input
-/// read from no variable, which no entry could be given but as a value,
-/// and a key its extras for Claude give that the entry writes already.
+/// [`McpDefinition::inexpressible`] says refuses Claude, a key its extras
+/// for Claude give that the entry writes already among them; and for an
+/// input read from no variable, which no entry could be given but as a
+/// value, and which that report does not say: it is no agent's limit, but
+/// a value this is not handed yet (#93).
 pub fn entry(definition: &McpDefinition) -> Result<Entry, ClaudeMcpError> {
     let name = definition.name.clone();
     let unfit = artifact::mcp_strict_issues(definition, &name, &name, &[]);
@@ -153,28 +155,28 @@ pub fn entry(definition: &McpDefinition) -> Result<Entry, ClaudeMcpError> {
         )
     };
 
-    let mut members: Vec<(String, Value)> = match &definition.transport {
+    // Each under its key in `keys`, in its order, which is what the report
+    // holds Claude's extras to.
+    let values = match &definition.transport {
         Transport::Stdio(stdio) => vec![
-            (
-                String::from("type"),
-                Value::from(definition.transport.slug()),
-            ),
-            (String::from("command"), Value::from(stdio.command.as_str())),
-            (
-                String::from("args"),
-                Value::Array(stdio.args.iter().map(|arg| referred(arg)).collect()),
-            ),
-            (String::from("env"), table(&stdio.env)),
+            Value::from(definition.transport.slug()),
+            Value::from(stdio.command.as_str()),
+            Value::Array(stdio.args.iter().map(|arg| referred(arg)).collect()),
+            table(&stdio.env),
         ],
         Transport::Http(endpoint) | Transport::Sse(endpoint) => vec![
-            (
-                String::from("type"),
-                Value::from(definition.transport.slug()),
-            ),
-            (String::from("url"), referred(&endpoint.url)),
-            (String::from("headers"), table(&endpoint.headers)),
+            Value::from(definition.transport.slug()),
+            referred(&endpoint.url),
+            table(&endpoint.headers),
         ],
     };
+    let written = keys(definition.transport.kind());
+    debug_assert_eq!(written.len(), values.len());
+    let mut members: Vec<(String, Value)> = written
+        .iter()
+        .map(|key| (*key).to_owned())
+        .zip(values)
+        .collect();
     match definition.transport {
         Transport::Sse(_) => warnings.push(Warning::ServerSentEvents {
             name: name.to_string(),
@@ -182,15 +184,9 @@ pub fn entry(definition: &McpDefinition) -> Result<Entry, ClaudeMcpError> {
         Transport::Stdio(_) | Transport::Http(_) => {}
     }
     // Passed on as written, beside what the transport renders, never over
-    // it: an extra holding a key the entry writes would leave one of the
-    // two lost, and which one would be the order of a file's keys.
+    // it: an extra holding a key the entry writes refused the entry above
+    // ([`Inexpressible::ExtraRepeated`]).
     for (key, value) in definition.extras_for(Agent::Claude).into_iter().flatten() {
-        if members.iter().any(|(written, _)| written == key) {
-            return Err(ClaudeMcpError::ExtraRepeated {
-                name: name.to_string(),
-                key: key.clone(),
-            });
-        }
         members.push((key.clone(), value_of(value)));
     }
     Ok(Entry {
@@ -198,6 +194,20 @@ pub fn entry(definition: &McpDefinition) -> Result<Entry, ClaudeMcpError> {
         value: Value::Object(members),
         warnings,
     })
+}
+
+/// The keys Claude's entry is written with from a transport of `kind`, in
+/// the order written, whether or not each holds anything.
+///
+/// What [`McpDefinition::inexpressible`] holds Claude's extras to, so that
+/// one giving a key the entry writes is said wherever the report is, by
+/// `show` too, rather than found only once an entry is made
+/// ([`Inexpressible::ExtraRepeated`]).
+pub(crate) const fn keys(kind: TransportType) -> &'static [&'static str] {
+    match kind {
+        TransportType::Stdio => &["type", "command", "args", "env"],
+        TransportType::Http | TransportType::Sse => &["type", "url", "headers"],
+    }
 }
 
 /// Write `definition`'s entry into the [`FILE`] at `root`, a project's
@@ -290,8 +300,6 @@ pub enum ClaudeMcpError {
     Inexpressible { name: String, shape: Inexpressible },
     #[error("`{name}` cannot be given to Claude Code: input `{input}` is read from no environment variable, and its entry could be given it only as its value")]
     InputUnread { name: String, input: InputName },
-    #[error("`{name}` cannot be given to Claude Code: its extras for Claude give `{key}`, which the entry writes from its transport")]
-    ExtraRepeated { name: String, key: String },
     #[error("{path}: not strict JSON ({detail}), which is how Claude Code reads it, loading none of the servers of a file that holds a comment or a trailing comma, so it was left as it is")]
     NotStrict { path: PathBuf, detail: String },
     #[error(transparent)]
@@ -301,7 +309,6 @@ pub enum ClaudeMcpError {
 codes!(ClaudeMcpError {
     Self::Unfit { .. } => "claude_mcp_unfit",
     Self::InputUnread { .. } => "claude_mcp_input_unread",
-    Self::ExtraRepeated { .. } => "claude_mcp_extra_repeated",
     Self::NotStrict { .. } => "mcp_json_not_strict",
 } carried {
     Self::Inexpressible { shape, .. } => shape,

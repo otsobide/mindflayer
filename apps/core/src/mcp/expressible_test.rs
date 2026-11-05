@@ -170,6 +170,48 @@ fn claude_is_given_an_address_read_from_a_variable_it_passes_on_and_a_program_fr
 }
 
 #[test]
+fn claude_cannot_be_given_extras_giving_a_key_its_entry_writes_from_the_transport() {
+    let name = random::kebab();
+    for key in ["type", "command", "args", "env"] {
+        let text = McpMother::with_claude_extras(&name, &format!("{key} = \"other\"\n"));
+        assert_eq!(
+            by_agent(&text),
+            [
+                (
+                    "claude",
+                    vec![Inexpressible::ExtraRepeated {
+                        key: key.to_owned()
+                    }]
+                ),
+                ("codex", vec![]),
+                ("opencode", vec![])
+            ],
+            "{key}"
+        );
+    }
+    // A key of a program's entry is none of an address's, which takes it
+    // beside its own.
+    for (key, repeated) in [("url", true), ("headers", true), ("command", false)] {
+        let text = format!(
+            "{}\n[extras.claude]\n{key} = \"other\"\n",
+            McpMother::http(&name)
+        );
+        let expected = if repeated {
+            vec![Inexpressible::ExtraRepeated {
+                key: key.to_owned(),
+            }]
+        } else {
+            vec![]
+        };
+        assert_eq!(
+            parsed(&text).inexpressible(Agent::Claude),
+            expected,
+            "{key}"
+        );
+    }
+}
+
+#[test]
 fn claude_cannot_be_given_text_it_reads_as_a_reference_where_no_input_stands() {
     let name = random::kebab();
     for (why, reference) in McpMother::references() {
@@ -251,6 +293,9 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
         Inexpressible::TextExpanded {
             at: String::from("transport.args[0]"),
         },
+        Inexpressible::ExtraRepeated {
+            key: String::from("type"),
+        },
     ];
     assert_eq!(
         shapes.len(),
@@ -272,6 +317,7 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
             ("cwd_unsupported", false),
             ("variable_blanked", true),
             ("text_expanded", true),
+            ("extra_repeated", true),
         ]
     );
 }

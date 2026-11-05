@@ -18,11 +18,17 @@
 //! Claude reads as empty toward a remote server from its binary
 //! ([`super::blanked`]); `docs/agents.md`'s "MCP servers" says what #18's
 //! runs on the binaries moved, and what a later one would.
+//!
+//! Not an input read from no variable either, which a renderer refuses
+//! (`claude_mcp_input_unread`) while no install hands it the value (#93):
+//! every agent could be given that value as it is, so it is no agent's
+//! limit, and `show` would say it of all three only until then.
 
 use serde::Serialize;
 use thiserror::Error;
 
 use crate::agent::Agent;
+use crate::claude_mcp;
 use crate::code::{codes, Said};
 use crate::mcp::{blanked, keyed, written, InputKind, McpDefinition, Transport};
 use crate::value::{InputName, VariableName};
@@ -90,6 +96,15 @@ pub enum Inexpressible {
          there, so the text written in it cannot be given"
     )]
     TextExpanded { at: String },
+    /// A key the agent's extras give that its entry is written with from
+    /// the transport: passed on beside it, one of the two would be lost,
+    /// and which one would be the order of a file's keys. Said of Claude,
+    /// whose entry's keys are its renderer's (`claude_mcp::keys`).
+    #[error(
+        "its extras for the agent give `{key}`, a key the entry there is written with from the \
+         transport, so one of the two would be lost"
+    )]
+    ExtraRepeated { key: String },
 }
 
 codes!(Inexpressible {
@@ -100,6 +115,7 @@ codes!(Inexpressible {
     Self::WorkingDirectory => "cwd_unsupported",
     Self::VariableBlanked { .. } => "variable_blanked",
     Self::TextExpanded { .. } => "text_expanded",
+    Self::ExtraRepeated { .. } => "extra_repeated",
 });
 
 impl Inexpressible {
@@ -116,7 +132,8 @@ impl Inexpressible {
             | Inexpressible::SecretHeaderComposite { .. }
             | Inexpressible::ServerSentEvents
             | Inexpressible::VariableBlanked { .. }
-            | Inexpressible::TextExpanded { .. } => true,
+            | Inexpressible::TextExpanded { .. }
+            | Inexpressible::ExtraRepeated { .. } => true,
             Inexpressible::WorkingDirectory => false,
         }
     }
@@ -145,7 +162,7 @@ pub struct Expressibility {
 impl McpDefinition {
     /// What `agent` cannot be given of this definition as it is written,
     /// in the order the definition holds it: its transport, then each
-    /// input in the order declared.
+    /// input in the order declared, then the agent's extras.
     ///
     /// What a renderer asks before it writes the agent's entry, and the
     /// one place each agent's limits are said.
@@ -186,8 +203,9 @@ impl McpDefinition {
     /// environment and in an address and its headers (D-11), and reaches
     /// every transport: so it cannot be given text there that opens a
     /// reference as it is written, its entry for a program has no folder to
-    /// start it in, and toward an address it reads the credentials it keeps
-    /// from one as empty.
+    /// start it in, toward an address it reads the credentials it keeps
+    /// from one as empty, and its extras go beside the keys the entry
+    /// writes, never over one.
     fn for_claude(&self) -> Vec<Inexpressible> {
         // Where an input stands, the renderer writes a reference of its
         // own, so text is held to this only around one; but not in a
@@ -254,6 +272,14 @@ impl McpDefinition {
                 );
             }
         }
+        let entry = claude_mcp::keys(self.transport.kind());
+        shapes.extend(
+            self.extras_for(Agent::Claude)
+                .into_iter()
+                .flatten()
+                .filter(|(key, _)| entry.contains(&key.as_str()))
+                .map(|(key, _)| Inexpressible::ExtraRepeated { key: key.clone() }),
+        );
         shapes
     }
 

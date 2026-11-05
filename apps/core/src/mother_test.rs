@@ -636,6 +636,11 @@ fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so()
             Agent::Claude,
             None,
         ),
+        (
+            McpMother::with_claude_extras(&name, "type = \"other\"\n"),
+            Agent::Claude,
+            Some("extra_repeated"),
+        ),
     ];
     for (text, agent, code) in shapes.into_iter().chain(read_from).chain(texts) {
         let definition = read(text);

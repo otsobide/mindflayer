@@ -1061,6 +1061,7 @@ anything, and refuses the agent by or writes the entry without
 | Claude Code | a program's folder (`cwd_unsupported`) | written without it |
 | Claude Code | an input of an address read from a variable it reads as empty toward a remote server (`variable_blanked`) | refused |
 | Claude Code | `${` written as it is in a command, an argument, the environment, the URL or a header, where no input stands (`text_expanded`) | refused |
+| Claude Code | an extra for it giving a key its entry is written with from the transport, `type`, `command`, `args` and `env` or `url` and `headers` (`extra_repeated`) | refused |
 
 Codex has no interpolation, so a secret reaches a server there only through
 the keys that name a variable: `env_vars` for a program's environment,
@@ -1085,11 +1086,19 @@ nothing, where a brace naming no input means what it says: any `${`
 outside an input's placeholder refuses the server Claude, rather than only
 what 2.1.318's pattern takes (a name, then `}` or `:-`), since a reference
 written for an input after it may close what it opens. A `$` just before a
-placeholder is the `$` and the value, and stays. `show` says every
+placeholder is the `$` and the value, and stays. Claude's extras go beside
+its entry, never over a key the entry writes (`claude_mcp::keys`), which
+would leave one of the two lost. `show` says every
 agent's (`McpDefinition::expressibility`) between the description and the
 file, and `show --json` the same as `expressibility`, each shape by its code
 under `refused` or `dropped`, and `null` for a skill or a rule: a name
 added, so no version moved.
+
+An input read from no variable is not among them, though Claude's renderer
+refuses it (`claude_mcp_input_unread`): every agent could be given its
+value as it is, and none is given it only because no install hands a
+renderer one yet (#93, in the open questions). Said here, `show` would
+call every agent refused a server each of them can take.
 
 None of it is `validate`'s. A shape one agent cannot express says nothing
 wrong with the definition, which every other agent is given whole, and a
@@ -9273,10 +9282,11 @@ Claude would read as a reference, refuses the entry (`text_expanded`,
 [what each agent cannot be given](#what-each-agent-cannot-be-given-of-a-server)).
 The command is written as the definition holds it: no input's kind puts
 one there, and that Claude expands a reference in it as well is its docs'
-word and its binary's, which no run tried. Claude's extras are passed on beside the entry, never
-over a key it writes (`claude_mcp_extra_repeated`), which would leave one
-of the two lost, and a TOML date and time as its text, as `config_entry`
-reads one.
+word and its binary's, which no run tried. Claude's extras are passed on
+beside the entry, never over a key it writes (`extra_repeated`, a shape
+of the report, since `claude_mcp::keys` says which keys those are to
+`McpDefinition::inexpressible` too), and a TOML date and time as its
+text, as `config_entry` reads one.
 
 What Claude cannot be given is `McpDefinition::inexpressible`'s to say,
 asked before the file is read, and never a second copy of its rule: a
@@ -9286,7 +9296,8 @@ docs call it deprecated (`claude_mcp_sse_deprecated`). A definition
 `validate` calls invalid is refused before anything else
 (`claude_mcp_unfit`), so a token written as it is never reaches a file, and
 so is an input read from no variable (`claude_mcp_input_unread`), which an
-entry could be given only as its value.
+entry could be given only as its value, and which `show` does not say:
+it is no agent's limit, but a value no install hands the renderer yet.
 
 The file is read as strict JSON, as Claude reads it, and up to 2 MiB
 (`claude_mcp::MAX_BYTES`): a project's servers come to a few KiB. A file
@@ -12226,9 +12237,10 @@ it once as it closes.
 - **An input given a value rather than a variable.** An input that is no
   secret may name no variable, its value being somebody's to give, and
   Claude's entry then has nothing to refer to: `claude_mcp` refuses it
-  (`claude_mcp_input_unread`). A value given when the server is installed
-  is #93's to hand the renderer, which would then write it as it is, held
-  to what a value of the transport is held to.
+  (`claude_mcp_input_unread`), which `show`'s report of each agent does
+  not say, since it is no agent's limit. A value given when the server is
+  installed is #93's to hand the renderer, which would then write it as it
+  is, held to what a value of the transport is held to.
 - **Variables Claude empties that the table does not follow.** What Claude
   keeps from a remote server was read from 2.1.318's binary
   (`mcp/blanked.rs`), and only what it keeps in every environment: a
