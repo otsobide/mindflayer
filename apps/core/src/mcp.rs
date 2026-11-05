@@ -56,6 +56,8 @@ use crate::artifact::ValidationIssue;
 use crate::code::codes;
 use crate::value::{ArtifactName, InputName, Redacted, VariableName};
 
+mod token;
+
 /// The format a definition is written in, and the newest this build reads.
 ///
 /// A version of its own rather than a marker's: a definition is an
@@ -146,6 +148,13 @@ pub struct Endpoint {
     /// input is written where no agent can be given it, rather than that it
     /// is used nowhere ([`ValidationIssue::InputInUserinfo`]).
     pub withheld: Vec<InputName>,
+    /// What each token the address held as written starts with, its
+    /// userinfo included: read off the text before it is redacted, as
+    /// [`withheld`](Self::withheld) is, since a token typed there went with
+    /// it, and kept as what it starts with and never as the text, so that
+    /// `validate` says the file holds one ([`ValidationIssue::SecretLiteral`])
+    /// without the definition holding it again.
+    pub tokens: Vec<&'static str>,
 }
 
 /// One value somebody supplies when an agent starts the server.
@@ -250,10 +259,11 @@ impl McpDefinition {
     /// fixing: a description with nothing in it, a transport that names
     /// nothing to start or reach, an input whose name no placeholder can be
     /// written of or whose variable not every agent can refer to, a secret
-    /// read from no variable at all, an input declared twice, and an input
-    /// no value uses where its kind says, each in the order written: one
-    /// written in the address's userinfo said as that, since it is written
-    /// where its kind says, only in a part no address is kept with.
+    /// read from no variable at all, a token written as it is in a value of
+    /// the transport, an input declared twice, and an input no value uses
+    /// where its kind says, each in the order written: one written in the
+    /// address's userinfo said as that, since it is written where its kind
+    /// says, only in a part no address is kept with.
     ///
     /// Not its name, which is the file's to say and the artifact's to judge
     /// ([`crate::artifact`]). Pure, as every check `validate` makes is.
@@ -308,6 +318,15 @@ impl McpDefinition {
                 }
             }
         }
+        for (at, prefix) in self.literals() {
+            let issue = ValidationIssue::SecretLiteral {
+                at,
+                prefix: prefix.to_owned(),
+            };
+            if !issues.contains(&issue) {
+                issues.push(issue);
+            }
+        }
         let mut seen: Vec<&InputName> = Vec::new();
         for input in &self.inputs {
             if seen.contains(&&input.name) {
@@ -340,6 +359,46 @@ impl McpDefinition {
             }
         }
         issues
+    }
+
+    /// Where each token written as it is stands in the transport, by the
+    /// key that leads to it, and what it starts with: a program's `args`,
+    /// then its `env`, or an address's `url`, then its `headers`, each in
+    /// the order written, every placeholder of a declared input taken out
+    /// first. Not its `command`, which names a program, nor `cwd`.
+    fn literals(&self) -> Vec<(String, &'static str)> {
+        let placeholders: Vec<String> = self
+            .inputs
+            .iter()
+            .map(|input| written(&input.name))
+            .collect();
+        let found = |value: &str| token::found(value, &placeholders);
+        let mut literals = Vec::new();
+        match &self.transport {
+            Transport::Stdio(stdio) => {
+                for (index, arg) in stdio.args.iter().enumerate() {
+                    for prefix in found(arg) {
+                        literals.push((format!("transport.args[{index}]"), prefix));
+                    }
+                }
+                for (key, value) in &stdio.env {
+                    for prefix in found(value) {
+                        literals.push((keyed("transport.env", key), prefix));
+                    }
+                }
+            }
+            Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                for prefix in &endpoint.tokens {
+                    literals.push((String::from("transport.url"), *prefix));
+                }
+                for (key, value) in &endpoint.headers {
+                    for prefix in found(value) {
+                        literals.push((keyed("transport.headers", key), prefix));
+                    }
+                }
+            }
+        }
+        literals
     }
 
     /// Whether `input` is a part of an address written only in its
@@ -500,6 +559,21 @@ fn written(name: &InputName) -> String {
     format!("{{{name}}}")
 }
 
+/// `key` in the table `table` names, as TOML spells the path to it: bare
+/// when it may be, and quoted when a dot or a space in it would read as
+/// another key.
+fn keyed(table: &str, key: &str) -> String {
+    let bare = !key.is_empty()
+        && key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-');
+    if bare {
+        format!("{table}.{key}")
+    } else {
+        format!("{table}.{}", toml::Value::String(key.to_owned()))
+    }
+}
+
 impl From<Raw> for McpDefinition {
     fn from(raw: Raw) -> Self {
         let inputs: Vec<Input> = raw
@@ -517,8 +591,10 @@ impl From<Raw> for McpDefinition {
         // Read off the address as written and what is kept of it, here,
         // where both are at hand: once redacted, which inputs its userinfo
         // held is not known.
+        let placeholders: Vec<String> = inputs.iter().map(|input| written(&input.name)).collect();
         let endpoint = |url: String, headers| {
             let kept = Redacted::new(&url);
+            let tokens = token::found(&url, &placeholders);
             let withheld = inputs
                 .iter()
                 .map(|input| &input.name)
@@ -532,6 +608,7 @@ impl From<Raw> for McpDefinition {
                 url: kept,
                 headers,
                 withheld,
+                tokens,
             }
         };
         let transport = match raw.transport {

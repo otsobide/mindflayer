@@ -1102,6 +1102,33 @@
             "warning",
             "message"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "code": {
+              "const": "secret_literal"
+            },
+            "message": {
+              "type": "string"
+            },
+            "prefix": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "at",
+            "prefix",
+            "warning",
+            "message"
+          ]
         }
       ]
     }

@@ -685,6 +685,16 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
             },
             serde_json::json!({"code": "secret_without_env_var", "name": "token", "warning": false}),
         ),
+        (
+            ValidationIssue::SecretLiteral {
+                at: String::from("transport.env.API_KEY"),
+                prefix: String::from("sk-"),
+            },
+            serde_json::json!({
+                "code": "secret_literal", "at": "transport.env.API_KEY", "prefix": "sk-",
+                "warning": false,
+            }),
+        ),
     ];
     assert_eq!(
         issues.len(),

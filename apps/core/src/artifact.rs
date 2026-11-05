@@ -926,6 +926,7 @@ pub enum ValidationIssue {
     InputNameMalformed { name: String },
     EnvVarMalformed { name: String, variable: String },
     SecretWithoutEnvVar { name: String },
+    SecretLiteral { at: String, prefix: String },
 }
 
 codes!(ValidationIssue {
@@ -953,6 +954,7 @@ codes!(ValidationIssue {
     Self::InputNameMalformed { .. } => "input_name_malformed",
     Self::EnvVarMalformed { .. } => "env_var_malformed",
     Self::SecretWithoutEnvVar { .. } => "secret_without_env_var",
+    Self::SecretLiteral { .. } => "secret_literal",
 });
 
 impl ValidationIssue {
@@ -1015,7 +1017,8 @@ impl ValidationIssue {
             | ValidationIssue::InputInUserinfo { .. }
             | ValidationIssue::InputNameMalformed { .. }
             | ValidationIssue::EnvVarMalformed { .. }
-            | ValidationIssue::SecretWithoutEnvVar { .. } => false,
+            | ValidationIssue::SecretWithoutEnvVar { .. }
+            | ValidationIssue::SecretLiteral { .. } => false,
         }
     }
 }
@@ -1105,6 +1108,9 @@ impl ValidationIssue {
                 ("name", Carried::Text(name)),
                 ("variable", Carried::Text(variable)),
             ],
+            ValidationIssue::SecretLiteral { at, prefix } => {
+                vec![("at", Carried::Text(at)), ("prefix", Carried::Text(prefix))]
+            }
             ValidationIssue::InputUnreferenced { name, kind } => vec![
                 ("name", Carried::Text(name)),
                 ("kind", Carried::Text(kind.slug())),
@@ -1265,6 +1271,10 @@ impl ValidationIssue {
                 variable: text(),
             },
             ValidationIssue::SecretWithoutEnvVar { name: text() },
+            ValidationIssue::SecretLiteral {
+                at: text(),
+                prefix: text(),
+            },
         ]
     }
 }
@@ -1368,6 +1378,15 @@ impl fmt::Display for ValidationIssue {
                 "secret input `{name}` names no `env_var` to be read from, and a secret reaches \
                  an agent only as a reference to an environment variable, never as a value a \
                  file holds"
+            ),
+            // Where, and what it starts with, and never the value: the
+            // message goes wherever `validate` is read, and the value is a
+            // secret.
+            ValidationIssue::SecretLiteral { at, prefix } => write!(
+                f,
+                "`{at}` holds what looks like a token, starting `{prefix}`, and a definition \
+                 holds no secret: declare a secret input read from an environment variable, \
+                 and write it there between braces"
             ),
         }
     }

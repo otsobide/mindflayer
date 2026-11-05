@@ -261,6 +261,149 @@ impl McpMother {
         Self::stdio(name).replacen("env_var = \"EXAMPLE_API_KEY\"\n", "", 1)
     }
 
+    /// A token of each shape a definition is refused for holding, beside
+    /// what it starts with, as `validate` says it.
+    ///
+    /// Drawn afresh every run and put together from parts at run time, so
+    /// that no file in the repository holds anything shaped like a real
+    /// credential, which a secret scanner would stop a push for, and a test
+    /// cannot pass on one value it happens to spell.
+    pub fn tokens() -> Vec<(&'static str, String)> {
+        let upper = random::LOWERCASE.to_ascii_uppercase();
+        let alphanumeric = format!("{}{upper}{}", random::LOWERCASE, random::DIGITS);
+        let drawn = |length: usize| random::drawn_from(&alphanumeric, length);
+        let github = random::pick(&["ghp", "gho", "ghu", "ghs", "ghr"]);
+        let github_prefix: &'static str = match github {
+            "ghp" => "ghp_",
+            "gho" => "gho_",
+            "ghu" => "ghu_",
+            "ghs" => "ghs_",
+            _ => "ghr_",
+        };
+        vec![
+            (github_prefix, format!("{github}_{}", drawn(36))),
+            (
+                "github_pat_",
+                format!("github_pat_{}_{}", drawn(22), drawn(59)),
+            ),
+            (
+                "sk-",
+                format!(
+                    "sk-{}{}{}",
+                    random::pick(&["", "proj-", "ant-api03-"]),
+                    random::drawn_from(random::DIGITS, 1),
+                    drawn(47)
+                ),
+            ),
+            (
+                "Bearer",
+                format!(
+                    "{} {}.{}",
+                    random::pick(&["Bearer", "bearer"]),
+                    drawn(24),
+                    drawn(16)
+                ),
+            ),
+        ]
+    }
+
+    /// One token of the shapes [`tokens`](Self::tokens) draws, beside what
+    /// it starts with.
+    pub fn token() -> (&'static str, String) {
+        random::pick(&Self::tokens())
+    }
+
+    /// `name`'s definition holding `token` as it is, written where `place`
+    /// says (`args`, `env`, `headers`, `url`, or `userinfo`, the user of
+    /// the address), beside where `validate` says it is.
+    pub fn with_literal(name: &str, place: &str, token: &str) -> (String, String) {
+        let quoted = toml::Value::String(token.to_owned()).to_string();
+        match place {
+            "args" => (
+                Self::stdio(name).replacen(
+                    "\"{workspace}\"]",
+                    &format!("\"{{workspace}}\", {quoted}]"),
+                    1,
+                ),
+                String::from("transport.args[4]"),
+            ),
+            "env" => (
+                Self::stdio(name).replacen(
+                    "LOG_LEVEL = \"info\"",
+                    &format!("LOG_LEVEL = \"info\", SERVICE_KEY = {quoted}"),
+                    1,
+                ),
+                String::from("transport.env.SERVICE_KEY"),
+            ),
+            "headers" => (
+                Self::http(name).replacen(
+                    "Authorization = \"Bearer {token}\"",
+                    &format!("Authorization = \"Bearer {{token}}\", X-Service-Key = {quoted}"),
+                    1,
+                ),
+                String::from("transport.headers.X-Service-Key"),
+            ),
+            "url" => (
+                Self::http(name).replacen(
+                    "/mcp\"",
+                    &format!("/mcp?key={}\"", &quoted[1..quoted.len() - 1]),
+                    1,
+                ),
+                String::from("transport.url"),
+            ),
+            "userinfo" => (
+                Self::http(name).replacen(
+                    "https://{tenant}",
+                    &format!("https://{}@{{tenant}}", &quoted[1..quoted.len() - 1]),
+                    1,
+                ),
+                String::from("transport.url"),
+            ),
+            other => panic!("{other} is no place a definition writes a value"),
+        }
+    }
+
+    /// Texts that start the way a token does and are none, each beside
+    /// why: what `validate` lets a definition hold. Each is judged with
+    /// `{token}` an input's placeholder.
+    pub fn not_tokens() -> Vec<(&'static str, String)> {
+        let alphanumeric = format!("{}{}", random::LOWERCASE, random::DIGITS);
+        vec![
+            ("a placeholder after Bearer", String::from("Bearer {token}")),
+            (
+                "a reference in Claude's own syntax",
+                String::from("Bearer ${GITHUB_TOKEN}"),
+            ),
+            (
+                "a variable a shell expands",
+                String::from("Bearer $GITHUB_TOKEN"),
+            ),
+            (
+                "a scheme with nothing after it",
+                String::from("--auth-scheme=Bearer"),
+            ),
+            ("a short word after a scheme", String::from("Bearer abc")),
+            (
+                "a prefix inside a word",
+                format!("risk-{}", random::drawn_from(&alphanumeric, 30)),
+            ),
+            (
+                "a package named with no digit",
+                String::from("sk-mcp-server-for-every-tracker"),
+            ),
+            (
+                "a prefix cut short",
+                format!("ghp_{}", random::drawn_from(&alphanumeric, 12)),
+            ),
+            (
+                "a prefix in capitals GitHub never gives",
+                format!("GHP_{}", random::drawn_from(&alphanumeric, 36)),
+            ),
+            ("a path", String::from("/usr/local/share/sk-tools")),
+            ("a token made of an input", String::from("ghp_{token}")),
+        ]
+    }
+
     /// What every definition opens with: its format, its name and what it
     /// is for, each a TOML string whatever it holds.
     pub fn head(name: &str, description: &str) -> String {

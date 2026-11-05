@@ -449,6 +449,77 @@ fn every_input_name_and_variable_the_rules_refuse_is_said_once() {
 }
 
 #[test]
+fn a_token_written_as_it_is_in_any_value_of_a_transport_is_said_where_it_is_and_never_whole() {
+    let name = random::kebab();
+    for (prefix, token) in McpMother::tokens() {
+        for place in ["args", "env", "headers", "url", "userinfo"] {
+            let (text, at) = McpMother::with_literal(&name, place, &token);
+
+            let issues = parsed(&text).issues();
+
+            assert_eq!(
+                issues,
+                [ValidationIssue::SecretLiteral {
+                    at: at.clone(),
+                    prefix: prefix.to_owned(),
+                }],
+                "{place}: {text}"
+            );
+            let issue = &issues[0];
+            assert_eq!(issue.code(), "secret_literal");
+            assert!(!issue.is_warning());
+            // What it starts with, and none of the rest, in the message or
+            // in what a front end is handed.
+            let rest = token[prefix.len()..].trim_start();
+            let said = issue.to_string();
+            let sent = serde_json::to_string(issue).unwrap();
+            assert!(said.contains(&format!("`{at}`")), "{said}");
+            assert!(
+                !said.contains(rest) && !sent.contains(rest),
+                "{said}\n{sent}"
+            );
+        }
+    }
+}
+
+#[test]
+fn what_starts_as_a_token_does_and_is_none_is_not_said_to_be_one() {
+    let name = random::kebab();
+    for (why, text) in McpMother::not_tokens() {
+        for place in ["args", "env", "headers"] {
+            let (definition, _) = McpMother::with_literal(&name, place, &text);
+
+            assert_eq!(
+                parsed(&definition).issues(),
+                [],
+                "{why} in {place}: {definition}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_key_that_is_no_bare_key_is_quoted_where_a_token_is_said_to_be() {
+    let (prefix, token) = McpMother::token();
+    let text = McpMother::stdio(&random::kebab()).replacen(
+        "LOG_LEVEL = \"info\"",
+        &format!(
+            "LOG_LEVEL = \"info\", \"service.key\" = {}",
+            toml::Value::String(token)
+        ),
+        1,
+    );
+
+    assert_eq!(
+        parsed(&text).issues(),
+        [ValidationIssue::SecretLiteral {
+            at: String::from("transport.env.\"service.key\""),
+            prefix: prefix.to_owned(),
+        }]
+    );
+}
+
+#[test]
 fn a_brace_naming_no_input_is_left_as_it_is_written() {
     let text = McpMother::stdio(&random::kebab()).replacen(
         "\"-y\",",

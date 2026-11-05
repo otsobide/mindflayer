@@ -229,6 +229,17 @@ fn input_and_variable_names_named_for_breaking_their_rule_break_it() {
             "{why}: {text:?}"
         );
     }
+    for (prefix, token) in McpMother::tokens() {
+        let (text, at) = McpMother::with_literal(&random::kebab(), "env", &token);
+        let holding = crate::mcp::McpDefinition::parse(&text).unwrap();
+        assert_eq!(
+            holding.issues(),
+            [ValidationIssue::SecretLiteral {
+                at,
+                prefix: prefix.to_owned()
+            }]
+        );
+    }
     let unnamed =
         crate::mcp::McpDefinition::parse(&McpMother::secret_without_variable(&random::kebab()))
             .unwrap();
