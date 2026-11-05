@@ -466,10 +466,11 @@ mind migrate --names [--yes]
                            # this project's commands use
 
 mindweaver                 # the TUI: everything below, a key each
-mindweaver ui [--port PORT] [--no-open] [--dev] [--token-file PATH]
+mindweaver ui [--port PORT] [--no-open] [--dev] [--token-file PATH] [--log]
                            # the control panel, in a browser, until Ctrl-C;
                            # mind ui is the same; with --no-open and
-                           # --token-file, its API for scripts alone
+                           # --token-file, its API for scripts alone; with
+                           # --log, what it answered and how long each took
 mindweaver init [PATH] [--skills DIR] [--rules DIR]
                            # create a .mindweaver here, or in PATH
 mindweaver activate [DIR] [--shell SHELL]
@@ -1885,6 +1886,26 @@ changed something, with what each said, as the TUI does when it closes:
 $ mindweaver -W /home/you/Projects install -p /home/you/Projects/collapse skill:commit-style
 installed commit-style into collapse, from workspace
 ```
+
+**`--log`** says on stderr, as it happens, every request the panel
+answered and how long the answer took; for each change, how long it waited
+its turn behind the ones before it and how long it ran; and for each of its
+commands, by its place among them, how long it took and how much of that
+it waited for another writer to let go of a workspace, and which process
+that was. Each line comes after the time of day it was said at, in UTC, to
+read beside a browser's trace or CI's log of the same minutes:
+
+```
+04:20:59.460Z POST /api/v1/tasks/preview 200 1ms
+04:20:59.757Z run: 0ms waiting its turn, 1ms working out its 1 line
+04:20:59.761Z run: line 1 of 1 took 4ms, 0ms of it waiting for a workspace's lock
+04:20:59.761Z run: 4ms running its 1 line
+04:20:59.762Z POST /api/v1/tasks 200 6ms
+```
+
+It is for finding out why something took long, and never holds the token,
+a header, what a request sent or which commands a change ran, which the
+transcript says.
 
 **Every change is previewed first.** Whatever you ask the panel to change,
 it asks the server what that is before anything runs, and shows you the

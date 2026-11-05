@@ -1037,6 +1037,19 @@ pub struct UiOptions {
     // its own, and only whoever starts one knows which script it is for.
     #[arg(long, value_name = "PATH")]
     pub token_file: Option<PathBuf>,
+
+    /// Say on stderr, as it happens, every request answered and how long
+    /// it took, how long each change waited its turn and ran, and how long
+    /// each of its commands took, of it waiting for another writer to let
+    /// go of a workspace: each line after the time of day, in UTC. Never
+    /// the token, nor what a request sent.
+    //
+    // On stderr, which the person who started the panel already reads and
+    // can send anywhere, rather than to a file of its own, which would be
+    // one more path to refuse when something is there. Off unless asked
+    // for: a line a request is too many for a terminal somebody is using.
+    #[arg(long)]
+    pub log: bool,
 }
 
 /// How `edit` changes an artifact, at either level: in an editor, or by

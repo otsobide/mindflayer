@@ -5833,7 +5833,8 @@ ran, which are the request's body.
 
 The server knows a task and not its lines, so the CLI's backend says what
 it can of each, in the log its front end hands it as it hands the server
-one (`PanelBackend::logging`): once a line has run, by its place among the
+one (`PanelBackend::logging`, which `mindweaver ui --log` hands both,
+[launching it](#launching-it-mindweaver-ui)): once a line has run, by its place among the
 task's lines, how long it took and how much of that it waited for a
 workspace's lock another writer held, and which process held it when one
 did and said so, `run: line 1 of 1 took 5402ms, 0ms of it waiting for a
@@ -5980,6 +5981,18 @@ printed nowhere the link was not, and `TokenFile` has no `Debug` to print
 it with. Nor can the panel ask for a file: a front end with no terminal
 refuses `ui` whatever its options (`Refusal::Panel`), so a browser never
 names one for it to write.
+
+`--log` hands the server and the backend one log ([the log](#the-log)),
+which writes each line to stderr as it is said, after the time of day, in
+UTC to the millisecond (`04:20:59.756Z`): as it is said, since it is for
+watching a panel serve, or for reading beside a browser's trace of the same
+minutes, and either needs it while the panel runs; the time of day alone,
+which is what that reading asks for, in UTC, which needs no timezone looked
+up and is what a trace and CI's log say their times in. Off unless asked
+for, since a line a request is too many for a terminal somebody is using,
+and on stderr rather than in a file of its own, which would be one more
+path to refuse when something is there: whoever starts the panel sends
+stderr where they like. Without it, stderr says what it always has.
 
 The runtime is tokio's with one thread: every query goes to the blocking pool
 and every run to the server's writer thread, so it only moves bytes. `--dev`

@@ -13,14 +13,16 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::task::Poll;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use mindweaver_server::{Listening, Server};
 use serde::Serialize;
 use tokio::sync::oneshot;
 
 use super::typed;
-use crate::backend::PanelBackend;
+use crate::backend::{Log, PanelBackend};
 use crate::parse::UiOptions;
 use crate::{CliError, Failure, Lookup, Outcome, Warning};
 
@@ -58,7 +60,11 @@ pub(crate) fn ui_command(
         .as_deref()
         .map(|path| typed(directory, path))
         .transpose()?;
-    let backend = PanelBackend::launch(directory, lookup)?;
+    let log = options.log.then(on_stderr);
+    let mut backend = PanelBackend::launch(directory, lookup)?;
+    if let Some(log) = &log {
+        backend = backend.logging(Arc::clone(log));
+    }
     let root = backend.root();
     // A clone keeps what the server's ran, for the transcript.
     let kept = backend.clone();
@@ -66,6 +72,9 @@ pub(crate) fn ui_command(
     let mut server = Server::new(backend).port(port);
     if options.dev {
         server = server.dev_server(DEV_SERVER);
+    }
+    if let Some(log) = log {
+        server = server.log(move |line| log(line));
     }
     let listening = server.bind().map_err(|source| CliError::Unbound {
         port,
@@ -157,6 +166,44 @@ fn announce(
         root.display()
     );
     Ok(())
+}
+
+/// Where `--log` sends what the server and the backend say: each line to
+/// stderr as it is said, after the time of day it was said at
+/// ([`time_of_day`]).
+///
+/// Written as it is said rather than gathered and handed back, as the link
+/// is: it is for watching a panel serve, or for reading beside a browser's
+/// trace of the same minutes once something took too long (#240), and
+/// either needs it while the panel runs. A line stderr will not take is
+/// lost rather than a reason to stop, as the note is.
+fn on_stderr() -> Log {
+    Arc::new(|line: &str| {
+        let _ = writeln!(
+            io::stderr().lock(),
+            "{} {line}",
+            time_of_day(SystemTime::now())
+        );
+    })
+}
+
+/// The time of day `at` was, in UTC, to the millisecond: `04:20:59.756Z`.
+///
+/// The time of day alone, which is what reading a log beside a trace of the
+/// same run asks for, where a date would only lengthen every line. In UTC,
+/// which needs no timezone to be looked up, and is what a browser's trace
+/// and CI's own log say their times in, so a line here is found there by
+/// its time as it reads.
+fn time_of_day(at: SystemTime) -> String {
+    let since = at.duration_since(UNIX_EPOCH).unwrap_or_default();
+    let seconds = since.as_secs() % 86_400;
+    format!(
+        "{:02}:{:02}:{:02}.{:03}Z",
+        seconds / 3_600,
+        seconds / 60 % 60,
+        seconds % 60,
+        since.subsec_millis()
+    )
 }
 
 /// What `--token-file` writes, for a script to read where the API is and
