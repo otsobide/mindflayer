@@ -10,7 +10,7 @@ use std::path::Path;
 
 use mindweaver_core::config_entry::{ConfigFile, Format, Written};
 use mindweaver_core::mother::McpMother;
-use mindweaver_core::opencode_mcp::{self, OpenCodeMcpError, FILE, FILES, MAX_BYTES};
+use mindweaver_core::opencode_mcp::{self, OpenCodeMcpError, Shape, FILE, FILES, MAX_BYTES};
 use mindweaver_core::McpDefinition;
 use tempfile::TempDir;
 
@@ -605,4 +605,210 @@ fn a_symlink_on_the_way_is_refused_and_what_it_points_at_left_alone() {
         fs::read_to_string(elsewhere.path().join("opencode.json")).unwrap(),
         TEAMS
     );
+}
+
+/// A team's own config keeping its servers in V1's shape, as OpenCode
+/// wrote them before V2: straight under `mcp`, each `enabled`, with a
+/// comment above and trailing commas.
+const TEAMS_V1: &str = r#"{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    // their own, from before V2
+    "docs": {
+      "type": "local",
+      "command": ["docs-mcp"],
+      "enabled": true,
+    },
+  },
+}
+"#;
+
+#[test]
+fn a_file_keeping_its_servers_in_v1_s_shape_is_given_a_program_in_it_without_its_folder() {
+    let root = TempDir::new().unwrap();
+    write(root.path(), FILE, TEAMS_V1);
+    let name = McpMother::name();
+
+    let rendered = render(root.path(), &McpMother::stdio(&name));
+
+    assert_eq!(rendered.written, Written::Changed);
+    assert_eq!(rendered.entry.shape, Shape::V1);
+    assert_eq!(codes(&rendered), ["opencode_mcp_v1_cwd"]);
+    assert_eq!(
+        read(root.path(), FILE),
+        format!(
+            r#"{{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {{
+    // their own, from before V2
+    "docs": {{
+      "type": "local",
+      "command": ["docs-mcp"],
+      "enabled": true,
+    }},
+    "{name}": {{
+      "type": "local",
+      "command": ["npx", "-y", "@example/server", "--workspace", "{{env:EXAMPLE_WORKSPACE}}"],
+      "enabled": true,
+      "environment": {{
+        "API_KEY": "{{env:EXAMPLE_API_KEY}}",
+        "LOG_LEVEL": "info",
+      }},
+    }},
+  }},
+}}
+"#
+        )
+    );
+
+    assert_eq!(
+        opencode_mcp::remove(root.path(), &name, false).unwrap(),
+        Written::Changed
+    );
+    assert_eq!(read(root.path(), FILE), TEAMS_V1);
+}
+
+#[test]
+fn a_file_keeping_its_servers_in_v1_s_shape_is_given_an_address_in_it() {
+    let root = TempDir::new().unwrap();
+    write(root.path(), FILES[1], TEAMS_V1);
+    let name = McpMother::name();
+
+    let rendered = render(root.path(), &McpMother::http(&name));
+
+    assert_eq!(rendered.entry.shape, Shape::V1);
+    assert_eq!(codes(&rendered), [] as [&str; 0]);
+    let written = read(root.path(), FILES[1]);
+    assert!(
+        written.contains(&format!(
+            r#"    "{name}": {{
+      "type": "remote",
+      "url": "https://{{env:EXAMPLE_TENANT}}.example.com/mcp",
+      "enabled": true,
+      "headers": {{
+        "Authorization": "Bearer {{env:EXAMPLE_TOKEN}}",
+      }},
+    }},
+"#
+        )),
+        "{written}"
+    );
+    assert!(!written.contains("\"servers\""), "{written}");
+}
+
+#[test]
+fn a_server_is_replaced_in_the_shape_it_stands_in() {
+    let name = McpMother::name();
+    let key =
+        |shape: Shape| -> Vec<String> { shape.key(&name).into_iter().map(str::to_owned).collect() };
+    let holds = |root: &Path, shape: Shape| {
+        let key = key(shape);
+        let key: Vec<&str> = key.iter().map(String::as_str).collect();
+        ConfigFile::new(root, FILE, Format::Jsonc)
+            .unwrap()
+            .get(&key)
+            .unwrap()
+    };
+
+    // Ours in V2's shape, in a file somebody has given a server of V1's
+    // since, stays V2's.
+    let root = TempDir::new().unwrap();
+    write(root.path(), FILE, TEAMS);
+    render(root.path(), &McpMother::http(&name));
+    let mixed = read(root.path(), FILE).replacen(
+        "\"mcp\": {\n",
+        "\"mcp\": {\n    \"theirs\": { \"type\": \"remote\", \"url\": \"https://example.com/mcp\" },\n",
+        1,
+    );
+    write(root.path(), FILE, &mixed);
+    let rendered = render(root.path(), &McpMother::whole_secret_header(&name));
+    assert_eq!(rendered.entry.shape, Shape::V2);
+    assert_eq!(rendered.written, Written::Changed);
+    assert!(holds(root.path(), Shape::V2).is_some());
+    assert!(holds(root.path(), Shape::V1).is_none());
+
+    // And one of the name in V1's shape, in a file of V2's, stays V1's.
+    let root = TempDir::new().unwrap();
+    write(
+        root.path(),
+        FILE,
+        &TEAMS.replacen(
+            "\"mcp\": {\n",
+            &format!(
+                "\"mcp\": {{\n    \"{name}\": {{ \"type\": \"remote\", \"url\": \"https://example.com/old\", \"enabled\": true }},\n"
+            ),
+            1,
+        ),
+    );
+    let rendered = render(root.path(), &McpMother::http(&name));
+    assert_eq!(rendered.entry.shape, Shape::V1);
+    assert_eq!(
+        holds(root.path(), Shape::V1).unwrap().canonical(),
+        rendered.entry.canonical()
+    );
+    assert!(holds(root.path(), Shape::V2).is_none());
+    assert_eq!(
+        opencode_mcp::remove(root.path(), &name, false).unwrap(),
+        Written::Changed
+    );
+    assert!(holds(root.path(), Shape::V1).is_none());
+}
+
+#[test]
+fn a_server_in_both_shapes_is_refused_and_the_file_left_as_it_is() {
+    let root = TempDir::new().unwrap();
+    let name = McpMother::name();
+    let both = format!(
+        "{{\n  \"mcp\": {{\n    \"servers\": {{ \"{name}\": {{ \"type\": \"remote\", \"url\": \"https://a.example\" }} }},\n    \"{name}\": {{ \"type\": \"remote\", \"url\": \"https://b.example\" }}\n  }}\n}}\n"
+    );
+    write(root.path(), FILE, &both);
+
+    for result in [
+        opencode_mcp::render(root.path(), &parsed(&McpMother::http(&name))).map(|_| ()),
+        opencode_mcp::remove(root.path(), &name, false).map(|_| ()),
+        opencode_mcp::remove(root.path(), &name, true).map(|_| ()),
+    ] {
+        let error = result.unwrap_err();
+        assert_eq!(error.code(), "opencode_mcp_twice");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "{}: `{name}` is a server both under `mcp.servers` and under `mcp`, OpenCode's \
+                 V2 and V1 shapes of one, so which of the two is meant cannot be told, and the \
+                 file was left as it is",
+                root.path().join(FILE).display()
+            )
+        );
+    }
+    assert_eq!(read(root.path(), FILE), both);
+}
+
+#[test]
+fn the_keys_opencode_s_mcp_holds_itself_are_no_servers_of_v1_s() {
+    // A timeout beside the servers keeps a new one in V2's shape.
+    let root = TempDir::new().unwrap();
+    let held = "{\n  \"mcp\": {\n    \"timeout\": 5000\n  }\n}\n";
+    write(root.path(), FILE, held);
+    let name = McpMother::name();
+    let rendered = render(root.path(), &McpMother::http(&name));
+    assert_eq!(rendered.entry.shape, Shape::V2);
+    assert!(
+        read(root.path(), FILE)
+            .starts_with("{\n  \"mcp\": {\n    \"timeout\": 5000,\n    \"servers\": {\n"),
+        "{}",
+        read(root.path(), FILE)
+    );
+
+    // Nor is `servers` ever taken out as a server, which would take every
+    // one of V2's with it.
+    let root = TempDir::new().unwrap();
+    write(root.path(), FILE, TEAMS);
+    for name in ["servers", "timeout"] {
+        assert_eq!(
+            opencode_mcp::remove(root.path(), name, false).unwrap(),
+            Written::Unchanged,
+            "{name}"
+        );
+    }
+    assert_eq!(read(root.path(), FILE), TEAMS);
 }

@@ -30,9 +30,9 @@
 //! What OpenCode cannot be given of a definition is
 //! [`McpDefinition::inexpressible`]'s to say, never a second copy of its
 //! rule here, and it is asked before anything else is: server-sent events,
-//! which V2's shape does not take, and text OpenCode would fill in where no
+//! which V2's shape does not take, text OpenCode would fill in where no
 //! input stands, `{env:` or `{file:` written as it is (`text_substituted`),
-//! refuse the entry.
+//! and extras over a key either shape may write refuse the entry.
 //!
 //! The file is the first of `opencode.json`, `opencode.jsonc`,
 //! `.opencode/opencode.json` and `.opencode/opencode.jsonc` there is at the
@@ -280,16 +280,24 @@ pub struct Rendered {
 /// servers already there, and make [`FILE`] when none of them is there yet.
 ///
 /// The entry is made first ([`entry`]), so a definition refused reads and
-/// writes nothing. The file is read as JSONC, as OpenCode reads every one
-/// of them, up to [`MAX_BYTES`], and written through [`ConfigFile`], which
-/// keeps every byte outside the entry, comments and trailing commas
-/// included, makes a new file with `create_new` and leaves one that
-/// already holds the entry as it is.
+/// writes nothing: what refuses one refuses it in either shape. It is
+/// written in the shape a server of the name stands in, where it stands,
+/// rather than beside itself in the other ([`standing`]), and a new one in
+/// the shape the file keeps its servers in ([`followed`]). The file is read
+/// as JSONC, as OpenCode reads every one of them, up to [`MAX_BYTES`], and
+/// written through [`ConfigFile`], which keeps every byte outside the
+/// entry, comments and trailing commas included, makes a new file with
+/// `create_new` and leaves one that already holds the entry as it is.
 pub fn render(root: &Path, definition: &McpDefinition) -> Result<Rendered, OpenCodeMcpError> {
-    let given = entry(definition, Shape::V2)?;
+    let checked = entry(definition, Shape::V2)?;
     let (file, _) = config(root)?;
+    let standing = standing(&file, checked.name.as_str())?;
+    let given = match standing.map_or_else(|| followed(&file), Ok)? {
+        Shape::V2 => checked,
+        Shape::V1 => entry(definition, Shape::V1)?,
+    };
     let key = given.shape.key(given.name.as_str());
-    let edit = match file.get(&key)? {
+    let edit = match standing {
         None => Edit::Insert(given.value.clone()),
         Some(_) => Edit::Replace(given.value.clone()),
     };
@@ -302,9 +310,10 @@ pub fn render(root: &Path, definition: &McpDefinition) -> Result<Rendered, OpenC
 }
 
 /// Take the server keyed `name` out of the first of [`FILES`] there is at
-/// `root`, every other byte as it was, and take the file away with it when
-/// `created`, that Mindweaver made it, and nothing else is left in it: no
-/// other server, nothing beside them, and no comment ([`holds_only`]).
+/// `root`, in whichever shape it stands, every other byte as it was, and
+/// take the file away with it when `created`, that Mindweaver made it, and
+/// nothing else is left in it: no other server, nothing beside them, and
+/// no comment ([`holds_only`]).
 ///
 /// [`Written::Removed`] when the file went, [`Written::Changed`] when the
 /// server did and the file stays, and [`Written::Unchanged`] when there was
@@ -314,19 +323,60 @@ pub fn render(root: &Path, definition: &McpDefinition) -> Result<Rendered, OpenC
 /// is gone, stays whatever it holds. `.opencode` is never taken away.
 pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, OpenCodeMcpError> {
     let (file, route) = config(root)?;
-    let key = Shape::V2.key(name);
+    let standing = standing(&file, name)?;
     // Taken whole when the server is all it holds, rather than written
     // without it first only to be taken away.
     if created && route == FILE {
+        let key = standing.unwrap_or(Shape::V2).key(name);
         let taken = file.take(|text, _| holds_only(text, &key))?;
         if taken == Written::Removed {
             return Ok(taken);
         }
     }
-    if file.get(&key)?.is_none() {
+    let Some(shape) = standing else {
         return Ok(Written::Unchanged);
+    };
+    Ok(file.edit(&shape.key(name), &Edit::Remove)?)
+}
+
+/// The shape a server not in `file` yet is written in: V1's when `file`
+/// keeps a server in V1's shape already, so that its servers keep one
+/// shape (D-12), and V2's otherwise.
+fn followed(file: &ConfigFile) -> Result<Shape, OpenCodeMcpError> {
+    let v1 = match file.get(&[MCP])? {
+        Some(Value::Object(members)) => members.iter().any(|(key, _)| !held(key)),
+        _ => false,
+    };
+    Ok(if v1 { Shape::V1 } else { Shape::V2 })
+}
+
+/// Which shape a server keyed `name` stands in in `file`, `None` when it is
+/// in neither, and refused when it is in both, since which of the two
+/// OpenCode reads cannot be told.
+///
+/// A key OpenCode's `mcp` holds itself is never a server of V1's: `servers`
+/// is where V2's are, which taking out as one server would take every one
+/// of them.
+fn standing(file: &ConfigFile, name: &str) -> Result<Option<Shape>, OpenCodeMcpError> {
+    let v2 = file.get(&Shape::V2.key(name))?.is_some();
+    let v1 = !held(name) && file.get(&Shape::V1.key(name))?.is_some();
+    match (v2, v1) {
+        (true, true) => Err(OpenCodeMcpError::Twice {
+            path: file.path(),
+            name: name.to_owned(),
+        }),
+        (true, false) => Ok(Some(Shape::V2)),
+        (false, true) => Ok(Some(Shape::V1)),
+        (false, false) => Ok(None),
     }
-    Ok(file.edit(&key, &Edit::Remove)?)
+}
+
+/// Whether `key` is one OpenCode's `mcp` holds itself beside the servers its
+/// V1 shape keys there (`servers`, `timeout`), as it spells it: the names a
+/// server is refused for OpenCode ([`mcp::name`]'s), which keep no server of
+/// V1's.
+fn held(key: &str) -> bool {
+    mcp::name::reserved(Agent::OpenCode).contains(&key)
 }
 
 /// The first of [`FILES`] there is at `root`, or [`FILE`] when none is,
@@ -425,6 +475,12 @@ pub enum OpenCodeMcpError {
     Inexpressible { name: String, shape: Inexpressible },
     #[error("`{name}` cannot be given to OpenCode: input `{input}` is read from no environment variable, and its entry could be given it only as its value")]
     InputUnread { name: String, input: InputName },
+    #[error(
+        "{path}: `{name}` is a server both under `mcp.servers` and under `mcp`, OpenCode's V2 \
+         and V1 shapes of one, so which of the two is meant cannot be told, and the file was \
+         left as it is"
+    )]
+    Twice { path: PathBuf, name: String },
     #[error(transparent)]
     File(#[from] FileError),
 }
@@ -432,6 +488,7 @@ pub enum OpenCodeMcpError {
 codes!(OpenCodeMcpError {
     Self::Unfit { .. } => "opencode_mcp_unfit",
     Self::InputUnread { .. } => "opencode_mcp_input_unread",
+    Self::Twice { .. } => "opencode_mcp_twice",
 } carried {
     Self::Inexpressible { shape, .. } => shape,
     Self::File(error) => error,
