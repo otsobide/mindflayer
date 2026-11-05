@@ -178,6 +178,7 @@ every_store![
     forgetting_each_copy_in_turn_forgets_the_installation_with_the_last,
     a_skill_recording_no_copy_is_forgotten_whole_by_a_change_at_any_path,
     a_rule_recording_no_copy_outlives_a_change_at_any_path,
+    a_servers_installation_outlives_a_change_at_any_path_with_its_entries,
     a_rules_last_copy_forgotten_takes_its_installation_with_it,
     renaming_a_copy_of_a_name_never_installed_carries_nothing,
     renaming_a_copy_the_installation_never_wrote_carries_nothing,
@@ -842,6 +843,41 @@ fn a_rule_recording_no_copy_outlives_a_change_at_any_path(mut store: Store) {
         recorded(&store, "collapse", Kind::Rule, &route),
         Some(reaching_nobody)
     );
+}
+
+fn a_servers_installation_outlives_a_change_at_any_path_with_its_entries(mut store: Store) {
+    let name = McpMother::name();
+    let server = InstallRecordMother::mcp(&name);
+    store.installed("collapse", &server).unwrap();
+    let renamed = format!("{name}x");
+
+    // Where the project's own definition of the name is, and the file one of
+    // its entries is in: a change at either reaches no entry it wrote.
+    for at in [format!("mcp/{name}.toml"), server.entries[0].file.clone()] {
+        let forgotten = store
+            .uninstalled_copy("collapse", Kind::Mcp, &name, &at)
+            .unwrap();
+        let carried = store
+            .renamed_copy(
+                "collapse",
+                Kind::Mcp,
+                &name,
+                &at,
+                &renamed,
+                &format!("mcp/{renamed}.toml"),
+            )
+            .unwrap();
+        assert_eq!(forgotten, Forgotten::Nothing, "{name} at {at}");
+        assert_eq!(carried, Carried::Nothing, "{name} at {at}");
+    }
+
+    store.reopen();
+    assert_eq!(
+        recorded(&store, "collapse", Kind::Mcp, &name),
+        Some(server),
+        "{name}"
+    );
+    assert_eq!(recorded(&store, "collapse", Kind::Mcp, &renamed), None);
 }
 
 fn a_rules_last_copy_forgotten_takes_its_installation_with_it(mut store: Store) {

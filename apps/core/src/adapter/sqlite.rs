@@ -887,7 +887,7 @@ impl LedgerStore for Sqlite {
                 |row| row.get(0),
             )
             .map_err(failed)?;
-        let forgotten = if left == 0 && (copy > 0 || kind != Kind::Rule) {
+        let forgotten = if left == 0 && (copy > 0 || stale_without_copies(kind)) {
             transaction
                 .execute("DELETE FROM installations WHERE id = ?1", [id])
                 .map_err(failed)?;
@@ -941,7 +941,7 @@ impl LedgerStore for Sqlite {
             .optional()
             .map_err(failed)?;
         let Some((agent, held)) = copy else {
-            if kind != Kind::Rule && count(&transaction).map_err(failed)? == 0 {
+            if stale_without_copies(kind) && count(&transaction).map_err(failed)? == 0 {
                 transaction
                     .execute("DELETE FROM installations WHERE id = ?1", [id])
                     .map_err(failed)?;
@@ -1613,6 +1613,27 @@ fn retarget_in(
     )?;
     insert_targets(connection, id, targets)?;
     Ok(Some(id))
+}
+
+/// Whether an installation of `kind` recording no copy is forgotten whole by
+/// a change at a path in its project that reached none of its copies, as
+/// [`uninstalled_copy`](LedgerStore::uninstalled_copy) and
+/// [`renamed_copy`](LedgerStore::renamed_copy) are asked.
+///
+/// A skill's is one only a build from before installations had targets
+/// wrote, held to a change by name, as records were. A rule's is one a build
+/// writes, for a rule that reaches no agent the project names, and an MCP
+/// server's never records a copy, since what it writes is an entry in each
+/// agent's config file (D-10), which no change at a path reaches: either way
+/// the change reached nothing it installed, and it stays. Forgetting a
+/// server's would take its entries' record with it, and leave what
+/// Mindweaver wrote there somebody's, never updated or taken out again. On
+/// every kind with no wildcard, so a kind added says which it is.
+fn stale_without_copies(kind: Kind) -> bool {
+    match kind {
+        Kind::Skill => true,
+        Kind::Rule | Kind::Mcp => false,
+    }
 }
 
 /// Record `targets` as the copies of the installation `id`, through

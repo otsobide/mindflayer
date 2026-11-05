@@ -8,14 +8,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use mindweaver_core::config_entry::{ConfigFile, Format, Value};
+use mindweaver_core::create::Start;
 use mindweaver_core::install::{self, Standing};
 use mindweaver_core::ledger::{EntryTarget, InstallRecord};
-use mindweaver_core::mother::{McpMother, ProjectMother, WorkspaceMother};
+use mindweaver_core::lifecycle::{self, Record};
+use mindweaver_core::mother::{McpMother, ProjectMother, SkillMother, WorkspaceMother};
 use mindweaver_core::status::{EntryStatus, State, Status};
 use mindweaver_core::value::{ArtifactName, Origin};
 use mindweaver_core::{
     claude_mcp, codex_mcp, opencode_mcp, Agent, AgentHomes, Kind, Ledger, McpDefinition,
-    MindProject, Share, WeaverWorkspace,
+    MindProject, Reference, Share, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -31,9 +33,20 @@ struct World {
 
 impl World {
     fn new(text: impl FnOnce(&str) -> String) -> World {
+        World::of(text, ProjectMother::create)
+    }
+
+    /// As [`World::new`], with `app` authoring servers of its own in `mcp`.
+    fn authoring(text: impl FnOnce(&str) -> String) -> World {
+        World::of(text, ProjectMother::with_mcp)
+    }
+
+    fn of(
+        text: impl FnOnce(&str) -> String,
+        make: fn(&Path, &[Agent], Share) -> MindProject,
+    ) -> World {
         let (dir, mut workspace) = WorkspaceMother::empty();
-        let project =
-            ProjectMother::create(&workspace.root().join("app"), &Agent::ALL, Share::Shared);
+        let project = make(&workspace.root().join("app"), &Agent::ALL, Share::Shared);
         workspace.link(&project).unwrap();
         let name = McpMother::name();
         let world = World {
@@ -447,4 +460,54 @@ fn the_snapshot_lists_a_projects_entries_as_status_does() {
         held.targets,
         [codex_mcp::FILE, claude_mcp::FILE, opencode_mcp::FILE]
     );
+}
+
+#[test]
+fn the_projects_own_server_of_the_name_added_renamed_and_removed_leaves_what_was_installed_recorded(
+) {
+    let world = World::authoring(McpMother::plain_program);
+    world.installed();
+    let recorded = || {
+        world
+            .ledger
+            .installation("app", Kind::Mcp, &world.name)
+            .unwrap()
+    };
+    let before = recorded();
+    let ours = |name: &str| {
+        lifecycle::find_to_change(
+            Some(&world.workspace),
+            &world.project,
+            &Reference::parse(&format!("mcp:{name}")),
+        )
+        .unwrap()
+    };
+
+    // Each in the project's own `mcp`, which holds none of the entries the
+    // install wrote into its agents' config files.
+    let added = lifecycle::add(
+        Some(&world.workspace),
+        &world.project,
+        Kind::Mcp,
+        &world.name,
+        &SkillMother::description(),
+        Start::Server(&McpMother::given()),
+    )
+    .unwrap();
+    let renamed = lifecycle::rename(
+        Some(&world.workspace),
+        &world.project,
+        &ours(&world.name),
+        &format!("{}x", world.name),
+    )
+    .unwrap();
+    let removed =
+        lifecycle::remove(Some(&world.workspace), &world.project, &renamed.target).unwrap();
+
+    assert_eq!(added.stale.unwrap(), Record::Untouched);
+    assert_eq!(renamed.copy.unwrap(), Record::Untouched);
+    assert_eq!(removed.copy.unwrap(), Record::Untouched);
+    assert_eq!(recorded(), before);
+    assert_eq!(world.standings(), every(Standing::Current));
+    assert_eq!(world.entries(), listed(&world, State::Current));
 }

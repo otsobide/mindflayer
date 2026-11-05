@@ -9919,7 +9919,12 @@ copy. A skill's record naming no target, which only a build from before
 targets wrote, is dropped by name as records were. A rule's naming none is
 one a build writes, for a rule that reaches no agent the project names
 ([installing rules](#installing-rules)), and a change to the project's own
-rule of that route reaches nothing it installed, so it stays.
+rule of that route reaches nothing it installed, so it stays. So does an MCP
+server's, which records an entry in each agent's config file and never a
+copy ([D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent)): adding,
+renaming or removing the project's own server of that name reaches none of
+them, and dropping the record would leave what Mindweaver wrote there
+somebody's, never updated or taken out again.
 
 And only that copy's part of the record (`Ledger::uninstalled_copy`,
 `Ledger::renamed_copy`), in one transaction: settings can make the folder a

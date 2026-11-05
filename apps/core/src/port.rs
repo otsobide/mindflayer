@@ -291,9 +291,10 @@ pub trait LedgerStore: Debug + Send {
     /// would. A rule's is one a build writes, for a rule that reaches no
     /// agent the project names (`install::rules`), never one from before
     /// targets, since rules were installed only after: a change at some other
-    /// path leaves it what was installed, and it stays. One transaction, so
-    /// an install of the same name at the same moment never finds half of
-    /// this done.
+    /// path leaves it what was installed, and it stays. So does an MCP
+    /// server's, which records entries and never a copy (D-10). One
+    /// transaction, so an install of the same name at the same moment never
+    /// finds half of this done.
     fn uninstalled_copy(
         &self,
         project: &str,
@@ -316,8 +317,9 @@ pub trait LedgerStore: Debug + Send {
     /// the copy is forgotten instead, as [`uninstalled_copy`](Self::uninstalled_copy) would.
     /// A skill's installation recording no copy at all, which only a build
     /// from before installations had targets wrote, is forgotten whole as
-    /// there. One transaction, so an install of either name at the same
-    /// moment never finds half of this done.
+    /// there, and a rule's or an MCP server's stays as there. One
+    /// transaction, so an install of either name at the same moment never
+    /// finds half of this done.
     fn renamed_copy(
         &self,
         project: &str,

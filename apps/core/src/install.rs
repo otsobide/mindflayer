@@ -2116,7 +2116,8 @@ pub(crate) fn recorded_copy(
 /// installed. The installation goes with its last copy. A record from before
 /// installations had targets names none, and is dropped as it was; a rule's
 /// naming none reaches no agent the project names, and stays, since the
-/// change reached nothing it installed.
+/// change reached nothing it installed, and so does an MCP server's, whose
+/// entries are in its agents' config files, where no change reaches (D-10).
 ///
 /// In a local project, `at` stops being kept out of git with its record:
 /// what is there now, or is written there next, is its author's, and a line
