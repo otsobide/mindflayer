@@ -293,6 +293,7 @@ export type CoreCode =
   | "opencode_mcp_unfit"
   | "opencode_mcp_input_unread"
   | "opencode_mcp_twice"
+  | "opencode_mcp_user_scope"
   | "opencode_mcp_v1_cwd"
   | "path_url"
   | "path_relative"

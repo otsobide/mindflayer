@@ -11,7 +11,7 @@ use std::path::Path;
 use mindweaver_core::config_entry::{ConfigFile, Format, Written};
 use mindweaver_core::mother::McpMother;
 use mindweaver_core::opencode_mcp::{self, OpenCodeMcpError, Shape, FILE, FILES, MAX_BYTES};
-use mindweaver_core::McpDefinition;
+use mindweaver_core::{AgentHomes, McpDefinition};
 use tempfile::TempDir;
 
 fn parsed(text: &str) -> McpDefinition {
@@ -19,7 +19,8 @@ fn parsed(text: &str) -> McpDefinition {
 }
 
 fn render(root: &Path, text: &str) -> opencode_mcp::Rendered {
-    opencode_mcp::render(root, &parsed(text)).unwrap_or_else(|error| panic!("{error}\n{text}"))
+    opencode_mcp::render(root, &parsed(text), &AgentHomes::default())
+        .unwrap_or_else(|error| panic!("{error}\n{text}"))
 }
 
 fn read(root: &Path, route: &str) -> String {
@@ -508,7 +509,12 @@ fn a_file_that_is_not_jsonc_is_refused_and_left_as_it_is() {
         write(root.path(), FILE, broken);
 
         for result in [
-            opencode_mcp::render(root.path(), &parsed(&McpMother::http(&name))).map(|_| ()),
+            opencode_mcp::render(
+                root.path(),
+                &parsed(&McpMother::http(&name)),
+                &AgentHomes::default(),
+            )
+            .map(|_| ()),
             opencode_mcp::remove(root.path(), "docs", true).map(|_| ()),
         ] {
             let error = result.unwrap_err();
@@ -526,8 +532,12 @@ fn a_file_past_two_mib_is_refused_unread() {
     let large = format!("{{\"mcp\": {{}}{padding}}}\n");
     write(root.path(), FILE, &large);
 
-    let error = opencode_mcp::render(root.path(), &parsed(&McpMother::http(&McpMother::name())))
-        .unwrap_err();
+    let error = opencode_mcp::render(
+        root.path(),
+        &parsed(&McpMother::http(&McpMother::name())),
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
 
     assert_eq!(MAX_BYTES, 2 * 1024 * 1024);
     assert_eq!(error.code(), "config_too_large", "{error}");
@@ -564,13 +574,50 @@ fn a_definition_opencode_is_refused_is_written_nowhere() {
             }),
     ) {
         let root = TempDir::new().unwrap();
-        let error = opencode_mcp::render(root.path(), &parsed(&text)).unwrap_err();
+        let error =
+            opencode_mcp::render(root.path(), &parsed(&text), &AgentHomes::default()).unwrap_err();
         assert_eq!(error.code(), code, "{error}");
         assert!(names(root.path()).is_empty(), "{code}");
 
         write(root.path(), FILE, TEAMS);
-        opencode_mcp::render(root.path(), &parsed(&text)).unwrap_err();
+        opencode_mcp::render(root.path(), &parsed(&text), &AgentHomes::default()).unwrap_err();
         assert_eq!(read(root.path(), FILE), TEAMS, "{code}");
+    }
+}
+
+#[test]
+fn a_project_whose_config_is_inside_an_agent_s_own_folder_is_refused() {
+    // A project at OpenCode's own folder, whose `opencode.json` is the one
+    // OpenCode reads for every project: made there, or one already there.
+    let home = TempDir::new().unwrap();
+    let root = home.path().join(".config").join("opencode");
+    fs::create_dir_all(&root).unwrap();
+    let homes = AgentHomes {
+        opencode_config_dir: Some(root.clone()),
+        ..AgentHomes::default()
+    };
+    let definition = parsed(&McpMother::http(&McpMother::name()));
+
+    for held in [None, Some(TEAMS)] {
+        if let Some(text) = held {
+            write(&root, FILE, text);
+        }
+        let error = opencode_mcp::render(&root, &definition, &homes).unwrap_err();
+
+        assert_eq!(error.code(), "opencode_mcp_user_scope");
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "{} is inside {}, which OpenCode reads for every project, so no server is \
+                 written into it: Mindweaver gives a server to one project at a time",
+                root.join(FILE).display(),
+                root.display()
+            )
+        );
+        match held {
+            None => assert!(names(&root).is_empty()),
+            Some(text) => assert_eq!(read(&root, FILE), text),
+        }
     }
 }
 
@@ -588,7 +635,12 @@ fn a_symlink_on_the_way_is_refused_and_what_it_points_at_left_alone() {
         root.path().join(FILE),
     )
     .unwrap();
-    let error = opencode_mcp::render(root.path(), &parsed(&McpMother::http(&name))).unwrap_err();
+    let error = opencode_mcp::render(
+        root.path(),
+        &parsed(&McpMother::http(&name)),
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
     assert_eq!(error.code(), "config_symlink", "{error}");
     let error = opencode_mcp::remove(root.path(), "docs", true).unwrap_err();
     assert_eq!(error.code(), "config_symlink", "{error}");
@@ -597,7 +649,12 @@ fn a_symlink_on_the_way_is_refused_and_what_it_points_at_left_alone() {
     // for a file of the project's own beside it.
     let root = TempDir::new().unwrap();
     std::os::unix::fs::symlink(elsewhere.path(), root.path().join(".opencode")).unwrap();
-    let error = opencode_mcp::render(root.path(), &parsed(&McpMother::http(&name))).unwrap_err();
+    let error = opencode_mcp::render(
+        root.path(),
+        &parsed(&McpMother::http(&name)),
+        &AgentHomes::default(),
+    )
+    .unwrap_err();
     assert_eq!(error.code(), "config_symlink", "{error}");
     assert!(!root.path().join(FILE).exists());
 
@@ -764,7 +821,12 @@ fn a_server_in_both_shapes_is_refused_and_the_file_left_as_it_is() {
     write(root.path(), FILE, &both);
 
     for result in [
-        opencode_mcp::render(root.path(), &parsed(&McpMother::http(&name))).map(|_| ()),
+        opencode_mcp::render(
+            root.path(),
+            &parsed(&McpMother::http(&name)),
+            &AgentHomes::default(),
+        )
+        .map(|_| ()),
         opencode_mcp::remove(root.path(), &name, false).map(|_| ()),
         opencode_mcp::remove(root.path(), &name, true).map(|_| ()),
     ] {

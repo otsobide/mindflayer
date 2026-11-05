@@ -1249,7 +1249,9 @@ project's OpenCode config, on what the runs above and the
   sse (`sse_unsupported`, docs-only).
 - The file goes with its last server only when it is the `opencode.json`
   Mindweaver made and nothing else is left in it, a comment somebody wrote
-  included.
+  included. A project whose file is inside an agent's own folder, one
+  whose root is `~/.config/opencode` while that is OpenCode's, is refused
+  (`opencode_mcp_user_scope`).
 - Nothing is said of whose environment fills the references, though V2's
   background server fills them from its own (`opencode-mcp-service`):
   whether Mindweaver says so, and doctor checks the server's variables, is

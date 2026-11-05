@@ -783,9 +783,11 @@ These are easy to break from a single file without noticing.
     in, one in both refused, `opencode_mcp_twice`, and V1's written
     without `cwd`, `opencode_mcp_v1_cwd`), each input as `{env:VAR}` and
     what OpenCode cannot be given the report's (`text_substituted` among
-    it); and only the `opencode.json` Mindweaver made goes with its last
-    server, when what taking the server out leaves is the objects on the
-    way, empty, and no comment (`config_entry::jsonc_commented`).
+    it); it refuses a project whose file is inside an agent's own folder
+    (`opencode_mcp_user_scope`), as Codex's does; and only the
+    `opencode.json` Mindweaver made goes with its last server, when what
+    taking the server out leaves is the objects on the way, empty, and no
+    comment (`config_entry::jsonc_commented`).
   - `ui --token-file` (`TokenFile`, in `src/commands/ui.rs`) makes its
     file with `create_new`, mode 0600 on Unix, so whatever is at the path,
     a link included, is refused and never written over or through, and
@@ -1210,9 +1212,10 @@ These are easy to break from a single file without noticing.
   (`Lookup::agents`), and install is the first to take them, to refuse a
   copy inside one, as `agents_md::render` and `claude_rules::render` take
   them to refuse rules there, `claude_md` to leave the user memory file
-  out of what keeps Claude from reading `AGENTS.md`, and
+  out of what keeps Claude from reading `AGENTS.md`,
   `codex_mcp::render` to refuse a `.codex/config.toml` inside one and to
-  read, never write, the Codex home's `config.toml`. `tui::execute` hands each line the TUI's own
+  read, never write, the Codex home's `config.toml`, and
+  `opencode_mcp::render` to refuse OpenCode's config inside one. `tui::execute` hands each line the TUI's own
   with the rest of its `Lookup`, and so does its install screen: a command
   the TUI runs carries none of the four options, so it would decide them
   again from the environment.

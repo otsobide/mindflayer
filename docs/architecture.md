@@ -8608,7 +8608,8 @@ into an agent's own folder](#never-into-an-agents-own-folder)), and
 rendering a project's rules takes them to refuse a block of them there ([how
 a rule reaches the agents](#how-a-rule-reaches-the-agents)), as rendering an
 MCP server into Codex's `.codex/config.toml` takes them to refuse a file
-inside one (`codex_mcp_user_scope`). They are
+inside one (`codex_mcp_user_scope`), and into OpenCode's config too
+(`opencode_mcp_user_scope`). They are
 decided once per command line, with the workspace to use, into the same
 `Lookup` (`Lookup::given`), which the TUI keeps and hands to every line it
 runs (`tui::execute`), its install screen's among them: a line the TUI runs
@@ -9541,7 +9542,12 @@ questions](#open-questions)).
 `render` makes the entry first, in V2's shape, so a definition refused
 reads nothing, and again in V1's when the file keeps its servers so, and
 writes it in place of a server of the name or after the servers there,
-leaving a file that already holds it as it is (`Written::Unchanged`).
+leaving a file that already holds it as it is (`Written::Unchanged`). It
+refuses a project whose file is inside an agent's own folder
+(`opencode_mcp_user_scope`), before reading it, as `codex_mcp::render`
+does: one whose root is `~/.config/opencode` while that is OpenCode's,
+where `opencode.json` is the config OpenCode reads for every project,
+which #92 leaves out, as an install refuses a copy there.
 `remove` takes the server out of whichever shape it stands in, and the
 file with it when the caller says Mindweaver made it and nothing else is
 left, asked of what taking the server out of the text leaves: the objects

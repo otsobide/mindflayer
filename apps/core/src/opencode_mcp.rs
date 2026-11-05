@@ -46,6 +46,10 @@
 //! trailing commas are kept with every other byte outside the entry. The
 //! file goes with its last server only when the caller says Mindweaver made
 //! it and nothing else is left in it, a comment somebody wrote included.
+//! It is never one OpenCode reads for every project: a project whose file
+//! is inside an agent's own folder, one whose root is `~/.config/opencode`
+//! while that is OpenCode's, is refused ([`OpenCodeMcpError::UserScope`]),
+//! as `codex_mcp` refuses one and an install's copy is refused there.
 //!
 //! Nothing here knows of the ledger. Whether an entry of the name is
 //! Mindweaver's to replace or take out, and whether Mindweaver made the
@@ -59,10 +63,11 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::agent::Agent;
+use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
 use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
+use crate::install;
 use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
 use crate::value::{ArtifactName, InputName, VariableName};
 
@@ -298,7 +303,8 @@ pub struct Rendered {
 /// servers already there, and make [`FILE`] when none of them is there yet.
 ///
 /// The entry is made first ([`entry`]), so a definition refused reads and
-/// writes nothing: what refuses one refuses it in either shape. It is
+/// writes nothing: what refuses one refuses it in either shape. A file
+/// inside one of `homes` is refused before it is read. It is
 /// written in the shape a server of the name stands in, where it stands,
 /// rather than beside itself in the other ([`standing`]), and a new one in
 /// the shape the file keeps its servers in ([`followed`]). The file is read
@@ -306,9 +312,16 @@ pub struct Rendered {
 /// written through [`ConfigFile`], which keeps every byte outside the
 /// entry, comments and trailing commas included, makes a new file with
 /// `create_new` and leaves one that already holds the entry as it is.
-pub fn render(root: &Path, definition: &McpDefinition) -> Result<Rendered, OpenCodeMcpError> {
+pub fn render(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<Rendered, OpenCodeMcpError> {
     let checked = entry(definition, Shape::V2)?;
     let (file, _) = config(root)?;
+    if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.path()]) {
+        return Err(OpenCodeMcpError::UserScope { file, home, reader });
+    }
     let standing = standing(&file, checked.name.as_str())?;
     let given = match standing.map_or_else(|| followed(&file), Ok)? {
         Shape::V2 => checked,
@@ -499,6 +512,15 @@ pub enum OpenCodeMcpError {
          left as it is"
     )]
     Twice { path: PathBuf, name: String },
+    #[error(
+        "{file} is inside {home}, which {reader} reads for every project, so no server is \
+         written into it: Mindweaver gives a server to one project at a time"
+    )]
+    UserScope {
+        file: PathBuf,
+        home: PathBuf,
+        reader: &'static str,
+    },
     #[error(transparent)]
     File(#[from] FileError),
 }
@@ -507,6 +529,7 @@ codes!(OpenCodeMcpError {
     Self::Unfit { .. } => "opencode_mcp_unfit",
     Self::InputUnread { .. } => "opencode_mcp_input_unread",
     Self::Twice { .. } => "opencode_mcp_twice",
+    Self::UserScope { .. } => "opencode_mcp_user_scope",
 } carried {
     Self::Inexpressible { shape, .. } => shape,
     Self::File(error) => error,
