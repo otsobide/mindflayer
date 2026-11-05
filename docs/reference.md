@@ -3072,8 +3072,11 @@ value shaped like a token (`--env API_KEY=sk-…`, `--header
 Authorization=Bearer …`), a variable no agent can refer to, a part of the
 address the URL does not write. Beside them, it refuses what no file
 should hold: a key given twice, and an address typed with a credential,
-which it says without it. Given neither a program nor an address, it says
-what it needs:
+which it says without it; either, holding what looks like a token, is said
+by what that starts with. An option taking `NAME=VALUE` given no `=`
+(`--header "Authorization: Bearer …"`, say) is refused without repeating
+what it was given. Given neither a program nor an address, it says what it
+needs:
 
 ```
 $ mindweaver add mcp computer-use "Ours" --command npx
