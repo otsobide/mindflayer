@@ -7298,6 +7298,18 @@ a person's browser trades it. The security smoke tests send requests of
 their own: one with the cookie the link set, one with the token as
 Bearer, and one with neither.
 
+A page a click leads to is acted on through what that page alone draws.
+The router loads a page's code the first time it is opened, so a click on
+a link returns while the page it leaves is still drawn, and Playwright
+matches a label or a name in any case and anywhere in it unless told
+`exact`. The add page's `Name`, looked for anywhere, was once the
+library's filter ("Filter each skill by name or summary"), and the name
+typed into it went into the filter, or nowhere once the library made way
+for the add page (#238). So a spec finds the fields it fills inside what
+the page draws once it is ready, the add page's form by its name, and a
+spec that only reads waits for a test id or an address only the page it
+arrives at has; never for a fixed time, which a slower runner outlasts.
+
 The specs hold the panel to the CLI: the overview's cards to the rows
 `mindweaver list --json` prints, counted from them rather than read from a
 count beside them; each project's page to what the listing says of that
@@ -10712,6 +10724,15 @@ it once as it closes.
   document in JavaScript, so it is slower than a browser at the same work
   and says nothing of painting. The browser suite times nothing; a bound
   there would be one more number a runner's load moves.
+- **The unload's dialog once stayed open after its run.** In one run of
+  CI's Chromium, `e2e/loads.spec.ts` found the dialog still drawn five
+  seconds after Run was clicked on an unload (#238). Nothing on the page
+  the spec comes from matches what it acts on there, and nearly six
+  hundred runs here, on the debug and the release binaries, with the
+  browser's CPU throttled and with the whole run held to two cores, never
+  showed it again, so nothing was changed for it: whether the click was
+  lost or the run's end never reached the dialog waits for the trace of a
+  failing run, which CI keeps.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has
