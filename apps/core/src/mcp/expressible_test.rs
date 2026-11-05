@@ -20,16 +20,17 @@ fn named(text: &str) -> InputName {
 }
 
 #[test]
-fn a_program_with_no_folder_and_a_secret_environment_is_given_whole_to_every_agent() {
+fn a_program_with_no_folder_and_a_secret_under_its_variable_s_name_is_given_whole_to_every_agent() {
+    let text = McpMother::whole_secret_env(&random::kebab()).replacen("cwd = \".\"\n", "", 1);
     assert_eq!(
-        by_agent(&McpMother::without_cwd(&random::kebab())),
+        by_agent(&text),
         [("claude", vec![]), ("codex", vec![]), ("opencode", vec![])]
     );
 }
 
 #[test]
 fn claude_is_given_a_program_without_the_folder_it_is_told_to_start_in() {
-    let report = by_agent(&McpMother::stdio(&random::kebab()));
+    let report = by_agent(&McpMother::whole_secret_env(&random::kebab()));
 
     assert_eq!(
         report,
@@ -57,6 +58,63 @@ fn codex_cannot_be_given_a_secret_argument() {
     );
     assert_eq!(report[2], ("opencode", vec![]));
     assert_eq!(report[0], ("claude", vec![Inexpressible::WorkingDirectory]));
+}
+
+#[test]
+fn codex_cannot_be_given_a_secret_environment_variable_but_whole_under_its_own_name() {
+    let name = random::kebab();
+
+    // The program's own name for it, where Codex passes a variable on
+    // under the name it is read from.
+    assert_eq!(
+        by_agent(&McpMother::stdio(&name)),
+        [
+            ("claude", vec![Inexpressible::WorkingDirectory]),
+            (
+                "codex",
+                vec![Inexpressible::SecretEnvRenamed {
+                    key: String::from("API_KEY"),
+                    input: named("api_key"),
+                    variable: VariableName::from("EXAMPLE_API_KEY"),
+                }]
+            ),
+            ("opencode", vec![])
+        ]
+    );
+    // Beside other text, under its own name or another.
+    let beside = |key: &str| {
+        vec![Inexpressible::SecretEnvComposite {
+            key: key.to_owned(),
+            input: named("api_key"),
+        }]
+    };
+    assert_eq!(
+        parsed(&McpMother::composite_secret_env(&name)).inexpressible(Agent::Codex),
+        beside("EXAMPLE_API_KEY")
+    );
+    let renamed = McpMother::stdio(&name).replacen("\"{api_key}\"", "\"key={api_key}\"", 1);
+    assert_eq!(
+        parsed(&renamed).inexpressible(Agent::Codex),
+        beside("API_KEY")
+    );
+    // Each variable that holds it is said, and one that is passed on is not.
+    let twice = McpMother::whole_secret_env(&name).replacen(
+        "LOG_LEVEL = \"info\"",
+        "LOG_LEVEL = \"info\", TOKEN = \"{api_key}\"",
+        1,
+    );
+    assert_eq!(
+        parsed(&twice).inexpressible(Agent::Codex),
+        [Inexpressible::SecretEnvRenamed {
+            key: String::from("TOKEN"),
+            input: named("api_key"),
+            variable: VariableName::from("EXAMPLE_API_KEY"),
+        }]
+    );
+    // An input that is no secret is no shape of a secret's, whatever its
+    // variable is named.
+    let open = McpMother::stdio(&name).replacen("secret = true\n", "", 1);
+    assert_eq!(parsed(&open).inexpressible(Agent::Codex), []);
 }
 
 #[test]
@@ -105,6 +163,36 @@ fn codex_cannot_be_given_a_secret_header_beside_other_text_but_bearer() {
         ),
     ] {
         assert_eq!(parsed(&whole).inexpressible(Agent::Codex), [], "{whole}");
+    }
+}
+
+#[test]
+fn codex_is_refused_a_secret_by_where_it_is_written_whatever_its_kind() {
+    let name = random::kebab();
+    let argued = McpMother::whole_secret_env(&name).replacen(
+        "\"{workspace}\"]",
+        "\"{workspace}\", \"--key={api_key}\"]",
+        1,
+    );
+    let addressed = McpMother::http(&name).replacen("/mcp\"", "/mcp?key={token}\"", 1);
+
+    for (text, shape) in [
+        (
+            argued,
+            Inexpressible::SecretInArgument {
+                input: named("api_key"),
+            },
+        ),
+        (
+            addressed,
+            Inexpressible::SecretInUrl {
+                input: named("token"),
+            },
+        ),
+    ] {
+        let definition = parsed(&text);
+        assert_eq!(definition.issues(), [], "{text}");
+        assert_eq!(definition.inexpressible(Agent::Codex), [shape], "{text}");
     }
 }
 
@@ -212,6 +300,42 @@ fn claude_cannot_be_given_extras_giving_a_key_its_entry_writes_from_the_transpor
 }
 
 #[test]
+fn codex_cannot_be_given_extras_giving_a_key_its_entry_may_write_from_the_transport() {
+    let name = random::kebab();
+    for key in ["command", "args", "env", "env_vars", "cwd"] {
+        let text = McpMother::with_codex_extras(&name, &format!("{key} = \"other\"\n"));
+        assert_eq!(
+            by_agent(&text),
+            [
+                ("claude", vec![Inexpressible::WorkingDirectory]),
+                (
+                    "codex",
+                    vec![Inexpressible::ExtraRepeated {
+                        key: key.to_owned()
+                    }]
+                ),
+                ("opencode", vec![])
+            ],
+            "{key}"
+        );
+    }
+    // Nor where Codex runs the server, whatever it holds.
+    for key in ["experimental_environment", "environment_id"] {
+        let text = McpMother::with_codex_extras(&name, &format!("{key} = \"remote\"\n"));
+        assert_eq!(
+            parsed(&text).inexpressible(Agent::Codex),
+            [Inexpressible::ExtraWithheld {
+                key: key.to_owned()
+            }],
+            "{key}"
+        );
+    }
+    // Claude's extras are Claude's alone.
+    let text = McpMother::with_claude_extras(&name, "env_vars = [\"OTHER\"]\n");
+    assert_eq!(parsed(&text).inexpressible(Agent::Codex), []);
+}
+
+#[test]
 fn claude_cannot_be_given_text_it_reads_as_a_reference_where_no_input_stands() {
     let name = random::kebab();
     for (why, reference) in McpMother::references() {
@@ -254,6 +378,7 @@ fn a_shape_an_agent_cannot_express_is_nothing_validate_says() {
         McpMother::secret_argument(&name),
         McpMother::secret_in_url(&name),
         McpMother::composite_secret_header(&name),
+        McpMother::composite_secret_env(&name),
         McpMother::sse(&name),
         McpMother::header_read_from(&name, "NPM_TOKEN"),
         McpMother::with_text(&name, "headers", "${NPM_TOKEN}").0,
@@ -282,7 +407,16 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
         },
         Inexpressible::SecretHeaderComposite {
             header: String::from("X-Key"),
+            input: input.clone(),
+        },
+        Inexpressible::SecretEnvComposite {
+            key: String::from("TOKEN"),
+            input: input.clone(),
+        },
+        Inexpressible::SecretEnvRenamed {
+            key: String::from("TOKEN"),
             input,
+            variable: VariableName::from("EXAMPLE_TOKEN"),
         },
         Inexpressible::ServerSentEvents,
         Inexpressible::WorkingDirectory,
@@ -295,6 +429,9 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
         },
         Inexpressible::ExtraRepeated {
             key: String::from("type"),
+        },
+        Inexpressible::ExtraWithheld {
+            key: String::from("environment_id"),
         },
     ];
     assert_eq!(
@@ -313,11 +450,14 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
             ("secret_in_argument", true),
             ("secret_in_url", true),
             ("secret_header_composite", true),
+            ("secret_env_composite", true),
+            ("secret_env_renamed", true),
             ("sse_unsupported", true),
             ("cwd_unsupported", false),
             ("variable_blanked", true),
             ("text_expanded", true),
             ("extra_repeated", true),
+            ("extra_withheld", true),
         ]
     );
 }

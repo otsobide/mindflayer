@@ -199,27 +199,30 @@ impl ConfigFile {
         }
     }
 
-    /// Take the file away when `empty` says the document it holds is
-    /// nothing its caller keeps, and leave it as it is otherwise.
+    /// Take the file away when `empty` says the text it holds, and the
+    /// document that text is, are nothing its caller keeps, and leave it as
+    /// it is otherwise.
     ///
     /// What a caller that made the file asks when what it is taking out is
     /// all that is left in it, a file nobody else wrote in being nothing to
     /// leave behind. Which
     /// documents are empty is the caller's to say, as the key path is:
     /// `{"mcpServers": {}}` is nothing in `.mcp.json`, and something in a
-    /// file that holds other settings beside it.
+    /// file that holds other settings beside it. The text is handed too,
+    /// since the document holds no comment: in a format that has them, one
+    /// somebody wrote is something, and only the text says it is there.
     ///
     /// Read as an edit reads it, so a file that does not parse is refused
     /// rather than judged, and one not there is [`Written::Unchanged`]. The
     /// route is looked at again just before the file goes, as it is before
     /// a write: a file that has become a link is refused, and what it points
     /// at is never this folder's to take.
-    pub fn take(&self, empty: impl FnOnce(&Value) -> bool) -> Result<Written, FileError> {
+    pub fn take(&self, empty: impl FnOnce(&str, &Value) -> bool) -> Result<Written, FileError> {
         let Some(text) = self.read()? else {
             return Ok(Written::Unchanged);
         };
         let held = document(self.format, &text).map_err(|source| self.entry_error(source))?;
-        if !empty(&held) {
+        if !empty(&text, &held) {
             return Ok(Written::Unchanged);
         }
         let Some(path) = self.walk()? else {

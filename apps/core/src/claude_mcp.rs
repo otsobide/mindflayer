@@ -54,7 +54,7 @@ use thiserror::Error;
 use crate::agent::Agent;
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
-use crate::config_entry::{ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
+use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
 use crate::mcp::{Inexpressible, McpDefinition, Transport, TransportType};
 use crate::value::{ArtifactName, InputName, VariableName};
 
@@ -185,9 +185,10 @@ pub fn entry(definition: &McpDefinition) -> Result<Entry, ClaudeMcpError> {
     }
     // Passed on as written, beside what the transport renders, never over
     // it: an extra holding a key the entry writes refused the entry above
-    // ([`Inexpressible::ExtraRepeated`]).
+    // ([`Inexpressible::ExtraRepeated`]). A TOML date and time, which JSON
+    // has no value for, goes as the text it is written in.
     for (key, value) in definition.extras_for(Agent::Claude).into_iter().flatten() {
-        members.push((key.clone(), value_of(value)));
+        members.push((key.clone(), Value::from(value)));
     }
     Ok(Entry {
         name,
@@ -252,7 +253,7 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, ClaudeM
     // without it first only to be taken away.
     if created {
         let taken = file
-            .take(|document| holds_only(document, name))
+            .take(|_, document| holds_only(document, name))
             .map_err(|error| loose(&file, error))?;
         if taken == Written::Removed {
             return Ok(taken);
@@ -358,15 +359,7 @@ fn loose(file: &ConfigFile, error: FileError) -> ClaudeMcpError {
 /// Whether `document` holds nothing but the server keyed `name`, or not
 /// even that: nothing a person wrote beside an entry of Mindweaver's.
 fn holds_only(document: &Value, name: &str) -> bool {
-    let Value::Object(members) = document else {
-        return false;
-    };
-    members.iter().all(|(key, value)| match value {
-        Value::Object(servers) if key == SERVERS => {
-            servers.iter().all(|(server, _)| server == name)
-        }
-        _ => false,
-    })
+    config_entry::holds_only(document, &[SERVERS, name])
 }
 
 /// `text` with each placeholder of an input in `read` written as Claude's
@@ -404,25 +397,6 @@ fn referring(text: &str, read: &[(&InputName, &VariableName)]) -> String {
     }
     written.push_str(rest);
     written
-}
-
-/// An extra as an entry holds it, every value as it is; a TOML date and
-/// time, which JSON has no value for, as the text it is written in, as
-/// [`crate::config_entry`] reads one.
-fn value_of(value: &toml::Value) -> Value {
-    match value {
-        toml::Value::String(text) => Value::String(text.clone()),
-        toml::Value::Integer(number) => Value::Integer(*number),
-        toml::Value::Float(number) => Value::Float(*number),
-        toml::Value::Boolean(flag) => Value::Bool(*flag),
-        toml::Value::Datetime(moment) => Value::String(moment.to_string()),
-        toml::Value::Array(values) => Value::Array(values.iter().map(value_of).collect()),
-        toml::Value::Table(table) => Value::object(
-            table
-                .iter()
-                .map(|(key, value)| (key.clone(), value_of(value))),
-        ),
-    }
 }
 
 #[cfg(test)]

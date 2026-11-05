@@ -349,6 +349,44 @@ fn what_an_edit_must_keep_drops_the_objects_the_entry_leaves_empty_on_its_way() 
 }
 
 #[test]
+fn a_document_holds_only_an_entry_when_nothing_is_written_beside_it_on_its_way() {
+    let key = ["mcp", "servers", "github"];
+    let nested = |servers: Vec<(&str, Value)>| {
+        Value::object([("mcp", Value::object([("servers", Value::object(servers))]))])
+    };
+
+    for alone in [
+        Value::object::<&str>([]),
+        Value::object([("mcp", Value::object::<&str>([]))]),
+        nested(vec![]),
+        nested(vec![("github", server())]),
+        // The entry is whatever it holds.
+        nested(vec![("github", Value::Null)]),
+    ] {
+        assert!(holds_only(&alone, &key), "{}", alone.canonical());
+    }
+    for beside in [
+        nested(vec![("gitlab", server())]),
+        nested(vec![("github", server()), ("gitlab", server())]),
+        Value::object([
+            (
+                "mcp",
+                Value::object([("servers", Value::object::<&str>([]))]),
+            ),
+            ("theirs", Value::Bool(true)),
+        ]),
+        Value::object([(
+            "mcp",
+            Value::object([("timeout", Value::from(5)), ("servers", Value::Null)]),
+        )]),
+        Value::object([("mcp", Value::Null)]),
+        Value::Array(Vec::new()),
+    ] {
+        assert!(!holds_only(&beside, &key), "{}", beside.canonical());
+    }
+}
+
+#[test]
 fn an_edit_that_changed_more_than_its_entry_is_refused() {
     let before = super::document(Format::Json, MCP).unwrap();
     let key = ["mcpServers", "gitlab"];

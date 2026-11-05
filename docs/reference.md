@@ -3206,8 +3206,11 @@ computer-use: 1 problem
 ```
 
 Not every agent can be given every server. Codex has no way to read a
-secret argument, a secret inside a URL, or a secret header but its whole
-value or `Authorization: Bearer` and the token; neither Codex nor
+secret argument, a secret inside a URL, a secret header but its whole
+value or `Authorization: Bearer` and the token, or a secret in a program's
+environment but the whole value of the variable named as the one it is read
+from (`GITHUB_PERSONAL_ACCESS_TOKEN = "{token}"` read from `GITHUB_TOKEN`
+is one it cannot; `--secret-env` always writes one it can); neither Codex nor
 OpenCode takes a server over sse; Claude starts a program in no folder it
 is told, so its `cwd` is left out there; and Claude reads a credential of
 its own or of a tool on the machine (`ANTHROPIC_API_KEY`, `NPM_TOKEN`,

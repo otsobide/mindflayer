@@ -270,6 +270,30 @@ pub fn loose_json(text: &str) -> bool {
     json::loose(text)
 }
 
+/// Whether `document` holds nothing but the entry at `key`, or not even
+/// that: each object on the way to it holding the next key of the path
+/// alone, and the entry whatever it holds.
+///
+/// What a caller that made a file asks before it takes the file away with
+/// the last entry it wrote ([`ConfigFile::take`]): `{"mcpServers": {}}`
+/// holds nothing beside `mcpServers.github`, and a key somebody wrote
+/// anywhere on the way is something. Still the caller's to ask, as which
+/// documents are empty is, since a file that keeps settings of its own
+/// beside its entries is something whatever it holds. Enough only in a
+/// format with no comments: a document holds none, so a caller whose file
+/// can hold them asks the text `take` hands it too.
+pub fn holds_only(document: &Value, key: &[&str]) -> bool {
+    let Some((first, rest)) = key.split_first() else {
+        return true;
+    };
+    let Value::Object(members) = document else {
+        return false;
+    };
+    members
+        .iter()
+        .all(|(name, value)| name == first && holds_only(value, rest))
+}
+
 /// The value at `key` in `document`, `None` when a key on the way is missing.
 fn lookup<'a>(document: &'a Value, key: &[&str]) -> Result<Option<&'a Value>, EntryError> {
     let mut current = document;
@@ -449,6 +473,28 @@ impl From<&str> for Value {
 impl From<String> for Value {
     fn from(value: String) -> Self {
         Value::String(value)
+    }
+}
+
+/// A value as the `toml` crate reads it, an MCP definition's extras among
+/// them, which a renderer passes on: every value as it is, and a date and
+/// time, which JSON has none of and so neither has this type, as the text
+/// it is written in, as an entry read from a TOML file holds one.
+impl From<&::toml::Value> for Value {
+    fn from(value: &::toml::Value) -> Self {
+        match value {
+            ::toml::Value::String(text) => Value::String(text.clone()),
+            ::toml::Value::Integer(number) => Value::Integer(*number),
+            ::toml::Value::Float(number) => Value::Float(*number),
+            ::toml::Value::Boolean(flag) => Value::Bool(*flag),
+            ::toml::Value::Datetime(moment) => Value::String(moment.to_string()),
+            ::toml::Value::Array(values) => Value::Array(values.iter().map(Value::from).collect()),
+            ::toml::Value::Table(table) => Value::object(
+                table
+                    .iter()
+                    .map(|(key, value)| (key.clone(), Value::from(value))),
+            ),
+        }
     }
 }
 

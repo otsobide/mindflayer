@@ -54,6 +54,7 @@ use crate::catalog::DiscoveryFailure;
 use crate::claude_mcp::{self, ClaudeMcpError};
 use crate::claude_md::{self, ClaudeMdError, Fallback};
 use crate::claude_rules::{self, ClaudeRulesError};
+use crate::codex_mcp::{self, CodexMcpError};
 use crate::config_entry::{EntryError, FileError};
 use crate::contents::ContentsError;
 use crate::create::CreateError;
@@ -207,6 +208,8 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("claude_md::Warning", claude_md::Warning::CODES),
     ("claude_rules::ClaudeRulesError", ClaudeRulesError::CODES),
     ("claude_rules::Warning", claude_rules::Warning::CODES),
+    ("codex_mcp::CodexMcpError", CodexMcpError::CODES),
+    ("codex_mcp::Warning", codex_mcp::Warning::CODES),
     ("config_entry::EntryError", EntryError::CODES),
     ("config_entry::file::FileError", FileError::CODES),
     ("contents::ContentsError", ContentsError::CODES),

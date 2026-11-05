@@ -744,14 +744,14 @@ pub(crate) fn token_in(text: &str) -> Option<&'static str> {
 }
 
 /// How an input named `name` is written where its value goes.
-fn written(name: &InputName) -> String {
+pub(crate) fn written(name: &InputName) -> String {
     format!("{{{name}}}")
 }
 
 /// `key` in the table `table` names, as TOML spells the path to it: bare
 /// when it may be, and quoted when a dot or a space in it would read as
 /// another key.
-fn keyed(table: &str, key: &str) -> String {
+pub(crate) fn keyed(table: &str, key: &str) -> String {
     let bare = !key.is_empty()
         && key
             .bytes()
