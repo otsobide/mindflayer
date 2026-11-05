@@ -68,6 +68,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
+use std::time::{Duration, Instant};
 
 use mindweaver_core::browse::{BrowseError, Folders};
 use mindweaver_core::code::Said;
@@ -76,6 +77,7 @@ use mindweaver_core::draft;
 use mindweaver_core::gather::Watch;
 use mindweaver_core::install::{self, Cell, Conflict, Locked};
 use mindweaver_core::known::{self, Launch};
+use mindweaver_core::lock::{self, Waited};
 use mindweaver_core::policy::PolicyError;
 use mindweaver_core::resolve::{resolve, Intent, Reason, Resolved};
 use mindweaver_core::scan::{self, Order, DEFAULT_DEPTH};
@@ -479,9 +481,14 @@ impl Pin {
     }
 }
 
+/// Where a backend says how long each line it ran took, a line of text at a
+/// time: the front end's, as the server's log is, which decides where it
+/// goes ([`PanelBackend::logging`]).
+pub type Log = Arc<dyn Fn(&str) + Send + Sync>;
+
 /// The backend over the workspace a panel was launched on, or switched to
 /// since.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct PanelBackend {
     /// The workspace the launch resolved, and how: what the panel may
     /// always switch back to, by the rule that chose it.
@@ -497,6 +504,21 @@ pub struct PanelBackend {
     /// Every line it ran for a task that changes something, in the order
     /// they ran ([`transcript`](Self::transcript)). Shared by its clones.
     changed: Arc<Mutex<Vec<Run>>>,
+    /// Where it says how long each line took, if anywhere.
+    log: Option<Log>,
+}
+
+/// By hand, for the log, which is a function: whether there is one.
+impl std::fmt::Debug for PanelBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PanelBackend")
+            .field("launch", &self.launch)
+            .field("pin", &self.pin)
+            .field("lookup", &self.lookup)
+            .field("changed", &self.changed)
+            .field("log", &self.log.is_some())
+            .finish()
+    }
 }
 
 impl PanelBackend {
@@ -516,7 +538,24 @@ impl PanelBackend {
             launch,
             lookup: lookup.clone(),
             changed: Arc::default(),
+            log: None,
         })
+    }
+
+    /// Say in `log`, once each line it runs has run, how long it took and
+    /// how much of that it waited for a workspace's lock another writer
+    /// held, and which process held it: `run: line 1 of 1 took 5402ms, 0ms
+    /// of it waiting for a workspace's lock`.
+    ///
+    /// What the server's own log cannot say, since it knows a task and
+    /// not its lines, nor what core waited for running one: a run that
+    /// took seconds is told apart there from one that waited its turn on
+    /// the writer thread, and here from one that waited for another writer
+    /// (#240). By its place among the task's lines rather than its words,
+    /// which are the request's, as the server logs no body.
+    pub fn logging(mut self, log: Log) -> Self {
+        self.log = Some(log);
+        self
     }
 
     /// Every line run so far for a task that changes something, with what
@@ -849,14 +888,22 @@ impl Backend for PanelBackend {
         };
         let watch = Watch::new();
         let mut runs: Vec<Run> = Vec::new();
-        for words in &plan.lines {
+        for (index, words) in plan.lines.iter().enumerate() {
+            let started = Instant::now();
             // Every refusal of the list, where the TUI refuses only a
             // screen: the plan refused them already, and a line that is one
             // all the same is not run here either.
-            let run = ran(
-                words,
-                run_line(words, &plan.root, &plan.lookup, &watch, |_| true),
-            );
+            let (line, waited) =
+                lock::waits(|| run_line(words, &plan.root, &plan.lookup, &watch, |_| true));
+            if let Some(log) = &self.log {
+                log(&timing(
+                    index + 1,
+                    plan.lines.len(),
+                    started.elapsed(),
+                    waited,
+                ));
+            }
+            let run = ran(words, line);
             let failed = run.error.is_some();
             runs.push(run);
             if failed && plan.chained {
@@ -1020,6 +1067,22 @@ fn linked(workspace: &WeaverWorkspace, holder: Holder) -> Result<Option<MindProj
                 .map(Some)
                 .map_err(|error| named(error.code(), error))
         }
+    }
+}
+
+/// What the log says of the `place`th of a task's `lines`, which took
+/// `took`, of it `waited` for a workspace's lock: `run: line 1 of 1 took
+/// 5402ms, 0ms of it waiting for a workspace's lock`, and the process
+/// that held it when one did and said so.
+fn timing(place: usize, lines: usize, took: Duration, waited: Waited) -> String {
+    let said = format!(
+        "run: line {place} of {lines} took {}ms, {}ms of it waiting for a workspace's lock",
+        took.as_millis(),
+        waited.total.as_millis()
+    );
+    match waited.holder {
+        Some(pid) if !waited.total.is_zero() => format!("{said}, which process {pid} held"),
+        _ => said,
     }
 }
 

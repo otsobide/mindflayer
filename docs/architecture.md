@@ -6019,9 +6019,40 @@ folder in each repository would reach it with one `node_modules`.
 
 The server prints nothing of its own accord. A front end that wants a log hands
 `Server::log` a function, and gets a line per request once it is answered,
-like `GET /api/v1/transcript 200`: the method, the path and query, the status.
+like `GET /api/v1/transcript 200 3ms`: the method, the path and query, the
+status, and how long the answer took, in whole milliseconds, from the request
+reaching the server to the answer's head, so an event stream's says how long
+it took to open rather than how long it stayed open. How long, because a log
+is most often read for a request that took too long, and a client's clock
+cannot tell the server's part of that from its own (#240).
 Never a header, since the cookie and the Bearer token travel in them, and never
 a body.
+
+The writer thread says what it did with each job in the same log, in lines
+`log::Log` builds as it builds a request's: a run once it is taken off the
+queue and its lines are worked out, `run: 0ms waiting its turn, 1ms working
+out its 1 line`, before any of them runs, so a run that never ends is said
+to have started; again once they have run, however that went, `run: 5402ms
+running its 1 line`; and a switch once it is made or refused, `switch: 0ms
+waiting its turn, 3ms switching`. Waiting its turn is the time behind every
+job queued before it, which the run's request line, said once it is
+answered, cannot tell from the run's own time or from what carrying the
+answer took (#240). None of them says what a task was or which lines it
+ran, which are the request's body.
+
+The server knows a task and not its lines, so the CLI's backend says what
+it can of each, in the log its front end hands it as it hands the server
+one (`PanelBackend::logging`, which `mindweaver ui --log` hands both,
+[launching it](#launching-it-mindweaver-ui)): once a line has run, by its place among the
+task's lines, how long it took and how much of that it waited for a
+workspace's lock another writer held, and which process held it when one
+did and said so, `run: line 1 of 1 took 5402ms, 0ms of it waiting for a
+workspace's lock`. Core counts those waits on the thread that waited
+(`lock::waits`), rather than each writer handing back how long it
+waited, which would carry a duration through every writer and every
+caller of one for the one front end that asks. Between them the lines
+say where a slow run's time went: behind another job on the writer
+thread, behind another writer of the workspace, or in the line itself.
 The value of a `token` parameter is replaced by `<redacted>` however its name
 is encoded, decoded the way the exchange decodes it to find it; and the token
 is scrubbed from anywhere else in the line, upper-cased or pasted into a path,
@@ -6159,6 +6190,24 @@ printed nowhere the link was not, and `TokenFile` has no `Debug` to print
 it with. Nor can the panel ask for a file: a front end with no terminal
 refuses `ui` whatever its options (`Refusal::Panel`), so a browser never
 names one for it to write.
+
+`--log` hands the server and the backend one log ([the log](#the-log)),
+which writes each line to stderr as it is said, after the time of day, in
+UTC to the millisecond (`04:20:59.756Z`): as it is said, since it is for
+watching a panel serve, or for reading beside a browser's trace of the same
+minutes, and either needs it while the panel runs; the time of day alone,
+which is what that reading asks for, in UTC, which needs no timezone looked
+up and is what a trace and CI's log say their times in. Off unless asked
+for, since a line a request is too many for a terminal somebody is using,
+and on stderr rather than in a file of its own, which would be one more
+path to refuse when something is there: whoever starts the panel sends
+stderr where they like. Without it, stderr says what it always has. Its
+help and the reference say what a line holds as the log lays it out: a
+request's path and query, so a read's line names the folders and entries
+it asked for, and never the token, a header or a body, so neither what a
+change was sent nor which commands it ran. Not "nothing a request sent",
+which a read sends in its query, and which somebody passing a log on
+would take at its word.
 
 The runtime is tokio's with one thread: every query goes to the blocking pool
 and every run to the server's writer thread, so it only moves bytes. `--dev`
@@ -7636,6 +7685,51 @@ links against libraries Playwright installs only on Debian and Ubuntu
 (`BROWSERS=chromium`), and WebKit in CI. A failed test keeps its trace,
 every action with the page and the requests at each step, in
 `test-results/`, and CI adds the HTML report.
+
+A trace times each request from the browser, so it says a run took
+seconds, and not where they went: an unload once took five and a half on
+CI, which its trace could say no more of (#240). So a test's own
+`mindweaver ui` is started with `--log` (`serve`, in `e2e/environment.ts`),
+its stderr kept for as long as it runs, and a test that fails keeps it
+beside its trace, once the server has stopped and said all it will, as
+`mindweaver-ui.log` in its folder of `test-results/`, attached to the
+report too (`close`, in `e2e/panel.ts`): every request with how long its
+answer took, and every run with how long it waited its turn, how long
+each of its lines took and how much of that it waited for a workspace's
+lock ([the log](#the-log)), each after the time of day, to read beside the
+trace. Not the config's server, whose stderr Playwright prints, which
+would put a line for every request of every test in the run's output; no
+spec runs a change on it. `e2e/log.spec.ts` holds a run from the panel to
+being said there, as it starts, as its line runs and as it ends, with its
+request, and never the token or the body the run was sent.
+
+The log says where a run's time went among the server's parts, and not
+whether the machine kept all of them waiting: the unload's line had
+written its marker a second in, and took four more to let go of the lock
+and finish, where every read beside it took its usual milliseconds, as
+waiting on a disk shared by a whole suite and two browsers would look.
+So every test that fails keeps how long the machine stalled while it ran
+(`stalls`, in `e2e/panel.ts`), as `pressure.txt` beside the trace: for its
+processors, its memory and its disk, how long at least one task was kept
+waiting for each, and how long every task that would run was, from the
+totals Linux keeps in `/proc/pressure` read as the test's first fixture
+starts and again after its last one stops, so it is the test's own time
+rather than an average of the minutes around it (`stalled`), then each file
+as it read the second time. Nothing on a system without them, where there
+is nothing to read.
+
+Both are kept only for a test that ended other than it was expected to,
+decided in one place for both (`keep`), and held by tests that pass: one
+made to fail would fail the suite, and `test.fail()` makes none that keeps
+anything, a test marked so that fails having ended as expected. So
+`e2e/log.spec.ts` hands `keep` and both teardowns (`close`, `keepStalls`)
+a stand-in for a test's `TestInfo` that failed (`ending`), and finds the
+server's log kept whole once it has stopped, the token redacted where the
+launch link carried it, and the pressure kept for each file Linux has;
+and nothing kept, nor anything asked of what would be, for a test that
+passed, or one marked to fail that failed.
+Rather than a nested run of Playwright over a spec made to fail, which
+would need a config and a fixture of its own beside the driver's.
 
 ### The README's screenshots
 
@@ -9773,7 +9867,10 @@ How the lock behaves, and why:
   that a command kept waiting by a process that has stopped answering says
   so rather than looks hung. The error is collected like any other: the CLI
   prints it, and the install screen prints it under the line it was running
-  and goes on to the next.
+  and goes on to the next. A wait that ends in the lock is said nowhere,
+  but counted on the thread that waited, with the holder it found, for a
+  front end that asks what some work it ran waited (`lock::waits`), as
+  the panel's log does ([the log](#the-log)).
 - **Who holds it, in a file of its own.** The writer holding the lock writes
   its process id to `.mindweaver/lock.pid`, and takes it away while it still
   holds the lock, so it never names a writer that has let go. Not in `lock`
@@ -10936,19 +11033,45 @@ it once as it closes.
 - **An unload's run once took five and a half seconds.** In one run of
   CI's Chromium, `e2e/loads.spec.ts` found the unload's command dialog
   still drawn five seconds after Run was clicked (#238). The trace CI kept
-  says why: the dialog was the unload's own, its buttons held as they are
-  while a run goes on, and the server answered the run 5508 ms after it
-  was sent, half a second after the spec stopped waiting, where the load
-  before it, a change to the same marker, took 952 ms. A snapshot asked
-  meanwhile was answered in 9 ms, so what waited was the writer thread,
-  or the line it ran, which is one `edit_array` under the workspace's
-  lock. Nearly six hundred runs here, on the debug and the release
-  binaries, with the browser's CPU throttled and with the whole run held
-  to two cores, never took longer than about half a second. What the run
-  waited on (another writer holding the lock, something in the line, or
-  the runner) waits for a run that says how long each line took and how
-  long it waited for the lock (#240); the spec is left as it is, since a
-  longer wait there would hide a run a person waits for too.
+  says the dialog was the unload's own, its buttons held as they are while
+  a run goes on, and the server answered the run 5508 ms after it was
+  sent, half a second after the spec stopped waiting, where the load
+  before it, a change to the same marker, took 952 ms, and a snapshot
+  asked meanwhile 9 ms. Read further (#240), it says where in the run the
+  time went. The event stream told the unload had started and that the
+  workspace had changed, and never that it finished before it closed; the
+  snapshot asked on hearing the change, 1.6 s after the run was sent, was
+  byte for byte the one from before the load, so the marker had been
+  renamed into place about 1.2 s in. The answer came four seconds after
+  that, written while the server stopped on the Ctrl-C the test's teardown
+  sent it half a second before (`Connection: close`). All the line had
+  left to do then was read the marker back, let go of the lock, taking
+  `lock.pid` away, and say what it did, and the writer thread to keep the
+  run and tell the stream: none of it waits on anything of the panel's.
+  Not the workspace's lock, which it held already, and which nothing else
+  in that test takes, its twin being a copy elsewhere; not the writer's
+  queue, which held it alone; not the event bus, a broadcast that never
+  blocks a sender, whose lock the stop took at once; not a subprocess, of
+  which an unload runs none; nor resolving the workspace, which `-W` names
+  and the preview had resolved in 1.5 ms. In that run writes were slow,
+  the load taking 952 ms where it takes a few milliseconds here, and
+  reads were not, which
+  is how waiting on a disk looks: CI's runner keeps its temporary folder,
+  where the suite builds its workspaces, on a disk two browsers recording
+  their traces, the other worker's install and its ledger's commits share,
+  where this machine's is a RAM disk. The likeliest cause, and not shown:
+  300 runs of the spec here, on the release binaries, the whole Chromium
+  suite on two workers held to four processors with `taskset`, every test
+  traced as CI traces it, never took longer than 15 ms to answer an
+  unload, half of them 2.4 ms or less, nor 217 ms to answer any of the
+  5060 runs of every spec beside them. So nothing is changed for it, and
+  the spec is left as it is, since a longer wait there would hide a run a
+  person waits for too. A test that fails keeps instead its own server's
+  log, which says how long each run waited its turn, ran and waited for a
+  workspace's lock, and how long the machine kept tasks waiting for its
+  disk while it ran ([end to end, in a
+  browser](#end-to-end-in-a-browser)). Should the next say the disk, what
+  to change is where the suite works on CI, not a timeout.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has

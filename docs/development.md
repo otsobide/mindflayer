@@ -343,6 +343,15 @@ make web/e2e ARGS='e2e/csp.spec.ts --debug'
 make web/e2e/run E2E_BIN=../../target/x86_64-unknown-linux-gnu/release
 ```
 
+A test that fails keeps its trace in `apps/web/test-results`, every action
+with the page and the requests at each step, and beside it what says where
+the time went: for a test with a `mindweaver ui` of its own, all that server
+said on stderr with `--log` (`mindweaver-ui.log`: every request with how
+long its answer took, and every run with how long it waited its turn, ran,
+and waited for a workspace's lock), and on Linux how long the machine kept
+tasks waiting for its processors, its memory and its disk while the test
+ran (`pressure.txt`). CI uploads all three.
+
 The browsers are Playwright's own builds, which `make web/e2e/browsers`
 downloads into `apps/web/node_modules` rather than `~/.cache`. Its WebKit
 needs libraries Playwright installs only on Debian and Ubuntu, with sudo

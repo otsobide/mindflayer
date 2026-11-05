@@ -288,7 +288,8 @@ under `apps/` with its own `Makefile`:
   `src/transcript.rs` what
   the session ran, `src/events.rs` the bus `/api/v1/events` streams,
   `src/watcher.rs` what watches the paths the backend names and tells the
-  bus what changed, `src/log.rs` the redacting request log,
+  bus what changed, `src/log.rs` the redacting log, a line for each
+  request and for each job the writer takes, with how long it took,
   `src/panel.rs` the embedded panel (`apps/web/dist`), and under its
   `schema` feature `src/schema.rs` the roots of the API's schemas it gives
   of its own (`Preview`, `Ran`, `Event`, `Refused`) and its part of the
@@ -527,8 +528,10 @@ These are easy to break from a single file without noticing.
 - **Output is built, then printed.** Commands return an `Outcome` (stdout
   text, stderr lines, ok), so tests assert on the exact text a user sees.
   The two that run until they are stopped write as they run, the TUI its
-  screen and `ui` its link, a note and the token file it is asked for, and
-  hand back their transcript.
+  screen and `ui` its link, a note, the token file it is asked for and,
+  with `--log`, a line on stderr for each request answered and each job
+  its writer takes, as it happens (`ui::on_stderr`), and hand back their
+  transcript.
   Each stderr line, and each of a `Failure`'s warnings, is a
   `render::Warning`: the text a terminal shows, word for word, and beside
   it the code of what it says (`code()` of the core error, refusal or
@@ -1699,7 +1702,15 @@ These are easy to break from a single file without noticing.
   editing, adding and renaming in the library, beside a copy of it
   and served by `serve`, through
   `environment.ts` as every process is), and holds what the panel left to
-  what the same command leaves in the copy.
+  what the same command leaves in the copy. That `mindweaver ui` runs with
+  `--log`, and a test that fails keeps what it said beside its trace
+  (`close`, in `panel.ts`), which `log.spec.ts` holds to saying a run and
+  never the token; every test that fails keeps how long the machine
+  stalled while it ran, from Linux's `/proc/pressure` (`stalls`). Whether
+  a test failed is decided in one place (`keep`), and `log.spec.ts` hands
+  both teardowns a stand-in for a test that failed, since no test that
+  passes is one, and finds each file kept and attached, and nothing kept
+  for one that passed.
 - The tests of the panel's types are core's and the CLI's
   `src/typescript_test.rs`, compiled only with the `ts` feature, and named
   so `--lib typescript` picks them out: each crate's export
