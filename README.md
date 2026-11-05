@@ -8,10 +8,7 @@ your projects, puts each where the agents working in a project read it, tells
 you which copies have fallen behind, and never touches anything it did not
 write. Think of it as git for what your agents know.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/project-dark.png">
-  <img alt="A project's page in the control panel: its skills and rules, how each stands, which agents read it, where it came from and where its copies are" src="docs/images/project.png">
-</picture>
+![A project's page in the control panel: its skills and rules, how each stands, which agents read it, where it came from and where its copies are](docs/images/project.png)
 
 It comes as two commands, `mind` for the project you are in and `mindweaver` for
 the folder your projects sit in, with a TUI, and a control panel in your

@@ -7799,9 +7799,10 @@ written in US English and in UTC: the panel writes them in the browser's
 language and time zone (`src/time.ts`), which Playwright takes from the
 machine, so a run under another language would put its words into an
 English README, and every run would tell its taker's time zone. The colour
-mode is picked through the cookie the panel keeps it in (`src/preferences.ts`),
-light for the tour and dark as well for the project's page, which the README
-shows in a `<picture>` that follows the reader's.
+mode is picked through the cookie the panel keeps it in (`src/preferences.ts`):
+dark for the whole tour, as the owner prefers the README's images, one
+image a page rather than a light and a dark one for a `<picture>` to pick
+between.
 
 Before an image is written, the page is read, its URL, its markup, its
 text and what each of its fields holds (a value bound into a field is in
