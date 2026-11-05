@@ -25,9 +25,9 @@ fn collapse_holding_two() -> Scenario {
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install -p collapse commit-style")
+        .given("~/Projects", "mindweaver install -p collapse commit-style")
         .given(
             "~/Projects/collapse",
             "mind add skill deploy \"Ship the service to staging\"",
@@ -111,10 +111,10 @@ fn list_json_reads_a_project_as_every_front_end_reads_it() {
 }
 
 #[test]
-fn flayer_list_json_names_the_projects_holding_each_of_the_librarys_own() {
+fn mindweaver_list_json_names_the_projects_holding_each_of_the_librarys_own() {
     let scenario = collapse_holding_two();
 
-    let data = clean(&scenario.run("~/Projects", "flayer list --json"));
+    let data = clean(&scenario.run("~/Projects", "mindweaver list --json"));
 
     assert_eq!(data["library"]["origin"], "workspace");
     assert_eq!(data["library"]["artifacts"][0]["name"], "commit-style");
@@ -146,6 +146,9 @@ fn show_json_holds_the_artifact_its_front_matter_and_its_body() {
             "compatibility": null,
             "metadata": {},
             "paths": null,
+            "transport": null,
+            "inputs": null,
+            "expressibility": null,
             "body": "\n# deploy\n",
         }])
     );
@@ -175,10 +178,10 @@ fn templates_json_says_each_template_and_where_it_comes_from() {
 }
 
 #[test]
-fn workspaces_json_lists_the_flayers_this_machine_knows() {
+fn workspaces_json_lists_the_weavers_this_machine_knows() {
     let scenario = Scenario::projects(&["collapse"]);
 
-    let data = clean(&scenario.run("~/Projects", "flayer workspaces --json"));
+    let data = clean(&scenario.run("~/Projects", "mindweaver workspaces --json"));
 
     assert_eq!(
         data,
@@ -204,7 +207,7 @@ fn scan_json_says_what_it_found_under_the_workspace_and_what_is_linked() {
     let collapse = scenario.project_id("~/Projects/collapse");
     let web = scenario.project_id("~/Projects/web");
 
-    let data = clean(&scenario.run("~/Projects", "flayer scan --json"));
+    let data = clean(&scenario.run("~/Projects", "mindweaver scan --json"));
 
     assert_eq!(
         data,
@@ -237,10 +240,10 @@ fn gather_list_json_says_where_each_offer_comes_from_as_from_takes_it() {
             "~/src/acme-skills",
             &[("skills/review/SKILL.md", &skill("review", "Read a change"))],
         )
-        .given("~/Projects", "flayer gather git ../src/acme-skills");
+        .given("~/Projects", "mindweaver gather git ../src/acme-skills");
     let revision = scenario.commit("~/src/acme-skills");
 
-    let mut data = clean(&scenario.run("~/Projects", "flayer gather list --json"));
+    let mut data = clean(&scenario.run("~/Projects", "mindweaver gather list --json"));
 
     // When it was gathered, which no run makes the same.
     let gathered = data[0]
@@ -255,7 +258,7 @@ fn gather_list_json_says_where_each_offer_comes_from_as_from_takes_it() {
             "place": "shelf",
             "kind": "skill",
             "name": "review",
-            "path": ".mindflayer/skills/..-src-acme-skills/review",
+            "path": ".mindweaver/skills/..-src-acme-skills/review",
             "summary": "Read a change",
             "revision": revision,
             "source": {

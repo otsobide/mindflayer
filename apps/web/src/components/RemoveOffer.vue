@@ -32,7 +32,7 @@ watch(reference, () => {
 })
 
 /**
- * `flayer remove --everywhere`, told `--yes` or not: the workspace's own,
+ * `mindweaver remove --everywhere`, told `--yes` or not: the workspace's own,
  * taken out of every project it links first, which is the only way the
  * panel removes one, since the library's copy alone would leave each
  * installed copy orphaned.
@@ -85,7 +85,7 @@ async function remove() {
       Remove it
     </h2>
     <p class="text-sm text-muted">
-      Removing it from the library takes it out of every project holding a copy first, as <code class="font-mono text-xs">flayer remove --everywhere</code> does,
+      Removing it from the library takes it out of every project holding a copy first, as <code class="font-mono text-xs">mindweaver remove --everywhere</code> does,
       but for a copy changed since it was installed, and anything of its name a project keeps on its own.
       See what that would do first: nothing is deleted until you remove it.
     </p>

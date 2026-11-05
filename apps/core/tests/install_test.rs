@@ -7,21 +7,21 @@ use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use common::{repository, skill, url};
-use mindflayer_core::copy;
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Installed, Removed, Standing};
-use mindflayer_core::ledger::{Ledger, Target};
-use mindflayer_core::AgentHomes;
-use mindflayer_core::{
-    Agent, Directories, FlayerWorkspace, Kind, MindProject, Settings, Share, Targets, MIND_DIR,
+use mindweaver_core::copy;
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::{self, Installed, Removed, Standing};
+use mindweaver_core::ledger::{Ledger, Target};
+use mindweaver_core::AgentHomes;
+use mindweaver_core::{
+    Agent, Directories, Kind, MindProject, Settings, Share, Targets, WeaverWorkspace, MIND_DIR,
     SETTINGS_FILE,
 };
 use tempfile::TempDir;
 
 /// A workspace with one project in it, and a shelf holding `names`.
-fn ready(names: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn ready(names: &[&str]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -74,7 +74,7 @@ fn the_shelf_is_what_a_project_can_be_offered() {
 #[test]
 fn installing_copies_the_skill_into_the_directory_the_project_named() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     // The project keeps its skills where its agents look, not where we assume.
@@ -105,7 +105,7 @@ fn installing_copies_the_skill_into_the_directory_the_project_named() {
 #[test]
 fn a_skills_whole_directory_arrives_with_it() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -259,7 +259,7 @@ fn a_project_whose_settings_name_no_agent_is_offered_nothing_and_refused_one_by_
 
 /// A workspace with a shelf holding `names`, and one project marked by its
 /// settings, naming `agents` and authoring its own skills in `skills`.
-fn ready_v3(names: &[&str], agents: &[Agent]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn ready_v3(names: &[&str], agents: &[Agent]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, _, ledger) = ready(names);
     let root = dir.path().join("alpha");
     fs::create_dir(&root).unwrap();
@@ -284,7 +284,7 @@ fn agents_copies(project: &MindProject, name: &str) -> [std::path::PathBuf; 2] {
 }
 
 fn install_from_shelf(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     name: &str,
@@ -305,7 +305,7 @@ fn install_from_shelf(
 fn ready_with_targets(
     names: &[&str],
     folders: &[&str],
-) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, mut project, ledger) = ready_v3(names, &Agent::ALL);
     project
         .change_settings(|settings| {
@@ -419,9 +419,9 @@ fn installing_into_a_project_marked_by_its_settings_puts_one_copy_where_each_age
         .installation("alpha", Kind::Skill, "deploy")
         .unwrap()
         .unwrap();
-    let hash = mindflayer_core::hash::tree(&agents).unwrap();
+    let hash = mindweaver_core::hash::tree(&agents).unwrap();
     assert_eq!(record.content_hash.as_deref(), Some(hash.as_str()));
-    assert_eq!(mindflayer_core::hash::tree(&claude).unwrap(), hash);
+    assert_eq!(mindweaver_core::hash::tree(&claude).unwrap(), hash);
     assert_eq!(
         record.targets,
         [
@@ -663,7 +663,7 @@ fn a_record_naming_a_copy_outside_the_project_is_refused_rather_than_removed() {
     ledger
         .installed(
             "alpha",
-            &mindflayer_core::ledger::InstallRecord {
+            &mindweaver_core::ledger::InstallRecord {
                 kind: Kind::Skill,
                 name: "deploy".into(),
                 source_id: None,
@@ -696,7 +696,7 @@ fn a_record_naming_a_copy_outside_the_project_is_refused_rather_than_removed() {
 }
 
 // ---------------------------------------------------------------------------
-// What was not installed by Mindflayer is not Mindflayer's to touch
+// What was not installed by Mindweaver is not Mindweaver's to touch
 // ---------------------------------------------------------------------------
 
 /// A skill somebody wrote by hand, of a name the shelf also offers.
@@ -863,7 +863,7 @@ fn a_shelf_entry_whose_files_have_gone_is_named_in_the_error() {
 #[test]
 fn the_folder_is_named_after_the_skill_rather_than_after_its_shelf_folder() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -907,9 +907,9 @@ fn the_folder_is_named_after_the_skill_rather_than_after_its_shelf_folder() {
 // ---------------------------------------------------------------------------
 
 /// A workspace with one project, and a shelf gathered from these files.
-fn gathered(files: &[(&str, &str)]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn gathered(files: &[(&str, &str)]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
@@ -1024,7 +1024,7 @@ fn what_agents_read_past_does_not_stop_an_install() {
 
     assert!(matches!(outcome, Installed::Added { .. }), "{outcome:?}");
     // Line endings are the gathering checkout's (CRLF under autocrlf on
-    // Windows), not Mindflayer's, so they are left out of the comparison.
+    // Windows), not Mindweaver's, so they are left out of the comparison.
     let copied = fs::read_to_string(installed_at(&project, "deploy").join("SKILL.md")).unwrap();
     assert_eq!(copied.replace("\r\n", "\n"), manifest, "copied as written");
 }
@@ -1036,16 +1036,16 @@ fn what_agents_read_past_does_not_stop_an_install() {
 /// A workspace managing one project and offering skills of its own, each with
 /// `files` references besides its `SKILL.md`, so that copying one takes long
 /// enough for somebody looking at the project to see it happen.
-fn own_skills(names: &[&str], files: usize) -> (TempDir, FlayerWorkspace, MindProject) {
+fn own_skills(names: &[&str], files: usize) -> (TempDir, WeaverWorkspace, MindProject) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("collapse");
     fs::create_dir(&root).unwrap();
     let (project, _) = MindProject::init(&root).unwrap();
     workspace.link(&project).unwrap();
     for name in names {
         let skill =
-            mindflayer_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
+            mindweaver_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
                 .unwrap();
         for file in 0..files {
             fs::write(
@@ -1059,7 +1059,7 @@ fn own_skills(names: &[&str], files: usize) -> (TempDir, FlayerWorkspace, MindPr
 }
 
 /// Change one of the workspace's own skills, so installing it again updates.
-fn edit_own(workspace: &FlayerWorkspace, name: &str, round: usize) {
+fn edit_own(workspace: &WeaverWorkspace, name: &str, round: usize) {
     let skill = workspace
         .own()
         .directory_for(Kind::Skill)
@@ -1069,7 +1069,7 @@ fn edit_own(workspace: &FlayerWorkspace, name: &str, round: usize) {
 }
 
 fn install_named(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     name: &str,
@@ -1399,9 +1399,12 @@ fn what_an_earlier_version_left_beside_the_copy_is_cleared_and_said_by_the_next_
     let ledger = workspace.ledger().unwrap();
     install_named(&workspace, &ledger, &project, "deploy").unwrap();
     // As an install of a version that staged beside leaves it when stopped:
-    // a half-made copy next to the skill, and the one it was replacing.
+    // a half-made copy next to the skill, and the one it was replacing,
+    // under Mindweaver's names and under those of a Mindflayer build.
     let skills = project.directory_for(Kind::Skill).unwrap();
     let left = [
+        skills.join(".deploy.mindweaver-new"),
+        skills.join(".deploy.mindweaver-old"),
         skills.join(".deploy.mindflayer-new"),
         skills.join(".deploy.mindflayer-old"),
     ];
@@ -1434,12 +1437,12 @@ fn what_an_earlier_version_left_beside_the_copy_is_cleared_and_said_by_the_next_
 // ---------------------------------------------------------------------------
 
 /// `ready`, with the project linked and a skill of the workspace's own.
-fn with_own(shelf: &[&str], own: &[&str]) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn with_own(shelf: &[&str], own: &[&str]) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, _, project, ledger) = ready(shelf);
-    let mut workspace = FlayerWorkspace::open(dir.path()).unwrap();
+    let mut workspace = WeaverWorkspace::open(dir.path()).unwrap();
     workspace.link(&project).unwrap();
     for name in own {
-        mindflayer_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
+        mindweaver_core::create(&workspace.own(), Kind::Skill, name, &format!("Our {name}"))
             .unwrap();
     }
     (dir, workspace, project, ledger)
@@ -1571,7 +1574,7 @@ fn from_typed_with_credentials_names_the_source_they_were_taken_out_of_and_repea
 /// A shelf holding `deploy` with a `.claude-plugin` folder beside its
 /// `SKILL.md`, as a plugin's skill is gathered, and a project marked by its
 /// settings naming every agent.
-fn plugin_skill() -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn plugin_skill() -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, _, ledger) = gathered(&[
         ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
         (
@@ -1614,7 +1617,7 @@ fn a_gathered_skill_holding_a_claude_plugin_folder_is_installed_without_it_and_s
     let [agents, _] = agents_copies(&project, "deploy");
     assert_eq!(
         record.content_hash,
-        Some(mindflayer_core::hash::tree(&agents).unwrap())
+        Some(mindweaver_core::hash::tree(&agents).unwrap())
     );
 }
 
@@ -1654,7 +1657,7 @@ fn a_skill_installed_without_what_is_left_out_is_still_current_and_installs_unch
 /// A shelf holding `deploy`, and a project marked by its settings, sharing
 /// as `share` says, naming every agent, at the root of a git repository of
 /// its own when `in_git`.
-fn local_v3(share: Share, in_git: bool) -> (TempDir, FlayerWorkspace, MindProject, Ledger) {
+fn local_v3(share: Share, in_git: bool) -> (TempDir, WeaverWorkspace, MindProject, Ledger) {
     let (dir, workspace, _, ledger) = ready(&["deploy"]);
     let root = dir.path().join("alpha");
     fs::create_dir(&root).unwrap();
@@ -1706,13 +1709,13 @@ fn a_local_install_keeps_every_copy_out_of_git_and_its_uninstall_takes_them_back
     );
     assert_eq!(
         done.excluded,
-        Some(mindflayer_core::Excluded::Written { file: file.clone() })
+        Some(mindweaver_core::Excluded::Written { file: file.clone() })
     );
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
         format!(
-            "{before}# mindflayer:begin\n# project {id}\n/.agents/skills/deploy/\n\
-             /.claude/skills/deploy/\n# mindflayer:end\n"
+            "{before}# mindweaver:begin\n# project {id}\n/.agents/skills/deploy/\n\
+             /.claude/skills/deploy/\n# mindweaver:end\n"
         )
     );
     assert!(ignored(&project, ".agents/skills/deploy"));
@@ -1725,7 +1728,7 @@ fn a_local_install_keeps_every_copy_out_of_git_and_its_uninstall_takes_them_back
     );
     assert_eq!(
         again.excluded,
-        Some(mindflayer_core::Excluded::Unchanged { file: file.clone() })
+        Some(mindweaver_core::Excluded::Unchanged { file: file.clone() })
     );
 
     let removed = install::uninstall(
@@ -1766,7 +1769,7 @@ fn a_local_install_keeps_no_copy_git_tracks_out_of_git() {
     install_from_shelf(&workspace, &ledger, &project, "deploy");
     // The team commits deploy's copies, as a project that was shared would
     // have, and its lines go.
-    mindflayer_core::exclude::forget(project.root(), &id).unwrap();
+    mindweaver_core::exclude::forget(project.root(), &id).unwrap();
     common::indexed(project.root());
     let file = exclude_file(&project);
     let before = fs::read_to_string(&file).unwrap();
@@ -1777,8 +1780,8 @@ fn a_local_install_keeps_no_copy_git_tracks_out_of_git() {
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
         format!(
-            "{before}# mindflayer:begin\n# project {id}\n/.agents/skills/commit-style/\n\
-             /.claude/skills/commit-style/\n# mindflayer:end\n"
+            "{before}# mindweaver:begin\n# project {id}\n/.agents/skills/commit-style/\n\
+             /.claude/skills/commit-style/\n# mindweaver:end\n"
         )
     );
     assert!(!ignored(&project, ".claude/skills/deploy"));
@@ -1814,7 +1817,7 @@ fn a_local_install_outside_git_says_nothing_keeps_its_copies_out() {
 
     let excluded = done.excluded.unwrap();
     assert!(
-        matches!(excluded, mindflayer_core::Excluded::Outside { .. }),
+        matches!(excluded, mindweaver_core::Excluded::Outside { .. }),
         "{excluded:?}"
     );
     assert!(excluded
@@ -1828,7 +1831,7 @@ fn a_local_install_outside_git_says_nothing_keeps_its_copies_out() {
 fn an_exclude_block_that_cannot_be_read_refuses_the_install_with_nothing_written() {
     let (_dir, workspace, project, ledger) = local_v3(Share::Local, true);
     let file = exclude_file(&project);
-    fs::write(&file, "# mindflayer:begin\n/mine/\n").unwrap();
+    fs::write(&file, "# mindweaver:begin\n/mine/\n").unwrap();
     let candidate =
         install::offered(&workspace, &ledger, &project, Kind::Skill, "deploy", None).unwrap();
 
@@ -1858,7 +1861,7 @@ fn an_exclude_block_that_cannot_be_read_refuses_the_install_with_nothing_written
         .is_none());
     assert_eq!(
         fs::read_to_string(&file).unwrap(),
-        "# mindflayer:begin\n/mine/\n"
+        "# mindweaver:begin\n/mine/\n"
     );
 }
 
@@ -1926,7 +1929,7 @@ fn a_project_at_the_users_home_is_refused_an_install_into_its_agents_own_folders
     assert!(
         refused
             .to_string()
-            .contains("Mindflayer installs into one project at a time"),
+            .contains("Mindweaver installs into one project at a time"),
         "{refused}"
     );
     assert!(!home.join(".agents").exists() && !home.join(".claude").exists());
@@ -1975,13 +1978,13 @@ fn each_offer_serializes_its_place_what_it_holds_and_its_origin() {
         kind: Kind::Skill,
         name: "deploy".into(),
         summary: Some(String::from("Ship it")),
-        path: std::path::PathBuf::from("/work/.mindflayer/skills/deploy"),
+        path: std::path::PathBuf::from("/work/.mindweaver/skills/deploy"),
     };
     let loaded = install::Offer::Loaded {
         kind: Kind::Rule,
         name: "git/no-force".into(),
         summary: None,
-        path: std::path::PathBuf::from("/team/.mindflayer/rules/git/no-force.md"),
+        path: std::path::PathBuf::from("/team/.mindweaver/rules/git/no-force.md"),
         entry: String::from("../team"),
         workspace: String::from("team"),
     };
@@ -1990,14 +1993,14 @@ fn each_offer_serializes_its_place_what_it_holds_and_its_origin() {
         serde_json::to_string(&workspace).unwrap(),
         concat!(
             r#"{"place":"workspace","kind":"skill","name":"deploy","summary":"Ship it","#,
-            r#""path":"/work/.mindflayer/skills/deploy","origin":"workspace"}"#,
+            r#""path":"/work/.mindweaver/skills/deploy","origin":"workspace"}"#,
         )
     );
     assert_eq!(
         serde_json::to_string(&loaded).unwrap(),
         concat!(
             r#"{"place":"loaded","kind":"rule","name":"git/no-force","summary":null,"#,
-            r#""path":"/team/.mindflayer/rules/git/no-force.md","entry":"../team","#,
+            r#""path":"/team/.mindweaver/rules/git/no-force.md","entry":"../team","#,
             r#""workspace":"team","origin":"load:../team"}"#,
         )
     );
@@ -2013,14 +2016,14 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
         offer: install::Offer::Shelf(gather::Gathered {
             kind: Kind::Skill,
             name: "review".into(),
-            path: String::from(".mindflayer/skills/github.com-acme-skills/review"),
+            path: String::from(".mindweaver/skills/github.com-acme-skills/review"),
             summary: Some(String::from("Review a change")),
             revision: Some("4f9c2a7".into()),
             gathered_at: 1_790_000_000,
-            source: mindflayer_core::ledger::Source {
+            source: mindweaver_core::ledger::Source {
                 id: 1,
-                kind: mindflayer_core::SourceKind::Git,
-                url: mindflayer_core::value::Redacted::new(
+                kind: mindweaver_core::SourceKind::Git,
+                url: mindweaver_core::value::Redacted::new(
                     "https://me:s3cret@github.com/acme/skills.git",
                 ),
                 reference: Some(String::from("main")),
@@ -2039,7 +2042,7 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
         serialized,
         concat!(
             r#"{"offer":{"place":"shelf","kind":"skill","name":"review","#,
-            r#""path":".mindflayer/skills/github.com-acme-skills/review","#,
+            r#""path":".mindweaver/skills/github.com-acme-skills/review","#,
             r#""summary":"Review a change","revision":"4f9c2a7","gathered_at":1790000000,"#,
             r#""source":{"kind":"git","url":"https://github.com/acme/skills.git","#,
             r#""reference":"main","subdirectory":"skills","revision":"4f9c2a7","#,

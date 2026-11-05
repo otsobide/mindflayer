@@ -59,7 +59,7 @@ async fn a_request_the_panel_would_not_send_is_refused() {
     let origin = "only from its own pages";
     let fetch = "Sec-Fetch-Site: same-origin";
     let json = "must be JSON";
-    let custom = "X-Mindflayer: 1";
+    let custom = "X-Mindweaver: 1";
 
     let cases: Vec<(&str, Vec<Change>, StatusCode, &str, &str)> = vec![
         (
@@ -167,15 +167,15 @@ async fn a_request_the_panel_would_not_send_is_refused() {
             json,
         ),
         (
-            "no X-Mindflayer",
-            vec![unset("x-mindflayer")],
+            "no X-Mindweaver",
+            vec![unset("x-mindweaver")],
             StatusCode::FORBIDDEN,
             "x_mindflayer_required",
             custom,
         ),
         (
-            "X-Mindflayer other than 1",
-            vec![set("x-mindflayer", "yes")],
+            "X-Mindweaver other than 1",
+            vec![set("x-mindweaver", "yes")],
             StatusCode::FORBIDDEN,
             "x_mindflayer_required",
             custom,
@@ -438,7 +438,7 @@ async fn no_answer_grants_another_origin_anything() {
         headers.insert("access-control-request-method", "POST".parse().unwrap());
         headers.insert(
             "access-control-request-headers",
-            "content-type, x-mindflayer".parse().unwrap(),
+            "content-type, x-mindweaver".parse().unwrap(),
         );
 
         let reply = deliver(&server, preflight).await;
@@ -659,8 +659,8 @@ async fn every_versioned_route_holds_every_guard_by_bearer_and_cookie_alike() {
                     "same_origin_required",
                 ),
                 (
-                    "by cookie, without X-Mindflayer",
-                    changed(by_cookie(), &[unset("x-mindflayer")]),
+                    "by cookie, without X-Mindweaver",
+                    changed(by_cookie(), &[unset("x-mindweaver")]),
                     StatusCode::FORBIDDEN,
                     "x_mindflayer_required",
                 ),

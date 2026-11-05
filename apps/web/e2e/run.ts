@@ -1,7 +1,7 @@
 /*
  * The end-to-end suite's driver, which `make web/e2e` runs with Node:
  *
- *   MINDFLAYER_E2E_BIN=../../target/debug node e2e/run.ts [playwright test options]
+ *   MINDWEAVER_E2E_BIN=../../target/debug node e2e/run.ts [playwright test options]
  *
  * It does what Playwright's own setup cannot do in the order it needs. The
  * fixture workspace has to be there before the server starts, and Playwright
@@ -15,9 +15,9 @@
  * as it was made. Then it removes the folder.
  *
  * Under the system's temporary folder, and refused there when any folder
- * above it holds a `.mind` or a `.mindflayer`: resolving walks up the tree
- * before it looks at a home, so a fixture inside somebody's project or
- * workspace could reach theirs.
+ * above it holds a `.mind`, a `.mindweaver` or a `.mindflayer`: resolving
+ * walks up the tree before it looks at a home, so a fixture inside
+ * somebody's project or workspace could reach theirs.
  */
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
@@ -39,7 +39,7 @@ function playwright(options: string[], env: Record<string, string>): Promise<num
   // the home and remove the folder after it. A termination sent to the
   // driver alone, as CI cancels a job, is passed on as that same SIGINT,
   // not as a SIGTERM: Playwright handles no SIGTERM, and dying of one would
-  // leave `flayer ui`, in a process group of its own, serving a folder the
+  // leave `mindweaver ui`, in a process group of its own, serving a folder the
   // driver then removes.
   const waiting = () => {}
   const relay = () => child.kill('SIGINT')
@@ -62,17 +62,17 @@ function refuse(message: string): never {
 }
 
 /** The binaries' folder, as the Makefile names it, from this folder. */
-const bin = resolve(web, process.env.MINDFLAYER_E2E_BIN ?? '../../target/debug')
+const bin = resolve(web, process.env.MINDWEAVER_E2E_BIN ?? '../../target/debug')
 if (!built(bin)) {
-  refuse(`no flayer and mind in ${bin} to test: \`make web/e2e\` builds them there, and E2E_BIN names another folder holding them`)
+  refuse(`no mindweaver and mind in ${bin} to test: \`make web/e2e\` builds them there, and E2E_BIN names another folder holding them`)
 }
 const temporary = tmpdir()
 const holder = marked(temporary)
 if (holder) {
-  refuse(`the temporary folder ${temporary} is inside ${holder}, which holds a .mind or a .mindflayer a command run from the fixture could reach: point TMPDIR elsewhere`)
+  refuse(`the temporary folder ${temporary} is inside ${holder}, which holds a .mind, a .mindweaver or a .mindflayer a command run from the fixture could reach: point TMPDIR elsewhere`)
 }
 
-const at: Places = places(mkdtempSync(join(temporary, 'mindflayer-e2e-')), bin)
+const at: Places = places(mkdtempSync(join(temporary, 'mindweaver-e2e-')), bin)
 let status = 1
 try {
   mkdirSync(at.home)

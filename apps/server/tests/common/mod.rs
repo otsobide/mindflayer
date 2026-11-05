@@ -10,7 +10,7 @@ pub mod mother;
 
 pub use axum::body::{Body, Bytes};
 pub use axum::http::{header, HeaderMap, Method, Request, StatusCode};
-pub use mindflayer_server::{
+pub use mindweaver_server::{
     Arguments, Backend, Condition, Grounds, Listening, Own, Parameter, Preview, Refusal, Route,
     Server, Shape, Watched, API,
 };
@@ -68,7 +68,7 @@ struct Words {
 pub fn fake_routes() -> Vec<Route<FakeQuery>> {
     vec![
         Route {
-            method: mindflayer_server::Method::Get,
+            method: mindweaver_server::Method::Get,
             path: "/echo",
             about: "What was sent, said back",
             parameters: vec![
@@ -81,7 +81,7 @@ pub fn fake_routes() -> Vec<Route<FakeQuery>> {
             query: echoed,
         },
         Route {
-            method: mindflayer_server::Method::Get,
+            method: mindweaver_server::Method::Get,
             path: "/words",
             about: "Words, said back",
             parameters: vec![
@@ -103,7 +103,7 @@ pub fn fake_routes() -> Vec<Route<FakeQuery>> {
             },
         },
         Route {
-            method: mindflayer_server::Method::Post,
+            method: mindweaver_server::Method::Post,
             path: "/judge",
             about: "What was sent in the body, said back",
             parameters: Vec::new(),
@@ -206,7 +206,7 @@ impl Serialize for Unwritable {
     }
 }
 
-/// A backend that knows nothing of mindflayer, which is the point: the server
+/// A backend that knows nothing of mindweaver, which is the point: the server
 /// must carry types it has never heard of.
 #[derive(Default)]
 pub struct Fake {
@@ -441,7 +441,7 @@ pub fn request(
                 .header(header::COOKIE, pair)
                 .header(header::ORIGIN, format!("http://{}", server.address()))
                 .header("sec-fetch-site", "same-origin")
-                .header("x-mindflayer", "1")
+                .header("x-mindweaver", "1")
         }
     }
     match body {

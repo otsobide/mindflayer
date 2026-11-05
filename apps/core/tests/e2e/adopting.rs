@@ -4,8 +4,8 @@
 //! the library (`everywhere::apply`), or what nothing offers any more
 //! (`assign::uninstall_orphaned`).
 
-use mindflayer_core::install::Edits;
-use mindflayer_core::{adopt, assign, everywhere, Kind, Reference};
+use mindweaver_core::install::Edits;
+use mindweaver_core::{adopt, assign, everywhere, Kind, Reference};
 
 use crate::{at, World};
 
@@ -53,7 +53,7 @@ fn adopting_plans_first_and_the_plan_writes_nothing() {
     )
     .expect("plan the adoption");
 
-    assert!(!world.exists("~/Projects/.mindflayer/library/skills/notes"));
+    assert!(!world.exists("~/Projects/.mindweaver/library/skills/notes"));
     assert_eq!(
         at(
             &world.snapshot("~/Projects"),
@@ -77,7 +77,7 @@ fn an_adopted_skill_is_the_librarys_and_its_copy_reads_as_installed_from_there()
     .expect("adopt notes");
 
     assert_eq!(
-        world.read("~/Projects/.mindflayer/library/skills/notes/SKILL.md"),
+        world.read("~/Projects/.mindweaver/library/skills/notes/SKILL.md"),
         NOTES
     );
     assert_eq!(
@@ -116,7 +116,7 @@ fn a_name_the_library_holds_already_is_not_adopted() {
     assert_eq!(
         world.said(&refused),
         "the library holds `notes` already, at \
-         /home/you/Projects/.mindflayer/library/skills/notes, so \
+         /home/you/Projects/.mindweaver/library/skills/notes, so \
          /home/you/Projects/collapse/.claude/skills/notes is not adopted: rename one of them first"
     );
 }
@@ -136,7 +136,7 @@ fn removing_one_everywhere_takes_out_every_untouched_copy_then_the_librarys() {
     assert!(!world.exists("~/Projects/collapse/.claude/skills/commit-style"));
     assert!(!world.exists("~/Projects/collapse/.agents/skills/commit-style"));
     assert!(world.exists("~/Projects/tanukeys/.agents/skills/commit-style/SKILL.md"));
-    assert!(!world.exists("~/Projects/.mindflayer/library/skills/commit-style"));
+    assert!(!world.exists("~/Projects/.mindweaver/library/skills/commit-style"));
     let snapshot = world.snapshot("~/Projects");
     assert_eq!(
         at(&snapshot, "/projects/0/artifacts"),
@@ -150,13 +150,13 @@ fn what_nothing_offers_any_more_is_taken_out_unless_it_was_edited() {
     let world = installed_twice_one_edited();
     let workspace = world.workspace("~/Projects");
     let own = workspace.own();
-    let target = mindflayer_core::lifecycle::find_to_change(
+    let target = mindweaver_core::lifecycle::find_to_change(
         Some(&workspace),
         &own,
         &Reference::parse("skill:commit-style"),
     )
     .expect("find it");
-    mindflayer_core::lifecycle::remove(Some(&workspace), &own, &target)
+    mindweaver_core::lifecycle::remove(Some(&workspace), &own, &target)
         .expect("remove it from the library alone");
     assert_eq!(
         at(

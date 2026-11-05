@@ -6,7 +6,7 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::exclude::{self, Entry, ExcludeError, Excluded};
+use mindweaver_core::exclude::{self, Entry, ExcludeError, Excluded};
 use tempfile::TempDir;
 
 /// An empty repository, with the `info/exclude` `git init` writes.
@@ -74,7 +74,7 @@ fn entries_are_added_and_removed_and_gix_reports_them_ignored() {
     assert!(written.starts_with(&before));
     assert_eq!(
         String::from_utf8_lossy(&written[before.len()..]),
-        "# mindflayer:begin\n# project .\n/.agents/skills/commit-style/\n# mindflayer:end\n"
+        "# mindweaver:begin\n# project .\n/.agents/skills/commit-style/\n# mindweaver:end\n"
     );
 
     let removed = exclude::remove(repo.path(), ".", &[skill("commit-style")]).unwrap();
@@ -92,8 +92,8 @@ fn lines_on_both_sides_of_the_block_stay_byte_identical() {
     exclude::add(repo.path(), ".", &[skill("one")]).unwrap();
     assert_eq!(
         String::from_utf8(fs::read(&file).unwrap()).unwrap(),
-        "*.log\r\n/scratch/\r\n# mindflayer:begin\r\n# project .\r\n/.agents/skills/one/\r\n\
-         # mindflayer:end"
+        "*.log\r\n/scratch/\r\n# mindweaver:begin\r\n# project .\r\n/.agents/skills/one/\r\n\
+         # mindweaver:end"
     );
     assert!(ignored(repo.path(), "scratch/"));
     assert!(ignored(repo.path(), ".agents/skills/one/"));
@@ -109,8 +109,8 @@ fn lines_on_both_sides_of_the_block_stay_byte_identical() {
     exclude::add(repo.path(), ".", &[skill("two")]).unwrap();
     assert_eq!(
         String::from_utf8(fs::read(&file).unwrap()).unwrap(),
-        "*.log\r\n/scratch/\r\n# mindflayer:begin\r\n# project .\r\n/.agents/skills/one/\r\n\
-         /.agents/skills/two/\r\n# mindflayer:end\r\ntarget/\r\n"
+        "*.log\r\n/scratch/\r\n# mindweaver:begin\r\n# project .\r\n/.agents/skills/one/\r\n\
+         /.agents/skills/two/\r\n# mindweaver:end\r\ntarget/\r\n"
     );
     assert!(ignored(repo.path(), ".agents/skills/two/"));
     assert!(ignored(repo.path(), "target/"));
@@ -367,7 +367,7 @@ fn a_change_that_happened_says_nothing_to_warn_about() {
 fn a_malformed_block_is_a_failure_and_nothing_is_written() {
     let repo = repository();
     let file = exclude_file(repo.path());
-    let before = b"*.log\n# mindflayer:begin\n# project .\n/.agents/skills/one/\n";
+    let before = b"*.log\n# mindweaver:begin\n# project .\n/.agents/skills/one/\n";
     fs::write(&file, before).unwrap();
 
     let error = exclude::add(repo.path(), ".", &[skill("two")]).unwrap_err();
@@ -375,7 +375,7 @@ fn a_malformed_block_is_a_failure_and_nothing_is_written() {
     assert_eq!(
         error.to_string(),
         format!(
-            "{}: line 2: `# mindflayer:begin` is never closed by `# mindflayer:end`, \
+            "{}: line 2: `# mindweaver:begin` is never closed by `# mindweaver:end`, \
              so nothing was written",
             file.display()
         )
@@ -463,8 +463,8 @@ fn a_folder_is_tracked_when_the_index_names_a_file_inside_it() {
     let app = project(repo.path(), "packages/app");
     project(&app, ".mind");
     fs::write(app.join(".mind/mind.toml"), "version = 2\n").unwrap();
-    project(&app, ".mindflayer");
-    fs::write(app.join(".mindflayer/flayer.toml"), "version = 2\n").unwrap();
+    project(&app, ".mindweaver");
+    fs::write(app.join(".mindweaver/weaver.toml"), "version = 2\n").unwrap();
     let web = project(repo.path(), "packages/web");
     project(&web, ".mindy");
     fs::write(web.join(".mindy/notes"), "Mine").unwrap();
@@ -713,4 +713,34 @@ fn a_group_with_no_line_of_the_project_is_left_as_it_is() {
         exclude::Followed::Nothing
     );
     assert_eq!(fs::read(&file).unwrap(), before);
+}
+
+/// What a Mindflayer build kept out of git is kept out still, and a group
+/// written into its block since goes under the markers it opened with.
+#[test]
+fn a_block_a_mindflayer_build_wrote_still_keeps_out_what_it_names() {
+    let repository = repository();
+    let app = project(repository.path(), "app");
+    exclude::add(&app, "app", &[skill("a")]).unwrap();
+    mindweaver_core::mother::MindflayerMother::rendered_into(&app);
+
+    exclude::add(&app, "app", &[skill("b")]).unwrap();
+    let web = project(repository.path(), "web");
+    exclude::add(&web, "web", &[skill("c")]).unwrap();
+
+    let text = fs::read_to_string(exclude_file(repository.path())).unwrap();
+    assert_eq!(text.matches(exclude::FLAYER_BEGIN).count(), 1, "{text}");
+    assert!(!text.contains(exclude::BEGIN), "{text}");
+    for path in [
+        "app/.agents/skills/a/",
+        "app/.agents/skills/b/",
+        "web/.agents/skills/c/",
+    ] {
+        assert!(ignored(repository.path(), path), "{path}");
+    }
+    exclude::forget(&app, "app").unwrap();
+    exclude::forget(&web, "web").unwrap();
+    assert!(!fs::read_to_string(exclude_file(repository.path()))
+        .unwrap()
+        .contains("mindflayer"));
 }

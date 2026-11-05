@@ -1,6 +1,6 @@
-//! `flayer ui` started in a scenario, and what a script asks of it.
+//! `mindweaver ui` started in a scenario, and what a script asks of it.
 //!
-//! The server is the binary as a person starts it, `flayer ui --no-open`
+//! The server is the binary as a person starts it, `mindweaver ui --no-open`
 //! typed in a folder of the scenario, with the environment every command
 //! of the scenario gets: `PATH` and the home, nothing else. The link it
 //! prints is read for where it listens and its token, and every request is
@@ -33,13 +33,13 @@ const API: &str = "/api/v1";
 const PATIENCE: Duration = Duration::from_secs(30);
 
 impl Scenario {
-    /// `flayer ui --no-open` typed in `at`: the panel and its API served
+    /// `mindweaver ui --no-open` typed in `at`: the panel and its API served
     /// on a port the system picks, with no browser opened.
     pub fn serve(&self, at: &str) -> Served<'_> {
-        self.serve_line(at, "flayer ui --no-open")
+        self.serve_line(at, "mindweaver ui --no-open")
     }
 
-    /// `line`, a launch of `flayer ui` as it is typed, from `at`, held to
+    /// `line`, a launch of `mindweaver ui` as it is typed, from `at`, held to
     /// print its link before anything is asked of it.
     pub fn serve_line(&self, at: &str, line: &str) -> Served<'_> {
         let mut child = self
@@ -140,10 +140,10 @@ impl Served<'_> {
         }
         if ask.page {
             headers.extend([
-                format!("Cookie: mf_{port}={}", self.token),
+                format!("Cookie: mw_{port}={}", self.token),
                 format!("Origin: http://{}", self.address),
                 String::from("Sec-Fetch-Site: same-origin"),
-                String::from("X-Mindflayer: 1"),
+                String::from("X-Mindweaver: 1"),
             ]);
         }
         if body.is_some() && ask.json {

@@ -9,13 +9,13 @@ use std::path::{Path, PathBuf};
 use std::slice;
 
 use common::{repository, skill};
-use mindflayer_core::gather::{self, Request};
-use mindflayer_core::install::{self, Candidate, Cell, Change, Plan};
-use mindflayer_core::ledger::Ledger;
-use mindflayer_core::resolve::{Reason, Resolved};
-use mindflayer_core::view::Snapshot;
-use mindflayer_core::{
-    create, Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Share, State,
+use mindweaver_core::gather::{self, Request};
+use mindweaver_core::install::{self, Candidate, Cell, Change, Plan};
+use mindweaver_core::ledger::Ledger;
+use mindweaver_core::resolve::{Reason, Resolved};
+use mindweaver_core::view::Snapshot;
+use mindweaver_core::{
+    create, Agent, AgentHomes, Directories, Kind, MindProject, Share, State, WeaverWorkspace,
     MIND_DIR, SETTINGS_FILE,
 };
 use tempfile::TempDir;
@@ -25,14 +25,14 @@ use tempfile::TempDir;
 /// and `team`, a workspace it loads, with a `deploy` of its own too.
 struct Fixture {
     dir: TempDir,
-    workspace: FlayerWorkspace,
-    team: FlayerWorkspace,
+    workspace: WeaverWorkspace,
+    team: WeaverWorkspace,
     projects: Vec<MindProject>,
 }
 
 fn given(names: &[&str]) -> Fixture {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path().join("home")).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path().join("home")).unwrap();
     let mut projects = Vec::new();
     for name in names {
         let root = dir.path().join("home").join(name);
@@ -44,7 +44,7 @@ fn given(names: &[&str]) -> Fixture {
         projects.push(project);
     }
     create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
-    let (team, _) = FlayerWorkspace::init(dir.path().join("team")).unwrap();
+    let (team, _) = WeaverWorkspace::init(dir.path().join("team")).unwrap();
     create(&team.own(), Kind::Skill, "deploy", "Ship it the team's way").unwrap();
     workspace.load(&team).unwrap();
     Fixture {
@@ -115,7 +115,7 @@ impl Fixture {
 }
 
 /// Write `name`'s manifest in `workspace`'s own folder of skills anew.
-fn rewrite(workspace: &FlayerWorkspace, name: &str, description: &str) {
+fn rewrite(workspace: &WeaverWorkspace, name: &str, description: &str) {
     let folder = workspace.own().directory_for(Kind::Skill).unwrap();
     fs::write(folder.join(name).join("SKILL.md"), skill(name, description)).unwrap();
 }
@@ -541,7 +541,7 @@ fn an_offer_its_origin_does_not_make_is_locked_as_not_offered() {
     assert_eq!(
         plan.locked[0].why.message,
         "nothing called `deploy` can be installed from load:../elsewhere: gather it, load a \
-         workspace that has it with `flayer load`, or add it to the workspace with `flayer add`"
+         workspace that has it with `mindweaver load`, or add it to the workspace with `mindweaver add`"
     );
 }
 
@@ -654,7 +654,7 @@ impl Fixture {
     /// The workspace as a front end reads it.
     fn snapshot(&self) -> Snapshot {
         let resolved = Resolved {
-            workspace: FlayerWorkspace::open(self.workspace.root()).unwrap(),
+            workspace: WeaverWorkspace::open(self.workspace.root()).unwrap(),
             reason: Reason::Explicit,
         };
         Snapshot::of(&resolved, None)
@@ -815,7 +815,11 @@ fn a_kind_a_project_has_nowhere_to_put_closes_its_boxes_by_the_code_a_plan_locks
         .collect();
     assert_eq!(
         closed,
-        [(Kind::Skill, "no_target"), (Kind::Rule, "no_target")]
+        [
+            (Kind::Skill, "no_target"),
+            (Kind::Rule, "no_target"),
+            (Kind::Mcp, "not_installable"),
+        ]
     );
     assert_eq!(boxes.held, []);
     let plan = fixture.planned(&[cell("bare", "skill:deploy", "workspace", true)]);

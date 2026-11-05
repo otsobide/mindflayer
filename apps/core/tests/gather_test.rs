@@ -6,9 +6,9 @@ use std::fs;
 use std::sync::{Arc, Mutex};
 
 use common::{commit, repository, skill, url, workspace, write_files};
-use mindflayer_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
-use mindflayer_core::ledger::{Action, Ledger, SourceKind};
-use mindflayer_core::{FlayerWorkspace, Kind, MindProject, ValidationIssue};
+use mindweaver_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
+use mindweaver_core::ledger::{Action, Ledger, SourceKind};
+use mindweaver_core::{Kind, MindProject, ValidationIssue, WeaverWorkspace};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -209,7 +209,7 @@ fn a_skill_that_breaks_the_rules_is_gathered_with_a_warning() {
     );
     // What is ignored is not rewritten: the shelf holds the file as written.
     // Line endings are left out of the comparison because the checkout, not
-    // Mindflayer, decides them: on Windows git's autocrlf turns them into CRLF.
+    // Mindweaver, decides them: on Windows git's autocrlf turns them into CRLF.
     let copied = fs::read_to_string(shelf.join("nested").join("SKILL.md")).unwrap();
     let copied = copied.replace("\r\n", "\n");
     assert!(copied.contains("  owner:\n    team: ops\n"), "{copied}");
@@ -364,7 +364,7 @@ fn gathering_writes_nothing_into_a_mind_project() {
     let dir = TempDir::new().unwrap();
     // A workspace that is also a project, which is the arrangement where a
     // gather leaking into `.mind` would be easiest to miss.
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let (project, _) = MindProject::init(dir.path()).unwrap();
     let ledger = workspace.ledger().unwrap();
 
@@ -641,8 +641,8 @@ fn the_ledger_lands_beside_the_marker_file() {
 
     assert!(dir
         .path()
-        .join(".mindflayer")
-        .join("mindflayer.db")
+        .join(".mindweaver")
+        .join("mindweaver.db")
         .is_file());
 }
 
@@ -716,11 +716,11 @@ fn a_password_cut_by_a_slash_is_refused_too_and_kept_nowhere() {
     assert!(!workspace.cache_dir().exists());
 }
 
-/// Leave in `workspace` what a Mindflayer from before the refusal left after
+/// Leave in `workspace` what a Mindweaver from before the refusal left after
 /// gathering from `url` with a token in it: the URL in the source the clone
 /// in `directory` belongs to, in the log, and in that clone's config and
 /// reflog.
-fn left_by_an_older_build(workspace: &FlayerWorkspace, directory: &str, url: &str) {
+fn left_by_an_older_build(workspace: &WeaverWorkspace, directory: &str, url: &str) {
     let database = rusqlite::Connection::open(workspace.ledger_path()).unwrap();
     database
         .execute("UPDATE sources SET url = ?1", [url])
@@ -833,7 +833,7 @@ fn a_source_that_becomes_one_with_another_takes_its_folders_with_it() {
                         subdirectory, '{older}', 0, 0 FROM sources;
              INSERT INTO artifacts (kind, name, source_id, path, gathered_at)
                  VALUES ('skill', 'deploy', (SELECT id FROM sources WHERE directory = '{older}'),
-                         '.mindflayer/skills/{older}/deploy', 0);"
+                         '.mindweaver/skills/{older}/deploy', 0);"
         ))
         .unwrap();
 
@@ -931,7 +931,7 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
         directory: name.to_owned(),
         summary: Some(format!("About {name}")),
         path: std::path::PathBuf::from(format!(
-            "/work/.mindflayer/skills/github.com-acme-skills/{name}"
+            "/work/.mindweaver/skills/github.com-acme-skills/{name}"
         )),
     };
     let report = gather::Report {
@@ -941,7 +941,7 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
         updated: Vec::new(),
         unchanged: vec![harvested("review")],
         failures: vec![gather::Failure::UnusableName {
-            path: std::path::PathBuf::from("/work/.mindflayer/cache/x"),
+            path: std::path::PathBuf::from("/work/.mindweaver/cache/x"),
         }],
         warnings: vec![Warning {
             path: std::path::PathBuf::from("/work/SKILL.md"),
@@ -956,10 +956,10 @@ fn a_gather_report_serializes_what_changed_and_leaves_its_failures_to_the_warnin
         concat!(
             r#"{"revision":"4f9c2a7","directory":"github.com-acme-skills","#,
             r#""added":[{"name":"deploy","directory":"deploy","summary":"About deploy","#,
-            r#""path":"/work/.mindflayer/skills/github.com-acme-skills/deploy"}],"#,
+            r#""path":"/work/.mindweaver/skills/github.com-acme-skills/deploy"}],"#,
             r#""updated":[],"#,
             r#""unchanged":[{"name":"review","directory":"review","summary":"About review","#,
-            r#""path":"/work/.mindflayer/skills/github.com-acme-skills/review"}]}"#,
+            r#""path":"/work/.mindweaver/skills/github.com-acme-skills/review"}]}"#,
         )
     );
 }

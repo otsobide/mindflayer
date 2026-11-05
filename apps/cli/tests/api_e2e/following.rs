@@ -50,7 +50,7 @@ fn a_run_is_told_as_it_starts_and_once_it_finishes_whoever_sent_it() {
         .into_iter()
         .filter(|event| event["type"] != "changed")
         .collect();
-    let lines = json!(["flayer -W /home/you/Projects link /home/you/Projects/web"]);
+    let lines = json!(["mindweaver -W /home/you/Projects link /home/you/Projects/web"]);
     assert_eq!(
         told,
         [
@@ -87,7 +87,7 @@ fn a_change_to_the_library_made_in_an_editor_is_told_as_the_workspaces() {
     stream.opened();
 
     scenario.file(
-        "~/Projects/.mindflayer/library/skills/review/SKILL.md",
+        "~/Projects/.mindweaver/library/skills/review/SKILL.md",
         &crate::added("review", "Read every change before it lands"),
     );
 
@@ -102,11 +102,11 @@ fn a_change_to_the_library_made_in_an_editor_is_told_as_the_workspaces() {
 fn a_switch_is_told_to_every_stream_with_how_many_have_been_taken() {
     let scenario = Scenario::empty();
     scenario
-        .given("~", "flayer init")
+        .given("~", "mindweaver init")
         .folder("~/Projects")
-        .given("~/Projects", "flayer init")
+        .given("~/Projects", "mindweaver init")
         .folder("~/Notes")
-        .given("~/Notes", "flayer init");
+        .given("~/Notes", "mindweaver init");
     let served = scenario.serve("~/Projects");
     let mut first = served.events();
     first.opened();

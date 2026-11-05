@@ -1,9 +1,9 @@
-//! The CLI end to end: `mind` and `flayer`, the binaries a person runs,
+//! The CLI end to end: `mind` and `mindweaver`, the binaries a person runs,
 //! driven one use case at a time.
 //!
 //! Every other suite of the CLI stops short of the process: it parses a line
 //! with the real parsers and runs it in the test's own process
-//! (`common::mind`, `common::flayer`), its options pinned so it reaches no
+//! (`common::mind`, `common::weaver`), its options pinned so it reaches no
 //! real home. Here each command is the built binary, started from a folder
 //! with an environment of its own, and what a test holds is what a person
 //! sees: the exit status, stdout and stderr, word for word, and what the
@@ -13,21 +13,21 @@
 //!
 //! - the scenario it needs, built from nothing for that test alone
 //!   ([`Scenario`]): folders and git repositories as a person or a git
-//!   server makes them, and Mindflayer's own state only through the commands
+//!   server makes them, and Mindweaver's own state only through the commands
 //!   themselves (`given`), each held to exit 0 with nothing on stderr;
 //! - one command, the input of the use case, as it is typed in a shell;
 //! - its output, as the reference shows it (`docs/reference.md`): every path
 //!   under the scenario reads as `/home`, the home being `/home/you`.
 //!
 //! No test shares a scenario with another or depends on one having run, so
-//! any one of them runs alone (`cargo test -p mindflayer-cli --test e2e_test
+//! any one of them runs alone (`cargo test -p mindweaver-cli --test e2e_test
 //! <name>`). The use cases are grouped by what a person is doing: making
 //! projects and workspaces, writing skills and rules, installing them,
 //! gathering them from git, keeping copies up to date, reading what is
 //! where, saying which workspace a command is about, changing a project's
 //! agents, share and targets, adopting a skill somebody keeps, removing
 //! one everywhere, loading another workspace, upgrading what an older
-//! Mindflayer made, and reading it all as JSON.
+//! Mindweaver made, and reading it all as JSON.
 //!
 //! Unix alone: the reference's paths are a Unix home's, which a Windows
 //! path, its drive and its backslashes, never reads as, so every use case

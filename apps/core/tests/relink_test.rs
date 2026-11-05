@@ -6,12 +6,12 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::exclude::{self, Followed};
-use mindflayer_core::install;
-use mindflayer_core::relink::{self, RelinkError};
-use mindflayer_core::scan;
-use mindflayer_core::{
-    Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, ProjectId, Share,
+use mindweaver_core::exclude::{self, Followed};
+use mindweaver_core::install;
+use mindweaver_core::relink::{self, RelinkError};
+use mindweaver_core::scan;
+use mindweaver_core::{
+    Agent, AgentHomes, Directories, Kind, MindProject, ProjectId, Share, WeaverWorkspace,
     WorkspaceError,
 };
 use tempfile::TempDir;
@@ -19,10 +19,10 @@ use tempfile::TempDir;
 /// A workspace keeping `deploy` as its own and linking `collapse`, a
 /// project marked by its settings in a repository of its own, shared as
 /// `share` says, with `deploy` installed into it.
-fn installed(share: Share) -> (TempDir, FlayerWorkspace, MindProject) {
+fn installed(share: Share) -> (TempDir, WeaverWorkspace, MindProject) {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path().join("Projects")).unwrap();
-    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path().join("Projects")).unwrap();
+    mindweaver_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
     let root = dir.path().join("Projects/collapse");
     fs::create_dir_all(&root).unwrap();
     gix::init(&root).unwrap();
@@ -151,8 +151,8 @@ fn copied(from: &Path, to: &Path) {
     }
 }
 
-fn scanned(workspace: &FlayerWorkspace) -> mindflayer_core::Scan {
-    mindflayer_core::scan(workspace, &mindflayer_core::scan::Request::default())
+fn scanned(workspace: &WeaverWorkspace) -> mindweaver_core::Scan {
+    mindweaver_core::scan(workspace, &mindweaver_core::scan::Request::default())
 }
 
 #[test]
@@ -174,8 +174,8 @@ fn a_scan_finds_a_project_moved_from_a_stale_entry_by_its_id() {
 #[test]
 fn a_moved_project_is_matched_to_its_entry_by_where_each_points() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path().join("Projects")).unwrap();
-    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path().join("Projects")).unwrap();
+    mindweaver_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
     let elsewhere = dir.path().join("Elsewhere");
     let project = linked(&mut workspace, &elsewhere.join("collapse"));
     linked(&mut workspace, &elsewhere.join("other"));
@@ -188,7 +188,7 @@ fn a_moved_project_is_matched_to_its_entry_by_where_each_points() {
         roots: vec![elsewhere.clone()],
         ..scan::Request::default()
     };
-    let scan = mindflayer_core::scan(&workspace, &request);
+    let scan = mindweaver_core::scan(&workspace, &request);
 
     let found = scan.found.iter().find(|found| found.path == moved).unwrap();
     // Outside the workspace, spelled by its path, where the marker spells
@@ -207,7 +207,7 @@ fn a_moved_project_is_matched_to_its_entry_by_where_each_points() {
 #[test]
 fn a_project_moved_before_the_ledger_learned_its_id_leaves_its_entry_untraced() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, &dir.path().join("collapse"));
     let moved = dir.path().join("apps/collapse");
     fs::create_dir_all(moved.parent().unwrap()).unwrap();
@@ -273,7 +273,7 @@ fn two_copies_of_a_project_that_moved_are_a_duplicate_and_neither_is_its_move() 
     assert!(scan.found.iter().all(|found| found.moved.is_none()));
     assert!(matches!(
         &scan.failures[..],
-        [mindflayer_core::scan::ScanFailure::Duplicate(duplicate)]
+        [mindweaver_core::scan::ScanFailure::Duplicate(duplicate)]
             if duplicate.paths == [first.clone(), second.clone()]
     ));
 }
@@ -285,7 +285,7 @@ fn two_linked_copies_are_a_failure_of_the_status_naming_both() {
     copied(project.root(), &copy);
     workspace.link(&MindProject::open(&copy).unwrap()).unwrap();
 
-    let (status, failures) = mindflayer_core::Status::of_workspace(&workspace);
+    let (status, failures) = mindweaver_core::Status::of_workspace(&workspace);
 
     assert_eq!(status.projects.len(), 2);
     let said: Vec<String> = failures.iter().map(ToString::to_string).collect();
@@ -302,7 +302,7 @@ fn two_linked_copies_are_a_failure_of_the_status_naming_both() {
 }
 
 /// Install `deploy`, the workspace's own, into `project`.
-fn install_deploy(workspace: &FlayerWorkspace, project: &MindProject) {
+fn install_deploy(workspace: &WeaverWorkspace, project: &MindProject) {
     let (ledger, _) = workspace.ledger_to_write().unwrap();
     let candidate =
         install::offered(workspace, &ledger, project, Kind::Skill, "deploy", None).unwrap();
@@ -317,7 +317,7 @@ fn install_deploy(workspace: &FlayerWorkspace, project: &MindProject) {
 }
 
 /// A project marked by its settings at `root`, local, linked by `workspace`.
-fn linked(workspace: &mut FlayerWorkspace, root: &Path) -> MindProject {
+fn linked(workspace: &mut WeaverWorkspace, root: &Path) -> MindProject {
     fs::create_dir_all(root).unwrap();
     let (project, _) =
         MindProject::init_asked(root, &Agent::ALL, Share::Local, &Directories::default()).unwrap();
@@ -325,14 +325,14 @@ fn linked(workspace: &mut FlayerWorkspace, root: &Path) -> MindProject {
     project
 }
 
-fn marker(workspace: &FlayerWorkspace) -> String {
+fn marker(workspace: &WeaverWorkspace) -> String {
     fs::read_to_string(workspace.config_path()).unwrap()
 }
 
-/// How each artifact of the project at `entry` stands, as `flayer status`
+/// How each artifact of the project at `entry` stands, as `mindweaver status`
 /// reports it.
-fn states(workspace: &FlayerWorkspace, entry: &str) -> Vec<(String, String)> {
-    let (status, failures) = mindflayer_core::Status::of_workspace(workspace);
+fn states(workspace: &WeaverWorkspace, entry: &str) -> Vec<(String, String)> {
+    let (status, failures) = mindweaver_core::Status::of_workspace(workspace);
     assert!(failures.is_empty(), "{failures:?}");
     status
         .projects
@@ -390,8 +390,8 @@ fn a_project_moved_inside_its_repository_takes_its_exclude_lines_along() {
     let dir = TempDir::new().unwrap();
     let repository = dir.path().join("monorepo");
     gix::init(&repository).unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(&repository).unwrap();
-    mindflayer_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(&repository).unwrap();
+    mindweaver_core::create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
     let project = linked(&mut workspace, &repository.join("packages/app"));
     install_deploy(&workspace, &project);
     let id = id_of(project.root());
@@ -500,7 +500,7 @@ fn an_entry_whose_marker_would_not_open_has_not_moved_and_a_copy_is_never_its_mo
     assert!(
         refused
             .to_string()
-            .contains("written by a newer Mindflayer"),
+            .contains("written by a newer Mindweaver"),
         "{refused}"
     );
     assert_eq!(marker(&workspace), before);
@@ -551,7 +551,7 @@ fn a_linked_copy_refuses_the_relink_until_it_is_given_an_id_of_its_own() {
 #[test]
 fn a_workspace_with_no_ledger_moves_the_entry_alone() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let project = linked(&mut workspace, &dir.path().join("collapse"));
     let moved = dir.path().join("moved");
     fs::rename(project.root(), &moved).unwrap();

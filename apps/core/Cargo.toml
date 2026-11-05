@@ -1,9 +1,9 @@
 [package]
-name = "mindflayer-core"
+name = "mindweaver-core"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-only"
-description = "Mind projects, flayer workspaces, and the skills they hold"
+description = "Mind projects, weaver workspaces, and the skills they hold"
 
 [dependencies]
 thiserror = "2"
@@ -14,7 +14,7 @@ serde = { version = "1", features = ["derive"] }
 # continuation of serde_yaml, which upstream archived.
 serde_yaml_ng = "0.10"
 # The marker files (.mind/settings.toml, .mind/mind.toml,
-# .mindflayer/flayer.toml) are TOML: the format the Rust toolchain already
+# .mindweaver/weaver.toml) are TOML: the format the Rust toolchain already
 # asks everyone here to read and write.
 toml = "0.9"
 # Reading a marker is serde's job, or a key at a time for a project's
@@ -84,7 +84,7 @@ mother = ["dep:tempfile"]
 # Core itself, with its mothers, for the integration suites in `tests/`, which
 # see only what the crate makes public: a dependency on itself, which Cargo
 # builds once for every test target, so a plain build holds no mother.
-mindflayer-core = { path = ".", features = ["mother"] }
+mindweaver-core = { path = ".", features = ["mother"] }
 # To pin what a report's types serialize to, name by name: what a front end
 # prints as JSON is a contract. The version the server already builds.
 serde_json = "1"

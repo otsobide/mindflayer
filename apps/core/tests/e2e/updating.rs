@@ -3,9 +3,9 @@
 //! (`update::apply`), which writes what is outdated or missing and leaves
 //! what somebody changed.
 
-use mindflayer_core::install::Edits;
-use mindflayer_core::update::{self, Updates};
-use mindflayer_core::Kind;
+use mindweaver_core::install::Edits;
+use mindweaver_core::update::{self, Updates};
+use mindweaver_core::Kind;
 use serde_json::json;
 
 use crate::World;
@@ -38,7 +38,7 @@ fn one_outdated_one_edited() -> World {
         .install("~/Projects", "~/Projects/api", "skill:commit-style")
         .install("~/Projects", "~/Projects/web", "skill:review")
         .file(
-            "~/Projects/.mindflayer/library/skills/commit-style/SKILL.md",
+            "~/Projects/.mindweaver/library/skills/commit-style/SKILL.md",
             &added("commit-style", "How every repo here writes commits, now"),
         )
         .file(
@@ -49,7 +49,7 @@ fn one_outdated_one_edited() -> World {
 }
 
 /// Every project `~/Projects` links, as an update of them all takes them.
-fn every_project(world: &World) -> Vec<mindflayer_core::MindProject> {
+fn every_project(world: &World) -> Vec<mindweaver_core::MindProject> {
     world.workspace("~/Projects").projects().0
 }
 

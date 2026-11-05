@@ -1,5 +1,5 @@
 //! Starting the server and stopping it: the guide's "Starting the server
-//! for a script" and "Stopping it", what `flayer ui` prints, the token file
+//! for a script" and "Stopping it", what `mindweaver ui` prints, the token file
 //! it writes for a script, and the session it hands back on Ctrl-C.
 
 use std::os::unix::fs::PermissionsExt;
@@ -9,7 +9,7 @@ use serde_json::json;
 use crate::{guide_workspace, Scenario};
 
 /// Where the guide has `ui` write the token file.
-const TOKEN_FILE: &str = "~/.local/state/mindflayer.json";
+const TOKEN_FILE: &str = "~/.local/state/mindweaver.json";
 
 #[test]
 fn the_link_is_alone_on_stdout_and_stderr_says_what_is_served_until_when() {
@@ -55,9 +55,9 @@ fn ctrl_c_prints_each_line_that_changed_something_so_the_session_runs_again() {
     assert_eq!(
         stopped.stdout,
         concat!(
-            "$ flayer -W /home/you/Projects link /home/you/Projects/web\n",
+            "$ mindweaver -W /home/you/Projects link /home/you/Projects/web\n",
             "linked web as web\n",
-            "$ flayer -W /home/you/Projects install -p /home/you/Projects/web skill:review\n",
+            "$ mindweaver -W /home/you/Projects install -p /home/you/Projects/web skill:review\n",
             "installed review into web, from workspace\n",
         )
     );
@@ -70,7 +70,7 @@ fn the_token_file_says_where_the_api_is_and_its_token_for_this_account_alone() {
 
     let served = scenario.serve_line(
         "~/Projects",
-        &format!("flayer ui --no-open --token-file {TOKEN_FILE}"),
+        &format!("mindweaver ui --no-open --token-file {TOKEN_FILE}"),
     );
 
     assert_eq!(
@@ -93,7 +93,7 @@ fn the_token_file_is_taken_away_once_the_server_stops() {
     scenario.folder("~/.local/state");
     let served = scenario.serve_line(
         "~/Projects",
-        &format!("flayer ui --no-open --token-file {TOKEN_FILE}"),
+        &format!("mindweaver ui --no-open --token-file {TOKEN_FILE}"),
     );
 
     let stopped = served.stop();
@@ -110,12 +110,12 @@ fn a_token_file_where_a_file_already_is_stops_the_launch_with_nothing_served() {
     scenario
         .run(
             "~/Projects",
-            &format!("flayer ui --no-open --token-file {TOKEN_FILE}"),
+            &format!("mindweaver ui --no-open --token-file {TOKEN_FILE}"),
         )
         .exits(1)
         .prints("")
         .says(
-            "error: /home/you/.local/state/mindflayer.json: already exists, and is left \
+            "error: /home/you/.local/state/mindweaver.json: already exists, and is left \
              alone, so the panel was not served: --token-file writes a file of its own, \
              never over one\n",
         );
@@ -129,12 +129,12 @@ fn a_token_file_in_a_folder_that_is_not_there_stops_the_launch() {
     scenario
         .run(
             "~/Projects",
-            &format!("flayer ui --no-open --token-file {TOKEN_FILE}"),
+            &format!("mindweaver ui --no-open --token-file {TOKEN_FILE}"),
         )
         .exits(1)
         .prints("")
         .says(
-            "error: /home/you/.local/state/mindflayer.json: its folder does not exist, so \
+            "error: /home/you/.local/state/mindweaver.json: its folder does not exist, so \
              the panel was not served: --token-file makes no folder\n",
         );
     assert!(!scenario.exists("~/.local"));
@@ -152,5 +152,5 @@ fn serving_where_no_workspace_is_reads_the_default_one_without_making_it() {
     served.get("/projects").is(200).answers(json!([]));
     served.stop();
 
-    assert!(!scenario.exists("~/.mindflayer"));
+    assert!(!scenario.exists("~/.mindweaver"));
 }

@@ -136,7 +136,7 @@ export function drafts(): Answered[] {
 }
 
 /**
- * What `flayer validate` said of the workspace fixture's library once
+ * What `mindweaver validate` said of the workspace fixture's library once
  * `review` held `text`, the draft it warns of (tests/fixtures/
  * validated.json): what the editor's verdict is held to, word for word.
  */

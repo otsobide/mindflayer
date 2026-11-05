@@ -21,7 +21,7 @@ function sha256(text: string): string {
 
 /** Where the workspace at `root` keeps its own skills, and the file `review` is read from. */
 function library(root: string): string {
-  return join(root, '.mindflayer', 'library', 'skills')
+  return join(root, '.mindweaver', 'library', 'skills')
 }
 
 function manifest(root: string): string {
@@ -40,12 +40,12 @@ async function append(page: Page, text: string) {
   await page.keyboard.type(text)
 }
 
-test('a library skill edited in the browser is written on disk as flayer edit --contents writes it, and its text taken away after', async ({ page, own }) => {
+test('a library skill edited in the browser is written on disk as mindweaver edit --contents writes it, and its text taken away after', async ({ page, own }) => {
   const before = readFileSync(manifest(own.at.workspace), 'utf8')
   await own.open(`/artifact?${new URLSearchParams({ kind: 'skill', name: AUTHORED })}`)
   await page.getByTestId('edit').click()
   await expect(editor(page)).toBeVisible()
-  await expect(page.getByTestId('verdict')).toContainText('flayer edit would write it.')
+  await expect(page.getByTestId('verdict')).toContainText('mindweaver edit would write it.')
 
   const added = 'Say why, every time.'
   await append(page, added)
@@ -54,30 +54,30 @@ test('a library skill edited in the browser is written on disk as flayer edit --
 
   await page.getByTestId('save').click()
   const dialog = page.getByRole('dialog')
-  const route = `.mindflayer/tmp/edit-${sha256(text).slice(0, 16)}.md`
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} edit --contents ${route} --if-unchanged ${sha256(before)} skill:${AUTHORED}`])
+  const route = `.mindweaver/tmp/edit-${sha256(text).slice(0, 16)}.md`
+  await expect(dialog.getByTestId('command')).toHaveText([`$ mindweaver -W ${own.at.workspace} edit --contents ${route} --if-unchanged ${sha256(before)} skill:${AUTHORED}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
   await expect(page.getByTestId('unsaved')).toHaveCount(0)
 
   expect(readFileSync(manifest(own.at.workspace), 'utf8')).toBe(text)
-  expect(readdirSync(join(own.at.workspace, '.mindflayer', 'tmp')), 'the text put there for the line is taken away').toEqual([])
+  expect(readdirSync(join(own.at.workspace, '.mindweaver', 'tmp')), 'the text put there for the line is taken away').toEqual([])
   const twin = own.twin
   const typed = draft(twin, 'review.md', text)
-  succeed(twin, 'flayer', twin.workspace, ['edit', '--contents', typed, '--if-unchanged', sha256(before), `skill:${AUTHORED}`])
+  succeed(twin, 'mindweaver', twin.workspace, ['edit', '--contents', typed, '--if-unchanged', sha256(before), `skill:${AUTHORED}`])
   expect(tree(library(own.at.workspace))).toEqual(tree(library(twin.workspace)))
 })
 
 test('a change made on disk while the editor is open makes the save fail with core\'s message, and writes nothing over it', async ({ page, own }) => {
   const before = readFileSync(manifest(own.at.workspace), 'utf8')
   await own.open(`/edit?${new URLSearchParams({ kind: 'skill', name: AUTHORED })}`)
-  await expect(page.getByTestId('verdict')).toContainText('flayer edit would write it.')
+  await expect(page.getByTestId('verdict')).toContainText('mindweaver edit would write it.')
   await append(page, 'Typed in the browser.')
 
   // Changed meanwhile with the real command, as another editor would.
   const elsewhere = `${before}Changed on the command line.\n`
   const changed = draft(own.at, 'elsewhere.md', elsewhere)
-  succeed(own.at, 'flayer', own.at.workspace, ['edit', '--contents', changed, `skill:${AUTHORED}`])
+  succeed(own.at, 'mindweaver', own.at.workspace, ['edit', '--contents', changed, `skill:${AUTHORED}`])
   await expect(page.getByTestId('changed')).toBeVisible()
   await expect(editor(page)).toContainText('Typed in the browser.')
 
@@ -89,30 +89,38 @@ test('a change made on disk while the editor is open makes the save fail with co
   await expect(said.getByTestId('line')).toContainText(['edit_stale'])
   await expect(said.getByTestId('line')).toContainText([message])
   expect(readFileSync(manifest(own.at.workspace), 'utf8')).toBe(elsewhere)
-  expect(readdirSync(join(own.at.workspace, '.mindflayer', 'tmp'))).toEqual([])
+  expect(readdirSync(join(own.at.workspace, '.mindweaver', 'tmp'))).toEqual([])
 })
 
-test('a skill added from a template and one renamed are what flayer add and flayer rename write', async ({ page, own }) => {
+test('a skill added from a template and one renamed are what mindweaver add and mindweaver rename write', async ({ page, own }) => {
   await own.open('/library?kind=skill')
   await page.getByTestId('new').click()
-  await page.getByLabel('Name').fill('deploy-docs')
-  await page.getByLabel('Description').fill('Publish the docs')
-  await page.getByRole('radio', { name: /^full/ }).click()
-  await expect(page.getByTestId('verdict')).toContainText('flayer add would write it.')
+  // In the add page's form, which the page draws once it is loaded and the
+  // snapshot answered, rather than by label anywhere on the page: the click
+  // returns while the library is still drawn, and a label matched as
+  // Playwright matches one by default, in any case and anywhere in the
+  // name, finds the library's filter ("Filter each skill by name or
+  // summary"), so the name went into the filter, or nowhere once the
+  // library made way for the add page.
+  const form = page.getByRole('form', { name: 'The new one' })
+  await form.getByLabel('Name', { exact: true }).fill('deploy-docs')
+  await form.getByLabel('Description', { exact: true }).fill('Publish the docs')
+  await form.getByRole('radio', { name: /^full/ }).click()
+  await expect(page.getByTestId('verdict')).toContainText('mindweaver add would write it.')
   await page.getByTestId('add').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} add --template full skill deploy-docs 'Publish the docs'`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ mindweaver -W ${own.at.workspace} add --template full skill deploy-docs 'Publish the docs'`])
   await dialog.getByTestId('run').click()
   await expect(page).toHaveURL(/\/artifact\?kind=skill&name=deploy-docs$/)
 
   await page.getByTestId('rename-to').fill('publish-docs')
   await page.getByTestId('rename-run').click()
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} rename skill:deploy-docs publish-docs`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ mindweaver -W ${own.at.workspace} rename skill:deploy-docs publish-docs`])
   await dialog.getByTestId('run').click()
   await expect(page).toHaveURL(/\/artifact\?kind=skill&name=publish-docs$/)
 
   const twin = own.twin
-  succeed(twin, 'flayer', twin.workspace, ['add', '--template', 'full', 'skill', 'deploy-docs', 'Publish the docs'])
-  succeed(twin, 'flayer', twin.workspace, ['rename', 'skill:deploy-docs', 'publish-docs'])
+  succeed(twin, 'mindweaver', twin.workspace, ['add', '--template', 'full', 'skill', 'deploy-docs', 'Publish the docs'])
+  succeed(twin, 'mindweaver', twin.workspace, ['rename', 'skill:deploy-docs', 'publish-docs'])
   expect(tree(library(own.at.workspace))).toEqual(tree(library(twin.workspace)))
 })

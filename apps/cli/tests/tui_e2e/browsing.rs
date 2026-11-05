@@ -1,18 +1,18 @@
-//! Looking around the screen: what `flayer` and `mind` open on, moving
+//! Looking around the screen: what `mindweaver` and `mind` open on, moving
 //! over the projects, and the keys and what each runs.
 
 use crate::{collapse_and_tanukeys, Key};
 
 #[test]
-fn flayer_opens_on_the_workspaces_own_then_each_project_and_what_the_first_holds() {
+fn mindweaver_opens_on_the_workspaces_own_then_each_project_and_what_the_first_holds() {
     let scenario = collapse_and_tanukeys();
 
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
 
     terminal.draws(
         0,
         &[
-            " mindflayer  Projects  · found above · nothing on the shelf  · /home/you/Projects",
+            " mindweaver  Projects  · found above · nothing on the shelf  · /home/you/Projects",
             "┏ Projects (2) ━━━━━━━━━━━━━━━━━━━━┓┌ collapse ────────────────────────────────────────────────────────────────────────┐",
             "┃  ◆ Projects  1                   ┃│>   skill commit-style  current  CC CX OC  How every repo here writes commits     │",
             "┃> collapse  2                     ┃│    skill deploy        authored           Ship the service to staging            │",
@@ -33,7 +33,7 @@ fn flayer_opens_on_the_workspaces_own_then_each_project_and_what_the_first_holds
 #[test]
 fn moving_down_shows_what_the_next_project_holds_and_where_it_keeps_it() {
     let scenario = collapse_and_tanukeys();
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal.presses(Key::Down).draws(
@@ -53,7 +53,7 @@ fn moving_down_shows_what_the_next_project_holds_and_where_it_keeps_it() {
 #[test]
 fn the_keys_say_what_each_runs_as_a_command_line() {
     let scenario = collapse_and_tanukeys();
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal.types("?").draws(
@@ -75,9 +75,9 @@ fn the_keys_say_what_each_runs_as_a_command_line() {
 }
 
 #[test]
-fn validate_shows_what_flayer_validate_says_of_everything() {
+fn validate_shows_what_mindweaver_validate_says_of_everything() {
     let scenario = collapse_and_tanukeys();
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal

@@ -20,7 +20,7 @@
 //!   Watching the nearest folder above it that is there, for its being
 //!   made, is the watcher's, since it is the same for any path.
 //! - **Nothing a read changes.** The ledger is named by its file, never by
-//!   its folder: SQLite makes `mindflayer.db-wal` and `mindflayer.db-shm`
+//!   its folder: SQLite makes `mindweaver.db-wal` and `mindweaver.db-shm`
 //!   beside it to read it and takes them away after, so a watch on the
 //!   folder would wake for every snapshot it set off, without end. A write
 //!   reaches the file itself when its log is checkpointed, at the latest as
@@ -32,7 +32,7 @@
 //! - **Asked again after every change.** A skill installed is a new folder
 //!   to watch, and a project linked a set of them, so a front end asks for
 //!   the list again once something on it changed rather than keep one the
-//!   disk has moved past; `flayer.toml` changing, a project linked or
+//!   disk has moved past; `weaver.toml` changing, a project linked or
 //!   unlinked, is one such change.
 
 use std::path::{Path, PathBuf};
@@ -41,11 +41,10 @@ use crate::agent::Agent;
 use crate::catalog::Catalog;
 use crate::claude_rules;
 use crate::kind::Kind;
+use crate::names::Names;
 use crate::paths;
 use crate::template;
-use crate::workspace::{
-    FlayerWorkspace, MarkerFile, MindProject, FLAYER_CONFIG, FLAYER_DIR, MIND_DIR,
-};
+use crate::workspace::{MarkerFile, MindProject, WeaverWorkspace, MIND_DIR};
 
 /// One path to watch, and what a change to it is a change to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,7 +79,7 @@ pub enum Scope {
 /// whose default workspace's marker says which workspaces this machine
 /// knows. A read, as the snapshot is: nothing is made or changed, and what
 /// cannot be listed is left out, as discovery reports it.
-pub fn watched(workspace: &FlayerWorkspace, home: Option<&Path>) -> Vec<Watched> {
+pub fn watched(workspace: &WeaverWorkspace, home: Option<&Path>) -> Vec<Watched> {
     let mut list = List::default();
     let at_home = Scope::Workspace;
 
@@ -101,11 +100,11 @@ pub fn watched(workspace: &FlayerWorkspace, home: Option<&Path>) -> Vec<Watched>
                 list.folders(&at_home, &source.own());
             }
             // What would bring it back.
-            Err(_) => list.add(&at_home, marker_of_workspace(&loaded.root)),
+            Err(_) => list.workspace_markers(&at_home, &loaded.root),
         }
     }
     if let Some(home) = home {
-        list.add(&at_home, marker_of_workspace(home));
+        list.workspace_markers(&at_home, home);
     }
 
     for member in workspace.members() {
@@ -117,11 +116,6 @@ pub fn watched(workspace: &FlayerWorkspace, home: Option<&Path>) -> Vec<Watched>
         }
     }
     list.0
-}
-
-/// Where a workspace at `root` keeps its marker.
-fn marker_of_workspace(root: &Path) -> PathBuf {
-    root.join(FLAYER_DIR).join(FLAYER_CONFIG)
 }
 
 /// The list being put together, each path once for each scope.
@@ -139,6 +133,20 @@ impl List {
         }
     }
 
+    /// Each file a workspace's marker can be in, under `root`: the one
+    /// Mindweaver writes and the one a Mindflayer build wrote, either of
+    /// which makes it a workspace, and a move from the one to the other
+    /// changes.
+    fn workspace_markers(&mut self, scope: &Scope, root: &Path) {
+        for names in Names::ALL {
+            self.add(
+                scope,
+                root.join(names.workspace_dir())
+                    .join(names.workspace_config()),
+            );
+        }
+    }
+
     /// Everything of `project`'s a snapshot reads: its marker, whichever
     /// file it is in, the files every agent reads in it, the folders it
     /// keeps each kind in and those its agents read them from, the files
@@ -148,7 +156,7 @@ impl List {
     /// rules' block in `AGENTS.md` and the import in `CLAUDE.md` are read
     /// whichever it names, and a few files more are no cost against a
     /// change missed.
-    fn project(&mut self, scope: &Scope, project: &MindProject, workspace: &FlayerWorkspace) {
+    fn project(&mut self, scope: &Scope, project: &MindProject, workspace: &WeaverWorkspace) {
         self.markers(scope, project.root());
         for agent in Agent::ALL {
             for file in agent.reads_files() {
@@ -156,10 +164,14 @@ impl List {
             }
         }
         self.folders(scope, project);
-        // Filed by the rule's route, folders and all, as rules are kept.
-        let claude = project.root().join(claude_rules::folder());
-        for folder in Catalog::looked_in(&claude, Kind::Rule) {
-            self.add(scope, folder);
+        // Filed by the rule's route, folders and all, as rules are kept, in
+        // the folder a Mindflayer build filed them in too, where those it
+        // recorded stay until they are moved.
+        for names in Names::ALL {
+            let claude = project.root().join(claude_rules::folder_under(names));
+            for folder in Catalog::looked_in(&claude, Kind::Rule) {
+                self.add(scope, folder);
+            }
         }
         self.templates(scope, workspace, project);
     }
@@ -190,7 +202,7 @@ impl List {
     }
 
     /// Every folder the templates `holder` is offered are looked for in.
-    fn templates(&mut self, scope: &Scope, workspace: &FlayerWorkspace, holder: &MindProject) {
+    fn templates(&mut self, scope: &Scope, workspace: &WeaverWorkspace, holder: &MindProject) {
         for folder in template::looked_in(Some(workspace), holder) {
             self.add(scope, folder);
         }

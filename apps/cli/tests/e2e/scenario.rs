@@ -10,9 +10,9 @@
 //!
 //! Each command is the built binary, started as a process from the folder it
 //! is typed in, with an environment holding nothing but `PATH` and that home:
-//! no `MINDFLAYER_*` variable, no agent home and no git configuration of the
-//! developer's reaches it, and no option is added to the line to keep them
-//! out, so the line run is the line typed. A variable a test is about is
+//! no `MINDWEAVER_*` or `MINDFLAYER_*` variable, no agent home and no git
+//! configuration of the developer's reaches it, and no option is added to the
+//! line to keep them out, so the line run is the line typed. A variable a test is about is
 //! given to that one command alone.
 
 use std::fmt;
@@ -20,7 +20,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use mindflayer_core::mother::GitRepositoryMother;
+use mindweaver_core::mother::GitRepositoryMother;
 use tempfile::TempDir;
 
 /// What the scenario's root is read as in a command's output, and what a
@@ -30,7 +30,7 @@ const ROOT: &str = "/home";
 /// The home's name under the root: `/home/you`, as in the reference.
 const YOU: &str = "you";
 
-/// A world of folders, repositories and Mindflayer's own files, built step by
+/// A world of folders, repositories and Mindweaver's own files, built step by
 /// step for one test and gone when it ends.
 pub struct Scenario {
     /// Kept for its lifetime: dropping it takes the world away.
@@ -61,9 +61,9 @@ impl Scenario {
             let at = format!("~/Projects/{project}");
             scenario.repository(&at).given(&at, "mind init");
         }
-        scenario.given("~/Projects", "flayer init");
+        scenario.given("~/Projects", "mindweaver init");
         for project in projects {
-            scenario.given("~/Projects", &format!("flayer link {project}"));
+            scenario.given("~/Projects", &format!("mindweaver link {project}"));
         }
         scenario
     }
@@ -91,7 +91,7 @@ impl Scenario {
     }
 
     // ---------------------------------------------------------------------
-    // The world outside Mindflayer: what a person or a git server made.
+    // The world outside Mindweaver: what a person or a git server made.
     // ---------------------------------------------------------------------
 
     /// A folder at `at`, and the folders above it.
@@ -109,7 +109,7 @@ impl Scenario {
         self
     }
 
-    /// A project at `at` as a Mindflayer from before settings made one:
+    /// A project at `at` as a Mindweaver from before settings made one:
     /// marked by a `.mind/mind.toml` naming the folders it authors in and
     /// nothing else. No command of this build writes that marker any more,
     /// so core's own `MindProject::init`, kept to write it for tests of such
@@ -117,7 +117,7 @@ impl Scenario {
     pub fn older_project(&self, at: &str) -> &Self {
         let path = self.at(at);
         fs::create_dir_all(&path).expect("make the project's folder");
-        mindflayer_core::MindProject::init(&path).expect("mark it with a mind.toml");
+        mindweaver_core::MindProject::init(&path).expect("mark it with a mind.toml");
         self
     }
 
@@ -213,7 +213,7 @@ impl Scenario {
     }
 
     // ---------------------------------------------------------------------
-    // Running Mindflayer.
+    // Running Mindweaver.
     // ---------------------------------------------------------------------
 
     /// Run `line` from `at` as a step of building the world, held to what
@@ -275,7 +275,7 @@ impl Scenario {
             .unwrap_or_else(|| panic!("`{line}` names no command"));
         let program = match binary.as_str() {
             "mind" => env!("CARGO_BIN_EXE_mind"),
-            "flayer" => env!("CARGO_BIN_EXE_flayer"),
+            "mindweaver" => env!("CARGO_BIN_EXE_mindweaver"),
             other => panic!("`{other}` is not one of the binaries under test"),
         };
         let dir = self.at(at);
@@ -372,7 +372,7 @@ impl Ran {
         self.exits(0)
     }
 
-    /// It exited with `code`: 1 for a refusal or a failure Mindflayer says,
+    /// It exited with `code`: 1 for a refusal or a failure Mindweaver says,
     /// 2 for a line its parser refuses.
     pub fn exits(&self, code: i32) -> &Self {
         if self.status != Some(code) {

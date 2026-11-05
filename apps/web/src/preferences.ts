@@ -1,23 +1,53 @@
 import { setSSRHandler, type StorageLike } from '@vueuse/core'
 
-/** Every cookie a choice is kept in is named with this, apart from other programs' on 127.0.0.1. */
-const PREFIX = 'mindflayer-'
+/**
+ * Every cookie a choice is kept in is named with this, apart from other
+ * programs' on 127.0.0.1.
+ */
+const PREFIX = 'mindweaver-'
+
+/**
+ * What a Mindflayer build's panel named them with (D-26). A choice made
+ * under it is read once, where none is kept under the new name, and moved
+ * to it: the browser keeps its colour mode and its sidebar across the
+ * rename rather than forget them, and the old cookie goes, so it is read no
+ * more than that once.
+ */
+const FLAYER_PREFIX = 'mindflayer-'
 
 /** A year, counted again each time the choice is made. */
 const KEPT_FOR = 60 * 60 * 24 * 365
 
-function name(key: string): string {
-  return `${PREFIX}${encodeURIComponent(key)}`
+function name(key: string, prefix: string = PREFIX): string {
+  return `${prefix}${encodeURIComponent(key)}`
+}
+
+/** The cookie called `named`, as it was set: `null` when there is none. */
+function read(named: string): string | null {
+  const prefix = `${named}=`
+  const pair = document.cookie.split(/;\s*/).find(each => each.startsWith(prefix))
+  if (pair === undefined) {
+    return null
+  }
+  try {
+    return decodeURIComponent(pair.slice(prefix.length))
+  } catch {
+    return null
+  }
+}
+
+function forget(named: string): void {
+  document.cookie = `${named}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict`
 }
 
 /**
  * What this browser chose, kept in cookies: the colour mode, and the
  * sidebar's size and whether it is collapsed.
  *
- * Not localStorage, which is kept per origin: each `flayer ui` takes a port
+ * Not localStorage, which is kept per origin: each `mindweaver ui` takes a port
  * of its own, so every launch would open on an empty one and forget what the
  * last was told. A cookie is kept per host, whatever the port (the reason the
- * server names its own `mf_<port>`), so a choice made under one launch is
+ * server names its own `mw_<port>`), so a choice made under one launch is
  * there for the next, and for `make web/dev` on 127.0.0.1 too.
  *
  * The price is that the browser sends them with every request to 127.0.0.1,
@@ -26,16 +56,16 @@ function name(key: string): string {
  */
 export const cookies: StorageLike = {
   getItem(key) {
-    const prefix = `${name(key)}=`
-    const pair = document.cookie.split(/;\s*/).find(each => each.startsWith(prefix))
-    if (pair === undefined) {
-      return null
+    const kept = read(name(key))
+    if (kept !== null) {
+      return kept
     }
-    try {
-      return decodeURIComponent(pair.slice(prefix.length))
-    } catch {
-      return null
+    const older = read(name(key, FLAYER_PREFIX))
+    if (older !== null) {
+      cookies.setItem(key, older)
+      forget(name(key, FLAYER_PREFIX))
     }
+    return older
   },
 
   setItem(key, value) {
@@ -43,7 +73,7 @@ export const cookies: StorageLike = {
   },
 
   removeItem(key) {
-    document.cookie = `${name(key)}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict`
+    forget(name(key))
   }
 }
 

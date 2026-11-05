@@ -12,13 +12,13 @@ fn collapse_for_claude() -> Scenario {
     scenario
         .repository("~/Projects/collapse")
         .given("~/Projects/collapse", "mind init --agents claude")
-        .given("~/Projects", "flayer init")
-        .given("~/Projects", "flayer link collapse")
+        .given("~/Projects", "mindweaver init")
+        .given("~/Projects", "mindweaver link collapse")
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install -p collapse commit-style")
+        .given("~/Projects", "mindweaver install -p collapse commit-style")
         .file(
             "~/Projects/collapse/.claude/skills/notes/SKILL.md",
             &skill("notes", "My own notes"),
@@ -80,7 +80,7 @@ fn an_agent_added_gets_a_copy_of_what_is_installed_where_it_reads() {
 }
 
 #[test]
-fn an_agent_removed_loses_mindflayers_copy_and_somebodys_skill_stays() {
+fn an_agent_removed_loses_mindweavers_copy_and_somebodys_skill_stays() {
     let scenario = collapse_for_claude_and_codex();
 
     scenario
@@ -89,7 +89,7 @@ fn an_agent_removed_loses_mindflayers_copy_and_somebodys_skill_stays() {
         .prints(concat!(
             "set agents to codex in collapse, where they were claude,codex\n",
             "removed commit-style from .claude/skills/commit-style\n",
-            "left .claude/skills/notes where it is: Mindflayer did not install it\n",
+            "left .claude/skills/notes where it is: Mindweaver did not install it\n",
         ))
         .quiet();
     assert!(!scenario.exists("~/Projects/collapse/.claude/skills/commit-style"));
@@ -116,11 +116,14 @@ fn turning_shared_hands_mind_and_the_copies_to_the_team_to_commit() {
 }
 
 #[test]
-fn flayer_agents_changes_a_project_from_the_workspace() {
+fn mindweaver_agents_changes_a_project_from_the_workspace() {
     let scenario = collapse_for_claude();
 
     scenario
-        .run("~/Projects", "flayer agents -p collapse add codex --yes")
+        .run(
+            "~/Projects",
+            "mindweaver agents -p collapse add codex --yes",
+        )
         .succeeds()
         .prints(concat!(
             "set agents to claude,codex in collapse, where they were claude\n",
@@ -140,7 +143,7 @@ fn the_last_agent_is_not_removed() {
         .prints("")
         .says(
             "error: collapse would name no agent, and what is installed into it would reach \
-             none, so its last agent is not removed; `flayer uninstall` takes out what it has\n",
+             none, so its last agent is not removed; `mindweaver uninstall` takes out what it has\n",
         );
     assert_eq!(
         scenario.read("~/Projects/collapse/.mind/settings.toml"),
@@ -154,9 +157,9 @@ fn targets_send_every_agents_copies_to_one_folder_and_warn_none_reads_it() {
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install -p collapse commit-style");
+        .given("~/Projects", "mindweaver install -p collapse commit-style");
 
     scenario
         .run("~/Projects/collapse", "mind targets set skills .skills --yes")
@@ -190,9 +193,9 @@ fn targets_reset_sends_the_copies_back_where_each_agent_reads() {
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install -p collapse commit-style");
+        .given("~/Projects", "mindweaver install -p collapse commit-style");
     // Set as a step: it says a note, which a given step may not.
     scenario
         .run(
@@ -213,7 +216,7 @@ fn targets_reset_sends_the_copies_back_where_each_agent_reads() {
             "copied commit-style to .agents/skills/commit-style, for codex and opencode, kept out of git\n",
             "copied commit-style to .claude/skills/commit-style, for claude, kept out of git\n",
             "removed commit-style from .skills/commit-style\n",
-            "left .skills/notes where it is: Mindflayer did not install it\n",
+            "left .skills/notes where it is: Mindweaver did not install it\n",
         ))
         .quiet();
     let settings = scenario.read("~/Projects/collapse/.mind/settings.toml");

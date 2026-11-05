@@ -24,7 +24,7 @@ fn the_link_trades_its_token_for_a_cookie_and_sends_the_browser_to_the_panel() {
     assert_eq!(
         answer.header("set-cookie"),
         Some(&*format!(
-            "mf_{}={}; Path=/; HttpOnly; SameSite=Strict",
+            "mw_{}={}; Path=/; HttpOnly; SameSite=Strict",
             served.address.port(),
             served.token
         ))
@@ -185,12 +185,12 @@ fn a_change_sent_with_the_cookie_without_the_panels_header_is_refused() {
         .send(
             Ask::post("/tasks", link_web())
                 .as_the_page()
-                .without("X-Mindflayer"),
+                .without("X-Mindweaver"),
         )
         .refused(
             403,
             "x_mindflayer_required",
-            "a change sent with the cookie must carry X-Mindflayer: 1, as the panel's do",
+            "a change sent with the cookie must carry X-Mindweaver: 1, as the panel's do",
         );
     assert_eq!(entries(&served.get("/projects")), ["api"]);
 }

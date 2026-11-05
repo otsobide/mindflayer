@@ -12,11 +12,14 @@ import { dirname, join, relative } from 'node:path'
 /**
  * The variables that lead a command to a real workspace or a real agent
  * home, as the CLI's own tests name them (`common::CLEARED`): an activated
- * workspace, the default one's home, and the agents' folders. The driver
+ * workspace, the default one's home, each under the name a Mindflayer build
+ * read it by too, and the agents' folders. The driver
  * starts Playwright without them, so neither the server nor any command a
  * spec runs, nor a worker, ever sees them.
  */
 export const CLEARED = [
+  'MINDWEAVER_HOME',
+  'MINDWEAVER_WORKSPACE',
   'MINDFLAYER_HOME',
   'MINDFLAYER_WORKSPACE',
   'CLAUDE_CONFIG_DIR',
@@ -37,8 +40,8 @@ export const NO_AGENT_HOMES = [
 ] as const
 
 /** The variables the driver hands the config and the workers. */
-const SCRATCH = 'MINDFLAYER_E2E_SCRATCH'
-const BIN = 'MINDFLAYER_E2E_BIN'
+const SCRATCH = 'MINDWEAVER_E2E_SCRATCH'
+const BIN = 'MINDWEAVER_E2E_BIN'
 
 /** Where a run keeps what it builds, and what it runs. */
 export interface Places {
@@ -49,9 +52,9 @@ export interface Places {
    * empty, and held to stay that way (run.ts).
    */
   home: string
-  /** The fixture workspace, holding `.mindflayer` and the projects it links. */
+  /** The fixture workspace, holding `.mindweaver` and the projects it links. */
   workspace: string
-  /** The folder holding the `flayer` and `mind` under test. */
+  /** The folder holding the `mindweaver` and `mind` under test. */
   bin: string
 }
 
@@ -85,15 +88,22 @@ export function given(): Places {
 }
 
 /**
- * The folder above `folder`, itself included, that holds a `.mind` or a
- * `.mindflayer`, if one does: resolving walks up the tree before it looks
- * at a home, so a workspace built under such a folder could reach it.
- * Here rather than in the driver, so that whatever else builds a workspace
- * in the temporary folder refuses the same.
+ * What makes a folder a project or a workspace to a command walking up the
+ * tree: a `.mind`, a `.mindweaver`, or the `.mindflayer` a Mindflayer build
+ * made a workspace in, which resolving still finds.
+ */
+const MARKS = ['.mind', '.mindweaver', '.mindflayer']
+
+/**
+ * The folder above `folder`, itself included, that holds any of `MARKS`, if
+ * one does: resolving walks up the tree before it looks at a home, so a
+ * workspace built under such a folder could reach it. Here rather than in
+ * the driver, so that whatever else builds a workspace in the temporary
+ * folder refuses the same.
  */
 export function marked(folder: string): string | undefined {
   for (let at = folder; ; at = dirname(at)) {
-    if (existsSync(join(at, '.mind')) || existsSync(join(at, '.mindflayer'))) {
+    if (MARKS.some(mark => existsSync(join(at, mark)))) {
       return at
     }
     if (dirname(at) === at) {
@@ -120,13 +130,13 @@ export function look(folder: string): string[] {
 }
 
 /** The path of the binary called `name` in `bin`. */
-export function binary(bin: string, name: 'flayer' | 'mind'): string {
+export function binary(bin: string, name: 'mindweaver' | 'mind'): string {
   return join(bin, process.platform === 'win32' ? `${name}.exe` : name)
 }
 
 /** Whether both binaries are in `bin`, to run. */
 export function built(bin: string): boolean {
-  return existsSync(binary(bin, 'flayer')) && existsSync(binary(bin, 'mind'))
+  return existsSync(binary(bin, 'mindweaver')) && existsSync(binary(bin, 'mind'))
 }
 
 /**
@@ -156,7 +166,7 @@ export function environment(at: Places): Record<string, string> {
  * The options every line names its home, its workspace and the agent homes
  * by: `--home` the temporary one, `--workspace` the fixture, or, before
  * there is one to name, empty, which names none and ignores
- * `$MINDFLAYER_WORKSPACE` too, and every agent home empty. Named on every
+ * `$MINDWEAVER_WORKSPACE` too, and every agent home empty. Named on every
  * line even though `-C` is under the temporary folder: resolving walks up
  * from there, and only a line that names its workspace cannot be led to
  * another.
@@ -177,7 +187,7 @@ export interface Ran {
  * Run `name` with `args` in `directory`, which it is also given as `-C`, and
  * every option `pinned` names, and say what it printed.
  */
-export function run(at: Places, name: 'flayer' | 'mind', directory: string, args: string[], workspace: 'fixture' | 'none' = 'fixture'): Ran {
+export function run(at: Places, name: 'mindweaver' | 'mind', directory: string, args: string[], workspace: 'fixture' | 'none' = 'fixture'): Ran {
   const line = [...args, '-C', directory, ...pinned(at, workspace)]
   const ran = spawnSync(binary(at.bin, name), line, {
     cwd: directory,
@@ -192,7 +202,7 @@ export function run(at: Places, name: 'flayer' | 'mind', directory: string, args
 }
 
 /** `run`, failing unless the line exits 0 and says no warning. */
-export function succeed(at: Places, name: 'flayer' | 'mind', directory: string, args: string[], workspace: 'fixture' | 'none' = 'fixture'): Ran {
+export function succeed(at: Places, name: 'mindweaver' | 'mind', directory: string, args: string[], workspace: 'fixture' | 'none' = 'fixture'): Ran {
   const ran = run(at, name, directory, args, workspace)
   if (ran.status !== 0 || /^warning:/m.test(ran.stderr)) {
     throw new Error(`\`${ran.line}\` exited ${ran.status}:\n${ran.stdout}${ran.stderr}`)
@@ -201,7 +211,7 @@ export function succeed(at: Places, name: 'flayer' | 'mind', directory: string, 
 }
 
 /**
- * `flayer ui` as a person starts it over the workspace `at` names, on a
+ * `mindweaver ui` as a person starts it over the workspace `at` names, on a
  * port the system picks, with nothing opened: what the config starts the
  * suite's server with, and `serve` a spec's own. With `workspace` `none` it
  * names none, and finds the one it is started in, as a person's does: what
@@ -211,7 +221,7 @@ export function ui(at: Places, workspace: 'fixture' | 'none' = 'fixture'): strin
   return ['ui', '--no-open', '--port', '0', '-C', at.workspace, ...pinned(at, workspace)]
 }
 
-/** A `flayer ui` a spec started, and how to stop it. */
+/** A `mindweaver ui` a spec started, and how to stop it. */
 export interface Serving {
   /** Where it listens: `http://127.0.0.1:<port>`. */
   origin: string
@@ -222,18 +232,18 @@ export interface Serving {
   stop(): Promise<void>
 }
 
-/** The link `flayer ui` prints first on stdout, and the only line there while it serves. */
+/** The link `mindweaver ui` prints first on stdout, and the only line there while it serves. */
 const LINK = /^(?<origin>http:\/\/127\.0\.0\.1:\d+)\/\?token=(?<token>[0-9a-f]+)$/m
 
 /**
- * Start `flayer ui` over the workspace `at` names, as the config starts the
+ * Start `mindweaver ui` over the workspace `at` names, as the config starts the
  * suite's, from that workspace with the environment `environment` gives,
  * and answer once it printed its link: for a spec that changes a workspace
  * of its own, which no other spec reads. Its stdout is read, never
  * printed, so the token stays out of the log.
  */
 export function serve(at: Places, workspace: 'fixture' | 'none' = 'fixture'): Promise<Serving> {
-  const child = spawn(binary(at.bin, 'flayer'), ui(at, workspace), {
+  const child = spawn(binary(at.bin, 'mindweaver'), ui(at, workspace), {
     cwd: at.workspace,
     env: environment(at),
     stdio: ['ignore', 'pipe', 'pipe']
@@ -243,7 +253,7 @@ export function serve(at: Places, workspace: 'fixture' | 'none' = 'fixture'): Pr
     let said = ''
     const timer = setTimeout(() => {
       child.kill('SIGKILL')
-      refuse(new Error(`flayer ui printed no link within a minute:\n${said}`))
+      refuse(new Error(`mindweaver ui printed no link within a minute:\n${said}`))
     }, 60_000)
     child.stderr!.setEncoding('utf8').on('data', (chunk: string) => (said += chunk))
     child.stdout!.setEncoding('utf8').on('data', (chunk: string) => {
@@ -260,13 +270,13 @@ export function serve(at: Places, workspace: 'fixture' | 'none' = 'fixture'): Pr
     })
     child.on('exit', (code) => {
       clearTimeout(timer)
-      refuse(new Error(`flayer ui exited ${code} before it printed a link:\n${said}`))
+      refuse(new Error(`mindweaver ui exited ${code} before it printed a link:\n${said}`))
     })
   })
 }
 
 /**
- * `child` stopped with the Ctrl-C a person stops `flayer ui` with, which
+ * `child` stopped with the Ctrl-C a person stops `mindweaver ui` with, which
  * lets it close every event stream and finish what it runs, and killed if
  * it has not stopped ten seconds later.
  */

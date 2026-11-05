@@ -7,17 +7,17 @@ use crate::{Scenario, Served};
 
 /// A machine knowing three workspaces: the default one in the home, made
 /// first, and `~/Projects`, linking `api`, and `~/Notes`, each remembered
-/// by the default when `flayer init` made it.
+/// by the default when `mindweaver init` made it.
 fn three_known() -> Scenario {
     let scenario = Scenario::empty();
     scenario
-        .given("~", "flayer init")
+        .given("~", "mindweaver init")
         .repository("~/Projects/api")
         .given("~/Projects/api", "mind init")
-        .given("~/Projects", "flayer init")
-        .given("~/Projects", "flayer link api")
+        .given("~/Projects", "mindweaver init")
+        .given("~/Projects", "mindweaver link api")
         .folder("~/Notes")
-        .given("~/Notes", "flayer init");
+        .given("~/Notes", "mindweaver init");
     scenario
 }
 
@@ -84,7 +84,7 @@ fn switching_to_a_listed_workspace_reads_and_changes_it_from_then_on() {
         .is(200)
         .answers_at(
             "/lines",
-            json!(["flayer -W /home/you/Notes add skill journal 'Keep a journal'"]),
+            json!(["mindweaver -W /home/you/Notes add skill journal 'Keep a journal'"]),
         );
 }
 

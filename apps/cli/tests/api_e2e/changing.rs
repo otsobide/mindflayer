@@ -26,7 +26,7 @@ fn a_preview_says_the_lines_a_task_is_and_runs_none_of_them() {
         .post("/tasks/preview", link_web())
         .is(200)
         .answers(json!({
-            "lines": ["flayer -W /home/you/Projects link /home/you/Projects/web"],
+            "lines": ["mindweaver -W /home/you/Projects link /home/you/Projects/web"],
             "confirm": [],
         }));
     assert_eq!(entries(&served.get("/projects")), ["api"]);
@@ -39,11 +39,11 @@ fn linking_a_folder_runs_the_line_its_preview_said() {
     let served = scenario.serve("~/Projects");
 
     served.post("/tasks", link_web()).is(200).answers(json!({
-        "lines": ["flayer -W /home/you/Projects link /home/you/Projects/web"],
+        "lines": ["mindweaver -W /home/you/Projects link /home/you/Projects/web"],
         "outcome": {
             "ok": true,
             "runs": [{
-                "command": "flayer -W /home/you/Projects link /home/you/Projects/web",
+                "command": "mindweaver -W /home/you/Projects link /home/you/Projects/web",
                 "error": null,
                 "ok": true,
                 "stderr": [],
@@ -63,11 +63,11 @@ fn installing_a_skill_writes_a_copy_where_each_of_the_projects_agents_reads() {
         .post("/tasks", install_review_into_web())
         .is(200)
         .answers(json!({
-            "lines": ["flayer -W /home/you/Projects install -p /home/you/Projects/web skill:review"],
+            "lines": ["mindweaver -W /home/you/Projects install -p /home/you/Projects/web skill:review"],
             "outcome": {
                 "ok": true,
                 "runs": [{
-                    "command": "flayer -W /home/you/Projects install -p /home/you/Projects/web skill:review",
+                    "command": "mindweaver -W /home/you/Projects install -p /home/you/Projects/web skill:review",
                     "error": null,
                     "ok": true,
                     "stderr": [],
@@ -93,7 +93,7 @@ fn installing_a_skill_writes_a_copy_where_each_of_the_projects_agents_reads() {
 #[test]
 fn a_preview_says_which_of_its_lines_take_something_away() {
     let scenario = linking(&["api"]);
-    scenario.given("~/Projects", "flayer install -p api review");
+    scenario.given("~/Projects", "mindweaver install -p api review");
     let served = scenario.serve("~/Projects");
 
     served
@@ -103,11 +103,11 @@ fn a_preview_says_which_of_its_lines_take_something_away() {
         )
         .is(200)
         .answers(json!({
-            "lines": ["flayer -W /home/you/Projects uninstall -p /home/you/Projects/api skill:review"],
+            "lines": ["mindweaver -W /home/you/Projects uninstall -p /home/you/Projects/api skill:review"],
             "confirm": [{
                 "caution": "uninstalls",
                 "line": 0,
-                "message": "takes copies Mindflayer installed out of projects",
+                "message": "takes copies Mindweaver installed out of projects",
             }],
         }));
     assert_eq!(
@@ -128,16 +128,16 @@ fn a_run_the_command_refuses_is_still_answered_with_its_error_and_code() {
         )
         .is(200)
         .answers(json!({
-            "lines": ["flayer -W /home/you/Projects install -p /home/you/Projects/api skill:deploy"],
+            "lines": ["mindweaver -W /home/you/Projects install -p /home/you/Projects/api skill:deploy"],
             "outcome": {
                 "ok": false,
                 "runs": [{
-                    "command": "flayer -W /home/you/Projects install -p /home/you/Projects/api skill:deploy",
+                    "command": "mindweaver -W /home/you/Projects install -p /home/you/Projects/api skill:deploy",
                     "error": {
                         "code": "not_offered",
                         "message": "nothing called `deploy` can be installed: gather it, load a \
-                                    workspace that has it with `flayer load`, or add it to the \
-                                    workspace with `flayer add`",
+                                    workspace that has it with `mindweaver load`, or add it to the \
+                                    workspace with `mindweaver add`",
                     },
                     "ok": false,
                     "stderr": [],
@@ -153,12 +153,12 @@ fn updating_every_project_writes_what_is_outdated_and_says_what_it_left_with_its
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style 'How every repo here writes commits'",
+            "mindweaver add skill commit-style 'How every repo here writes commits'",
         )
-        .given("~/Projects", "flayer install -p api commit-style")
-        .given("~/Projects", "flayer install -p web review")
+        .given("~/Projects", "mindweaver install -p api commit-style")
+        .given("~/Projects", "mindweaver install -p web review")
         .file(
-            "~/Projects/.mindflayer/library/skills/commit-style/SKILL.md",
+            "~/Projects/.mindweaver/library/skills/commit-style/SKILL.md",
             &crate::added("commit-style", "How every repo here writes commits, now"),
         )
         .file(
@@ -175,11 +175,11 @@ fn updating_every_project_writes_what_is_outdated_and_says_what_it_left_with_its
         )
         .is(200)
         .answers(json!({
-            "lines": ["flayer -W /home/you/Projects update --all --yes"],
+            "lines": ["mindweaver -W /home/you/Projects update --all --yes"],
             "outcome": {
                 "ok": false,
                 "runs": [{
-                    "command": "flayer -W /home/you/Projects update --all --yes",
+                    "command": "mindweaver -W /home/you/Projects update --all --yes",
                     "error": null,
                     "ok": false,
                     "stderr": [{
@@ -208,9 +208,9 @@ fn a_plan_applied_is_one_task_running_every_line_it_amounts_to() {
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style 'How every repo here writes commits'",
+            "mindweaver add skill commit-style 'How every repo here writes commits'",
         )
-        .given("~/Projects", "flayer install -p api commit-style");
+        .given("~/Projects", "mindweaver install -p api commit-style");
     let served = scenario.serve("~/Projects");
 
     // The tasks `/plan` answered for ticking review in api and unticking
@@ -226,21 +226,21 @@ fn a_plan_applied_is_one_task_running_every_line_it_amounts_to() {
         .is(200)
         .answers(json!({
             "lines": [
-                "flayer -W /home/you/Projects install -p /home/you/Projects/api --from workspace skill:review",
-                "flayer -W /home/you/Projects uninstall -p /home/you/Projects/api skill:commit-style",
+                "mindweaver -W /home/you/Projects install -p /home/you/Projects/api --from workspace skill:review",
+                "mindweaver -W /home/you/Projects uninstall -p /home/you/Projects/api skill:commit-style",
             ],
             "outcome": {
                 "ok": true,
                 "runs": [
                     {
-                        "command": "flayer -W /home/you/Projects install -p /home/you/Projects/api --from workspace skill:review",
+                        "command": "mindweaver -W /home/you/Projects install -p /home/you/Projects/api --from workspace skill:review",
                         "error": null,
                         "ok": true,
                         "stderr": [],
                         "stdout": "installed review into api, from workspace\n",
                     },
                     {
-                        "command": "flayer -W /home/you/Projects uninstall -p /home/you/Projects/api skill:commit-style",
+                        "command": "mindweaver -W /home/you/Projects uninstall -p /home/you/Projects/api skill:commit-style",
                         "error": null,
                         "ok": true,
                         "stderr": [],
@@ -273,7 +273,7 @@ fn folders_marked_to_be_made_projects_and_linked_are_one_line_each() {
         .answers(json!({
             "lines": [
                 "mind -W /home/you/Projects -C /home/you/Projects/site init",
-                "flayer -W /home/you/Projects link /home/you/Projects/site",
+                "mindweaver -W /home/you/Projects link /home/you/Projects/site",
             ],
             "outcome": {
                 "ok": true,
@@ -286,7 +286,7 @@ fn folders_marked_to_be_made_projects_and_linked_are_one_line_each() {
                         "stdout": "initialized mind project `site` in /home/you/Projects/site/.mind\n",
                     },
                     {
-                        "command": "flayer -W /home/you/Projects link /home/you/Projects/site",
+                        "command": "mindweaver -W /home/you/Projects link /home/you/Projects/site",
                         "error": null,
                         "ok": true,
                         "stderr": [],
@@ -301,7 +301,7 @@ fn folders_marked_to_be_made_projects_and_linked_are_one_line_each() {
 #[test]
 fn unticking_an_agent_of_a_project_takes_the_copies_only_it_read_along() {
     let scenario = linking(&["api"]);
-    scenario.given("~/Projects", "flayer install -p api review");
+    scenario.given("~/Projects", "mindweaver install -p api review");
     let served = scenario.serve("~/Projects");
 
     // What a project's settings form sends with codex and opencode unticked.
@@ -359,8 +359,10 @@ fn the_transcript_holds_each_run_in_order_and_no_preview_or_read() {
     assert_eq!(
         lines,
         [
-            json!(["flayer -W /home/you/Projects link /home/you/Projects/web"]),
-            json!(["flayer -W /home/you/Projects install -p /home/you/Projects/web skill:review"]),
+            json!(["mindweaver -W /home/you/Projects link /home/you/Projects/web"]),
+            json!([
+                "mindweaver -W /home/you/Projects install -p /home/you/Projects/web skill:review"
+            ]),
         ]
     );
 }
@@ -368,11 +370,11 @@ fn the_transcript_holds_each_run_in_order_and_no_preview_or_read() {
 #[test]
 fn what_nothing_offers_any_more_is_taken_out_of_every_project_in_one_task() {
     let scenario = linking(&["api", "web"]);
-    scenario.given("~/Projects", "flayer install --all-projects review");
+    scenario.given("~/Projects", "mindweaver install --all-projects review");
     // Out of the library alone: it warns of what it left, which a given
     // step may not.
     scenario
-        .run("~/Projects", "flayer remove review --yes")
+        .run("~/Projects", "mindweaver remove review --yes")
         .exits(1);
     let served = scenario.serve("~/Projects");
 
@@ -383,11 +385,11 @@ fn what_nothing_offers_any_more_is_taken_out_of_every_project_in_one_task() {
         )
         .is(200)
         .answers(json!({
-            "lines": ["flayer -W /home/you/Projects uninstall --all-projects --orphaned"],
+            "lines": ["mindweaver -W /home/you/Projects uninstall --all-projects --orphaned"],
             "outcome": {
                 "ok": true,
                 "runs": [{
-                    "command": "flayer -W /home/you/Projects uninstall --all-projects --orphaned",
+                    "command": "mindweaver -W /home/you/Projects uninstall --all-projects --orphaned",
                     "error": null,
                     "ok": true,
                     "stderr": [],
@@ -413,7 +415,7 @@ fn a_read_the_panel_runs_as_a_line_is_answered_with_what_the_command_printed() {
         .answers_at(
             "/outcome/runs/0",
             json!({
-                "command": "flayer -W /home/you/Projects validate",
+                "command": "mindweaver -W /home/you/Projects validate",
                 "error": null,
                 "ok": true,
                 "stderr": [],
@@ -441,8 +443,8 @@ fn the_tasks_that_only_read_are_the_lines_of_the_commands_that_list() {
     assert_eq!(
         lines,
         [
-            json!(["flayer -W /home/you/Projects gather list"]),
-            json!(["flayer -W /home/you/Projects workspaces"]),
+            json!(["mindweaver -W /home/you/Projects gather list"]),
+            json!(["mindweaver -W /home/you/Projects workspaces"]),
             // Read everything again: no line, since nothing runs.
             json!([]),
         ]

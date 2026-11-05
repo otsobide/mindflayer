@@ -535,6 +535,12 @@ fn a_project_a_mind_toml_marks_is_read_only_from_the_folder_it_names() {
     for kind in Kind::ALL {
         let folders = stood(&project, kind);
 
+        // A kind added since a `mind.toml` was written is kept nowhere in
+        // one, and is read from no folder.
+        if Directories::default_for(kind).is_none() {
+            assert_eq!(folders, [], "{kind:?}");
+            continue;
+        }
         assert_eq!(folders.len(), 1, "{kind:?}: {folders:?}");
         let (_, agents, authored, shared) = &folders[0];
         assert!(
@@ -798,11 +804,11 @@ fn each_discovery_failure_of_its_own_gives_its_own_code() {
 #[test]
 fn a_ledger_that_cannot_be_read_is_said_with_the_ledger_s_code_and_file() {
     let failure = DiscoveryFailure::Ledger(LedgerError::Unmade {
-        path: PathBuf::from("/w/.mindflayer/mindflayer.db"),
+        path: PathBuf::from("/w/.mindweaver/mindweaver.db"),
     });
 
     assert_eq!(failure.code(), "ledger_unmade");
-    assert_eq!(failure.path(), Path::new("/w/.mindflayer/mindflayer.db"));
+    assert_eq!(failure.path(), Path::new("/w/.mindweaver/mindweaver.db"));
     assert!(failure.is_unreadable());
 }
 

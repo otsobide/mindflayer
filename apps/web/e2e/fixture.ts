@@ -1,7 +1,7 @@
 /*
  * The workspace the panel is served over, built as somebody would build it:
  * a command at a time, with the binaries under test, so what the panel draws
- * is what those commands made and `flayer list --json` says of it. Nothing is
+ * is what those commands made and `mindweaver list --json` says of it. Nothing is
  * written by hand but the folders `mind init` is run in, as `mkdir` would,
  * and, outside the workspace, the text an `--editor` copies in, as an editor
  * would save it.
@@ -10,7 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { succeed, type Places } from './environment.ts'
 
-/** The workspace's own, each as `flayer add` takes it: kind, name, description. */
+/** The workspace's own, each as `mindweaver add` takes it: kind, name, description. */
 export const LIBRARY = [
   ['skill', 'review', 'Read a change before it lands'],
   ['skill', 'lint', 'Tidy the code before a commit'],
@@ -36,20 +36,20 @@ export const PROJECTS = ['api', 'web'] as const
  * that Codex reads it only when started there.
  */
 export function build(at: Places): void {
-  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'mindweaver', at.scratch, ['init', at.workspace], 'none')
   for (const [kind, name, description] of LIBRARY) {
-    succeed(at, 'flayer', at.workspace, ['add', kind, name, description])
+    succeed(at, 'mindweaver', at.workspace, ['add', kind, name, description])
   }
 
   project(at, 'api', ['--agents', 'claude,codex'])
   const api = join(at.workspace, 'api')
   succeed(at, 'mind', api, ['add', 'skill', 'deploy', 'Ship a release'])
   succeed(at, 'mind', api, ['add', 'rule', 'style/comments', 'Comment the why, not the what'])
-  succeed(at, 'flayer', at.workspace, ['install', '-p', 'api', 'skill:review'])
+  succeed(at, 'mindweaver', at.workspace, ['install', '-p', 'api', 'skill:review'])
 
   project(at, 'web', ['--agents', 'claude,opencode', '--shared'])
   for (const name of ['review', 'lint']) {
-    succeed(at, 'flayer', at.workspace, ['install', '-p', 'web', `skill:${name}`])
+    succeed(at, 'mindweaver', at.workspace, ['install', '-p', 'web', `skill:${name}`])
   }
 }
 
@@ -58,7 +58,7 @@ function project(at: Places, name: string, options: string[]): void {
   const folder = join(at.workspace, name)
   mkdirSync(folder)
   succeed(at, 'mind', folder, ['init', ...options])
-  succeed(at, 'flayer', at.workspace, ['link', name])
+  succeed(at, 'mindweaver', at.workspace, ['link', name])
 }
 
 /**
@@ -68,13 +68,13 @@ function project(at: Places, name: string, options: string[]): void {
  * held byte for byte to what the same command leaves in a copy of it.
  */
 export function changeable(at: Places): void {
-  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'mindweaver', at.scratch, ['init', at.workspace], 'none')
   for (const name of ['drafts', 'notes']) {
     const folder = join(at.workspace, name)
     mkdirSync(folder)
     succeed(at, 'mind', folder, ['init'])
   }
-  succeed(at, 'flayer', at.workspace, ['link', 'drafts'])
+  succeed(at, 'mindweaver', at.workspace, ['link', 'drafts'])
 }
 
 /** The skill `assignable`'s loaded workspace offers, and where from as `--from` takes it. */
@@ -96,15 +96,15 @@ export const ASSIGNED = ['alpha', 'beta'] as const
  */
 export function assignable(at: Places): void {
   const team: Places = { ...at, workspace: join(dirname(at.workspace), 'team') }
-  succeed(at, 'flayer', at.scratch, ['init', team.workspace], 'none')
-  succeed(team, 'flayer', team.workspace, ['add', 'skill', OFFERED.name, 'Keep notes as the team does'])
-  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
-  succeed(at, 'flayer', at.workspace, ['load', '../team'])
+  succeed(at, 'mindweaver', at.scratch, ['init', team.workspace], 'none')
+  succeed(team, 'mindweaver', team.workspace, ['add', 'skill', OFFERED.name, 'Keep notes as the team does'])
+  succeed(at, 'mindweaver', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'mindweaver', at.workspace, ['load', '../team'])
   for (const name of ASSIGNED) {
     const folder = join(at.workspace, name)
     mkdirSync(folder)
     succeed(at, 'mind', folder, ['init', '--agents', 'claude,codex'])
-    succeed(at, 'flayer', at.workspace, ['link', name])
+    succeed(at, 'mindweaver', at.workspace, ['link', name])
   }
 }
 
@@ -118,7 +118,7 @@ export const UPDATED = 'lint' as const
  */
 export const UPDATING = ['alpha', 'beta'] as const
 
-/** What `flayer add` writes for the skill `lint`, a line added below. */
+/** What `mindweaver add` writes for the skill `lint`, a line added below. */
 function lint(line: string): string {
   return `---\nname: ${UPDATED}\ndescription: Tidy the code before a commit\n---\n\n# ${UPDATED}\n\n${line}\n`
 }
@@ -152,12 +152,12 @@ export function draft(at: Places, name: string, text: string): string {
  * edited against.
  */
 export function updatable(at: Places): void {
-  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
-  succeed(at, 'flayer', at.workspace, ['add', 'skill', UPDATED, 'Tidy the code before a commit'])
+  succeed(at, 'mindweaver', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'mindweaver', at.workspace, ['add', 'skill', UPDATED, 'Tidy the code before a commit'])
   const [alpha, beta] = UPDATING
   project(at, alpha, ['--agents', 'claude,codex'])
   project(at, beta, ['--agents', 'claude', '--skills', '.claude/skills'])
-  succeed(at, 'flayer', at.workspace, ['install', '-p', alpha, '-p', beta, `skill:${UPDATED}`])
+  succeed(at, 'mindweaver', at.workspace, ['install', '-p', alpha, '-p', beta, `skill:${UPDATED}`])
   const edited = draft(at, 'beta-lint.md', lint('Our own way: lint before every push.'))
   succeed(at, 'mind', join(at.workspace, beta), ['edit', `skill:${UPDATED}`, '--editor', `cp ${edited}`])
 }
@@ -168,11 +168,11 @@ export const AUTHORED = 'review' as const
 /**
  * A workspace for the spec that authors in the library from the panel,
  * which no other spec reads: its library holds the skill `review`, as
- * `flayer add` writes it, and nothing else.
+ * `mindweaver add` writes it, and nothing else.
  */
 export function authorable(at: Places): void {
-  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
-  succeed(at, 'flayer', at.workspace, ['add', 'skill', AUTHORED, 'Read a change before it lands'])
+  succeed(at, 'mindweaver', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'mindweaver', at.workspace, ['add', 'skill', AUTHORED, 'Read a change before it lands'])
 }
 
 /** The workspace `loadable` loads from the panel, by its entry once loaded, and the skill it offers. */
@@ -184,7 +184,7 @@ export const OWN = 'review' as const
 /**
  * A workspace for the spec that loads and unloads from the panel, which no
  * other spec reads, in a home of its own, made the default workspace first,
- * so that each `flayer init` after it remembers the workspace it makes:
+ * so that each `mindweaver init` after it remembers the workspace it makes:
  * `team`, beside the workspace, holding the skill `notes` of its own, then
  * the workspace, holding `review` and linking `alpha`, made by `mind init`
  * for Claude, so the matrix has an offer and a project to draw before
@@ -195,11 +195,11 @@ export const OWN = 'review' as const
  * this machine knows, and this one is held to stay as it was made in turn.
  */
 export function loadable(at: Places): void {
-  succeed(at, 'flayer', at.scratch, ['init', at.home], 'none')
+  succeed(at, 'mindweaver', at.scratch, ['init', at.home], 'none')
   const team: Places = { ...at, workspace: join(dirname(at.workspace), 'team') }
-  succeed(at, 'flayer', at.scratch, ['init', team.workspace], 'none')
-  succeed(team, 'flayer', team.workspace, ['add', 'skill', LOADED.name, LOADED.description])
-  succeed(at, 'flayer', at.scratch, ['init', at.workspace], 'none')
-  succeed(at, 'flayer', at.workspace, ['add', 'skill', OWN, 'Read a change before it lands'])
+  succeed(at, 'mindweaver', at.scratch, ['init', team.workspace], 'none')
+  succeed(team, 'mindweaver', team.workspace, ['add', 'skill', LOADED.name, LOADED.description])
+  succeed(at, 'mindweaver', at.scratch, ['init', at.workspace], 'none')
+  succeed(at, 'mindweaver', at.workspace, ['add', 'skill', OWN, 'Read a change before it lands'])
   project(at, 'alpha', ['--agents', 'claude'])
 }

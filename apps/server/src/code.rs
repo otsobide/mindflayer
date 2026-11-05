@@ -11,7 +11,7 @@
 //! as every refusal of a backend's does, and every error core gives.
 //!
 //! The server's codes are its own, written here once. Core's `codes!`
-//! would be the natural tool, but the server depends on no mindflayer crate
+//! would be the natural tool, but the server depends on no mindweaver crate
 //! (`tests/crate_test.rs`), so it mirrors its rules instead:
 //!
 //! - **One code per condition**, named for it, in snake_case, in as few
@@ -105,9 +105,12 @@ pub enum Condition {
     /// same-origin`: from a page on another port of loopback, or from a
     /// script, which sends the token as Bearer instead.
     SameOriginRequired,
-    /// A change sent with the cookie without `X-Mindflayer: 1`, which the
-    /// panel's own requests carry.
-    XMindflayerRequired,
+    /// A change sent with the cookie without `X-Mindweaver: 1`
+    /// ([`PANEL_HEADER`](crate::guard::PANEL_HEADER)), which the panel's own
+    /// requests carry. Its code spells the header as Mindflayer named it,
+    /// `X-Mindflayer`, as it was given, since a code once given is never
+    /// renamed (D-26).
+    PanelHeaderRequired,
     /// A body not sent as `application/json`: refused by the guard on a
     /// change by cookie and by the JSON extractor alike, one condition
     /// whichever finds it.
@@ -159,7 +162,7 @@ codes!(Condition {
     Self::UnknownHost => (FORBIDDEN, "unknown_host"),
     Self::ForeignOrigin => (FORBIDDEN, "foreign_origin"),
     Self::SameOriginRequired => (FORBIDDEN, "same_origin_required"),
-    Self::XMindflayerRequired => (FORBIDDEN, "x_mindflayer_required"),
+    Self::PanelHeaderRequired => (FORBIDDEN, "x_mindflayer_required"),
     Self::JsonRequired => (UNSUPPORTED_MEDIA_TYPE, "json_required"),
     Self::MalformedJson => (BAD_REQUEST, "malformed_json"),
     Self::InvalidBody => (UNPROCESSABLE_ENTITY, "invalid_body"),

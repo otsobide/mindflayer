@@ -1,4 +1,4 @@
-//! `flayer ui` and `mind ui`: the control panel, served from this binary
+//! `mindweaver ui` and `mind ui`: the control panel, served from this binary
 //! over the CLI's backend until Ctrl-C (D-17).
 //!
 //! A command as every other is, reached from both binaries through the one
@@ -15,7 +15,7 @@ use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::task::Poll;
 
-use mindflayer_server::{Listening, Server};
+use mindweaver_server::{Listening, Server};
 use serde::Serialize;
 use tokio::sync::oneshot;
 
@@ -38,7 +38,7 @@ const DEV_PORT: u16 = 7878;
 const TOKEN_FILE_VERSION: u32 = 1;
 
 /// Serve the panel over the workspace `lookup` resolves from `directory`
-/// until Ctrl-C: what `flayer ui` and `mind ui` do.
+/// until Ctrl-C: what `mindweaver ui` and `mind ui` do.
 ///
 /// The workspace is resolved once, here, before anything listens, from the
 /// `-C`, `--home`, `-W` and agent homes this command line was given

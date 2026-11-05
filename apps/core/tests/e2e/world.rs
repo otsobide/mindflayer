@@ -7,10 +7,10 @@
 //! core answers with read back as `/home`, read as the reference's
 //! (`docs/reference.md`).
 //!
-//! What a person or a git server makes is made directly. What Mindflayer
+//! What a person or a git server makes is made directly. What Mindweaver
 //! keeps is made only by core's own public calls, each the one a command
-//! makes for that step (`mind init` is [`MindProject::init_asked`], `flayer
-//! link` is [`FlayerWorkspace::link`], an install is [`assign::install`]),
+//! makes for that step (`mind init` is [`MindProject::init_asked`], `mindweaver
+//! link` is [`WeaverWorkspace::link`], an install is [`assign::install`]),
 //! with what a front end hands them: the home, the agents' own folders under
 //! it, and no workspace named or activated unless a test is about that. Each
 //! such step is held to go cleanly, as the CLI suite's `given` holds a
@@ -20,15 +20,16 @@ use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use mindflayer_core::assign;
-use mindflayer_core::install::{Edits, Installed};
-use mindflayer_core::known;
-use mindflayer_core::lifecycle;
-use mindflayer_core::mother::GitRepositoryMother;
-use mindflayer_core::resolve::{self, Inputs, Intent, ResolveError, Resolved};
-use mindflayer_core::view::Snapshot;
-use mindflayer_core::{
-    Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MindProject, Reference, Share,
+use mindweaver_core::assign;
+use mindweaver_core::create::Start;
+use mindweaver_core::install::{Edits, Installed};
+use mindweaver_core::known;
+use mindweaver_core::lifecycle;
+use mindweaver_core::mother::GitRepositoryMother;
+use mindweaver_core::resolve::{self, Inputs, Intent, ResolveError, Resolved};
+use mindweaver_core::view::Snapshot;
+use mindweaver_core::{
+    Agent, AgentHomes, Directories, Kind, MindProject, Reference, Share, WeaverWorkspace,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -41,7 +42,7 @@ const ROOT: &str = "/home";
 /// The home's name under the root: `/home/you`, as in the reference.
 const YOU: &str = "you";
 
-/// A world of folders, repositories and Mindflayer's own files, built step by
+/// A world of folders, repositories and Mindweaver's own files, built step by
 /// step for one test and gone when it ends.
 pub struct World {
     /// Kept for its lifetime: dropping it takes the world away.
@@ -65,7 +66,7 @@ impl World {
 
     /// A workspace, `~/Projects`, linking each of `projects`: a git
     /// repository in it made a project as `mind init` makes one, then the
-    /// workspace made and each linked as `flayer init` and `flayer link` do.
+    /// workspace made and each linked as `mindweaver init` and `mindweaver link` do.
     pub fn projects(projects: &[&str]) -> Self {
         let world = Self::empty();
         for project in projects {
@@ -102,7 +103,7 @@ impl World {
     }
 
     // ---------------------------------------------------------------------
-    // The world outside Mindflayer: what a person or a git server made.
+    // The world outside Mindweaver: what a person or a git server made.
     // ---------------------------------------------------------------------
 
     /// A folder at `at`, and the folders above it.
@@ -201,8 +202,8 @@ impl World {
     // ---------------------------------------------------------------------
 
     /// The workspace at `at`, opened.
-    pub fn workspace(&self, at: &str) -> FlayerWorkspace {
-        FlayerWorkspace::open(self.at(at)).unwrap_or_else(|error| panic!("open {at}: {error}"))
+    pub fn workspace(&self, at: &str) -> WeaverWorkspace {
+        WeaverWorkspace::open(self.at(at)).unwrap_or_else(|error| panic!("open {at}: {error}"))
     }
 
     /// The project at `at`, opened.
@@ -259,15 +260,15 @@ impl World {
     }
 
     // ---------------------------------------------------------------------
-    // Mindflayer's own state, through core as the commands reach it.
+    // Mindweaver's own state, through core as the commands reach it.
     // ---------------------------------------------------------------------
 
-    /// `flayer init` in `at`: the workspace made, and remembered by the
+    /// `mindweaver init` in `at`: the workspace made, and remembered by the
     /// default one in the home when that is made already, which it never
     /// makes ([`known::remember`]).
     pub fn init_workspace(&self, at: &str) -> &Self {
-        let (workspace, _) = FlayerWorkspace::init(self.at(at))
-            .unwrap_or_else(|error| panic!("flayer init in {at}: {error}"));
+        let (workspace, _) = WeaverWorkspace::init(self.at(at))
+            .unwrap_or_else(|error| panic!("mindweaver init in {at}: {error}"));
         known::remember(Some(&self.home()), &workspace)
             .unwrap_or_else(|error| panic!("remember {at}: {error}"));
         self
@@ -286,7 +287,7 @@ impl World {
         self
     }
 
-    /// A project at `at` as a Mindflayer from before settings made one,
+    /// A project at `at` as a Mindweaver from before settings made one,
     /// marked by a `.mind/mind.toml` naming its folders and nothing else,
     /// which core's `MindProject::init` still writes for such a test.
     pub fn older_project(&self, at: &str) -> &Self {
@@ -296,7 +297,7 @@ impl World {
         self
     }
 
-    /// `flayer link` of the project at `project`, in the workspace at
+    /// `mindweaver link` of the project at `project`, in the workspace at
     /// `workspace`.
     pub fn link(&self, workspace: &str, project: &str) -> &Self {
         let mut opened = self.workspace(workspace);
@@ -306,7 +307,7 @@ impl World {
         self
     }
 
-    /// `flayer add`, or `mind add` in a project the workspace links: `kind`
+    /// `mindweaver add`, or `mind add` in a project the workspace links: `kind`
     /// `name`, said to do `description`, made by `holder`, the workspace at
     /// `workspace` itself for its library.
     pub fn add(
@@ -323,12 +324,19 @@ impl World {
         } else {
             self.project(holder)
         };
-        lifecycle::add(Some(&opened), &holding, kind, name, description, None)
-            .unwrap_or_else(|error| panic!("add {name} to {holder}: {error}"));
+        lifecycle::add(
+            Some(&opened),
+            &holding,
+            kind,
+            name,
+            description,
+            Start::Scratch,
+        )
+        .unwrap_or_else(|error| panic!("add {name} to {holder}: {error}"));
         self
     }
 
-    /// `flayer install -p <project> <typed>` in the workspace at
+    /// `mindweaver install -p <project> <typed>` in the workspace at
     /// `workspace`, held to have written every copy with nothing left out.
     pub fn install(&self, workspace: &str, project: &str, typed: &str) -> &Self {
         let opened = self.workspace(workspace);

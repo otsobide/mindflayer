@@ -2,9 +2,10 @@
 //! (`lifecycle::add`, `rename`, `remove`, `replace_contents`), each handed
 //! its workspace, and what core says of a draft before any is written.
 
-use mindflayer_core::draft;
-use mindflayer_core::lifecycle;
-use mindflayer_core::{Kind, Reference};
+use mindweaver_core::create::Start;
+use mindweaver_core::draft;
+use mindweaver_core::lifecycle;
+use mindweaver_core::{Kind, Reference};
 use serde_json::json;
 
 use crate::World;
@@ -45,12 +46,12 @@ fn a_skill_added_to_the_library_is_written_with_its_front_matter() {
         Kind::Skill,
         "review",
         REVIEW,
-        None,
+        Start::Scratch,
     )
     .expect("add review");
 
     assert_eq!(
-        world.read("~/Projects/.mindflayer/library/skills/review/SKILL.md"),
+        world.read("~/Projects/.mindweaver/library/skills/review/SKILL.md"),
         format!("---\nname: review\ndescription: {REVIEW}\n---\n\n# review\n")
     );
 }
@@ -66,7 +67,7 @@ fn a_rule_added_to_a_project_is_written_where_the_project_keeps_its_rules() {
         Kind::Rule,
         "style",
         "How code here reads",
-        None,
+        Start::Scratch,
     )
     .expect("add style");
 
@@ -87,7 +88,7 @@ fn a_name_no_agent_could_load_is_refused_before_anything_is_written() {
         Kind::Skill,
         "Review",
         REVIEW,
-        None,
+        Start::Scratch,
     )
     .expect_err("an unfit name");
 
@@ -97,7 +98,7 @@ fn a_name_no_agent_could_load_is_refused_before_anything_is_written() {
         "`Review` is not usable as a name: it has to be lowercase letters and digits, \
          joined by single hyphens"
     );
-    assert!(!world.exists("~/Projects/.mindflayer/library/skills/Review"));
+    assert!(!world.exists("~/Projects/.mindweaver/library/skills/Review"));
 }
 
 #[test]
@@ -125,7 +126,7 @@ fn a_draft_is_judged_as_the_add_would_refuse_it_with_nothing_written() {
             },
         })
     );
-    assert!(!world.exists("~/Projects/.mindflayer/library/skills/Review"));
+    assert!(!world.exists("~/Projects/.mindweaver/library/skills/Review"));
 }
 
 #[test]
@@ -136,9 +137,9 @@ fn renaming_a_skill_moves_its_folder_and_rewrites_only_its_name_line() {
     lifecycle::rename(Some(&workspace), &workspace.own(), &review(&world), "ship")
         .expect("rename review");
 
-    assert!(!world.exists("~/Projects/.mindflayer/library/skills/review"));
+    assert!(!world.exists("~/Projects/.mindweaver/library/skills/review"));
     assert_eq!(
-        world.read("~/Projects/.mindflayer/library/skills/ship/SKILL.md"),
+        world.read("~/Projects/.mindweaver/library/skills/ship/SKILL.md"),
         format!("---\nname: ship\ndescription: {REVIEW}\n---\n\n# review\n")
     );
 }
@@ -150,7 +151,7 @@ fn removing_a_skill_takes_its_folder_away() {
 
     lifecycle::remove(Some(&workspace), &workspace.own(), &review(&world)).expect("remove review");
 
-    assert!(!world.exists("~/Projects/.mindflayer/library/skills/review"));
+    assert!(!world.exists("~/Projects/.mindweaver/library/skills/review"));
 }
 
 #[test]
@@ -171,7 +172,7 @@ fn contents_given_whole_replace_the_file_read_with_the_hash_named() {
 
     assert!(edited.changed);
     assert_eq!(
-        world.read("~/Projects/.mindflayer/library/skills/review/SKILL.md"),
+        world.read("~/Projects/.mindweaver/library/skills/review/SKILL.md"),
         text
     );
 }
@@ -182,7 +183,7 @@ fn contents_given_over_a_change_made_since_are_refused_and_the_change_kept() {
     // Changed in an editor after the front end read it.
     let changed = format!("---\nname: review\ndescription: {REVIEW}\n---\n\n# review\n\nMine.\n");
     world.file(
-        "~/Projects/.mindflayer/library/skills/review/SKILL.md",
+        "~/Projects/.mindweaver/library/skills/review/SKILL.md",
         &changed,
     );
     let workspace = world.workspace("~/Projects");
@@ -198,7 +199,7 @@ fn contents_given_over_a_change_made_since_are_refused_and_the_change_kept() {
 
     assert_eq!(refused.code(), "edit_stale");
     assert_eq!(
-        world.read("~/Projects/.mindflayer/library/skills/review/SKILL.md"),
+        world.read("~/Projects/.mindweaver/library/skills/review/SKILL.md"),
         changed
     );
 }
@@ -219,7 +220,7 @@ fn contents_naming_another_skill_are_refused_with_a_pointer_to_rename() {
 
     assert_eq!(refused.code(), "edit_name_changed");
     assert_eq!(
-        world.read("~/Projects/.mindflayer/library/skills/review/SKILL.md"),
+        world.read("~/Projects/.mindweaver/library/skills/review/SKILL.md"),
         format!("---\nname: review\ndescription: {REVIEW}\n---\n\n# review\n")
     );
 }

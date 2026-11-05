@@ -3,7 +3,7 @@
 //! activated, the folders up the tree and the default in the home, and the
 //! rule that chose it.
 
-use mindflayer_core::resolve::{Intent, Reason};
+use mindweaver_core::resolve::{Intent, Reason};
 use serde_json::json;
 
 use crate::{at, World};
@@ -85,7 +85,7 @@ fn reading_where_no_workspace_is_reads_the_default_one_without_making_it() {
     assert_eq!(resolved.reason, Reason::Home);
     assert_eq!(world.spelled(resolved.workspace.root()), "/home/you");
     assert!(!resolved.workspace.is_made());
-    assert!(!world.exists("~/.mindflayer"));
+    assert!(!world.exists("~/.mindweaver"));
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn a_change_where_no_workspace_is_makes_the_default_one_in_the_home() {
 
     assert_eq!(resolved.reason, Reason::Home);
     assert!(resolved.workspace.is_made());
-    assert!(world.exists("~/.mindflayer/flayer.toml"));
+    assert!(world.exists("~/.mindweaver/weaver.toml"));
 }
 
 #[test]
@@ -114,10 +114,10 @@ fn a_named_folder_that_is_no_workspace_is_refused_and_never_made() {
     assert_eq!(refused.code(), "not_a_workspace");
     assert_eq!(
         world.said(&refused),
-        "the named workspace cannot be used: /home/you/Archive: not a flayer workspace \
-         (no .mindflayer/flayer.toml)"
+        "the named workspace cannot be used: /home/you/Archive: not a weaver workspace \
+         (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)"
     );
-    assert!(!world.exists("~/Archive/.mindflayer"));
+    assert!(!world.exists("~/Archive/.mindweaver"));
 }
 
 #[test]
@@ -132,8 +132,8 @@ fn an_activated_folder_that_is_no_workspace_is_refused_rather_than_walked_past()
     assert_eq!(refused.code(), "not_a_workspace");
     assert_eq!(
         world.said(&refused),
-        "the activated workspace cannot be used: /home/you/Archive: not a flayer workspace \
-         (no .mindflayer/flayer.toml)"
+        "the activated workspace cannot be used: /home/you/Archive: not a weaver workspace \
+         (no .mindweaver/weaver.toml or .mindflayer/flayer.toml)"
     );
 }
 
@@ -170,7 +170,7 @@ fn a_loaded_workspaces_own_are_offered_until_it_is_unloaded() {
     world.folder("~/src/team").init_workspace("~/src/team").add(
         "~/src/team",
         "~/src/team",
-        mindflayer_core::Kind::Skill,
+        mindweaver_core::Kind::Skill,
         "deploy",
         "Ship the service to staging",
     );

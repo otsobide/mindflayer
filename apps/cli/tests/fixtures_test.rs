@@ -22,10 +22,10 @@
 mod common;
 
 use common::*;
-use mindflayer_cli::backend::{PanelBackend, Query};
-use mindflayer_core::ledger::{Action, Outcome as Logged};
-use mindflayer_core::SourceKind;
-use mindflayer_server::Backend;
+use mindweaver_cli::backend::{PanelBackend, Query};
+use mindweaver_core::ledger::{Action, Outcome as Logged};
+use mindweaver_core::SourceKind;
+use mindweaver_server::Backend;
 use serde_json::{json, Value};
 
 /// Where the fixtures go: the panel's tests, beside this crate, whichever
@@ -94,8 +94,9 @@ scripts/diff.sh main
 /// shows, built as somebody would build it, a command at a time:
 ///
 /// - its library holds the skills `review`, with a script and a reference
-///   beside its `SKILL.md`, and `lint`, and the rules `git/commits` and
-///   `style/comments`;
+///   beside its `SKILL.md`, and `lint`, the rules `git/commits` and
+///   `style/comments`, and the MCP server `github`, a program started with
+///   a secret its environment is given;
 /// - `api`, for Claude and Codex and local, authors `deploy`, and received
 ///   `review` and `git/commits`, as they were written: nothing to do;
 /// - `web`, for Claude and OpenCode and shared, received `lint`, changed in
@@ -110,15 +111,35 @@ scripts/diff.sh main
 fn workspace(home: &Path) -> PathBuf {
     let root = home.join("Projects");
     fs::create_dir_all(&root).unwrap();
-    flayer(&root, &["init"]).unwrap();
+    weaver(&root, &["init"]).unwrap();
     for (kind, name, description) in [
         ("skill", "review", "Read a change before it lands"),
         ("skill", "lint", "Tidy the code before a commit"),
         ("rule", "git/commits", "Write commit messages that say why"),
         ("rule", "style/comments", "Comment the why, not the what"),
     ] {
-        flayer(&root, &["add", kind, name, description]).unwrap();
+        weaver(&root, &["add", kind, name, description]).unwrap();
     }
+    // The snapshot carries it as it carries every kind, with nothing in the
+    // panel to learn it.
+    weaver(
+        &root,
+        &[
+            "add",
+            "mcp",
+            "github",
+            "GitHub's issues, pull requests and code",
+            "--command",
+            "npx",
+            "--arg",
+            "-y",
+            "--arg",
+            "@modelcontextprotocol/server-github",
+            "--secret-env",
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+        ],
+    )
+    .unwrap();
     // Before anything installs it, so every copy is of this one.
     write_files(
         &own_directory_for(&root, Kind::Skill).join("review"),
@@ -171,8 +192,8 @@ fn workspace(home: &Path) -> PathBuf {
 
     let team = home.join("team");
     fs::create_dir_all(&team).unwrap();
-    flayer(&team, &["init"]).unwrap();
-    flayer(&root, &["load", "../team"]).unwrap();
+    weaver(&team, &["init"]).unwrap();
+    weaver(&root, &["load", "../team"]).unwrap();
     fs::remove_dir_all(&team).unwrap();
 
     shelve(&root);
@@ -202,26 +223,26 @@ fn assigning(home: &Path) -> PathBuf {
     let team = home.join("team");
     for workspace in [&root, &team] {
         fs::create_dir_all(workspace).unwrap();
-        flayer(workspace, &["init"]).unwrap();
+        weaver(workspace, &["init"]).unwrap();
     }
     for (kind, name, description) in [
         ("skill", "deploy", "Ship the service"),
         ("skill", "review", "Read a change before it lands"),
         ("rule", "git/commits", "Write commit messages that say why"),
     ] {
-        flayer(&root, &["add", kind, name, description]).unwrap();
+        weaver(&root, &["add", kind, name, description]).unwrap();
     }
     for (name, description) in [
         ("deploy", "Ship it the team's way"),
         ("notes", "Keep notes as the team does"),
     ] {
-        flayer(&team, &["add", "skill", name, description]).unwrap();
+        weaver(&team, &["add", "skill", name, description]).unwrap();
     }
-    flayer(&root, &["load", "../team"]).unwrap();
+    weaver(&root, &["load", "../team"]).unwrap();
     shelve(&root);
 
     project(&root, "api", &["--agents", "claude,codex"]);
-    let installed = flayer(
+    let installed = weaver(
         &root,
         &[
             "install",
@@ -271,18 +292,18 @@ fn assigning(home: &Path) -> PathBuf {
 }
 
 /// `home`, beside what [`assigning`] built in it, made the default
-/// workspace, and what it knows, each remembered by a `flayer init` run on
+/// workspace, and what it knows, each remembered by a `mindweaver init` run on
 /// it, which leaves one made already as it was: `Assign`, `team`, which
 /// `Assign` loads, `kit`, a workspace of its own nothing loads, and `old`,
 /// gone since. So the panel's page of loads has one of each a known
 /// workspace can be: this one, one it loads, one it could, the default
 /// among those, and one that would not open.
 fn acquainted(home: &Path) {
-    flayer_at_home(home, home, &["init"]).unwrap();
+    weaver_at_home(home, home, &["init"]).unwrap();
     for name in ["Assign", "team", "kit", "old"] {
         let root = home.join(name);
         fs::create_dir_all(&root).unwrap();
-        flayer_at_home(&root, home, &["init"]).unwrap();
+        weaver_at_home(&root, home, &["init"]).unwrap();
     }
     fs::remove_dir_all(home.join("old")).unwrap();
 }
@@ -315,7 +336,7 @@ fn at_home(home: &Path) -> Lookup {
 fn updating(home: &Path) -> PathBuf {
     let root = home.join("Updating");
     fs::create_dir_all(&root).unwrap();
-    flayer(&root, &["init"]).unwrap();
+    weaver(&root, &["init"]).unwrap();
     for (kind, name, description) in [
         ("skill", "lint", "Tidy the code before a commit"),
         ("skill", "review", "Read a change before it lands"),
@@ -323,7 +344,7 @@ fn updating(home: &Path) -> PathBuf {
         ("skill", "release", "Cut a release the way the team does"),
         ("rule", "git/commits", "Write commit messages that say why"),
     ] {
-        flayer(&root, &["add", kind, name, description]).unwrap();
+        weaver(&root, &["add", kind, name, description]).unwrap();
     }
 
     project(&root, "api", &["--agents", "claude,codex"]);
@@ -361,10 +382,10 @@ fn updating(home: &Path) -> PathBuf {
     );
     fs::remove_dir_all(root.join("api/.agents/skills/review")).unwrap();
     // The library's copy alone: what was installed from it is left behind.
-    let removed = flayer(&root, &["remove", "--yes", "skill:format"]).unwrap();
+    let removed = weaver(&root, &["remove", "--yes", "skill:format"]).unwrap();
     assert!(removed.stdout.starts_with("removed"), "{removed:?}");
     // Everywhere, as the panel removes one: the edited copy is left.
-    let removed = flayer(&root, &["remove", "--everywhere", "--yes", "skill:release"]).unwrap();
+    let removed = weaver(&root, &["remove", "--everywhere", "--yes", "skill:release"]).unwrap();
     assert!(
         removed.ok
             && removed
@@ -389,13 +410,13 @@ fn project(root: &Path, name: &str, options: &[&str]) {
     let mut init = vec!["init"];
     init.extend_from_slice(options);
     mind(&project, &init).unwrap();
-    flayer(root, &["link", name]).unwrap();
+    weaver(root, &["link", name]).unwrap();
 }
 
 /// Each of `names`, the workspace's own, into the project `entry`.
 fn install(root: &Path, entry: &str, names: &[&str]) {
     for name in names {
-        let installed = flayer(root, &["install", "-p", entry, name]).unwrap();
+        let installed = weaver(root, &["install", "-p", entry, name]).unwrap();
         assert!(installed.ok, "{name} into {entry}: {installed:?}");
     }
 }
@@ -409,7 +430,7 @@ fn install(root: &Path, entry: &str, names: &[&str]) {
 ///   holding nothing an agent reads, neither a project yet;
 /// - `old`, linked with `review` installed, which records its id, for
 ///   [`moved`] to move;
-/// - `legacy`, linked, which a `mind.toml` marks, as an older Mindflayer
+/// - `legacy`, linked, which a `mind.toml` marks, as an older Mindweaver
 ///   made a project.
 fn candidates(root: &Path) {
     for name in ["blog", "drafts"] {
@@ -430,7 +451,7 @@ fn candidates(root: &Path) {
     project(root, "old", &[]);
     // Said with the warning that the load `team` has gone, as every install
     // here is, so held to what it did rather than to how it exited.
-    let installed = flayer(root, &["install", "-p", "old", "review"]).unwrap();
+    let installed = weaver(root, &["install", "-p", "old", "review"]).unwrap();
     assert!(
         installed.stdout.starts_with("installed review into old"),
         "{installed:?}"
@@ -438,7 +459,7 @@ fn candidates(root: &Path) {
     let legacy = root.join("legacy");
     fs::create_dir(&legacy).unwrap();
     older_project(&legacy);
-    flayer(root, &["link", "legacy"]).unwrap();
+    weaver(root, &["link", "legacy"]).unwrap();
 }
 
 /// `old`, which [`candidates`] linked, moved to `archive/old`, leaving its
@@ -463,7 +484,7 @@ fn write_files(root: &Path, files: &[(&str, &str)]) {
 /// recorded as a gather records them: a gather itself would clone, and the
 /// URL of a repository made in a temporary folder is a temporary path.
 fn shelve(root: &Path) {
-    let workspace = FlayerWorkspace::open(root).unwrap();
+    let workspace = WeaverWorkspace::open(root).unwrap();
     let ledger = workspace.ledger().unwrap();
     let source = ledger
         .source_for(SourceKind::Git, SOURCE, None, "skills")
@@ -473,7 +494,7 @@ fn shelve(root: &Path) {
         ("format", "Format the code the way the team does"),
         ("triage", "Sort new issues by what they need"),
     ] {
-        let shelf = format!(".mindflayer/skills/{}/{name}", source.directory);
+        let shelf = format!(".mindweaver/skills/{}/{name}", source.directory);
         write_files(
             &root.join(&shelf),
             &[("SKILL.md", &skill_file(name, summary))],
@@ -502,7 +523,7 @@ fn shelve(root: &Path) {
 /// Every time the ledger at `root` keeps, set from [`AT`] on: each action a
 /// minute after the one before it, and the shelf at the first.
 fn pin_times(root: &Path) {
-    let workspace = FlayerWorkspace::open(root).unwrap();
+    let workspace = WeaverWorkspace::open(root).unwrap();
     rusqlite::Connection::open(workspace.ledger_path())
         .unwrap()
         .execute_batch(&format!(
@@ -672,7 +693,7 @@ fn write_the_snapshot_of_a_home_where_nothing_is_made() {
     let json = answered(&home, &lookup);
 
     let json = pinned(&json, dir.path(), None);
-    assert!(!home.join(FLAYER_DIR).exists(), "the read made a workspace");
+    assert!(!home.join(WEAVER_DIR).exists(), "the read made a workspace");
     write("unmade", &json);
 }
 
@@ -995,7 +1016,7 @@ fn write_what_planning_boxes_of_a_workspace_to_assign_in_is_answered_with() {
     let home = dir.path().join("you");
     let root = assigning(&home);
     let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
-    let before = fs::read(root.join(FLAYER_DIR).join("mindflayer.db")).unwrap();
+    let before = fs::read(root.join(WEAVER_DIR).join("mindweaver.db")).unwrap();
 
     let answers: Vec<Value> = [
         format_into_two(),
@@ -1013,7 +1034,7 @@ fn write_what_planning_boxes_of_a_workspace_to_assign_in_is_answered_with() {
     .collect();
 
     assert_eq!(
-        fs::read(root.join(FLAYER_DIR).join("mindflayer.db")).unwrap(),
+        fs::read(root.join(WEAVER_DIR).join("mindweaver.db")).unwrap(),
         before,
         "a plan wrote to the ledger"
     );
@@ -1210,12 +1231,12 @@ fn write_what_asking_what_an_update_would_do_is_answered_with() {
     let home = dir.path().join("you");
     let root = updating(&home);
     let backend = PanelBackend::launch(&root, &Lookup::default()).unwrap();
-    let before = fs::read(root.join(FLAYER_DIR).join("mindflayer.db")).unwrap();
+    let before = fs::read(root.join(WEAVER_DIR).join("mindweaver.db")).unwrap();
 
     let answers = vec![asked(&backend, json!({"type": "updates"}))];
 
     assert_eq!(
-        fs::read(root.join(FLAYER_DIR).join("mindflayer.db")).unwrap(),
+        fs::read(root.join(WEAVER_DIR).join("mindweaver.db")).unwrap(),
         before,
         "asking wrote to the ledger"
     );
@@ -1374,8 +1395,8 @@ fn added_skill(name: &str, description: &str, template: Option<&str>) -> Value {
 /// add, one that would be written, from nothing and from `full`, one whose
 /// name is refused and one whose name is taken.
 ///
-/// Beside them (`validated.json`), what `flayer validate` says of the
-/// library once `review` holds the draft it warns of, written with `flayer
+/// Beside them (`validated.json`), what `mindweaver validate` says of the
+/// library once `review` holds the draft it warns of, written with `mindweaver
 /// edit --contents`: what the panel's verdict is held to, word for word.
 #[test]
 fn write_what_judging_drafts_in_the_library_is_answered_with() {
@@ -1426,7 +1447,7 @@ fn write_what_judging_drafts_in_the_library_is_answered_with() {
 
     let draft = home.join("review.md");
     fs::write(&draft, review_warned()).unwrap();
-    flayer(
+    weaver(
         &root,
         &[
             "edit",
@@ -1436,7 +1457,7 @@ fn write_what_judging_drafts_in_the_library_is_answered_with() {
         ],
     )
     .unwrap();
-    let said = flayer(&root, &["validate"]).unwrap().stdout;
+    let said = weaver(&root, &["validate"]).unwrap().stdout;
     for issue in warned {
         let line = format!("  - warning: {}\n", issue["message"].as_str().unwrap());
         assert!(said.contains(&line), "{line:?} in {said}");
@@ -1461,7 +1482,7 @@ fn write_what_judging_drafts_in_the_library_is_answered_with() {
 /// library.
 #[test]
 fn write_what_each_change_authoring_sends_is_answered_with() {
-    let read = mindflayer_core::hash::bytes(REVIEW.as_bytes());
+    let read = mindweaver_core::hash::bytes(REVIEW.as_bytes());
     let save = json!({
         "type": "save", "holder": {"type": "workspace"}, "kind": "skill", "name": "review",
         "text": review_saved(), "hash": read,

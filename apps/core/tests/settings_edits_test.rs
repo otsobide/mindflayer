@@ -9,9 +9,9 @@
 
 use std::fs;
 
-use mindflayer_core::mother::random;
-use mindflayer_core::mother::{ProjectIdMother, ProjectMother};
-use mindflayer_core::{Agent, MindProject, Settings, Share, WorkspaceError};
+use mindweaver_core::mother::random;
+use mindweaver_core::mother::{ProjectIdMother, ProjectMother};
+use mindweaver_core::{Agent, MindProject, Settings, Share, WorkspaceError};
 
 const ROUNDS: usize = 40;
 

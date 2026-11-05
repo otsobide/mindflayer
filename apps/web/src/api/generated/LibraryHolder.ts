@@ -4,7 +4,7 @@ import type { Kind } from "./Kind";
 /**
  * A project holding a copy of one of the workspace's own: one whose install
  * the ledger tells came from it ([`install::from_the_library`]), the rule
- * `flayer remove --everywhere` takes the copies it removes by.
+ * `mindweaver remove --everywhere` takes the copies it removes by.
  *
  * Told here rather than by a front end comparing a copy's
  * [`origin`](Held::origin) with [`Library::origin`], which would be a

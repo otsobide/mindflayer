@@ -3,18 +3,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Projects link /home/you/Projects/blog"
+        "mindweaver -W /home/you/Projects link /home/you/Projects/blog"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects link /home/you/Projects/blog"
+        "mindweaver -W /home/you/Projects link /home/you/Projects/blog"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects link /home/you/Projects/blog",
+            "command": "mindweaver -W /home/you/Projects link /home/you/Projects/blog",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -38,18 +38,18 @@
         }
       ],
       "lines": [
-        "flayer -W /home/you/Projects unlink gone"
+        "mindweaver -W /home/you/Projects unlink gone"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects unlink gone"
+        "mindweaver -W /home/you/Projects unlink gone"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects unlink gone",
+            "command": "mindweaver -W /home/you/Projects unlink gone",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -111,26 +111,26 @@
         {
           "caution": "uninstalls",
           "line": 0,
-          "message": "takes copies Mindflayer installed out of projects"
+          "message": "takes copies Mindweaver installed out of projects"
         }
       ],
       "lines": [
-        "flayer -W /home/you/Projects remove --everywhere --yes skill:lint"
+        "mindweaver -W /home/you/Projects remove --everywhere --yes skill:lint"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects remove --everywhere --yes skill:lint"
+        "mindweaver -W /home/you/Projects remove --everywhere --yes skill:lint"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects remove --everywhere --yes skill:lint",
+            "command": "mindweaver -W /home/you/Projects remove --everywhere --yes skill:lint",
             "error": null,
             "ok": true,
             "stderr": [],
-            "stdout": "removed lint from web\nremoved skill lint from /home/you/Projects/.mindflayer/library/skills/lint\n"
+            "stdout": "removed lint from web\nremoved skill lint from /home/you/Projects/.mindweaver/library/skills/lint\n"
           }
         ]
       }
@@ -151,13 +151,13 @@
       "confirm": [],
       "lines": [
         "mind -W /home/you/Projects -C /home/you/Projects/notes init",
-        "flayer -W /home/you/Projects link /home/you/Projects/drafts /home/you/Projects/notes"
+        "mindweaver -W /home/you/Projects link /home/you/Projects/drafts /home/you/Projects/notes"
       ]
     },
     "ran": {
       "lines": [
         "mind -W /home/you/Projects -C /home/you/Projects/notes init",
-        "flayer -W /home/you/Projects link /home/you/Projects/drafts /home/you/Projects/notes"
+        "mindweaver -W /home/you/Projects link /home/you/Projects/drafts /home/you/Projects/notes"
       ],
       "outcome": {
         "ok": true,
@@ -170,7 +170,7 @@
             "stdout": "initialized mind project `notes` in /home/you/Projects/notes/.mind\n"
           },
           {
-            "command": "flayer -W /home/you/Projects link /home/you/Projects/drafts /home/you/Projects/notes",
+            "command": "mindweaver -W /home/you/Projects link /home/you/Projects/drafts /home/you/Projects/notes",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -197,18 +197,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Projects relink old /home/you/Projects/archive/old"
+        "mindweaver -W /home/you/Projects relink old /home/you/Projects/archive/old"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects relink old /home/you/Projects/archive/old"
+        "mindweaver -W /home/you/Projects relink old /home/you/Projects/archive/old"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects relink old /home/you/Projects/archive/old",
+            "command": "mindweaver -W /home/you/Projects relink old /home/you/Projects/archive/old",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -276,18 +276,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy"
+        "mindweaver -W /home/you/Projects migrate -p /home/you/Projects/legacy"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy"
+        "mindweaver -W /home/you/Projects migrate -p /home/you/Projects/legacy"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy",
+            "command": "mindweaver -W /home/you/Projects migrate -p /home/you/Projects/legacy",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -306,18 +306,18 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy --yes"
+        "mindweaver -W /home/you/Projects migrate -p /home/you/Projects/legacy --yes"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy --yes"
+        "mindweaver -W /home/you/Projects migrate -p /home/you/Projects/legacy --yes"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects migrate -p /home/you/Projects/legacy --yes",
+            "command": "mindweaver -W /home/you/Projects migrate -p /home/you/Projects/legacy --yes",
             "error": null,
             "ok": true,
             "stderr": [],
@@ -336,22 +336,22 @@
     "preview": {
       "confirm": [],
       "lines": [
-        "flayer -W /home/you/Projects remove --everywhere skill:review"
+        "mindweaver -W /home/you/Projects remove --everywhere skill:review"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects remove --everywhere skill:review"
+        "mindweaver -W /home/you/Projects remove --everywhere skill:review"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects remove --everywhere skill:review",
+            "command": "mindweaver -W /home/you/Projects remove --everywhere skill:review",
             "error": null,
             "ok": true,
             "stderr": [],
-            "stdout": "would remove review from api, where it is current\nwould leave review in web, where it is edited, at .claude/skills/review\nwould remove review from docs, where it is current\nwould remove review from old, where it is current\nwould remove skill review from /home/you/Projects/.mindflayer/library/skills/review and the 3 files in it\nnothing removed: add --yes to go ahead\n"
+            "stdout": "would remove review from api, where it is current\nwould leave review in web, where it is edited, at .claude/skills/review\nwould remove review from docs, where it is current\nwould remove review from old, where it is current\nwould remove skill review from /home/you/Projects/.mindweaver/library/skills/review and the 3 files in it\nnothing removed: add --yes to go ahead\n"
           }
         ]
       }
@@ -378,31 +378,31 @@
         {
           "caution": "uninstalls",
           "line": 0,
-          "message": "takes copies Mindflayer installed out of projects"
+          "message": "takes copies Mindweaver installed out of projects"
         }
       ],
       "lines": [
-        "flayer -W /home/you/Projects remove --everywhere --yes skill:review"
+        "mindweaver -W /home/you/Projects remove --everywhere --yes skill:review"
       ]
     },
     "ran": {
       "lines": [
-        "flayer -W /home/you/Projects remove --everywhere --yes skill:review"
+        "mindweaver -W /home/you/Projects remove --everywhere --yes skill:review"
       ],
       "outcome": {
         "ok": true,
         "runs": [
           {
-            "command": "flayer -W /home/you/Projects remove --everywhere --yes skill:review",
+            "command": "mindweaver -W /home/you/Projects remove --everywhere --yes skill:review",
             "error": null,
             "ok": true,
             "stderr": [
               {
                 "code": null,
-                "text": "note: nothing offers review in web any more; `flayer uninstall -p web review --force` takes it out"
+                "text": "note: nothing offers review in web any more; `mindweaver uninstall -p web review --force` takes it out"
               }
             ],
-            "stdout": "removed review from api\nleft review in web, where it is edited, at .claude/skills/review\nremoved review from docs\nremoved review from old\nremoved skill review from /home/you/Projects/.mindflayer/library/skills/review\n"
+            "stdout": "removed review from api\nleft review in web, where it is edited, at .claude/skills/review\nremoved review from docs\nremoved review from old\nremoved skill review from /home/you/Projects/.mindweaver/library/skills/review\n"
           }
         ]
       }

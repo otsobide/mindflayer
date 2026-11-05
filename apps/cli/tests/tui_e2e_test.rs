@@ -1,4 +1,4 @@
-//! The TUI end to end: `flayer` and `mind` on their own, the screen a
+//! The TUI end to end: `mindweaver` and `mind` on their own, the screen a
 //! person works in, driven one use case at a time in a terminal of its own.
 //!
 //! The screen's own suite (`tui_test`) drives its state with key events and
@@ -59,9 +59,9 @@ pub fn collapse_and_tanukeys() -> Scenario {
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install -p collapse commit-style")
+        .given("~/Projects", "mindweaver install -p collapse commit-style")
         .given(
             "~/Projects/collapse",
             "mind add skill deploy \"Ship the service to staging\"",

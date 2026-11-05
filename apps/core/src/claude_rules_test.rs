@@ -3,14 +3,25 @@
 use super::*;
 
 #[test]
-fn a_rules_file_is_filed_by_its_route_in_mindflayers_own_folder() {
-    let folder = Path::new(".claude").join("rules").join("mindflayer");
+fn a_rules_file_is_filed_by_its_route_in_mindweavers_own_folder() {
+    let folder = Path::new(".claude").join("rules").join("mindweaver");
     assert_eq!(super::folder(), folder);
     assert_eq!(file_for("commit-style"), folder.join("commit-style.md"));
     assert_eq!(
         file_for("git/no-force-push"),
         folder.join("git").join("no-force-push.md")
     );
+}
+
+#[test]
+fn a_mindflayer_build_filed_them_in_a_folder_of_its_own() {
+    let older = Path::new(".claude").join("rules").join("mindflayer");
+    assert_eq!(folder_under(Names::Mindflayer), older);
+    assert_eq!(
+        file_under(Names::Mindflayer, "git/no-force-push"),
+        older.join("git").join("no-force-push.md")
+    );
+    assert_eq!(folder_under(Names::Mindweaver), super::folder());
 }
 
 /// What [`plan`] decides, by name.
@@ -33,7 +44,7 @@ fn file(bytes: &str) -> Found {
 }
 
 #[test]
-fn a_file_is_mindflayers_only_while_it_holds_what_was_recorded() {
+fn a_file_is_mindweavers_only_while_it_holds_what_was_recorded() {
     // Asked for.
     assert_eq!(decided(Some("new"), None, Found::Absent), "create");
     assert_eq!(decided(Some("new"), Some("old"), Found::Absent), "create");
@@ -42,7 +53,7 @@ fn a_file_is_mindflayers_only_while_it_holds_what_was_recorded() {
     assert_eq!(decided(Some("new"), Some("old"), file("theirs")), "edited");
     assert_eq!(decided(Some("new"), Some("old"), Found::Other), "edited");
     assert_eq!(decided(Some("new"), None, file("theirs")), "foreign");
-    // Holding the rule is not enough to be Mindflayer's.
+    // Holding the rule is not enough to be Mindweaver's.
     assert_eq!(decided(Some("new"), None, file("new")), "foreign");
     assert_eq!(decided(Some("new"), None, Found::Other), "foreign");
 

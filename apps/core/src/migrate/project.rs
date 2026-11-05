@@ -1,4 +1,4 @@
-//! Bringing a project an older Mindflayer made, marked by a `mind.toml` or a
+//! Bringing a project an older Mindweaver made, marked by a `mind.toml` or a
 //! `settings.json`, to the `settings.toml` a new one has, and what is
 //! installed into it to where its agents read.
 //!
@@ -49,9 +49,9 @@ use crate::ledger::{Action, Ledger, LedgerError, Moved, Target};
 use crate::reapply::{self, Retarget, Why};
 use crate::settings::{Settings, Share, SETTINGS_FILE, SETTINGS_JSON_FILE};
 use crate::workspace::{
-    ignore_itself, misplaced_authored, same_directory, write_new, Directories, FlayerWorkspace,
-    MarkerFile, MindConfig, MindProject, ProjectConfig, WorkspaceError, DIRECTORIES_VERSION,
-    MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_TOML_VERSION,
+    ignore_itself, is_mind_ignore, misplaced_authored, same_directory, write_new, Directories,
+    MarkerFile, MindConfig, MindProject, ProjectConfig, WeaverWorkspace, WorkspaceError,
+    DIRECTORIES_VERSION, MIND_CONFIG, MIND_DIR, SETTINGS_TOML_VERSION,
 };
 
 /// What moving a project from its older marker to a `settings.toml` would
@@ -70,7 +70,7 @@ pub struct ProjectPlan {
     pub backup: PathBuf,
     /// Whether the installations a workspace records were read: false when
     /// no workspace given links the project, whose copies are then left
-    /// where they are, since nothing says which of them are Mindflayer's.
+    /// where they are, since nothing says which of them are Mindweaver's.
     pub recorded: bool,
     /// The `.gitignore` that keeps a local project's `.mind` out of git
     /// (D-01), written when the project is to be local and has none.
@@ -82,7 +82,7 @@ pub struct ProjectPlan {
     /// where it is, its author's.
     pub authored: Vec<PathBuf>,
     /// What sits in a folder the project's agents are sent copies to that
-    /// Mindflayer did not put there, but for one an installation's copy
+    /// Mindweaver did not put there, but for one an installation's copy
     /// would have gone to, which its installation says: left, and said,
     /// since the project is listed from those folders from now on.
     pub foreign: Vec<PathBuf>,
@@ -99,7 +99,7 @@ pub struct ProjectPlan {
     /// Whether git tracks something in `.mind` of a project that is to be
     /// local, whose `.gitignore` then keeps none of it out
     /// ([`exclude::tracks`]): for a front end to say how to stop that, which
-    /// is not Mindflayer's to do.
+    /// is not Mindweaver's to do.
     pub tracked: bool,
     /// Why it cannot go ahead. Nothing is written while there is any.
     pub refusals: Vec<Refusal>,
@@ -122,7 +122,7 @@ pub struct ProjectPlan {
 /// inside one of `homes`, or where a loaded workspace keeps its own, as an
 /// install refuses one.
 pub fn project_plan(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     agents: &[Agent],
     share: Share,
@@ -311,7 +311,7 @@ pub enum Stranded {
 /// said ([`MigrateError::left_behind`]). Only once the ledger holds the move
 /// are the copies taken out deleted, with the stage.
 pub fn project(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     agents: &[Agent],
     share: Share,
@@ -361,7 +361,7 @@ pub fn project(
 /// folder, everything written put back when a step fails.
 fn carry(
     project: &MindProject,
-    records: Option<(&FlayerWorkspace, &Ledger)>,
+    records: Option<(&WeaverWorkspace, &Ledger)>,
     mut plan: ProjectPlan,
     scrub: Scrub,
 ) -> Result<ProjectMigrated, MigrateError> {
@@ -398,7 +398,7 @@ fn carry(
 /// `undo` as it is made, so a failure can put it back.
 fn carry_out(
     project: &MindProject,
-    records: Option<(&FlayerWorkspace, &Ledger)>,
+    records: Option<(&WeaverWorkspace, &Ledger)>,
     plan: &ProjectPlan,
     stage: &mut copy::Stage,
     undo: &mut Undo,
@@ -628,7 +628,7 @@ impl<'a> Undo<'a> {
         }
         if let Some(ignore) = self.ignore {
             // Only while it holds what was written.
-            let ours = fs::read(&ignore).is_ok_and(|bytes| bytes == MIND_IGNORE.as_bytes());
+            let ours = fs::read(&ignore).is_ok_and(|bytes| is_mind_ignore(&bytes));
             if ours && fs::remove_file(&ignore).is_err() {
                 stranded.push(Stranded::Ignore(ignore));
             }
@@ -641,18 +641,18 @@ impl<'a> Undo<'a> {
 }
 
 /// `workspace`, when it is made and links `project`: the one whose records
-/// say what in the project is Mindflayer's.
+/// say what in the project is Mindweaver's.
 pub(super) fn linking<'a>(
-    workspace: Option<&'a FlayerWorkspace>,
+    workspace: Option<&'a WeaverWorkspace>,
     project: &MindProject,
-) -> Option<&'a FlayerWorkspace> {
+) -> Option<&'a WeaverWorkspace> {
     workspace.filter(|workspace| workspace.is_made() && workspace.is_linked(project.root()))
 }
 
 /// [`project_plan`], against `records`: the workspace that links the
 /// project and its ledger, or none.
 pub(super) fn plan_with(
-    records: Option<(&FlayerWorkspace, &Ledger)>,
+    records: Option<(&WeaverWorkspace, &Ledger)>,
     project: &MindProject,
     agents: &[Agent],
     share: Share,
@@ -844,7 +844,8 @@ pub(super) fn plan_with(
 /// all, where the `mind.toml` meant the default beside the code.
 ///
 /// Every kind's default filled in (`Directories::with_defaults`, as `mind
-/// init` fills them), and any key this build does not know carried along. A
+/// init` fills them, a kind with none left out), and any key this build
+/// does not know carried along. A
 /// version 1 marker kept every kind it names no folder for inside `.mind`,
 /// and is described so, for the plan to refuse: settings cannot name a
 /// folder there. A folder it does name is kept, as every other command reads
@@ -857,7 +858,9 @@ fn authored(config: &MindConfig) -> Directories {
     Kind::ALL
         .into_iter()
         .fold(config.directories.clone(), |directories, kind| {
-            if directories.get(kind).is_some() {
+            // Only a kind it knew, which is a kind with a default: one added
+            // since was kept nowhere.
+            if directories.get(kind).is_some() || Directories::default_for(kind).is_none() {
                 directories
             } else {
                 directories.with(kind, Path::new(MIND_DIR).join(kind.folder()))

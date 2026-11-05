@@ -1,6 +1,6 @@
-//! The shell code `flayer activate` prints: what activates a workspace in one
+//! The shell code `mindweaver activate` prints: what activates a workspace in one
 //! shell, as a Python virtualenv's `activate` script does, and the
-//! `flayer-deactivate` that undoes it.
+//! `mindweaver-deactivate` that undoes it.
 //!
 //! Printed for the shell to run rather than written into a file. Activation
 //! lasts as long as the shell, as a virtualenv's does, and leaves nothing in
@@ -13,10 +13,17 @@
 //! code, and none can write it differently.
 //!
 //! What it changes, and so what deactivating restores, is two things: the
-//! variable, and a prefix on the prompt. `flayer-deactivate` takes out only
-//! what activating put in, wherever it is by then, so that it gets along with
-//! an active virtualenv in either order. It is never called `deactivate`,
-//! which is the virtualenv's.
+//! variable, and a prefix on the prompt. `mindweaver-deactivate` takes out
+//! only what activating put in, wherever it is by then, so that it gets
+//! along with an active virtualenv in either order. It is never called
+//! `deactivate`, which is the virtualenv's.
+//!
+//! A shell a Mindflayer build activated holds `$MINDFLAYER_WORKSPACE` and
+//! that build's `flayer-deactivate` (D-26). It keeps working: the front end
+//! reads the old variable while the new one is not set. Activating again
+//! runs the old function first, if it is there, so the old activation is
+//! undone by the code that made it, its prompt's prefix with it, before the
+//! new one is made; never two activations, of two names, at once.
 //!
 //! [`resolve`]: crate::resolve::resolve
 
@@ -27,16 +34,28 @@ use std::str::FromStr;
 use thiserror::Error;
 
 use crate::code::codes;
-use crate::workspace::FlayerWorkspace;
+use crate::workspace::WeaverWorkspace;
 
 /// The variable that activates a workspace for every command a shell runs,
 /// which the front end reads and hands to [`resolve`](crate::resolve::resolve)
 /// as the activated workspace.
-pub const WORKSPACE_VARIABLE: &str = "MINDFLAYER_WORKSPACE";
+///
+/// Spelled here alone, and taken from here by the code [`script`] writes, as
+/// [`DEACTIVATE`] is: a name the shell is handed changes in one place.
+pub const WORKSPACE_VARIABLE: &str = "MINDWEAVER_WORKSPACE";
+
+/// [`WORKSPACE_VARIABLE`] as a Mindflayer build named it: what a shell that
+/// build activated still holds, which the front end reads while the new one
+/// is not set, and nothing writes.
+pub const FLAYER_WORKSPACE_VARIABLE: &str = "MINDFLAYER_WORKSPACE";
 
 /// What undoes an activation. Not `deactivate`, which an active virtualenv
 /// has already defined, and which defining again would take from it.
-pub const DEACTIVATE: &str = "flayer-deactivate";
+pub const DEACTIVATE: &str = "mindweaver-deactivate";
+
+/// [`DEACTIVATE`] as a Mindflayer build named it: run, when a shell has it,
+/// before an activation, which so undoes the old one by its own code.
+pub const FLAYER_DEACTIVATE: &str = "flayer-deactivate";
 
 /// A shell activation can be written for.
 ///
@@ -124,7 +143,7 @@ pub fn expected() -> String {
 pub enum ActivateError {
     /// The default workspace before anything has made it: there is no
     /// directory to point the variable at that a command would accept.
-    #[error("{path}: the default workspace is not made yet, so there is nothing to activate; `flayer init` makes one")]
+    #[error("{path}: the default workspace is not made yet, so there is nothing to activate; `mindweaver init` makes one")]
     Unmade { path: PathBuf },
     /// A path a shell cannot be handed as text, which is what the code is.
     #[error("{path}: cannot be activated, since the path is not UTF-8")]
@@ -137,11 +156,11 @@ codes!(ActivateError {
 });
 
 /// The code that activates `workspace` in `shell`, for the shell to run:
-/// `eval "$(flayer activate)"` in bash and zsh.
+/// `eval "$(mindweaver activate)"` in bash and zsh.
 ///
 /// Refused rather than written for a workspace that is not on disk: the
 /// variable would name a directory every command then refuses.
-pub fn script(workspace: &FlayerWorkspace, shell: Shell) -> Result<String, ActivateError> {
+pub fn script(workspace: &WeaverWorkspace, shell: Shell) -> Result<String, ActivateError> {
     if !workspace.is_made() {
         return Err(ActivateError::Unmade {
             path: workspace.root().to_path_buf(),
@@ -157,7 +176,7 @@ pub fn script(workspace: &FlayerWorkspace, shell: Shell) -> Result<String, Activ
 }
 
 /// What the prompt starts with while a workspace is active:
-/// `(flayer:<name>) `.
+/// `(weaver:<name>) `.
 ///
 /// The name is the marker's, which comes with whatever directory holds it, a
 /// cloned one included, and a prompt is expanded every time it is drawn:
@@ -178,7 +197,7 @@ pub fn prompt(name: &str) -> String {
             }
         })
         .collect();
-    format!("(flayer:{label}) ")
+    format!("(weaver:{label}) ")
 }
 
 /// The characters some shell's prompt acts on, as [`prompt`] says.
@@ -205,35 +224,41 @@ fn written(shell: Shell, root: &str, prompt: &str) -> String {
 /// nor brings it back once none is.
 fn bourne(root: &str, prompt: &str) -> String {
     format!(
-        r#"if typeset -f flayer-deactivate >/dev/null 2>&1; then
-    flayer-deactivate
+        r#"if typeset -f {older} >/dev/null 2>&1; then
+    {older}
 fi
-if [ -n "${{MINDFLAYER_WORKSPACE+set}}" ]; then
-    _FLAYER_OLD_WORKSPACE="$MINDFLAYER_WORKSPACE"
+if typeset -f {deactivate} >/dev/null 2>&1; then
+    {deactivate}
+fi
+if [ -n "${{{variable}+set}}" ]; then
+    _WEAVER_OLD_WORKSPACE="${variable}"
 else
-    unset _FLAYER_OLD_WORKSPACE
+    unset _WEAVER_OLD_WORKSPACE
 fi
-export MINDFLAYER_WORKSPACE={root}
-_FLAYER_PROMPT={prompt}
-PS1="$_FLAYER_PROMPT${{PS1-}}"
+export {variable}={root}
+_WEAVER_PROMPT={prompt}
+PS1="$_WEAVER_PROMPT${{PS1-}}"
 if [ -n "${{_OLD_VIRTUAL_PS1+set}}" ]; then
-    _OLD_VIRTUAL_PS1="$_FLAYER_PROMPT$_OLD_VIRTUAL_PS1"
+    _OLD_VIRTUAL_PS1="$_WEAVER_PROMPT$_OLD_VIRTUAL_PS1"
 fi
-flayer-deactivate() {{
-    if [ -n "${{_FLAYER_OLD_WORKSPACE+set}}" ]; then
-        export MINDFLAYER_WORKSPACE="$_FLAYER_OLD_WORKSPACE"
-        unset _FLAYER_OLD_WORKSPACE
+{deactivate}() {{
+    if [ -n "${{_WEAVER_OLD_WORKSPACE+set}}" ]; then
+        export {variable}="$_WEAVER_OLD_WORKSPACE"
+        unset _WEAVER_OLD_WORKSPACE
     else
-        unset MINDFLAYER_WORKSPACE
+        unset {variable}
     fi
-    PS1="${{PS1/"$_FLAYER_PROMPT"/}}"
+    PS1="${{PS1/"$_WEAVER_PROMPT"/}}"
     if [ -n "${{_OLD_VIRTUAL_PS1+set}}" ]; then
-        _OLD_VIRTUAL_PS1="${{_OLD_VIRTUAL_PS1/"$_FLAYER_PROMPT"/}}"
+        _OLD_VIRTUAL_PS1="${{_OLD_VIRTUAL_PS1/"$_WEAVER_PROMPT"/}}"
     fi
-    unset _FLAYER_PROMPT
-    unset -f flayer-deactivate
+    unset _WEAVER_PROMPT
+    unset -f {deactivate}
 }}
-"#
+"#,
+        variable = WORKSPACE_VARIABLE,
+        deactivate = DEACTIVATE,
+        older = FLAYER_DEACTIVATE,
     )
 }
 
@@ -247,38 +272,44 @@ flayer-deactivate() {{
 /// unwrapping would take away.
 fn fish(root: &str, prompt: &str) -> String {
     format!(
-        r#"if functions -q flayer-deactivate
-    flayer-deactivate
+        r#"if functions -q {older}
+    {older}
 end
-if set -q MINDFLAYER_WORKSPACE
-    set -g _flayer_old_workspace $MINDFLAYER_WORKSPACE
+if functions -q {deactivate}
+    {deactivate}
+end
+if set -q {variable}
+    set -g _weaver_old_workspace ${variable}
 else
-    set -e _flayer_old_workspace
+    set -e _weaver_old_workspace
 end
-set -gx MINDFLAYER_WORKSPACE {root}
-set -g _flayer_prompt {prompt}
-if not functions -q _flayer_old_fish_prompt
-    functions -c fish_prompt _flayer_old_fish_prompt
+set -gx {variable} {root}
+set -g _weaver_prompt {prompt}
+if not functions -q _weaver_old_fish_prompt
+    functions -c fish_prompt _weaver_old_fish_prompt
     function fish_prompt
         set -l last_status $status
-        if set -q _flayer_prompt
-            printf '%s' $_flayer_prompt
+        if set -q _weaver_prompt
+            printf '%s' $_weaver_prompt
         end
         echo "exit $last_status" | source
-        _flayer_old_fish_prompt
+        _weaver_old_fish_prompt
     end
 end
-function flayer-deactivate
-    if set -q _flayer_old_workspace
-        set -gx MINDFLAYER_WORKSPACE $_flayer_old_workspace
-        set -e _flayer_old_workspace
+function {deactivate}
+    if set -q _weaver_old_workspace
+        set -gx {variable} $_weaver_old_workspace
+        set -e _weaver_old_workspace
     else
-        set -e MINDFLAYER_WORKSPACE
+        set -e {variable}
     end
-    set -e _flayer_prompt
-    functions -e flayer-deactivate
+    set -e _weaver_prompt
+    functions -e {deactivate}
 end
-"#
+"#,
+        variable = WORKSPACE_VARIABLE,
+        deactivate = DEACTIVATE,
+        older = FLAYER_DEACTIVATE,
     )
 }
 
@@ -288,35 +319,41 @@ end
 /// would make an error on every prompt.
 fn pwsh(root: &str, prompt: &str) -> String {
     format!(
-        r#"if (Test-Path -Path Function:flayer-deactivate) {{
-    flayer-deactivate
+        r#"if (Test-Path -Path Function:{older}) {{
+    {older}
 }}
-if (Test-Path -Path Env:MINDFLAYER_WORKSPACE) {{
-    $global:_FlayerOldWorkspace = $Env:MINDFLAYER_WORKSPACE
+if (Test-Path -Path Function:{deactivate}) {{
+    {deactivate}
+}}
+if (Test-Path -Path Env:{variable}) {{
+    $global:_WeaverOldWorkspace = $Env:{variable}
 }} else {{
-    Remove-Variable -Name _FlayerOldWorkspace -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name _WeaverOldWorkspace -Scope Global -ErrorAction SilentlyContinue
 }}
-$Env:MINDFLAYER_WORKSPACE = {root}
-$global:_FlayerPrompt = {prompt}
-if (-not (Get-Variable -Name _FlayerOldPrompt -Scope Global -ErrorAction SilentlyContinue)) {{
-    $global:_FlayerOldPrompt = $Function:prompt
+$Env:{variable} = {root}
+$global:_WeaverPrompt = {prompt}
+if (-not (Get-Variable -Name _WeaverOldPrompt -Scope Global -ErrorAction SilentlyContinue)) {{
+    $global:_WeaverOldPrompt = $Function:prompt
     function global:prompt {{
-        Write-Host -NoNewline $global:_FlayerPrompt
-        & $global:_FlayerOldPrompt
+        Write-Host -NoNewline $global:_WeaverPrompt
+        & $global:_WeaverOldPrompt
     }}
 }}
-function global:flayer-deactivate {{
-    $old = Get-Variable -Name _FlayerOldWorkspace -Scope Global -ErrorAction SilentlyContinue
+function global:{deactivate} {{
+    $old = Get-Variable -Name _WeaverOldWorkspace -Scope Global -ErrorAction SilentlyContinue
     if ($old) {{
-        $Env:MINDFLAYER_WORKSPACE = $old.Value
-        Remove-Variable -Name _FlayerOldWorkspace -Scope Global
+        $Env:{variable} = $old.Value
+        Remove-Variable -Name _WeaverOldWorkspace -Scope Global
     }} else {{
-        Remove-Item -Path Env:MINDFLAYER_WORKSPACE -ErrorAction SilentlyContinue
+        Remove-Item -Path Env:{variable} -ErrorAction SilentlyContinue
     }}
-    $global:_FlayerPrompt = ''
-    Remove-Item -Path Function:flayer-deactivate
+    $global:_WeaverPrompt = ''
+    Remove-Item -Path Function:{deactivate}
 }}
-"#
+"#,
+        variable = WORKSPACE_VARIABLE,
+        deactivate = DEACTIVATE,
+        older = FLAYER_DEACTIVATE,
     )
 }
 

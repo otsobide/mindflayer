@@ -1,6 +1,6 @@
 //! Looking after projects and loads through the API, as the panel's pages
 //! do: forgetting a project, following one that moved, making a folder a
-//! project and linking it, moving one an older Mindflayer made, changing
+//! project and linking it, moving one an older build made, changing
 //! its agents, its share and its targets, loading another workspace and
 //! forgetting it, and adopting a skill somebody keeps.
 
@@ -34,7 +34,7 @@ fn unlinking_a_project_says_first_that_the_workspace_forgets_it() {
         .post("/tasks/preview", json!({"type": "unlink", "entry": "web"}))
         .is(200)
         .answers(json!({
-            "lines": ["flayer -W /home/you/Projects unlink web"],
+            "lines": ["mindweaver -W /home/you/Projects unlink web"],
             "confirm": [{
                 "caution": "unlinks",
                 "line": 0,
@@ -53,7 +53,7 @@ fn unlinking_a_project_forgets_it_and_leaves_its_folder_as_it_is() {
         .post("/tasks", json!({"type": "unlink", "entry": "web"}))
         .is(200)
         .answers(ran_one(
-            "flayer -W /home/you/Projects unlink web",
+            "mindweaver -W /home/you/Projects unlink web",
             "unlinked web\n",
             json!([]),
         ));
@@ -64,7 +64,7 @@ fn unlinking_a_project_forgets_it_and_leaves_its_folder_as_it_is() {
 #[test]
 fn a_project_that_moved_is_relinked_with_what_was_installed_in_it() {
     let scenario = linking(&["api"]);
-    scenario.given("~/Projects", "flayer install -p api review");
+    scenario.given("~/Projects", "mindweaver install -p api review");
     std::fs::rename(
         scenario.at("~/Projects/api"),
         scenario.at("~/Projects/service"),
@@ -79,7 +79,7 @@ fn a_project_that_moved_is_relinked_with_what_was_installed_in_it() {
         )
         .is(200)
         .answers(ran_one(
-            "flayer -W /home/you/Projects relink api /home/you/Projects/service",
+            "mindweaver -W /home/you/Projects relink api /home/you/Projects/service",
             "relinked api as service, from api\n  1 install kept with it\n",
             json!([]),
         ));
@@ -106,7 +106,7 @@ fn a_repository_is_made_a_project_and_linked_in_one_task() {
             "/lines",
             json!([
                 "mind -W /home/you/Projects -C /home/you/Projects/site init",
-                "flayer -W /home/you/Projects link /home/you/Projects/site",
+                "mindweaver -W /home/you/Projects link /home/you/Projects/site",
             ]),
         )
         .answers_at("/outcome/runs/1/stdout", json!("linked site as site\n"));
@@ -114,11 +114,11 @@ fn a_repository_is_made_a_project_and_linked_in_one_task() {
 }
 
 #[test]
-fn a_project_an_older_mindflayer_made_is_moved_to_settings_only_when_asked() {
+fn a_project_an_older_build_made_is_moved_to_settings_only_when_asked() {
     let scenario = Scenario::projects(&["api"]);
     scenario
         .older_project("~/Projects/old")
-        .given("~/Projects", "flayer link old");
+        .given("~/Projects", "mindweaver link old");
     let served = scenario.serve("~/Projects");
 
     served
@@ -129,7 +129,7 @@ fn a_project_an_older_mindflayer_made_is_moved_to_settings_only_when_asked() {
         .is(200)
         .answers_at(
             "/lines",
-            json!(["flayer -W /home/you/Projects migrate -p /home/you/Projects/old"]),
+            json!(["mindweaver -W /home/you/Projects migrate -p /home/you/Projects/old"]),
         );
     served
         .post(
@@ -138,7 +138,7 @@ fn a_project_an_older_mindflayer_made_is_moved_to_settings_only_when_asked() {
         )
         .is(200)
         .answers(ran_one(
-            "flayer -W /home/you/Projects migrate -p /home/you/Projects/old --yes",
+            "mindweaver -W /home/you/Projects migrate -p /home/you/Projects/old --yes",
             "wrote .mind/settings.toml for old: agents claude,codex,opencode, share shared\n\
              moved .mind/mind.toml to .mind/tmp/mind.toml.v2, as it was\n",
             json!([]),
@@ -155,7 +155,7 @@ fn a_project_an_older_mindflayer_made_is_moved_to_settings_only_when_asked() {
 #[test]
 fn a_projects_settings_form_runs_its_agents_line_then_its_share_line() {
     let scenario = linking(&["api"]);
-    scenario.given("~/Projects", "flayer install -p api review");
+    scenario.given("~/Projects", "mindweaver install -p api review");
     let served = scenario.serve("~/Projects");
 
     let answer = served.post(
@@ -205,7 +205,7 @@ fn a_projects_settings_form_runs_its_agents_line_then_its_share_line() {
 #[test]
 fn targets_set_from_the_panel_say_their_note_beside_what_they_moved() {
     let scenario = linking(&["api"]);
-    scenario.given("~/Projects", "flayer install -p api review");
+    scenario.given("~/Projects", "mindweaver install -p api review");
     let served = scenario.serve("~/Projects");
 
     served
@@ -241,7 +241,7 @@ fn targets_set_from_the_panel_say_their_note_beside_what_they_moved() {
 #[test]
 fn targets_reset_from_the_panel_send_the_copies_back_where_each_agent_reads() {
     let scenario = linking(&["api"]);
-    scenario.given("~/Projects", "flayer install -p api review");
+    scenario.given("~/Projects", "mindweaver install -p api review");
     // Set as a step: it says a note, which a given step may not.
     scenario
         .run("~/Projects/api", "mind targets set skills .skills --yes")
@@ -282,10 +282,10 @@ fn loading_a_workspace_offers_its_own_to_every_project() {
     let scenario = Scenario::projects(&["api"]);
     scenario
         .folder("~/src/team")
-        .given("~/src/team", "flayer init")
+        .given("~/src/team", "mindweaver init")
         .given(
             "~/src/team",
-            "flayer add skill deploy 'Ship the service to staging'",
+            "mindweaver add skill deploy 'Ship the service to staging'",
         );
     let served = scenario.serve("~/Projects");
 
@@ -293,7 +293,7 @@ fn loading_a_workspace_offers_its_own_to_every_project() {
         .post("/tasks", json!({"type": "load", "path": "/home/you/src/team"}))
         .is(200)
         .answers(ran_one(
-            "flayer -W /home/you/Projects load /home/you/src/team",
+            "mindweaver -W /home/you/Projects load /home/you/src/team",
             "loaded team as ../src/team: 1 skill to install\n  into the workspace at /home/you/Projects\n",
             json!([]),
         ));
@@ -314,19 +314,19 @@ fn unloading_a_workspace_forgets_it_by_its_entry() {
     let scenario = Scenario::projects(&["api"]);
     scenario
         .folder("~/src/team")
-        .given("~/src/team", "flayer init")
+        .given("~/src/team", "mindweaver init")
         .given(
             "~/src/team",
-            "flayer add skill deploy 'Ship the service to staging'",
+            "mindweaver add skill deploy 'Ship the service to staging'",
         )
-        .given("~/Projects", "flayer load ../src/team");
+        .given("~/Projects", "mindweaver load ../src/team");
     let served = scenario.serve("~/Projects");
 
     served
         .post("/tasks", json!({"type": "unload", "entry": "../src/team"}))
         .is(200)
         .answers(ran_one(
-            "flayer -W /home/you/Projects unload ../src/team",
+            "mindweaver -W /home/you/Projects unload ../src/team",
             "unloaded ../src/team\n  from the workspace at /home/you/Projects\n",
             json!([]),
         ));
@@ -369,10 +369,10 @@ fn adopting_from_the_panel_brings_the_skill_into_the_library_at_once() {
         )
         .is(200)
         .answers(ran_one(
-            "flayer -W /home/you/Projects adopt -p /home/you/Projects/api --yes skill:notes",
-            "copied notes from api into the library, at /home/you/Projects/.mindflayer/library/skills/notes\n\
+            "mindweaver -W /home/you/Projects adopt -p /home/you/Projects/api --yes skill:notes",
+            "copied notes from api into the library, at /home/you/Projects/.mindweaver/library/skills/notes\n\
              recorded notes in api as installed from workspace, at .claude/skills/notes\n\
-             recorded .agents/skills/notes missing: `flayer update -p api` puts it there\n\
+             recorded .agents/skills/notes missing: `mindweaver update -p api` puts it there\n\
              kept .claude/skills/notes out of git\n",
             json!([]),
         ));

@@ -1,30 +1,36 @@
 //! Keeping paths out of git without touching the team's `.gitignore`.
 //!
-//! A project in local mode keeps what Mindflayer installs into it out of git
+//! A project in local mode keeps what Mindweaver installs into it out of git
 //! (D-02), and the file that can say so without being committed is
 //! `$GIT_COMMON_DIR/info/exclude`: git reads it like a `.gitignore` but never
 //! tracks it, and every linked worktree of the repository reads the same one.
-//! Mindflayer writes there only between `# mindflayer:begin` and
-//! `# mindflayer:end`, one group per project:
+//! Mindweaver writes there only between `# mindweaver:begin` and
+//! `# mindweaver:end`, one group per project:
 //!
 //! ```text
-//! # mindflayer:begin
+//! # mindweaver:begin
 //! # project 4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5
 //! /packages/app/.agents/skills/commit-style/
 //! /packages/app/.claude/skills/commit-style/
 //! # project 0123456789abcdef0123456789abcdef
 //! /packages/web/.agents/skills/review/
-//! # mindflayer:end
+//! # mindweaver:end
 //! ```
 //!
 //! Several projects can share one repository, so each owns a group under its
 //! own header and an edit for one never rewrites another's lines. Everything
 //! outside the block is somebody else's and comes back byte for byte.
 //!
+//! A block a Mindflayer build wrote opens with `# mindflayer:begin` (D-26,
+//! [`Names`]): it is read as the block, and edited under its own markers,
+//! as `AGENTS.md`'s is ([`crate::agents_md`]); only a block made anew says
+//! `mindweaver:`, and only `migrate --names` moves an old one to it
+//! ([`ExcludeFile::renamed`]). One block a file, whichever its markers.
+//!
 //! Not `.gitignore`, which is the team's: it is committed, so a line there
 //! puts copies one machine has into every teammate's diff. Not
 //! `core.excludesFile` either, which is the user's and spans every
-//! repository they have. Mindflayer edits neither, ever.
+//! repository they have. Mindweaver edits neither, ever.
 
 use std::fs;
 use std::io;
@@ -34,13 +40,27 @@ use thiserror::Error;
 
 use crate::code::codes;
 use crate::lines::{self, Line};
+use crate::names::Names;
 use crate::paths;
 use crate::workspace::replace_bytes;
 
-/// The line that opens Mindflayer's block.
-pub const BEGIN: &str = "# mindflayer:begin";
+/// The line that opens Mindweaver's block.
+pub const BEGIN: &str = "# mindweaver:begin";
 /// The line that closes it.
-pub const END: &str = "# mindflayer:end";
+pub const END: &str = "# mindweaver:end";
+/// [`BEGIN`] as a Mindflayer build wrote it, read and kept in a block it
+/// wrote ([`Names::Mindflayer`]).
+pub const FLAYER_BEGIN: &str = "# mindflayer:begin";
+/// [`END`] as a Mindflayer build wrote it.
+pub const FLAYER_END: &str = "# mindflayer:end";
+
+/// The two markers of a block spelled under `names`.
+const fn markers(names: Names) -> (&'static str, &'static str) {
+    match names {
+        Names::Mindweaver => (BEGIN, END),
+        Names::Mindflayer => (FLAYER_BEGIN, FLAYER_END),
+    }
+}
 /// What opens one project's group inside the block, before the project's key.
 pub const GROUP: &str = "# project ";
 
@@ -95,7 +115,7 @@ pub fn listed(project: &Path, key: &str) -> Result<Option<Listing>, ExcludeError
 /// project at `from` into the group headed `to_key`, naming the same paths
 /// in the project at `to`: for a project whose id changed
 /// (`mind init --new-id`), which keeps its place and takes a new key, and
-/// for one that moved (`flayer relink`), which keeps its key and takes a new
+/// for one that moved (`mindweaver relink`), which keeps its key and takes a new
 /// place, in the same work tree or another.
 ///
 /// A line is the project's when it names a path below the project's own
@@ -318,12 +338,12 @@ pub fn locate(project: &Path) -> Result<Option<Location>, ExcludeError> {
 /// `mind.toml` project's was, stays in the index once a `.gitignore` asks
 /// for it to be left out, until somebody runs `git rm --cached` on it. Read
 /// from the index with gix, the repository opened as [`locate`] opens it,
-/// and never written: Mindflayer runs no git command, and taking a team's
+/// and never written: Mindweaver runs no git command, and taking a team's
 /// files out of the index is not its to do.
 pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
     in_index(project, folder, |index, path| {
         // Ending in a slash, as the index spells a folder's files, so
-        // `.mind` does not take in a `.mindflayer` beside it.
+        // `.mind` does not take in a `.mindweaver` beside it.
         let prefix = format!("{path}/");
         index
             .prefixed_entries(prefix.as_bytes().into())
@@ -335,7 +355,7 @@ pub fn tracks(project: &Path, folder: &Path) -> Result<bool, ExcludeError> {
 /// `project`: whether the index of the work tree holding the project names
 /// it. Never, outside a git work tree.
 ///
-/// For a team file Mindflayer would edit to reach an agent, which a local
+/// For a team file Mindweaver would edit to reach an agent, which a local
 /// project leaves alone while git tracks it, unless its settings say
 /// `edit_tracked` (D-02), as a project's `CLAUDE.md`. Read from the index
 /// as [`tracks`] reads it, so a file added and not yet committed is tracked,
@@ -512,7 +532,7 @@ fn read(path: &Path) -> Result<ExcludeFile, ExcludeError> {
 /// One path to keep out of git, relative to the project it is in.
 ///
 /// Which paths those are is the caller's to decide (an installed skill's
-/// folders, an `AGENTS.md` Mindflayer created); this only says how a path is
+/// folders, an `AGENTS.md` Mindweaver created); this only says how a path is
 /// written down.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Entry {
@@ -620,7 +640,7 @@ fn escape(segment: &str) -> String {
     escaped
 }
 
-/// An exclude file's text, split around Mindflayer's block.
+/// An exclude file's text, split around Mindweaver's block.
 ///
 /// Kept as lines with their own endings ([`crate::lines`]) rather than as
 /// one string to search and splice: what is outside the block is re-emitted
@@ -637,8 +657,11 @@ pub struct ExcludeFile {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Block {
+    /// Whose markers it is spelled with: those it was found under, and
+    /// Mindweaver's for one made anew.
+    names: Names,
     begin: Line,
-    /// Lines between the begin marker and the first group. Mindflayer never
+    /// Lines between the begin marker and the first group. Mindweaver never
     /// writes any, so they are somebody's, and they are kept.
     loose: Vec<Line>,
     groups: Vec<Group>,
@@ -657,30 +680,57 @@ impl ExcludeFile {
     ///
     /// A block that is not exactly one well-formed block is refused rather
     /// than repaired: guessing where a missing end marker belongs could
-    /// swallow somebody's patterns into Mindflayer's block, and the next edit
+    /// swallow somebody's patterns into Mindweaver's block, and the next edit
     /// would rewrite them.
     pub fn parse(bytes: &[u8]) -> Result<Self, Malformed> {
         let lines = lines::split(bytes);
         let ending = lines::ending(&lines);
 
-        let mut begin = None;
+        let mut begin: Option<(usize, Names)> = None;
         let mut end = None;
         for (index, line) in lines.iter().enumerate() {
             let number = index + 1;
-            if is(line, BEGIN) {
-                if begin.is_some() {
-                    return Err(Malformed::Reopened { line: number });
+            let marked = Names::ALL.into_iter().find_map(|names| {
+                let (opens, closes) = markers(names);
+                if is(line, opens) {
+                    Some((true, names))
+                } else if is(line, closes) {
+                    Some((false, names))
+                } else {
+                    None
                 }
-                begin = Some(index);
-            } else if is(line, END) {
-                if begin.is_none() || end.is_some() {
-                    return Err(Malformed::Unopened { line: number });
+            });
+            match marked {
+                None => {}
+                Some((true, names)) => {
+                    if begin.is_some() {
+                        return Err(Malformed::Reopened {
+                            line: number,
+                            names,
+                        });
+                    }
+                    begin = Some((index, names));
                 }
-                end = Some(index);
+                Some((false, names)) => {
+                    let Some((_, block)) = begin.filter(|_| end.is_none()) else {
+                        return Err(Malformed::Unopened {
+                            line: number,
+                            names,
+                        });
+                    };
+                    if block != names {
+                        return Err(Malformed::Mixed {
+                            line: number,
+                            found: names,
+                            block,
+                        });
+                    }
+                    end = Some(index);
+                }
             }
         }
 
-        let (begin, end) = match (begin, end) {
+        let (begin, names, end) = match (begin, end) {
             (None, _) => {
                 return Ok(ExcludeFile {
                     before: lines,
@@ -689,8 +739,13 @@ impl ExcludeFile {
                     ending,
                 })
             }
-            (Some(begin), None) => return Err(Malformed::Unclosed { line: begin + 1 }),
-            (Some(begin), Some(end)) => (begin, end),
+            (Some((begin, names)), None) => {
+                return Err(Malformed::Unclosed {
+                    line: begin + 1,
+                    names,
+                })
+            }
+            (Some((begin, names)), Some(end)) => (begin, names, end),
         };
 
         let mut lines = lines.into_iter();
@@ -721,6 +776,7 @@ impl ExcludeFile {
         Ok(ExcludeFile {
             before,
             block: Some(Block {
+                names,
                 begin: begin_line,
                 loose,
                 groups,
@@ -772,6 +828,7 @@ impl ExcludeFile {
                 }
             }
             self.block = Some(Block {
+                names: Names::Mindweaver,
                 begin: Line::new(BEGIN, ending),
                 loose: Vec::new(),
                 groups: Vec::new(),
@@ -852,6 +909,59 @@ impl ExcludeFile {
         Ok(true)
     }
 
+    /// Whose markers the block is spelled with: `None` when there is none.
+    pub fn names(&self) -> Option<Names> {
+        self.block.as_ref().map(|block| block.names)
+    }
+
+    /// Spell the block's two markers with `names`', and whether that
+    /// changed anything: what `migrate --names` does to a block a
+    /// Mindflayer build wrote, every group and every byte outside it kept,
+    /// the markers' line endings among them. The block's, whichever
+    /// projects' groups it holds: a file has one block, so its markers are
+    /// spelled one way for all of them.
+    pub fn renamed(&mut self, names: Names) -> bool {
+        let Some(block) = &mut self.block else {
+            return false;
+        };
+        if block.names == names {
+            return false;
+        }
+        let (begin, end) = markers(names);
+        block.begin = Line::new(begin, block.begin.end);
+        block.end = Line::new(end, block.end.end);
+        block.names = names;
+        true
+    }
+
+    /// Put `to` in place of the line `from` in `key`'s group, where it
+    /// stands, and whether that changed anything: for a path an entry names
+    /// that moved, its group's order kept, as Claude's rule files a
+    /// Mindflayer build filed are moved to the new folder.
+    pub fn replace(&mut self, key: &str, from: &str, to: &str) -> Result<bool, ExcludeError> {
+        check(key, &[from.to_owned(), to.to_owned()])?;
+        let Some(block) = self.block.as_mut() else {
+            return Ok(false);
+        };
+        let Some(group) = block
+            .groups
+            .iter_mut()
+            .find(|group| group.key == key.as_bytes())
+        else {
+            return Ok(false);
+        };
+        let Some(line) = group
+            .lines
+            .iter_mut()
+            .find(|line| line.text == from.as_bytes())
+        else {
+            return Ok(false);
+        };
+        let end = line.end;
+        *line = Line::new(to, end);
+        Ok(true)
+    }
+
     /// Every line of `key`'s group but blank ones, as written: none when
     /// there is no such group. Bytes that are not UTF-8 are shown as
     /// replacement characters, being for a person to read.
@@ -909,7 +1019,7 @@ impl ExcludeFile {
 
 /// Whether a line is the marker `marker`. Trailing whitespace is forgiven,
 /// as git forgives it in a pattern; leading whitespace is not, because git
-/// reads `  # mindflayer:begin` as a pattern rather than a comment.
+/// reads `  # mindweaver:begin` as a pattern rather than a comment.
 fn is(line: &Line, marker: &str) -> bool {
     line.text.trim_ascii_end() == marker.as_bytes()
 }
@@ -927,7 +1037,7 @@ fn key_of(line: &Line) -> Option<&[u8]> {
 /// file, and a key with space around it would not read back as itself.
 ///
 /// A pattern git reads as blank or as a comment excludes nothing, and inside
-/// the block a comment is structure: `# mindflayer:end` would close the block
+/// the block a comment is structure: `# mindweaver:end` would close the block
 /// early, leaving a file the next read refuses, and `# project b` would hand
 /// the lines after it to another project. [`Entry::pattern`] never writes
 /// one, since its lines start with `/`; this is for patterns handed in raw.
@@ -949,16 +1059,28 @@ fn check(key: &str, patterns: &[String]) -> Result<(), ExcludeError> {
     Ok(())
 }
 
-/// Why the block in an exclude file is not one Mindflayer can edit. Lines are
-/// counted from 1.
+/// Why the block in an exclude file is not one Mindweaver can edit. Lines are
+/// counted from 1, and a marker is quoted as the file spells it, under
+/// `names`.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Malformed {
-    #[error("line {line}: `# mindflayer:begin` is never closed by `# mindflayer:end`")]
-    Unclosed { line: usize },
-    #[error("line {line}: `# mindflayer:end` closes no `# mindflayer:begin`")]
-    Unopened { line: usize },
-    #[error("line {line}: a second `# mindflayer:begin`, where there can be one block")]
-    Reopened { line: usize },
+    #[error("line {line}: `{}` is never closed by `{}`", markers(*.names).0, markers(*.names).1)]
+    Unclosed { line: usize, names: Names },
+    #[error("line {line}: `{}` closes no `{}`", markers(*.names).1, markers(*.names).0)]
+    Unopened { line: usize, names: Names },
+    #[error("line {line}: a second `{}`, where there can be one block", markers(*.names).0)]
+    Reopened { line: usize, names: Names },
+    /// An end marker spelled under other names than the block's begin
+    /// marker.
+    #[error(
+        "line {line}: an end marker spelled as {found} spells it, in a block {block}'s \
+         marker opens, where both markers of a block are spelled alike"
+    )]
+    Mixed {
+        line: usize,
+        found: Names,
+        block: Names,
+    },
     #[error("line {line}: a second group for `{key}` in the block")]
     Regrouped { line: usize, key: String },
 }
@@ -967,6 +1089,7 @@ codes!(Malformed {
     Self::Unclosed { .. } => "exclude_block_unclosed",
     Self::Unopened { .. } => "exclude_block_unopened",
     Self::Reopened { .. } => "exclude_block_reopened",
+    Self::Mixed { .. } => "exclude_markers_mixed",
     Self::Regrouped { .. } => "exclude_group_repeated",
 });
 

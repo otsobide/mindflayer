@@ -65,7 +65,7 @@ fn a_project_is_read_by_its_entry_with_its_settings() {
 fn a_project_says_how_each_thing_it_holds_stands_and_where_its_copies_are() {
     let scenario = linking(&["api"]);
     scenario
-        .given("~/Projects", "flayer install -p api review")
+        .given("~/Projects", "mindweaver install -p api review")
         .given(
             "~/Projects/api",
             "mind add skill deploy 'Ship the service to staging'",
@@ -128,9 +128,9 @@ fn the_library_lists_the_workspaces_own_and_which_projects_hold_a_copy() {
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style 'How every repo here writes commits'",
+            "mindweaver add skill commit-style 'How every repo here writes commits'",
         )
-        .given("~/Projects", "flayer install -p api commit-style");
+        .given("~/Projects", "mindweaver install -p api commit-style");
     let served = scenario.serve("~/Projects");
 
     served
@@ -147,7 +147,7 @@ fn the_library_lists_the_workspaces_own_and_which_projects_hold_a_copy() {
                     "origin": null,
                     "state": null,
                     "summary": "How every repo here writes commits",
-                    "targets": [".mindflayer/library/skills/commit-style"],
+                    "targets": [".mindweaver/library/skills/commit-style"],
                     "unread": null,
                 },
                 {
@@ -158,7 +158,7 @@ fn the_library_lists_the_workspaces_own_and_which_projects_hold_a_copy() {
                     "origin": null,
                     "state": null,
                     "summary": REVIEW,
-                    "targets": [".mindflayer/library/skills/review"],
+                    "targets": [".mindweaver/library/skills/review"],
                     "unread": null,
                 },
             ]),
@@ -241,7 +241,7 @@ fn a_file_too_large_to_show_is_said_by_its_size_alone() {
     let scenario = guide_workspace();
     // One byte past the most a file is read to: 1 MiB.
     scenario.file(
-        "~/Projects/.mindflayer/library/skills/review/notes.md",
+        "~/Projects/.mindweaver/library/skills/review/notes.md",
         &"x".repeat((1 << 20) + 1),
     );
     let served = scenario.serve("~/Projects");
@@ -365,14 +365,14 @@ fn updates_says_what_an_update_of_every_project_would_write_and_what_it_leaves()
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style 'How every repo here writes commits'",
+            "mindweaver add skill commit-style 'How every repo here writes commits'",
         )
-        .given("~/Projects", "flayer install -p api commit-style")
-        .given("~/Projects", "flayer install -p web review")
+        .given("~/Projects", "mindweaver install -p api commit-style")
+        .given("~/Projects", "mindweaver install -p web review")
         // The library's moved on since api's copy was made, and web's copy
         // was changed where it is.
         .file(
-            "~/Projects/.mindflayer/library/skills/commit-style/SKILL.md",
+            "~/Projects/.mindweaver/library/skills/commit-style/SKILL.md",
             &added("commit-style", "How every repo here writes commits, now"),
         )
         .file(
@@ -480,7 +480,7 @@ fn a_plan_of_ticked_boxes_is_the_tasks_that_carry_it_out() {
 fn a_plan_says_a_box_it_may_not_change_is_locked_and_plans_the_rest() {
     let scenario = linking(&["api", "web"]);
     scenario
-        .given("~/Projects", "flayer install -p web review")
+        .given("~/Projects", "mindweaver install -p web review")
         .file(
             "~/Projects/web/.claude/skills/review/SKILL.md",
             &added("review", "Mine now"),
@@ -546,7 +546,7 @@ fn a_draft_is_judged_as_the_command_would_refuse_it_with_nothing_written() {
                             and digits, joined by single hyphens",
             },
         }));
-    assert!(!scenario.exists("~/Projects/.mindflayer/library/skills/Review"));
+    assert!(!scenario.exists("~/Projects/.mindweaver/library/skills/Review"));
 }
 
 #[test]
@@ -567,5 +567,5 @@ fn a_draft_that_breaks_no_rule_is_judged_fit() {
         )
         .is(200)
         .answers(json!({"issues": [], "refused": null}));
-    assert!(!scenario.exists("~/Projects/.mindflayer/library/skills/deploy"));
+    assert!(!scenario.exists("~/Projects/.mindweaver/library/skills/deploy"));
 }

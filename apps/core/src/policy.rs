@@ -16,7 +16,7 @@
 //! - **A folder that is not linked yet is named by a path that reads the same
 //!   from anywhere** ([`path`]): absolute, spelled as normalizing it would
 //!   spell it, so that what the preview shows is the folder the command
-//!   acts on, and outside every `.mindflayer`, where a workspace keeps its
+//!   acts on, and outside every `.mindweaver` (and `.mindflayer`), where a workspace keeps its
 //!   marker, its ledger, its library and the clones it gathered, none of
 //!   which is a project to make or link. A path that leads into one through
 //!   a link is refused as one inside it.
@@ -39,9 +39,10 @@ use thiserror::Error;
 use crate::code::codes;
 use crate::install;
 use crate::known::Switchable;
+use crate::names::Names;
 use crate::paths;
 use crate::resolve::Reason;
-use crate::workspace::{FlayerWorkspace, Loaded, Member, WorkspaceError, FLAYER_DIR};
+use crate::workspace::{Loaded, Member, WeaverWorkspace, WorkspaceError};
 
 /// Why a value a request holds is not one it may name.
 #[derive(Debug, Error)]
@@ -52,8 +53,11 @@ pub enum PolicyError {
     Relative { given: String },
     #[error("`{given}` is not spelled as the folder it names, `{normal}`: no `.` or `..` part, and no doubled or trailing separator")]
     Unnormalized { given: String, normal: String },
-    #[error("`{given}` is inside a `.mindflayer`, which holds a workspace's own files: name a folder outside it")]
-    InMindflayer { given: String },
+    /// Inside a `.mindweaver`, or the `.mindflayer` of a workspace a
+    /// Mindflayer build made: `folder` is the one it is in. Still the code
+    /// it was given under the old name, as every code is kept.
+    #[error("`{given}` is inside a `{folder}`, which holds a workspace's own files: name a folder outside it")]
+    InWeaverDir { given: String, folder: &'static str },
     /// A workspace to switch to that no list of what may be switched to
     /// holds, by the path it spells: a typo, a list read before it changed,
     /// or a path somebody put together, none of which is gone to.
@@ -70,22 +74,23 @@ codes!(PolicyError {
     Self::Url { .. } => "path_url",
     Self::Relative { .. } => "path_relative",
     Self::Unnormalized { .. } => "path_unnormalized",
-    Self::InMindflayer { .. } => "path_in_mindflayer",
+    Self::InWeaverDir { .. } => "path_in_mindflayer",
     Self::Unlisted { .. } => "switch_unlisted",
 } carried {
     Self::Workspace(error) => error,
 });
 
 /// `given`, as a path a request may name: absolute, spelled exactly as
-/// [`paths::normalize`] would spell it, and outside every `.mindflayer`,
-/// both as given and once its links are followed.
+/// [`paths::normalize`] would spell it, and outside every `.mindweaver` and
+/// every `.mindflayer` a Mindflayer build made, both as given and once its
+/// links are followed.
 ///
 /// Spelled as given is spelled normalized, rather than normalized for it, so
 /// the path a preview shows is the one the command is given, character for
 /// character. A path that does not exist yet is followed as far as it does
 /// exist, the rest appended ([`install::resolved`]): `mind init` makes a
 /// project in a folder that may be new, and one new under a link into a
-/// `.mindflayer` would be made inside it.
+/// `.mindweaver` would be made inside it.
 pub fn path(given: &str) -> Result<PathBuf, PolicyError> {
     let path = Path::new(given);
     if !path.is_absolute() {
@@ -109,13 +114,14 @@ pub fn path(given: &str) -> Result<PathBuf, PolicyError> {
         });
     }
     let followed = install::resolved(path);
-    if [Some(path), followed.as_deref()]
+    if let Some(folder) = [Some(path), followed.as_deref()]
         .into_iter()
         .flatten()
-        .any(in_mindflayer)
+        .find_map(in_weaver_dir)
     {
-        return Err(PolicyError::InMindflayer {
+        return Err(PolicyError::InWeaverDir {
             given: given.to_owned(),
+            folder,
         });
     }
     Ok(normal)
@@ -129,7 +135,7 @@ pub fn path(given: &str) -> Result<PathBuf, PolicyError> {
 /// way to name one, which a request has no need of. An entry whose project
 /// has gone is still an entry, and the command it reaches says why it
 /// cannot act on it.
-pub fn linked(workspace: &FlayerWorkspace, entry: &str) -> Result<Member, PolicyError> {
+pub fn linked(workspace: &WeaverWorkspace, entry: &str) -> Result<Member, PolicyError> {
     workspace
         .members()
         .into_iter()
@@ -145,7 +151,7 @@ pub fn linked(workspace: &FlayerWorkspace, entry: &str) -> Result<Member, Policy
 
 /// The entry of `workspace`'s `loaded` list spelled `entry`, as a snapshot
 /// lists it, matched as [`linked`] matches a project's.
-pub fn loaded(workspace: &FlayerWorkspace, entry: &str) -> Result<Loaded, PolicyError> {
+pub fn loaded(workspace: &WeaverWorkspace, entry: &str) -> Result<Loaded, PolicyError> {
     workspace
         .loads()
         .into_iter()
@@ -160,9 +166,9 @@ pub fn loaded(workspace: &FlayerWorkspace, entry: &str) -> Result<Loaded, Policy
 }
 
 /// `given`, a [`path`] some entry of `workspace`'s registry points at: how a
-/// command that takes linked projects by their paths, `flayer unlink` from
+/// command that takes linked projects by their paths, `mindweaver unlink` from
 /// the minds screen's marks, is given one.
-pub fn linked_path(workspace: &FlayerWorkspace, given: &str) -> Result<PathBuf, PolicyError> {
+pub fn linked_path(workspace: &WeaverWorkspace, given: &str) -> Result<PathBuf, PolicyError> {
     let path = path(given)?;
     if !workspace.is_linked(&path) {
         return Err(WorkspaceError::NotRegistered {
@@ -176,7 +182,7 @@ pub fn linked_path(workspace: &FlayerWorkspace, given: &str) -> Result<PathBuf, 
 
 /// `given`, a [`path`] some entry of `workspace`'s `loaded` list points at:
 /// how `mind unload` is given the workspace it takes out.
-pub fn loaded_path(workspace: &FlayerWorkspace, given: &str) -> Result<PathBuf, PolicyError> {
+pub fn loaded_path(workspace: &WeaverWorkspace, given: &str) -> Result<PathBuf, PolicyError> {
     let path = path(given)?;
     if !workspace.is_loaded(&path) {
         return Err(WorkspaceError::NotLoaded {
@@ -198,20 +204,20 @@ pub fn loaded_path(workspace: &FlayerWorkspace, given: &str) -> Result<PathBuf, 
 /// followed through a link, so nothing but a listed workspace is reached,
 /// and `given` names nothing else for being another spelling of it. One
 /// listed that does not open is refused with why it does not, never made:
-/// a workspace is made by `flayer init`, and a list read a moment ago may
+/// a workspace is made by `mindweaver init`, and a list read a moment ago may
 /// name one that has gone since. The one in use is taken, a switch to it
 /// changing nothing, as a load of one loaded already changes nothing.
 pub fn switched(
     listed: &[Switchable],
     given: &str,
-) -> Result<(FlayerWorkspace, Reason), PolicyError> {
+) -> Result<(WeaverWorkspace, Reason), PolicyError> {
     let row = listed
         .iter()
         .find(|row| row.workspace.path.to_str() == Some(given))
         .ok_or_else(|| PolicyError::Unlisted {
             given: given.to_owned(),
         })?;
-    Ok((FlayerWorkspace::open(&row.workspace.path)?, row.reason))
+    Ok((WeaverWorkspace::open(&row.workspace.path)?, row.reason))
 }
 
 /// `path` as a command line's words hold it: a path the registry resolved,
@@ -228,10 +234,16 @@ pub fn spelled(path: &Path) -> Result<String, PolicyError> {
     })
 }
 
-/// Whether some part of `path` is a `.mindflayer`.
-fn in_mindflayer(path: &Path) -> bool {
-    path.components()
-        .any(|component| component == Component::Normal(FLAYER_DIR.as_ref()))
+/// Which workspace's folder some part of `path` is, under either names:
+/// `.mindweaver`, or a Mindflayer build's `.mindflayer`.
+fn in_weaver_dir(path: &Path) -> Option<&'static str> {
+    Names::ALL
+        .into_iter()
+        .map(Names::workspace_dir)
+        .find(|folder| {
+            path.components()
+                .any(|component| component == Component::Normal(folder.as_ref()))
+        })
 }
 
 #[cfg(test)]

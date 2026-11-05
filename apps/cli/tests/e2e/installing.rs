@@ -9,7 +9,7 @@ fn library_with_commit_style(projects: &[&str]) -> Scenario {
     let scenario = Scenario::projects(projects);
     scenario.given(
         "~/Projects",
-        "flayer add skill commit-style \"How every repo here writes commits\"",
+        "mindweaver add skill commit-style \"How every repo here writes commits\"",
     );
     scenario
 }
@@ -17,7 +17,7 @@ fn library_with_commit_style(projects: &[&str]) -> Scenario {
 /// [`library_with_commit_style`], installed into `collapse`.
 fn commit_style_installed() -> Scenario {
     let scenario = library_with_commit_style(&["collapse"]);
-    scenario.given("~/Projects", "flayer install -p collapse commit-style");
+    scenario.given("~/Projects", "mindweaver install -p collapse commit-style");
     scenario
 }
 
@@ -26,12 +26,12 @@ fn a_skill_installed_gets_a_copy_in_every_folder_the_projects_agents_read() {
     let scenario = library_with_commit_style(&["collapse"]);
 
     scenario
-        .run("~/Projects", "flayer install -p collapse commit-style")
+        .run("~/Projects", "mindweaver install -p collapse commit-style")
         .succeeds()
         .prints("installed commit-style into collapse, from workspace\n")
         .quiet();
 
-    let library = scenario.read("~/Projects/.mindflayer/library/skills/commit-style/SKILL.md");
+    let library = scenario.read("~/Projects/.mindweaver/library/skills/commit-style/SKILL.md");
     for folder in [".claude/skills", ".agents/skills"] {
         assert_eq!(
             scenario.read(&format!(
@@ -49,19 +49,19 @@ fn a_local_projects_copies_are_kept_out_of_git() {
     let id = scenario.project_id("~/Projects/collapse");
 
     scenario
-        .run("~/Projects", "flayer install -p collapse commit-style")
+        .run("~/Projects", "mindweaver install -p collapse commit-style")
         .succeeds();
 
     let exclude = scenario.read("~/Projects/collapse/.git/info/exclude");
     let block = exclude
-        .split_once("# mindflayer:begin\n")
+        .split_once("# mindweaver:begin\n")
         .map(|(_, block)| block)
-        .expect("a block of Mindflayer's in the exclude file");
+        .expect("a block of Mindweaver's in the exclude file");
     assert_eq!(
         block,
         format!(
             "# project {id}\n/.agents/skills/commit-style/\n/.claude/skills/commit-style/\n\
-             # mindflayer:end\n"
+             # mindweaver:end\n"
         )
     );
 }
@@ -82,11 +82,11 @@ fn a_rule_installed_is_written_into_the_projects_agents_md() {
     let scenario = Scenario::projects(&["collapse"]);
     scenario.given(
         "~/Projects",
-        "flayer add rule git/commits \"Commit one coherent step at a time\"",
+        "mindweaver add rule git/commits \"Commit one coherent step at a time\"",
     );
 
     scenario
-        .run("~/Projects", "flayer install -p collapse git/commits")
+        .run("~/Projects", "mindweaver install -p collapse git/commits")
         .succeeds()
         .prints("installed rule git/commits into collapse, from workspace\n")
         .quiet();
@@ -94,10 +94,10 @@ fn a_rule_installed_is_written_into_the_projects_agents_md() {
     assert_eq!(
         scenario.read("~/Projects/collapse/AGENTS.md"),
         concat!(
-            "<!-- mindflayer:begin -->\n",
-            "<!-- mindflayer:rule git/commits -->\n",
+            "<!-- mindweaver:begin -->\n",
+            "<!-- mindweaver:rule git/commits -->\n",
             "# Commit one coherent step at a time\n",
-            "<!-- mindflayer:end -->\n",
+            "<!-- mindweaver:end -->\n",
         )
     );
     assert!(
@@ -116,15 +116,18 @@ fn a_rule_about_some_files_reaches_claude_alone_and_the_install_says_so() {
         )
         .given(
             "~/Projects",
-            "flayer add rule style/comments \"Comments say why, not what\"",
+            "mindweaver add rule style/comments \"Comments say why, not what\"",
         )
         .given(
             "~/Projects",
-            "flayer edit style/comments --contents ~/comments.md",
+            "mindweaver edit style/comments --contents ~/comments.md",
         );
 
     scenario
-        .run("~/Projects", "flayer install -p collapse style/comments")
+        .run(
+            "~/Projects",
+            "mindweaver install -p collapse style/comments",
+        )
         .exits(1)
         .prints("installed rule style/comments into collapse, from workspace\n")
         .says(
@@ -133,7 +136,7 @@ fn a_rule_about_some_files_reaches_claude_alone_and_the_install_says_so() {
         );
 
     assert_eq!(
-        scenario.read("~/Projects/collapse/.claude/rules/mindflayer/style/comments.md"),
+        scenario.read("~/Projects/collapse/.claude/rules/mindweaver/style/comments.md"),
         scenario.read("~/comments.md"),
         "Claude's rule file holds the rule as written, front matter included"
     );
@@ -145,15 +148,15 @@ fn a_skill_installed_from_a_loaded_workspace_says_where_it_came_from() {
     let scenario = Scenario::projects(&["collapse"]);
     scenario
         .folder("~/src/team")
-        .given("~/src/team", "flayer init")
+        .given("~/src/team", "mindweaver init")
         .given(
             "~/src/team",
-            "flayer add skill deploy \"Ship the service to staging\"",
+            "mindweaver add skill deploy \"Ship the service to staging\"",
         )
-        .given("~/Projects", "flayer load ../src/team");
+        .given("~/Projects", "mindweaver load ../src/team");
 
     scenario
-        .run("~/Projects", "flayer install -p collapse deploy")
+        .run("~/Projects", "mindweaver install -p collapse deploy")
         .succeeds()
         .prints("installed deploy into collapse, from load:../src/team\n")
         .quiet();
@@ -164,14 +167,14 @@ fn loading_a_workspace_says_what_it_offers_and_where_it_went() {
     let scenario = Scenario::projects(&["collapse"]);
     scenario
         .folder("~/src/team")
-        .given("~/src/team", "flayer init")
+        .given("~/src/team", "mindweaver init")
         .given(
             "~/src/team",
-            "flayer add skill deploy \"Ship the service to staging\"",
+            "mindweaver add skill deploy \"Ship the service to staging\"",
         );
 
     scenario
-        .run("~/Projects", "flayer load ../src/team")
+        .run("~/Projects", "mindweaver load ../src/team")
         .succeeds()
         .prints(concat!(
             "loaded team as ../src/team: 1 skill to install\n",
@@ -190,12 +193,12 @@ fn somebodys_skill_of_the_same_name_is_left_alone() {
     );
 
     scenario
-        .run("~/Projects", "flayer install -p collapse commit-style")
+        .run("~/Projects", "mindweaver install -p collapse commit-style")
         .exits(1)
         .prints("")
         .says(
             "warning: collapse already has a commit-style at .claude/skills/commit-style \
-             that Mindflayer did not put there, so it was left alone\n",
+             that Mindweaver did not put there, so it was left alone\n",
         );
 
     assert_eq!(
@@ -258,12 +261,15 @@ fn an_install_into_every_project_says_each_and_goes_on_past_a_refusal() {
     );
 
     scenario
-        .run("~/Projects", "flayer install commit-style --all-projects")
+        .run(
+            "~/Projects",
+            "mindweaver install commit-style --all-projects",
+        )
         .exits(1)
         .prints("installed commit-style into collapse, from workspace\n")
         .says(
             "warning: tanukeys already has a commit-style at .claude/skills/commit-style \
-             that Mindflayer did not put there, so it was left alone\n",
+             that Mindweaver did not put there, so it was left alone\n",
         );
 }
 
@@ -276,7 +282,10 @@ fn uninstall_takes_out_every_copy_it_installed_and_nothing_else() {
     );
 
     scenario
-        .run("~/Projects", "flayer uninstall -p collapse commit-style")
+        .run(
+            "~/Projects",
+            "mindweaver uninstall -p collapse commit-style",
+        )
         .succeeds()
         .prints("removed commit-style from collapse\n")
         .quiet();
@@ -294,14 +303,14 @@ fn uninstalling_the_last_rule_takes_away_the_agents_md_it_made() {
     scenario
         .given(
             "~/Projects",
-            "flayer add rule git/commits \"Commit one coherent step at a time\"",
+            "mindweaver add rule git/commits \"Commit one coherent step at a time\"",
         )
-        .given("~/Projects", "flayer install -p collapse git/commits");
+        .given("~/Projects", "mindweaver install -p collapse git/commits");
 
     scenario
         .run(
             "~/Projects",
-            "flayer uninstall -p collapse rule:git/commits",
+            "mindweaver uninstall -p collapse rule:git/commits",
         )
         .succeeds()
         .prints("removed rule git/commits from collapse\n")

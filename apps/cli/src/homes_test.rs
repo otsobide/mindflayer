@@ -54,7 +54,7 @@ fn default_home_takes_the_command_line_first() {
 
 #[test]
 fn a_named_workspace_is_taken_and_the_variable_is_not_read() {
-    let activated = environment(&[("MINDFLAYER_WORKSPACE", "/activated")]);
+    let activated = environment(&[("MINDWEAVER_WORKSPACE", "/activated")]);
 
     let lookup = Lookup::chosen(Some("/named"), &activated);
 
@@ -66,7 +66,7 @@ fn a_named_workspace_is_taken_and_the_variable_is_not_read() {
 fn a_workspace_named_empty_is_given_and_still_keeps_the_variable_out() {
     // What the test helpers pass: an activated workspace must not reach a
     // command whose line pins it.
-    let activated = environment(&[("MINDFLAYER_WORKSPACE", "/activated")]);
+    let activated = environment(&[("MINDWEAVER_WORKSPACE", "/activated")]);
 
     let lookup = Lookup::chosen(Some(""), &activated);
 
@@ -76,7 +76,7 @@ fn a_workspace_named_empty_is_given_and_still_keeps_the_variable_out() {
 
 #[test]
 fn with_no_workspace_named_the_activated_one_is_read() {
-    let activated = environment(&[("MINDFLAYER_WORKSPACE", "/activated")]);
+    let activated = environment(&[("MINDWEAVER_WORKSPACE", "/activated")]);
 
     let lookup = Lookup::chosen(None, &activated);
 
@@ -86,12 +86,97 @@ fn with_no_workspace_named_the_activated_one_is_read() {
 }
 
 #[test]
+fn the_variable_a_mindflayer_build_set_is_taken_only_while_the_new_one_is_not_set() {
+    let older = environment(&[("MINDFLAYER_WORKSPACE", "/older")]);
+
+    let lookup = Lookup::chosen(None, &older);
+
+    assert_eq!(lookup.activated, path("/older"));
+    assert_eq!(
+        lookup.older,
+        [Older {
+            older: "MINDFLAYER_WORKSPACE",
+            name: "MINDWEAVER_WORKSPACE",
+        }]
+    );
+    let both = environment(&[
+        ("MINDFLAYER_WORKSPACE", "/older"),
+        ("MINDWEAVER_WORKSPACE", "/newer"),
+    ]);
+    let lookup = Lookup::chosen(None, &both);
+    assert_eq!(lookup.activated, path("/newer"));
+    assert!(lookup.older.is_empty());
+    // Set empty, the new name is the answer: none, and the old not read.
+    let emptied = environment(&[
+        ("MINDFLAYER_WORKSPACE", "/older"),
+        ("MINDWEAVER_WORKSPACE", ""),
+    ]);
+    let lookup = Lookup::chosen(None, &emptied);
+    assert_eq!(lookup.activated, Some(PathBuf::new()));
+    assert!(lookup.older.is_empty());
+    // Named on the command line, neither is read.
+    assert!(Lookup::chosen(Some("/named"), &older).older.is_empty());
+}
+
+#[test]
+fn the_home_a_mindflayer_build_read_is_taken_only_while_the_new_one_is_not_set() {
+    let older = environment(&[("MINDFLAYER_HOME", "/older")]);
+    let user = path("/you");
+
+    assert_eq!(
+        home_from(None, &older, user.clone()),
+        (
+            path("/older"),
+            Some(Older {
+                older: "MINDFLAYER_HOME",
+                name: "MINDWEAVER_HOME",
+            })
+        )
+    );
+    let both = environment(&[("MINDFLAYER_HOME", "/older"), ("MINDWEAVER_HOME", "/newer")]);
+    assert_eq!(home_from(None, &both, user.clone()), (path("/newer"), None));
+    assert_eq!(
+        home_from(Some("/given"), &older, user.clone()),
+        (path("/given"), None)
+    );
+    assert_eq!(
+        home_from(None, &environment(&[]), user.clone()),
+        (user, None)
+    );
+}
+
+#[test]
+fn an_old_variable_taken_is_said_with_how_to_set_the_new_one() {
+    let workspace = Older {
+        older: "MINDFLAYER_WORKSPACE",
+        name: "MINDWEAVER_WORKSPACE",
+    };
+    let home = Older {
+        older: "MINDFLAYER_HOME",
+        name: "MINDWEAVER_HOME",
+    };
+
+    assert_eq!(
+        workspace.note(),
+        "note: $MINDFLAYER_WORKSPACE is Mindflayer's name for $MINDWEAVER_WORKSPACE, which is \
+         not set, so it is taken; `eval \"$(mindweaver activate \"$MINDFLAYER_WORKSPACE\")\"` \
+         activates it again under the new one"
+    );
+    assert_eq!(
+        home.note(),
+        "note: $MINDFLAYER_HOME is Mindflayer's name for $MINDWEAVER_HOME, which is not set, so \
+         it is taken; set MINDWEAVER_HOME in its place"
+    );
+}
+
+#[test]
 fn a_lookup_hands_core_what_it_holds() {
     let lookup = Lookup {
         flag: path("/named"),
         activated: path("/activated"),
         home: path("/home"),
         agents: AgentHomes::default(),
+        older: Vec::new(),
     };
 
     let inputs = lookup.inputs(Path::new("/start"), Intent::Write);

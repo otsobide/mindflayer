@@ -38,7 +38,7 @@ fn gathering_a_repository_puts_its_skills_on_the_shelf_and_says_each() {
     let scenario = acme();
 
     scenario
-        .run("~/Projects", "flayer gather git ../src/acme-skills")
+        .run("~/Projects", "mindweaver gather git ../src/acme-skills")
         .succeeds()
         .prints(&format!(
             "../src/acme-skills at {}\n\
@@ -60,7 +60,7 @@ fn gathering_a_repository_puts_its_skills_on_the_shelf_and_says_each() {
 fn gathering_again_says_what_moved() {
     let scenario = acme();
     scenario
-        .given("~/Projects", "flayer gather git ../src/acme-skills")
+        .given("~/Projects", "mindweaver gather git ../src/acme-skills")
         .change(
             SOURCE,
             &[(
@@ -73,7 +73,7 @@ fn gathering_again_says_what_moved() {
         );
 
     scenario
-        .run("~/Projects", "flayer gather git ../src/acme-skills")
+        .run("~/Projects", "mindweaver gather git ../src/acme-skills")
         .succeeds()
         .prints(&format!(
             "../src/acme-skills at {}\n\
@@ -98,7 +98,7 @@ fn a_skill_breaking_the_format_is_gathered_with_a_warning() {
     );
 
     scenario
-        .run("~/Projects", "flayer gather git ../src/other-rules")
+        .run("~/Projects", "mindweaver gather git ../src/other-rules")
         .exits(1)
         .prints(&format!(
             "../src/other-rules at {}\n\
@@ -108,7 +108,7 @@ fn a_skill_breaking_the_format_is_gathered_with_a_warning() {
             scenario.head("~/src/other-rules")
         ))
         .says(
-            "warning: /home/you/Projects/.mindflayer/skills/..-src-other-rules/pdf--forms/SKILL.md: \
+            "warning: /home/you/Projects/.mindweaver/skills/..-src-other-rules/pdf--forms/SKILL.md: \
              `pdf--forms` is not usable as a name: it has to be lowercase letters and digits, \
              joined by single hyphens\n",
         );
@@ -117,10 +117,10 @@ fn a_skill_breaking_the_format_is_gathered_with_a_warning() {
 #[test]
 fn gather_list_says_what_the_shelf_holds_and_from_where() {
     let scenario = acme();
-    scenario.given("~/Projects", "flayer gather git ../src/acme-skills");
+    scenario.given("~/Projects", "mindweaver gather git ../src/acme-skills");
 
     scenario
-        .run("~/Projects", "flayer gather list")
+        .run("~/Projects", "mindweaver gather list")
         .succeeds()
         .prints(concat!(
             "commit-style  ../src/acme-skills  How this repo writes commit messages\n",
@@ -132,10 +132,10 @@ fn gather_list_says_what_the_shelf_holds_and_from_where() {
 #[test]
 fn a_gathered_skill_installs_from_the_source_it_came_from() {
     let scenario = acme();
-    scenario.given("~/Projects", "flayer gather git ../src/acme-skills");
+    scenario.given("~/Projects", "mindweaver gather git ../src/acme-skills");
 
     scenario
-        .run("~/Projects", "flayer install -p collapse commit-style")
+        .run("~/Projects", "mindweaver install -p collapse commit-style")
         .succeeds()
         .prints("installed commit-style into collapse, from ../src/acme-skills\n")
         .quiet();
@@ -159,11 +159,11 @@ fn a_gathered_skill_the_format_refuses_is_not_installed() {
     // Gathered with its warning, which a step building the scenario would
     // refuse: the warning is the use case before this one.
     scenario
-        .run("~/Projects", "flayer gather git ../src/other-rules")
+        .run("~/Projects", "mindweaver gather git ../src/other-rules")
         .exits(1);
 
     scenario
-        .run("~/Projects", "flayer install -p collapse pdf--forms")
+        .run("~/Projects", "mindweaver install -p collapse pdf--forms")
         .exits(1)
         .prints("")
         .says(
@@ -181,7 +181,7 @@ fn a_url_carrying_a_token_is_refused_before_anything_is_fetched() {
     scenario
         .run(
             "~/Projects",
-            "flayer gather git https://me:ghp_t0ken@github.com/acme/private-skills",
+            "mindweaver gather git https://me:ghp_t0ken@github.com/acme/private-skills",
         )
         .exits(1)
         .prints("")
@@ -192,22 +192,22 @@ fn a_url_carrying_a_token_is_refused_before_anything_is_fetched() {
         );
 
     scenario
-        .run("~/Projects", "flayer gather list")
+        .run("~/Projects", "mindweaver gather list")
         .succeeds()
         .prints(concat!(
             "nothing gathered yet\n",
-            "  take some with `flayer gather git <url>`, or offer a workspace's own with \
-             `flayer load <path>`\n",
+            "  take some with `mindweaver gather git <url>`, or offer a workspace's own with \
+             `mindweaver load <path>`\n",
         ));
 }
 
 #[test]
-fn flayer_validate_reads_the_shelf_beside_the_library_and_the_projects() {
+fn mindweaver_validate_reads_the_shelf_beside_the_library_and_the_projects() {
     let scenario = acme();
-    scenario.given("~/Projects", "flayer gather git ../src/acme-skills");
+    scenario.given("~/Projects", "mindweaver gather git ../src/acme-skills");
 
     scenario
-        .run("~/Projects", "flayer validate")
+        .run("~/Projects", "mindweaver validate")
         .succeeds()
         .prints(concat!(
             "commit-style: ok\n",

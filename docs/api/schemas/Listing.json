@@ -149,7 +149,8 @@
       "type": "string",
       "enum": [
         "skill",
-        "rule"
+        "rule",
+        "mcp"
       ]
     },
     "KindCount": {
@@ -227,7 +228,7 @@
           "type": "string"
         },
         "templates": {
-          "description": "What `flayer add --template` can start from.",
+          "description": "What `mindweaver add --template` can start from.",
           "type": "array",
           "items": {
             "$ref": "#/$defs/Template"
@@ -244,7 +245,7 @@
       ]
     },
     "LibraryHolder": {
-      "description": "A project holding a copy of one of the workspace's own: one whose install\nthe ledger tells came from it ([`install::from_the_library`]), the rule\n`flayer remove --everywhere` takes the copies it removes by.\n\nTold here rather than by a front end comparing a copy's\n[`origin`](Held::origin) with [`Library::origin`], which would be a\nrule of its own, and a different one: a record from before origins were\nkept names none, and is a copy of one of the workspace's own all the\nsame while no workspace it loads offers that name.",
+      "description": "A project holding a copy of one of the workspace's own: one whose install\nthe ledger tells came from it ([`install::from_the_library`]), the rule\n`mindweaver remove --everywhere` takes the copies it removes by.\n\nTold here rather than by a front end comparing a copy's\n[`origin`](Held::origin) with [`Library::origin`], which would be a\nrule of its own, and a different one: a record from before origins were\nkept names none, and is a copy of one of the workspace's own all the\nsame while no workspace it loads offers that name.",
       "type": "object",
       "properties": {
         "entry": {
@@ -757,6 +758,33 @@
           "type": "object",
           "properties": {
             "code": {
+              "const": "name_file_mismatch"
+            },
+            "file": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "file",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
               "const": "description_empty"
             },
             "message": {
@@ -1001,6 +1029,318 @@
           },
           "required": [
             "code",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "transport_incomplete"
+            },
+            "field": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "transport": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "transport",
+            "field",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_repeated"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_unreferenced"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "kind",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_in_userinfo"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "input_name_malformed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "env_var_malformed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "variable": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "variable",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "secret_without_env_var"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "code": {
+              "const": "secret_literal"
+            },
+            "message": {
+              "type": "string"
+            },
+            "prefix": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "at",
+            "prefix",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "mcp_name_not_a_key"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "code": {
+              "const": "mcp_name_reserved"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "reserved": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "agent",
+            "reserved",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "agent": {
+              "type": "string"
+            },
+            "claimed": {
+              "type": "string"
+            },
+            "code": {
+              "const": "mcp_name_claimed"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "agent",
+            "claimed",
+            "warning",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "const": "mcp_name_case_clash"
+            },
+            "message": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "twin": {
+              "type": "string"
+            },
+            "warning": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "name",
+            "twin",
             "warning",
             "message"
           ]

@@ -9,6 +9,8 @@
 
 mod common;
 
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -175,17 +177,17 @@ fn workspace_with_rows() -> TempDir {
     let dir = workspace_with_two();
     let alpha = dir.path().join("alpha");
     write_rule(&alpha, "git/commits.md", "# Commits\n\nSay why.\n");
-    flayer(dir.path(), &["add", "skill", "tidy", "Tidy it"]).unwrap();
-    flayer(dir.path(), &["install", "-p", "alpha", "tidy"]).unwrap();
+    weaver(dir.path(), &["add", "skill", "tidy", "Tidy it"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "alpha", "tidy"]).unwrap();
     dir
 }
 
 #[test]
-fn flayer_list_as_json_holds_the_entries_the_text_lists() {
+fn weaver_list_as_json_holds_the_entries_the_text_lists() {
     let dir = workspace_with_rows();
 
-    let text = flayer(dir.path(), &["list"]).unwrap();
-    let json = flayer(dir.path(), &["list", "--json"]).unwrap();
+    let text = weaver(dir.path(), &["list"]).unwrap();
+    let json = weaver(dir.path(), &["list", "--json"]).unwrap();
 
     let (listing, warnings): (Listing, _) = enveloped(&json);
     assert_eq!(
@@ -238,8 +240,8 @@ fn flayer_list_as_json_holds_the_entries_the_text_lists() {
 fn a_kind_narrows_what_list_as_json_holds_as_it_narrows_the_text() {
     let dir = workspace_with_rows();
 
-    let text = flayer(dir.path(), &["list", "rules"]).unwrap();
-    let json = flayer(dir.path(), &["list", "rules", "--json"]).unwrap();
+    let text = weaver(dir.path(), &["list", "rules"]).unwrap();
+    let json = weaver(dir.path(), &["list", "rules", "--json"]).unwrap();
 
     let (listing, _): (Listing, _) = enveloped(&json);
     assert_eq!(entries(&listing), ["alpha rule git/commits"]);
@@ -257,12 +259,12 @@ fn a_kind_narrows_what_list_as_json_holds_as_it_narrows_the_text() {
 }
 
 #[test]
-fn mind_list_as_json_is_flayer_list_of_its_project() {
+fn mind_list_as_json_is_weaver_list_of_its_project() {
     let dir = workspace_with_rows();
     let alpha = dir.path().join("alpha");
 
     let here = mind(&alpha, &["list", "--json"]).unwrap();
-    let named = flayer(dir.path(), &["list", "-p", "alpha", "--json"]).unwrap();
+    let named = weaver(dir.path(), &["list", "-p", "alpha", "--json"]).unwrap();
     let text = mind(&alpha, &["list"]).unwrap();
 
     assert_eq!(here, named);
@@ -291,8 +293,8 @@ fn an_artifact_that_does_not_read_is_a_warning_and_fails_list_as_json_too() {
 
     for (text, json) in [
         (
-            flayer(dir.path(), &["list"]).unwrap(),
-            flayer(dir.path(), &["list", "--json"]).unwrap(),
+            weaver(dir.path(), &["list"]).unwrap(),
+            weaver(dir.path(), &["list", "--json"]).unwrap(),
         ),
         (
             mind(&alpha, &["list"]).unwrap(),
@@ -330,8 +332,8 @@ fn a_stale_entry_is_a_warning_and_a_project_saying_why_in_list_as_json() {
     let dir = workspace_with_two();
     fs::remove_dir_all(dir.path().join("beta")).unwrap();
 
-    let text = flayer(dir.path(), &["list"]).unwrap();
-    let json = flayer(dir.path(), &["list", "--json"]).unwrap();
+    let text = weaver(dir.path(), &["list"]).unwrap();
+    let json = weaver(dir.path(), &["list", "--json"]).unwrap();
 
     let (listing, warnings): (Listing, _) = enveloped(&json);
     assert_eq!(warnings, warned(&text));
@@ -351,7 +353,7 @@ fn the_hint_about_an_unmade_default_workspace_stays_on_stderr() {
     let home = TempDir::new().unwrap();
     let elsewhere = TempDir::new().unwrap();
 
-    let json = flayer_at_home(elsewhere.path(), home.path(), &["list", "--json"]).unwrap();
+    let json = weaver_at_home(elsewhere.path(), home.path(), &["list", "--json"]).unwrap();
 
     let (listing, warnings): (Listing, _) = enveloped(&json);
     assert!(listing.projects.is_empty());
@@ -359,7 +361,7 @@ fn the_hint_about_an_unmade_default_workspace_stays_on_stderr() {
     assert_eq!(json.stderr.len(), 1, "{:?}", json.stderr);
     assert!(json.stderr[0].text.starts_with("hint: "));
     assert!(json.ok);
-    assert!(!home.path().join(".mindflayer").exists());
+    assert!(!home.path().join(".mindweaver").exists());
 }
 
 /// `mind list --json` reads how each stands against the workspace `mind`
@@ -370,7 +372,7 @@ fn the_hint_about_an_unmade_default_workspace_stays_on_stderr() {
 fn a_workspace_above_that_cannot_be_read_leaves_mind_list_as_json_as_the_text() {
     let dir = workspace_with_two();
     let alpha = dir.path().join("alpha");
-    let marker = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let marker = dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG);
     let mut written = fs::read_to_string(&marker).unwrap();
     written.push_str("garbage = [\n");
     fs::write(&marker, written).unwrap();
@@ -481,8 +483,8 @@ fn validate_as_json_checks_the_entries_the_text_checks() {
         &skill_file("Deployment", "Ship it"),
     );
 
-    let text = flayer(dir.path(), &["validate"]).unwrap();
-    let json = flayer(dir.path(), &["validate", "--json"]).unwrap();
+    let text = weaver(dir.path(), &["validate"]).unwrap();
+    let json = weaver(dir.path(), &["validate", "--json"]).unwrap();
 
     let (validation, warnings): (Validation, _) = enveloped(&json);
     assert_eq!(checked(&validation), judged(&text.stdout));
@@ -517,11 +519,11 @@ fn validate_as_json_checks_the_entries_the_text_checks() {
 }
 
 #[test]
-fn mind_validate_as_json_is_flayer_validate_of_its_project() {
+fn mind_validate_as_json_is_weaver_validate_of_its_project() {
     let dir = workspace_with_rows();
 
     let here = mind(&dir.path().join("alpha"), &["validate", "rules", "--json"]).unwrap();
-    let named = flayer(dir.path(), &["validate", "rules", "-p", "alpha", "--json"]).unwrap();
+    let named = weaver(dir.path(), &["validate", "rules", "-p", "alpha", "--json"]).unwrap();
 
     assert_eq!(here, named);
     let (validation, _): (Validation, _) = enveloped(&here);
@@ -588,7 +590,46 @@ struct Shown {
     compatibility: Option<String>,
     metadata: Option<serde_json::Map<String, Value>>,
     paths: Option<Vec<String>>,
+    transport: Option<Transport>,
+    inputs: Option<Vec<Input>>,
+    expressibility: Option<Vec<Expressibility>>,
     body: String,
+}
+
+/// How an MCP server is started or reached, as `show --json` prints it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Transport {
+    #[serde(rename = "type")]
+    transport: String,
+    command: Option<String>,
+    args: Vec<String>,
+    env: BTreeMap<String, String>,
+    cwd: Option<String>,
+    url: Option<String>,
+    headers: BTreeMap<String, String>,
+}
+
+/// One input of an MCP server, as `show --json` prints it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Input {
+    name: String,
+    kind: String,
+    description: Option<String>,
+    required: bool,
+    secret: bool,
+    env_var: Option<String>,
+}
+
+/// What one agent cannot be given of an MCP server, as `show --json`
+/// prints it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Expressibility {
+    agent: String,
+    refused: Vec<Said>,
+    dropped: Vec<Said>,
 }
 
 #[test]
@@ -629,7 +670,111 @@ fn show_as_json_holds_what_the_text_shows() {
         dir.path().join("skills").join("deploy").join("SKILL.md")
     );
     assert_eq!(deploy.paths, None);
+    assert!(deploy.transport.is_none() && deploy.inputs.is_none());
+    assert!(deploy.expressibility.is_none());
     assert!(warnings.is_empty());
+    assert!(json.ok && text.ok);
+}
+
+#[test]
+fn show_as_json_says_what_each_agent_cannot_be_given_of_a_server_as_the_text_does() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("events.toml"),
+        mindweaver_core::mother::McpMother::sse("events"),
+    )
+    .unwrap();
+
+    let text = weaver(dir.path(), &["show", "mcp:events"]).unwrap();
+    let json = weaver(dir.path(), &["show", "mcp:events", "--json"]).unwrap();
+
+    let (shown, warnings): (Vec<Shown>, _) = enveloped(&json);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let report = shown[0].expressibility.as_ref().expect("a server's report");
+    let agents: Vec<&str> = report.iter().map(|one| one.agent.as_str()).collect();
+    assert_eq!(agents, ["claude", "codex", "opencode"]);
+    for one in report {
+        assert!(one.dropped.is_empty(), "{one:?}");
+        let codes: Vec<&str> = one.refused.iter().map(|said| said.code.as_str()).collect();
+        let expected: &[&str] = if one.agent == "claude" {
+            &[]
+        } else {
+            &["sse_unsupported"]
+        };
+        assert_eq!(codes, expected, "{}", one.agent);
+        for said in &one.refused {
+            assert!(
+                text.stdout.contains(&format!("    - {}\n", said.message)),
+                "{}",
+                text.stdout
+            );
+        }
+    }
+    assert!(json.ok && text.ok);
+}
+
+#[test]
+fn show_as_json_lays_out_a_servers_transport_and_inputs_as_the_text_does() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("linear.toml"),
+        mindweaver_core::mother::McpMother::http("linear"),
+    )
+    .unwrap();
+
+    let text = weaver(dir.path(), &["show", "mcp:linear"]).unwrap();
+    let json = weaver(dir.path(), &["show", "mcp:linear", "--json"]).unwrap();
+
+    let (shown, warnings): (Vec<Shown>, _) = enveloped(&json);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let transport = shown[0].transport.as_ref().expect("a server's transport");
+    assert_eq!(transport.transport, "http");
+    assert_eq!(
+        (&transport.command, &transport.cwd),
+        (&None, &None),
+        "{transport:?}"
+    );
+    assert!(transport.args.is_empty() && transport.env.is_empty());
+    let url = transport.url.as_deref().expect("an address");
+    assert!(
+        text.stdout
+            .contains(&format!("transport: http\n  url: {url}\n  headers:\n")),
+        "{}",
+        text.stdout
+    );
+    for (header, value) in &transport.headers {
+        assert!(
+            text.stdout.contains(&format!("    {header}: {value}\n")),
+            "{}",
+            text.stdout
+        );
+    }
+    let inputs = shown[0].inputs.as_ref().expect("a server's inputs");
+    let said: Vec<(&str, &str, bool)> = inputs
+        .iter()
+        .map(|input| (input.name.as_str(), input.kind.as_str(), input.secret))
+        .collect();
+    assert_eq!(
+        said,
+        [("tenant", "url_var", false), ("token", "header", true)]
+    );
+    for input in inputs {
+        let variable = input.env_var.as_deref().expect("a variable");
+        assert!(
+            text.stdout
+                .contains(&format!("  {}: {}", input.name, input.kind))
+                && text.stdout.contains(&format!("read from ${variable}\n")),
+            "{}",
+            text.stdout
+        );
+        assert!(input.required && input.description.is_none(), "{input:?}");
+    }
     assert!(json.ok && text.ok);
 }
 
@@ -643,8 +788,8 @@ fn show_as_json_holds_every_artifact_of_the_name_the_text_shows() {
     );
     write_rule(&dir.path().join("beta"), "alpha.md", "# A rule\n");
 
-    let text = flayer(dir.path(), &["show", "alpha"]).unwrap();
-    let json = flayer(dir.path(), &["show", "alpha", "--json"]).unwrap();
+    let text = weaver(dir.path(), &["show", "alpha"]).unwrap();
+    let json = weaver(dir.path(), &["show", "alpha", "--json"]).unwrap();
 
     let (shown, _): (Vec<Shown>, _) = enveloped(&json);
     let said: Vec<(&str, &str, &str)> = shown
@@ -672,7 +817,7 @@ fn show_as_json_holds_every_artifact_of_the_name_the_text_shows() {
 }
 
 #[test]
-fn mind_show_as_json_is_flayer_show_of_its_project() {
+fn mind_show_as_json_is_weaver_show_of_its_project() {
     let dir = workspace_with_rows();
 
     let here = mind(
@@ -680,7 +825,7 @@ fn mind_show_as_json_is_flayer_show_of_its_project() {
         &["show", "git/commits", "--json"],
     )
     .unwrap();
-    let named = flayer(
+    let named = weaver(
         dir.path(),
         &["show", "git/commits", "-p", "alpha", "--json"],
     )
@@ -716,7 +861,7 @@ fn an_artifact_that_does_not_read_is_a_warning_beside_show_as_json() {
 fn show_as_json_names_what_it_could_not_find_as_the_text_does() {
     let dir = workspace_with_two();
 
-    let failure = flayer(dir.path(), &["show", "absent", "--json"]).unwrap_err();
+    let failure = weaver(dir.path(), &["show", "absent", "--json"]).unwrap_err();
 
     assert!(matches!(*failure.error, CliError::UnknownArtifact(ref name) if name == "absent"));
 }
@@ -759,11 +904,11 @@ fn templates_as_json_holds_the_templates_the_text_lists() {
 }
 
 #[test]
-fn flayer_templates_as_json_is_mind_templates_of_its_project() {
+fn weaver_templates_as_json_is_mind_templates_of_its_project() {
     let dir = workspace_with_two();
 
     let here = mind(&dir.path().join("alpha"), &["templates", "--json"]).unwrap();
-    let named = flayer(dir.path(), &["templates", "-p", "alpha", "--json"]).unwrap();
+    let named = weaver(dir.path(), &["templates", "-p", "alpha", "--json"]).unwrap();
 
     assert_eq!(here, named);
 }
@@ -775,7 +920,7 @@ fn flayer_templates_as_json_is_mind_templates_of_its_project() {
 fn a_workspace_above_that_cannot_be_read_is_a_warning_beside_templates_as_json() {
     let dir = workspace_with_two();
     let alpha = dir.path().join("alpha");
-    let marker = dir.path().join(FLAYER_DIR).join(FLAYER_CONFIG);
+    let marker = dir.path().join(WEAVER_DIR).join(WEAVER_CONFIG);
     let mut written = fs::read_to_string(&marker).unwrap();
     written.push_str("garbage = [\n");
     fs::write(&marker, written).unwrap();
@@ -885,12 +1030,12 @@ fn workspace_offering() -> (TempDir, TempDir) {
     let dir = TempDir::new().unwrap();
     let hub = dir.path().join("hub");
     let team = dir.path().join("team");
-    flayer(&hub, &["init"]).unwrap();
-    flayer(&team, &["init"]).unwrap();
-    flayer(&team, &["add", "skill", "notes", "Take notes"]).unwrap();
-    flayer(&hub, &["load", "../team"]).unwrap();
+    weaver(&hub, &["init"]).unwrap();
+    weaver(&team, &["init"]).unwrap();
+    weaver(&team, &["add", "skill", "notes", "Take notes"]).unwrap();
+    weaver(&hub, &["load", "../team"]).unwrap();
     let url = source.path().to_string_lossy().into_owned();
-    flayer(&hub, &["gather", "git", &url]).unwrap();
+    weaver(&hub, &["gather", "git", &url]).unwrap();
     (dir, source)
 }
 
@@ -899,8 +1044,8 @@ fn gather_list_as_json_holds_the_offers_the_text_lists() {
     let (dir, source) = workspace_offering();
     let hub = dir.path().join("hub");
 
-    let text = flayer(&hub, &["gather", "list"]).unwrap();
-    let json = flayer(&hub, &["gather", "list", "--json"]).unwrap();
+    let text = weaver(&hub, &["gather", "list"]).unwrap();
+    let json = weaver(&hub, &["gather", "list", "--json"]).unwrap();
 
     let (offers, warnings): (Vec<Offer>, _) = enveloped(&json);
     let listed: Vec<String> = offers
@@ -928,8 +1073,8 @@ fn a_loaded_workspace_gone_is_a_warning_beside_gather_list_as_json() {
     let hub = dir.path().join("hub");
     fs::remove_dir_all(dir.path().join("team")).unwrap();
 
-    let text = flayer(&hub, &["gather", "list"]).unwrap();
-    let json = flayer(&hub, &["gather", "list", "--json"]).unwrap();
+    let text = weaver(&hub, &["gather", "list"]).unwrap();
+    let json = weaver(&hub, &["gather", "list", "--json"]).unwrap();
 
     let (offers, warnings): (Vec<Offer>, _) = enveloped(&json);
     assert_eq!(offers.len(), 1);

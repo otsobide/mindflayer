@@ -29,7 +29,7 @@ fn an_absent_file_gains_a_block_holding_the_group() {
     assert!(changed);
     assert_eq!(
         text(&file),
-        "# mindflayer:begin\n# project collapse\n/.agents/skills/commit-style/\n# mindflayer:end\n"
+        "# mindweaver:begin\n# project collapse\n/.agents/skills/commit-style/\n# mindweaver:end\n"
     );
 }
 
@@ -40,7 +40,7 @@ fn the_block_goes_after_what_was_there_and_leaves_it_byte_for_byte() {
     let written = text(&file);
     assert_eq!(
         written,
-        format!("{TEMPLATE}# mindflayer:begin\n# project collapse\n/a/\n# mindflayer:end\n")
+        format!("{TEMPLATE}# mindweaver:begin\n# project collapse\n/a/\n# mindweaver:end\n")
     );
 
     let mut file = ExcludeFile::parse(written.as_bytes()).unwrap();
@@ -50,12 +50,12 @@ fn the_block_goes_after_what_was_there_and_leaves_it_byte_for_byte() {
 
 #[test]
 fn lines_after_the_block_stay_where_they_are() {
-    let before = "*.log\n# mindflayer:begin\n# project a\n/a/\n# mindflayer:end\ntarget/\n";
+    let before = "*.log\n# mindweaver:begin\n# project a\n/a/\n# mindweaver:end\ntarget/\n";
     let mut file = ExcludeFile::parse(before.as_bytes()).unwrap();
     file.add("a", &patterns(&["/b/"])).unwrap();
     assert_eq!(
         text(&file),
-        "*.log\n# mindflayer:begin\n# project a\n/a/\n/b/\n# mindflayer:end\ntarget/\n"
+        "*.log\n# mindweaver:begin\n# project a\n/a/\n/b/\n# mindweaver:end\ntarget/\n"
     );
 
     file.remove("a", &patterns(&["/a/", "/b/"])).unwrap();
@@ -69,14 +69,14 @@ fn a_file_without_a_final_newline_keeps_ending_without_one() {
     let written = text(&file);
     assert_eq!(
         written,
-        "*.log\n# mindflayer:begin\n# project a\n/a/\n# mindflayer:end"
+        "*.log\n# mindweaver:begin\n# project a\n/a/\n# mindweaver:end"
     );
 
     let mut file = ExcludeFile::parse(written.as_bytes()).unwrap();
     file.add("a", &patterns(&["/b/"])).unwrap();
     assert_eq!(
         text(&file),
-        "*.log\n# mindflayer:begin\n# project a\n/a/\n/b/\n# mindflayer:end"
+        "*.log\n# mindweaver:begin\n# project a\n/a/\n/b/\n# mindweaver:end"
     );
     file.remove("a", &patterns(&["/a/", "/b/"])).unwrap();
     assert_eq!(file.to_bytes(), b"*.log");
@@ -86,7 +86,7 @@ fn a_file_without_a_final_newline_keeps_ending_without_one() {
 fn an_empty_file_gets_a_block_ending_in_a_newline_and_is_empty_again() {
     let mut file = ExcludeFile::parse(b"").unwrap();
     file.add("a", &patterns(&["/a/"])).unwrap();
-    assert!(text(&file).ends_with("# mindflayer:end\n"));
+    assert!(text(&file).ends_with("# mindweaver:end\n"));
     file.remove("a", &patterns(&["/a/"])).unwrap();
     assert_eq!(file.to_bytes(), b"");
 }
@@ -99,7 +99,7 @@ fn a_crlf_file_gets_crlf_lines_and_keeps_its_own() {
     let written = text(&file);
     assert_eq!(
         written,
-        "*.log\r\ntarget/\r\n# mindflayer:begin\r\n# project a\r\n/a/\r\n# mindflayer:end\r\n"
+        "*.log\r\ntarget/\r\n# mindweaver:begin\r\n# project a\r\n/a/\r\n# mindweaver:end\r\n"
     );
 
     let mut file = ExcludeFile::parse(written.as_bytes()).unwrap();
@@ -107,7 +107,7 @@ fn a_crlf_file_gets_crlf_lines_and_keeps_its_own() {
     file.remove("a", &patterns(&["/a/"])).unwrap();
     assert_eq!(
         text(&file),
-        "*.log\r\ntarget/\r\n# mindflayer:begin\r\n# project a\r\n/b/\r\n# mindflayer:end\r\n"
+        "*.log\r\ntarget/\r\n# mindweaver:begin\r\n# project a\r\n/b/\r\n# mindweaver:end\r\n"
     );
 }
 
@@ -135,7 +135,7 @@ fn a_pattern_named_twice_is_written_once() {
     file.add("a", &patterns(&["/a/", "/a/"])).unwrap();
     assert_eq!(
         text(&file),
-        "# mindflayer:begin\n# project a\n/a/\n# mindflayer:end\n"
+        "# mindweaver:begin\n# project a\n/a/\n# mindweaver:end\n"
     );
 }
 
@@ -157,20 +157,20 @@ fn one_projects_edits_never_touch_anothers_lines() {
     file.add("b", &patterns(&["/b/one/"])).unwrap();
     assert_eq!(
         text(&file),
-        "# mindflayer:begin\n# project a\n/a/one/\n# project b\n/b/one/\n# mindflayer:end\n"
+        "# mindweaver:begin\n# project a\n/a/one/\n# project b\n/b/one/\n# mindweaver:end\n"
     );
 
     file.add("a", &patterns(&["/a/two/"])).unwrap();
     assert_eq!(
         text(&file),
-        "# mindflayer:begin\n# project a\n/a/one/\n/a/two/\n# project b\n/b/one/\n# mindflayer:end\n"
+        "# mindweaver:begin\n# project a\n/a/one/\n/a/two/\n# project b\n/b/one/\n# mindweaver:end\n"
     );
 
     file.remove("a", &patterns(&["/a/one/", "/a/two/"]))
         .unwrap();
     assert_eq!(
         text(&file),
-        "# mindflayer:begin\n# project b\n/b/one/\n# mindflayer:end\n"
+        "# mindweaver:begin\n# project b\n/b/one/\n# mindweaver:end\n"
     );
 }
 
@@ -183,7 +183,7 @@ fn forgetting_a_group_takes_every_line_of_it_and_no_other_groups() {
     assert!(file.forget("a").unwrap());
     assert_eq!(
         text(&file),
-        format!("{TEMPLATE}# mindflayer:begin\n# project b\n/b/one/\n# mindflayer:end\n")
+        format!("{TEMPLATE}# mindweaver:begin\n# project b\n/b/one/\n# mindweaver:end\n")
     );
 
     // The last group takes the block with it, giving back the file as it was.
@@ -194,19 +194,19 @@ fn forgetting_a_group_takes_every_line_of_it_and_no_other_groups() {
 
 #[test]
 fn forgetting_the_last_group_keeps_a_block_somebody_wrote_in() {
-    let before = "# mindflayer:begin\n/kept/\n# project a\n/a/\n# mindflayer:end\n";
+    let before = "# mindweaver:begin\n/kept/\n# project a\n/a/\n# mindweaver:end\n";
     let mut file = ExcludeFile::parse(before.as_bytes()).unwrap();
     assert!(file.forget("a").unwrap());
     assert_eq!(
         text(&file),
-        "# mindflayer:begin\n/kept/\n# mindflayer:end\n"
+        "# mindweaver:begin\n/kept/\n# mindweaver:end\n"
     );
 }
 
 #[test]
 fn a_groups_lines_are_read_as_written_without_its_blanks() {
     let before =
-        "# mindflayer:begin\n# project a\n/a/\n\n/b/\n# project b\n/c/\n# mindflayer:end\n";
+        "# mindweaver:begin\n# project a\n/a/\n\n/b/\n# project b\n/c/\n# mindweaver:end\n";
     let file = ExcludeFile::parse(before.as_bytes()).unwrap();
     assert_eq!(file.lines_of("a"), patterns(&["/a/", "/b/"]));
     assert_eq!(file.lines_of("b"), patterns(&["/c/"]));
@@ -224,32 +224,32 @@ fn the_same_pattern_in_two_groups_is_each_groups_own() {
     file.remove("a", &patterns(&["/shared/"])).unwrap();
     assert_eq!(
         text(&file),
-        "# mindflayer:begin\n# project b\n/shared/\n# mindflayer:end\n"
+        "# mindweaver:begin\n# project b\n/shared/\n# mindweaver:end\n"
     );
 }
 
 #[test]
 fn lines_in_the_block_before_any_group_keep_it() {
-    // Mindflayer never writes them, so they are somebody's.
-    let before = "# mindflayer:begin\n/kept/\n# project a\n/a/\n# mindflayer:end\n";
+    // Mindweaver never writes them, so they are somebody's.
+    let before = "# mindweaver:begin\n/kept/\n# project a\n/a/\n# mindweaver:end\n";
     let mut file = ExcludeFile::parse(before.as_bytes()).unwrap();
     file.remove("a", &patterns(&["/a/"])).unwrap();
     assert_eq!(
         text(&file),
-        "# mindflayer:begin\n/kept/\n# mindflayer:end\n"
+        "# mindweaver:begin\n/kept/\n# mindweaver:end\n"
     );
 }
 
 #[test]
 fn markers_may_trail_whitespace_but_not_lead_it() {
-    let trailing = "# mindflayer:begin  \n# project a \n/a/\n# mindflayer:end\t\n";
+    let trailing = "# mindweaver:begin  \n# project a \n/a/\n# mindweaver:end\t\n";
     let mut file = ExcludeFile::parse(trailing.as_bytes()).unwrap();
     file.remove("a", &patterns(&["/a/"])).unwrap();
     assert_eq!(text(&file), "");
 
     // Git reads an indented `#` as a pattern, not a comment, so this is no
     // marker and there is no block to close.
-    let indented = " # mindflayer:begin\n";
+    let indented = " # mindweaver:begin\n";
     let mut file = ExcludeFile::parse(indented.as_bytes()).unwrap();
     file.add("a", &patterns(&["/a/"])).unwrap();
     assert!(text(&file).starts_with(indented));
@@ -257,46 +257,64 @@ fn markers_may_trail_whitespace_but_not_lead_it() {
 
 #[test]
 fn a_begin_without_an_end_is_malformed() {
-    let error = ExcludeFile::parse(b"*.log\n# mindflayer:begin\n# project a\n/a/\n").unwrap_err();
-    assert_eq!(error, Malformed::Unclosed { line: 2 });
+    let error = ExcludeFile::parse(b"*.log\n# mindweaver:begin\n# project a\n/a/\n").unwrap_err();
+    assert_eq!(
+        error,
+        Malformed::Unclosed {
+            line: 2,
+            names: Names::Mindweaver,
+        }
+    );
     assert_eq!(
         error.to_string(),
-        "line 2: `# mindflayer:begin` is never closed by `# mindflayer:end`"
+        "line 2: `# mindweaver:begin` is never closed by `# mindweaver:end`"
     );
 }
 
 #[test]
 fn an_end_without_a_begin_is_malformed() {
     assert_eq!(
-        ExcludeFile::parse(b"/a/\n# mindflayer:end\n").unwrap_err(),
-        Malformed::Unopened { line: 2 }
+        ExcludeFile::parse(b"/a/\n# mindweaver:end\n").unwrap_err(),
+        Malformed::Unopened {
+            line: 2,
+            names: Names::Mindweaver,
+        }
     );
     assert_eq!(
-        ExcludeFile::parse(b"# mindflayer:begin\n# mindflayer:end\n# mindflayer:end\n")
+        ExcludeFile::parse(b"# mindweaver:begin\n# mindweaver:end\n# mindweaver:end\n")
             .unwrap_err(),
-        Malformed::Unopened { line: 3 }
+        Malformed::Unopened {
+            line: 3,
+            names: Names::Mindweaver,
+        }
     );
 }
 
 #[test]
 fn a_second_block_is_malformed() {
     assert_eq!(
-        ExcludeFile::parse(b"# mindflayer:begin\n# mindflayer:begin\n# mindflayer:end\n")
+        ExcludeFile::parse(b"# mindweaver:begin\n# mindweaver:begin\n# mindweaver:end\n")
             .unwrap_err(),
-        Malformed::Reopened { line: 2 }
+        Malformed::Reopened {
+            line: 2,
+            names: Names::Mindweaver,
+        }
     );
     assert_eq!(
         ExcludeFile::parse(
-            b"# mindflayer:begin\n# mindflayer:end\n# mindflayer:begin\n# mindflayer:end\n"
+            b"# mindweaver:begin\n# mindweaver:end\n# mindweaver:begin\n# mindweaver:end\n"
         )
         .unwrap_err(),
-        Malformed::Reopened { line: 3 }
+        Malformed::Reopened {
+            line: 3,
+            names: Names::Mindweaver,
+        }
     );
 }
 
 #[test]
 fn a_project_with_two_groups_is_malformed() {
-    let before = "# mindflayer:begin\n# project a\n/a/\n# project a\n/b/\n# mindflayer:end\n";
+    let before = "# mindweaver:begin\n# project a\n/a/\n# project a\n/b/\n# mindweaver:end\n";
     assert_eq!(
         ExcludeFile::parse(before.as_bytes()).unwrap_err(),
         Malformed::Regrouped {
@@ -336,8 +354,8 @@ fn a_pattern_that_would_read_back_as_a_comment_or_a_blank_is_refused() {
     // was meant to be written.
     let mut file = ExcludeFile::parse(b"").unwrap();
     for pattern in [
-        "# mindflayer:end",
-        "# mindflayer:begin",
+        "# mindweaver:end",
+        "# mindweaver:begin",
         "# project b",
         "#note",
         "   ",
@@ -449,4 +467,103 @@ fn a_name_with_a_line_break_is_refused() {
         Entry::directory("a\nb").pattern(Path::new("")),
         Err(ExcludeError::Path { .. })
     ));
+}
+
+/// A block as a Mindflayer build wrote it after git's template, one
+/// project's group in it.
+fn written_by_mindflayer() -> String {
+    format!("{TEMPLATE}{FLAYER_BEGIN}\n# project app\n/.agents/skills/a/\n{FLAYER_END}\n")
+}
+
+#[test]
+fn a_block_a_mindflayer_build_wrote_is_edited_under_its_markers() {
+    let mut file = ExcludeFile::parse(written_by_mindflayer().as_bytes()).unwrap();
+    assert_eq!(file.names(), Some(Names::Mindflayer));
+    assert_eq!(file.lines_of("app"), ["/.agents/skills/a/"]);
+
+    file.add("app", &patterns(&["/.agents/skills/b/"])).unwrap();
+    file.add("web", &patterns(&["/web/.agents/skills/c/"]))
+        .unwrap();
+
+    assert_eq!(
+        text(&file),
+        format!(
+            "{TEMPLATE}{FLAYER_BEGIN}\n# project app\n/.agents/skills/a/\n/.agents/skills/b/\n\
+             # project web\n/web/.agents/skills/c/\n{FLAYER_END}\n"
+        )
+    );
+    file.forget("app").unwrap();
+    file.forget("web").unwrap();
+    assert_eq!(text(&file), TEMPLATE, "the block goes with its last group");
+}
+
+#[test]
+fn a_block_made_anew_is_spelled_under_mindweaver_s_markers() {
+    let mut file = ExcludeFile::parse(TEMPLATE.as_bytes()).unwrap();
+
+    file.add("app", &patterns(&["/.agents/skills/a/"])).unwrap();
+
+    assert_eq!(file.names(), Some(Names::Mindweaver));
+    assert!(text(&file).contains(&format!("{BEGIN}\n# project app\n")));
+}
+
+#[test]
+fn an_end_marker_spelled_otherwise_than_its_block_is_refused() {
+    let file = format!("{FLAYER_BEGIN}\n# project app\n{END}\n");
+
+    assert_eq!(
+        ExcludeFile::parse(file.as_bytes()),
+        Err(Malformed::Mixed {
+            line: 3,
+            found: Names::Mindweaver,
+            block: Names::Mindflayer,
+        })
+    );
+    let both = format!("{FLAYER_BEGIN}\n{FLAYER_END}\n{BEGIN}\n{END}\n");
+    assert_eq!(
+        ExcludeFile::parse(both.as_bytes()),
+        Err(Malformed::Reopened {
+            line: 3,
+            names: Names::Mindweaver,
+        })
+    );
+    let unclosed = ExcludeFile::parse(format!("{FLAYER_BEGIN}\n").as_bytes()).unwrap_err();
+    assert_eq!(
+        unclosed.to_string(),
+        "line 1: `# mindflayer:begin` is never closed by `# mindflayer:end`"
+    );
+}
+
+#[test]
+fn renaming_the_block_moves_its_markers_and_keeps_every_group() {
+    let old = written_by_mindflayer().replace('\n', "\r\n");
+    let mut file = ExcludeFile::parse(old.as_bytes()).unwrap();
+
+    assert!(file.renamed(Names::Mindweaver));
+    assert!(!file.renamed(Names::Mindweaver));
+
+    assert_eq!(text(&file), old.replace("mindflayer:", "mindweaver:"));
+    assert_eq!(file.lines_of("app"), ["/.agents/skills/a/"]);
+}
+
+#[test]
+fn a_line_replaced_keeps_its_place_in_its_group_and_its_ending() {
+    let old = format!(
+        "{BEGIN}\r\n# project app\r\n/a/\r\n/b.md\r\n/c/\r\n# project web\r\n/b.md\r\n{END}\r\n"
+    );
+    let mut file = ExcludeFile::parse(old.as_bytes()).unwrap();
+
+    assert!(file.replace("app", "/b.md", "/moved/b.md").unwrap());
+    assert!(!file.replace("app", "/b.md", "/again.md").unwrap(), "gone");
+    assert!(
+        !file.replace("other", "/a/", "/z/").unwrap(),
+        "no such group"
+    );
+
+    assert_eq!(
+        text(&file),
+        old.replacen("/b.md", "/moved/b.md", 1),
+        "the other group's line of the same text is its own"
+    );
+    assert!(file.replace("app", "/a/", "# not a pattern").is_err());
 }

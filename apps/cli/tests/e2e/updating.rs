@@ -25,8 +25,8 @@ fn installed_from_acme() -> Scenario {
                 &skill("commit-style", "How this repo writes commit messages"),
             )],
         )
-        .given("~/Projects", "flayer gather git ../src/acme-skills")
-        .given("~/Projects", "flayer install -p collapse commit-style");
+        .given("~/Projects", "mindweaver gather git ../src/acme-skills")
+        .given("~/Projects", "mindweaver install -p collapse commit-style");
     scenario
 }
 
@@ -36,7 +36,7 @@ fn outdated() -> Scenario {
     let scenario = installed_from_acme();
     scenario
         .change(SOURCE, &[("skills/commit-style/SKILL.md", &moved_on())])
-        .given("~/Projects", "flayer gather git ../src/acme-skills");
+        .given("~/Projects", "mindweaver gather git ../src/acme-skills");
     scenario
 }
 
@@ -45,7 +45,7 @@ fn a_copy_behind_what_its_source_offers_is_outdated() {
     let scenario = outdated();
 
     scenario
-        .run("~/Projects", "flayer status")
+        .run("~/Projects", "mindweaver status")
         .succeeds()
         .prints("commit-style  outdated  claude,codex,opencode  ../src/acme-skills\n")
         .quiet();
@@ -58,7 +58,7 @@ fn update_without_yes_says_what_it_would_do_and_changes_nothing() {
     let before = scenario.read(copy);
 
     scenario
-        .run("~/Projects", "flayer update -p collapse")
+        .run("~/Projects", "mindweaver update -p collapse")
         .succeeds()
         .prints(concat!(
             "would update commit-style in collapse, from ../src/acme-skills\n",
@@ -74,7 +74,7 @@ fn update_with_yes_brings_every_copy_up_to_date() {
     let scenario = outdated();
 
     scenario
-        .run("~/Projects", "flayer update -p collapse --yes")
+        .run("~/Projects", "mindweaver update -p collapse --yes")
         .succeeds()
         .prints("updated commit-style in collapse, from ../src/acme-skills\n")
         .quiet();
@@ -89,7 +89,7 @@ fn update_with_yes_brings_every_copy_up_to_date() {
         );
     }
     scenario
-        .run("~/Projects", "flayer status")
+        .run("~/Projects", "mindweaver status")
         .succeeds()
         .prints("commit-style  current  claude,codex,opencode  ../src/acme-skills\n");
 }
@@ -123,7 +123,7 @@ fn update_leaves_a_copy_somebody_changed_and_says_how_to_force_it() {
     scenario.file(copy, &changed);
 
     scenario
-        .run("~/Projects", "flayer update -p collapse --yes")
+        .run("~/Projects", "mindweaver update -p collapse --yes")
         .exits(1)
         .prints("nothing to update in collapse\n")
         .says(
@@ -140,9 +140,9 @@ fn a_change_to_the_library_reaches_a_project_by_an_update() {
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install -p collapse commit-style")
+        .given("~/Projects", "mindweaver install -p collapse commit-style")
         .file(
             "~/draft.md",
             &skill(
@@ -152,11 +152,11 @@ fn a_change_to_the_library_reaches_a_project_by_an_update() {
         )
         .given(
             "~/Projects",
-            "flayer edit commit-style --contents ~/draft.md",
+            "mindweaver edit commit-style --contents ~/draft.md",
         );
 
     scenario
-        .run("~/Projects", "flayer update -p collapse --yes")
+        .run("~/Projects", "mindweaver update -p collapse --yes")
         .succeeds()
         .prints("updated commit-style in collapse, from workspace\n")
         .quiet();
@@ -172,7 +172,7 @@ fn update_says_which_projects_it_needs_named() {
     let scenario = installed_from_acme();
 
     scenario
-        .run("~/Projects", "flayer update --yes")
+        .run("~/Projects", "mindweaver update --yes")
         .exits(1)
         .prints("")
         .says(

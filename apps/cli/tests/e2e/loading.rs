@@ -10,12 +10,12 @@ fn loading_team() -> Scenario {
     let scenario = Scenario::projects(&["collapse"]);
     scenario
         .folder("~/src/team")
-        .given("~/src/team", "flayer init")
+        .given("~/src/team", "mindweaver init")
         .given(
             "~/src/team",
-            "flayer add skill deploy \"Ship the service to staging\"",
+            "mindweaver add skill deploy \"Ship the service to staging\"",
         )
-        .given("~/Projects", "flayer load ../src/team");
+        .given("~/Projects", "mindweaver load ../src/team");
     scenario
 }
 
@@ -24,7 +24,7 @@ fn load_alone_says_what_is_loaded_and_what_each_offers() {
     let scenario = loading_team();
 
     scenario
-        .run("~/Projects", "flayer load")
+        .run("~/Projects", "mindweaver load")
         .succeeds()
         .prints(concat!(
             "../src/team  team  1 skill to install\n",
@@ -36,16 +36,16 @@ fn load_alone_says_what_is_loaded_and_what_each_offers() {
 #[test]
 fn unload_forgets_a_loaded_workspace_and_leaves_what_was_installed_from_it() {
     let scenario = loading_team();
-    scenario.given("~/Projects", "flayer install -p collapse deploy");
+    scenario.given("~/Projects", "mindweaver install -p collapse deploy");
 
     scenario
-        .run("~/Projects", "flayer unload ../src/team")
+        .run("~/Projects", "mindweaver unload ../src/team")
         .succeeds()
         .prints("unloaded ../src/team\n  from the workspace at /home/you/Projects\n")
         .quiet();
     assert!(scenario.exists("~/Projects/collapse/.claude/skills/deploy/SKILL.md"));
     scenario
-        .run("~/Projects", "flayer status -p collapse")
+        .run("~/Projects", "mindweaver status -p collapse")
         .succeeds()
         .prints("deploy  orphaned  claude,codex,opencode  load:../src/team\n");
 }
@@ -55,10 +55,10 @@ fn mind_load_loads_into_the_workspace_above_the_project() {
     let scenario = Scenario::projects(&["collapse"]);
     scenario
         .folder("~/src/team")
-        .given("~/src/team", "flayer init")
+        .given("~/src/team", "mindweaver init")
         .given(
             "~/src/team",
-            "flayer add skill deploy \"Ship the service to staging\"",
+            "mindweaver add skill deploy \"Ship the service to staging\"",
         );
 
     scenario
@@ -76,13 +76,13 @@ fn a_name_two_places_offer_is_installed_from_the_one_from_names() {
     let scenario = loading_team();
     scenario.given(
         "~/Projects",
-        "flayer add skill deploy \"Ship the service to production\"",
+        "mindweaver add skill deploy \"Ship the service to production\"",
     );
 
     scenario
         .run(
             "~/Projects",
-            "flayer install -p collapse deploy --from load:../src/team",
+            "mindweaver install -p collapse deploy --from load:../src/team",
         )
         .succeeds()
         .prints("installed deploy into collapse, from load:../src/team\n")
@@ -97,11 +97,11 @@ fn a_name_two_places_offer_is_not_installed_until_from_says_which() {
     let scenario = loading_team();
     scenario.given(
         "~/Projects",
-        "flayer add skill deploy \"Ship the service to production\"",
+        "mindweaver add skill deploy \"Ship the service to production\"",
     );
 
     scenario
-        .run("~/Projects", "flayer install -p collapse deploy")
+        .run("~/Projects", "mindweaver install -p collapse deploy")
         .exits(1)
         .prints("")
         .says(

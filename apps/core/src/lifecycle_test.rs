@@ -99,7 +99,8 @@ fn a_skill_lives_in_a_folder_of_its_name_and_a_rule_in_a_file_of_its_route() {
 
 #[test]
 fn an_artifact_s_place_is_in_the_folder_its_project_keeps_the_kind_in() {
-    let (_dir, project) = project();
+    let dir = TempDir::new().unwrap();
+    let project = ProjectMother::with_mcp(&dir.path().join("app"), &[], Share::Shared);
     for kind in Kind::ALL {
         let name = random::kebab();
 
@@ -130,11 +131,12 @@ fn a_kind_the_project_keeps_nowhere_has_no_place() {
 /// does not read still be named from where it sits.
 #[test]
 fn the_file_at_any_artifact_s_place_identifies_it() {
-    let (_dir, project) = project();
+    let dir = TempDir::new().unwrap();
+    let project = ProjectMother::with_mcp(&dir.path().join("app"), &[], Share::Shared);
     for _ in 0..DRAWS {
         let kind = random::pick(&Kind::ALL);
         let name = match kind {
-            Kind::Skill => random::kebab(),
+            Kind::Skill | Kind::Mcp => random::kebab(),
             Kind::Rule => crate::mother::ArtifactNameMother::route().into_string(),
         };
         let file = file_of(kind, &place(&project, kind, &name).unwrap());
@@ -534,7 +536,7 @@ fn no_workspace_is_no_library() {
         assert!(!library(
             None,
             kind,
-            Path::new("/home/you/.mindflayer/skills")
+            Path::new("/home/you/.mindweaver/skills")
         ));
     }
 }
@@ -644,12 +646,16 @@ fn every_lifecycle_error_of_its_own_has_a_code_and_they_are_all_listed() {
     unique.dedup();
 
     assert_eq!(unique.len(), codes.len(), "{codes:?}");
-    assert_eq!(codes.len(), 20, "{codes:?}");
+    assert_eq!(codes.len(), 24, "{codes:?}");
     for code in [
         "not_found",
         "change_outside",
         "edit_stale",
         "edit_leads_outside",
+        "rename_mcp_nested",
+        "rename_definition_unreadable",
+        "edit_definition_unreadable",
+        "edit_mcp_name_changed",
     ] {
         assert!(codes.contains(&code), "{code}");
     }

@@ -31,16 +31,18 @@ pub mod settings;
 pub mod url;
 pub mod value;
 
-pub use artifact::{RuleMother, SkillMother};
-pub use fixture::{GitRepositoryMother, ProjectMother, ShelfMother, WorkspaceMother};
+pub use artifact::{McpMother, RuleMother, SkillMother};
+pub use fixture::{
+    GitRepositoryMother, MindflayerMother, ProjectMother, ShelfMother, WorkspaceMother,
+};
 pub use ledger::{
     EntryMother, GatheredMother, InstallRecordMother, MovedMother, SourceMother, TargetMother,
 };
 pub use settings::SettingsMother;
 pub use url::{Credentialed, UrlMother};
 pub use value::{
-    ArtifactNameMother, ContentHashMother, OriginMother, ProjectIdMother, RedactedMother,
-    RevisionMother,
+    ArtifactNameMother, ContentHashMother, InputNameMother, OriginMother, ProjectIdMother,
+    RedactedMother, RevisionMother, VariableNameMother,
 };
 
 #[cfg(test)]

@@ -19,7 +19,7 @@ use crate::frontmatter;
 
 /// The front matter of a rule, as written: empty when it has none.
 ///
-/// Only the keys Mindflayer reads are held. Every other key belongs to an
+/// Only the keys Mindweaver reads are held. Every other key belongs to an
 /// agent and passes through, not modelled and not rejected, as a skill's do.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RuleManifest {

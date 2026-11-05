@@ -108,7 +108,7 @@ fn in_skills() -> Settings {
 fn a_settings_toml_is_written_from_a_template_whose_comments_say_what_each_key_does() {
     assert_eq!(
         standard_toml(),
-        r#"# Mindflayer mind project: what Mindflayer needs to know about the project
+        r#"# Mindweaver mind project: what Mindweaver needs to know about the project
 # this .mind is in, and nothing else. No agent reads it.
 #
 # `name` is what the project is shown as, and `agents` the agents that work

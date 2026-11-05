@@ -7,7 +7,7 @@ use crate::{collapse_and_tanukeys, Key, Scenario};
 #[test]
 fn quitting_with_nothing_changed_prints_nothing_and_gives_the_terminal_back() {
     let scenario = collapse_and_tanukeys();
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal.types("q");
@@ -20,7 +20,7 @@ fn quitting_with_nothing_changed_prints_nothing_and_gives_the_terminal_back() {
 #[test]
 fn ctrl_c_quits_as_q_does_since_the_screen_keeps_it_for_itself() {
     let scenario = collapse_and_tanukeys();
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal.presses(Key::CtrlC);
@@ -35,59 +35,59 @@ fn where_no_workspace_is_it_opens_the_default_one_without_making_it() {
     let scenario = Scenario::empty();
     scenario.folder("~/notes");
 
-    let mut terminal = scenario.open("~/notes", "flayer");
+    let mut terminal = scenario.open("~/notes", "mindweaver");
 
     terminal
         .draws(
             0,
-            &[" mindflayer  you  · default workspace, not made yet · nothing on the shelf  · /home/you"],
+            &[" mindweaver  you  · default workspace, not made yet · nothing on the shelf  · /home/you"],
         )
         .shows("> ◆ you  0")
-        .shows("skills go in .mindflayer/library/skills/");
+        .shows("skills go in .mindweaver/library/skills/");
     terminal.types("q");
     let closed = terminal.exits();
     assert!(closed.status.success());
-    assert!(!scenario.exists("~/.mindflayer"));
+    assert!(!scenario.exists("~/.mindweaver"));
 }
 
 #[test]
 fn with_no_default_either_it_offers_to_make_a_workspace_where_it_was_opened() {
     let scenario = Scenario::empty();
     scenario.folder("~/notes");
-    let mut terminal = scenario.open("~/notes", "flayer --home=");
+    let mut terminal = scenario.open("~/notes", "mindweaver --home=");
 
     terminal
-        .shows("No flayer workspace here")
+        .shows("No weaver workspace here")
         .shows("Nothing at or above this directory is one:")
         .shows("/home/you/notes")
-        .shows("enter  create one here  runs `flayer init`");
+        .shows("enter  create one here  runs `mindweaver init`");
     terminal
         .presses(Key::Enter)
-        .shows(" mindflayer  notes  · found above · nothing on the shelf  · /home/you/notes")
-        .shows("initialized flayer workspace `notes` in /home/you/notes/.mindflayer");
+        .shows(" mindweaver  notes  · found above · nothing on the shelf  · /home/you/notes")
+        .shows("initialized weaver workspace `notes` in /home/you/notes/.mindweaver");
 
     terminal.types("q");
     let closed = terminal.exits();
     assert_eq!(
         closed.shown.trim_end(),
         concat!(
-            "$ flayer init\n",
-            "initialized flayer workspace `notes` in /home/you/notes/.mindflayer",
+            "$ mindweaver init\n",
+            "initialized weaver workspace `notes` in /home/you/notes/.mindweaver",
         )
     );
-    assert!(scenario.exists("~/notes/.mindflayer/flayer.toml"));
+    assert!(scenario.exists("~/notes/.mindweaver/weaver.toml"));
 }
 
 #[test]
 fn quitting_where_nothing_was_made_leaves_the_folder_as_it_was() {
     let scenario = Scenario::empty();
     scenario.folder("~/notes");
-    let mut terminal = scenario.open("~/notes", "flayer --home=");
-    terminal.shows("No flayer workspace here");
+    let mut terminal = scenario.open("~/notes", "mindweaver --home=");
+    terminal.shows("No weaver workspace here");
 
     terminal.types("q");
     let closed = terminal.exits();
 
     assert!(closed.status.success());
-    assert!(!scenario.exists("~/notes/.mindflayer"));
+    assert!(!scenario.exists("~/notes/.mindweaver"));
 }

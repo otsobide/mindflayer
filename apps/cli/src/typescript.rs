@@ -1,6 +1,6 @@
 //! What the panel sends the CLI's backend and is answered with, in
 //! TypeScript (#70): the `ts` feature's, as core's types are core's
-//! (`mindflayer_core::typescript`).
+//! (`mindweaver_core::typescript`).
 //!
 //! Derived, every type serde reads or writes: a query, a task and what a
 //! run produced go through serde's derive, which ts-rs reads, so none needs
@@ -10,9 +10,9 @@
 
 use std::path::PathBuf;
 
-use mindflayer_core::code::CoreCode;
-use mindflayer_core::typescript::{docs, lines};
-use mindflayer_server::Condition;
+use mindweaver_core::code::CoreCode;
+use mindweaver_core::typescript::{docs, lines};
+use mindweaver_server::Condition;
 use ts_rs::{Config, TypeVisitor, TS};
 
 use crate::backend::{Confirm, Outcome, Planned, Query, Scanned, Switch};

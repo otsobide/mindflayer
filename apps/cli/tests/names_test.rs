@@ -8,11 +8,11 @@ mod common;
 use std::collections::BTreeMap;
 
 use common::*;
-use mindflayer_core::mother::{ArtifactNameMother, SkillMother};
+use mindweaver_core::mother::{ArtifactNameMother, McpMother, SkillMother};
 use serde_json::Value;
 
 /// Where an artifact is added: a project's own, through `mind`, or the
-/// workspace's library, through `flayer`.
+/// workspace's library, through `mindweaver`.
 #[derive(Debug, Clone, Copy)]
 enum Level {
     Project,
@@ -33,7 +33,7 @@ impl Place {
         match level {
             Level::Project => new_project(dir.path()),
             Level::Workspace => {
-                flayer(dir.path(), &["init"]).unwrap();
+                weaver(dir.path(), &["init"]).unwrap();
             }
         }
         Place { dir, level }
@@ -62,7 +62,7 @@ impl Place {
     fn run(&self, args: &[&str]) -> Result<Outcome, Failure> {
         match self.level {
             Level::Project => mind(self.root(), args),
-            Level::Workspace => flayer(self.root(), args),
+            Level::Workspace => weaver(self.root(), args),
         }
     }
 
@@ -304,22 +304,39 @@ fn a_rule_added_under_any_route_is_listed_shown_renamed_and_removed_by_it() {
     }
 }
 
-/// What a refusal of a name no artifact may be written under says, by why
-/// it is refused: the command's one code covers every reason, which its
-/// words tell apart.
-fn says_why(failure: &Failure, code: &str, why: &str, what: &str) {
+/// Every name no artifact of `kind` may be written under, each beside why:
+/// a skill's and a rule's are held to kebab-case, and an MCP server's to the
+/// keys an agent takes, less those an agent keeps for itself.
+fn unwritable(kind: Kind) -> Vec<(&'static str, String)> {
+    match kind {
+        Kind::Skill | Kind::Rule => ArtifactNameMother::unwritable(),
+        Kind::Mcp => McpMother::unwritable(),
+    }
+}
+
+/// What a refusal of a name no artifact of `kind` may be written under
+/// says, by why it is refused: the command's one code covers every reason,
+/// which its words tell apart.
+fn says_why(failure: &Failure, code: &str, kind: Kind, why: &str, what: &str) {
     assert_eq!(failure.error.code(), code, "{what}: {}", failure.error);
     let said = failure.error.to_string();
     let limit = format!(
         "characters, over the {} character limit",
-        mindflayer_core::skill::MAX_NAME_SEGMENT_LEN
+        mindweaver_core::skill::MAX_NAME_SEGMENT_LEN
     );
-    let expected = match why {
-        "empty" => "the name is empty",
-        "a segment over the limit" => &limit,
-        _ => "is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens",
+    let expected: Vec<&str> = match (kind, why) {
+        (_, "empty") => vec!["the name is empty"],
+        (_, "a segment over the limit") => vec![&limit],
+        (Kind::Mcp, "reserved") => vec!["can be keyed by it", "would be read as that key"],
+        (Kind::Mcp, _) => vec!["is not usable as an MCP server's name"],
+        (Kind::Skill | Kind::Rule, _) => vec![
+            "is not usable as a name: it has to be lowercase letters and digits, joined by single hyphens",
+        ],
     };
-    assert!(said.contains(expected), "{what}: {said}");
+    assert!(
+        expected.iter().any(|expected| said.contains(expected)),
+        "{what}: {said}"
+    );
 }
 
 #[test]
@@ -327,8 +344,8 @@ fn no_name_an_artifact_may_not_be_written_under_is_added_and_nothing_is_written(
     for level in LEVELS {
         let place = Place::new(level);
         let before = place.files();
-        for (why, name) in ArtifactNameMother::unwritable() {
-            for kind in Kind::ALL {
+        for kind in Kind::ALL {
+            for (why, name) in unwritable(kind) {
                 // As a front end builds the line, so a name led by a dash
                 // reaches `add` as the name, behind a `--`.
                 let added = place.ran(Task::Add {
@@ -344,6 +361,7 @@ fn no_name_an_artifact_may_not_be_written_under_is_added_and_nothing_is_written(
                 says_why(
                     &failure,
                     "add_name_unfit",
+                    kind,
                     why,
                     &format!("{level:?} {} {name:?}, {why}", kind.slug()),
                 );
@@ -376,6 +394,7 @@ fn no_artifact_is_renamed_to_a_name_it_may_not_be_written_under() {
                 says_why(
                     &failure,
                     "rename_name_unfit",
+                    kind,
                     why,
                     &format!("{level:?} {from} to {name:?}, {why}"),
                 );

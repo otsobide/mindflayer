@@ -2,8 +2,8 @@
 //! `templates`, at either level.
 //!
 //! Each takes the holder it acts on (a project, or the workspace's own), so
-//! `mind add` and `flayer add -p alpha` are one function given one project,
-//! and `flayer add` is the same function given the workspace. Each also takes
+//! `mind add` and `mindweaver add -p alpha` are one function given one project,
+//! and `mindweaver add` is the same function given the workspace. Each also takes
 //! the workspace the command resolved and hands it to core: its templates are
 //! among those `add` starts from, and core's lifecycle sees to its record of
 //! what it installed: kept through an edit, carried through a rename, and
@@ -15,12 +15,14 @@ use std::fs;
 use std::io::{self, Read as _};
 use std::path::Path;
 
-use mindflayer_core::everywhere::{self, EverywhereError, Plan, Step};
-use mindflayer_core::install::{InstallError, Removed};
-use mindflayer_core::lifecycle::{self, Edited, Record};
-use mindflayer_core::template::{self, Origin, Template};
-use mindflayer_core::{
-    paths, AgentHomes, FlayerWorkspace, Kind, MindProject, Reference, Standing, Target,
+use mindweaver_core::create::Start;
+use mindweaver_core::everywhere::{self, EverywhereError, Plan, Step};
+use mindweaver_core::install::{InstallError, Removed};
+use mindweaver_core::lifecycle::{self, Edited, Record};
+use mindweaver_core::mcp;
+use mindweaver_core::template::{self, Origin, Template};
+use mindweaver_core::{
+    paths, AgentHomes, Kind, MindProject, Reference, Standing, Target, WeaverWorkspace,
     WorkspaceError,
 };
 
@@ -35,27 +37,31 @@ use crate::{CliError, Editing, Failure, Given, Outcome, Warning};
 /// What a dry run that would delete something ends with.
 const UNREMOVED: &str = "nothing removed: add --yes to go ahead\n";
 
+/// `add`, at either level: `kind` `name`, described as `description`, from
+/// the template `template` names, or for an MCP server from how `server`
+/// says an agent starts or reaches it, or else from scratch; core judges
+/// each before a byte is written ([`lifecycle::add`]).
 pub(crate) fn add_to(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     kind: Kind,
-    name: &str,
-    description: &str,
+    (name, description): (&str, &str),
     template: Option<&str>,
+    server: Option<&mcp::Given>,
 ) -> Result<Outcome, Failure> {
     let template = template
         .map(|template| template::find(workspace, holder, kind, template))
         .transpose()
         .map_err(CliError::from)?;
-    let added = lifecycle::add(
-        workspace,
-        holder,
-        kind,
-        name,
-        description,
-        template.as_ref(),
-    )
-    .map_err(CliError::from)?;
+    // One or the other, never both: the grammar refuses a transport given
+    // with a template, which says how a server is started as surely.
+    let start = match (&template, server) {
+        (Some(template), _) => Start::Template(template),
+        (None, Some(given)) => Start::Server(given),
+        (None, None) => Start::Scratch,
+    };
+    let added = lifecycle::add(workspace, holder, kind, name, description, start)
+        .map_err(CliError::from)?;
     let mut outcome = Outcome::plain(format!(
         "created {} {} at {}\n",
         added.artifact.kind(),
@@ -77,7 +83,7 @@ pub(crate) fn add_to(
 /// works in, as every path a command takes is, so a line a front end runs
 /// from the workspace's root reads what it names there.
 pub(crate) fn edit_in(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     reference: &str,
     editing: &Editing,
@@ -104,8 +110,8 @@ pub(crate) fn edit_in(
     recorded(&mut outcome, finished.copy, |record| {
         (record == Record::Kept).then(|| {
             String::from(
-                "it was installed by `flayer install`, and stays so; edited, it is left alone by \
-                 `flayer install` and `flayer uninstall` unless they are forced",
+                "it was installed by `mindweaver install`, and stays so; edited, it is left alone by \
+                 `mindweaver install` and `mindweaver uninstall` unless they are forced",
             )
         })
     });
@@ -115,7 +121,7 @@ pub(crate) fn edit_in(
 /// Open `target` in `editor`, or the one the environment names, and say
 /// what the edit came to once it is closed.
 fn open(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     target: &Target,
     editor: Option<&str>,
@@ -168,7 +174,7 @@ fn read_given(given: Given<'_>, directory: &Path) -> Result<Vec<u8>, CliError> {
 }
 
 pub(crate) fn rename_in(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     reference: &str,
     to: &str,
@@ -184,29 +190,31 @@ pub(crate) fn rename_in(
         renamed.target.path.display()
     ));
     let to = renamed.target.name.clone();
-    recorded(&mut outcome, renamed.copy, |record| match record {
+    recorded(&mut outcome, renamed.copy, |record| {
+        match record {
         Record::Moved { edited: true } => Some(String::from(
-            "it was installed by `flayer install`, and stays so under its new name; renamed, it \
-             is left alone by `flayer install` and `flayer uninstall` unless they are forced",
+            "it was installed by `mindweaver install`, and stays so under its new name; renamed, it \
+             is left alone by `mindweaver install` and `mindweaver uninstall` unless they are forced",
         )),
         // A rule's rename moves its file as it is, so nothing in it reads
         // as an edit, and the uninstall that put it there takes it out.
         Record::Moved { edited: false } => Some(String::from(
-            "it was installed by `flayer install`, and stays so under its new name; renamed, it \
-             still holds what was installed, and `flayer uninstall` takes it out",
+            "it was installed by `mindweaver install`, and stays so under its new name; renamed, it \
+             still holds what was installed, and `mindweaver uninstall` takes it out",
         )),
         Record::Dropped => Some(format!(
             "it had been installed, but `{to}` is installed already; renamed, it is yours, and \
-             `flayer install` leaves it alone"
+             `mindweaver install` leaves it alone"
         )),
         Record::Untouched | Record::Kept => None,
+    }
     });
     recorded(&mut outcome, renamed.stale, stale);
     Ok(scrubbed(&renamed.scrub).before(outcome))
 }
 
 pub(crate) fn remove_from(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     reference: &str,
     yes: bool,
@@ -233,14 +241,14 @@ pub(crate) fn remove_from(
     recorded(&mut outcome, removed.copy, |record| {
         (record == Record::Dropped).then(|| {
             String::from(
-                "it had been installed, and is uninstalled with it; `flayer install` can put it back",
+                "it had been installed, and is uninstalled with it; `mindweaver install` can put it back",
             )
         })
     });
     Ok(scrubbed(&removed.scrub).before(outcome))
 }
 
-/// `flayer remove` of one of the workspace's own, without `--everywhere`:
+/// `mindweaver remove` of one of the workspace's own, without `--everywhere`:
 /// removed as [`remove_from`] removes it, or said what would be, and beside
 /// it each project that has a copy installed from it, which nothing offers
 /// once it is gone, as core plans it ([`everywhere::plan`]): orphaned there,
@@ -257,7 +265,7 @@ pub(crate) fn remove_from(
 /// copy whole, offering it still, or a skill's folder half deleted, offering
 /// nothing, and either way its error is what there is to say.
 pub(crate) fn remove_own(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     reference: &str,
     yes: bool,
 ) -> Result<Outcome, Failure> {
@@ -302,7 +310,7 @@ fn orphaning(plan: &Plan, removed: bool) -> Vec<Warning> {
     let said = if removed {
         format!(
             "warning: {what} is still installed in {projects}, orphaned now that nothing offers \
-             it; `flayer uninstall --orphaned --all-projects` takes out what nothing offers"
+             it; `mindweaver uninstall --orphaned --all-projects` takes out what nothing offers"
         )
     } else {
         format!(
@@ -313,13 +321,13 @@ fn orphaning(plan: &Plan, removed: bool) -> Vec<Warning> {
     vec![said.into()]
 }
 
-/// `flayer remove --everywhere` without `--yes`: what removing `reference`,
+/// `mindweaver remove --everywhere` without `--yes`: what removing `reference`,
 /// one of the workspace's own, from every project it links and then from
 /// the workspace would do, as core plans it ([`everywhere::plan`]), nothing
 /// written. A line for each project's copy, saying how it stands, then one
 /// for the library copy, in the order they would go.
 pub(crate) fn would_remove_everywhere(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     reference: &str,
 ) -> Result<Outcome, Failure> {
     let plan = everywhere::plan(workspace, &Reference::parse(reference)).map_err(CliError::from)?;
@@ -358,7 +366,7 @@ pub(crate) fn would_remove_everywhere(
     Ok(outcome)
 }
 
-/// `flayer remove --everywhere --yes`: `reference`, one of the workspace's
+/// `mindweaver remove --everywhere --yes`: `reference`, one of the workspace's
 /// own, uninstalled from every project it links and then removed from the
 /// workspace, as core does it ([`everywhere::apply`]), handing it the
 /// agents' own folders, `homes`, as an uninstall does.
@@ -368,9 +376,9 @@ pub(crate) fn would_remove_everywhere(
 /// it was installed is offered by nothing from then on, which a note says
 /// beside it with the command that takes it out once somebody has looked.
 /// A copy whose uninstall failed is an error of its project, as among
-/// several in `flayer uninstall`, and the rest stand.
+/// several in `mindweaver uninstall`, and the rest stand.
 pub(crate) fn remove_everywhere(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     reference: &str,
     homes: &AgentHomes,
 ) -> Result<Outcome, Failure> {
@@ -456,12 +464,12 @@ pub(crate) fn remove_everywhere(
             // a rule of one word could be a skill's name too.
             let typed = match target.kind {
                 Kind::Skill => target.name.to_string(),
-                Kind::Rule => target.qualified_name(),
+                Kind::Rule | Kind::Mcp => target.qualified_name(),
             };
             for from in orphaned {
                 outcome.stderr.push(
                     format!(
-                        "note: nothing offers {what} in {from} any more; `flayer uninstall -p \
+                        "note: nothing offers {what} in {from} any more; `mindweaver uninstall -p \
                          {from} {typed} --force` takes it out"
                     )
                     .into(),
@@ -502,7 +510,7 @@ fn unread(outcome: &mut Outcome, unread: &[WorkspaceError]) {
 /// with the templates kept in `found`, for `--json` to print in place of
 /// the text.
 pub(crate) fn templates_of(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     holder: &MindProject,
     found: &mut Option<Vec<Template>>,
 ) -> Result<Outcome, Failure> {
@@ -610,7 +618,7 @@ fn edited(project: &MindProject, target: &Target, changed: bool) -> Outcome {
     }
 }
 
-/// Say what a change did to a record that `flayer install` put something
+/// Say what a change did to a record that `mindweaver install` put something
 /// into the project, when `why` has something to say of it.
 ///
 /// A record that could not be changed is a warning rather than an error, as
@@ -641,7 +649,7 @@ fn recorded(
 fn stale(record: Record) -> Option<String> {
     (record == Record::Dropped).then(|| {
         String::from(
-            "an old record said `flayer install` had put one of that name here; it is gone",
+            "an old record said `mindweaver install` had put one of that name here; it is gone",
         )
     })
 }

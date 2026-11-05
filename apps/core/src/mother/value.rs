@@ -4,7 +4,9 @@
 use crate::hash;
 use crate::mother::random;
 use crate::mother::url::UrlMother;
-use crate::value::{ArtifactName, ContentHash, Origin, ProjectId, Redacted, Revision};
+use crate::value::{
+    ArtifactName, ContentHash, InputName, Origin, ProjectId, Redacted, Revision, VariableName,
+};
 
 /// Makes [`ContentHash`]es, through the recipe or the parser, the only ways
 /// one is made.
@@ -207,7 +209,10 @@ impl ArtifactNameMother {
         ArtifactName::from(segments.join("/"))
     }
 
-    /// Names no artifact may be written under, each beside why.
+    /// Names no skill or rule may be written under, each beside why. An
+    /// MCP server's are held to the keys an agent takes rather than to
+    /// kebab-case, so some of these are a server's
+    /// ([`McpMother::unwritable`](crate::mother::McpMother::unwritable)).
     pub fn unwritable() -> Vec<(&'static str, String)> {
         vec![
             ("empty", String::new()),
@@ -241,5 +246,70 @@ impl RevisionMother {
     /// Exactly `text`.
     pub fn create(text: &str) -> Revision {
         Revision::from(text)
+    }
+}
+
+/// Makes [`InputName`]s, as a definition calls what somebody supplies.
+pub struct InputNameMother;
+
+impl InputNameMother {
+    /// Words joined by underscores, as an input is usually named.
+    pub fn random() -> InputName {
+        InputName::from(format!("{}_{}", random::word(), random::word()))
+    }
+
+    /// Exactly `text`, whatever it holds: a definition on the disk is read
+    /// whatever it calls an input.
+    pub fn create(text: &str) -> InputName {
+        InputName::from(text)
+    }
+
+    /// Texts no placeholder can be written of, each beside why: what
+    /// [`InputName::is_writable`] refuses.
+    pub fn unwritable() -> Vec<(&'static str, String)> {
+        let word = random::word();
+        vec![
+            ("empty", String::new()),
+            ("a closing brace", format!("{word}}}{word}")),
+            ("an opening brace", format!("{{{word}")),
+            ("a space", format!("{word} {word}")),
+            ("a colon", format!("env:{word}")),
+            ("a dot", format!("{word}.{word}")),
+            ("a dollar", format!("${word}")),
+            ("a letter past ASCII", format!("{word}\u{e9}")),
+        ]
+    }
+}
+
+/// Makes [`VariableName`]s, as a shell names an environment variable.
+pub struct VariableNameMother;
+
+impl VariableNameMother {
+    /// Capitals joined by underscores, as a variable holding a secret is
+    /// usually named.
+    pub fn random() -> VariableName {
+        VariableName::from(format!("{}_{}", random::word(), random::word()).to_ascii_uppercase())
+    }
+
+    /// Exactly `text`.
+    pub fn create(text: &str) -> VariableName {
+        VariableName::from(text)
+    }
+
+    /// Texts no agent can refer to as one variable, each beside why: what
+    /// [`VariableName::is_portable`] refuses.
+    pub fn unportable() -> Vec<(&'static str, String)> {
+        let word = random::word().to_ascii_uppercase();
+        vec![
+            ("empty", String::new()),
+            ("a leading digit", format!("9{word}")),
+            ("a hyphen", format!("{word}-{word}")),
+            ("a space", format!("{word} {word}")),
+            ("a closing brace", format!("{word}}}")),
+            ("a default after it", format!("{word}:-x")),
+            ("a dollar", format!("${word}")),
+            ("a dot", format!("{word}.{word}")),
+            ("a letter past ASCII", format!("{word}\u{c9}")),
+        ]
     }
 }

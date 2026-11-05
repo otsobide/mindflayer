@@ -290,7 +290,7 @@ fn a_rule_is_refused_before_anything_is_read() {
     .unwrap_err();
 
     assert!(
-        matches!(&refused, AdoptError::Rule { name } if name == "lint"),
+        matches!(&refused, AdoptError::NotASkill { name, .. } if name == "lint"),
         "{refused:?}"
     );
     assert_eq!(refused.code(), "adopt_not_a_skill");
@@ -385,7 +385,7 @@ fn each_adopt_error_of_its_own_has_a_code_unique_among_them() {
 #[test]
 fn an_adopt_error_carrying_another_of_core_s_gives_its_code() {
     let error = AdoptError::from(LedgerError::Unmade {
-        path: PathBuf::from("/w/.mindflayer/mindflayer.db"),
+        path: PathBuf::from("/w/.mindweaver/mindweaver.db"),
     });
 
     assert_eq!(error.code(), "ledger_unmade");

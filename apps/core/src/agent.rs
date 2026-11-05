@@ -1,4 +1,4 @@
-//! What core knows about the agents that read what Mindflayer manages.
+//! What core knows about the agents that read what Mindweaver manages.
 //!
 //! Which agents there are ([`Agent`]), where each kind goes in a project for
 //! each of them to read it ([`TargetTable`]), every folder in a project each
@@ -25,7 +25,7 @@ use crate::claude_md::{CLAUDE_LOCAL_MD, CLAUDE_MD};
 use crate::code::codes;
 use crate::kind::Kind;
 
-/// A coding agent Mindflayer puts skills and rules where it reads them.
+/// A coding agent Mindweaver puts skills and rules where it reads them.
 ///
 /// A closed enum, as [`Kind`] is: what an agent reads, and where, is a fact
 /// about that agent, so a new one is a new arm in every `match` and the
@@ -63,10 +63,21 @@ impl Agent {
         }
     }
 
+    /// How a sentence names it: the name of the product, as its makers
+    /// write it, where [`name`](Self::name) is the word a command line
+    /// takes.
+    pub const fn title(self) -> &'static str {
+        match self {
+            Agent::Claude => "Claude Code",
+            Agent::Codex => "Codex",
+            Agent::OpenCode => "OpenCode",
+        }
+    }
+
     /// Every folder in a project this agent reads `kind` from, whoever put
     /// what is there, each relative to the project's root.
     ///
-    /// Not the [`TargetTable`], which says where Mindflayer puts a copy for
+    /// Not the [`TargetTable`], which says where Mindweaver puts a copy for
     /// the agent: one folder for each, where this is every folder it reads,
     /// which can be more. OpenCode reads `.claude/skills` as well as
     /// `.agents/skills`, and is sent a copy only in the second. A listing
@@ -185,11 +196,15 @@ fn read(kind: Kind, agent: Agent) -> Vec<PathBuf> {
         }
         // A rule reaches an agent through `AGENTS.md`, or Claude's rule files
         // (D-03), rendered outside the target table (`install::rules`).
-        // Claude does read `.claude/rules`, but what Mindflayer writes there
+        // Claude does read `.claude/rules`, but what Mindweaver writes there
         // is listed from the ledger as its rule's target, so no folder of
         // rules is said to be read, and no listing takes those files for a
         // rule somebody keeps there.
         (Kind::Rule, Agent::Claude | Agent::Codex | Agent::OpenCode) => Vec::new(),
+        // An MCP server reaches an agent as an entry in its own config file
+        // (D-10), one of the files `files` names, never as a folder of
+        // definitions: no agent reads one.
+        (Kind::Mcp, Agent::Claude | Agent::Codex | Agent::OpenCode) => Vec::new(),
     }
 }
 
@@ -286,8 +301,8 @@ impl fmt::Display for UnknownAgent {
 /// with none is a kind that reaches that agent some other way, or not at
 /// all, which is every rule: D-03 puts rules in a block of `AGENTS.md`, one
 /// file every agent shares rather than a folder a copy goes in, rendered
-/// outside the table ([`crate::install::rules`]), as M6's MCP servers will
-/// be entries in each agent's own file.
+/// outside the table ([`crate::install::rules`]), and every MCP server, which
+/// will be an entry in each agent's own file (D-10).
 ///
 /// Pure: no entry is looked for on disk, and every location is relative to
 /// a project's root.
@@ -382,6 +397,9 @@ fn standard(kind: Kind, agent: Agent) -> Option<PathBuf> {
         (Kind::Skill, Agent::Claude) => Some(Path::new(".claude").join("skills")),
         (Kind::Skill, Agent::Codex | Agent::OpenCode) => Some(Path::new(".agents").join("skills")),
         (Kind::Rule, Agent::Claude | Agent::Codex | Agent::OpenCode) => None,
+        // An entry in each agent's own config file, rendered outside the
+        // table as a rule's section is (D-10), which no release writes yet.
+        (Kind::Mcp, Agent::Claude | Agent::Codex | Agent::OpenCode) => None,
     }
 }
 
@@ -446,7 +464,7 @@ impl AgentHomes {
     /// front end takes once neither its option nor the agent's own variable
     /// answers.
     ///
-    /// Named here, as [`FLAYER_DIR`](crate::FLAYER_DIR) is, rather than in the
+    /// Named here, as [`WEAVER_DIR`](crate::WEAVER_DIR) is, rather than in the
     /// front end: which folder an agent reads is a fact about the agent, and a
     /// second front end must not spell it differently. Finding the user's home
     /// is still the front end's, so this reads no environment.

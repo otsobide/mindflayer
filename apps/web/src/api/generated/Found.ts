@@ -15,7 +15,7 @@ export type Found = {
  */
 path: string, 
 /**
- * What `flayer link` would be given for it, run where the request
+ * What `mindweaver link` would be given for it, run where the request
  * spells routes from: the route from there, `/` separated, when it is
  * inside, and its path otherwise.
  */
@@ -39,7 +39,7 @@ linked: boolean,
 /**
  * The entry it moved from, when it is not linked and holds the id the
  * workspace's ledger last saw at an entry where no project is any more
- * ([`MindProject::is_vacant`]): spelled as `route` is, so `flayer
+ * ([`MindProject::is_vacant`]): spelled as `route` is, so `mindweaver
  * relink <moved> <route>` run there follows it. None otherwise, and for
  * an id another directory holds too, which is a copy rather than a
  * move.

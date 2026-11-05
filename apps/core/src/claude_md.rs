@@ -15,9 +15,9 @@
 //! has, at the top of a file that is otherwise somebody else's:
 //!
 //! ```text
-//! <!-- mindflayer:begin -->
+//! <!-- mindweaver:begin -->
 //! @AGENTS.md
-//! <!-- mindflayer:end -->
+//! <!-- mindweaver:end -->
 //!
 //! # Working here
 //! ```
@@ -27,11 +27,13 @@
 //! line just below the end marker, which is the block's ([`ClaudeMd`]), and a
 //! block that is not exactly one well-formed one is refused, never repaired,
 //! as in `AGENTS.md`: the markers are read by the same search
-//! (`agents_md::locate`).
+//! (`agents_md::locate`), under either names, and an import a Mindflayer
+//! build wrote is kept under its own markers until it is moved
+//! ([`ClaudeMd::renamed`]).
 //!
 //! [`reach`] decides how Claude gets the block, from the predicate, the
 //! project's settings and whether the block was written: natively, through
-//! an import of `AGENTS.md` the project's files already hold, Mindflayer's
+//! an import of `AGENTS.md` the project's files already hold, Mindweaver's
 //! or somebody's, through the import added, or not at all, when Claude's
 //! own rules folder is to hold every rule instead ([`Reach::mode`],
 //! [`crate::claude_rules`]). Never both a block Claude reads and a rule
@@ -52,13 +54,14 @@ use crate::claude_rules::{self, Mode};
 use crate::code::codes;
 use crate::exclude;
 use crate::lines::{self, Line};
+use crate::names::Names;
 use crate::settings::Share;
 use crate::workspace::{replace_bytes_unresolved, MindProject};
 
 /// The file Claude reads as a folder's instructions, and its user memory
 /// file's name in its own folder.
 pub const CLAUDE_MD: &str = "CLAUDE.md";
-/// The one a person keeps to themselves, beside `CLAUDE.md`. Mindflayer
+/// The one a person keeps to themselves, beside `CLAUDE.md`. Mindweaver
 /// never makes one: a `CLAUDE.local.md` alone stops Claude reading
 /// `AGENTS.md`, without a word to anybody (D-03).
 pub const CLAUDE_LOCAL_MD: &str = "CLAUDE.local.md";
@@ -83,7 +86,7 @@ const OWN: [(&[&str], &str); 2] = [
     (&[".claude", CLAUDE_MD], "@../AGENTS.md"),
 ];
 
-/// A person's own file, which Mindflayer never writes in but reads for an
+/// A person's own file, which Mindweaver never writes in but reads for an
 /// import of `AGENTS.md` they wrote themselves, and that import's line.
 const LOCAL: (&[&str], &str) = (&[CLAUDE_LOCAL_MD], "@AGENTS.md");
 
@@ -179,12 +182,12 @@ pub enum Reach {
     /// block already holds.
     Same(PathBuf),
     /// Claude reads the block through an import of `AGENTS.md` somebody
-    /// wrote in this file, outside Mindflayer's markers, as Claude's docs
+    /// wrote in this file, outside Mindweaver's markers, as Claude's docs
     /// show a `CLAUDE.md` sharing `AGENTS.md`: the project's own
     /// `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md`. Nothing is
-    /// written, and Mindflayer's import, wherever it is, is no longer wanted.
+    /// written, and Mindweaver's import, wherever it is, is no longer wanted.
     Imported(PathBuf),
-    /// Claude reads the block through Mindflayer's import in this file, the
+    /// Claude reads the block through Mindweaver's import in this file, the
     /// project's own `CLAUDE.md` or `.claude/CLAUDE.md`, there already or for
     /// [`render`] to add.
     Import(PathBuf),
@@ -229,7 +232,7 @@ pub enum Fallback {
     /// reads it in every project below.
     #[error(
         "{0}: above the project, where Claude Code reads it in place of AGENTS.md, and \
-         Mindflayer edits nothing above a project; Claude Code gets its rules from {folder}",
+         Mindweaver edits nothing above a project; Claude Code gets its rules from {folder}",
         folder = claude_rules::folder().display()
     )]
     Above(PathBuf),
@@ -281,7 +284,7 @@ codes!(Fallback {
 ///   ([`ClaudeMd::imports_outside`]), whether or not it may be edited:
 ///   Claude reads the block through it, and the fallback beside it would
 ///   give Claude every rule about every file twice. Chosen before
-///   Mindflayer's own import, which beside it would only name the same file
+///   Mindweaver's own import, which beside it would only name the same file
 ///   a second time, and which [`render`] then takes out.
 /// - [`Reach::Import`] when the project's own `CLAUDE.md` or
 ///   `.claude/CLAUDE.md` is there and may be edited: in a shared project,
@@ -440,7 +443,7 @@ fn decide(project: &MindProject, survey: &Survey) -> Result<Reach, ClaudeMdError
 ///
 /// Only the project's own `CLAUDE.md` and `.claude/CLAUDE.md` are touched,
 /// each only while it is there: never made, as no `CLAUDE.local.md` is
-/// ever made, since a `CLAUDE.md` Mindflayer made would itself keep Claude
+/// ever made, since a `CLAUDE.md` Mindweaver made would itself keep Claude
 /// from reading `AGENTS.md` natively. Never one above the project either,
 /// which the reach says instead ([`Fallback::Above`]): Claude reads it in
 /// every project below, and it is nobody's to edit for one of them. Never a
@@ -452,7 +455,7 @@ fn decide(project: &MindProject, survey: &Survey) -> Result<Reach, ClaudeMdError
 /// it was before. One that may not be edited any more, tracked by git in a
 /// local project without `edit_tracked`, keeps it, and that is said
 /// ([`Warning`]), rather than edited behind the setting that keeps
-/// Mindflayer out of it. A file whose text a change leaves as it was is not
+/// Mindweaver out of it. A file whose text a change leaves as it was is not
 /// written at all.
 ///
 /// A file is replaced whole through a temporary and a rename
@@ -578,14 +581,14 @@ pub enum Warning {
     /// The import is in a file git tracks, in a local project without
     /// `edit_tracked`, where it is no longer wanted, and is left there.
     #[error(
-        "{0}: holds Mindflayer's import of AGENTS.md, no longer wanted, and is left as it is: \
+        "{0}: holds Mindweaver's import of AGENTS.md, no longer wanted, and is left as it is: \
          git tracks it, and the project is local without edit_tracked"
     )]
     Tracked(PathBuf),
     /// The import is in a file of which whether git tracks it cannot be
     /// told, where it is no longer wanted, and is left there.
     #[error(
-        "{file}: holds Mindflayer's import of AGENTS.md, no longer wanted, and is left as it \
+        "{file}: holds Mindweaver's import of AGENTS.md, no longer wanted, and is left as it \
          is: whether git tracks it cannot be told ({detail})"
     )]
     Untold { file: PathBuf, detail: String },
@@ -664,7 +667,7 @@ fn read(file: &Path) -> Result<ClaudeMd, ClaudeMdError> {
 }
 
 /// The lines of the file at `file`, a byte order mark left out: one
-/// Mindflayer never writes in, so no block of its own there is looked for,
+/// Mindweaver never writes in, so no block of its own there is looked for,
 /// and none is refused.
 fn read_lines(file: &Path) -> Result<Vec<Line>, ClaudeMdError> {
     let bytes = read_bytes(file)?;
@@ -766,7 +769,7 @@ fn find(text: &[u8], needle: &[u8]) -> Option<usize> {
 /// the file and leave its begin marker one that never reads back as itself.
 const BOM: &[u8] = b"\xEF\xBB\xBF";
 
-/// A `CLAUDE.md`'s text, split around Mindflayer's import.
+/// A `CLAUDE.md`'s text, split around Mindweaver's import.
 ///
 /// Kept as lines with their own endings ([`crate::lines`]), as `AGENTS.md`
 /// is, so what is outside the block is written back exactly as read, and
@@ -783,6 +786,9 @@ pub struct ClaudeMd {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Block {
+    /// Whose markers it is spelled with: those it was found under, and
+    /// Mindweaver's for one made anew.
+    names: Names,
     begin: Line,
     /// Every line between the markers, as read or as written.
     lines: Vec<Line>,
@@ -801,7 +807,7 @@ impl ClaudeMd {
     /// Read a `CLAUDE.md`'s bytes.
     ///
     /// Refused as `AGENTS.md` is ([`Malformed`]), and also when the block
-    /// holds a rule's marker, which Mindflayer writes only in `AGENTS.md`: a
+    /// holds a rule's marker, which Mindweaver writes only in `AGENTS.md`: a
     /// `CLAUDE.md` holding one is a copy of that file, kept beside it, and
     /// replacing its rules with the import would take them from whoever
     /// reads that copy, while importing beside them would give them twice.
@@ -839,6 +845,7 @@ impl ClaudeMd {
             bom,
             before,
             block: Some(Block {
+                names: span.names,
                 begin,
                 lines: inside,
                 end,
@@ -849,9 +856,32 @@ impl ClaudeMd {
         })
     }
 
-    /// Whether the file holds Mindflayer's block.
+    /// Whether the file holds Mindweaver's block.
     pub fn has_block(&self) -> bool {
         self.block.is_some()
+    }
+
+    /// Whose markers the block is spelled with: `None` when there is none.
+    pub fn names(&self) -> Option<Names> {
+        self.block.as_ref().map(|block| block.names)
+    }
+
+    /// Spell the block's two markers with `names`', and whether that
+    /// changed anything: what `migrate --names` does to an import a
+    /// Mindflayer build wrote, every other byte kept, the markers' line
+    /// endings among them.
+    pub fn renamed(&mut self, names: Names) -> bool {
+        let Some(block) = &mut self.block else {
+            return false;
+        };
+        if block.names == names {
+            return false;
+        }
+        let (begin, end, _) = agents_md::markers(names);
+        block.begin = Line::new(begin, block.begin.end);
+        block.end = Line::new(end, block.end.end);
+        block.names = names;
+        true
     }
 
     /// Whether the block holds `import` and nothing else: whether Claude,
@@ -865,7 +895,7 @@ impl ClaudeMd {
 
     /// Whether a line outside the block is `import`, as somebody wrote it
     /// to share `AGENTS.md` with Claude: Claude follows it as it follows
-    /// Mindflayer's, which beside it would only name the file a second time.
+    /// Mindweaver's, which beside it would only name the file a second time.
     /// What counts as that line is narrow ([`imported_by`]).
     pub fn imports_outside(&self, import: &str) -> bool {
         imported_by(self.before.iter().chain(&self.after), import)
@@ -874,7 +904,7 @@ impl ClaudeMd {
     /// Make the block hold `import` alone, and whether that changed
     /// anything.
     ///
-    /// Everything between the markers is Mindflayer's, so it is replaced
+    /// Everything between the markers is Mindweaver's, so it is replaced
     /// whole, as in `AGENTS.md`. A file with no block gains one at the top,
     /// on lines of its own and an empty line apart from what follows; one
     /// somebody moved is changed where it is.
@@ -894,6 +924,7 @@ impl ClaudeMd {
         self.after = std::mem::take(&mut self.before);
         let spacer = (!self.after.is_empty()).then(|| Line::new("", ending));
         self.block = Some(Block {
+            names: Names::Mindweaver,
             begin: Line::new(BEGIN, ending),
             lines,
             end: Line::new(END, ending),

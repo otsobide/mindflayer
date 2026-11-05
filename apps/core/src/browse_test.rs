@@ -7,22 +7,22 @@ use std::fs;
 use tempfile::TempDir;
 
 use super::*;
-use crate::workspace::{MarkerFile, MIND_DIR};
+use crate::workspace::{MarkerFile, MIND_DIR, WEAVER_DIR};
 
 /// A workspace at `work`, linking `alpha` under it, which `mind init` made,
 /// and nothing else.
-fn fixture() -> (TempDir, FlayerWorkspace) {
+fn fixture() -> (TempDir, WeaverWorkspace) {
     let dir = TempDir::new().unwrap();
     let root = dir.path().join("work");
-    let (mut workspace, _) = FlayerWorkspace::init(&root).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(&root).unwrap();
     let (alpha, _) = MindProject::init(root.join("alpha")).unwrap();
     workspace.link(&alpha).unwrap();
-    let workspace = FlayerWorkspace::open(&root).unwrap();
+    let workspace = WeaverWorkspace::open(&root).unwrap();
     (dir, workspace)
 }
 
 /// The folders `folder` lists, hidden ones as `hidden` asks.
-fn listed(workspace: &FlayerWorkspace, folder: &Path, hidden: bool) -> Folders {
+fn listed(workspace: &WeaverWorkspace, folder: &Path, hidden: bool) -> Folders {
     Folders::read(workspace, folder, hidden, None).unwrap()
 }
 
@@ -84,7 +84,7 @@ fn hidden_folders_are_left_out_and_counted_unless_asked_for() {
 
     assert_eq!(names(&without), ["alpha", "src"]);
     assert_eq!(names(&with), [".git", ".github", "alpha", "src"]);
-    // The workspace's own `.mindflayer` is hidden too, and counted in
+    // The workspace's own `.mindweaver` is hidden too, and counted in
     // neither, since asking for hidden folders never lists it.
     assert_eq!(without.hidden, 2);
     assert_eq!(with.hidden, 2);
@@ -92,14 +92,14 @@ fn hidden_folders_are_left_out_and_counted_unless_asked_for() {
 
 #[cfg(unix)]
 #[test]
-fn a_mindflayer_is_never_listed_nor_a_link_into_one() {
+fn a_mindweaver_is_never_listed_nor_a_link_into_one() {
     use std::os::unix::fs::symlink;
 
     let (dir, workspace) = fixture();
     let root = dir.path().join("work");
-    let inside = root.join(FLAYER_DIR).join("kept");
+    let inside = root.join(WEAVER_DIR).join("kept");
     fs::create_dir(&inside).unwrap();
-    symlink(root.join(FLAYER_DIR), dir.path().join("hub")).unwrap();
+    symlink(root.join(WEAVER_DIR), dir.path().join("hub")).unwrap();
     symlink(&inside, dir.path().join("inside")).unwrap();
     fs::create_dir(dir.path().join("kept")).unwrap();
 
@@ -125,14 +125,14 @@ fn each_folder_says_what_it_is_the_strongest_first() {
         fs::create_dir_all(&mind).unwrap();
         fs::write(mind.join(file.name()), "").unwrap();
     }
-    FlayerWorkspace::init(root.join("hub")).unwrap();
+    WeaverWorkspace::init(root.join("hub")).unwrap();
     fs::create_dir_all(root.join("repository").join(".git")).unwrap();
     // A worktree's `.git` is a file.
     fs::create_dir(root.join("worktree")).unwrap();
     fs::write(root.join("worktree").join(".git"), "gitdir: elsewhere\n").unwrap();
     // A project at a workspace's root, in a repository, is a project.
     let both = root.join("both");
-    FlayerWorkspace::init(&both).unwrap();
+    WeaverWorkspace::init(&both).unwrap();
     MindProject::init(&both).unwrap();
     fs::create_dir(both.join(".git")).unwrap();
     fs::create_dir(root.join("plain")).unwrap();
@@ -404,7 +404,7 @@ fn the_home_is_named_only_as_a_folder_a_request_may_name() {
     let trailing = format!("{}/", home.display());
     let unnormalized = Folders::read(&workspace, &root, false, Some(Path::new(&trailing))).unwrap();
     let relative = Folders::read(&workspace, &root, false, Some(Path::new("home"))).unwrap();
-    let inside = Folders::read(&workspace, &root, false, Some(&root.join(FLAYER_DIR))).unwrap();
+    let inside = Folders::read(&workspace, &root, false, Some(&root.join(WEAVER_DIR))).unwrap();
 
     assert_eq!(named.home.as_deref(), home.to_str());
     assert_eq!(unnormalized.home.as_deref(), home.to_str());

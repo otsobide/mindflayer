@@ -21,15 +21,21 @@ function row(page: Page, project: string) {
   return page.getByTestId('row').filter({ has: page.getByTestId('name').getByText(project, { exact: true }) })
 }
 
-/** The library's `lint` changed in `at`, as its editor saves it: `flayer edit` copying a draft in. */
+/** The library's `lint` changed in `at`, as its editor saves it: `mindweaver edit` copying a draft in. */
 function changeTheLibrary(at: Places) {
   const since = draft(at, 'lint-since.md', LINT_SINCE)
-  succeed(at, 'flayer', at.workspace, ['edit', `skill:${UPDATED}`, '--editor', `cp ${since}`])
+  succeed(at, 'mindweaver', at.workspace, ['edit', `skill:${UPDATED}`, '--editor', `cp ${since}`])
 }
 
-/** Go to a page from the sidebar, as a person does, and wait for it to be drawn. */
-async function visit(page: Page, name: string) {
+/**
+ * Go to a page from the sidebar, as a person does, and wait for it to be
+ * drawn: its own panel, `panel` by its test id, first, since the click
+ * returns while the page it leaves is still drawn, and that page holds a
+ * main and an answered snapshot too, which is all `drawn` looks for.
+ */
+async function visit(page: Page, name: string, panel: string) {
   await page.getByTestId('sidebar').getByRole('link', { name, exact: true }).click()
+  await expect(page.getByTestId(panel)).toBeVisible()
   await drawn(page)
 }
 
@@ -46,7 +52,7 @@ test('a library skill changed shows outdated, and updating every project brings 
   // Edited is said over outdated: `beta`'s copy asks for a forced update.
   await expect(row(page, beta).getByTestId('outdated')).toHaveText('none')
 
-  await visit(page, 'Updates')
+  await visit(page, 'Updates', 'updates')
   const outdated = page.getByTestId('state-outdated').getByTestId('row')
   await expect(outdated).toHaveCount(1)
   await expect(outdated.getByTestId('project')).toHaveText(alpha)
@@ -59,7 +65,7 @@ test('a library skill changed shows outdated, and updating every project brings 
 
   await page.getByTestId('update-all').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} update --all --yes`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ mindweaver -W ${own.at.workspace} update --all --yes`])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
 
@@ -71,14 +77,14 @@ test('a library skill changed shows outdated, and updating every project brings 
 
   await expect(page.getByTestId('state-outdated').getByTestId('row')).toHaveCount(0)
   await expect(page.getByTestId('state-edited').getByTestId('row').getByTestId('left')).toContainText(left)
-  await visit(page, 'Projects')
+  await visit(page, 'Projects', 'projects')
   for (const project of UPDATING) {
     await expect(row(page, project).getByTestId('outdated')).toHaveText('none')
   }
 
   const twin = own.twin
   changeTheLibrary(twin)
-  const typed = run(twin, 'flayer', twin.workspace, ['update', '--all', '--yes'])
+  const typed = run(twin, 'mindweaver', twin.workspace, ['update', '--all', '--yes'])
   expect(typed.status, typed.stderr).toBe(1)
   expect(typed.stderr).toContain(`${UPDATED} in ${beta} was changed since it was installed`)
   for (const project of UPDATING) {
@@ -92,7 +98,7 @@ test('removing a library skill shows what removing it everywhere does first, the
 
   await page.getByTestId('remove-dry').click()
   const dialog = page.getByRole('dialog')
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} remove --everywhere skill:${UPDATED}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ mindweaver -W ${own.at.workspace} remove --everywhere skill:${UPDATED}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(0)
   await dialog.getByTestId('run').click()
   const dry = page.getByTestId('remove-said')
@@ -101,14 +107,14 @@ test('removing a library skill shows what removing it everywhere does first, the
   expect(existsSync(join(own.at.workspace, alpha, '.claude/skills', UPDATED)), 'a dry run removes nothing').toBe(true)
 
   await page.getByTestId('remove-yes').click()
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} remove --everywhere --yes skill:${UPDATED}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ mindweaver -W ${own.at.workspace} remove --everywhere --yes skill:${UPDATED}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(2)
   await expect(dialog.getByTestId('cancel')).toBeFocused()
   await dialog.getByTestId('run').click()
   await expect(page).toHaveURL(/\/library\?kind=skill$/)
 
   const twin = own.twin
-  succeed(twin, 'flayer', twin.workspace, ['remove', '--everywhere', '--yes', `skill:${UPDATED}`])
+  succeed(twin, 'mindweaver', twin.workspace, ['remove', '--everywhere', '--yes', `skill:${UPDATED}`])
   for (const project of UPDATING) {
     expect(tree(join(own.at.workspace, project)), project).toEqual(tree(join(twin.workspace, project)))
   }
@@ -117,18 +123,18 @@ test('removing a library skill shows what removing it everywhere does first, the
 
   // What the removal left, edited with nothing offering it any more, is
   // listed with the forced uninstall that alone takes it out.
-  await visit(page, 'Updates')
+  await visit(page, 'Updates', 'updates')
   const left = page.getByTestId('state-edited').getByTestId('row')
   await expect(left.getByTestId('project')).toHaveText(beta)
   await expect(left.getByTestId('left')).toContainText('only a forced uninstall takes it out')
   await left.getByTestId('change').click()
-  await expect(dialog.getByTestId('command')).toHaveText([`$ flayer -W ${own.at.workspace} uninstall -p ${join(own.at.workspace, beta)} --force skill:${UPDATED}`])
+  await expect(dialog.getByTestId('command')).toHaveText([`$ mindweaver -W ${own.at.workspace} uninstall -p ${join(own.at.workspace, beta)} --force skill:${UPDATED}`])
   await expect(dialog.getByTestId('caution')).toHaveCount(2)
   await expect(dialog.getByTestId('cancel')).toBeFocused()
   await dialog.getByTestId('run').click()
   await expect(page.getByTestId('state-edited').getByTestId('row')).toHaveCount(0)
 
-  succeed(twin, 'flayer', twin.workspace, ['uninstall', '-p', beta, '--force', `skill:${UPDATED}`])
+  succeed(twin, 'mindweaver', twin.workspace, ['uninstall', '-p', beta, '--force', `skill:${UPDATED}`])
   expect(tree(join(own.at.workspace, beta))).toEqual(tree(join(twin.workspace, beta)))
   expect(existsSync(join(own.at.workspace, beta, '.claude/skills', UPDATED))).toBe(false)
 })

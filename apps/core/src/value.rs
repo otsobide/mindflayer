@@ -15,11 +15,14 @@
 //!   made only through the rule (the recipe, the generator or the parser, the
 //!   redaction), never from any text at all. A function that is handed one
 //!   need not check it again.
-//! - **Named apart**: [`ArtifactName`], [`Origin`] and [`Revision`], which
-//!   hold any text, since what core reads it reads leniently (a name on the
-//!   disk can break the rules a write is held to, and is listed all the same:
-//!   "strict when writing, lenient when reading"), but each a type of its own
-//!   so that one is never handed where another is meant.
+//! - **Named apart**: [`ArtifactName`], [`Origin`], [`Revision`],
+//!   [`InputName`] and [`VariableName`], which hold any text, since what
+//!   core reads it reads leniently (a name on the disk can break the rules a
+//!   write is held to, and is listed all the same: "strict when writing,
+//!   lenient when reading"), but each a type of its own so that one is never
+//!   handed where another is meant. Two of them say a rule they are not
+//!   made by, for `validate` to ask ([`InputName::is_writable`],
+//!   [`VariableName::is_portable`]).
 //!
 //! Each goes out as the text it holds, and its contract is that text: serde
 //! writes a string, ts-rs says `string` (so no file of its own is exported
@@ -377,6 +380,76 @@ text_value! {
 from_text!(Revision);
 as_text!(Revision);
 
+text_value! {
+    /// The name of an input an MCP server's definition declares
+    /// ([`crate::mcp::Input`]): what a value of its transport writes between
+    /// braces, `{token}`, where the value somebody supplies goes.
+    ///
+    /// Named apart, as an artifact's name is: a definition on the disk is
+    /// read whatever it calls an input, and `validate` says what is wrong
+    /// with the name ([`is_writable`](Self::is_writable)) and when no value
+    /// uses it. Not a [`VariableName`], though an input is read from one:
+    /// the two are written in different places, and one handed where the
+    /// other is meant would render a placeholder as the variable or the
+    /// variable as a placeholder.
+    pub struct InputName;
+}
+from_text!(InputName);
+as_text!(InputName);
+
+impl InputName {
+    /// Whether its placeholder, `{name}`, can be written where its value
+    /// goes and found there again as this input: letters, digits, hyphens
+    /// and underscores, at least one.
+    ///
+    /// The rule a server's name is held to ([`crate::mcp`]), so that a
+    /// definition holds one rule for the names written in it, and one with
+    /// no brace in it: a `}` would end the placeholder early, so that no
+    /// value could write it, and a `{` would open another. Asked rather
+    /// than made by, since a definition is read whatever it holds and
+    /// `validate` says what this refuses.
+    pub fn is_writable(&self) -> bool {
+        !self.0.is_empty()
+            && self
+                .0
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+    }
+}
+
+text_value! {
+    /// The name of an environment variable an MCP server's input is read
+    /// from when an agent starts the server (D-11): never the value, which
+    /// no file Mindweaver writes holds.
+    ///
+    /// Named apart, and judged by [`is_portable`](Self::is_portable) rather
+    /// than made by it, for the reason an input's name is.
+    pub struct VariableName;
+}
+from_text!(VariableName);
+as_text!(VariableName);
+
+impl VariableName {
+    /// Whether every agent can refer to it and every shell can set it:
+    /// letters, digits and underscores, not starting with a digit, the
+    /// name POSIX gives a variable.
+    ///
+    /// What each agent's reference is spelled around (D-11): Claude's
+    /// `${VAR}` reads `:-` after a name as the default that follows it,
+    /// OpenCode's `{env:VAR}` is ended by a `}`, and Codex names the
+    /// variable outright in its `env_vars`, `env_http_headers` and
+    /// `bearer_token_env_var`, which a shell has to be able to set. A name
+    /// any of them would read otherwise is no reference to one variable
+    /// in all three.
+    pub fn is_portable(&self) -> bool {
+        let mut bytes = self.0.bytes();
+        bytes
+            .next()
+            .is_some_and(|first| first.is_ascii_alphabetic() || first == b'_')
+            && bytes.all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    }
+}
+
 /// A project's id: 128 random bits, written as 32 lowercase hexadecimal
 /// digits.
 ///
@@ -441,7 +514,7 @@ impl schemars::JsonSchema for ProjectId {
     fn schema_id() -> Cow<'static, str> {
         // Where it was first declared, which is only ever compared with
         // itself: kept as it was, rather than moved with the type.
-        "mindflayer_core::settings::ProjectId".into()
+        "mindweaver_core::settings::ProjectId".into()
     }
 
     fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {

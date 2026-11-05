@@ -1,8 +1,8 @@
-//! The server end to end: the HTTP API `flayer ui` serves, driven one use
+//! The server end to end: the HTTP API `mindweaver ui` serves, driven one use
 //! case at a time, as a script on this machine drives it.
 //!
 //! The server (`apps/server`) is a library with no binary of its own: what
-//! a person runs is `flayer ui`, which serves it over the CLI's backend, so
+//! a person runs is `mindweaver ui`, which serves it over the CLI's backend, so
 //! its use cases are run here, beside the binary. The other suites that
 //! reach it stop short of a use case: the server's own run against a fake
 //! backend, `backend_test` drives the CLI's backend with no port bound,
@@ -13,10 +13,10 @@
 //!
 //! - the scenario it needs, built from nothing for that test alone
 //!   ([`Scenario`], the CLI suite's own): folders and repositories made
-//!   directly, Mindflayer's state through the commands (`given`), and, for
+//!   directly, Mindweaver's state through the commands (`given`), and, for
 //!   what only the API leaves, such as what ran since the server started,
 //!   through tasks run clean (`Served::given`);
-//! - `flayer ui --no-open` typed in a folder of it, with the environment
+//! - `mindweaver ui --no-open` typed in a folder of it, with the environment
 //!   every command there gets, and one request, the input of the use case,
 //!   sent over loopback as curl sends it;
 //! - its status and its answer, word for word, as the guide shows them
@@ -88,7 +88,10 @@ pub const REVIEW: &str = "Read a change before it lands";
 pub fn guide_workspace() -> Scenario {
     let scenario = Scenario::projects(&["api"]);
     scenario
-        .given("~/Projects", &format!("flayer add skill review '{REVIEW}'"))
+        .given(
+            "~/Projects",
+            &format!("mindweaver add skill review '{REVIEW}'"),
+        )
         .repository("~/Projects/web")
         .given("~/Projects/web", "mind init");
     scenario
@@ -98,7 +101,10 @@ pub fn guide_workspace() -> Scenario {
 /// guide's workspace once `web` is linked, or with more projects.
 pub fn linking(projects: &[&str]) -> Scenario {
     let scenario = Scenario::projects(projects);
-    scenario.given("~/Projects", &format!("flayer add skill review '{REVIEW}'"));
+    scenario.given(
+        "~/Projects",
+        &format!("mindweaver add skill review '{REVIEW}'"),
+    );
     scenario
 }
 

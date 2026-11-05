@@ -1,39 +1,39 @@
-//! Moving what an older Mindflayer made to what this one writes, only when
+//! Moving what an older build made to what this one writes, only when
 //! asked and a dry run first: the reference's "Upgrading".
 
 use crate::Scenario;
 
-/// The home's workspace as `flayer init` made one before the library:
+/// The home's workspace as `mindweaver init` made one before the library:
 /// keeping its own in `~/skills` and `~/rules`, a skill and a rule there.
 fn home_before_the_library() -> Scenario {
     let scenario = Scenario::empty();
     scenario
-        .given("~", "flayer init --skills skills --rules rules")
+        .given("~", "mindweaver init --skills skills --rules rules")
         .given(
             "~",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
         .given(
             "~",
-            "flayer add rule git/no-force-push \"Never force-push a shared branch\"",
+            "mindweaver add rule git/no-force-push \"Never force-push a shared branch\"",
         );
     scenario
 }
 
-/// `~/Projects` linking `collapse`, a project an older Mindflayer made,
+/// `~/Projects` linking `collapse`, a project an older build made,
 /// marked by a `mind.toml`: `commit-style` installed from the library into
 /// its `skills/`, beside `deploy`, its own.
 fn collapse_marked_by_a_mind_toml() -> Scenario {
     let scenario = Scenario::empty();
     scenario
         .older_project("~/Projects/collapse")
-        .given("~/Projects", "flayer init")
-        .given("~/Projects", "flayer link collapse")
+        .given("~/Projects", "mindweaver init")
+        .given("~/Projects", "mindweaver link collapse")
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install -p collapse commit-style")
+        .given("~/Projects", "mindweaver install -p collapse commit-style")
         .given(
             "~/Projects/collapse",
             "mind add skill deploy \"Ship the service to staging\"",
@@ -44,52 +44,52 @@ fn collapse_marked_by_a_mind_toml() -> Scenario {
 #[test]
 fn migrating_the_library_without_yes_says_what_would_move_and_moves_nothing() {
     let scenario = home_before_the_library();
-    let marker = scenario.read("~/.mindflayer/flayer.toml");
+    let marker = scenario.read("~/.mindweaver/weaver.toml");
 
     scenario
-        .run("~", "flayer migrate --library")
+        .run("~", "mindweaver migrate --library")
         .succeeds()
         .prints(concat!(
-            "would move /home/you/skills/commit-style to /home/you/.mindflayer/library/skills/commit-style\n",
-            "would move /home/you/rules/git/no-force-push.md to /home/you/.mindflayer/library/rules/git/no-force-push.md\n",
-            "would point skills and rules in /home/you/.mindflayer/flayer.toml at the library, \
-             keeping it as it is in /home/you/.mindflayer/flayer.toml.v2\n",
+            "would move /home/you/skills/commit-style to /home/you/.mindweaver/library/skills/commit-style\n",
+            "would move /home/you/rules/git/no-force-push.md to /home/you/.mindweaver/library/rules/git/no-force-push.md\n",
+            "would point skills and rules in /home/you/.mindweaver/weaver.toml at the library, \
+             keeping it as it is in /home/you/.mindweaver/weaver.toml.v2\n",
             "nothing moved: add --yes to go ahead\n",
         ))
         .quiet();
-    assert_eq!(scenario.read("~/.mindflayer/flayer.toml"), marker);
+    assert_eq!(scenario.read("~/.mindweaver/weaver.toml"), marker);
     assert!(scenario.exists("~/skills/commit-style/SKILL.md"));
 }
 
 #[test]
 fn migrating_the_library_moves_each_of_its_own_and_keeps_the_old_marker() {
     let scenario = home_before_the_library();
-    let marker = scenario.read("~/.mindflayer/flayer.toml");
+    let marker = scenario.read("~/.mindweaver/weaver.toml");
 
     scenario
-        .run("~", "flayer migrate --library --yes")
+        .run("~", "mindweaver migrate --library --yes")
         .succeeds()
         .prints(concat!(
-            "moved /home/you/skills/commit-style to /home/you/.mindflayer/library/skills/commit-style\n",
-            "moved /home/you/rules/git/no-force-push.md to /home/you/.mindflayer/library/rules/git/no-force-push.md\n",
-            "pointed skills and rules in /home/you/.mindflayer/flayer.toml at the library, \
-             kept as it was in /home/you/.mindflayer/flayer.toml.v2\n",
+            "moved /home/you/skills/commit-style to /home/you/.mindweaver/library/skills/commit-style\n",
+            "moved /home/you/rules/git/no-force-push.md to /home/you/.mindweaver/library/rules/git/no-force-push.md\n",
+            "pointed skills and rules in /home/you/.mindweaver/weaver.toml at the library, \
+             kept as it was in /home/you/.mindweaver/weaver.toml.v2\n",
         ))
         .quiet();
     assert!(!scenario.exists("~/skills"));
     assert!(!scenario.exists("~/rules"));
-    assert!(scenario.exists("~/.mindflayer/library/skills/commit-style/SKILL.md"));
-    assert!(scenario.exists("~/.mindflayer/library/rules/git/no-force-push.md"));
-    assert_eq!(scenario.read("~/.mindflayer/flayer.toml.v2"), marker);
+    assert!(scenario.exists("~/.mindweaver/library/skills/commit-style/SKILL.md"));
+    assert!(scenario.exists("~/.mindweaver/library/rules/git/no-force-push.md"));
+    assert_eq!(scenario.read("~/.mindweaver/weaver.toml.v2"), marker);
 }
 
 #[test]
 fn migrating_the_library_again_has_nothing_to_move() {
     let scenario = home_before_the_library();
-    scenario.given("~", "flayer migrate --library --yes");
+    scenario.given("~", "mindweaver migrate --library --yes");
 
     scenario
-        .run("~", "flayer migrate --library --yes")
+        .run("~", "mindweaver migrate --library --yes")
         .succeeds()
         .prints("nothing to move: the workspace keeps its own in its library already\n")
         .quiet();

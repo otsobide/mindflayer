@@ -4,7 +4,7 @@
 //! Three places offer what can be installed: the workspace's own artifacts,
 //! the own artifacts of every workspace it loads (read where they are), and
 //! the shelf gathering fills. This is the other half. It writes into a mind
-//! project, the only thing in Mindflayer that does, and the rule it works by
+//! project, the only thing in Mindweaver that does, and the rule it works by
 //! is that **it only manages what it installed**. An artifact somebody wrote by
 //! hand is neither overwritten nor deleted, whatever a caller asks for, and it
 //! is told so rather than being obeyed quietly. Which of the two a file is, is
@@ -45,7 +45,7 @@ use crate::paths;
 use crate::settings::Share;
 use crate::url::redacted;
 use crate::value::{ArtifactName, ContentHash, Origin};
-use crate::workspace::{same_directory, FlayerWorkspace, Loaded, MindProject, WorkspaceError};
+use crate::workspace::{same_directory, Loaded, MindProject, WeaverWorkspace, WorkspaceError};
 
 mod plan;
 pub mod rules;
@@ -68,7 +68,7 @@ pub enum Edits {
     /// Left as they are, and the whole change refused.
     #[default]
     Kept,
-    /// Written over or taken out as any copy Mindflayer installed.
+    /// Written over or taken out as any copy Mindweaver installed.
     Forced,
 }
 
@@ -78,7 +78,7 @@ pub enum Edits {
 /// A copy whose record has no hash is held to where it came from, so the
 /// offers are looked for only then.
 fn edited(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -109,6 +109,7 @@ fn edited(
             rules::block_file(project.root()).as_ref(),
             &offered,
         ),
+        Kind::Mcp => standing::mcp_copies(project, &record),
     };
     Ok(looked
         .into_iter()
@@ -348,7 +349,7 @@ impl Offer {
     }
 
     /// The directory it is copied from.
-    pub(crate) fn source(&self, workspace: &FlayerWorkspace) -> PathBuf {
+    pub(crate) fn source(&self, workspace: &WeaverWorkspace) -> PathBuf {
         match self {
             Offer::Shelf(gathered) => workspace.root().join(&gathered.path),
             Offer::Workspace { path, .. } | Offer::Loaded { path, .. } => path.clone(),
@@ -370,10 +371,10 @@ pub fn loaded_origin(entry: &str) -> Origin {
 /// `from` as `--from` should match it: when it is a path, typed relative to
 /// `base` (bare or after `load:`) to a workspace `workspace` loads, that
 /// workspace's origin; otherwise `from` as it is, and always for the word
-/// the workspace's own go by. So the path given to `flayer load` works as
+/// the workspace's own go by. So the path given to `mindweaver load` works as
 /// `--from` from wherever it was typed, not only spelled as the marker
 /// stores it.
-pub fn resolve_from(workspace: &FlayerWorkspace, base: &Path, from: &str) -> String {
+pub fn resolve_from(workspace: &WeaverWorkspace, base: &Path, from: &str) -> String {
     if from == WORKSPACE_ORIGIN {
         return from.to_owned();
     }
@@ -415,6 +416,10 @@ pub fn is_installable_name(kind: Kind, name: &str) -> bool {
     match kind {
         Kind::Skill => is_folder_name(name),
         Kind::Rule => name_issues(name).is_empty(),
+        // A definition's file is named by it, as a skill's folder is, and an
+        // entry will be keyed by it: the keys every agent takes, each one
+        // file's name too.
+        Kind::Mcp => crate::mcp::name::is_key(name),
     }
 }
 
@@ -424,7 +429,7 @@ fn installable_name(kind: Kind, name: &str) -> Result<(), InstallError> {
         return Ok(());
     }
     Err(match kind {
-        Kind::Skill => InstallError::UnsafeName {
+        Kind::Skill | Kind::Mcp => InstallError::UnsafeName {
             name: name.to_owned(),
         },
         Kind::Rule => InstallError::UnsafeRoute {
@@ -532,6 +537,12 @@ pub(crate) fn agent_of(agents: &[Agent]) -> Option<String> {
 /// install may use (`NoUsableTarget`), or a `mind.toml` naming no folder for
 /// it (`NoDirectory`).
 pub fn targets(project: &MindProject, kind: Kind) -> Result<Vec<InstallTarget>, InstallError> {
+    // Refused here, where every install, adoption and survey of a project
+    // asks where a kind goes, so none of them reads a folder for one no
+    // install writes, or says a project has none.
+    if !installs(kind) {
+        return Err(InstallError::NotInstallable { kind });
+    }
     if project.settings().is_none() {
         return Ok(vec![InstallTarget {
             folder: project.required_directory(kind)?,
@@ -605,7 +616,7 @@ impl Candidate {
     }
 
     /// The directory it is copied from.
-    fn source(&self, workspace: &FlayerWorkspace) -> PathBuf {
+    fn source(&self, workspace: &WeaverWorkspace) -> PathBuf {
         self.offer.source(workspace)
     }
 }
@@ -621,7 +632,7 @@ pub struct Loads {
 /// The own artifacts of `kind` of every workspace `workspace` loads, in the
 /// order its marker lists them. What could not be offered is dropped here;
 /// [`offered_by_loads`] has it, for a front end to warn with.
-pub fn loaded_offers(workspace: &FlayerWorkspace, kind: Kind) -> Vec<Offer> {
+pub fn loaded_offers(workspace: &WeaverWorkspace, kind: Kind) -> Vec<Offer> {
     from_loads(workspace, &[kind]).offers
 }
 
@@ -631,9 +642,9 @@ pub fn loaded_offers(workspace: &FlayerWorkspace, kind: Kind) -> Vec<Offer> {
 /// filed under. Failures collected, not raised, like every discovery.
 ///
 /// Every kind, as [`survey`] offers every kind to install, so what a load
-/// is said to offer, in `flayer load`, `flayer gather list` and the TUI, is
+/// is said to offer, in `mindweaver load`, `mindweaver gather list` and the TUI, is
 /// what the command line and the install screen let somebody install.
-pub fn offered_by_loads(workspace: &FlayerWorkspace) -> Loads {
+pub fn offered_by_loads(workspace: &WeaverWorkspace) -> Loads {
     from_loads(workspace, &Kind::ALL)
 }
 
@@ -643,7 +654,7 @@ pub fn offered_by_loads(workspace: &FlayerWorkspace) -> Loads {
 /// even kinds it keeps in one folder with a project of its, since that project
 /// is not what is being offered; and each loaded directory once, however many
 /// spellings of it the marker has.
-fn from_loads(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Loads {
+fn from_loads(workspace: &WeaverWorkspace, kinds: &[Kind]) -> Loads {
     let mut loads = Loads::default();
     let mut seen: Vec<PathBuf> = Vec::new();
     for loaded in workspace.loads() {
@@ -743,7 +754,7 @@ codes!(LoadFailure {
 /// every project a workspace links, where a refusal for one would hide the
 /// rest. Asking for one by name ([`offered`]) is refused.
 pub fn survey(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -766,7 +777,7 @@ pub fn survey(
 /// them: for a reader surveying every project a workspace links, which reads
 /// what is offered once rather than once a project, as a snapshot does.
 pub(crate) fn survey_among(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -829,7 +840,7 @@ pub(crate) fn survey_among(
 /// shelf offers, so that is what it says: a report reads that ledger too,
 /// and says a failure of it once, as discovery's.
 pub fn standings(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -844,7 +855,7 @@ pub fn standings(
 /// name order, as [`standings`] tells them, with what told each: where it
 /// is offered now and how each of its copies is found.
 pub(crate) fn surveyed(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -869,7 +880,7 @@ pub(crate) fn surveyed(
 /// removing one everywhere does ([`crate::everywhere`]): surveying each
 /// project whole would hash the copies of everything else installed there.
 pub(crate) fn surveyed_one(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -910,7 +921,7 @@ pub(crate) fn surveyed_one(
 /// somebody's artifact to mend, not a reason to take its copies out. By
 /// place ([`places`]), since what cannot be read cannot say its name.
 pub(crate) fn orphaned(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -958,10 +969,10 @@ pub(crate) fn orphaned(
 
 /// What the workspace's own could not offer of `kinds`: an artifact of it
 /// that cannot be read, or a folder of them that cannot be listed. None of
-/// a kind it does not keep ([`FlayerWorkspace::own_kinds`]), which it
+/// a kind it does not keep ([`WeaverWorkspace::own_kinds`]), which it
 /// offers none of. Failures collected, as every discovery's, for a front
 /// end to warn with, as [`offered_by_loads`] has a load's.
-pub fn own_failures(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Vec<DiscoveryFailure> {
+pub fn own_failures(workspace: &WeaverWorkspace, kinds: &[Kind]) -> Vec<DiscoveryFailure> {
     let kept = workspace.own_kinds();
     let kinds: Vec<Kind> = kinds
         .iter()
@@ -981,7 +992,7 @@ pub fn own_failures(workspace: &FlayerWorkspace, kinds: &[Kind]) -> Vec<Discover
 /// workspace's that can be opened. A record from before origins were kept
 /// may have come from any of them. None for one from the shelf, whose
 /// offers are the ledger's rows, not a read that can fail.
-fn places(workspace: &FlayerWorkspace, loads: &[Loaded], record: &InstallRecord) -> Vec<PathBuf> {
+fn places(workspace: &WeaverWorkspace, loads: &[Loaded], record: &InstallRecord) -> Vec<PathBuf> {
     let any = record.origin.is_none() && record.source_id.is_none();
     let names = |origin: &str| any || record.origin.as_deref() == Some(origin);
     let mut places = Vec::new();
@@ -1019,7 +1030,7 @@ fn load_origin(loaded: &Loaded) -> Origin {
 fn block_of(project: &MindProject, kind: Kind) -> Option<AgentsMd> {
     // Matched on the kind, so a third one has to say how its copies are told.
     match kind {
-        Kind::Skill => None,
+        Kind::Skill | Kind::Mcp => None,
         Kind::Rule => rules::block_file(project.root()),
     }
 }
@@ -1028,7 +1039,7 @@ fn block_of(project: &MindProject, kind: Kind) -> Option<AgentsMd> {
 /// every offer of its kind, and `block`, the project's `AGENTS.md` as it
 /// reads now for a rule: what [`surveyed`] says of each.
 fn told(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     record: InstallRecord,
     offers: &[Offer],
@@ -1047,6 +1058,11 @@ fn told(
             let standing = standing::rule_standing(workspace, &record, &copies, &offered);
             (copies, standing)
         }
+        Kind::Mcp => {
+            let copies = standing::mcp_copies(project, &record);
+            let standing = standing::mcp_standing(&copies, !offered.is_empty());
+            (copies, standing)
+        }
     };
     let offered = offered.into_iter().cloned().collect();
     Surveyed {
@@ -1062,7 +1078,7 @@ fn told(
 /// shelf. Nothing whose name no copy can be filed under
 /// ([`is_installable_name`]).
 pub(crate) fn offers(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     kind: Kind,
 ) -> Result<Vec<Offer>, LedgerError> {
@@ -1154,7 +1170,7 @@ pub(crate) fn from_the_library(
 /// [`survey`] offers it nothing: "not offered" would send somebody to gather
 /// what could never be installed there anyway.
 pub fn offered(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -1213,7 +1229,7 @@ pub fn offered(
 /// Kind by kind: a kind that cannot go into the project at all refuses
 /// for that, which keeps no other from being found by the path.
 pub fn offered_typed(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     reference: &Reference,
@@ -1280,7 +1296,7 @@ pub fn offered_typed(
 /// ([`Removed::Foreign`]) before the absence the first kind finds: the name
 /// was typed because something by it is somewhere.
 pub fn uninstall_typed(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     reference: &Reference,
@@ -1340,16 +1356,36 @@ pub fn kinds_named(reference: &Reference) -> Vec<Kind> {
 
 /// The kinds a copy could be filed as under `name` ([`is_installable_name`]),
 /// or every kind when none could, so that what is asked of them refuses the
-/// name, saying why.
+/// name, saying why: of the kinds an install writes ([`installs`]), since a
+/// name typed bare would otherwise be refused for a kind nobody offered it
+/// as, where nothing offers it at all.
 fn filed_as(name: &str) -> Vec<Kind> {
-    let kinds: Vec<Kind> = Kind::ALL
+    let installed: Vec<Kind> = Kind::ALL
         .into_iter()
+        .filter(|&kind| installs(kind))
+        .collect();
+    let kinds: Vec<Kind> = installed
+        .iter()
+        .copied()
         .filter(|&kind| is_installable_name(kind, name))
         .collect();
     if kinds.is_empty() {
-        Kind::ALL.to_vec()
+        installed
     } else {
         kinds
+    }
+}
+
+/// Whether an install writes `kind` into a project at all: a skill as a
+/// copy in a folder, a rule as a section of a block or a file, and not yet
+/// an MCP server, whose entry in each agent's own config file (D-10) no
+/// release writes. What a name typed bare is asked of, and what a front end
+/// steps through to install. Matched on the kind, so a kind added says
+/// whether it is installed before it compiles.
+pub const fn installs(kind: Kind) -> bool {
+    match kind {
+        Kind::Skill | Kind::Rule => true,
+        Kind::Mcp => false,
     }
 }
 
@@ -1383,7 +1419,7 @@ pub fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
 /// work, as a copy nothing records is, until [`install_with`] is told to
 /// write over it.
 pub fn install(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
@@ -1396,7 +1432,7 @@ pub fn install(
 /// `edits` says so, as `--force` does. Never over a copy nothing records,
 /// which is somebody's whatever is asked.
 pub fn install_with(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
@@ -1410,6 +1446,7 @@ pub fn install_with(
     match kind {
         Kind::Skill => {}
         Kind::Rule => return rules::install(workspace, ledger, project, candidate, homes, edits),
+        Kind::Mcp => return Err(InstallError::NotInstallable { kind }),
     }
     let entry = project_entry(workspace, project);
     // The folder is named after the artifact, not after the folder it had on
@@ -1455,7 +1492,7 @@ pub fn install_with(
 /// install refuses is looked at again here, under the lock, whatever was
 /// looked at before it.
 pub(crate) fn install_held(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
@@ -1471,6 +1508,7 @@ pub(crate) fn install_held(
         Kind::Rule => {
             return rules::install_held(workspace, ledger, project, candidate, homes, edits)
         }
+        Kind::Mcp => return Err(InstallError::NotInstallable { kind }),
     }
     let entry = project_entry(workspace, project);
     let targets = targets(project, kind)?;
@@ -1767,7 +1805,7 @@ pub(crate) fn in_agent_home(
 /// copies are the team's to commit, and for one a `mind.toml` marks, since a
 /// project from before settings was committed by design.
 ///
-/// Asked by whatever else Mindflayer writes into a project, as Claude's rule
+/// Asked by whatever else Mindweaver writes into a project, as Claude's rule
 /// files ([`crate::claude_rules`]), so all of it is kept out of git alike.
 pub(crate) fn local(project: &MindProject) -> Option<&str> {
     project
@@ -1794,7 +1832,7 @@ pub(crate) fn entries(project: &MindProject, copies: &[PathBuf]) -> Vec<exclude:
 /// every file added to it later from `git status`, where a teammate would
 /// never see it to commit: one a team committed, or one a project that was
 /// shared kept when it turned local.
-/// Mindflayer runs no git command and leaves the index as it is, so such a
+/// Mindweaver runs no git command and leaves the index as it is, so such a
 /// copy stays the team's in git, written over by an update as a tracked
 /// file is, for the change to show. An index that cannot be read takes
 /// nothing for tracked: the exclude edit that follows reads the same
@@ -1852,8 +1890,9 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
         Kind::Skill => Artifact::skill(from, from)?,
         // A rule is held to its route, which `installable_name` asks, and
         // its front matter says nothing an agent would pass it over for;
-        // nor does an install of one come here ([`rules::install`]).
-        Kind::Rule => return Ok(Vec::new()),
+        // nor does an install of one come here ([`rules::install`]), nor of
+        // a definition, which is refused before.
+        Kind::Rule | Kind::Mcp => return Ok(Vec::new()),
     };
     Ok(artifact
         .manifest()
@@ -1863,8 +1902,8 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
 /// Take one artifact back out of a project: every copy its installation
 /// recorded, wherever the project would install it now.
 ///
-/// Only if the ledger says Mindflayer put it there, and only the copies it
-/// says Mindflayer wrote: a folder of that name in a target the record does
+/// Only if the ledger says Mindweaver put it there, and only the copies it
+/// says Mindweaver wrote: a folder of that name in a target the record does
 /// not name is somebody's, and stays. Anything else is reported and left
 /// where it is.
 ///
@@ -1876,7 +1915,7 @@ fn unfit(kind: Kind, from: &Path, name: &str) -> Result<Vec<ValidationIssue>, In
 /// every copy left where it is and the record kept ([`Removed::Edited`]),
 /// until [`uninstall_with`] is told to take it out.
 pub fn uninstall(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -1889,7 +1928,7 @@ pub fn uninstall(
 /// [`uninstall`], taking out a copy edited since it was installed when
 /// `edits` says so, as `--force` does.
 pub fn uninstall_with(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -1905,7 +1944,7 @@ pub fn uninstall_with(
     // reason `install` holds it: an install of the same name at the same
     // moment comes wholly before this or wholly after it. Between the copies
     // going and their record going, it would leave a copy with no record,
-    // which Mindflayer would never touch again.
+    // which Mindweaver would never touch again.
     let _lock = workspace.lock().map_err(WorkspaceError::from)?;
     let entry = project_entry(workspace, project);
     let Some(record) = ledger.installation(&entry, kind, name)? else {
@@ -1988,10 +2027,10 @@ pub fn uninstall_with(
 /// it would go.
 ///
 /// A rule in a project marked by its settings is somebody's in its block or
-/// in Claude's folder of Mindflayer's rules ([`rules`]), as its uninstall
+/// in Claude's folder of Mindweaver's rules ([`rules`]), as its uninstall
 /// tells.
 pub(crate) fn somebodys(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     kind: Kind,
@@ -2041,7 +2080,9 @@ pub(crate) fn recorded_copy(
         .all(|component| matches!(component, Component::Normal(_)));
     let named = match kind.layout() {
         Layout::Directory { .. } => path.file_name() == Some(std::ffi::OsStr::new(name)),
-        Layout::Files { .. } => path.ends_with(copy_at(Path::new(""), kind, name)),
+        Layout::Files { .. } | Layout::Flat { .. } => {
+            path.ends_with(copy_at(Path::new(""), kind, name))
+        }
     };
     if !inside || !named {
         return Err(InstallError::Recorded {
@@ -2052,7 +2093,7 @@ pub(crate) fn recorded_copy(
     Ok(project.root().join(path))
 }
 
-/// Drop the record that Mindflayer installed `name` into `project`, when it
+/// Drop the record that Mindweaver installed `name` into `project`, when it
 /// names a copy at `at`, saying whether there was one.
 ///
 /// For when what is in the project stops being a copy that was installed:
@@ -2098,7 +2139,7 @@ pub(crate) fn recorded_copy(
 /// what that scrubbed comes back too, for the change to hand on: the changes
 /// in [`crate::lifecycle`] reach the ledger only through here.
 pub(crate) fn disown(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -2156,7 +2197,7 @@ pub(crate) fn disown(
 /// ([`Ledger::renamed_copy`]), saying what became of it.
 ///
 /// For a rename of an installed copy: it is what was installed, renamed, so
-/// it stays Mindflayer's, as an edit leaves a copy, told by the hash of what
+/// it stays Mindweaver's, as an edit leaves a copy, told by the hash of what
 /// was written (D-04), and never left out of a listing of what the project
 /// was given. A skill's rename rewrites the `name` line of its manifest, an
 /// edit in all but name, so it reads as edited: never written over or
@@ -2176,7 +2217,7 @@ pub(crate) fn disown(
 /// The workspace and the ledger are found and opened as for [`disown`], and
 /// only by the changes in [`crate::lifecycle`].
 pub(crate) fn carry(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -2261,7 +2302,7 @@ pub(crate) struct Carry {
     /// say; nothing when there was no ledger to open.
     pub scrub: Scrub,
     /// Why the exclude block of a local project does not say what is
-    /// Mindflayer's now, when it could not be edited.
+    /// Mindweaver's now, when it could not be edited.
     pub unexcluded: Option<InstallError>,
 }
 
@@ -2281,7 +2322,7 @@ impl Default for Carry {
 /// is and says so. False for a workspace that does not manage the project,
 /// and one with no ledger, which is not made to look.
 pub(crate) fn recorded_at(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -2337,7 +2378,7 @@ pub enum Installed {
     /// Something of that name is already in one of the targets, at `path`,
     /// and is not ours to replace, so nothing was written in any of them.
     Foreign { name: ArtifactName, path: PathBuf },
-    /// A copy Mindflayer installed was changed since, at each of `paths`,
+    /// A copy Mindweaver installed was changed since, at each of `paths`,
     /// and the install was not forced, so nothing was written in any target.
     Edited {
         name: ArtifactName,
@@ -2468,7 +2509,7 @@ pub enum Refused {
     /// Something of that name is in a target, and the ledger records none
     /// of it.
     Foreign,
-    /// A copy Mindflayer installed was changed since, and the change was not
+    /// A copy Mindweaver installed was changed since, and the change was not
     /// forced.
     Edited,
     /// Nothing of that name is installed to take out: an uninstall's only.
@@ -2482,7 +2523,7 @@ codes!(Refused {
 });
 
 /// How `name` stands in `project`, which installs into `targets`, given
-/// every copy the ledger records Mindflayer writing there (`recorded`, as
+/// every copy the ledger records Mindweaver writing there (`recorded`, as
 /// [`Ledger::copies`] spells them), and the record of its installation with
 /// every offer of `kind`, when there is one.
 ///
@@ -2494,7 +2535,7 @@ codes!(Refused {
 /// place it came from offers now ([`Standing`]), a copy gone since included,
 /// which the next install puts back.
 fn standing(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     targets: &[InstallTarget],
     kind: Kind,
@@ -2519,6 +2560,9 @@ fn standing(
         // Only into a project a `mind.toml` marks, as a copy of its file: one
         // marked by its settings has its rules told by `rules::survey`.
         Kind::Rule => standing::of_rule(workspace, project, record, None, &offered),
+        Kind::Mcp => {
+            standing::mcp_standing(&standing::mcp_copies(project, record), !offered.is_empty())
+        }
     }
 }
 
@@ -2528,7 +2572,7 @@ fn standing(
 /// By the copy's path, as a listing marks installed copies
 /// (`Catalog::with_records`), not by its name: an installation of a name
 /// into one folder does not make what somebody keeps under that name in
-/// another folder Mindflayer's to write over.
+/// another folder Mindweaver's to write over.
 fn unrecorded(root: &Path, kind: Kind, copies: &[PathBuf], recorded: &[String]) -> Option<PathBuf> {
     copies
         .iter()
@@ -2545,6 +2589,7 @@ fn unrecorded(root: &Path, kind: Kind, copies: &[PathBuf], recorded: &[String]) 
 pub(crate) fn copy_at(folder: &Path, kind: Kind, name: &str) -> PathBuf {
     match kind.layout() {
         Layout::Directory { .. } => folder.join(name),
+        Layout::Flat { extension } => folder.join(format!("{name}.{extension}")),
         Layout::Files { extension } => {
             let mut path = folder.to_path_buf();
             path.extend(name.split('/'));
@@ -2562,7 +2607,7 @@ pub(crate) fn holds(copy: &Path, kind: Kind) -> bool {
         // notes somebody started by hand is theirs, and installing over it
         // would delete them.
         Layout::Directory { .. } => copy.exists(),
-        Layout::Files { .. } => copy.is_file(),
+        Layout::Files { .. } | Layout::Flat { .. } => copy.is_file(),
     }
 }
 
@@ -2570,16 +2615,16 @@ pub(crate) fn holds(copy: &Path, kind: Kind) -> bool {
 /// registered project is stored, so moving the two together keeps it true.
 ///
 /// The route to where the workspace's own entry leads
-/// ([`FlayerWorkspace::spelling_of`]), not to however the caller spelled the
-/// project: `mind` run inside it and `flayer -p` must read and write one
+/// ([`WeaverWorkspace::spelling_of`]), not to however the caller spelled the
+/// project: `mind` run inside it and `mindweaver -p` must read and write one
 /// record, whichever symlinks either went through.
-fn project_entry(workspace: &FlayerWorkspace, project: &MindProject) -> String {
+fn project_entry(workspace: &WeaverWorkspace, project: &MindProject) -> String {
     entry_for_root(workspace, project.root())
 }
 
 /// [`project_entry`], for a project known only by its root, as an artifact
 /// knows the one it was found in.
-pub(crate) fn entry_for_root(workspace: &FlayerWorkspace, root: &Path) -> String {
+pub(crate) fn entry_for_root(workspace: &WeaverWorkspace, root: &Path) -> String {
     route(workspace.root(), &workspace.spelling_of(root))
 }
 
@@ -2625,15 +2670,15 @@ pub(crate) fn resolved(path: &Path) -> Option<PathBuf> {
 }
 
 /// The loaded workspace that keeps its own of `kind` in a folder `path` is
-/// in, or around, if one does (spelled as its root, which `flayer unload`
+/// in, or around, if one does (spelled as its root, which `mindweaver unload`
 /// accepts from anywhere).
 ///
 /// By the folder, not by what is in it yet: a project that is also a loaded
-/// workspace keeping both in one folder has nothing in it Mindflayer may
+/// workspace keeping both in one folder has nothing in it Mindweaver may
 /// write or remove, from the first install on; otherwise an install today
 /// is the loaded workspace's own tomorrow, and can never be updated again.
 pub(crate) fn kept_by_a_load(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     kind: Kind,
     path: &Path,
 ) -> Option<PathBuf> {
@@ -2661,7 +2706,7 @@ pub(crate) fn kept_by_a_load(
 /// settings holds a rule's bytes alone to compare: its section is rendered,
 /// and Claude may have no file of it.
 pub fn is_current(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     ledger: &Ledger,
     project: &MindProject,
     candidate: &Candidate,
@@ -2669,6 +2714,8 @@ pub fn is_current(
     // Matched on the kind, so a third one has to say how it is told.
     match candidate.kind() {
         Kind::Skill => {}
+        // Nothing of one is in a project for it to be current there.
+        Kind::Mcp => return false,
         Kind::Rule => {
             let entry = project_entry(workspace, project);
             return ledger
@@ -2705,7 +2752,7 @@ pub enum InstallError {
         path: PathBuf,
         workspace: PathBuf,
     },
-    #[error("{name}: {path} is not there any more, because the workspace loaded from {workspace} has changed; `flayer unload {workspace}` if it has gone")]
+    #[error("{name}: {path} is not there any more, because the workspace loaded from {workspace} has changed; `mindweaver unload {workspace}` if it has gone")]
     Gone {
         name: String,
         path: PathBuf,
@@ -2730,7 +2777,7 @@ pub enum InstallError {
     NotRecorded { file: PathBuf, route: String },
     #[error("{file}: the section of rule `{route}` was changed since it was rendered and cannot be read back, so the project's rules are not rendered: put it right by hand, or install the rule again with --force")]
     Unread { file: PathBuf, route: String },
-    #[error("{file}: holds rule `{route}` in Mindflayer's block, which cannot be edited ({why}), so the rule is not uninstalled: share the project or set edit_tracked, or take its section out by hand")]
+    #[error("{file}: holds rule `{route}` in Mindweaver's block, which cannot be edited ({why}), so the rule is not uninstalled: share the project or set edit_tracked, or take its section out by hand")]
     Withheld {
         file: PathBuf,
         route: String,
@@ -2742,6 +2789,8 @@ pub enum InstallError {
     ClaudeMd(#[from] ClaudeMdError),
     #[error(transparent)]
     ClaudeRules(#[from] ClaudeRulesError),
+    #[error("{} cannot be installed into a project yet", .kind.plural())]
+    NotInstallable { kind: Kind },
     #[error("`{name}` cannot be installed: {}", issue_list(.issues))]
     Unfit {
         name: String,
@@ -2751,7 +2800,7 @@ pub enum InstallError {
     Artifact(#[from] ArtifactError),
     #[error("{from} and {to} are one inside the other, so installing one onto the other would delete it")]
     Overlaps { from: PathBuf, to: PathBuf },
-    #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindflayer neither installs nor removes there; `flayer unload {loaded}` first to manage it as a project")]
+    #[error("{path} is where the workspace loaded from {loaded} keeps its own, so Mindweaver neither installs nor removes there; `mindweaver unload {loaded}` first to manage it as a project")]
     KeptByALoad { path: PathBuf, loaded: PathBuf },
     #[error("{path}: cannot be written: {source}")]
     Write {
@@ -2762,7 +2811,7 @@ pub enum InstallError {
         /// the write failed ([`InstallError::swept`]).
         swept: Vec<PathBuf>,
     },
-    #[error("nothing called `{name}` can be installed{}: gather it, load a workspace that has it with `flayer load`, or add it to the workspace with `flayer add`", from.as_deref().map(|from| format!(" from {from}")).unwrap_or_default())]
+    #[error("nothing called `{name}` can be installed{}: gather it, load a workspace that has it with `mindweaver load`, or add it to the workspace with `mindweaver add`", from.as_deref().map(|from| format!(" from {from}")).unwrap_or_default())]
     NotOffered { name: String, from: Option<String> },
     #[error("`{name}` is offered by more than one place ({}), so say which with --from", .origins.join(", "))]
     OfferedTwice { name: String, origins: Vec<Origin> },
@@ -2770,9 +2819,9 @@ pub enum InstallError {
     OfferedAsKinds { name: String, kinds: Vec<Kind> },
     #[error("`{name}` is installed as {}, so say which: {}", as_kinds(.kinds), qualified(.name, .kinds))]
     InstalledAsKinds { name: String, kinds: Vec<Kind> },
-    #[error("{project} names no agent in its settings that {kind}s are installed for, so none can be installed into it")]
+    #[error("{project} names no agent in its settings that {kinds} are installed for, so none can be installed into it", kinds = .kind.plural())]
     NoTarget { project: String, kind: Kind },
-    #[error("none of the folders {project}'s settings name for its {kind}s is one an install may use, so none can be installed into it")]
+    #[error("none of the folders {project}'s settings name for its {kinds} is one an install may use, so none can be installed into it", kinds = .kind.plural())]
     NoUsableTarget { project: String, kind: Kind },
     #[error("{name}: the ledger records a copy at {route}, which is not a folder of the project named after it, so nothing was removed")]
     Recorded { name: String, route: String },
@@ -2790,7 +2839,7 @@ pub enum InstallError {
         #[source]
         source: ExcludeError,
     },
-    #[error("{path} is inside {home}, which {reader} reads for every project, so nothing was installed: Mindflayer installs into one project at a time")]
+    #[error("{path} is inside {home}, which {reader} reads for every project, so nothing was installed: Mindweaver installs into one project at a time")]
     UserScope {
         path: PathBuf,
         home: PathBuf,
@@ -2808,6 +2857,7 @@ codes!(InstallError {
     Self::NotRecorded { .. } => "rule_not_recorded",
     Self::Unread { .. } => "rule_section_unread",
     Self::Withheld { .. } => "rules_block_unedited",
+    Self::NotInstallable { .. } => "not_installable",
     Self::Unfit { .. } => "install_unfit",
     Self::Overlaps { .. } => "install_overlaps",
     Self::KeptByALoad { .. } => "kept_by_a_load",

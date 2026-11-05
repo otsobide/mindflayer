@@ -16,7 +16,7 @@ const gradient = useId()
   <RouterLink
     to="/"
     class="flex min-w-0 items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-    aria-label="Mindflayer: overview"
+    aria-label="Mindweaver: overview"
   >
     <svg
       viewBox="0 0 32 32"
@@ -65,7 +65,7 @@ const gradient = useId()
       v-if="!collapsed"
       class="flex min-w-0 items-baseline gap-1.5"
     >
-      <span class="truncate text-sm font-semibold tracking-tight text-highlighted">Mindflayer</span>
+      <span class="truncate text-sm font-semibold tracking-tight text-highlighted">Mindweaver</span>
       <span class="font-mono text-[10px] font-medium uppercase tracking-wider text-dimmed">panel</span>
     </span>
   </RouterLink>

@@ -2,11 +2,11 @@
 //!
 //! The commands were written for a person at one terminal, running one at a
 //! time. The TUI beside a terminal, and the server the panel runs on beside
-//! both, are more than one: two writers that each read `flayer.toml`, add an
+//! both, are more than one: two writers that each read `weaver.toml`, add an
 //! entry and write it back keep only the entry written second, and two gathers
-//! of one source clone into one folder. So a writer takes `.mindflayer/lock`
+//! of one source clone into one folder. So a writer takes `.mindweaver/lock`
 //! before it reads what it is about to change, and holds it until the change
-//! is written ([`crate::workspace::FlayerWorkspace::lock`]).
+//! is written ([`crate::workspace::WeaverWorkspace::lock`]).
 //!
 //! Readers never take it. A marker is replaced by a rename, and a read of the
 //! ledger sees only what was committed, so each file a reader opens is whole,
@@ -40,7 +40,7 @@ use crate::code::codes;
 /// at the other end is told rather than left to wonder.
 pub const WAIT: Duration = Duration::from_secs(10);
 
-/// The file a writer locks, inside `.mindflayer`.
+/// The file a writer locks, inside `.mindweaver`.
 pub const LOCK_FILE: &str = "lock";
 
 /// Where the writer holding [`LOCK_FILE`] writes its process id, beside it,
@@ -77,7 +77,7 @@ pub struct WorkspaceLock {
 }
 
 impl WorkspaceLock {
-    /// Take the lock in `dir`, a workspace's `.mindflayer`, waiting up to
+    /// Take the lock in `dir`, a workspace's `.mindweaver`, waiting up to
     /// `wait` for a writer that holds it.
     pub(crate) fn acquire(dir: &Path, wait: Duration) -> Result<Self, LockError> {
         let path = dir.join(LOCK_FILE);
@@ -144,6 +144,16 @@ impl WorkspaceLock {
     /// others out.
     pub fn is_held(&self) -> bool {
         self.file.is_some()
+    }
+}
+
+impl WorkspaceLock {
+    /// Say that the folder holding the lock is `dir` now, for one renamed
+    /// while it is held, as a workspace moved to Mindweaver's names is: the
+    /// lock is on the file, wherever its folder went, and the holder's id is
+    /// taken away from where it is once the lock is let go.
+    pub(crate) fn moved(&mut self, dir: &Path) {
+        self.holder = dir.join(HOLDER_FILE);
     }
 }
 

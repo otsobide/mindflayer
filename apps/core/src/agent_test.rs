@@ -465,3 +465,20 @@ fn an_agent_is_read_back_from_its_name_and_no_other_spelling() {
         "{error}"
     );
 }
+
+#[test]
+fn a_sentence_names_each_agent_by_its_product_and_a_command_line_by_its_binary() {
+    let titled: Vec<(&str, &str)> = Agent::ALL
+        .into_iter()
+        .map(|agent| (agent.name(), agent.title()))
+        .collect();
+
+    assert_eq!(
+        titled,
+        [
+            ("claude", "Claude Code"),
+            ("codex", "Codex"),
+            ("opencode", "OpenCode")
+        ]
+    );
+}

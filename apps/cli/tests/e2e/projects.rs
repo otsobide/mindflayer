@@ -20,7 +20,7 @@ fn mind_init_makes_a_repository_a_project_kept_out_of_git() {
     );
     assert_eq!(
         scenario.read("~/Projects/collapse/.mind/.gitignore"),
-        "# Mindflayer keeps this project's settings here, for this checkout alone.\n\
+        "# Mindweaver keeps this project's settings here, for this checkout alone.\n\
          # Nothing in this folder is meant to be committed.\n\
          *\n"
     );
@@ -57,25 +57,25 @@ fn mind_init_run_again_says_so_and_changes_nothing() {
 }
 
 #[test]
-fn flayer_init_makes_the_folder_a_workspace() {
+fn mindweaver_init_makes_the_folder_a_workspace() {
     let scenario = Scenario::empty();
     scenario.folder("~/Projects");
 
     scenario
-        .run("~/Projects", "flayer init")
+        .run("~/Projects", "mindweaver init")
         .succeeds()
-        .prints("initialized flayer workspace `Projects` in /home/you/Projects/.mindflayer\n")
+        .prints("initialized weaver workspace `Projects` in /home/you/Projects/.mindweaver\n")
         .quiet();
 
-    assert!(scenario.exists("~/Projects/.mindflayer/flayer.toml"));
+    assert!(scenario.exists("~/Projects/.mindweaver/weaver.toml"));
     assert!(
-        !scenario.exists("~/.mindflayer"),
+        !scenario.exists("~/.mindweaver"),
         "a workspace made elsewhere leaves the home alone"
     );
 }
 
 #[test]
-fn flayer_link_registers_a_project_and_its_skills_are_listed() {
+fn mindweaver_link_registers_a_project_and_its_skills_are_listed() {
     let scenario = Scenario::empty();
     scenario
         .repository("~/Projects/collapse")
@@ -84,16 +84,16 @@ fn flayer_link_registers_a_project_and_its_skills_are_listed() {
             "~/Projects/collapse",
             "mind add skill deploy \"Ship the service to staging\"",
         )
-        .given("~/Projects", "flayer init");
+        .given("~/Projects", "mindweaver init");
 
     scenario
-        .run("~/Projects", "flayer link collapse")
+        .run("~/Projects", "mindweaver link collapse")
         .succeeds()
         .prints("linked collapse as collapse\n")
         .quiet();
 
     scenario
-        .run("~/Projects", "flayer list")
+        .run("~/Projects", "mindweaver list")
         .succeeds()
         .prints("deploy  Ship the service to staging\n")
         .quiet();
@@ -104,10 +104,10 @@ fn a_repository_not_made_a_project_is_not_linked() {
     let scenario = Scenario::empty();
     scenario
         .repository("~/Projects/archive")
-        .given("~/Projects", "flayer init");
+        .given("~/Projects", "mindweaver init");
 
     scenario
-        .run("~/Projects", "flayer link archive")
+        .run("~/Projects", "mindweaver link archive")
         .exits(1)
         .prints("")
         .says(
@@ -117,12 +117,12 @@ fn a_repository_not_made_a_project_is_not_linked() {
 }
 
 #[test]
-fn flayer_scan_finds_what_could_be_linked_and_says_what_it_needs() {
+fn mindweaver_scan_finds_what_could_be_linked_and_says_what_it_needs() {
     let scenario = Scenario::projects(&["collapse"]);
     scenario.repository("~/Projects/archive");
 
     scenario
-        .run("~/Projects", "flayer scan")
+        .run("~/Projects", "mindweaver scan")
         .succeeds()
         .prints(concat!(
             "archive   not linked  git repository, not a mind project yet\n",
@@ -134,7 +134,7 @@ fn flayer_scan_finds_what_could_be_linked_and_says_what_it_needs() {
 }
 
 #[test]
-fn flayer_unlink_forgets_a_project_and_leaves_it_as_it_is() {
+fn mindweaver_unlink_forgets_a_project_and_leaves_it_as_it_is() {
     let scenario = Scenario::projects(&["collapse"]);
     scenario.given(
         "~/Projects/collapse",
@@ -142,7 +142,7 @@ fn flayer_unlink_forgets_a_project_and_leaves_it_as_it_is() {
     );
 
     scenario
-        .run("~/Projects", "flayer unlink collapse")
+        .run("~/Projects", "mindweaver unlink collapse")
         .succeeds()
         .prints("unlinked collapse\n")
         .quiet();
@@ -150,9 +150,9 @@ fn flayer_unlink_forgets_a_project_and_leaves_it_as_it_is() {
     assert!(scenario.exists("~/Projects/collapse/.mind/settings.toml"));
     assert!(scenario.exists("~/Projects/collapse/skills/deploy/SKILL.md"));
     scenario
-        .run("~/Projects", "flayer list")
+        .run("~/Projects", "mindweaver list")
         .succeeds()
-        .prints("Projects manages no projects yet\n  link one with `flayer link <path>`\n");
+        .prints("Projects manages no projects yet\n  link one with `mindweaver link <path>`\n");
 }
 
 // -------------------------------------------------------------------------
@@ -166,9 +166,9 @@ fn collapse_moved_into_apps() -> Scenario {
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install -p collapse commit-style")
+        .given("~/Projects", "mindweaver install -p collapse commit-style")
         .folder("~/Projects/apps");
     std::fs::rename(
         scenario.at("~/Projects/collapse"),
@@ -183,7 +183,7 @@ fn a_project_that_moved_is_stale_and_status_says_why() {
     let scenario = collapse_moved_into_apps();
 
     scenario
-        .run("~/Projects", "flayer status")
+        .run("~/Projects", "mindweaver status")
         .exits(1)
         .prints("collapse  stale\n")
         .says(
@@ -193,26 +193,26 @@ fn a_project_that_moved_is_stale_and_status_says_why() {
 }
 
 #[test]
-fn flayer_scan_finds_a_project_that_moved_by_its_id() {
+fn mindweaver_scan_finds_a_project_that_moved_by_its_id() {
     let scenario = collapse_moved_into_apps();
 
     scenario
-        .run("~/Projects", "flayer scan")
+        .run("~/Projects", "mindweaver scan")
         .succeeds()
         .prints(concat!(
             "apps/collapse  not linked  moved: collapse -> apps/collapse\n",
             "\n",
-            "  follow one that moved with `flayer relink <old> <new>`\n",
+            "  follow one that moved with `mindweaver relink <old> <new>`\n",
         ))
         .quiet();
 }
 
 #[test]
-fn flayer_relink_follows_a_project_and_keeps_what_was_installed() {
+fn mindweaver_relink_follows_a_project_and_keeps_what_was_installed() {
     let scenario = collapse_moved_into_apps();
 
     scenario
-        .run("~/Projects", "flayer relink collapse apps/collapse")
+        .run("~/Projects", "mindweaver relink collapse apps/collapse")
         .succeeds()
         .prints(concat!(
             "relinked collapse as apps/collapse, from collapse\n",
@@ -221,7 +221,7 @@ fn flayer_relink_follows_a_project_and_keeps_what_was_installed() {
         .quiet();
 
     scenario
-        .run("~/Projects", "flayer status")
+        .run("~/Projects", "mindweaver status")
         .succeeds()
         .prints("commit-style  current  claude,codex,opencode  workspace\n")
         .quiet();

@@ -10,10 +10,10 @@
 //! good and the name it is shown by (D-09).
 //! These describe the files physically in the project, and several
 //! workspaces may link one project, so they live in the project rather than
-//! in any one workspace's `flayer.toml`, where two workspaces could disagree
+//! in any one workspace's `weaver.toml`, where two workspaces could disagree
 //! about one project's files.
 //!
-//! TOML, as `flayer.toml` is, the owner's choice (D-06, amended): both
+//! TOML, as `weaver.toml` is, the owner's choice (D-06, amended): both
 //! markers are written from a template whose comments say what each key
 //! does, and edited through toml_edit, which keeps every byte an edit does
 //! not touch, those comments included. JSON, which the settings were
@@ -26,7 +26,7 @@
 //!
 //! A key this build does not know is carried rather than refused: read past,
 //! and kept by an edit, where it was. The format grows, and a project
-//! configured by a newer Mindflayer is still a project, as it is for unknown
+//! configured by a newer Mindweaver is still a project, as it is for unknown
 //! front matter. A key that changes what an older build would do with the
 //! project is the exception, and comes with a version of its own, which
 //! that build refuses: `targets` came with [`TARGETS_VERSION`], which a
@@ -127,7 +127,7 @@ impl Settings {
     /// JSON included), when a key the format defines is missing or holds the
     /// wrong thing (but for `targets` in a version 3 file, read past then as
     /// before them), and when its version is not one its file holds: a newer
-    /// one as written by a newer Mindflayer, any other as another file's
+    /// one as written by a newer Mindweaver, any other as another file's
     /// ([`MarkerFile::of_version`]), a `settings.json` holding 3 or 4 and a
     /// `settings.toml` [`SETTINGS_TOML_VERSION`]. A key this build does not
     /// know is read past.
@@ -140,7 +140,7 @@ impl Settings {
     }
 
     /// The text of a new `settings.toml` holding these, written from a
-    /// template rather than serialized, as `flayer.toml` is: its comments say
+    /// template rather than serialized, as `weaver.toml` is: its comments say
     /// what each key does, in the file somebody opens to change one, and an
     /// edit keeps them ([`MindProject::change_settings`]). Version
     /// [`SETTINGS_TOML_VERSION`] whatever these say, the one version that
@@ -161,7 +161,7 @@ impl Settings {
             .map(|agent| toml_string(agent.name()))
             .collect();
         let mut text = format!(
-            "# Mindflayer mind project: what Mindflayer needs to know about the project\n\
+            "# Mindweaver mind project: what Mindweaver needs to know about the project\n\
              # this {MIND_DIR} is in, and nothing else. No agent reads it.\n\
              #\n\
              # `name` is what the project is shown as, and `agents` the agents that work\n\
@@ -393,7 +393,7 @@ pub(crate) fn grammar(path: &Path) -> Format {
 /// read alike, and refused alike, each refusal naming the key.
 ///
 /// The version is read first and held to this build before anything else,
-/// so a file a newer Mindflayer wrote is refused for being newer, whatever
+/// so a file a newer Mindweaver wrote is refused for being newer, whatever
 /// else it holds, rather than for a key that version gave a new meaning.
 /// Then to the versions its file holds: one another file holds is
 /// malformed rather than guessed at, since what it would mean here is
@@ -435,7 +435,7 @@ pub(crate) fn parse(path: &Path, text: &str) -> Result<Settings, WorkspaceError>
 }
 
 /// `text`, the `settings.toml` at `path` holding `before`, changed to hold
-/// `wanted` through toml_edit, as `flayer.toml` is edited, with every byte
+/// `wanted` through toml_edit, as `weaver.toml` is edited, with every byte
 /// that is not a changed value as it was.
 ///
 /// Only the keys whose values differ are touched, `directories` and

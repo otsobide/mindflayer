@@ -34,7 +34,7 @@
           "const": "removes"
         },
         {
-          "description": "`uninstall`, every form of it, and `flayer remove --everywhere\n--yes`, which uninstalls from every project first.",
+          "description": "`uninstall`, every form of it, and `mindweaver remove --everywhere\n--yes`, which uninstalls from every project first.",
           "type": "string",
           "const": "uninstalls"
         },

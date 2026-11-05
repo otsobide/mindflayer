@@ -1,9 +1,9 @@
 //! Making projects and linking them: a project's marker as `mind init`
-//! has core write it, a workspace's registry as `flayer link` changes it,
+//! has core write it, a workspace's registry as `mindweaver link` changes it,
 //! and a project found again by its id once it moved.
 
-use mindflayer_core::relink;
-use mindflayer_core::{Agent, Directories, Initialization, MindProject, Registration, Share};
+use mindweaver_core::relink;
+use mindweaver_core::{Agent, Directories, Initialization, MindProject, Registration, Share};
 use serde_json::json;
 
 use crate::{at, World};
@@ -28,7 +28,7 @@ fn a_new_project_is_marked_by_settings_written_from_their_template() {
         .split_once("version = ")
         .expect("the comments, then the values");
     assert!(
-        comments.starts_with("# Mindflayer mind project: what Mindflayer needs to know"),
+        comments.starts_with("# Mindweaver mind project: what Mindweaver needs to know"),
         "{comments}"
     );
     assert_eq!(
@@ -44,7 +44,7 @@ fn a_new_project_is_marked_by_settings_written_from_their_template() {
     // it is about.
     assert_eq!(
         world.read("~/Projects/api/.mind/.gitignore"),
-        "# Mindflayer keeps this project's settings here, for this checkout alone.\n\
+        "# Mindweaver keeps this project's settings here, for this checkout alone.\n\
          # Nothing in this folder is meant to be committed.\n*\n"
     );
     assert!(world.exists("~/Projects/api/skills"));
@@ -91,7 +91,7 @@ fn linking_a_project_registers_it_by_its_route_from_the_workspace() {
 #[test]
 fn linking_a_project_already_linked_changes_nothing_and_says_so() {
     let world = World::projects(&["api"]);
-    let registry = world.read("~/Projects/.mindflayer/flayer.toml");
+    let registry = world.read("~/Projects/.mindweaver/weaver.toml");
     let mut workspace = world.workspace("~/Projects");
 
     let (entry, registration) = workspace
@@ -100,7 +100,7 @@ fn linking_a_project_already_linked_changes_nothing_and_says_so() {
 
     assert_eq!(registration, Registration::AlreadyRegistered);
     assert_eq!(entry.to_str(), Some("api"));
-    assert_eq!(world.read("~/Projects/.mindflayer/flayer.toml"), registry);
+    assert_eq!(world.read("~/Projects/.mindweaver/weaver.toml"), registry);
 }
 
 #[test]
@@ -131,7 +131,7 @@ fn a_moved_project_is_relinked_by_its_id_with_what_was_installed_in_it() {
         .add(
             "~/Projects",
             "~/Projects",
-            mindflayer_core::Kind::Skill,
+            mindweaver_core::Kind::Skill,
             "review",
             "Read a change before it lands",
         )

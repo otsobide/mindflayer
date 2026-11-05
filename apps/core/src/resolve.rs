@@ -2,7 +2,7 @@
 //! no two of them can come to different answers (D-08).
 //!
 //! In order: the workspace the command line names (`-W`), then the one
-//! activated for the shell (`$MINDFLAYER_WORKSPACE`), then the first one
+//! activated for the shell (`$MINDWEAVER_WORKSPACE`), then the first one
 //! found walking up from where the command starts, then the default one in
 //! home. The first two were chosen on purpose, so they win over where
 //! somebody happens to be standing, as an activated Python virtualenv does.
@@ -13,7 +13,7 @@
 //! A choice that does not open as a workspace is an error, and never a
 //! reason to carry on down the list: carrying on would act on a workspace
 //! nobody chose, and say nothing about it. Nor is a chosen workspace ever
-//! made for the occasion; that is `flayer init`'s to do.
+//! made for the occasion; that is `mindweaver init`'s to do.
 //!
 //! The front end reads the environment and hands over what it says, as it
 //! hands over home: core never reads it, which is what lets a test pin every
@@ -26,11 +26,9 @@ use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::code::codes;
+use crate::names::Names;
 use crate::paths;
-use crate::workspace::{
-    absolute, same_directory, FlayerWorkspace, MindProject, WorkspaceError, FLAYER_CONFIG,
-    FLAYER_DIR,
-};
+use crate::workspace::{absolute, same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// What a command means to do with the workspace it is given, which decides
 /// whether the default one may be made for it.
@@ -38,7 +36,7 @@ use crate::workspace::{
 pub enum Intent {
     /// Only look. The default workspace is the one made in home or, until
     /// something makes it, the one that would be
-    /// ([`FlayerWorkspace::unmade`]): reading is no reason to write a marker
+    /// ([`WeaverWorkspace::unmade`]): reading is no reason to write a marker
     /// into somebody's home.
     Read,
     /// Change it. The default workspace is made in home the first time one
@@ -55,7 +53,7 @@ pub enum Intent {
 /// from below it as well as fallen back to, and only the last is what the
 /// TUI means by "no workspace here or above". Whether a workspace *is* the
 /// one in home is a question about the workspace rather than the rule, which
-/// [`FlayerWorkspace::is_default`] answers from paths: `load` and `unload`
+/// [`WeaverWorkspace::is_default`] answers from paths: `load` and `unload`
 /// ask that, so they call it the default one however it was reached.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reason {
@@ -117,7 +115,8 @@ impl fmt::Display for Reason {
 /// what, and the only question left about a value is whether it was given.
 #[derive(Debug, Clone, Copy)]
 pub struct Inputs<'a> {
-    /// The workspace the command line names: its root, or its `.mindflayer`.
+    /// The workspace the command line names: its root, or its `.mindweaver`
+    /// (a `.mindflayer`, for one a Mindflayer build made).
     ///
     /// Given empty, it names none, and switches the activated one off too.
     /// That is what lets a test pin it, the way `--home=` pins home: a test
@@ -137,7 +136,7 @@ pub struct Inputs<'a> {
 /// A workspace, and the rule that chose it.
 #[derive(Debug, Clone)]
 pub struct Resolved {
-    pub workspace: FlayerWorkspace,
+    pub workspace: WeaverWorkspace,
     pub reason: Reason,
 }
 
@@ -211,12 +210,14 @@ pub fn resolve_except(
 
     let start = absolute(inputs.start)?;
     let skipped = |root: &Path| except.iter().any(|path| same_directory(root, path));
-    let above = start.ancestors().find(|candidate| {
-        candidate.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() && !skipped(candidate)
-    });
+    // Under either names, so a workspace a Mindflayer build made is found
+    // as it was before, and never passed over for one further up.
+    let above = start
+        .ancestors()
+        .find(|candidate| WeaverWorkspace::is_marked(candidate) && !skipped(candidate));
     if let Some(root) = above {
         return Ok(Some(Resolved {
-            workspace: FlayerWorkspace::open(root)?,
+            workspace: WeaverWorkspace::open(root)?,
             reason: Reason::Above,
         }));
     }
@@ -233,12 +234,15 @@ pub fn resolve_except(
             Intent::Read => Ok(None),
         };
     }
+    // The default in home under whichever names it is there by, the new
+    // before the old: `~/.mindflayer` stays the default until it is moved,
+    // and a write never makes a `~/.mindweaver` beside it, which `init`
+    // takes it for. Only where neither is there does a write make the new
+    // one and a read fall back to it unmade.
     let workspace = match inputs.intent {
-        Intent::Write => FlayerWorkspace::init(home)?.0,
-        Intent::Read if home.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file() => {
-            FlayerWorkspace::open(home)?
-        }
-        Intent::Read => FlayerWorkspace::unmade(home)?,
+        Intent::Write => WeaverWorkspace::init(home)?.0,
+        Intent::Read if WeaverWorkspace::is_marked(home) => WeaverWorkspace::open(home)?,
+        Intent::Read => WeaverWorkspace::unmade(home)?,
     };
     Ok(Some(Resolved {
         workspace,
@@ -256,7 +260,7 @@ pub fn resolve_except(
 pub fn managing(
     inputs: &Inputs<'_>,
     project: &MindProject,
-) -> Result<Option<FlayerWorkspace>, ResolveError> {
+) -> Result<Option<WeaverWorkspace>, ResolveError> {
     let inputs = Inputs {
         start: project.root(),
         ..*inputs
@@ -293,7 +297,7 @@ pub fn consulted(
     Ok(resolve(&inputs)?.filter(|resolved| resolved.workspace.is_made()))
 }
 
-impl FlayerWorkspace {
+impl WeaverWorkspace {
     /// What a command at the workspace's level changes: its own artifacts,
     /// or the one project it names ([`pick`](Self::pick)).
     pub fn holder(&self, project: Option<&str>) -> Result<MindProject, ResolveError> {
@@ -406,24 +410,27 @@ fn chosen<'a>(inputs: &Inputs<'a>) -> Option<(Reason, &'a Path)> {
     }
 }
 
-/// Open a workspace somebody named, by its root or by its `.mindflayer`:
+/// Open a workspace somebody named, by its root or by its `.mindweaver`, or
+/// the `.mindflayer` of one a Mindflayer build made:
 /// what `-W` and the activation name, and what a command taking a workspace
-/// as its own argument names, as `flayer activate DIR` does, so that every
+/// as its own argument names, as `mindweaver activate DIR` does, so that every
 /// way of naming one takes the same spellings.
 ///
 /// The folder is taken as well as the root because it is what a person
 /// pointing at a workspace is often looking at, and it is the folder that
 /// makes the directory a workspace. A root that holds a marker of its own is
-/// a root, even when it happens to be called `.mindflayer` itself. Never
+/// a root, even when it happens to be called `.mindweaver` itself. Never
 /// made for the occasion, for the reason a chosen workspace never is.
-pub fn named(path: &Path) -> Result<FlayerWorkspace, WorkspaceError> {
+pub fn named(path: &Path) -> Result<WeaverWorkspace, WorkspaceError> {
     let path = absolute(path)?;
-    let holds_marker = path.join(FLAYER_DIR).join(FLAYER_CONFIG).is_file();
+    let folder = Names::ALL
+        .into_iter()
+        .any(|names| path.file_name() == Some(names.workspace_dir().as_ref()));
     let root = match path.parent() {
-        Some(parent) if !holds_marker && path.file_name() == Some(FLAYER_DIR.as_ref()) => parent,
+        Some(parent) if folder && !WeaverWorkspace::is_marked(&path) => parent,
         _ => &path,
     };
-    FlayerWorkspace::open(root)
+    WeaverWorkspace::open(root)
 }
 
 #[cfg(test)]

@@ -4,11 +4,11 @@
 //! what could be linked (`scan`), each answered as the JSON a front end
 //! is handed.
 
-use mindflayer_core::browse::Folders;
-use mindflayer_core::contents::{Contents, Files};
-use mindflayer_core::scan::{self, Request};
-use mindflayer_core::Kind;
-use mindflayer_core::ProjectStatus;
+use mindweaver_core::browse::Folders;
+use mindweaver_core::contents::{Contents, Files};
+use mindweaver_core::scan::{self, Request};
+use mindweaver_core::Kind;
+use mindweaver_core::ProjectStatus;
 use serde_json::json;
 
 use crate::{at, World};
@@ -74,7 +74,11 @@ fn the_snapshot_counts_what_the_projects_hold_by_kind_and_by_state() {
     assert_eq!(
         at(&snapshot, "/summary/held"),
         &json!({
-            "kinds": [{"count": 3, "kind": "skill"}, {"count": 0, "kind": "rule"}],
+            "kinds": [
+                {"count": 3, "kind": "skill"},
+                {"count": 0, "kind": "rule"},
+                {"count": 0, "kind": "mcp"},
+            ],
             "states": states([1, 0, 0, 0, 0, 1, 1]),
             "total": 3,
         })
@@ -163,7 +167,7 @@ fn a_file_leading_out_of_its_artifact_through_a_link_is_never_read() {
         .file("~/.ssh/id_ed25519", "a private key\n");
     std::os::unix::fs::symlink(
         world.at("~/.ssh/id_ed25519"),
-        world.at("~/Projects/.mindflayer/library/skills/review/key"),
+        world.at("~/Projects/.mindweaver/library/skills/review/key"),
     )
     .expect("link out of the skill");
     let workspace = world.workspace("~/Projects");

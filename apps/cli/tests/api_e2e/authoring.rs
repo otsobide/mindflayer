@@ -20,7 +20,7 @@ fn library_with_deploy() -> Scenario {
     let scenario = Scenario::projects(&["api"]);
     scenario.given(
         "~/Projects",
-        "flayer add skill deploy 'Ship the service to staging'",
+        "mindweaver add skill deploy 'Ship the service to staging'",
     );
     scenario
 }
@@ -44,7 +44,7 @@ fn save(hash: &str) -> serde_json::Value {
 /// run.
 fn save_line(hash: &str) -> String {
     format!(
-        "flayer -W /home/you/Projects edit --contents .mindflayer/tmp/edit-50958fe22e107cbe.md \
+        "mindweaver -W /home/you/Projects edit --contents .mindweaver/tmp/edit-50958fe22e107cbe.md \
          --if-unchanged {hash} skill:deploy"
     )
 }
@@ -64,21 +64,21 @@ fn adding_a_skill_to_the_library_writes_it_there() {
         )
         .is(200)
         .answers(json!({
-            "lines": ["flayer -W /home/you/Projects add skill deploy 'Ship the service to staging'"],
+            "lines": ["mindweaver -W /home/you/Projects add skill deploy 'Ship the service to staging'"],
             "outcome": {
                 "ok": true,
                 "runs": [{
-                    "command": "flayer -W /home/you/Projects add skill deploy 'Ship the service to staging'",
+                    "command": "mindweaver -W /home/you/Projects add skill deploy 'Ship the service to staging'",
                     "error": null,
                     "ok": true,
                     "stderr": [],
                     "stdout": "created skill deploy at \
-                               /home/you/Projects/.mindflayer/library/skills/deploy/SKILL.md\n",
+                               /home/you/Projects/.mindweaver/library/skills/deploy/SKILL.md\n",
                 }],
             },
         }));
     assert_eq!(
-        scenario.read("~/Projects/.mindflayer/library/skills/deploy/SKILL.md"),
+        scenario.read("~/Projects/.mindweaver/library/skills/deploy/SKILL.md"),
         added("deploy", "Ship the service to staging")
     );
 }
@@ -135,11 +135,11 @@ fn saving_writes_the_text_the_editor_held_and_leaves_no_scratch_file() {
             },
         }));
     assert_eq!(
-        scenario.read("~/Projects/.mindflayer/library/skills/deploy/SKILL.md"),
+        scenario.read("~/Projects/.mindweaver/library/skills/deploy/SKILL.md"),
         SAVED
     );
     let left: Vec<String> = scenario
-        .files("~/Projects/.mindflayer")
+        .files("~/Projects/.mindweaver")
         .into_iter()
         .filter(|file| file.starts_with("tmp/"))
         .collect();
@@ -152,7 +152,7 @@ fn a_save_over_a_change_made_since_it_was_read_writes_nothing() {
     // Changed in an editor after the panel read it.
     let changed = added("deploy", "Ship the service to production");
     scenario.file(
-        "~/Projects/.mindflayer/library/skills/deploy/SKILL.md",
+        "~/Projects/.mindweaver/library/skills/deploy/SKILL.md",
         &changed,
     );
     let served = scenario.serve("~/Projects");
@@ -166,7 +166,7 @@ fn a_save_over_a_change_made_since_it_was_read_writes_nothing() {
                 "error": {
                     "code": "edit_stale",
                     "message": format!(
-                        "/home/you/Projects/.mindflayer/library/skills/deploy/SKILL.md: changed \
+                        "/home/you/Projects/.mindweaver/library/skills/deploy/SKILL.md: changed \
                          since it was read, its SHA-256 now \
                          116c7d75c3cd556bb3afb3824cb94cfffc34d205c3a4a8c284eb4f070449853e and not \
                          {DEPLOY_HASH}, so it is not written over; read it again"
@@ -179,7 +179,7 @@ fn a_save_over_a_change_made_since_it_was_read_writes_nothing() {
         },
     }));
     assert_eq!(
-        scenario.read("~/Projects/.mindflayer/library/skills/deploy/SKILL.md"),
+        scenario.read("~/Projects/.mindweaver/library/skills/deploy/SKILL.md"),
         changed
     );
 }
@@ -201,17 +201,17 @@ fn renaming_a_skill_moves_its_folder_and_rewrites_only_its_name() {
         .answers_at(
             "/outcome/runs",
             json!([{
-                "command": "flayer -W /home/you/Projects rename skill:deploy ship",
+                "command": "mindweaver -W /home/you/Projects rename skill:deploy ship",
                 "error": null,
                 "ok": true,
                 "stderr": [],
                 "stdout": "renamed skill deploy to ship at \
-                           /home/you/Projects/.mindflayer/library/skills/ship\n",
+                           /home/you/Projects/.mindweaver/library/skills/ship\n",
             }]),
         );
-    assert!(!scenario.exists("~/Projects/.mindflayer/library/skills/deploy"));
+    assert!(!scenario.exists("~/Projects/.mindweaver/library/skills/deploy"));
     assert_eq!(
-        scenario.read("~/Projects/.mindflayer/library/skills/ship/SKILL.md"),
+        scenario.read("~/Projects/.mindweaver/library/skills/ship/SKILL.md"),
         "---\nname: ship\ndescription: Ship the service to staging\n---\n\n# deploy\n"
     );
 }
@@ -219,7 +219,7 @@ fn renaming_a_skill_moves_its_folder_and_rewrites_only_its_name() {
 #[test]
 fn removing_one_of_the_librarys_own_everywhere_says_first_all_it_takes() {
     let scenario = linking(&["api"]);
-    scenario.given("~/Projects", "flayer install -p api review");
+    scenario.given("~/Projects", "mindweaver install -p api review");
     let served = scenario.serve("~/Projects");
 
     served
@@ -232,7 +232,7 @@ fn removing_one_of_the_librarys_own_everywhere_says_first_all_it_takes() {
         )
         .is(200)
         .answers(json!({
-            "lines": ["flayer -W /home/you/Projects remove --everywhere --yes skill:review"],
+            "lines": ["mindweaver -W /home/you/Projects remove --everywhere --yes skill:review"],
             "confirm": [
                 {
                     "caution": "removes",
@@ -242,17 +242,17 @@ fn removing_one_of_the_librarys_own_everywhere_says_first_all_it_takes() {
                 {
                     "caution": "uninstalls",
                     "line": 0,
-                    "message": "takes copies Mindflayer installed out of projects",
+                    "message": "takes copies Mindweaver installed out of projects",
                 },
             ],
         }));
-    assert!(scenario.exists("~/Projects/.mindflayer/library/skills/review"));
+    assert!(scenario.exists("~/Projects/.mindweaver/library/skills/review"));
 }
 
 #[test]
 fn removing_it_everywhere_takes_each_projects_copy_out_then_the_librarys() {
     let scenario = linking(&["api"]);
-    scenario.given("~/Projects", "flayer install -p api review");
+    scenario.given("~/Projects", "mindweaver install -p api review");
     let served = scenario.serve("~/Projects");
 
     served
@@ -267,16 +267,16 @@ fn removing_it_everywhere_takes_each_projects_copy_out_then_the_librarys() {
         .answers_at(
             "/outcome/runs",
             json!([{
-                "command": "flayer -W /home/you/Projects remove --everywhere --yes skill:review",
+                "command": "mindweaver -W /home/you/Projects remove --everywhere --yes skill:review",
                 "error": null,
                 "ok": true,
                 "stderr": [],
                 "stdout": "removed review from api\n\
                            removed skill review from \
-                           /home/you/Projects/.mindflayer/library/skills/review\n",
+                           /home/you/Projects/.mindweaver/library/skills/review\n",
             }]),
         );
-    assert!(!scenario.exists("~/Projects/.mindflayer/library/skills/review"));
+    assert!(!scenario.exists("~/Projects/.mindweaver/library/skills/review"));
     assert!(!scenario.exists("~/Projects/api/.claude/skills/review"));
     assert!(!scenario.exists("~/Projects/api/.agents/skills/review"));
 }

@@ -19,8 +19,11 @@
 //! on, see to no record, and a front end that added with them would leave a
 //! stale one in place.
 //!
+//! [`create`]: crate::create::create
+//! [`create_from`]: crate::create::create_from
+//!
 //! Changing a record opens the ledger to write, which scrubs it first
-//! ([`FlayerWorkspace::ledger_to_write`]), so each result that may also hands
+//! ([`WeaverWorkspace::ledger_to_write`]), so each result that may also hands
 //! back what that took out ([`Scrub`]) for the front end to say. Said
 //! nowhere, it would go unsaid for good: a scrub says what it found only the
 //! first time. An edit changes none, and only reads the ledger.
@@ -34,19 +37,19 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
 use crate::code::codes;
-use crate::create::{create, create_from, CreateError};
+use crate::create::{scaffold, CreateError, Start};
 use crate::frontmatter;
 use crate::gather::Scrub;
 use crate::hash;
 use crate::install::{self, InstallError};
 use crate::kind::{Kind, Layout};
 use crate::ledger::Carried;
+use crate::mcp::McpDefinition;
 use crate::paths;
 use crate::skill::SkillManifest;
-use crate::template::Template;
 use crate::value::{ArtifactName, ContentHash};
 use crate::workspace::{
-    replace_bytes_unresolved, replace_file, FlayerWorkspace, MindProject, WorkspaceError,
+    replace_bytes_unresolved, replace_file, MindProject, WeaverWorkspace, WorkspaceError,
 };
 
 /// An artifact found by what somebody typed.
@@ -74,7 +77,7 @@ impl Target {
     }
 }
 
-/// What a change did to the ledger's record that Mindflayer installed what
+/// What a change did to the ledger's record that Mindweaver installed what
 /// is under one name.
 ///
 /// That record is what gives an install leave to overwrite and an uninstall
@@ -120,32 +123,35 @@ pub struct Added {
     /// A record of an install under the same name. Nothing was there for the
     /// new artifact to be written over, so the copy it was about had gone,
     /// and left in place the record would make somebody's new work look like
-    /// something Mindflayer put there.
+    /// something Mindweaver put there.
     pub stale: Result<Record, InstallError>,
     /// What opening the ledger to see to that record scrubbed out of it.
     pub scrub: Scrub,
 }
 
-/// Write a new artifact into `project`, from `template` when one is given
-/// ([`create`], [`create_from`]), and drop any record of an install under its
-/// name.
+/// Write a new artifact into `project`, from what `start` says beside its
+/// name and its description (from scratch, a template, or for an MCP
+/// server how it is started or reached, as [`create`], [`create_from`] and
+/// [`create_server`] write one), and drop any record of an install under
+/// its name.
 ///
 /// `workspace` is the one the front end consulted about the project, given
 /// rather than found by walking up from it: a walk misses every workspace
 /// that links the project from somewhere that is not above it. With none,
 /// there is no record to drop.
+///
+/// [`create`]: crate::create::create
+/// [`create_from`]: crate::create::create_from
+/// [`create_server`]: crate::create::create_server
 pub fn add(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
     description: &str,
-    template: Option<&Template>,
+    start: Start<'_>,
 ) -> Result<Added, CreateError> {
-    let artifact = match template {
-        None => create(project, kind, name, description),
-        Some(template) => create_from(project, kind, name, description, template),
-    }?;
+    let artifact = scaffold(project, kind, name, description, start)?;
     let mut scrub = Scrub::default();
     let stale = disowned(workspace, project, kind, name, artifact.path(), &mut scrub);
     Ok(Added {
@@ -189,7 +195,7 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
 
     // Only a name made of plain folder names is turned into a place: one with
     // `..` in it would otherwise be a way out of the project. Not the naming
-    // rules, which are for what Mindflayer writes: a folder from before they
+    // rules, which are for what Mindweaver writes: a folder from before they
     // were tightened, or one somebody made by hand, is exactly what has to be
     // found to be fixed or removed.
     let name = reference.name();
@@ -255,7 +261,7 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
 /// what the report just showed; the ledger says whether it is one, and the
 /// refusal says how to take it out instead.
 pub fn find_to_change(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     reference: &Reference,
 ) -> Result<Target, LifecycleError> {
@@ -295,12 +301,19 @@ pub fn place(project: &MindProject, kind: Kind, name: &str) -> Option<PathBuf> {
 fn place_in(directory: &Path, kind: Kind, name: &str) -> PathBuf {
     match kind.layout() {
         Layout::Directory { .. } => directory.join(name),
-        Layout::Files { extension } => directory.join(format!("{name}.{extension}")),
+        Layout::Files { extension } | Layout::Flat { extension } => {
+            directory.join(format!("{name}.{extension}"))
+        }
     }
 }
 
 /// Load the artifact at `path`, named `name` if it is the kind whose name
 /// comes from where it sits.
+///
+/// An MCP server's definition is told of those beside it named as it is
+/// in another case, as discovery tells it ([`twins_beside`]), so that a
+/// verdict on one file, the one `edit` gives once the editor closes, is
+/// the one `validate` gives.
 pub fn load(
     project: &MindProject,
     kind: Kind,
@@ -310,6 +323,13 @@ pub fn load(
     match kind {
         Kind::Skill => Artifact::skill(path, project.root()),
         Kind::Rule => Artifact::rule(path, name.to_owned(), project.root()),
+        Kind::Mcp => {
+            let mut artifact = Artifact::mcp(path, name.to_owned(), project.root())?;
+            if let Some(folder) = path.parent() {
+                artifact.twinned(twins_beside(folder, name, path));
+            }
+            Ok(artifact)
+        }
     }
 }
 
@@ -333,6 +353,16 @@ pub fn identify(project: &MindProject, file: &Path) -> Option<(Kind, String)> {
                     .is_some_and(|found| found.eq_ignore_ascii_case(extension));
                 let name = paths::to_config_string(&below.with_extension(""))?;
                 matches.then_some((kind, name))
+            }
+            Layout::Flat { extension } => {
+                let mut parts = below.components();
+                let file = Path::new(parts.next()?.as_os_str());
+                let matches = parts.next().is_none()
+                    && file
+                        .extension()
+                        .is_some_and(|found| found.eq_ignore_ascii_case(extension));
+                let name = file.file_stem()?.to_str()?;
+                matches.then(|| (kind, name.to_owned()))
             }
         }
     })
@@ -399,7 +429,7 @@ pub fn start_edit(target: &Target) -> Edit {
 /// A front end finishes the edit whether or not the editor succeeded: one
 /// that wrote the file before it failed has changed the copy all the same.
 pub fn finish_edit(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     edit: Edit,
 ) -> Edited {
@@ -420,7 +450,7 @@ pub fn finish_edit(
 /// writes the text itself. `workspace` is the one consulted, as for [`add`].
 ///
 /// Held to the rules every write is held to before a byte is written. A
-/// skill's must be one Mindflayer would write ([`artifact::strict_issues`]):
+/// skill's must be one Mindweaver would write ([`artifact::strict_issues`]):
 /// front matter that reads, a name and a description that pass, and the
 /// name its folder has. A different name is refused rather than written,
 /// since a name changed there and not in the folder is a skill no agent
@@ -450,7 +480,7 @@ pub fn finish_edit(
 /// the artifact's file, not anything of the workspace's, whose ledger is
 /// only read.
 pub fn replace_contents(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     contents: &[u8],
@@ -509,7 +539,7 @@ pub fn replace_contents(
 /// whether it is still what an edit was made from, is the write's alone to
 /// tell, at the moment it writes.
 pub(crate) fn replaceable(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     contents: &[u8],
@@ -539,7 +569,7 @@ pub(crate) fn replaceable(
 /// a sibling's is not rewritten under a name that folder does not have.
 /// The widest first, so a refusal names the most the file leads out of.
 fn written_at(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     directory: &Path,
@@ -548,7 +578,7 @@ fn written_at(
     // Matched on the layout, so a kind kept another way says what bounds it.
     let own = match target.kind.layout() {
         Layout::Directory { .. } => Some(target.path.as_path()),
-        Layout::Files { .. } => None,
+        Layout::Files { .. } | Layout::Flat { .. } => None,
     };
     let canonical = |path: &Path| {
         fs::canonicalize(path).map_err(|source| LifecycleError::Io {
@@ -571,9 +601,9 @@ fn written_at(
 }
 
 /// Whether `directory`, where a holder keeps `kind`, is the folder
-/// `workspace` keeps its own of that kind in ([`FlayerWorkspace::own`]),
+/// `workspace` keeps its own of that kind in ([`WeaverWorkspace::own`]),
 /// of a kind it keeps apart from a project at its root
-/// ([`FlayerWorkspace::own_kinds`]): the library, as a read of it for the
+/// ([`WeaverWorkspace::own_kinds`]): the library, as a read of it for the
 /// panel finds it ([`crate::contents`]).
 ///
 /// Told by the folder, since the holder is a [`MindProject`] either way:
@@ -582,14 +612,14 @@ fn written_at(
 /// project's root. One at the workspace's root keeping a kind where the
 /// library does holds what is there itself, by `own_kinds`, and is held to
 /// its root too. With no workspace there is no library to be.
-fn library(workspace: Option<&FlayerWorkspace>, kind: Kind, directory: &Path) -> bool {
+fn library(workspace: Option<&WeaverWorkspace>, kind: Kind, directory: &Path) -> bool {
     workspace.is_some_and(|workspace| {
         workspace.own().directory_for(kind).as_deref() == Some(directory)
             && workspace.own_kinds().contains(&kind)
     })
 }
 
-/// Refuse `contents` for `target` unless they are what Mindflayer would
+/// Refuse `contents` for `target` unless they are what Mindweaver would
 /// write there: text, and for a skill a manifest that reads, names its
 /// folder and passes the strict rules; for a rule, one that says something
 /// with front matter that reads whole.
@@ -627,6 +657,32 @@ fn fit(target: &Target, contents: &[u8]) -> Result<(), LifecycleError> {
             artifact::strict_issues(&manifest, &folder)
         }
         Kind::Rule => artifact::rule_text_issues(text),
+        Kind::Mcp => {
+            let definition =
+                McpDefinition::parse(text).map_err(|error| LifecycleError::DefinitionUnparsed {
+                    name: name.to_string(),
+                    reason: error.to_string(),
+                })?;
+            // The file is the name an install keys the entry by, so it is
+            // what the definition has to say, as a skill's folder is.
+            if definition.name != name {
+                return Err(LifecycleError::McpNameChanged {
+                    name: name.to_string(),
+                    to: definition.name.to_string(),
+                });
+            }
+            let file = target
+                .path
+                .file_name()
+                .map(|file| file.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let twins = target
+                .path
+                .parent()
+                .map(|folder| twins_beside(folder, &name, &target.path))
+                .unwrap_or_default();
+            artifact::mcp_strict_issues(&definition, &name, &file, &twins)
+        }
     };
     if issues.is_empty() {
         Ok(())
@@ -642,7 +698,7 @@ fn fit(target: &Target, contents: &[u8]) -> Result<(), LifecycleError> {
 /// `workspace` records a copy at `at`, and untouched when it records none
 /// or there is no workspace to ask.
 fn kept(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -676,7 +732,7 @@ pub fn files(target: &Target) -> usize {
     }
     match target.kind.layout() {
         Layout::Directory { .. } => count(&target.path),
-        Layout::Files { .. } => 1,
+        Layout::Files { .. } | Layout::Flat { .. } => 1,
     }
 }
 
@@ -697,7 +753,7 @@ pub struct Removed {
 /// uninstall of that copy would. `workspace` is the one consulted, as for
 /// [`add`].
 pub fn remove(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
 ) -> Result<Removed, LifecycleError> {
@@ -715,6 +771,13 @@ pub fn remove(
                 source,
             })?;
             prune(&directory, target.path.parent());
+        }
+        // Directly in the kind's folder, so no folder of its own is left.
+        Layout::Flat { .. } => {
+            fs::remove_file(&target.path).map_err(|source| LifecycleError::Io {
+                path: target.path.clone(),
+                source,
+            })?;
         }
     }
     let mut scrub = Scrub::default();
@@ -742,7 +805,7 @@ pub struct Renamed {
     pub copy: Result<Record, InstallError>,
     /// A record under the new name, from an install that is no longer there:
     /// stale, and left in place it would make what was just renamed look like
-    /// something Mindflayer put there.
+    /// something Mindweaver put there.
     pub stale: Result<Record, InstallError>,
     /// What opening the ledger to see to both records scrubbed out of it,
     /// once: the second opening finds only what the first could not take out,
@@ -763,12 +826,19 @@ pub struct Renamed {
 /// copy renamed carried along with it. `workspace` is the one consulted, as
 /// for [`add`].
 pub fn rename(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     target: &Target,
     to: &str,
 ) -> Result<Renamed, LifecycleError> {
-    let issues = artifact::name_issues(to);
+    // Matched on the kind, since a server's name is held to the keys an
+    // agent takes rather than to the kebab-case of the others, and only
+    // once it is known to hold no folder ([`rename_mcp`]), which says so in
+    // words of its own.
+    let issues = match target.kind {
+        Kind::Skill | Kind::Rule => artifact::name_issues(to),
+        Kind::Mcp => Vec::new(),
+    };
     if !issues.is_empty() {
         return Err(LifecycleError::Name {
             name: to.to_owned(),
@@ -780,6 +850,7 @@ pub fn rename(
     let renamed = match target.kind {
         Kind::Skill => rename_skill(project, target, &directory, to),
         Kind::Rule => rename_rule(project, target, &directory, to),
+        Kind::Mcp => rename_mcp(project, target, &directory, to),
     }?;
     let mut scrub = Scrub::default();
     // The stale one first: a record of an install gone from the new place
@@ -827,7 +898,7 @@ fn rename_skill(
         });
     };
     // Held to the strict rules as it will be, the rules `add` and `install`
-    // hold a skill to: what is left behind is a skill Mindflayer wrote, if
+    // hold a skill to: what is left behind is a skill Mindweaver wrote, if
     // only its name, and one an agent would skip is not left behind. Judged as
     // renamed, because its name and folder are what a rename fixes.
     if let Some(manifest) = artifact.manifest() {
@@ -936,6 +1007,115 @@ fn rename_rule(
     })
 }
 
+/// Give an MCP server's definition a new name: its file and the `name` it
+/// declares together, so it still passes `validate`, as a skill's folder
+/// and its manifest are renamed.
+fn rename_mcp(
+    project: &MindProject,
+    target: &Target,
+    directory: &Path,
+    to: &str,
+) -> Result<Target, LifecycleError> {
+    // A key in an agent's config holds no folder, so neither does the name
+    // an entry will be keyed by.
+    if to.contains('/') {
+        return Err(LifecycleError::McpNested {
+            name: to.to_owned(),
+        });
+    }
+    // Beside every definition but the one renamed, so that a name changed
+    // only in case is its own and not its twin.
+    let twins = twins_beside(directory, to, &target.path);
+    let issues = artifact::mcp_name_strict_issues(to, &twins);
+    if !issues.is_empty() {
+        return Err(LifecycleError::Name {
+            name: to.to_owned(),
+            issues,
+        });
+    }
+    // The name lives in the definition too, and one that does not read
+    // cannot be trusted to have its name rewritten.
+    let Some(definition) = target.artifact.as_ref().and_then(Artifact::definition) else {
+        return Err(LifecycleError::DefinitionUnreadable {
+            path: target.file(),
+        });
+    };
+    let file = place_in(directory, Kind::Mcp, to);
+    let moves = file != target.path;
+    let renames = definition.name != to;
+    if !moves && !renames {
+        return Err(LifecycleError::Unchanged {
+            name: to.to_owned(),
+        });
+    }
+    if moves && occupied(&file) {
+        return Err(LifecycleError::Exists { path: file });
+    }
+
+    let rewritten = if renames {
+        let source = fs::read_to_string(&target.path).map_err(|source| LifecycleError::Io {
+            path: target.path.clone(),
+            source,
+        })?;
+        Some(crate::mcp::declaring(&source, to, None).map_err(|reason| {
+            LifecycleError::Rewrite {
+                path: target.path.clone(),
+                reason,
+            }
+        })?)
+    } else {
+        None
+    };
+    // Held to what `validate` calls a definition invalid for, as it will
+    // be once renamed, as a skill is held to the strict rules: what is left
+    // behind is a definition Mindweaver wrote, if only its name.
+    let renamed = named(definition, to);
+    let file_name = file
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let issues = artifact::mcp_strict_issues(&renamed, to, &file_name, &twins);
+    if !issues.is_empty() {
+        return Err(LifecycleError::Unfit {
+            name: target.name.to_string(),
+            issues,
+        });
+    }
+
+    if moves {
+        fs::rename(&target.path, &file).map_err(|source| LifecycleError::Io {
+            path: target.path.clone(),
+            source,
+        })?;
+    }
+    if let Some(text) = rewritten {
+        if let Err(error) = replace_file(&file, &text) {
+            // Half a rename is a definition whose file and name disagree: put
+            // the file back rather than leave that behind.
+            if moves {
+                let _ = fs::rename(&file, &target.path);
+            }
+            return Err(error.into());
+        }
+    }
+
+    let artifact = Artifact::mcp(&file, to.to_owned(), project.root())?;
+    Ok(Target {
+        kind: Kind::Mcp,
+        name: ArtifactName::from(to),
+        path: file,
+        artifact: Some(artifact),
+    })
+}
+
+/// `definition`, declaring `to` as its name.
+fn named(definition: &McpDefinition, to: &str) -> McpDefinition {
+    McpDefinition {
+        name: ArtifactName::from(to),
+        ..definition.clone()
+    }
+}
+
 /// A manifest with its `name` set to `to` and every other byte as it was.
 fn rewrite_name(source: &str, to: &str) -> Result<String, String> {
     let document = frontmatter::split(source).map_err(|error| error.to_string())?;
@@ -983,6 +1163,20 @@ fn inside(project: &MindProject, target: &Target) -> Result<PathBuf, LifecycleEr
     Ok(directory)
 }
 
+/// The names of the MCP servers' definitions in `folder` that are `name` in
+/// another case, the one at `file` left out: what a definition written
+/// there under `name` is held not to sit beside, as discovery holds the
+/// ones it finds ([`crate::mcp::name::twins`]), read off the same listing.
+pub(crate) fn twins_beside(folder: &Path, name: &str, file: &Path) -> Vec<ArtifactName> {
+    let (files, _) = Catalog::locate(folder, Kind::Mcp);
+    let stems: Vec<String> = files
+        .iter()
+        .filter(|other| other.as_path() != file)
+        .filter_map(|other| other.file_stem()?.to_str().map(str::to_owned))
+        .collect();
+    crate::mcp::name::twins(name, stems.iter().map(String::as_str))
+}
+
 /// Whether anything at all is at `path`, a dangling symlink included.
 fn occupied(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok()
@@ -1006,7 +1200,7 @@ pub(crate) fn prune(root: &Path, from: Option<&Path>) {
 fn file_of(kind: Kind, path: &Path) -> PathBuf {
     match kind.layout() {
         Layout::Directory { manifest } => path.join(manifest),
-        Layout::Files { .. } => path.to_path_buf(),
+        Layout::Files { .. } | Layout::Flat { .. } => path.to_path_buf(),
     }
 }
 
@@ -1019,7 +1213,7 @@ fn holds(kind: Kind, path: &Path) -> bool {
 /// that names the copy at `at`, the one the change reached, adding what
 /// opening the ledger to do it scrubbed out of it to `scrub`.
 fn disowned(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     name: &str,
@@ -1046,7 +1240,7 @@ fn disowned(
 /// moved it to, adding what opening the ledger to do it scrubbed out of it to
 /// `scrub`.
 fn carried(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     kind: Kind,
     (name, at): (&str, &Path),
@@ -1092,6 +1286,8 @@ pub enum LifecycleError {
     },
     #[error("`{name}`: a skill's name cannot contain `/`; skills are flat, and only rules are filed in folders")]
     Nested { name: String },
+    #[error("`{name}`: an MCP server's name cannot contain `/`; it is the key an agent's config names the server by, which holds no folder")]
+    McpNested { name: String },
     #[error("`{name}` cannot be renamed until it is fixed: {}", issue_list(.issues))]
     Unfit {
         name: String,
@@ -1103,6 +1299,8 @@ pub enum LifecycleError {
     Exists { path: PathBuf },
     #[error("{path}: its front matter cannot be read, so its name cannot be rewritten; fix it with `mind edit` first")]
     Unreadable { path: PathBuf },
+    #[error("{path}: it cannot be read as an MCP server's definition, so its name cannot be rewritten; fix it with `mind edit` first")]
+    DefinitionUnreadable { path: PathBuf },
     #[error("{path}: the name cannot be rewritten on its own ({reason}); change it by hand")]
     Rewrite { path: PathBuf, reason: String },
     #[error("{path}: not inside {directory}, so it is not changed from here")]
@@ -1117,7 +1315,15 @@ pub enum LifecycleError {
     /// A skill's contents given whole that name it other than its folder.
     #[error("the contents given for `{name}` call it `{to}`: a skill's name is its folder's too, so it is changed with `mind rename`, which moves both, and nothing was written")]
     NameChanged { name: String, to: String },
-    /// Contents given whole that break a rule Mindflayer holds a write to.
+    /// An MCP server's contents given whole that do not read as a
+    /// definition.
+    #[error("the contents given for `{name}` cannot be read as an MCP server's definition, so nothing was written: {reason}")]
+    DefinitionUnparsed { name: String, reason: String },
+    /// An MCP server's contents given whole that name it other than its
+    /// file.
+    #[error("the contents given for `{name}` call it `{to}`: an MCP server's name is its file's too, so it is changed with `mind rename`, which changes both, and nothing was written")]
+    McpNameChanged { name: String, to: String },
+    /// Contents given whole that break a rule Mindweaver holds a write to.
     #[error("the contents given for `{name}` break a rule, so nothing was written: {}", issue_list(.issues))]
     ContentsUnfit {
         name: String,
@@ -1163,15 +1369,19 @@ codes!(LifecycleError {
     Self::Ambiguous { .. } => "ambiguous_name",
     Self::Name { .. } => "rename_name_unfit",
     Self::Nested { .. } => "rename_skill_nested",
+    Self::McpNested { .. } => "rename_mcp_nested",
     Self::Unfit { .. } => "rename_unfit",
     Self::Unchanged { .. } => "rename_unchanged",
     Self::Exists { .. } => "rename_target_exists",
     Self::Unreadable { .. } => "rename_front_matter_unreadable",
+    Self::DefinitionUnreadable { .. } => "rename_definition_unreadable",
     Self::Rewrite { .. } => "rename_rewrite_failed",
     Self::Outside { .. } => "change_outside",
     Self::NotText { .. } => "edit_contents_not_text",
     Self::Unparsed { .. } => "edit_front_matter_unreadable",
     Self::NameChanged { .. } => "edit_name_changed",
+    Self::DefinitionUnparsed { .. } => "edit_definition_unreadable",
+    Self::McpNameChanged { .. } => "edit_mcp_name_changed",
     Self::ContentsUnfit { .. } => "edit_contents_unfit",
     Self::HashMalformed { .. } => "edit_hash_malformed",
     Self::Stale { .. } => "edit_stale",

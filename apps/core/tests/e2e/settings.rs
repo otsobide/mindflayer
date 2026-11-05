@@ -1,10 +1,10 @@
 //! Changing how a project is set up, and what is installed in it following
 //! (`reapply::apply`): its agents, how it shares and where a kind is
-//! installed, each carrying only what Mindflayer installed and nobody has
+//! installed, each carrying only what Mindweaver installed and nobody has
 //! changed since.
 
-use mindflayer_core::reapply::{self, Change};
-use mindflayer_core::{Agent, Kind, Share};
+use mindweaver_core::reapply::{self, Change};
+use mindweaver_core::{Agent, Kind, Share};
 use serde_json::json;
 
 use crate::{at, World};
@@ -74,7 +74,7 @@ fn an_agent_added_gets_a_copy_of_each_installation_where_it_reads() {
 }
 
 #[test]
-fn an_agent_removed_loses_mindflayers_copy_and_somebodys_skill_stays() {
+fn an_agent_removed_loses_mindweavers_copy_and_somebodys_skill_stays() {
     let world = collapse_for_claude();
     change(&world, Change::AddAgents(vec![Agent::Codex])).expect("add codex");
 

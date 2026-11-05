@@ -17,6 +17,7 @@ use crate::described::field_serializers;
 use crate::install::Place;
 use crate::kind::Kind;
 use crate::ledger::SourceKind;
+use crate::mcp::{InputKind, TransportType};
 use crate::resolve::Reason;
 use crate::scan;
 use crate::settings::{ProjectId, Share};
@@ -130,13 +131,24 @@ fn every_word_type_says_in_typescript_the_words_serde_writes() {
         Does::Orphaned,
         Does::Unsure,
     ]);
+    says_what_serde_writes(&[
+        TransportType::Stdio,
+        TransportType::Http,
+        TransportType::Sse,
+    ]);
+    says_what_serde_writes(&[
+        InputKind::Env,
+        InputKind::Header,
+        InputKind::Arg,
+        InputKind::UrlVar,
+    ]);
 }
 
 #[test]
 fn a_word_type_is_declared_as_the_union_of_its_words() {
     assert_eq!(
         Kind::decl(&Config::new()),
-        r#"type Kind = "skill" | "rule";"#
+        r#"type Kind = "skill" | "rule" | "mcp";"#
     );
     assert_eq!(
         Agent::decl(&Config::new()),
@@ -261,6 +273,9 @@ fn a_skill_s_metadata_is_an_object_in_both() {
         compatibility: None,
         metadata: Some(vec![("team".to_owned(), "infra".to_owned())]),
         paths: None,
+        transport: None,
+        inputs: None,
+        expressibility: None,
         body: String::new(),
     };
 

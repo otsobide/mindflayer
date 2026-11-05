@@ -8,8 +8,8 @@
 // The backend is the panel's, which a build without the `ui` feature lacks.
 #![cfg(feature = "ui")]
 
-use mindflayer_cli::backend::{PanelBackend, Query};
-use mindflayer_server::{Arguments, Backend, Method, Parameter, Route, Shape};
+use mindweaver_cli::backend::{PanelBackend, Query};
+use mindweaver_server::{Arguments, Backend, Method, Parameter, Route, Shape};
 use serde_json::{json, Map, Value};
 
 /// The route served at `path`.

@@ -6,6 +6,14 @@ const runner = useRunner()
 const { busy } = runner
 
 /**
+ * The folder a workspace keeps itself in, which the form's description
+ * names: the one a workspace is made with now. One a Mindflayer build made
+ * keeps a `.mindflayer`, and loads all the same, which core decides; the
+ * form names the folder somebody looking for one today will find.
+ */
+const WEAVER_DIR = '.mindweaver'
+
+/**
  * The workspace to load, as typed. Whether a workspace is there, and
  * whether it is this one, which a load refuses, is the line's to say once
  * it runs: checked nowhere here, so the panel cannot let through a path the
@@ -18,7 +26,7 @@ const path = ref('')
  * load form takes off too (`load_task`), so the same text typed is the same
  * task on either front end, and nothing when that leaves nothing, as there.
  * The server holds it to the path policy (absolute, normalized, outside
- * every `.mindflayer`) and says why when it is not, before anything runs.
+ * every `.mindweaver`) and says why when it is not, before anything runs.
  * Unicode's White_Space, which Rust's `str::trim` takes off, rather than
  * JavaScript's `trim`, which takes U+FEFF off as well and leaves U+0085: a
  * path ending in either would be two tasks.
@@ -45,7 +53,7 @@ async function load() {
   >
     <UFormField
       label="Load a workspace by its path"
-      description="The absolute path of a folder holding a .mindflayer: the line it runs is shown first."
+      :description="`The absolute path of a folder holding a ${WEAVER_DIR}: the line it runs is shown first.`"
       name="path"
       class="w-full sm:w-auto"
     >

@@ -6,10 +6,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use mindflayer_core::{
-    create, scan, Agent, AgentTarget, Catalog, CreateError, Directories, FlayerWorkspace,
-    Initialization, Kind, MarkerFile, MindProject, Misplaced, MisplacedTarget, ProjectWarning,
-    Settings, Share, Targets, WorkspaceError, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_FILE,
+use mindweaver_core::{
+    create, scan, Agent, AgentTarget, Catalog, CreateError, Directories, Initialization, Kind,
+    MarkerFile, MindProject, Misplaced, MisplacedTarget, ProjectWarning, Settings, Share, Targets,
+    WeaverWorkspace, WorkspaceError, MIND_CONFIG, MIND_DIR, MIND_IGNORE, SETTINGS_FILE,
     SETTINGS_JSON_FILE, SETTINGS_TOML_VERSION, SETTINGS_VERSION, TARGETS_VERSION,
 };
 use tempfile::TempDir;
@@ -254,7 +254,7 @@ fn init_leaves_a_project_marked_by_its_settings_without_a_mind_toml() {
 #[test]
 fn a_scan_takes_a_project_marked_by_its_settings_for_a_project() {
     let dir = TempDir::new().unwrap();
-    let (workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     fs::create_dir(dir.path().join("alpha")).unwrap();
     settings_project(&dir.path().join("alpha"), skills_beside());
 
@@ -268,7 +268,7 @@ fn a_scan_takes_a_project_marked_by_its_settings_for_a_project() {
 #[test]
 fn a_workspace_links_and_lists_a_project_marked_by_its_settings() {
     let dir = TempDir::new().unwrap();
-    let (mut workspace, _) = FlayerWorkspace::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
     let root = dir.path().join("alpha");
     fs::create_dir(&root).unwrap();
     settings_project(&root, skills_beside());
@@ -318,7 +318,8 @@ fn adding_a_kind_the_settings_name_no_folder_for_is_refused_before_anything_is_m
     assert_eq!(
         error.to_string(),
         format!(
-            "{}: keeps no rules of its own, since its marker names no folder for them",
+            "{}: keeps no rules of its own, since its settings.toml names no folder for them; \
+             its `[directories]` can name one",
             dir.path().display()
         )
     );
@@ -413,7 +414,7 @@ fn a_target_outside_the_project_inside_mind_or_absolute_is_passed_over_and_said(
             ".mind/skills",
             absolute,
             ".",
-            "nested/.mindflayer/skills",
+            "nested/.mindweaver/skills",
             ".git",
             "vendor/lib/.GIT/skills",
         ],
@@ -441,7 +442,7 @@ fn a_target_outside_the_project_inside_mind_or_absolute_is_passed_over_and_said(
             misplaced(".mind/skills", Misplaced::InsideMind),
             misplaced(absolute, Misplaced::Outside),
             misplaced(".", Misplaced::Outside),
-            misplaced("nested/.mindflayer/skills", Misplaced::InsideWorkspace),
+            misplaced("nested/.mindweaver/skills", Misplaced::InsideWorkspace),
             misplaced(".git", Misplaced::InsideGit),
             misplaced("vendor/lib/.GIT/skills", Misplaced::InsideGit),
         ]
@@ -457,7 +458,7 @@ fn a_target_outside_the_project_inside_mind_or_absolute_is_passed_over_and_said(
     assert!(
         said[1]
             .to_string()
-            .contains("because it is inside .mind, which holds Mindflayer's own files"),
+            .contains("because it is inside .mind, which holds Mindweaver's own files"),
         "{}",
         said[1]
     );
@@ -622,7 +623,7 @@ fn a_new_project_writes_exactly_its_settings_and_a_gitignore() {
     );
     assert_eq!(
         fs::read_to_string(mind.join(".gitignore")).unwrap(),
-        "# Mindflayer keeps this project's settings here, for this checkout alone.\n\
+        "# Mindweaver keeps this project's settings here, for this checkout alone.\n\
          # Nothing in this folder is meant to be committed.\n\
          *\n"
     );
@@ -1044,7 +1045,7 @@ fn a_change_in_toml_of_the_version_or_the_id_is_refused_and_writes_nothing() {
 
     for change in [
         (|settings: &mut Settings| settings.version = TARGETS_VERSION) as fn(&mut Settings),
-        |settings: &mut Settings| settings.id = mindflayer_core::ProjectId::generate(),
+        |settings: &mut Settings| settings.id = mindweaver_core::ProjectId::generate(),
     ] {
         let error = project.change_settings(change).unwrap_err();
 

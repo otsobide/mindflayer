@@ -15,9 +15,9 @@ fn collapse_holding_three() -> Scenario {
         )
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install -p collapse commit-style")
+        .given("~/Projects", "mindweaver install -p collapse commit-style")
         .file(
             "~/Projects/collapse/.claude/skills/notes/SKILL.md",
             &skill("notes", "My own notes"),
@@ -46,12 +46,15 @@ fn status_names_each_project_when_there_is_more_than_one() {
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install --all-projects commit-style");
+        .given(
+            "~/Projects",
+            "mindweaver install --all-projects commit-style",
+        );
 
     scenario
-        .run("~/Projects", "flayer status")
+        .run("~/Projects", "mindweaver status")
         .succeeds()
         .prints(concat!(
             "collapse  commit-style  current  claude,codex,opencode  workspace\n",
@@ -66,12 +69,12 @@ fn status_json_prints_the_same_report_in_the_envelope() {
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
-        .given("~/Projects", "flayer install -p collapse commit-style");
+        .given("~/Projects", "mindweaver install -p collapse commit-style");
 
     scenario
-        .run("~/Projects", "flayer status -p collapse --json")
+        .run("~/Projects", "mindweaver status -p collapse --json")
         .succeeds()
         .prints(concat!(
             "{\n",
@@ -125,7 +128,7 @@ fn a_warning_reaches_the_envelope_with_its_code_and_is_said_on_stderr_too() {
     let message = "/home/you/Projects/collapse: not a mind project \
                    (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)";
 
-    let ran = scenario.run("~/Projects", "flayer status --json");
+    let ran = scenario.run("~/Projects", "mindweaver status --json");
 
     ran.exits(1).says(&format!("warning: {message}\n"));
     let envelope: serde_json::Value =

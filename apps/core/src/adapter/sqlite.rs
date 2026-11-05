@@ -1,5 +1,5 @@
 //! The [`LedgerStore`] a build keeps a workspace's records in: SQLite, in
-//! `.mindflayer/mindflayer.db`, every query and every step of its schema.
+//! `.mindweaver/mindweaver.db`, every query and every step of its schema.
 //!
 //! What it stores, and the promises it keeps of it (a URL kept redacted, a
 //! write whole or not at all, a schema refused when it is newer than this
@@ -68,7 +68,7 @@ impl Sqlite {
         // as a writer waits for the workspace, rather than failing with
         // "database is locked": the CLI, the TUI and the server can each have
         // the ledger open. rusqlite waits five seconds of its own accord, but
-        // as a library's default; set here, the wait is Mindflayer's.
+        // as a library's default; set here, the wait is Mindweaver's.
         connection
             .busy_timeout(crate::lock::WAIT)
             .map_err(|source| LedgerError::Open {
@@ -85,7 +85,7 @@ impl Sqlite {
         // for each other at all: a reader goes on reading the ledger as the
         // last write left it while the next is made. It needs every process
         // using the file on one machine, sharing memory through
-        // `mindflayer.db-shm`, so a workspace on a network filesystem used
+        // `mindweaver.db-shm`, so a workspace on a network filesystem used
         // from two machines at once is beyond it, as it is beyond the
         // workspace lock.
         //
@@ -153,7 +153,7 @@ impl Sqlite {
     /// A ledger that keeps a write-ahead log, read where the log's files
     /// cannot be made, as a file nobody is changing.
     ///
-    /// SQLite makes `mindflayer.db-wal` and `mindflayer.db-shm` to read a
+    /// SQLite makes `mindweaver.db-wal` and `mindweaver.db-shm` to read a
     /// ledger that keeps its log, and takes them away when the last
     /// connection closes. So in a folder this process may read and not write
     /// (a sandboxed agent's view of the workspace, a read-only mount,
@@ -320,7 +320,7 @@ impl Sqlite {
     ///
     /// So that a step that turns out wrong, or a build that misreads what it
     /// wrote, leaves the file it started from to go back to: the copy opens at
-    /// the old version, and an older Mindflayer reads it as it always did. One
+    /// the old version, and an older Mindweaver reads it as it always did. One
     /// copy per version, replaced if an earlier attempt at the same step left
     /// one, since both are of the same file at the same version and the newer
     /// is the one the step is about to change. Nothing is migrated unless the
@@ -535,6 +535,18 @@ impl LedgerStore for Sqlite {
             )
             .map(|_| ())
             .map_err(|error| self.failed("recording an artifact", error))
+    }
+
+    fn shelf_moved(&self, from: &str, to: &str) -> Result<usize, LedgerError> {
+        // Compared as a prefix of bytes, never with LIKE, whose `%` and `_`
+        // a folder's name may hold.
+        self.connection
+            .execute(
+                "UPDATE artifacts SET path = ?2 || substr(path, length(?1) + 1)
+                  WHERE substr(path, 1, length(?1)) = ?1",
+                rusqlite::params![from, to],
+            )
+            .map_err(|error| self.failed("moving what was gathered", error))
     }
 
     fn gathered(&self) -> Result<Vec<Gathered>, LedgerError> {
@@ -1144,12 +1156,12 @@ impl LedgerStore for Sqlite {
             )
             .optional()
             .map(|found| found.is_some())
-            .map_err(|source| self.failed("reading which files Mindflayer made", source))
+            .map_err(|source| self.failed("reading which files Mindweaver made", source))
     }
 
     fn set_created(&self, project: &str, path: &str, created: bool) -> Result<(), LedgerError> {
         set_created_in(&self.connection, self.now(), project, path, created)
-            .map_err(|source| self.failed("noting which files Mindflayer made", source))
+            .map_err(|source| self.failed("noting which files Mindweaver made", source))
     }
 
     fn project_at(&self, route: &str) -> Result<Option<ProjectId>, LedgerError> {
@@ -1654,7 +1666,7 @@ struct Row {
 }
 
 /// Where a ledger at `path` is copied before a schema step takes it on from
-/// `version`: beside it, as `mindflayer.db.v2.bak` for version 2.
+/// `version`: beside it, as `mindweaver.db.v2.bak` for version 2.
 ///
 /// Named after the version it holds rather than numbered or dated, so which
 /// build reads a copy is in its name, and a ledger brought forward by several
@@ -1807,7 +1819,7 @@ fn read_source(row: &rusqlite::Row<'_>) -> rusqlite::Result<Source> {
 /// A URL as a readable directory name.
 ///
 /// The scheme, any credentials and a trailing `.git` carry nothing a person
-/// browsing `.mindflayer/skills/` wants to read, and anything that is not a
+/// browsing `.mindweaver/skills/` wants to read, and anything that is not a
 /// plain character becomes a hyphen, so the result is a name every filesystem
 /// accepts and nobody has to quote.
 fn slug(url: &str) -> String {
@@ -1997,18 +2009,18 @@ UPDATE installations
 /// The fourth schema: what installing a rule writes (#45).
 ///
 /// A rule reaches a project marked by its settings as a section of the block
-/// in its `AGENTS.md` and, for Claude, as a file in
-/// `.claude/rules/mindflayer`, which hold different bytes: the section is the
+/// in its `AGENTS.md` and, for Claude, as a file in its rules folder
+/// (`.claude/rules/mindweaver`), which hold different bytes: the section is the
 /// rule without its front matter, the file the rule as written. So a target
 /// gains a `content_hash` of its own, which is what tells a section or a file
 /// edited since from the one written (D-04). A skill's copies leave it empty:
 /// every one of them holds the tree the installation's `content_hash` names,
 /// which is why version 3 kept one hash an installation.
 ///
-/// `created_files` names each file Mindflayer made in a project, by its
+/// `created_files` names each file Mindweaver made in a project, by its
 /// route from the project, rather than wrote into: an `AGENTS.md` that was
 /// not there until a rule was installed. The block is taken out of a file
-/// with the last rule, and only a file Mindflayer made goes with it, so
+/// with the last rule, and only a file Mindweaver made goes with it, so
 /// whether it made the file is kept until then. A table of its own rather
 /// than a column of an installation's, since one file serves every rule of
 /// the project, and outlives each of them but the last.
@@ -2034,7 +2046,7 @@ CREATE TABLE created_files (
 /// place nothing is at. `projects` keeps the id ([`ProjectId`]) the ledger
 /// last saw at each route, one id a route and one route an id, so a project
 /// found somewhere else holding an id the ledger last saw at a stale entry
-/// is that entry's project, moved, and `flayer relink` takes its records
+/// is that entry's project, moved, and `mindweaver relink` takes its records
 /// along ([`Ledger::relinked`](crate::ledger::Ledger::relinked)). `installations.project_id` says which id
 /// each record was made for, the route's when it was written, emptied when
 /// the ledger stops knowing that id and moved with it.

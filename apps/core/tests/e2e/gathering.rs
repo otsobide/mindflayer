@@ -1,7 +1,7 @@
 //! Gathering skills from git onto the workspace's shelf (`gather::gather`),
 //! through the one port a gather fetches by, and what it refuses to keep.
 
-use mindflayer_core::gather::{self, Request};
+use mindweaver_core::gather::{self, Request};
 use serde_json::json;
 
 use crate::World;
@@ -33,7 +33,7 @@ fn with_a_source() -> World {
     world
 }
 
-/// A gather of the source at `at` by its path, as `flayer gather git`
+/// A gather of the source at `at` by its path, as `mindweaver gather git`
 /// asks for one.
 fn gather_from(world: &World, at: &str) -> Result<gather::Report, gather::GatherError> {
     let workspace = world.workspace("~/Projects");
@@ -50,7 +50,7 @@ fn gather_from(world: &World, at: &str) -> Result<gather::Report, gather::Gather
 /// shelf's folder for the source that the report names.
 fn harvested(report: &serde_json::Value, list: &str) -> Vec<(String, String)> {
     let shelf = format!(
-        "/home/you/Projects/.mindflayer/skills/{}",
+        "/home/you/Projects/.mindweaver/skills/{}",
         report["directory"].as_str().unwrap()
     );
     report[list]
@@ -105,7 +105,7 @@ fn gathering_a_source_puts_each_skill_it_holds_on_the_shelf() {
     assert_eq!(harvested(&report, "unchanged"), []);
     assert_eq!(
         world
-            .files("~/Projects/.mindflayer/skills")
+            .files("~/Projects/.mindweaver/skills")
             .iter()
             .filter(|file| file.ends_with("/SKILL.md"))
             .count(),

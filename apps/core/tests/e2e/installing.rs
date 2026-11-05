@@ -2,10 +2,10 @@
 //! every front end does it (`assign::install`, `assign::uninstall`), and the
 //! plan of a batch of boxes ticked and unticked (`install::plan`).
 
-use mindflayer_core::assign;
-use mindflayer_core::install::{self, Cell};
-use mindflayer_core::install::{Edits, Installed, Removed};
-use mindflayer_core::{Kind, Reference};
+use mindweaver_core::assign;
+use mindweaver_core::install::{self, Cell};
+use mindweaver_core::install::{Edits, Installed, Removed};
+use mindweaver_core::{Kind, Reference};
 use serde_json::json;
 
 use crate::{at, World};
@@ -96,13 +96,13 @@ fn a_skill_installed_is_copied_where_each_agent_reads_and_kept_out_of_git() {
     let id = world.project_id("~/Projects/api");
     let exclude = world.read("~/Projects/api/.git/info/exclude");
     let block = exclude
-        .split_once("# mindflayer:begin\n")
+        .split_once("# mindweaver:begin\n")
         .expect("the block")
         .1;
     assert_eq!(
         block,
         format!(
-            "# project {id}\n/.agents/skills/review/\n/.claude/skills/review/\n# mindflayer:end\n"
+            "# project {id}\n/.agents/skills/review/\n/.claude/skills/review/\n# mindweaver:end\n"
         )
     );
 }
@@ -131,7 +131,13 @@ fn an_installed_skill_reads_as_current_in_every_front_ends_snapshot() {
     assert_eq!(
         at(&snapshot, "/boxes"),
         &json!([{
-            "closed": [],
+            "closed": [{
+                "kind": "mcp",
+                "why": {
+                    "code": "not_installable",
+                    "message": "MCP servers cannot be installed into a project yet",
+                },
+            }],
             "entry": "api",
             "held": [{
                 "kind": "skill", "name": "review", "origin": "workspace",
@@ -165,13 +171,13 @@ fn a_rule_installed_is_rendered_into_the_block_of_the_projects_agents_md() {
     assert_eq!(
         world.read("~/Projects/api/AGENTS.md"),
         concat!(
-            "<!-- mindflayer:begin -->\n",
-            "<!-- mindflayer:rule style -->\n",
+            "<!-- mindweaver:begin -->\n",
+            "<!-- mindweaver:rule style -->\n",
             "# How code here reads\n",
-            "<!-- mindflayer:end -->\n",
+            "<!-- mindweaver:end -->\n",
         )
     );
-    // Made by Mindflayer in a project kept out of git, so kept out with it;
+    // Made by Mindweaver in a project kept out of git, so kept out with it;
     // no CLAUDE.md is made to import it.
     assert!(world
         .read("~/Projects/api/.git/info/exclude")
@@ -249,7 +255,7 @@ fn a_name_nothing_offers_is_refused_with_what_would_offer_it() {
     assert_eq!(
         world.said(&refused),
         "nothing called `review` can be installed: gather it, load a workspace that has it \
-         with `flayer load`, or add it to the workspace with `flayer add`"
+         with `mindweaver load`, or add it to the workspace with `mindweaver add`"
     );
 }
 

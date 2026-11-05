@@ -83,7 +83,7 @@ fn every_event() -> Vec<Event> {
             | Event::Unwatched { .. } => {}
         }
     }
-    let lines = vec!["flayer link /home/you/blog".to_owned()];
+    let lines = vec!["mindweaver link /home/you/blog".to_owned()];
     vec![
         Event::Changed {
             scopes: vec![json!({"type": "workspace"}), json!("anything")],
@@ -134,7 +134,7 @@ fn a_preview_and_a_run_hold_to_their_schemas_whatever_the_backend_hands_over() {
     holds_to(
         "Preview",
         &Preview {
-            lines: vec!["flayer unlink gone".to_owned()],
+            lines: vec!["mindweaver unlink gone".to_owned()],
             confirm: vec![json!({"line": 0, "caution": "unlinks"}), json!(1)],
         },
     );
@@ -148,14 +148,14 @@ fn a_preview_and_a_run_hold_to_their_schemas_whatever_the_backend_hands_over() {
     holds_to(
         "Ran",
         &Ran {
-            lines: vec!["flayer unlink gone".to_owned()],
+            lines: vec!["mindweaver unlink gone".to_owned()],
             outcome: json!({"ok": true, "runs": []}),
         },
     );
-    refused_by("Preview", &json!({"lines": ["flayer unlink gone"]}));
+    refused_by("Preview", &json!({"lines": ["mindweaver unlink gone"]}));
     refused_by(
         "Ran",
-        &json!({"lines": "flayer unlink gone", "outcome": null}),
+        &json!({"lines": "mindweaver unlink gone", "outcome": null}),
     );
 }
 

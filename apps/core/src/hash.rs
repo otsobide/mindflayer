@@ -50,7 +50,7 @@ use crate::value::ContentHash;
 /// A link, or anything else that is neither a file nor a folder, is refused
 /// rather than followed. Following it could read anything (a link to
 /// `/dev/zero` never ends), and the text of a link is spelled differently on
-/// Windows. Mindflayer never writes one into a copy, since [`crate::copy::tree`]
+/// Windows. Mindweaver never writes one into a copy, since [`crate::copy::tree`]
 /// copies what a link points at, so one found there was put there afterwards.
 pub fn tree(root: &Path) -> Result<ContentHash, io::Error> {
     let mut entries = Vec::new();
@@ -83,7 +83,7 @@ pub fn tree(root: &Path) -> Result<ContentHash, io::Error> {
 
 /// The SHA-256 of a file's contents, as 64 lowercase hex digits.
 ///
-/// For a target that is one file Mindflayer writes whole, as a rule is in
+/// For a target that is one file Mindweaver writes whole, as a rule is in
 /// Claude's rules folder ([`crate::claude_rules`]), where [`tree`] walks a
 /// folder. The bytes alone, not the file's name, as a copy's own name is not
 /// part of its tree's hash; and handed the bytes rather than a path, so what

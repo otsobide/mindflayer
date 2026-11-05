@@ -45,8 +45,8 @@ fmt/check: ## Fail if any Rust code is not formatted
 # The features that describe what the crates hand a front end: the panel's
 # TypeScript (`ts`, core's and the CLI's) and the API's JSON Schema
 # (`schema`, the server's too).
-TS_FEATURES := mindflayer-core/ts,mindflayer-cli/ts
-SCHEMA_FEATURES := mindflayer-core/schema,mindflayer-server/schema,mindflayer-cli/schema
+TS_FEATURES := mindweaver-core/ts,mindweaver-cli/ts
+SCHEMA_FEATURES := mindweaver-core/schema,mindweaver-server/schema,mindweaver-cli/schema
 
 # Twice: as everything builds, and with the `ts` and `schema` features,
 # whose code (the panel's types, the API's schemas and the tests holding
@@ -76,7 +76,7 @@ SCHEMAS := docs/api/schemas
 .PHONY: api/schemas
 api/schemas: ## Write the API's JSON Schemas from Rust into docs/api/schemas (cargo only)
 	rm -rf $(SCHEMAS)
-	cargo test -p mindflayer-core -p mindflayer-server -p mindflayer-cli --features $(SCHEMA_FEATURES),$(TS_FEATURES) --lib schema
+	cargo test -p mindweaver-core -p mindweaver-server -p mindweaver-cli --features $(SCHEMA_FEATURES),$(TS_FEATURES) --lib schema
 
 # As web/types/check: `git diff --exit-code` for a file that changed or
 # went, and an untracked one for a root that is new.
@@ -99,7 +99,7 @@ OPENAPI := docs/api/openapi.json
 
 .PHONY: api/openapi
 api/openapi: ## Write the API's OpenAPI document from Rust into docs/api/openapi.json (cargo only)
-	cargo test -p mindflayer-cli --features $(SCHEMA_FEATURES),$(TS_FEATURES) --lib openapi
+	cargo test -p mindweaver-cli --features $(SCHEMA_FEATURES),$(TS_FEATURES) --lib openapi
 
 # As api/schemas/check, for the one file.
 .PHONY: api/openapi/check
@@ -153,13 +153,14 @@ clean: ## Remove build artifacts
 # `make cli/build` with Rust alone, since `make build` builds the panel first
 # and needs Node and pnpm.
 #
-# Both binaries, not just `mind`: `flayer` is a second entry point into the
+# Both binaries, not just `mind`: `mindweaver` is a second entry point into the
 # same crate, and half an install is worse than none.
 #
-# `mf` is a short name for `flayer` (the one that manages minds, so `mf init`
+# `mw` is a short name for `mindweaver` (the one that manages minds, so `mw init`
 # makes a workspace), linked beside the two: a symlink rather than a third
 # binary, so it cannot be a different version of the same one. Only a link,
-# never a cargo `[[bin]]`: `mf` is METAFONT wherever TeX is installed, and a
+# never a cargo `[[bin]]`: a two-letter name is easily some other tool's, as
+# `mf`, the one this was before, is METAFONT wherever TeX is installed, and a
 # link is something you asked for on your own machine.
 #
 # "dev" is not in APPS, so these do not collide with the <app>/<target> pattern
@@ -167,21 +168,21 @@ clean: ## Remove build artifacts
 # its binaries.
 # ---------------------------------------------------------------------------
 BINDIR ?= $(HOME)/.cargo/bin
-BINS := mind flayer
+BINS := mind mindweaver
 # alias:binary pairs, linked by dev/link and removed by dev/unlink.
-ALIASES := mf:flayer
+ALIASES := mw:mindweaver
 
 # The panel first, as for a release, where Node and pnpm run: the copies
 # embed it as they compile. Elsewhere a warning says what they embed instead
 # (`make web/build/if-node`).
 .PHONY: install
-install: ## Install `mind` and `flayer` as copies in cargo's bin directory, the panel built first where Node is
+install: ## Install `mind` and `mindweaver` as copies in cargo's bin directory, the panel built first where Node is
 	$(MAKE) -C apps/web build/if-node
 	cargo install --path apps/cli --locked
 
 .PHONY: dev/link
-dev/link: ## Build, then symlink `mind`, `flayer` and `mf` into BINDIR
-	cargo build -p mindflayer-cli
+dev/link: ## Build, then symlink `mind`, `mindweaver` and `mw` into BINDIR
+	cargo build -p mindweaver-cli
 	@mkdir -p "$(BINDIR)"
 	@for bin in $(BINS); do \
 		ln -sfn "$(CURDIR)/target/debug/$$bin" "$(BINDIR)/$$bin"; \
@@ -207,7 +208,7 @@ dev/unlink: ## Remove the dev/link symlinks (leaves installed copies alone)
 			rm "$$target" && echo "removed $$target"; \
 		elif [ -e "$$target" ]; then \
 			echo "$$target is a real file, not a symlink: left alone"; \
-			echo "(that is an installed copy; remove it with \`cargo uninstall mindflayer-cli\`)"; \
+			echo "(that is an installed copy; remove it with \`cargo uninstall mindweaver-cli\`)"; \
 		else \
 			echo "nothing to remove at $$target"; \
 		fi; \
@@ -217,11 +218,11 @@ dev/unlink: ## Remove the dev/link symlinks (leaves installed copies alone)
 dev/watch: ## Rebuild on every change, so the dev/link symlink is always current
 	@command -v cargo-watch >/dev/null 2>&1 \
 		|| { echo "cargo-watch is not installed: cargo install cargo-watch"; exit 1; }
-	cargo watch -x 'build -p mindflayer-cli'
+	cargo watch -x 'build -p mindweaver-cli'
 
 .PHONY: help
 help: ## Show this help
-	@echo "Mindflayer make targets:"
+	@echo "Mindweaver make targets:"
 	@grep -hE '^[a-zA-Z0-9_/-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 	@printf "  \033[36m%-12s\033[0m %s\n" "<app>/<t>" "run target <t> in an app (apps: $(APPS))"

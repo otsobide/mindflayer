@@ -1,5 +1,5 @@
-//! The two screens the main one opens: installing (`i`, or `flayer
-//! install` straight from the shell) and the minds (`m`, or `flayer
+//! The two screens the main one opens: installing (`i`, or `mindweaver
+//! install` straight from the shell) and the minds (`m`, or `mindweaver
 //! minds`), each applying its marks as the lines they amount to.
 
 use crate::{collapse_and_tanukeys, Key};
@@ -7,7 +7,7 @@ use crate::{collapse_and_tanukeys, Key};
 #[test]
 fn the_install_screen_installs_what_was_marked_once_it_is_said_yes_to() {
     let scenario = collapse_and_tanukeys();
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal
@@ -23,7 +23,7 @@ fn the_install_screen_installs_what_was_marked_once_it_is_said_yes_to() {
         .shows("Install 1, remove 0?");
     terminal
         .types("y")
-        .shows("flayer install -p tanukeys --from workspace skill:commit-style")
+        .shows("mindweaver install -p tanukeys --from workspace skill:commit-style")
         .shows("installed commit-style into tanukeys, from workspace")
         .presses(Key::Escape)
         .shows("tanukeys  1");
@@ -33,7 +33,7 @@ fn the_install_screen_installs_what_was_marked_once_it_is_said_yes_to() {
     assert_eq!(
         closed.shown.trim_end(),
         concat!(
-            "$ flayer install -p tanukeys --from workspace skill:commit-style\n",
+            "$ mindweaver install -p tanukeys --from workspace skill:commit-style\n",
             "installed commit-style into tanukeys, from workspace",
         )
     );
@@ -41,10 +41,10 @@ fn the_install_screen_installs_what_was_marked_once_it_is_said_yes_to() {
 }
 
 #[test]
-fn flayer_install_opens_the_install_screen_straight_from_the_shell() {
+fn mindweaver_install_opens_the_install_screen_straight_from_the_shell() {
     let scenario = collapse_and_tanukeys();
 
-    let mut terminal = scenario.open("~/Projects", "flayer install");
+    let mut terminal = scenario.open("~/Projects", "mindweaver install");
 
     terminal
         .shows("Skills in collapse")
@@ -60,7 +60,7 @@ fn flayer_install_opens_the_install_screen_straight_from_the_shell() {
 fn the_minds_screen_makes_a_ticked_repository_a_project_and_links_it() {
     let scenario = collapse_and_tanukeys();
     scenario.repository("~/Projects/site");
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal
@@ -72,7 +72,7 @@ fn the_minds_screen_makes_a_ticked_repository_a_project_and_links_it() {
         .shows("> [x] site      git repository (mind init first)  + mind init, then link")
         .types("a")
         .shows("Link 1?")
-        .shows("runs  mind -C site init && flayer link site");
+        .shows("runs  mind -C site init && mindweaver link site");
     terminal
         .types("y")
         .shows("linked site as site")
@@ -86,7 +86,7 @@ fn the_minds_screen_makes_a_ticked_repository_a_project_and_links_it() {
         concat!(
             "$ mind -C site init\n",
             "initialized mind project `site` in /home/you/Projects/site/.mind\n",
-            "$ flayer link site\n",
+            "$ mindweaver link site\n",
             "linked site as site",
         )
     );

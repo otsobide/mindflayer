@@ -57,18 +57,18 @@ fn a_name_the_skill_format_refuses_is_never_written() {
 }
 
 #[test]
-fn flayer_add_keeps_a_skill_in_the_workspaces_library() {
+fn mindweaver_add_keeps_a_skill_in_the_workspaces_library() {
     let scenario = Scenario::projects(&["collapse"]);
 
     scenario
         .run(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
         .succeeds()
         .prints(
             "created skill commit-style at \
-             /home/you/Projects/.mindflayer/library/skills/commit-style/SKILL.md\n",
+             /home/you/Projects/.mindweaver/library/skills/commit-style/SKILL.md\n",
         )
         .quiet();
 
@@ -79,20 +79,20 @@ fn flayer_add_keeps_a_skill_in_the_workspaces_library() {
 }
 
 #[test]
-fn flayer_list_lists_the_library_beside_each_projects_own() {
+fn mindweaver_list_lists_the_library_beside_each_projects_own() {
     let scenario = collapse_with_deploy();
     scenario
         .given(
             "~/Projects",
-            "flayer add skill commit-style \"How every repo here writes commits\"",
+            "mindweaver add skill commit-style \"How every repo here writes commits\"",
         )
         .given(
             "~/Projects",
-            "flayer add rule git/no-force-push \"Never force-push a shared branch\"",
+            "mindweaver add rule git/no-force-push \"Never force-push a shared branch\"",
         );
 
     scenario
-        .run("~/Projects", "flayer list")
+        .run("~/Projects", "mindweaver list")
         .succeeds()
         .prints(concat!(
             "workspace  skill  commit-style       How every repo here writes commits\n",

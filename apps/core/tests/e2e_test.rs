@@ -10,7 +10,7 @@
 //!
 //! - the world it needs, built from nothing for that test alone
 //!   ([`World`]): folders and git repositories made directly, and
-//!   Mindflayer's own state only through core's public calls, each the one
+//!   Mindweaver's own state only through core's public calls, each the one
 //!   a command makes for that step, with what a front end hands it (the
 //!   home, the agents' own folders under it), and held to go cleanly;
 //! - one call, the input of the use case, as a front end makes it;
@@ -20,7 +20,7 @@
 //!   what the snapshot every front end reads says next.
 //!
 //! No test shares a world with another, so any one runs alone (`cargo test
-//! -p mindflayer-core --test e2e_test <name>`).
+//! -p mindweaver-core --test e2e_test <name>`).
 //!
 //! Unix alone: the reference's paths are a Unix home's, which a Windows
 //! path never reads as, and a link is made as Unix makes one.

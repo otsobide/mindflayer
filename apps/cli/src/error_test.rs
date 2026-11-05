@@ -7,15 +7,15 @@ use super::*;
 /// client beside core's.
 ///
 /// The server's are held here because only here can they be: the server
-/// depends on no mindflayer crate, so it cannot see core's or the CLI's,
+/// depends on no mindweaver crate, so it cannot see core's or the CLI's,
 /// and the CLI depends on all three.
 fn given() -> Vec<(&'static str, &'static [&'static str])> {
     #[allow(unused_mut)]
     let mut given = CODES.to_vec();
     #[cfg(feature = "ui")]
     given.push((
-        "mindflayer_server::Condition",
-        mindflayer_server::Condition::CODES,
+        "mindweaver_server::Condition",
+        mindweaver_server::Condition::CODES,
     ));
     given
 }
@@ -25,7 +25,7 @@ fn given() -> Vec<(&'static str, &'static [&'static str])> {
 /// give, would be two conditions a front end cannot tell apart.
 #[test]
 fn no_code_the_cli_or_the_server_gives_is_given_twice_here_or_in_core() {
-    let mut seen: Vec<(&str, &str)> = mindflayer_core::code::ALL
+    let mut seen: Vec<(&str, &str)> = mindweaver_core::code::ALL
         .iter()
         .flat_map(|(owner, codes)| codes.iter().map(move |code| (*owner, *code)))
         .collect();
@@ -77,7 +77,7 @@ fn every_code_the_cli_or_the_server_gives_is_snake_case() {
 /// the panel by core's code for it: one condition, one code.
 #[test]
 fn every_code_the_cli_echoes_is_one_core_gives() {
-    let core: Vec<&str> = mindflayer_core::code::ALL
+    let core: Vec<&str> = mindweaver_core::code::ALL
         .iter()
         .flat_map(|(_, codes)| codes.iter().copied())
         .collect();

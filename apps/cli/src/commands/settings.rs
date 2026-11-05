@@ -8,9 +8,10 @@
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
-use mindflayer_core::reapply::{self, Change, Ignore, Plan, Retarget, Why};
-use mindflayer_core::{
-    paths, Agent, AgentHomes, Excluded, FlayerWorkspace, Kind, MindProject, Settings, Share,
+use mindweaver_core::install;
+use mindweaver_core::reapply::{self, Change, Ignore, Plan, Retarget, Why};
+use mindweaver_core::{
+    paths, Agent, AgentHomes, Excluded, Kind, MindProject, Settings, Share, WeaverWorkspace,
 };
 
 use super::consulted;
@@ -118,11 +119,11 @@ pub(crate) fn change_here(
     result
 }
 
-/// `flayer agents -p`, `flayer share -p` and `flayer targets -p`: the change
+/// `mindweaver agents -p`, `mindweaver share -p` and `mindweaver targets -p`: the change
 /// to one project the workspace manages, carrying what its ledger records
 /// along.
 pub(crate) fn change_of(
-    workspace: &FlayerWorkspace,
+    workspace: &WeaverWorkspace,
     project: &MindProject,
     change: &Change,
     yes: bool,
@@ -136,7 +137,7 @@ const NOTHING: &str = "nothing to change";
 
 /// The change, planned without `yes` and made with it, laid out.
 ///
-/// The dry run is a report, and exits as one, as `flayer migrate`'s does:
+/// The dry run is a report, and exits as one, as `mindweaver migrate`'s does:
 /// what it gives is a line for each thing that would change, to read before
 /// saying yes. Made, a copy left out of a folder an agent the project now
 /// names reads, over somebody's skill or for want of one to copy, is a
@@ -147,7 +148,7 @@ const NOTHING: &str = "nothing to change";
 /// reaches them once they are pointed at it, which `status` warns of until
 /// they are.
 fn change_project(
-    workspace: Option<&FlayerWorkspace>,
+    workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
     change: &Change,
     yes: bool,
@@ -217,7 +218,7 @@ pub(crate) fn not_copied(project: &MindProject, retarget: &Retarget) -> Vec<Warn
             let at = shown(project, &left.path);
             let text = match &left.why {
                 Why::Foreign => format!(
-                    "warning: {into} already has a {name} at {at} that Mindflayer did not put \
+                    "warning: {into} already has a {name} at {at} that Mindweaver did not put \
                      there, so it was left alone, and {name} was not copied there"
                 ),
                 Why::Unsourced => format!(
@@ -249,12 +250,30 @@ fn nothing(project: &MindProject, change: &Change, plan: &Plan) -> String {
                 ""
             }
         ),
-        Change::Targets { kind, folders } => match folders {
-            Some(_) => format!(
-                "{NOTHING}: {name} installs {kind}s in {} already\n",
+        // Of the settings alone for a kind no install writes yet (MCP
+        // servers): saying it goes where its agents read would say that one
+        // is installed at all.
+        Change::Targets { kind, folders } => match (folders, install::installs(*kind)) {
+            (Some(_), true) => format!(
+                "{NOTHING}: {name} installs {} in {} already\n",
+                kind.plural(),
                 targets(&plan.after, *kind)
             ),
-            None => format!("{NOTHING}: {name} installs {kind}s where its agents read already\n"),
+            (None, true) => format!(
+                "{NOTHING}: {name} installs {} where its agents read already\n",
+                kind.plural()
+            ),
+            (Some(_), false) => format!(
+                "{NOTHING}: {name} names {} for its {} already, \
+                 though none is installed into a project yet\n",
+                targets(&plan.after, *kind),
+                kind.plural()
+            ),
+            (None, false) => format!(
+                "{NOTHING}: {name} names no folder for its {} already, \
+                 and none is installed into a project yet\n",
+                kind.plural()
+            ),
         },
         Change::Agents(_) | Change::AddAgents(_) | Change::RemoveAgents(_) => format!(
             "{NOTHING}: {name} names {} already\n",
@@ -321,8 +340,9 @@ fn report(project: &MindProject, plan: &Plan, done: bool) -> String {
         if before.targets.get(kind) != after.targets.get(kind) {
             let _ = writeln!(
                 text,
-                "{} the targets of {kind}s to {} in {name}, where they were {}",
+                "{} the targets of {} to {} in {name}, where they were {}",
                 would("set", "would set"),
+                kind.plural(),
                 targets(after, kind),
                 targets(before, kind)
             );
@@ -348,7 +368,7 @@ fn report(project: &MindProject, plan: &Plan, done: bool) -> String {
         Some(Ignore::Kept(path)) => {
             let _ = writeln!(
                 text,
-                "{} {} as it is: it is not the one Mindflayer writes, so it may still keep .mind \
+                "{} {} as it is: it is not the one Mindweaver writes, so it may still keep .mind \
                  out of git",
                 would("left", "would leave"),
                 shown(project, path)
@@ -363,7 +383,7 @@ fn report(project: &MindProject, plan: &Plan, done: bool) -> String {
     for path in &plan.foreign {
         let _ = writeln!(
             text,
-            "{} {} where it is: Mindflayer did not install it",
+            "{} {} where it is: Mindweaver did not install it",
             would("left", "would leave"),
             shown(project, path)
         );
@@ -430,7 +450,7 @@ pub(crate) fn moved(
             Why::Edited => {
                 let _ = writeln!(
                     text,
-                    "{} {at} where it is, no longer Mindflayer's: it was changed since it was \
+                    "{} {at} where it is, no longer Mindweaver's: it was changed since it was \
                      installed",
                     would("left", "would leave")
                 );
@@ -438,7 +458,7 @@ pub(crate) fn moved(
             Why::Uncompared(reason) => {
                 let _ = writeln!(
                     text,
-                    "{} {at} where it is, no longer Mindflayer's: whether it was changed since it \
+                    "{} {at} where it is, no longer Mindweaver's: whether it was changed since it \
                      was installed cannot be told: {reason}",
                     would("left", "would leave")
                 );
@@ -446,7 +466,7 @@ pub(crate) fn moved(
             Why::Foreign if !done => {
                 let _ = writeln!(
                     text,
-                    "would leave {at} as it is: Mindflayer did not put it there, so {name} would \
+                    "would leave {at} as it is: Mindweaver did not put it there, so {name} would \
                      not be copied there"
                 );
             }

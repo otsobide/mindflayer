@@ -8,7 +8,7 @@ use crate::{collapse_and_tanukeys, Key, Scenario};
 #[test]
 fn the_add_form_shows_the_line_as_it_is_typed_and_runs_it() {
     let scenario = collapse_and_tanukeys();
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal
@@ -41,7 +41,7 @@ fn the_add_form_shows_the_line_as_it_is_typed_and_runs_it() {
 #[test]
 fn the_add_form_runs_its_line_and_says_why_the_command_wrote_nothing() {
     let scenario = collapse_and_tanukeys();
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal
@@ -68,7 +68,7 @@ fn the_add_form_runs_its_line_and_says_why_the_command_wrote_nothing() {
 #[test]
 fn unticking_agents_runs_the_agents_line_and_takes_their_copies_out() {
     let scenario = collapse_and_tanukeys();
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal
@@ -102,10 +102,10 @@ fn unticking_agents_runs_the_agents_line_and_takes_their_copies_out() {
 fn update_brings_an_outdated_copy_current() {
     let scenario = collapse_and_tanukeys();
     scenario.file(
-        "~/Projects/.mindflayer/library/skills/commit-style/SKILL.md",
+        "~/Projects/.mindweaver/library/skills/commit-style/SKILL.md",
         &crate::skill("commit-style", "How every repo here writes commits, now"),
     );
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows(">   skill commit-style  outdated CC CX OC");
 
     terminal
@@ -129,7 +129,7 @@ fn update_brings_an_outdated_copy_current() {
 #[test]
 fn deleting_an_artifact_asks_first_and_then_runs_remove() {
     let scenario = collapse_and_tanukeys();
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal
@@ -160,17 +160,17 @@ fn deleting_an_artifact_asks_first_and_then_runs_remove() {
 fn linking_a_repository_asks_before_mind_init_writes_into_it() {
     let scenario = collapse_and_tanukeys();
     scenario.repository("~/Projects/site");
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  2");
 
     terminal
         .types("l")
         .shows("Link a project to Projects")
         .shows("> site  git repository (mind init first)")
-        .shows("runs         mind -C site init && flayer link site")
+        .shows("runs         mind -C site init && mindweaver link site")
         .presses(Key::Enter)
         .shows("site is not a mind project yet.")
-        .shows("runs  mind -C site init && flayer link site");
+        .shows("runs  mind -C site init && mindweaver link site");
     terminal
         .types("y")
         .shows("> site  0")
@@ -183,12 +183,12 @@ fn linking_a_repository_asks_before_mind_init_writes_into_it() {
         concat!(
             "$ mind -C site init\n",
             "initialized mind project `site` in /home/you/Projects/site/.mind\n",
-            "$ flayer link site\n",
+            "$ mindweaver link site\n",
             "linked site as site",
         )
     );
     scenario
-        .run("~/Projects", "flayer status -p site")
+        .run("~/Projects", "mindweaver status -p site")
         .succeeds()
         .quiet();
 }
@@ -197,7 +197,7 @@ fn linking_a_repository_asks_before_mind_init_writes_into_it() {
 fn saying_no_to_mind_init_writes_nothing_into_the_repository() {
     let scenario = Scenario::projects(&["collapse"]);
     scenario.repository("~/Projects/site");
-    let mut terminal = scenario.open("~/Projects", "flayer");
+    let mut terminal = scenario.open("~/Projects", "mindweaver");
     terminal.shows("collapse  0");
 
     terminal

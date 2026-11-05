@@ -1,13 +1,13 @@
-//! Moving what an older Mindflayer made to what this one writes, only when
+//! Moving what an older build made to what this one writes, only when
 //! asked: a project marked by a `mind.toml` (`migrate::project`), and a
 //! workspace keeping its own beside its projects (`migrate::library`).
 
-use mindflayer_core::migrate;
-use mindflayer_core::{Agent, Directories, FlayerWorkspace, Kind, Share};
+use mindweaver_core::migrate;
+use mindweaver_core::{Agent, Directories, Kind, Share, WeaverWorkspace};
 
 use crate::{at, World};
 
-/// `~/Projects` linking `collapse`, a project an older Mindflayer made:
+/// `~/Projects` linking `collapse`, a project an older build made:
 /// `commit-style` installed from the library into its `skills/`, beside
 /// `deploy`, its own.
 fn collapse_marked_by_a_mind_toml() -> World {
@@ -102,7 +102,7 @@ fn a_project_marked_by_its_settings_already_has_nothing_to_migrate() {
 #[test]
 fn a_workspace_keeping_its_own_beside_its_projects_moves_them_into_its_library() {
     let world = World::empty();
-    FlayerWorkspace::init_with(
+    WeaverWorkspace::init_with(
         world.home(),
         &Directories::default()
             .with(Kind::Skill, "skills")
@@ -124,25 +124,26 @@ fn a_workspace_keeping_its_own_beside_its_projects_moves_them_into_its_library()
             "git/no-force-push",
             "Never force-push a shared branch",
         );
-    let marker = world.read("~/.mindflayer/flayer.toml");
+    let marker = world.read("~/.mindweaver/weaver.toml");
     let mut workspace = world.workspace("~");
 
     let migrated = migrate::library(&mut workspace).expect("migrate the library");
 
     assert_eq!(
         migrated.backup.map(|backup| world.spelled(&backup)),
-        Some("/home/you/.mindflayer/flayer.toml.v2".to_owned())
+        Some("/home/you/.mindweaver/weaver.toml.v2".to_owned())
     );
-    assert_eq!(world.read("~/.mindflayer/flayer.toml.v2"), marker);
+    assert_eq!(world.read("~/.mindweaver/weaver.toml.v2"), marker);
     assert!(!world.exists("~/skills"));
     assert!(!world.exists("~/rules"));
-    assert!(world.exists("~/.mindflayer/library/skills/commit-style/SKILL.md"));
-    assert!(world.exists("~/.mindflayer/library/rules/git/no-force-push.md"));
+    assert!(world.exists("~/.mindweaver/library/skills/commit-style/SKILL.md"));
+    assert!(world.exists("~/.mindweaver/library/rules/git/no-force-push.md"));
     assert_eq!(
         at(&world.snapshot("~"), "/library/directories"),
         &serde_json::json!([
-            {"kind": "skill", "path": ".mindflayer/library/skills"},
-            {"kind": "rule", "path": ".mindflayer/library/rules"},
+            {"kind": "skill", "path": ".mindweaver/library/skills"},
+            {"kind": "rule", "path": ".mindweaver/library/rules"},
+            {"kind": "mcp", "path": ".mindweaver/library/mcp"},
         ])
     );
 }

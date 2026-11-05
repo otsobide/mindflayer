@@ -7,20 +7,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use common::{skill, workspace};
-use mindflayer_core::hash;
-use mindflayer_core::install;
-use mindflayer_core::ledger::{Ledger, Target};
-use mindflayer_core::reapply::{self, Change, Ignore, Why};
-use mindflayer_core::{
-    Agent, AgentHomes, Directories, FlayerWorkspace, Kind, MarkerFile, MindProject, ReapplyError,
-    Share, WorkspaceError, MIND_DIR, MIND_IGNORE, SETTINGS_FILE, SETTINGS_JSON_FILE,
+use mindweaver_core::hash;
+use mindweaver_core::install;
+use mindweaver_core::ledger::{Ledger, Target};
+use mindweaver_core::reapply::{self, Change, Ignore, Why};
+use mindweaver_core::{
+    Agent, AgentHomes, Directories, Kind, MarkerFile, MindProject, ReapplyError, Share,
+    WeaverWorkspace, WorkspaceError, MIND_DIR, MIND_IGNORE, SETTINGS_FILE, SETTINGS_JSON_FILE,
 };
 use tempfile::TempDir;
 
 /// A workspace keeping a `deploy` skill of its own, and `collapse`, a
 /// repository linked to it, marked by its settings naming `agents` in
 /// `share` mode, with `deploy` installed.
-fn installed(agents: &[Agent], share: Share) -> (TempDir, FlayerWorkspace, MindProject) {
+fn installed(agents: &[Agent], share: Share) -> (TempDir, WeaverWorkspace, MindProject) {
     installed_after(agents, share, |_| {})
 }
 
@@ -30,7 +30,7 @@ fn installed_after(
     agents: &[Agent],
     share: Share,
     prepare: impl FnOnce(&Path),
-) -> (TempDir, FlayerWorkspace, MindProject) {
+) -> (TempDir, WeaverWorkspace, MindProject) {
     let (dir, mut workspace) = workspace();
     let folder = workspace
         .own()
@@ -76,7 +76,7 @@ fn agents(project: &MindProject, name: &str) -> PathBuf {
 }
 
 /// What the ledger records of `deploy` in `collapse`.
-fn targets(workspace: &FlayerWorkspace) -> Vec<Target> {
+fn targets(workspace: &WeaverWorkspace) -> Vec<Target> {
     workspace
         .ledger()
         .unwrap()
@@ -385,7 +385,7 @@ fn removing_the_last_agent_is_refused() {
 }
 
 #[test]
-fn an_edited_copy_in_a_dropped_folder_is_left_and_stops_being_mindflayers() {
+fn an_edited_copy_in_a_dropped_folder_is_left_and_stops_being_mindweavers() {
     let (_dir, workspace, project) = installed(&Agent::ALL, Share::Local);
     let edited = claudes(&project, "deploy").join("SKILL.md");
     fs::write(&edited, skill("deploy", "Ship it, my way")).unwrap();
@@ -546,6 +546,27 @@ fn turning_local_writes_the_gitignore_and_keeps_every_copy_in_place_out_of_git()
     let settings = reopened(&project).settings().unwrap().clone();
     assert_eq!(settings.share, Share::Local);
     assert!(settings.edit_tracked);
+}
+
+/// The `.gitignore` a Mindflayer build gave a local project's `.mind` is
+/// Mindweaver's too, and goes as the one written now does.
+#[test]
+fn turning_shared_removes_the_gitignore_a_mindflayer_build_wrote() {
+    let (_dir, workspace, project) = installed(&Agent::ALL, Share::Local);
+    let ignore = project.root().join(MIND_DIR).join(".gitignore");
+    fs::write(&ignore, mindweaver_core::FLAYER_MIND_IGNORE).unwrap();
+    let change = Change::Share {
+        share: Share::Shared,
+        edit_tracked: false,
+    };
+
+    let plan = reapply::plan(Some(&workspace), &project, &change, &AgentHomes::default()).unwrap();
+    assert_eq!(plan.ignore, Some(Ignore::Remove(ignore.clone())));
+    let applied =
+        reapply::apply(Some(&workspace), &project, &change, &AgentHomes::default()).unwrap();
+
+    assert!(applied.failures.is_empty(), "{:?}", applied.failures);
+    assert!(!ignore.exists());
 }
 
 #[test]
@@ -715,7 +736,7 @@ fn the_record_of_another_workspace_is_never_read_or_written() {
     // A ledger that names nothing in the project stands for a workspace that
     // installed nothing there.
     let elsewhere = TempDir::new().unwrap();
-    let (other, _) = FlayerWorkspace::init(elsewhere.path()).unwrap();
+    let (other, _) = WeaverWorkspace::init(elsewhere.path()).unwrap();
     Ledger::open(other.ledger_path()).unwrap();
 
     let plan = reapply::plan(
@@ -804,7 +825,7 @@ fn setting_targets_moves_each_installation_there_and_out_of_the_agents_folders()
     // No agent reads `.skills` until somebody points it there.
     assert_eq!(
         plan.unreached,
-        [mindflayer_core::Unreached {
+        [mindweaver_core::Unreached {
             kind: Kind::Skill,
             targets: vec![String::from(".skills")],
             agents: Agent::ALL.to_vec(),
@@ -826,7 +847,7 @@ fn setting_targets_moves_each_installation_there_and_out_of_the_agents_folders()
     // Written as the settings spell a folder, at the one version a
     // `settings.toml` holds.
     let settings = reopened(&project).settings().unwrap().clone();
-    assert_eq!(settings.version, mindflayer_core::SETTINGS_TOML_VERSION);
+    assert_eq!(settings.version, mindweaver_core::SETTINGS_TOML_VERSION);
     assert_eq!(
         settings.targets.get(Kind::Skill),
         Some(&[PathBuf::from(".skills")][..])
@@ -883,7 +904,7 @@ fn resetting_targets_moves_copies_back_and_leaves_somebodys_where_it_is_said() {
     );
     let settings = reopened(&project).settings().unwrap().clone();
     assert!(settings.targets.is_empty());
-    assert_eq!(settings.version, mindflayer_core::SETTINGS_TOML_VERSION);
+    assert_eq!(settings.version, mindweaver_core::SETTINGS_TOML_VERSION);
     assert!(!fs::read_to_string(settings_file(&project))
         .unwrap()
         .contains("\n[targets]\n"));
