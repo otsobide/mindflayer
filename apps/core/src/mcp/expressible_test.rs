@@ -371,6 +371,49 @@ fn claude_cannot_be_given_text_it_reads_as_a_reference_where_no_input_stands() {
 }
 
 #[test]
+fn opencode_cannot_be_given_text_it_fills_in_over_its_config_where_no_input_stands() {
+    let name = random::kebab();
+    for (why, substitution) in McpMother::substitutions() {
+        let opening = if substitution.starts_with("{file:") {
+            "{file:"
+        } else {
+            "{env:"
+        };
+        for place in ["command", "args", "env", "cwd", "url", "headers"] {
+            let (text, at) = McpMother::with_text(&name, place, &substitution);
+            // Claude and Codex read it as the text it is.
+            let claude = if place == "cwd" {
+                vec![Inexpressible::WorkingDirectory]
+            } else {
+                vec![]
+            };
+            assert_eq!(
+                by_agent(&text),
+                [
+                    ("claude", claude),
+                    ("codex", vec![]),
+                    (
+                        "opencode",
+                        vec![Inexpressible::TextSubstituted { at, opening }]
+                    )
+                ],
+                "{why} in {place}: {text}"
+            );
+        }
+    }
+    for (why, written) in McpMother::not_substitutions() {
+        for place in ["args", "env"] {
+            let (text, _) = McpMother::with_text(&name, place, &written);
+            assert_eq!(
+                parsed(&text).inexpressible(Agent::OpenCode),
+                [],
+                "{why} in {place}: {text}"
+            );
+        }
+    }
+}
+
+#[test]
 fn a_shape_an_agent_cannot_express_is_nothing_validate_says() {
     let name = random::kebab();
     for text in [
@@ -382,6 +425,7 @@ fn a_shape_an_agent_cannot_express_is_nothing_validate_says() {
         McpMother::sse(&name),
         McpMother::header_read_from(&name, "NPM_TOKEN"),
         McpMother::with_text(&name, "headers", "${NPM_TOKEN}").0,
+        McpMother::with_text(&name, "args", "{env:HOME}").0,
     ] {
         let definition = parsed(&text);
 
@@ -427,6 +471,10 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
         Inexpressible::TextExpanded {
             at: String::from("transport.args[0]"),
         },
+        Inexpressible::TextSubstituted {
+            at: String::from("transport.args[0]"),
+            opening: "{env:",
+        },
         Inexpressible::ExtraRepeated {
             key: String::from("type"),
         },
@@ -456,6 +504,7 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
             ("cwd_unsupported", false),
             ("variable_blanked", true),
             ("text_expanded", true),
+            ("text_substituted", true),
             ("extra_repeated", true),
             ("extra_withheld", true),
         ]

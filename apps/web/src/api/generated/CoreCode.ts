@@ -270,6 +270,7 @@ export type CoreCode =
   | "cwd_unsupported"
   | "variable_blanked"
   | "text_expanded"
+  | "text_substituted"
   | "extra_repeated"
   | "extra_withheld"
   | "migrate_refused"
