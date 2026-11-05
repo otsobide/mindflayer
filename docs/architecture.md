@@ -7488,6 +7488,21 @@ spec runs a change on it. `e2e/log.spec.ts` holds a run from the panel to
 being said there, as it starts, as its line runs and as it ends, with its
 request, and never the token or what the request sent.
 
+The log says where a run's time went among the server's parts, and not
+whether the machine kept all of them waiting: the unload's line had
+written its marker a second in, and took four more to let go of the lock
+and finish, where every read beside it took its usual milliseconds, as
+waiting on a disk shared by a whole suite and two browsers would look.
+So every test that fails keeps how long the machine stalled while it ran
+(`stalls`, in `e2e/panel.ts`), as `pressure.txt` beside the trace: for its
+processors, its memory and its disk, how long at least one task was kept
+waiting for each, and how long every task that would run was, from the
+totals Linux keeps in `/proc/pressure` read as the test's first fixture
+starts and again after its last one stops, so it is the test's own time
+rather than an average of the minutes around it (`stalled`), then each file
+as it read the second time. Nothing on a system without them, where there
+is nothing to read.
+
 ### The README's screenshots
 
 The README's pictures of the panel are taken, never drawn or captured by

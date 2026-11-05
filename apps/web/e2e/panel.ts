@@ -125,8 +125,23 @@ const BUILDERS = { changeable, assignable, updatable, authorable, loadable }
  */
 const HOMED: readonly (keyof typeof BUILDERS)[] = ['loadable']
 
-export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, own: Own, building: keyof typeof BUILDERS }>({
+export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, own: Own, building: keyof typeof BUILDERS, stalls: void }>({
   building: ['changeable', { option: true }],
+
+  // How long the machine stalled while each test ran, kept beside the
+  // trace of one that failed, from its first fixture to its last: what
+  // says whether a run that took seconds waited on the machine rather
+  // than on anything of the panel's (`stalled`).
+  stalls: [async ({}, use, testInfo) => {
+    const before = pressure()
+    const started = Date.now()
+    await use()
+    if (testInfo.status !== testInfo.expectedStatus && Object.keys(before).length > 0) {
+      const path = testInfo.outputPath('pressure.txt')
+      writeFileSync(path, stalled(before, pressure(), Date.now() - started))
+      await testInfo.attach('pressure', { path, contentType: 'text/plain' })
+    }
+  }, { auto: true }],
 
   served: async ({}, use) => {
     await use(served())
@@ -184,6 +199,70 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
 })
 
 export { expect }
+
+/** What Linux says tasks stall on, each in a file of `/proc/pressure`. */
+const RESOURCES = ['cpu', 'memory', 'io'] as const
+
+/** What `/proc/pressure` says of each resource. */
+export type Pressure = Partial<Record<typeof RESOURCES[number], string>>
+
+/**
+ * Each of `/proc/pressure`'s files as it reads now, and none that cannot be
+ * read: none at all on another system, or under a kernel built without it.
+ * Read by any account.
+ */
+export function pressure(): Pressure {
+  const read: Pressure = {}
+  for (const resource of RESOURCES) {
+    try {
+      read[resource] = readFileSync(`/proc/pressure/${resource}`, 'utf8')
+    } catch {
+      // Not there to read, which says nothing of the test.
+    }
+  }
+  return read
+}
+
+/** The microseconds a pressure file's `some` or `full` line says tasks have stalled in all. */
+function total(file: string | undefined, line: 'some' | 'full'): number | undefined {
+  const found = file?.match(new RegExp(String.raw`^${line} .*\btotal=(\d+)\s*$`, 'm'))
+  return found ? Number(found[1]) : undefined
+}
+
+/**
+ * How long tasks stalled on each resource between two readings, `took`
+ * milliseconds apart, as a failed test keeps it in `pressure.txt`: a line
+ * for each, `io: some 4120ms, full 3870ms of 6213ms`, then each file as it
+ * read the second time, its averages over the last ten seconds, minute
+ * and five minutes among them. `some` is how long at least one task was
+ * kept waiting for it, and `full` how long every task that would run was.
+ *
+ * From the totals rather than the averages, so it is the test's own time,
+ * not the minutes around it. An unload once took five and a half seconds
+ * on CI, whose runner a whole suite and two browsers share, while reads
+ * beside it took their usual milliseconds (#240): how long its disk kept
+ * writers waiting then is what would have said whether the machine was
+ * the cause.
+ */
+export function stalled(before: Pressure, after: Pressure, took: number): string {
+  const lines: string[] = []
+  for (const resource of RESOURCES) {
+    const said = (['some', 'full'] as const).flatMap((line) => {
+      const from = total(before[resource], line)
+      const to = total(after[resource], line)
+      return from === undefined || to === undefined ? [] : [`${line} ${Math.round((to - from) / 1000)}ms`]
+    })
+    if (said.length > 0) {
+      lines.push(`${resource}: ${said.join(', ')} of ${took}ms`)
+    }
+  }
+  for (const resource of RESOURCES) {
+    if (after[resource] !== undefined) {
+      lines.push('', `/proc/pressure/${resource}:`, after[resource].trimEnd())
+    }
+  }
+  return `${lines.join('\n')}\n`
+}
 
 /**
  * Keep what a failed test's own `mindweaver ui` said beside its trace, as
