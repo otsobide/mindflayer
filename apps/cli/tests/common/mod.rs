@@ -697,13 +697,19 @@ pub fn press_and_run(app: &mut App, code: KeyCode) -> Option<Task> {
 }
 
 pub fn tui_drawn(app: &App) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(110, 30)).unwrap();
+    tui_drawn_at(app, 110, 30)
+}
+
+/// The screen drawn into a terminal `width` columns wide and `height` rows
+/// high, a row a line.
+pub fn tui_drawn_at(app: &App, width: u16, height: u16) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal.draw(|frame| tui::ui::draw(app, frame)).unwrap();
     terminal
         .backend()
         .buffer()
         .content()
-        .chunks(110)
+        .chunks(usize::from(width))
         .map(|line| line.iter().map(|cell| cell.symbol()).collect::<String>())
         .collect::<Vec<_>>()
         .join("\n")
