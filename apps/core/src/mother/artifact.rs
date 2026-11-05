@@ -2,7 +2,10 @@
 //! rule's markdown and an MCP server's definition.
 
 use crate::agent::Agent;
+use crate::mcp::{Address, Given, Program, Repeated};
 use crate::mother::random;
+use crate::mother::value::VariableNameMother;
+use crate::value::{InputName, VariableName};
 
 /// Makes the text of a skill's `SKILL.md`.
 pub struct SkillMother;
@@ -621,6 +624,209 @@ impl McpMother {
             ),
             ("a path", String::from("/usr/local/share/sk-tools")),
             ("a token made of an input", String::from("ghp_{token}")),
+        ]
+    }
+
+    /// What `add` is told of a program, every option of one given: an
+    /// argument led by a dash, a setting, a secret passed on to its
+    /// environment under its variable's name and an argument read from a
+    /// variable, each read from a variable drawn afresh.
+    pub fn given_program() -> Given {
+        Given::Program(Program {
+            command: String::from("npx"),
+            args: vec![
+                String::from("-y"),
+                String::from("@example/server"),
+                String::from("--workspace"),
+            ],
+            env: vec![(String::from("LOG_LEVEL"), String::from("info"))],
+            secret_env: vec![VariableNameMother::random()],
+            arg_env: vec![VariableNameMother::random()],
+        })
+    }
+
+    /// What `add` is told of an address, over server-sent events when
+    /// `events` and streamable HTTP otherwise, every option of one given: a
+    /// header written as it is, one whose whole value is a secret, a bearer
+    /// token, and a part of the address read from a variable, each read
+    /// from a variable drawn afresh.
+    pub fn given_address(events: bool) -> Given {
+        Given::Address(Address {
+            url: String::from("https://{tenant}.example.com/mcp"),
+            events,
+            headers: vec![(String::from("X-Client"), String::from("mindweaver"))],
+            secret_headers: vec![(String::from("X-Api-Key"), VariableNameMother::random())],
+            bearer: Some(VariableNameMother::random()),
+            url_vars: vec![(InputName::from("tenant"), VariableNameMother::random())],
+        })
+    }
+
+    /// What `add` is told of any of the three transports.
+    pub fn given() -> Given {
+        match random::between(0, 2) {
+            0 => Self::given_program(),
+            1 => Self::given_address(false),
+            _ => Self::given_address(true),
+        }
+    }
+
+    /// What `add` is told of a server, `token` given as it is where `place`
+    /// says (`arg`, `env` or `header`, a value written as typed; `url`, in
+    /// the address; or `secret_env`, pasted where a secret's variable is
+    /// named), beside where `validate` says the definition holds it.
+    pub fn given_with_literal(place: &str, token: &str) -> (Given, String) {
+        let Given::Program(mut program) = Self::given_program() else {
+            unreachable!("a program is given as one");
+        };
+        let Given::Address(mut address) = Self::given_address(false) else {
+            unreachable!("an address is given as one");
+        };
+        match place {
+            "arg" => {
+                program.args.push(token.to_owned());
+                (Given::Program(program), String::from("transport.args[3]"))
+            }
+            "env" => {
+                program
+                    .env
+                    .push((String::from("SERVICE_KEY"), token.to_owned()));
+                (
+                    Given::Program(program),
+                    String::from("transport.env.SERVICE_KEY"),
+                )
+            }
+            "header" => {
+                address
+                    .headers
+                    .push((String::from("X-Service-Key"), token.to_owned()));
+                (
+                    Given::Address(address),
+                    String::from("transport.headers.X-Service-Key"),
+                )
+            }
+            "url" => {
+                address.url.push_str(&format!("?key={token}"));
+                (Given::Address(address), String::from("transport.url"))
+            }
+            "secret_env" => {
+                program.secret_env.push(VariableName::from(token));
+                (Given::Program(program), String::from("inputs[1].name"))
+            }
+            other => panic!("{other} is no place `add` writes a value"),
+        }
+    }
+
+    /// What `add` is told of a server that writes a definition `validate`
+    /// calls invalid, each beside why and the code it says it with: none a
+    /// rule of `add`'s own.
+    pub fn given_unfit() -> Vec<(&'static str, Given, &'static str)> {
+        let Given::Program(program) = Self::given_program() else {
+            unreachable!("a program is given as one");
+        };
+        let Given::Address(address) = Self::given_address(false) else {
+            unreachable!("an address is given as one");
+        };
+        // A hyphen, which an input's name may hold and a variable's may not,
+        // so the one name is wrong only as the variable.
+        let unportable = format!("{}-{}", random::word(), random::word()).to_ascii_uppercase();
+        let again = program.secret_env[0].clone();
+        vec![
+            (
+                "a program named by nothing",
+                Given::Program(Program {
+                    command: String::new(),
+                    ..program.clone()
+                }),
+                "transport_incomplete",
+            ),
+            (
+                "an address that is nowhere",
+                Given::Address(Address {
+                    url: String::new(),
+                    url_vars: Vec::new(),
+                    ..address.clone()
+                }),
+                "transport_incomplete",
+            ),
+            (
+                "a part of the address the address does not write",
+                Given::Address(Address {
+                    url: String::from("https://example.com/mcp"),
+                    ..address.clone()
+                }),
+                "input_unreferenced",
+            ),
+            (
+                "a variable no agent can refer to",
+                Given::Program(Program {
+                    secret_env: vec![VariableName::from(unportable)],
+                    ..program.clone()
+                }),
+                "env_var_malformed",
+            ),
+            (
+                "one variable read twice",
+                Given::Program(Program {
+                    arg_env: vec![again],
+                    ..program
+                }),
+                "input_repeated",
+            ),
+        ]
+    }
+
+    /// What `add` is told of a server that gives one key of a transport's
+    /// table twice, which no TOML file holds, each beside why and the key
+    /// found again.
+    pub fn given_repeating() -> Vec<(&'static str, Given, Repeated)> {
+        let Given::Program(program) = Self::given_program() else {
+            unreachable!("a program is given as one");
+        };
+        let Given::Address(address) = Self::given_address(false) else {
+            unreachable!("an address is given as one");
+        };
+        let variable = VariableNameMother::random();
+        let repeated = |table, key: &str| Repeated {
+            table,
+            key: key.to_owned(),
+        };
+        vec![
+            (
+                "one setting written twice",
+                Given::Program(Program {
+                    env: vec![
+                        (String::from("LOG_LEVEL"), String::from("info")),
+                        (String::from("LOG_LEVEL"), String::from("debug")),
+                    ],
+                    ..program.clone()
+                }),
+                repeated("env", "LOG_LEVEL"),
+            ),
+            (
+                "a setting written and read from a variable",
+                Given::Program(Program {
+                    env: vec![(variable.to_string(), String::from("1"))],
+                    secret_env: vec![variable.clone()],
+                    ..program
+                }),
+                repeated("env", variable.as_str()),
+            ),
+            (
+                "a header written and read from a variable",
+                Given::Address(Address {
+                    headers: vec![(String::from("X-Api-Key"), String::from("x"))],
+                    ..address.clone()
+                }),
+                repeated("headers", "X-Api-Key"),
+            ),
+            (
+                "an authorization written beside a bearer token",
+                Given::Address(Address {
+                    headers: vec![(String::from("Authorization"), String::from("Basic x"))],
+                    ..address
+                }),
+                repeated("headers", "Authorization"),
+            ),
         ]
     }
 

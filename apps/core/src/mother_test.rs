@@ -195,6 +195,60 @@ fn a_definitions_named_shapes_break_the_rule_they_are_named_for() {
 }
 
 #[test]
+fn what_add_is_told_of_a_server_writes_a_definition_with_nothing_wrong() {
+    use crate::mcp::McpDefinition;
+
+    for _ in 0..DRAWS {
+        let given = McpMother::given();
+        let name = McpMother::name();
+
+        let text = given.text(&name, &SkillMother::description());
+
+        assert_eq!(given.repeated(), None, "{given:?}");
+        let definition = McpDefinition::parse(&text).unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(definition.name, name.as_str());
+        assert_eq!(definition.issues(), [], "{text}");
+    }
+}
+
+#[test]
+fn what_add_is_told_in_a_shape_named_for_a_rule_breaks_that_rule() {
+    use crate::mcp::McpDefinition;
+
+    let read = |given: &crate::mcp::Given| {
+        McpDefinition::parse(&given.text(&McpMother::name(), &SkillMother::description()))
+            .unwrap()
+            .issues()
+    };
+    for (why, given, code) in McpMother::given_unfit() {
+        let issues = read(&given);
+        assert_eq!(
+            issues.iter().map(ValidationIssue::code).collect::<Vec<_>>(),
+            [code],
+            "{why}: {issues:?}"
+        );
+    }
+    for (prefix, token) in McpMother::tokens() {
+        for place in ["arg", "env", "header", "url", "secret_env"] {
+            let (given, at) = McpMother::given_with_literal(place, &token);
+            let issues = read(&given);
+            assert_eq!(
+                issues.first(),
+                Some(&ValidationIssue::SecretLiteral {
+                    at,
+                    prefix: prefix.to_owned()
+                }),
+                "{place}: {issues:?}"
+            );
+            assert!(
+                issues.iter().all(|issue| issue.code() == "secret_literal"),
+                "{place}: {issues:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn input_and_variable_names_are_drawn_as_they_are_usually_written() {
     for _ in 0..DRAWS {
         let input = InputNameMother::random();
