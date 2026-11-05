@@ -363,8 +363,8 @@ impl McpMother {
     }
 
     /// The program of [`stdio`](Self::stdio), its secret the whole value of
-    /// the environment variable named as the one it is read from is: what
-    /// Codex passes on to a program (`env_vars`).
+    /// an environment variable named as the one it is read from: what Codex
+    /// passes on to a program (`env_vars`).
     pub fn whole_secret_env(name: &str) -> String {
         Self::stdio(name).replacen(
             "API_KEY = \"{api_key}\"",

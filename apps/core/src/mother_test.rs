@@ -564,6 +564,31 @@ fn every_server_name_a_mother_draws_breaks_or_keeps_the_rule_it_is_named_for() {
 }
 
 #[test]
+fn every_definition_named_for_what_codex_is_given_whole_holds_what_it_says_and_is_given_it() {
+    use crate::mcp::McpDefinition;
+
+    let name = McpMother::name();
+    for (text, inputs) in [
+        (McpMother::program_for_codex(&name), vec!["api_key"]),
+        (McpMother::address_for_codex(&name), vec!["token"]),
+        (McpMother::whole_header_for_codex(&name), vec!["token"]),
+        (McpMother::plain_program(&name), vec![]),
+        (McpMother::plain_address(&name), vec![]),
+    ] {
+        let definition = McpDefinition::parse(&text).unwrap();
+        let declared: Vec<&str> = definition
+            .inputs
+            .iter()
+            .map(|input| input.name.as_str())
+            .collect();
+        assert_eq!(declared, inputs, "{text}");
+        assert_eq!(definition.issues(), [], "{text}");
+        let entry = crate::codex_mcp::entry(&definition);
+        assert!(entry.is_ok(), "{entry:?}\n{text}");
+    }
+}
+
+#[test]
 fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so() {
     use crate::mcp::{Inexpressible, McpDefinition};
 
