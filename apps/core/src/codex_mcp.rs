@@ -90,9 +90,10 @@ use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
 use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
+use crate::hash;
 use crate::install;
 use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
-use crate::value::{ArtifactName, InputName, VariableName};
+use crate::value::{ArtifactName, ContentHash, InputName, VariableName};
 
 /// Where Codex reads a project's servers, from its root.
 pub const FILE: &str = ".codex/config.toml";
@@ -133,6 +134,13 @@ impl Entry {
     /// as tables: the same server however it is laid out.
     pub fn canonical(&self) -> String {
         self.value.canonical()
+    }
+
+    /// The entry's fingerprint, [`hash::fingerprint`] of its
+    /// [canonical form](Self::canonical): what the ledger keeps of it once
+    /// it is written, and what one an agent's file holds is told by.
+    pub fn fingerprint(&self) -> ContentHash {
+        hash::fingerprint(&self.canonical())
     }
 }
 

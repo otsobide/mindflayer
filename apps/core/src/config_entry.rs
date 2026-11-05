@@ -33,10 +33,11 @@
 
 use std::fmt::{self, Write as _};
 
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::code::codes;
+use crate::hash;
+use crate::value::ContentHash;
 
 mod file;
 mod json;
@@ -437,8 +438,10 @@ impl Value {
         text
     }
 
-    /// What the ledger keeps of an entry Mindweaver wrote: the SHA-256 of its
-    /// [canonical form](Value::canonical), as 64 lowercase hex digits.
+    /// What the ledger keeps of an entry Mindweaver wrote: the
+    /// [`crate::hash::fingerprint`] of its [canonical form](Value::canonical),
+    /// the recipe's one definition, which a renderer's entry is fingerprinted
+    /// by too.
     ///
     /// The same whatever the file does to the entry's layout: its indentation,
     /// the order of its keys, whether TOML writes it as a table or inline,
@@ -449,13 +452,8 @@ impl Value {
     /// A digest rather than the canonical text itself: every row of the
     /// ledger is then as long as every other, as a copy's
     /// [`crate::hash::tree`] is, however long the entry.
-    pub fn fingerprint(&self) -> String {
-        let mut hex = String::with_capacity(64);
-        for byte in Sha256::digest(self.canonical().as_bytes()) {
-            // Writing to a `String` cannot fail.
-            let _ = write!(hex, "{byte:02x}");
-        }
-        hex
+    pub fn fingerprint(&self) -> ContentHash {
+        hash::fingerprint(&self.canonical())
     }
 }
 

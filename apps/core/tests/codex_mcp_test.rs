@@ -300,7 +300,7 @@ fn an_entry_written_again_in_another_layout_is_still_the_one_mindweaver_wrote() 
     let key = ["mcp_servers", name.as_str()];
 
     let held = file.get(&key).unwrap().unwrap();
-    assert_eq!(held.fingerprint(), rendered.entry.value.fingerprint());
+    assert_eq!(held.fingerprint(), rendered.entry.fingerprint());
 
     // As `codex mcp add` or a person might write it again: inline, its keys
     // in another order, an integer written as a float.
@@ -312,7 +312,7 @@ fn an_entry_written_again_in_another_layout_is_still_the_one_mindweaver_wrote() 
     write(root.path(), &again);
     let held = file.get(&key).unwrap().unwrap();
     assert_eq!(held.canonical(), rendered.entry.canonical());
-    assert_eq!(held.fingerprint(), rendered.entry.value.fingerprint());
+    assert_eq!(held.fingerprint(), rendered.entry.fingerprint());
 
     // So rendering it again leaves their layout as it is.
     let rendered = render(root.path(), &McpMother::program_for_codex(&name));
@@ -322,7 +322,7 @@ fn an_entry_written_again_in_another_layout_is_still_the_one_mindweaver_wrote() 
     // And a value changed is another entry.
     write(root.path(), &again.replacen("\"info\"", "\"debug\"", 1));
     let held = file.get(&key).unwrap().unwrap();
-    assert_ne!(held.fingerprint(), rendered.entry.value.fingerprint());
+    assert_ne!(held.fingerprint(), rendered.entry.fingerprint());
 }
 
 #[test]

@@ -9248,8 +9248,11 @@ again over an entry somebody reformatted leaves their layout alone.
 
 An entry can carry no mark of its own: OpenCode refuses keys it does not know,
 `codex --strict-config` fails on them, and `.mcp.json` allows no comments. So
-what the ledger will keep of an entry Mindweaver wrote (#93) is its
-fingerprint, `Value::fingerprint`: the SHA-256 of its canonical JSON form, as
+what the ledger will keep of an entry Mindweaver wrote (#93) is its fingerprint,
+`hash::fingerprint`, the recipe's one definition beside a copy's `hash::tree`
+and a file's `hash::bytes`: the SHA-256 of the entry's canonical JSON form,
+which each renderer's `Entry::fingerprint` takes of the entry it makes and
+`Value::fingerprint` of one a file holds, as
 [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785), the JSON Canonicalization
 Scheme, writes it. Members sorted by UTF-16 code units at every depth, no
 whitespace, strings escaped only where JSON must be, and numbers written as

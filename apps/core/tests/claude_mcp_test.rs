@@ -8,7 +8,8 @@ use std::fs;
 use std::path::Path;
 
 use mindweaver_core::claude_mcp::{self, ClaudeMcpError, FILE, MAX_BYTES};
-use mindweaver_core::config_entry::Written;
+use mindweaver_core::config_entry::{ConfigFile, Format, Written};
+use mindweaver_core::hash;
 use mindweaver_core::mother::{random, McpMother};
 use mindweaver_core::McpDefinition;
 use tempfile::TempDir;
@@ -282,6 +283,24 @@ fn a_server_replaced_where_it_stands_leaves_the_rest_as_it_was() {
     let rendered = render(root.path(), &McpMother::sse(&name));
     assert_eq!(rendered.written, Written::Unchanged);
     assert_eq!(read(root.path()), after);
+}
+
+#[test]
+fn the_entry_written_is_fingerprinted_as_the_file_holds_it() {
+    let root = TempDir::new().unwrap();
+    let name = McpMother::name();
+    let rendered = render(root.path(), &McpMother::stdio(&name));
+    let file = ConfigFile::new(root.path(), FILE, Format::Json).unwrap();
+    let held = file
+        .get(&[claude_mcp::SERVERS, name.as_str()])
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(held.fingerprint(), rendered.entry.fingerprint());
+    assert_eq!(
+        rendered.entry.fingerprint(),
+        hash::fingerprint(&rendered.entry.canonical())
+    );
 }
 
 #[test]
