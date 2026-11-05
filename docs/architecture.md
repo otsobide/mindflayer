@@ -10186,9 +10186,9 @@ variant, as a kind or an agent does.
 What counts as an agent's is a name at the root, never what a file holds:
 `Agent::reads_at_root` gives, for each agent, the folder each place it reads
 a kind from sits in, taken from `Agent::reads` (`.claude` for
-`.claude/skills`), its instruction files, and the file
-[D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent) puts its project's
-MCP servers in, each resting on a fact in
+`.claude/skills`), its instruction files, and each file
+[D-10](#d-10-an-mcp-server-is-one-owned-entry-per-agent) may put its
+project's MCP servers in, each resting on a fact in
 [docs/agents.md](agents.md#what-says-an-agent-works-in-a-project). It lives
 with the agent rather than in the scan or a front end, behind a match on
 every agent with no wildcard, so an agent added, or a folder an agent is

@@ -1360,8 +1360,8 @@ the five `PROBE_MCP_*` values above, for Claude's
 reads at its root above one holding nothing (#58), by name alone:
 `Agent::reads_at_root` in `apps/core/src/agent.rs`. Each name is the folder
 of a place the tables above say the agent reads a kind from, an instruction
-file they list, or the file [D-10](architecture.md#d-10-an-mcp-server-is-one-owned-entry-per-agent)
-puts the agent's project MCP servers in. The fallback for every docs-only row
+file they list, or a file [D-10](architecture.md#d-10-an-mcp-server-is-one-owned-entry-per-agent)
+may put the agent's project MCP servers in. The fallback for every docs-only row
 is the same: a name wrongly counted ranks a repository a little high, and
 one missed ranks it a little low, but the suggestion still lists every
 repository it finds, so neither hides one.
@@ -1369,11 +1369,11 @@ repository it finds, so neither hides one.
 | Agent | Names at a project's root | Mark | Source, and the fallback |
 |---|---|---|---|
 | Claude Code | `.claude`, `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` | verified | [Skills](#skills) and [rules](#rules-and-instruction-files) above: `.claude/skills`, the instruction files, and `AGENTS.md` read natively when no `CLAUDE.md` is there. |
-| Claude Code | `.mcp.json`, its project's MCP servers | docs-only | [mcp](https://code.claude.com/docs/en/mcp); D-10 writes into it. |
+| Claude Code | `.mcp.json`, its project's MCP servers | verified | [Claude Code's `.mcp.json`](#claude-codes-mcpjson) above: Claude Code 2.1.318 started every server it named (`claude-mcp`); D-10 writes into it. |
 | Codex | `.agents`, `AGENTS.md`, `AGENTS.override.md` | docs-only | [Skills](#skills-1) and [rules](#rules) above. |
 | Codex | `.codex`, which holds a trusted project's `config.toml` and `skills` | docs-only | [config-reference](https://learn.chatgpt.com/docs/config-file/config-reference), and `.codex/skills` above; D-10 writes into `.codex/config.toml`. Counted though `.codex/skills` is never targeted: a folder of Codex's own shows Codex is used there, trusted or not. |
 | OpenCode | `.agents`, `.claude`, `.opencode`, `AGENTS.md`, and `CLAUDE.md`, which V1 reads when there is no `AGENTS.md` | docs-only | [Skills](#skills-2) and [rules](#rules-1) above. |
-| OpenCode | `opencode.json`, its project's configuration | docs-only | [config](https://opencode.ai/docs/config/); D-10 writes into it, as JSONC. |
+| OpenCode | `opencode.json` and `opencode.jsonc`, its project's configuration, whose two in `.opencode` count as `.opencode` | docs-only | [config](https://opencode.ai/docs/config/), and [OpenCode's `opencode.json`](#opencodes-opencodejson) above; D-10 writes into the first of the four there is, as JSONC, or a new `opencode.json`. |
 
 ## Facts the roadmap cites
 

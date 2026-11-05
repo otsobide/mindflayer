@@ -618,7 +618,8 @@ not open); then a git repository holding something an agent reads at its
 root, named on the row; then any other repository. What counts as an agent's
 is what Claude Code, Codex and OpenCode read there: `AGENTS.md`,
 `AGENTS.override.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.mcp.json`,
-`opencode.json`, `.claude`, `.agents`, `.codex` and `.opencode`
+`opencode.json`, `opencode.jsonc`, `.claude`, `.agents`, `.codex` and
+`.opencode`
 ([where each agent reads](agents.md#what-says-an-agent-works-in-a-project)).
 It still links nothing and makes nothing a project: a suggestion is a line
 to type, or a row to tick on [the minds screen](#the-tui), which lists them
