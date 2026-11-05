@@ -10724,15 +10724,20 @@ it once as it closes.
   document in JavaScript, so it is slower than a browser at the same work
   and says nothing of painting. The browser suite times nothing; a bound
   there would be one more number a runner's load moves.
-- **The unload's dialog once stayed open after its run.** In one run of
-  CI's Chromium, `e2e/loads.spec.ts` found the dialog still drawn five
-  seconds after Run was clicked on an unload (#238). Nothing on the page
-  the spec comes from matches what it acts on there, and nearly six
-  hundred runs here, on the debug and the release binaries, with the
-  browser's CPU throttled and with the whole run held to two cores, never
-  showed it again, so nothing was changed for it: whether the click was
-  lost or the run's end never reached the dialog waits for the trace of a
-  failing run, which CI keeps.
+- **A dialog was once still drawn after an unload's run.** In one run of
+  CI's Chromium, `e2e/loads.spec.ts` found a dialog visible five seconds
+  after Run was clicked on an unload (#238). Its `getByRole('dialog')`
+  matches the warnings drawer as well as the command dialog, and the
+  drawer opens by itself, once the dialog has closed, on a run that
+  failed or said a line with a code, so the one dialog it found may have
+  been either. Nothing on the page the spec comes from matches what it
+  acts on there, and nearly six hundred runs here, on the debug and the
+  release binaries, with the browser's CPU throttled and with the whole
+  run held to two cores, never showed it again, so nothing was changed
+  for it: whether the click was lost, the run's end never reached the
+  dialog, or the unload failed or said a coded line and the drawer is
+  what stayed waits for a failing run's trace, which CI keeps, and whose
+  snapshot of the failing step shows which dialog it was.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has
