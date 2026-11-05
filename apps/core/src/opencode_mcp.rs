@@ -34,22 +34,54 @@
 //! input stands, `{env:` or `{file:` written as it is (`text_substituted`),
 //! refuse the entry.
 //!
+//! The file is the first of `opencode.json`, `opencode.jsonc`,
+//! `.opencode/opencode.json` and `.opencode/opencode.jsonc` there is at the
+//! project's root ([`FILES`]), or `opencode.json`, made with `create_new`,
+//! when none is. Each is read as JSONC ([`Format::Jsonc`]), as OpenCode
+//! reads every one of them, up to [`MAX_BYTES`], and its comments and
+//! trailing commas are kept with every other byte outside the entry. The
+//! file goes with its last server only when the caller says Mindweaver made
+//! it and nothing else is left in it, a comment somebody wrote included.
+//!
 //! Nothing here knows of the ledger. Whether an entry of the name is
 //! Mindweaver's to replace or take out, and whether Mindweaver made the
 //! file, are the caller's, as its record says (#93, #94); and the caller
-//! holds the workspace's lock, as one calling
-//! [`ConfigFile`](crate::config_entry::ConfigFile) does.
+//! holds the workspace's lock, as one calling [`ConfigFile`] does.
 
 use std::collections::BTreeMap;
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
 use crate::agent::Agent;
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
-use crate::config_entry::Value;
+use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
 use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
 use crate::value::{ArtifactName, InputName, VariableName};
+
+/// Where OpenCode reads a project's config from its root, in the order one
+/// is chosen: the first of them there is the one written into.
+pub const FILES: [&str; 4] = [
+    "opencode.json",
+    "opencode.jsonc",
+    ".opencode/opencode.json",
+    ".opencode/opencode.jsonc",
+];
+
+/// The one of [`FILES`] made when none of them is there.
+pub const FILE: &str = FILES[0];
+
+/// The most a file of [`FILES`] is read for: 2 MiB, as Claude's
+/// `.mcp.json` is.
+///
+/// A project's servers and the settings beside them come to a few KiB, so
+/// a file past this is not one somebody keeps them in, and it would be
+/// held in memory whole, as text, as a tree of every byte and as what an
+/// edit is checked against.
+pub const MAX_BYTES: u64 = 2 * 1024 * 1024;
 
 /// The object in OpenCode's config that holds its servers, in either shape.
 pub const MCP: &str = "mcp";
@@ -231,6 +263,134 @@ pub(crate) const fn keys(kind: TransportType) -> &'static [&'static str] {
     }
 }
 
+/// What [`render`] did.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rendered {
+    /// The one of [`FILES`] written into.
+    pub file: PathBuf,
+    /// [`Written::Created`] when none of [`FILES`] was there and [`FILE`]
+    /// is made now, which the caller keeps, to hand back to [`remove`] as
+    /// `created`.
+    pub written: Written,
+    pub entry: Entry,
+}
+
+/// Write `definition`'s entry into the first of [`FILES`] there is at
+/// `root`, a project's root, in place of one of the same name or after the
+/// servers already there, and make [`FILE`] when none of them is there yet.
+///
+/// The entry is made first ([`entry`]), so a definition refused reads and
+/// writes nothing. The file is read as JSONC, as OpenCode reads every one
+/// of them, up to [`MAX_BYTES`], and written through [`ConfigFile`], which
+/// keeps every byte outside the entry, comments and trailing commas
+/// included, makes a new file with `create_new` and leaves one that
+/// already holds the entry as it is.
+pub fn render(root: &Path, definition: &McpDefinition) -> Result<Rendered, OpenCodeMcpError> {
+    let given = entry(definition, Shape::V2)?;
+    let (file, _) = config(root)?;
+    let key = given.shape.key(given.name.as_str());
+    let edit = match file.get(&key)? {
+        None => Edit::Insert(given.value.clone()),
+        Some(_) => Edit::Replace(given.value.clone()),
+    };
+    let written = file.edit(&key, &edit)?;
+    Ok(Rendered {
+        file: file.path(),
+        written,
+        entry: given,
+    })
+}
+
+/// Take the server keyed `name` out of the first of [`FILES`] there is at
+/// `root`, every other byte as it was, and take the file away with it when
+/// `created`, that Mindweaver made it, and nothing else is left in it: no
+/// other server, nothing beside them, and no comment ([`holds_only`]).
+///
+/// [`Written::Removed`] when the file went, [`Written::Changed`] when the
+/// server did and the file stays, and [`Written::Unchanged`] when there was
+/// no such server, nor a file to take. A file Mindweaver made that somebody
+/// has written in since is theirs too, and stays; and only [`FILE`] is ever
+/// one Mindweaver made, so another of [`FILES`] chosen in its place, once it
+/// is gone, stays whatever it holds. `.opencode` is never taken away.
+pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, OpenCodeMcpError> {
+    let (file, route) = config(root)?;
+    let key = Shape::V2.key(name);
+    // Taken whole when the server is all it holds, rather than written
+    // without it first only to be taken away.
+    if created && route == FILE {
+        let taken = file.take(|text, _| holds_only(text, &key))?;
+        if taken == Written::Removed {
+            return Ok(taken);
+        }
+    }
+    if file.get(&key)?.is_none() {
+        return Ok(Written::Unchanged);
+    }
+    Ok(file.edit(&key, &Edit::Remove)?)
+}
+
+/// The first of [`FILES`] there is at `root`, or [`FILE`] when none is,
+/// read as JSONC up to [`MAX_BYTES`], beside its route.
+///
+/// JSONC whichever it is, `.json` too: OpenCode reads each of them with
+/// one JSONC parser, comments and trailing commas and all (its config
+/// docs), so a `.json` holding a comment is a file it loads, which strict
+/// JSON, as Claude's `.mcp.json` is read, would refuse. A file made is
+/// strict JSON all the same, since nothing written into it is a comment.
+fn config(root: &Path) -> Result<(ConfigFile, &'static str), OpenCodeMcpError> {
+    let route = chosen(root)?;
+    Ok((
+        ConfigFile::new(root, route, Format::Jsonc)?.capped(MAX_BYTES),
+        route,
+    ))
+}
+
+/// The first of [`FILES`] there is at `root`, as the issue (#92) orders
+/// them, or [`FILE`] when none is.
+///
+/// Whatever is there counts, a link or a folder too, so that the file's
+/// route refuses it ([`ConfigFile`]) rather than a server being written
+/// into another beside it. A `.opencode` that is no folder holds none of
+/// them, as OpenCode finds none in it.
+fn chosen(root: &Path) -> Result<&'static str, OpenCodeMcpError> {
+    for route in FILES {
+        let path = root.join(route);
+        match fs::symlink_metadata(&path) {
+            Ok(_) => return Ok(route),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+                ) => {}
+            Err(source) => return Err(FileError::Read { path, source }.into()),
+        }
+    }
+    Ok(FILE)
+}
+
+/// Whether `text` holds the server at `key` and nothing else, or not even
+/// that: what taking it out of the text leaves is the objects on the way
+/// to it, empty, and no comment.
+///
+/// Asked of what is left, as `codex_mcp` asks its TOML, rather than of the
+/// document alone, as `claude_mcp` asks its strict JSON
+/// ([`config_entry::holds_only`]), since JSONC has comments and the
+/// document holds none: one somebody wrote above the server or anywhere
+/// else outside it is something, and taking the server out keeps it
+/// ([`config_entry::jsonc_commented`]). What the server's own lines hold
+/// goes with it, as it does when the file stays.
+fn holds_only(text: &str, key: &[&str]) -> bool {
+    let left = match config_entry::edit(Format::Jsonc, text, key, &Edit::Remove) {
+        Ok(left) => left,
+        Err(EntryError::Missing { .. }) => text.to_owned(),
+        // Nothing else an edit refuses is a file holding the server alone.
+        Err(_) => return false,
+    };
+    !config_entry::jsonc_commented(&left)
+        && config_entry::document(Format::Jsonc, &left)
+            .is_ok_and(|document| config_entry::holds_only(&document, key))
+}
+
 /// What is said of an entry written all the same.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Warning {
@@ -265,6 +425,8 @@ pub enum OpenCodeMcpError {
     Inexpressible { name: String, shape: Inexpressible },
     #[error("`{name}` cannot be given to OpenCode: input `{input}` is read from no environment variable, and its entry could be given it only as its value")]
     InputUnread { name: String, input: InputName },
+    #[error(transparent)]
+    File(#[from] FileError),
 }
 
 codes!(OpenCodeMcpError {
@@ -272,6 +434,7 @@ codes!(OpenCodeMcpError {
     Self::InputUnread { .. } => "opencode_mcp_input_unread",
 } carried {
     Self::Inexpressible { shape, .. } => shape,
+    Self::File(error) => error,
 });
 
 /// `text` with each placeholder of an input in `read` written as
