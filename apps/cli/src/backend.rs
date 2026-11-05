@@ -1226,6 +1226,7 @@ impl Absence for LifecycleError {
             LifecycleError::NotFound { .. } => true,
             LifecycleError::Workspace(error) => error.absent(),
             LifecycleError::Received { .. }
+            | LifecycleError::ReceivedServer { .. }
             | LifecycleError::NotAuthored { .. }
             | LifecycleError::Ambiguous { .. }
             | LifecycleError::Name { .. }

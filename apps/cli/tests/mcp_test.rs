@@ -952,6 +952,41 @@ fn a_server_is_installed_by_a_name_qualified_as_one_and_not_typed_bare() {
         .contains("github"));
 }
 
+/// A server a project received is entries in its agents' config files,
+/// never a definition the project keeps (D-23): `rename`, `edit` and
+/// `remove` aimed at one are refused, saying what changes it instead.
+#[test]
+fn a_change_aimed_at_a_server_the_project_received_is_refused_with_what_to_do_instead() {
+    let dir = library();
+    let app = dir.path().join("app");
+    new_project(&app);
+    weaver(dir.path(), &["link", "app"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "app", "mcp:github"]).unwrap();
+    let before = fs::read_to_string(app.join(".mcp.json")).unwrap();
+
+    for line in [
+        &["rename", "mcp:github", "octocat"][..],
+        &["remove", "mcp:github", "--yes"],
+        &["edit", "mcp:github"],
+    ] {
+        let refused = mind(&app, line).unwrap_err();
+
+        assert_eq!(refused.error.code(), "change_received_mcp", "{line:?}");
+        assert_eq!(
+            refused.error.to_string(),
+            "`mcp:github` is an MCP server app received, an entry in its agents' config files \
+             written from the definition it was installed from rather than kept in it, so it is \
+             not changed from here: uninstall it, or change its definition in the library it \
+             came from and update",
+            "{line:?}"
+        );
+    }
+    assert_eq!(fs::read_to_string(app.join(".mcp.json")).unwrap(), before);
+    // Typed bare, the name is found received as well.
+    let bare = mind(&app, &["rename", "github", "octocat"]).unwrap_err();
+    assert_eq!(bare.error.code(), "change_received_mcp");
+}
+
 #[test]
 fn a_project_an_older_mind_init_made_keeps_no_servers_and_says_how_to_keep_some() {
     let dir = TempDir::new().unwrap();

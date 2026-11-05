@@ -13,11 +13,12 @@ use mindweaver_core::install::{
     self, Edits, InstallError, Installation, Installed, Removed, Standing,
 };
 use mindweaver_core::ledger::InstallRecord;
+use mindweaver_core::lifecycle::{self, LifecycleError};
 use mindweaver_core::mother::McpMother;
 use mindweaver_core::update::{self, Step};
 use mindweaver_core::{
     claude_mcp, codex_mcp, exclude, opencode_mcp, Agent, AgentHomes, Directories, Kind, Ledger,
-    McpDefinition, MindProject, Share, WeaverWorkspace,
+    McpDefinition, MindProject, Reference, Share, WeaverWorkspace,
 };
 use tempfile::TempDir;
 
@@ -739,4 +740,41 @@ fn a_server_nothing_offers_any_more_is_said_by_an_update_and_left() {
     assert!(orphaned.done.is_none());
     assert_eq!(fixture.files(), before);
     assert!(fixture.record().is_some());
+}
+
+#[test]
+fn a_change_aimed_at_a_server_the_project_received_is_refused_as_received() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+    fixture.install();
+    let find = |workspace: Option<&WeaverWorkspace>, typed: &str| {
+        lifecycle::find_to_change(workspace, &fixture.project, &Reference::parse(typed))
+            .unwrap_err()
+    };
+    let qualified = format!("mcp:{}", fixture.name);
+
+    let received = find(Some(&fixture.workspace), &qualified);
+
+    assert!(
+        matches!(&received, LifecycleError::ReceivedServer { typed, project }
+            if *typed == qualified && project == "app"),
+        "{received:?}"
+    );
+    assert_eq!(received.code(), "change_received_mcp");
+    assert!(received.to_string().ends_with(
+        "uninstall it, or change its definition in the library it came from and update"
+    ));
+    assert!(matches!(
+        find(Some(&fixture.workspace), &fixture.name),
+        LifecycleError::ReceivedServer { .. }
+    ));
+    assert!(matches!(
+        find(Some(&fixture.workspace), &format!("skill:{}", fixture.name)),
+        LifecycleError::NotFound { .. }
+    ));
+    // Without the workspace whose ledger says so, nothing says it was
+    // received.
+    assert!(matches!(
+        find(None, &qualified),
+        LifecycleError::NotFound { .. }
+    ));
 }

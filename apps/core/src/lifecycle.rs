@@ -250,16 +250,20 @@ pub fn find(project: &MindProject, reference: &Reference) -> Result<Target, Life
 }
 
 /// [`find`], for a change made with `workspace` consulted: a name the project
-/// holds nothing of where it authors, but received as a rule, is refused as
-/// such ([`LifecycleError::Received`]) rather than as nothing at all.
+/// holds nothing of where it authors, but received as a rule or as an MCP
+/// server, is refused as such ([`LifecycleError::Received`],
+/// [`LifecycleError::ReceivedServer`]) rather than as nothing at all.
 ///
 /// A rule a project marked by its settings received is no file of its own
 /// but a section of the block in its `AGENTS.md`, and maybe a file for
-/// Claude, rendered from where it was installed from (D-23): a change made
-/// there is undone by the next render, and what reaches it is a change made
-/// where it is offered. `status` lists it, so "nothing named" would deny
-/// what the report just showed; the ledger says whether it is one, and the
-/// refusal says how to take it out instead.
+/// Claude, rendered from where it was installed from (D-23), and a server
+/// it received is an entry in each of its agents' config files, written
+/// from the definition it was installed from: a change made there is
+/// undone by the next install, or read as an edit, and what reaches it is
+/// a change made where it is offered. `status` lists either, so "nothing
+/// named" would deny what the report just showed; the ledger says whether
+/// it is one, and the refusal says how to take it out instead. A rule is
+/// asked of first, a name received as both being one a qualifier settles.
 pub fn find_to_change(
     workspace: Option<&WeaverWorkspace>,
     project: &MindProject,
@@ -270,21 +274,23 @@ pub fn find_to_change(
         found => return found,
     };
     let name = reference.name();
-    let received = project.settings().is_some()
-        && reference.kind().is_none_or(|kind| kind == Kind::Rule)
-        && install::is_installable_name(Kind::Rule, name)
-        && workspace.is_some_and(|workspace| {
-            let entry = install::entry_for_root(workspace, project.root());
-            workspace
-                .ledger_for_reading()
-                .and_then(|ledger| ledger.installation(&entry, Kind::Rule, name))
-                .is_ok_and(|record| record.is_some())
-        });
-    Err(if received {
-        LifecycleError::Received {
-            typed,
-            project: project.name().to_owned(),
-        }
+    let received = |kind: Kind| {
+        project.settings().is_some()
+            && reference.kind().is_none_or(|asked| asked == kind)
+            && install::is_installable_name(kind, name)
+            && workspace.is_some_and(|workspace| {
+                let entry = install::entry_for_root(workspace, project.root());
+                workspace
+                    .ledger_for_reading()
+                    .and_then(|ledger| ledger.installation(&entry, kind, name))
+                    .is_ok_and(|record| record.is_some())
+            })
+    };
+    let project = project.name().to_owned();
+    Err(if received(Kind::Rule) {
+        LifecycleError::Received { typed, project }
+    } else if received(Kind::Mcp) {
+        LifecycleError::ReceivedServer { typed, project }
     } else {
         LifecycleError::NotFound { typed }
     })
@@ -1273,6 +1279,11 @@ pub enum LifecycleError {
     /// from where it was installed from ([`find_to_change`]).
     #[error("`{typed}` is a rule {project} received, rendered from where it was installed from rather than kept in it, so it is not changed from here: uninstall it, or change it where it is offered and install it again")]
     Received { typed: String, project: String },
+    /// Not authored in the project but received: an MCP server written into
+    /// its agents' config files from the definition it was installed from
+    /// ([`find_to_change`]).
+    #[error("`{typed}` is an MCP server {project} received, an entry in its agents' config files written from the definition it was installed from rather than kept in it, so it is not changed from here: uninstall it, or change its definition in the library it came from and update")]
+    ReceivedServer { typed: String, project: String },
     /// Listed, from a folder the project's agents read, but in none the
     /// project authors in: installed there, or somebody's own.
     #[error("`{typed}` is at {path}, in a folder this project's agents read and it does not author in, so it is not changed from here")]
@@ -1365,6 +1376,7 @@ pub enum LifecycleError {
 codes!(LifecycleError {
     Self::NotFound { .. } => "not_found",
     Self::Received { .. } => "change_received_rule",
+    Self::ReceivedServer { .. } => "change_received_mcp",
     Self::NotAuthored { .. } => "change_not_authored",
     Self::Ambiguous { .. } => "ambiguous_name",
     Self::Name { .. } => "rename_name_unfit",

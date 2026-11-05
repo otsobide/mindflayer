@@ -234,6 +234,7 @@ export type CoreCode =
   | "ledger_query_failed"
   | "not_found"
   | "change_received_rule"
+  | "change_received_mcp"
   | "change_not_authored"
   | "ambiguous_name"
   | "rename_name_unfit"
