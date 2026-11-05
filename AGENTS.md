@@ -1579,7 +1579,10 @@ These are easy to break from a single file without noticing.
   the screen, as after an editor; the editor `e` hands the terminal to is
   the use case's (`open_with`, `EDITOR`), and the test waits for the
   screen to give the window up and take it back (`steps_aside`,
-  `comes_back`). A row with a path inside a box is held by what it says,
+  `comes_back`). A gather that waits as long as a test needs is one from a
+  server on loopback that holds each request until the test lets it
+  answer (`tui_e2e/sources.rs`, `Holding`: `asked`, then `answers`), never
+  the network. A row with a path inside a box is held by what it says,
   not word for word: read as `/home`, the path is shorter than the one the
   box was drawn around. Unix alone.
 - The server's suites run against a fake backend with types of its own

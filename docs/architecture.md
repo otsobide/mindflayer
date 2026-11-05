@@ -326,6 +326,21 @@ screen), one that writes and waits for a key, so a test sees the window
 while it is the editor's, off the alternate screen, before the screen
 draws itself again.
 
+**A gather waits on a server the test holds.** A source on the disk is
+gathered before a key could stop it, so the suite serves one on loopback
+that holds each request until the test lets it answer, and answers that
+there is no such repository. A gather waiting on the network takes a
+cancel only once it hears back, as [a gather runs
+apart](#a-gather-runs-apart) says: so the test waits until the server
+has read the request, presses `esc` or Ctrl-C, sees the cancel said, and
+only then lets the server answer, when the gather stops with nothing on
+the shelf, no clone in the cache and nothing in the ledger. A server that
+never answered would hold the gather until the HTTP client gave up,
+thirty seconds on; one answering at once would race the key, which is how
+a first version of these tests passed only when the key came before the
+connection. A stand-in runner, as the screen's own suite uses, would stop
+a gather that is not gix's.
+
 **A row with a path in a box is held by what it says.** The screen pads a
 box's rows to its width around the path it shows, so a path read back as
 `/home` is shorter than the one drawn, and the box's edge moves: such a
