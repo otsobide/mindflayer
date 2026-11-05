@@ -24,7 +24,6 @@ mod common;
 use common::*;
 use mindweaver_cli::backend::{PanelBackend, Query};
 use mindweaver_core::ledger::{Action, Outcome as Logged};
-use mindweaver_core::mother::McpMother;
 use mindweaver_core::SourceKind;
 use mindweaver_server::Backend;
 use serde_json::{json, Value};
@@ -96,8 +95,8 @@ scripts/diff.sh main
 ///
 /// - its library holds the skills `review`, with a script and a reference
 ///   beside its `SKILL.md`, and `lint`, the rules `git/commits` and
-///   `style/comments`, and the MCP server `github`, its definition written
-///   into the library by hand, as `add` writes none yet;
+///   `style/comments`, and the MCP server `github`, a program started with
+///   a secret its environment is given;
 /// - `api`, for Claude and Codex and local, authors `deploy`, and received
 ///   `review` and `git/commits`, as they were written: nothing to do;
 /// - `web`, for Claude and OpenCode and shared, received `lint`, changed in
@@ -121,15 +120,26 @@ fn workspace(home: &Path) -> PathBuf {
     ] {
         weaver(&root, &["add", kind, name, description]).unwrap();
     }
-    // By hand, as `add` writes no definition yet: the snapshot carries it as
-    // it carries every kind, with nothing in the panel to learn it.
-    write_files(
-        &own_directory_for(&root, Kind::Mcp),
-        &[(
-            "github.toml",
-            &McpMother::create("github", "GitHub's issues, pull requests and code", "stdio"),
-        )],
-    );
+    // The snapshot carries it as it carries every kind, with nothing in the
+    // panel to learn it.
+    weaver(
+        &root,
+        &[
+            "add",
+            "mcp",
+            "github",
+            "GitHub's issues, pull requests and code",
+            "--command",
+            "npx",
+            "--arg",
+            "-y",
+            "--arg",
+            "@modelcontextprotocol/server-github",
+            "--secret-env",
+            "GITHUB_PERSONAL_ACCESS_TOKEN",
+        ],
+    )
+    .unwrap();
     // Before anything installs it, so every copy is of this one.
     write_files(
         &own_directory_for(&root, Kind::Skill).join("review"),
