@@ -1041,8 +1041,14 @@ pub struct UiOptions {
     /// Say on stderr, as it happens, every request answered and how long
     /// it took, how long each change waited its turn and ran, and how long
     /// each of its commands took, of it waiting for another writer to let
-    /// go of a workspace: each line after the time of day, in UTC. Never
-    /// the token, nor what a request sent.
+    /// go of a workspace: each line after the time of day, in UTC. A
+    /// request is said by its path and query, so a read's line names the
+    /// folders and entries it asked for; never the token, a header, nor
+    /// the body a change sent, and so not which commands it ran.
+    //
+    // Its path and query, as the request log has always said them, since
+    // which read took long is what the log is read for; the token alone is
+    // taken out of them (`log::redact`, in the server).
     //
     // On stderr, which the person who started the panel already reads and
     // can send anywhere, rather than to a file of its own, which would be

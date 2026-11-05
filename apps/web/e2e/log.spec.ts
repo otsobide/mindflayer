@@ -10,7 +10,8 @@ import { expect, pressure, stalled, test } from './panel.ts'
  * the time of day and with how long it took: what says where a run's time
  * went, which the trace, timing each request from the browser, cannot
  * (#240). Never the token, though the link and every request carried it,
- * nor what a request sent.
+ * nor the body the run was sent, which names its folder: a request is said
+ * by its path and query alone.
  *
  * And how long the machine stalled while the test ran, on its processors,
  * its memory and its disk, which says whether a run that took seconds

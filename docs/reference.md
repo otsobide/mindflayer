@@ -1903,9 +1903,12 @@ read beside a browser's trace or CI's log of the same minutes:
 04:20:59.762Z POST /api/v1/tasks 200 6ms
 ```
 
-It is for finding out why something took long, and never holds the token,
-a header, what a request sent or which commands a change ran, which the
-transcript says.
+It is for finding out why something took long. Each request is said by its
+path and query, so a read's line names the folders and entries it asked
+for, `GET /api/v1/folders?path=%2Fhome%2Fyou%2FProjects&hidden=false 200
+1ms` for one, and a log is worth reading over before you pass it on. It
+never holds the token, a header, or the body a change sent, and so not
+which commands a change ran, which the transcript says.
 
 **Every change is previewed first.** Whatever you ask the panel to change,
 it asks the server what that is before anything runs, and shows you the

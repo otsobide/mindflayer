@@ -5992,7 +5992,13 @@ up and is what a trace and CI's log say their times in. Off unless asked
 for, since a line a request is too many for a terminal somebody is using,
 and on stderr rather than in a file of its own, which would be one more
 path to refuse when something is there: whoever starts the panel sends
-stderr where they like. Without it, stderr says what it always has.
+stderr where they like. Without it, stderr says what it always has. Its
+help and the reference say what a line holds as the log lays it out: a
+request's path and query, so a read's line names the folders and entries
+it asked for, and never the token, a header or a body, so neither what a
+change was sent nor which commands it ran. Not "nothing a request sent",
+which a read sends in its query, and which somebody passing a log on
+would take at its word.
 
 The runtime is tokio's with one thread: every query goes to the blocking pool
 and every run to the server's writer thread, so it only moves bytes. `--dev`
@@ -7486,7 +7492,7 @@ trace. Not the config's server, whose stderr Playwright prints, which
 would put a line for every request of every test in the run's output; no
 spec runs a change on it. `e2e/log.spec.ts` holds a run from the panel to
 being said there, as it starts, as its line runs and as it ends, with its
-request, and never the token or what the request sent.
+request, and never the token or the body the run was sent.
 
 The log says where a run's time went among the server's parts, and not
 whether the machine kept all of them waiting: the unload's line had
