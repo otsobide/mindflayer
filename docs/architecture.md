@@ -12642,8 +12642,18 @@ it once as it closes.
   either way, made by Mindweaver or not: it is Codex's own folder, and
   which folder Mindweaver made is no record anybody keeps, so a project
   given a server and then none keeps an empty `.codex`, which git does not
-  see. Which files Mindweaver made is a record the ledger's MCP rows (#93)
-  carry, as `created_files` does for an `AGENTS.md`.
+  see. Which files Mindweaver made is `created_files`' to record, as it
+  records an `AGENTS.md`, which an install of a server will note its config
+  file in (#94): the ledger's entries (#93) record each entry, not the
+  file it is in.
+- **An entry left in an OpenCode file that no longer comes first.** A
+  recorded entry is looked for in the file its record names
+  ([how an entry stands](#how-an-entry-stands)), so one written into
+  `.opencode/opencode.json` reads as current after somebody adds an
+  `opencode.json`, which comes first among the four and is the one a new
+  entry goes into. Whether OpenCode reads all four or the first is
+  docs-only; if the first, the entry reaches OpenCode no more, and an
+  update would have to say so, or move it.
 - **An input given a value rather than a variable.** An input that is no
   secret may name no variable, its value being somebody's to give, and
   Claude's entry then has nothing to refer to: `claude_mcp` refuses it
@@ -12654,8 +12664,9 @@ it once as it closes.
   part of the address `add --arg-env` and `--url-var` write
   (`codex_mcp_input_in_text`): every server `add` writes with either
   reaches Codex only once a value is handed. A value given when the server
-  is installed is #93's to hand the renderer, which would then write it as
-  it is, held to what a value of the transport is held to.
+  is installed is an install's to hand the renderer (#94), which would then
+  write it as it is, held to what a value of the transport is held to; the
+  ledger's record of an entry (#93) keeps its fingerprint, not its values.
 - **Variables Claude empties that the table does not follow.** What Claude
   keeps from a remote server was read from 2.1.318's binary
   (`mcp/blanked.rs`), and only what it keeps in every environment: a
