@@ -167,6 +167,36 @@ fn codex_cannot_be_given_a_secret_header_beside_other_text_but_bearer() {
 }
 
 #[test]
+fn codex_is_refused_a_secret_by_where_it_is_written_whatever_its_kind() {
+    let name = random::kebab();
+    let argued = McpMother::whole_secret_env(&name).replacen(
+        "\"{workspace}\"]",
+        "\"{workspace}\", \"--key={api_key}\"]",
+        1,
+    );
+    let addressed = McpMother::http(&name).replacen("/mcp\"", "/mcp?key={token}\"", 1);
+
+    for (text, shape) in [
+        (
+            argued,
+            Inexpressible::SecretInArgument {
+                input: named("api_key"),
+            },
+        ),
+        (
+            addressed,
+            Inexpressible::SecretInUrl {
+                input: named("token"),
+            },
+        ),
+    ] {
+        let definition = parsed(&text);
+        assert_eq!(definition.issues(), [], "{text}");
+        assert_eq!(definition.inexpressible(Agent::Codex), [shape], "{text}");
+    }
+}
+
+#[test]
 fn neither_codex_nor_opencode_can_be_given_server_sent_events() {
     assert_eq!(
         by_agent(&McpMother::sse(&random::kebab())),

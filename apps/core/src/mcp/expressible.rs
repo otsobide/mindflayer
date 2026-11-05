@@ -319,15 +319,30 @@ impl McpDefinition {
         if let Transport::Sse(_) = self.transport {
             shapes.push(Inexpressible::ServerSentEvents);
         }
+        // By where each secret is written, not by its kind: a placeholder
+        // stands for its input wherever it is written, so one of an
+        // environment's written in an argument too is a secret argument.
         for input in self.inputs.iter().filter(|input| input.secret) {
-            match input.kind {
-                InputKind::Arg => shapes.push(Inexpressible::SecretInArgument {
-                    input: input.name.clone(),
-                }),
-                InputKind::UrlVar => shapes.push(Inexpressible::SecretInUrl {
-                    input: input.name.clone(),
-                }),
-                InputKind::Header => {
+            let placeholder = written(&input.name);
+            match &self.transport {
+                Transport::Stdio(stdio) => {
+                    if stdio.args.iter().any(|arg| arg.contains(&placeholder)) {
+                        shapes.push(Inexpressible::SecretInArgument {
+                            input: input.name.clone(),
+                        });
+                    }
+                    shapes.extend(self.unpassed_env(input));
+                }
+                Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                    // One its userinfo held is written in the address too,
+                    // though no address is kept with it.
+                    if endpoint.url.contains(&placeholder)
+                        || endpoint.withheld.contains(&input.name)
+                    {
+                        shapes.push(Inexpressible::SecretInUrl {
+                            input: input.name.clone(),
+                        });
+                    }
                     for header in self.composite_headers(&input.name) {
                         shapes.push(Inexpressible::SecretHeaderComposite {
                             header,
@@ -335,7 +350,6 @@ impl McpDefinition {
                         });
                     }
                 }
-                InputKind::Env => shapes.extend(self.unpassed_env(input)),
             }
         }
         shapes
