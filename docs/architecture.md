@@ -10724,20 +10724,22 @@ it once as it closes.
   document in JavaScript, so it is slower than a browser at the same work
   and says nothing of painting. The browser suite times nothing; a bound
   there would be one more number a runner's load moves.
-- **A dialog was once still drawn after an unload's run.** In one run of
-  CI's Chromium, `e2e/loads.spec.ts` found a dialog visible five seconds
-  after Run was clicked on an unload (#238). Its `getByRole('dialog')`
-  matches the warnings drawer as well as the command dialog, and the
-  drawer opens by itself, once the dialog has closed, on a run that
-  failed or said a line with a code, so the one dialog it found may have
-  been either. Nothing on the page the spec comes from matches what it
-  acts on there, and nearly six hundred runs here, on the debug and the
-  release binaries, with the browser's CPU throttled and with the whole
-  run held to two cores, never showed it again, so nothing was changed
-  for it: whether the click was lost, the run's end never reached the
-  dialog, or the unload failed or said a coded line and the drawer is
-  what stayed waits for a failing run's trace, which CI keeps, and whose
-  snapshot of the failing step shows which dialog it was.
+- **An unload's run once took five and a half seconds.** In one run of
+  CI's Chromium, `e2e/loads.spec.ts` found the unload's command dialog
+  still drawn five seconds after Run was clicked (#238). The trace CI kept
+  says why: the dialog was the unload's own, its buttons held as they are
+  while a run goes on, and the server answered the run 5508 ms after it
+  was sent, half a second after the spec stopped waiting, where the load
+  before it, a change to the same marker, took 952 ms. A snapshot asked
+  meanwhile was answered in 9 ms, so what waited was the writer thread,
+  or the line it ran, which is one `edit_array` under the workspace's
+  lock. Nearly six hundred runs here, on the debug and the release
+  binaries, with the browser's CPU throttled and with the whole run held
+  to two cores, never took longer than about half a second. What the run
+  waited on (another writer holding the lock, something in the line, or
+  the runner) waits for a run that says how long each line took and how
+  long it waited for the lock (#240); the spec is left as it is, since a
+  longer wait there would hide a run a person waits for too.
 - **Only the library's own open.** An artifact's page reads the
   workspace's own, the one holder of the snapshot an install takes from
   that `Query::Files` and `Query::Contents` read. What is on the shelf has
