@@ -56,6 +56,7 @@ use crate::artifact::ValidationIssue;
 use crate::code::codes;
 use crate::value::{ArtifactName, InputName, Redacted, VariableName};
 
+pub(crate) mod name;
 mod token;
 
 /// The format a definition is written in, and the newest this build reads.

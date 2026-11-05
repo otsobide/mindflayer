@@ -17,8 +17,9 @@ use mindweaver_core::mother::{
 };
 use mindweaver_core::reading::Shown;
 use mindweaver_core::{
-    create, Catalog, CreateError, Declared, Directories, DiscoveryFailure, Kind, LifecycleError,
-    MarkerFile, MindProject, Reference, Share, ValidationIssue, WeaverWorkspace, WorkspaceError,
+    create, Agent, Catalog, CreateError, Declared, Directories, DiscoveryFailure, Kind,
+    LifecycleError, MarkerFile, MindProject, Reference, Share, ValidationIssue, WeaverWorkspace,
+    WorkspaceError,
 };
 use tempfile::TempDir;
 
@@ -366,7 +367,13 @@ fn validate_holds_a_server_to_its_file_its_name_rule_and_its_format() {
         &folder,
         &[
             ("gh.toml", &McpMother::stdio("github")),
-            ("Bad_Name.toml", &McpMother::sse("Bad_Name")),
+            ("bad.name.toml", &McpMother::sse("bad.name")),
+            ("Workspace.toml", &McpMother::http("Workspace")),
+            (
+                "anthropic-skills.toml",
+                &McpMother::stdio("anthropic-skills"),
+            ),
+            ("My_Server.toml", &McpMother::stdio("My_Server")),
             ("bare.toml", &McpMother::incomplete("bare", "http")),
         ],
     );
@@ -388,12 +395,37 @@ fn validate_holds_a_server_to_its_file_its_name_rule_and_its_format() {
             file: String::from("gh.toml"),
         }]
     );
+    // Held to the keys an agent takes, not to kebab-case: capitals and
+    // underscores are a server's, a dot is no agent's.
+    assert_eq!(issues("My_Server"), []);
     assert_eq!(
-        issues("Bad_Name"),
-        [ValidationIssue::NameNotKebabCase {
-            segment: String::from("Bad_Name"),
+        issues("bad.name"),
+        [ValidationIssue::McpNameNotAKey {
+            name: String::from("bad.name"),
         }]
     );
+    // A name an agent keeps for itself is refused in any case, and one it
+    // uses for its own only warned of.
+    assert_eq!(
+        issues("Workspace"),
+        [ValidationIssue::McpNameReserved {
+            name: String::from("Workspace"),
+            agent: Agent::Claude,
+            reserved: String::from("workspace"),
+        }]
+    );
+    let claimed = issues("anthropic-skills");
+    assert!(
+        matches!(
+            &claimed[..],
+            [ValidationIssue::McpNameClaimed {
+                agent: Agent::Claude,
+                ..
+            }]
+        ),
+        "{claimed:?}"
+    );
+    assert!(claimed[0].is_warning());
     assert_eq!(
         issues("bare"),
         [ValidationIssue::TransportIncomplete {
@@ -510,6 +542,29 @@ fn rename_moves_the_file_and_rewrites_its_name_keeping_every_other_byte() {
     );
     assert_eq!(renamed.target.name, "octocat");
     assert_eq!(renamed.target.artifact.unwrap().validate(), []);
+}
+
+#[test]
+fn rename_holds_the_new_name_to_the_keys_an_agent_takes_and_to_what_none_keeps() {
+    let (_dir, project, folder) = authoring();
+    write(&folder, &[("github.toml", &McpMother::stdio("github"))]);
+    let github = lifecycle::find(&project, &Reference::parse("mcp:github")).unwrap();
+
+    for (why, to) in McpMother::unwritable() {
+        let refused = lifecycle::rename(None, &project, &github, &to).unwrap_err();
+
+        assert_eq!(refused.code(), "rename_name_unfit", "{why}: {refused}");
+        assert!(folder.join("github.toml").is_file(), "{why}");
+    }
+    // Wider than kebab-case, and a name only warned of is no reason to
+    // refuse one.
+    let wide = McpMother::name();
+    let renamed = lifecycle::rename(None, &project, &github, &wide).unwrap();
+    assert_eq!(renamed.target.name, wide.as_str());
+    assert!(folder.join(format!("{wide}.toml")).is_file(), "{wide}");
+    let claimed = lifecycle::rename(None, &project, &renamed.target, "anthropic-skills").unwrap();
+    assert_eq!(claimed.target.name, "anthropic-skills");
+    assert!(folder.join("anthropic-skills.toml").is_file());
 }
 
 #[test]

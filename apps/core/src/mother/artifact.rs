@@ -1,6 +1,7 @@
 //! Mothers of artifacts as their files hold them: a skill's `SKILL.md`, a
 //! rule's markdown and an MCP server's definition.
 
+use crate::agent::Agent;
 use crate::mother::random;
 
 /// Makes the text of a skill's `SKILL.md`.
@@ -84,16 +85,137 @@ impl RuleMother {
 pub struct McpMother;
 
 impl McpMother {
-    /// A definition of any of the three transports, under a name an
-    /// artifact may be written under, and the text of its file.
+    /// A definition of any of the three transports, under a name a server
+    /// may be given ([`name`](Self::name)), and the text of its file.
     pub fn random() -> (String, String) {
-        let name = random::kebab();
+        let name = Self::name();
         let text = match random::between(0, 2) {
             0 => Self::stdio(&name),
             1 => Self::http(&name),
             _ => Self::sse(&name),
         };
         (name, text)
+    }
+
+    /// A name every agent keys a server by: words of letters in either case
+    /// and digits, joined by hyphens or underscores, starting with a letter,
+    /// so that it has a case to turn, and ending in a digit, so that it is
+    /// never one an agent keeps for itself, none of which holds one.
+    pub fn name() -> String {
+        let letters = format!(
+            "{}{}",
+            random::LOWERCASE,
+            random::LOWERCASE.to_ascii_uppercase()
+        );
+        let alphabet = format!("{letters}{}", random::DIGITS);
+        let mut name = random::drawn_from(&letters, 1);
+        name.push_str(&random::drawn_from(&alphabet, random::between(0, 7)));
+        for _ in 0..random::between(0, 2) {
+            name.push(random::pick(&['-', '_']));
+            name.push_str(&random::drawn_from(&alphabet, random::between(1, 8)));
+        }
+        name.push_str(&random::drawn_from(random::DIGITS, 1));
+        name
+    }
+
+    /// Names no agent keys a server by, each beside why: what `validate`
+    /// says is no key.
+    pub fn unkeyed() -> Vec<(&'static str, String)> {
+        let word = random::word();
+        vec![
+            ("a dot", format!("{word}.{word}")),
+            ("a space", format!("{word} {word}")),
+            ("a colon", format!("{word}:{word}")),
+            ("an at sign", format!("@{word}")),
+            ("a plus", format!("{word}+{word}")),
+            ("a brace", format!("{{{word}}}")),
+            ("a letter past ASCII", format!("{word}\u{e9}")),
+        ]
+    }
+
+    /// Names no MCP server may be written under, each beside why: what a
+    /// server's name is held to where every name is (empty, or past the
+    /// limit), each that is no key ([`unkeyed`](Self::unkeyed)), and one an
+    /// agent keeps for itself, `reserved`.
+    pub fn unwritable() -> Vec<(&'static str, String)> {
+        let mut names = vec![
+            ("empty", String::new()),
+            (
+                "a segment over the limit",
+                "a".repeat(crate::skill::MAX_NAME_SEGMENT_LEN + 1),
+            ),
+        ];
+        names.extend(Self::unkeyed());
+        let (reserved, _, _) = random::pick(&Self::reserved());
+        names.push(("reserved", reserved));
+        names
+    }
+
+    /// Every name an agent keeps for itself, beside the agent and the name
+    /// as it spells it, each in a case drawn afresh: and for the two of
+    /// Claude's whose space no key can hold, each spelling of it one can,
+    /// with an underscore, a hyphen or nothing in its place.
+    pub fn reserved() -> Vec<(String, Agent, &'static str)> {
+        let mut names = Vec::new();
+        for word in ["workspace", "claude-in-chrome", "computer-use"] {
+            names.push((Self::recased(word), Agent::Claude, word));
+        }
+        for word in ["Claude Preview", "Claude Browser"] {
+            for space in ["_", "-", ""] {
+                names.push((
+                    Self::recased(&word.replace(' ', space)),
+                    Agent::Claude,
+                    word,
+                ));
+            }
+        }
+        for word in ["servers", "timeout"] {
+            names.push((Self::recased(word), Agent::OpenCode, word));
+        }
+        names
+    }
+
+    /// Every name an agent uses for one of its own without refusing a
+    /// server's, beside the agent and the name as it spells it, in a case
+    /// drawn afresh.
+    pub fn claimed() -> Vec<(String, Agent, &'static str)> {
+        vec![(
+            Self::recased("anthropic-skills"),
+            Agent::Claude,
+            "anthropic-skills",
+        )]
+    }
+
+    /// Names that are near one an agent keeps for itself and are none,
+    /// each beside why.
+    pub fn near_reserved() -> Vec<(&'static str, String)> {
+        vec![
+            ("more after it", String::from("workspaces")),
+            ("less of it", String::from("claude")),
+            ("a digit after it", String::from("claude-preview-2")),
+            (
+                "a hyphen written as an underscore in a name with no space",
+                String::from("claude_in_chrome"),
+            ),
+            (
+                "two separators for one space",
+                String::from("claude__preview"),
+            ),
+            ("another word", String::from("claude-desktop")),
+        ]
+    }
+
+    /// `word`, each of its letters in a case drawn afresh.
+    fn recased(word: &str) -> String {
+        word.chars()
+            .map(|c| {
+                if random::chance() {
+                    c.to_ascii_uppercase()
+                } else {
+                    c.to_ascii_lowercase()
+                }
+            })
+            .collect()
     }
 
     /// `name`, saying it is for `description`, reached over `transport`

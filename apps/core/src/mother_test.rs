@@ -160,7 +160,7 @@ fn every_definition_the_mother_makes_reads_as_the_transport_it_is_named_for() {
     assert!(matches!(sse.transport, Transport::Sse(_)));
     for _ in 0..DRAWS {
         let (name, text) = McpMother::random();
-        assert!(name_issues(&name).is_empty(), "{name}");
+        assert_eq!(crate::mcp::name::issues(&name), [], "{name}");
         assert_eq!(McpDefinition::parse(&text).unwrap().issues(), [], "{text}");
     }
 }

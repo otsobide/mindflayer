@@ -467,6 +467,9 @@
           "env_var_malformed",
           "secret_without_env_var",
           "secret_literal",
+          "mcp_name_not_a_key",
+          "mcp_name_reserved",
+          "mcp_name_claimed",
           "browse_missing",
           "browse_not_a_folder",
           "browse_unlisted",
@@ -5342,6 +5345,91 @@
               "code",
               "at",
               "prefix",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "code": {
+                "const": "mcp_name_not_a_key"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "code": {
+                "const": "mcp_name_reserved"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "reserved": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "agent",
+              "reserved",
+              "warning",
+              "message"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "agent": {
+                "type": "string"
+              },
+              "claimed": {
+                "type": "string"
+              },
+              "code": {
+                "const": "mcp_name_claimed"
+              },
+              "message": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "warning": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "code",
+              "name",
+              "agent",
+              "claimed",
               "warning",
               "message"
             ],

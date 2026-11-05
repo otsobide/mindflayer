@@ -29,4 +29,7 @@ export type ValidationIssue =
   | { code: "input_name_malformed", name: string, warning: boolean, message: string }
   | { code: "env_var_malformed", name: string, variable: string, warning: boolean, message: string }
   | { code: "secret_without_env_var", name: string, warning: boolean, message: string }
-  | { code: "secret_literal", at: string, prefix: string, warning: boolean, message: string };
+  | { code: "secret_literal", at: string, prefix: string, warning: boolean, message: string }
+  | { code: "mcp_name_not_a_key", name: string, warning: boolean, message: string }
+  | { code: "mcp_name_reserved", name: string, agent: string, reserved: string, warning: boolean, message: string }
+  | { code: "mcp_name_claimed", name: string, agent: string, claimed: string, warning: boolean, message: string };

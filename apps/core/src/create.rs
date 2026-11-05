@@ -139,7 +139,12 @@ pub(crate) fn plan(
     description: &str,
     template: Option<&Template>,
 ) -> Result<Scaffold, CreateError> {
-    let issues = artifact::name_issues(name);
+    // Matched on the kind, as `rename` holds a name: a server's to the keys
+    // an agent takes, the others' to kebab-case.
+    let issues = match kind {
+        Kind::Skill | Kind::Rule => artifact::name_issues(name),
+        Kind::Mcp => artifact::mcp_name_strict_issues(name),
+    };
     if !issues.is_empty() {
         return Err(CreateError::Name {
             name: name.to_owned(),

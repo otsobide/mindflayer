@@ -417,9 +417,9 @@ pub fn is_installable_name(kind: Kind, name: &str) -> bool {
         Kind::Skill => is_folder_name(name),
         Kind::Rule => name_issues(name).is_empty(),
         // A definition's file is named by it, as a skill's folder is, and an
-        // entry will be keyed by it, which #87 holds to what each agent
-        // takes.
-        Kind::Mcp => is_folder_name(name),
+        // entry will be keyed by it: the keys every agent takes, each one
+        // file's name too.
+        Kind::Mcp => crate::mcp::name::is_key(name),
     }
 }
 

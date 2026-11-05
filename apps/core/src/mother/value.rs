@@ -209,7 +209,10 @@ impl ArtifactNameMother {
         ArtifactName::from(segments.join("/"))
     }
 
-    /// Names no artifact may be written under, each beside why.
+    /// Names no skill or rule may be written under, each beside why. An
+    /// MCP server's are held to the keys an agent takes rather than to
+    /// kebab-case, so some of these are a server's
+    /// ([`McpMother::unwritable`](crate::mother::McpMother::unwritable)).
     pub fn unwritable() -> Vec<(&'static str, String)> {
         vec![
             ("empty", String::new()),

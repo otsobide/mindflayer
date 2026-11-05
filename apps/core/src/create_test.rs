@@ -407,8 +407,12 @@ fn any_rule_template_without_front_matter_opens_with_what_was_typed() {
 #[test]
 fn a_name_validate_would_refuse_is_refused_before_anything_is_planned() {
     let (_dir, project) = project();
-    for (why, name) in crate::mother::ArtifactNameMother::unwritable() {
-        for kind in Kind::ALL {
+    for kind in Kind::ALL {
+        let unwritable = match kind {
+            Kind::Skill | Kind::Rule => crate::mother::ArtifactNameMother::unwritable(),
+            Kind::Mcp => crate::mother::McpMother::unwritable(),
+        };
+        for (why, name) in unwritable {
             let refused = plan(&project, kind, &name, "Ship it", None);
 
             assert!(

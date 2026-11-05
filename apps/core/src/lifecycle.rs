@@ -810,7 +810,14 @@ pub fn rename(
     target: &Target,
     to: &str,
 ) -> Result<Renamed, LifecycleError> {
-    let issues = artifact::name_issues(to);
+    // Matched on the kind, since a server's name is held to the keys an
+    // agent takes rather than to the kebab-case of the others, and only
+    // once it is known to hold no folder ([`rename_mcp`]), which says so in
+    // words of its own.
+    let issues = match target.kind {
+        Kind::Skill | Kind::Rule => artifact::name_issues(to),
+        Kind::Mcp => Vec::new(),
+    };
     if !issues.is_empty() {
         return Err(LifecycleError::Name {
             name: to.to_owned(),
@@ -993,6 +1000,13 @@ fn rename_mcp(
     if to.contains('/') {
         return Err(LifecycleError::McpNested {
             name: to.to_owned(),
+        });
+    }
+    let issues = artifact::mcp_name_strict_issues(to);
+    if !issues.is_empty() {
+        return Err(LifecycleError::Name {
+            name: to.to_owned(),
+            issues,
         });
     }
     // The name lives in the definition too, and one that does not read

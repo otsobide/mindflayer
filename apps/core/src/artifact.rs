@@ -644,13 +644,13 @@ impl Artifact {
 /// Everything wrong with a definition filed under `name`, in a file called
 /// `file` when that file has a name to compare.
 ///
-/// Its name first, held to the rule every name is, then the file it is in,
-/// then the definition itself ([`McpDefinition::issues`]). Apart from
+/// Its name first, held to the keys every agent takes and to what each
+/// keeps for itself ([`mcp_name_issues`]), then the file it is in, then the
+/// definition itself ([`McpDefinition::issues`]). Apart from
 /// [`Artifact::validate`], as [`skill_issues`] is, so that contents given
-/// whole are judged before they are written ([`mcp_text_issues`]).
+/// whole are judged before they are written ([`mcp_strict_issues`]).
 fn mcp_issues(definition: &McpDefinition, name: &str, file: Option<&str>) -> Vec<ValidationIssue> {
-    // Every kind is looked up by name, so every kind is checked for one.
-    let mut issues = name_issues(name);
+    let mut issues = mcp_name_issues(name);
     // The file is what an install keys the entry by and what a change finds
     // the definition by, so a `name` that says otherwise is one of two names
     // for one server.
@@ -662,6 +662,24 @@ fn mcp_issues(definition: &McpDefinition, name: &str, file: Option<&str>) -> Vec
     }
     issues.extend(definition.issues());
     issues
+}
+
+/// Everything wrong with `name` as an MCP server's: not the kebab-case
+/// every other kind's name is held to, but the keys every agent's config
+/// takes, less those an agent keeps for itself ([`crate::mcp::name`]).
+fn mcp_name_issues(name: &str) -> Vec<ValidationIssue> {
+    crate::mcp::name::issues(name)
+}
+
+/// Whatever `name` breaks as an MCP server's that Mindweaver will not
+/// write: what [`mcp_strict_issues`] says of a definition's name, asked of
+/// a name before there is a definition to judge it with, as a rename asks
+/// of the name it is given.
+pub(crate) fn mcp_name_strict_issues(name: &str) -> Vec<ValidationIssue> {
+    mcp_name_issues(name)
+        .into_iter()
+        .filter(|issue| !issue.is_warning())
+        .collect()
 }
 
 /// Whatever a definition filed under `name`, in a file called `file`,
@@ -903,30 +921,84 @@ fn is_kebab_case(segment: &str) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValidationIssue {
     NameEmpty,
-    NameNotKebabCase { segment: String },
-    NameSegmentTooLong { segment: String, length: usize },
-    NameDirectoryMismatch { name: String, directory: String },
-    NameFileMismatch { name: String, file: String },
+    NameNotKebabCase {
+        segment: String,
+    },
+    NameSegmentTooLong {
+        segment: String,
+        length: usize,
+    },
+    NameDirectoryMismatch {
+        name: String,
+        directory: String,
+    },
+    NameFileMismatch {
+        name: String,
+        file: String,
+    },
     DescriptionEmpty,
-    DescriptionTooLong { length: usize },
+    DescriptionTooLong {
+        length: usize,
+    },
     CompatibilityEmpty,
-    CompatibilityTooLong { length: usize },
+    CompatibilityTooLong {
+        length: usize,
+    },
     CompatibilityNotAString,
     MetadataNotAMap,
-    MetadataNotAString { key: String },
-    MetadataRepeated { key: String },
+    MetadataNotAString {
+        key: String,
+    },
+    MetadataRepeated {
+        key: String,
+    },
     Empty,
-    FrontMatterUnparsed { reason: String },
+    FrontMatterUnparsed {
+        reason: String,
+    },
     PathsNotStrings,
     DescriptionNotAString,
-    TransportIncomplete { transport: String, field: String },
-    InputRepeated { name: String },
-    InputUnreferenced { name: String, kind: InputKind },
-    InputInUserinfo { name: String },
-    InputNameMalformed { name: String },
-    EnvVarMalformed { name: String, variable: String },
-    SecretWithoutEnvVar { name: String },
-    SecretLiteral { at: String, prefix: String },
+    TransportIncomplete {
+        transport: String,
+        field: String,
+    },
+    InputRepeated {
+        name: String,
+    },
+    InputUnreferenced {
+        name: String,
+        kind: InputKind,
+    },
+    InputInUserinfo {
+        name: String,
+    },
+    InputNameMalformed {
+        name: String,
+    },
+    EnvVarMalformed {
+        name: String,
+        variable: String,
+    },
+    SecretWithoutEnvVar {
+        name: String,
+    },
+    SecretLiteral {
+        at: String,
+        prefix: String,
+    },
+    McpNameNotAKey {
+        name: String,
+    },
+    McpNameReserved {
+        name: String,
+        agent: Agent,
+        reserved: String,
+    },
+    McpNameClaimed {
+        name: String,
+        agent: Agent,
+        claimed: String,
+    },
 }
 
 codes!(ValidationIssue {
@@ -955,6 +1027,9 @@ codes!(ValidationIssue {
     Self::EnvVarMalformed { .. } => "env_var_malformed",
     Self::SecretWithoutEnvVar { .. } => "secret_without_env_var",
     Self::SecretLiteral { .. } => "secret_literal",
+    Self::McpNameNotAKey { .. } => "mcp_name_not_a_key",
+    Self::McpNameReserved { .. } => "mcp_name_reserved",
+    Self::McpNameClaimed { .. } => "mcp_name_claimed",
 });
 
 impl ValidationIssue {
@@ -1002,7 +1077,8 @@ impl ValidationIssue {
             | ValidationIssue::MetadataRepeated { .. }
             | ValidationIssue::FrontMatterUnparsed { .. }
             | ValidationIssue::PathsNotStrings
-            | ValidationIssue::DescriptionNotAString => true,
+            | ValidationIssue::DescriptionNotAString
+            | ValidationIssue::McpNameClaimed { .. } => true,
             ValidationIssue::NameEmpty
             | ValidationIssue::NameNotKebabCase { .. }
             | ValidationIssue::NameSegmentTooLong { .. }
@@ -1018,7 +1094,9 @@ impl ValidationIssue {
             | ValidationIssue::InputNameMalformed { .. }
             | ValidationIssue::EnvVarMalformed { .. }
             | ValidationIssue::SecretWithoutEnvVar { .. }
-            | ValidationIssue::SecretLiteral { .. } => false,
+            | ValidationIssue::SecretLiteral { .. }
+            | ValidationIssue::McpNameNotAKey { .. }
+            | ValidationIssue::McpNameReserved { .. } => false,
         }
     }
 }
@@ -1101,7 +1179,8 @@ impl ValidationIssue {
             ValidationIssue::InputRepeated { name }
             | ValidationIssue::InputInUserinfo { name }
             | ValidationIssue::InputNameMalformed { name }
-            | ValidationIssue::SecretWithoutEnvVar { name } => {
+            | ValidationIssue::SecretWithoutEnvVar { name }
+            | ValidationIssue::McpNameNotAKey { name } => {
                 vec![("name", Carried::Text(name))]
             }
             ValidationIssue::EnvVarMalformed { name, variable } => vec![
@@ -1111,6 +1190,24 @@ impl ValidationIssue {
             ValidationIssue::SecretLiteral { at, prefix } => {
                 vec![("at", Carried::Text(at)), ("prefix", Carried::Text(prefix))]
             }
+            ValidationIssue::McpNameReserved {
+                name,
+                agent,
+                reserved,
+            } => vec![
+                ("name", Carried::Text(name)),
+                ("agent", Carried::Text(agent.name())),
+                ("reserved", Carried::Text(reserved)),
+            ],
+            ValidationIssue::McpNameClaimed {
+                name,
+                agent,
+                claimed,
+            } => vec![
+                ("name", Carried::Text(name)),
+                ("agent", Carried::Text(agent.name())),
+                ("claimed", Carried::Text(claimed)),
+            ],
             ValidationIssue::InputUnreferenced { name, kind } => vec![
                 ("name", Carried::Text(name)),
                 ("kind", Carried::Text(kind.slug())),
@@ -1275,6 +1372,17 @@ impl ValidationIssue {
                 at: text(),
                 prefix: text(),
             },
+            ValidationIssue::McpNameNotAKey { name: text() },
+            ValidationIssue::McpNameReserved {
+                name: text(),
+                agent: Agent::Claude,
+                reserved: text(),
+            },
+            ValidationIssue::McpNameClaimed {
+                name: text(),
+                agent: Agent::Claude,
+                claimed: text(),
+            },
         ]
     }
 }
@@ -1388,6 +1496,48 @@ impl fmt::Display for ValidationIssue {
                  holds no secret: declare a secret input read from an environment variable, \
                  and write it there between braces"
             ),
+            ValidationIssue::McpNameNotAKey { name } => write!(
+                f,
+                "`{name}` is not usable as an MCP server's name: every agent keys a server by \
+                 letters, digits, hyphens and underscores, and nothing else"
+            ),
+            // Matched on the agent, since what it keeps the name for is its
+            // own, so a new one says it.
+            ValidationIssue::McpNameReserved {
+                name,
+                agent,
+                reserved,
+            } => match agent {
+                Agent::Claude | Agent::Codex => write!(
+                    f,
+                    "`{name}` is a name {} keeps for a server of its own (`{reserved}`), so no \
+                     server of yours can be keyed by it",
+                    agent.title()
+                ),
+                Agent::OpenCode => write!(
+                    f,
+                    "`{name}` is a key OpenCode reads in its `mcp` table itself (`{reserved}`), \
+                     so a server keyed by it there would be read as that key"
+                ),
+            },
+            ValidationIssue::McpNameClaimed {
+                name,
+                agent,
+                claimed,
+            } => match agent {
+                Agent::Claude => write!(
+                    f,
+                    "`{name}` is the name Claude Code gives the skills Anthropic provides \
+                     (`{claimed}`), so a server of yours by it may be taken for theirs; it is \
+                     written all the same"
+                ),
+                Agent::Codex | Agent::OpenCode => write!(
+                    f,
+                    "`{name}` is a name {} uses for one of its own (`{claimed}`), so a server of \
+                     yours by it may be taken for that one; it is written all the same",
+                    agent.title()
+                ),
+            },
         }
     }
 }

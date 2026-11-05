@@ -695,6 +695,34 @@ fn an_issue_serializes_its_code_what_it_is_about_and_whether_it_warns() {
                 "warning": false,
             }),
         ),
+        (
+            ValidationIssue::McpNameNotAKey {
+                name: String::from("git.hub"),
+            },
+            serde_json::json!({"code": "mcp_name_not_a_key", "name": "git.hub", "warning": false}),
+        ),
+        (
+            ValidationIssue::McpNameReserved {
+                name: String::from("Servers"),
+                agent: Agent::OpenCode,
+                reserved: String::from("servers"),
+            },
+            serde_json::json!({
+                "code": "mcp_name_reserved", "name": "Servers", "agent": "opencode",
+                "reserved": "servers", "warning": false,
+            }),
+        ),
+        (
+            ValidationIssue::McpNameClaimed {
+                name: String::from("anthropic-skills"),
+                agent: Agent::Claude,
+                claimed: String::from("anthropic-skills"),
+            },
+            serde_json::json!({
+                "code": "mcp_name_claimed", "name": "anthropic-skills", "agent": "claude",
+                "claimed": "anthropic-skills", "warning": true,
+            }),
+        ),
     ];
     assert_eq!(
         issues.len(),
