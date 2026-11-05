@@ -121,6 +121,55 @@ fn neither_codex_nor_opencode_can_be_given_server_sent_events() {
 }
 
 #[test]
+fn claude_cannot_be_given_an_address_read_from_a_variable_it_keeps_from_one() {
+    let name = random::kebab();
+    for (why, variable) in McpMother::blanked_variables() {
+        let blanked = |input: &str| {
+            vec![Inexpressible::VariableBlanked {
+                input: named(input),
+                variable: VariableName::from(variable.as_str()),
+            }]
+        };
+        for (text, input) in [
+            (McpMother::header_read_from(&name, &variable), "token"),
+            (McpMother::url_read_from(&name, &variable), "tenant"),
+        ] {
+            assert_eq!(
+                by_agent(&text),
+                [
+                    ("claude", blanked(input)),
+                    ("codex", vec![]),
+                    ("opencode", vec![])
+                ],
+                "{why}: {text}"
+            );
+        }
+    }
+}
+
+#[test]
+fn claude_is_given_an_address_read_from_a_variable_it_passes_on_and_a_program_from_any() {
+    let name = random::kebab();
+    for (why, variable) in McpMother::passed_variables() {
+        let text = McpMother::header_read_from(&name, &variable);
+        assert_eq!(
+            parsed(&text).inexpressible(Agent::Claude),
+            [],
+            "{why}: {text}"
+        );
+    }
+    // A program's environment is no remote server's.
+    for (why, variable) in McpMother::blanked_variables() {
+        let text = McpMother::env_read_from(&name, &variable).replacen("cwd = \".\"\n", "", 1);
+        assert_eq!(
+            parsed(&text).inexpressible(Agent::Claude),
+            [],
+            "{why}: {text}"
+        );
+    }
+}
+
+#[test]
 fn a_shape_an_agent_cannot_express_is_nothing_validate_says() {
     let name = random::kebab();
     for text in [
@@ -129,6 +178,7 @@ fn a_shape_an_agent_cannot_express_is_nothing_validate_says() {
         McpMother::secret_in_url(&name),
         McpMother::composite_secret_header(&name),
         McpMother::sse(&name),
+        McpMother::header_read_from(&name, "NPM_TOKEN"),
     ] {
         let definition = parsed(&text);
 
@@ -158,6 +208,10 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
         },
         Inexpressible::ServerSentEvents,
         Inexpressible::WorkingDirectory,
+        Inexpressible::VariableBlanked {
+            input: named("token"),
+            variable: VariableName::from("NPM_TOKEN"),
+        },
     ];
     assert_eq!(
         shapes.len(),
@@ -177,6 +231,7 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
             ("secret_header_composite", true),
             ("sse_unsupported", true),
             ("cwd_unsupported", false),
+            ("variable_blanked", true),
         ]
     );
 }

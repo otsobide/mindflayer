@@ -598,7 +598,31 @@ fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so()
             Some("sse_unsupported"),
         ),
     ];
-    for (text, agent, code) in shapes {
+    let (_, blanked) = random::pick(&McpMother::blanked_variables());
+    let (_, passed) = random::pick(&McpMother::passed_variables());
+    let read_from = [
+        (
+            McpMother::header_read_from(&name, &blanked),
+            Agent::Claude,
+            Some("variable_blanked"),
+        ),
+        (
+            McpMother::url_read_from(&name, &blanked),
+            Agent::Claude,
+            Some("variable_blanked"),
+        ),
+        (
+            McpMother::header_read_from(&name, &passed),
+            Agent::Claude,
+            None,
+        ),
+        (
+            McpMother::env_read_from(&name, &blanked),
+            Agent::Claude,
+            Some("cwd_unsupported"),
+        ),
+    ];
+    for (text, agent, code) in shapes.into_iter().chain(read_from) {
         let definition = read(text);
         assert_eq!(definition.issues(), [], "{agent:?} {code:?}");
         let said: Vec<&str> = definition

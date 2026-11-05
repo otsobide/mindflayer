@@ -256,6 +256,7 @@ export type CoreCode =
   | "secret_header_composite"
   | "sse_unsupported"
   | "cwd_unsupported"
+  | "variable_blanked"
   | "migrate_refused"
   | "migrate_marker_backup_failed"
   | "migrate_move_failed"

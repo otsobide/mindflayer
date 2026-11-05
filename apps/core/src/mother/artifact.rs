@@ -387,6 +387,114 @@ impl McpMother {
         )
     }
 
+    /// The address of [`http`](Self::http), its secret header read from
+    /// `variable`.
+    pub fn header_read_from(name: &str, variable: &str) -> String {
+        Self::http(name).replacen(
+            "env_var = \"EXAMPLE_TOKEN\"",
+            &format!("env_var = {}", toml::Value::String(variable.to_owned())),
+            1,
+        )
+    }
+
+    /// The address of [`http`](Self::http), its supplied part read from
+    /// `variable`.
+    pub fn url_read_from(name: &str, variable: &str) -> String {
+        Self::http(name).replacen(
+            "env_var = \"EXAMPLE_TENANT\"",
+            &format!("env_var = {}", toml::Value::String(variable.to_owned())),
+            1,
+        )
+    }
+
+    /// The program of [`stdio`](Self::stdio), its secret environment read
+    /// from `variable`.
+    pub fn env_read_from(name: &str, variable: &str) -> String {
+        Self::stdio(name).replacen(
+            "env_var = \"EXAMPLE_API_KEY\"",
+            &format!("env_var = {}", toml::Value::String(variable.to_owned())),
+            1,
+        )
+    }
+
+    /// Variables Claude Code reads as empty in a remote server's `url` and
+    /// `headers`, each beside why, in a case drawn afresh: one of each list
+    /// and each shape it keeps from one.
+    pub fn blanked_variables() -> Vec<(&'static str, String)> {
+        let word = random::word().to_ascii_uppercase();
+        let digits = random::drawn_from(random::DIGITS, random::between(1, 3));
+        let mut variables = vec![
+            ("Claude's own key", String::from("ANTHROPIC_API_KEY")),
+            ("a package registry's token", String::from("NPM_TOKEN")),
+            ("a review service's token", String::from("SONAR_TOKEN")),
+            (
+                "a proxy a tool is sent through",
+                String::from("https_proxy"),
+            ),
+            (
+                "a registry's token under a workflow's input",
+                String::from("INPUT_NPM_TOKEN"),
+            ),
+            (
+                "a background session's, kept only as it is",
+                String::from("CLAUDE_BG_RV_AUTH"),
+            ),
+            (
+                "telemetry's settings",
+                String::from("OTEL_EXPORTER_OTLP_HEADERS"),
+            ),
+            ("git's configuration", format!("GIT_CONFIG_VALUE_{digits}")),
+            (
+                "git's configuration whole",
+                String::from("GIT_CONFIG_PARAMETERS"),
+            ),
+            (
+                "a Cargo registry's token",
+                format!("CARGO_REGISTRIES_{word}_TOKEN"),
+            ),
+            (
+                "a Cargo registry's token under a workflow's input",
+                format!("INPUT_CARGO_REGISTRIES_{word}_TOKEN"),
+            ),
+        ];
+        for (_, variable) in &mut variables {
+            *variable = Self::recased(variable);
+        }
+        variables
+    }
+
+    /// Variables Claude Code passes on to a remote server, each beside
+    /// why: each near one it reads as empty, and none of them.
+    pub fn passed_variables() -> Vec<(&'static str, String)> {
+        let word = random::word().to_ascii_uppercase();
+        vec![
+            ("GitHub's token", String::from("GITHUB_TOKEN")),
+            ("Hugging Face's token", String::from("HF_TOKEN")),
+            ("a server's own", String::from("EXAMPLE_TOKEN")),
+            (
+                "a background session's under a workflow's input",
+                String::from("INPUT_CLAUDE_BG_RV_AUTH"),
+            ),
+            (
+                "telemetry's prefix inside a word",
+                format!("{word}_OTEL_KEY"),
+            ),
+            (
+                "git's count of its settings",
+                String::from("GIT_CONFIG_COUNT"),
+            ),
+            (
+                "git's setting with no number",
+                String::from("GIT_CONFIG_KEY_"),
+            ),
+            (
+                "a Cargo registry's with no name",
+                String::from("CARGO_REGISTRIES__TOKEN"),
+            ),
+            ("more after a name", String::from("NPM_TOKEN_FILE")),
+        ]
+    }
+
     /// The address of [`http`](Self::http), its supplied part written in
     /// its userinfo, `https://{tenant}@example.com/mcp`, where an address
     /// is kept with no credential: what `validate` says no agent is given.

@@ -14,17 +14,18 @@
 //!
 //! Each agent's shapes are a function matched on the agent with no
 //! wildcard, so a new agent says what it cannot express before it
-//! compiles. Each fact is docs-only, from D-11 and #87, and
-//! `docs/agents.md`'s "MCP servers" says what #18's run on the binaries
-//! would move.
+//! compiles. Each fact is docs-only, from D-11 and #87, and the variables
+//! Claude reads as empty toward a remote server from its binary
+//! ([`super::blanked`]); `docs/agents.md`'s "MCP servers" says what #18's
+//! runs on the binaries moved, and what a later one would.
 
 use serde::Serialize;
 use thiserror::Error;
 
 use crate::agent::Agent;
 use crate::code::{codes, Said};
-use crate::mcp::{written, InputKind, McpDefinition, Transport};
-use crate::value::InputName;
+use crate::mcp::{blanked, written, InputKind, McpDefinition, Transport};
+use crate::value::{InputName, VariableName};
 
 /// Something a definition holds that one agent cannot be given as it is
 /// written, said of the agent the report is for.
@@ -67,6 +68,18 @@ pub enum Inexpressible {
     /// is started where Claude starts it, and the rest is written.
     #[error("the transport's `cwd` is left out, since a program is started there in no folder it is told")]
     WorkingDirectory,
+    /// An input of an address read from a variable Claude reads as empty in
+    /// a remote server's `url` and `headers`, a credential of its own or of
+    /// a tool on the machine ([`super::blanked`]): written as a reference,
+    /// it would reach the server with nothing in it.
+    #[error(
+        "input `{input}` is read from `{variable}`, which is read as empty there in a remote \
+         server's `url` and `headers`, so that a credential it holds never reaches one"
+    )]
+    VariableBlanked {
+        input: InputName,
+        variable: VariableName,
+    },
 }
 
 codes!(Inexpressible {
@@ -75,6 +88,7 @@ codes!(Inexpressible {
     Self::SecretHeaderComposite { .. } => "secret_header_composite",
     Self::ServerSentEvents => "sse_unsupported",
     Self::WorkingDirectory => "cwd_unsupported",
+    Self::VariableBlanked { .. } => "variable_blanked",
 });
 
 impl Inexpressible {
@@ -89,7 +103,8 @@ impl Inexpressible {
             Inexpressible::SecretInArgument { .. }
             | Inexpressible::SecretInUrl { .. }
             | Inexpressible::SecretHeaderComposite { .. }
-            | Inexpressible::ServerSentEvents => true,
+            | Inexpressible::ServerSentEvents
+            | Inexpressible::VariableBlanked { .. } => true,
             Inexpressible::WorkingDirectory => false,
         }
     }
@@ -158,13 +173,30 @@ impl McpDefinition {
     /// Claude expands `${VAR}` in a program's command, arguments and
     /// environment and in an address and its headers (D-11), and reaches
     /// every transport; its entry for a program has no folder to start it
-    /// in.
+    /// in, and toward an address it reads the credentials it keeps from one
+    /// as empty.
     fn for_claude(&self) -> Vec<Inexpressible> {
         match &self.transport {
             Transport::Stdio(stdio) if stdio.cwd.is_some() => {
                 vec![Inexpressible::WorkingDirectory]
             }
-            Transport::Stdio(_) | Transport::Http(_) | Transport::Sse(_) => Vec::new(),
+            Transport::Stdio(_) => Vec::new(),
+            Transport::Http(_) | Transport::Sse(_) => self
+                .inputs
+                .iter()
+                .filter(|input| match input.kind {
+                    InputKind::Header | InputKind::UrlVar => true,
+                    // Written nowhere in an address.
+                    InputKind::Env | InputKind::Arg => false,
+                })
+                .filter_map(|input| {
+                    let variable = input.env_var.as_ref()?;
+                    blanked::by_claude(variable).then(|| Inexpressible::VariableBlanked {
+                        input: input.name.clone(),
+                        variable: variable.clone(),
+                    })
+                })
+                .collect(),
         }
     }
 
