@@ -1,26 +1,33 @@
 #!/usr/bin/env bash
-# Asks the coding agents themselves where they read skills and rules (#17), so
-# that the adapters build on what the binaries do rather than on what their
-# documentation says. docs/agents.md records each run: the version, the
-# environment, the commands and what every agent answered.
+# Asks the coding agents themselves where they read skills and rules (#17), and
+# what they make of a project's MCP servers (#18), so that the adapters build
+# on what the binaries do rather than on what their documentation says.
+# docs/agents.md records each run: the version, the environment, the commands
+# and what every agent answered.
 #
-#   scripts/agent-probe/probe.sh [claude]
+#   scripts/agent-probe/probe.sh [claude] [codex] [opencode]
 #   PROBE_ONLY='claude-import claude-local' scripts/agent-probe/probe.sh
 #
 # It runs the agents against their APIs with the operator's own login, which is
-# why it is run by hand and never by CI or `make test`. Only Claude Code has
-# checks so far. An agent gets them from a file beside this one, <agent>.sh,
-# defining <agent>_prepare, run out here where the real home is visible,
-# <agent>_checks, run inside the namespace below, and <agent>_runs, the names
-# of its runs (see claude.sh).
+# why it is run by hand and never by CI or `make test`. Each agent gets its
+# checks from a file beside this one, <agent>.sh, defining <agent>_prepare, run
+# out here where the real home is visible, <agent>_checks, run inside the
+# namespace below, and <agent>_runs, the names of its runs (see claude.sh).
+# Claude Code's are about skills, rules and MCP servers; Codex's and
+# OpenCode's only about MCP servers so far, so where those two read skills and
+# rules is still docs-only. The MCP checks share mcp.sh, and the stand-in
+# server each of them starts, mcp_server.py.
 #
-# Every run costs a paid agent call, so PROBE_ONLY, a space-separated list of
-# those names, limits a re-run to the runs it names, after a change to those
-# alone. Unset, everything runs.
+# Nearly every run costs a paid agent call (OpenCode's list their servers and
+# call no model), so PROBE_ONLY, a space-separated list of those names, limits
+# a re-run to the runs it names, after a change to those alone. Unset,
+# everything runs.
 #
 # Linux only. It needs bubblewrap (bwrap) on PATH, jq and git in /usr/bin or
-# /bin, the only PATH inside the namespace, and each agent's own binary
-# rather than a script or shim that would run something the namespace hides.
+# /bin, the only PATH inside the namespace, python3 there too for the MCP
+# checks' stand-in, npm on PATH to fetch OpenCode 1.19.4, and each agent's own
+# binary rather than a script or shim that would run something the namespace
+# hides.
 #
 # Isolation. An agent reads folders in the user's home whatever its own
 # variable says: Codex and OpenCode read ~/.agents/skills, which on the owner's
@@ -58,9 +65,10 @@
 #
 # Before and after the run it fingerprints the user-scope folders an agent
 # could write to (~/.agents, ~/.codex, ~/.claude/skills, ~/.claude/rules,
-# ~/.claude/CLAUDE.md and ~/.claude.json) and says whether they changed. Not
-# the whole ~/.claude: a Claude Code session running this script writes there
-# itself.
+# ~/.claude/CLAUDE.md, ~/.claude.json, ~/.config/opencode and OpenCode's two
+# logins in ~/.local/share/opencode) and says whether they changed. Not the
+# whole ~/.claude: a Claude Code session running this script writes there
+# itself, as an OpenCode session does in the rest of ~/.local/share/opencode.
 
 set -euo pipefail
 
@@ -76,6 +84,14 @@ die() {
 }
 
 say() { printf '%s\n' "$*"; }
+
+# A tool the checks run inside the namespace, where PATH is /usr/bin:/bin. One
+# found only in ~/.local/bin or a version manager's folder would pass out here
+# and be missing in there.
+namespace_tool() {
+	[[ -x /usr/bin/$1 || -x /bin/$1 ]] ||
+		die "needs $1 in /usr/bin or /bin, the only PATH inside the namespace${2:+, $2}"
+}
 
 in_list() {
 	local needle=$1 item
@@ -122,14 +138,9 @@ outside() {
 	for tool in bwrap sha256sum; do
 		command -v "$tool" >/dev/null || die "needs $tool on PATH"
 	done
-	# The checks run jq and git inside the namespace, where the real home is
-	# hidden. One found only in ~/.local/bin or a version manager's folder
-	# would pass out here and be missing in there, and every answer would
-	# then come out empty, as if the agent had loaded nothing.
-	for tool in jq git; do
-		[[ -x /usr/bin/$tool || -x /bin/$tool ]] ||
-			die "needs $tool in /usr/bin or /bin, the only PATH inside the namespace"
-	done
+	# The checks run jq and git inside the namespace; without them every
+	# answer would come out empty, as if the agent had loaded nothing.
+	for tool in jq git; do namespace_tool "$tool"; done
 	[[ -n ${HOME:-} && -d $HOME ]] || die "HOME is not a directory"
 	real_home=$(cd "$HOME" && pwd -P)
 	local repo
@@ -155,6 +166,9 @@ outside() {
 		"$real_home/.claude/rules"
 		"$real_home/.claude/CLAUDE.md"
 		"$real_home/.claude.json"
+		"$real_home/.config/opencode"
+		"$real_home/.local/share/opencode/auth.json"
+		"$real_home/.local/share/opencode/mcp-auth.json"
 	)
 	local before after
 	before=$(fingerprint "${watched[@]}")
@@ -285,7 +299,7 @@ put() {
 	printf '%s\n' "$2" >"$1"
 }
 
-# Excludes paths the way Mindflayer's local mode does: anchored entries in a
+# Excludes paths the way Mindweaver's local mode does: anchored entries in a
 # marked block of $GIT_COMMON_DIR/info/exclude.
 exclude() {
 	local repo=$1 file
@@ -294,9 +308,9 @@ exclude() {
 	[[ $file == /* ]] || file=$repo/$file
 	mkdir -p -- "$(dirname "$file")"
 	{
-		printf '# mindflayer:begin\n# project .\n'
+		printf '# mindweaver:begin\n# project .\n'
 		printf '%s\n' "$@"
-		printf '# mindflayer:end\n'
+		printf '# mindweaver:end\n'
 	} >>"$file"
 }
 
@@ -323,6 +337,14 @@ selected() {
 	in_list "$1" $PROBE_ONLY
 }
 
+# Whether PROBE_ONLY lets any of these runs go: what a prepare asks before it
+# fetches or copies in something only those runs need.
+any_selected() {
+	local name
+	for name in "$@"; do selected "$name" && return 0; done
+	return 1
+}
+
 verdict() {
 	local name=$1 want=$2 got=$3 subject=$4 why=$5 status=ok
 	if [[ $want != "$got" ]]; then
@@ -333,6 +355,15 @@ verdict() {
 		"$status" "$name" "$subject" "$want" "$got" "$why" | tee -a "$results/summary.txt"
 }
 
+# observe <run> <subject> <got> <what it bears on>: a result with nothing
+# expected of it, for what an issue asks to find out rather than to confirm
+# (what an agent does with an entry it may not accept, say). It is never a
+# mismatch: docs/agents.md records it, and the decision it bears on reads it.
+observe() {
+	printf '%-8s %-22s %-28s got %-15s %s\n' \
+		record "$1" "$2" "$3" "$4" | tee -a "$results/summary.txt"
+}
+
 inside() {
 	agents_from "$@"
 	# The guard every check relies on: refuse unless HOME is the temp home and
@@ -341,13 +372,15 @@ inside() {
 	[[ ${HOME:-} == "$mount_root/home" ]] || die "HOME is '${HOME:-}', not $mount_root/home: refusing to run"
 	[[ -n ${PROBE_REAL_HOME:-} ]] || die "PROBE_REAL_HOME is not set"
 	local path
-	for path in .agents .codex .claude .claude.json; do
+	for path in .agents .codex .claude .claude.json .config/opencode .local/share/opencode; do
 		[[ ! -e $PROBE_REAL_HOME/$path ]] || die "the real home is visible at $PROBE_REAL_HOME: refusing to run"
 	done
 
 	results=$mount_root/results
 	stage=$mount_root/stage
 	mismatches=0
+	# shellcheck source=/dev/null
+	source "$mount_scripts/mcp.sh"
 	local agent
 	for agent in "${agents[@]}"; do
 		# shellcheck source=/dev/null

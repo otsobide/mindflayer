@@ -235,8 +235,10 @@ three names.
 [agents.md](agents.md) records. It runs them against their APIs with
 your own login, in a temp home under `target/` with your real home hidden, so
 neither CI nor `make test` runs it. It needs Linux, `bwrap`, `jq` and `git`
-in `/usr/bin` or `/bin`, and Claude Code's native binary rather than an npm
-launcher or a version manager's shim.
+in `/usr/bin` or `/bin`, and each agent's native binary rather than an npm
+launcher or a version manager's shim. The MCP checks need `python3` there
+too, and `npm` to fetch OpenCode 1.19.4; [agents.md](agents.md#mcp-servers)
+gives the command that runs them.
 
 ## Developing the panel
 
