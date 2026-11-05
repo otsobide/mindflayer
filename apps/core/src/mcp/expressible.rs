@@ -129,6 +129,16 @@ pub enum Inexpressible {
          transport, so one of the two would be lost"
     )]
     ExtraRepeated { key: String },
+    /// A key the agent's extras give that is never written for it: Codex's
+    /// `experimental_environment` and `environment_id`, by their names the
+    /// environment it runs a server in, where an entry of Mindweaver's is
+    /// for a server the project's own machine starts or reaches. Said of
+    /// Codex (`codex_mcp::WITHHELD`).
+    #[error(
+        "its extras for the agent give `{key}`, a key for the environment it runs a server in, \
+         which is never written there"
+    )]
+    ExtraWithheld { key: String },
 }
 
 codes!(Inexpressible {
@@ -142,6 +152,7 @@ codes!(Inexpressible {
     Self::VariableBlanked { .. } => "variable_blanked",
     Self::TextExpanded { .. } => "text_expanded",
     Self::ExtraRepeated { .. } => "extra_repeated",
+    Self::ExtraWithheld { .. } => "extra_withheld",
 });
 
 impl Inexpressible {
@@ -161,7 +172,8 @@ impl Inexpressible {
             | Inexpressible::ServerSentEvents
             | Inexpressible::VariableBlanked { .. }
             | Inexpressible::TextExpanded { .. }
-            | Inexpressible::ExtraRepeated { .. } => true,
+            | Inexpressible::ExtraRepeated { .. }
+            | Inexpressible::ExtraWithheld { .. } => true,
             Inexpressible::WorkingDirectory => false,
         }
     }
@@ -317,7 +329,8 @@ impl McpDefinition {
     /// shape of its own ([`codex_mcp::passed_on`], [`codex_mcp::bearer`]),
     /// so a secret anywhere else, or in any other shape, has no spelling
     /// there; it does not take server-sent events; and its extras go beside
-    /// the keys its entry writes, never over one.
+    /// the keys its entry writes, never over one, and never say where Codex
+    /// runs the server.
     fn for_codex(&self) -> Vec<Inexpressible> {
         let mut shapes = Vec::new();
         if let Transport::Sse(_) = self.transport {
@@ -361,8 +374,16 @@ impl McpDefinition {
             self.extras_for(Agent::Codex)
                 .into_iter()
                 .flatten()
-                .filter(|(key, _)| entry.contains(&key.as_str()))
-                .map(|(key, _)| Inexpressible::ExtraRepeated { key: key.clone() }),
+                .filter_map(|(key, _)| {
+                    let key = key.clone();
+                    if entry.contains(&key.as_str()) {
+                        Some(Inexpressible::ExtraRepeated { key })
+                    } else if codex_mcp::WITHHELD.contains(&key.as_str()) {
+                        Some(Inexpressible::ExtraWithheld { key })
+                    } else {
+                        None
+                    }
+                }),
         );
         shapes
     }

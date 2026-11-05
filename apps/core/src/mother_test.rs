@@ -612,6 +612,11 @@ fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so()
             Some("extra_repeated"),
         ),
         (
+            McpMother::with_codex_extras(&name, "environment_id = \"cloud\"\n"),
+            Agent::Codex,
+            Some("extra_withheld"),
+        ),
+        (
             McpMother::sse(&name),
             Agent::OpenCode,
             Some("sse_unsupported"),

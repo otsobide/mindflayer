@@ -149,6 +149,14 @@ fn each_shape_codex_cannot_be_given_refuses_the_entry_by_its_code() {
             McpMother::with_codex_extras(&name, "env_vars = [\"OTHER\"]\n"),
             "extra_repeated",
         ),
+        (
+            McpMother::with_codex_extras(&name, "experimental_environment = \"remote\"\n"),
+            "extra_withheld",
+        ),
+        (
+            McpMother::with_codex_extras(&name, "environment_id = \"cloud\"\n"),
+            "extra_withheld",
+        ),
     ] {
         let error = entry(&parsed(&text)).unwrap_err();
         assert_eq!(error.code(), code, "{error}");

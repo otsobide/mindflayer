@@ -319,6 +319,17 @@ fn codex_cannot_be_given_extras_giving_a_key_its_entry_may_write_from_the_transp
             "{key}"
         );
     }
+    // Nor where Codex runs the server, whatever it holds.
+    for key in ["experimental_environment", "environment_id"] {
+        let text = McpMother::with_codex_extras(&name, &format!("{key} = \"remote\"\n"));
+        assert_eq!(
+            parsed(&text).inexpressible(Agent::Codex),
+            [Inexpressible::ExtraWithheld {
+                key: key.to_owned()
+            }],
+            "{key}"
+        );
+    }
     // Claude's extras are Claude's alone.
     let text = McpMother::with_claude_extras(&name, "env_vars = [\"OTHER\"]\n");
     assert_eq!(parsed(&text).inexpressible(Agent::Codex), []);
@@ -419,6 +430,9 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
         Inexpressible::ExtraRepeated {
             key: String::from("type"),
         },
+        Inexpressible::ExtraWithheld {
+            key: String::from("environment_id"),
+        },
     ];
     assert_eq!(
         shapes.len(),
@@ -443,6 +457,7 @@ fn every_shape_but_a_folder_left_out_refuses_the_agent_the_definition() {
             ("variable_blanked", true),
             ("text_expanded", true),
             ("extra_repeated", true),
+            ("extra_withheld", true),
         ]
     );
 }

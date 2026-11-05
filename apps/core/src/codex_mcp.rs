@@ -32,6 +32,10 @@
 //! ([`CodexMcpError::InputInText`]), as one read from no variable does: it
 //! is no limit of Codex's, and the report does not say it.
 //!
+//! Never `experimental_environment` nor `environment_id`, which by their
+//! names say the environment Codex runs a server in ([`WITHHELD`]): the
+//! transport writes neither, and extras giving one refuse the entry.
+//!
 //! Each key is written only when it holds something, since Codex reads a
 //! key left out as empty and a `cwd` or a `bearer_token_env_var` has no
 //! empty value to write: a definition still has one entry, and one
@@ -245,6 +249,15 @@ pub(crate) const fn keys(kind: TransportType) -> &'static [&'static str] {
         ],
     }
 }
+
+/// Keys of Codex's for the environment it runs a server in, which are never
+/// written: not by the transport, which has nothing to say of one, and not
+/// from the extras either, which the report refuses for them
+/// ([`Inexpressible::ExtraWithheld`]). An entry of Mindweaver's is for a
+/// server the project's own machine starts or reaches, as every other
+/// agent's is, and one Codex ran elsewhere would be a server no other agent
+/// is given.
+pub(crate) const WITHHELD: &[&str] = &["experimental_environment", "environment_id"];
 
 /// Whether the program's environment variable `key`, holding `value`, is
 /// one `env_vars` gives the program from `variable`, the input written
