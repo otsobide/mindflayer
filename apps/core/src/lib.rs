@@ -25,6 +25,7 @@ pub mod claude_mcp;
 pub mod claude_md;
 pub mod claude_rules;
 pub mod code;
+pub mod codex_mcp;
 pub mod config_entry;
 pub mod contents;
 pub mod copy;

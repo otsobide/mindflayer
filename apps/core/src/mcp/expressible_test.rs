@@ -300,6 +300,31 @@ fn claude_cannot_be_given_extras_giving_a_key_its_entry_writes_from_the_transpor
 }
 
 #[test]
+fn codex_cannot_be_given_extras_giving_a_key_its_entry_may_write_from_the_transport() {
+    let name = random::kebab();
+    for key in ["command", "args", "env", "env_vars", "cwd"] {
+        let text = McpMother::with_codex_extras(&name, &format!("{key} = \"other\"\n"));
+        assert_eq!(
+            by_agent(&text),
+            [
+                ("claude", vec![Inexpressible::WorkingDirectory]),
+                (
+                    "codex",
+                    vec![Inexpressible::ExtraRepeated {
+                        key: key.to_owned()
+                    }]
+                ),
+                ("opencode", vec![])
+            ],
+            "{key}"
+        );
+    }
+    // Claude's extras are Claude's alone.
+    let text = McpMother::with_claude_extras(&name, "env_vars = [\"OTHER\"]\n");
+    assert_eq!(parsed(&text).inexpressible(Agent::Codex), []);
+}
+
+#[test]
 fn claude_cannot_be_given_text_it_reads_as_a_reference_where_no_input_stands() {
     let name = random::kebab();
     for (why, reference) in McpMother::references() {

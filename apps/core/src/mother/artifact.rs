@@ -381,6 +381,28 @@ impl McpMother {
     }
 
     /// The program of [`whole_secret_env`](Self::whole_secret_env), its
+    /// argument written as it is rather than supplied, with extras for
+    /// Codex beside Claude's: a program every input of which Codex reads
+    /// from its variable, and is given whole.
+    pub fn program_for_codex(name: &str) -> String {
+        Self::whole_secret_env(name)
+            .replacen("\"{workspace}\"]", "\".\"]", 1)
+            .replacen(
+                "[[inputs]]\nname = \"workspace\"\nkind = \"arg\"\nenv_var = \"EXAMPLE_WORKSPACE\"\n\n\
+                 [extras.claude]\n",
+                "[extras.codex]\nstartup_timeout_sec = 20\n\n[extras.claude]\n",
+                1,
+            )
+    }
+
+    /// The program of [`program_for_codex`](Self::program_for_codex), its
+    /// extras for Codex `extras`, the lines of a TOML table, in place of
+    /// the timeout it holds.
+    pub fn with_codex_extras(name: &str, extras: &str) -> String {
+        Self::program_for_codex(name).replacen("startup_timeout_sec = 20\n", extras, 1)
+    }
+
+    /// The program of [`whole_secret_env`](Self::whole_secret_env), its
     /// argument no secret and read from no variable: a value somebody
     /// gives, which a definition may leave unsaid and no entry can refer
     /// to.
@@ -428,6 +450,41 @@ impl McpMother {
     /// reads `Authorization: Bearer`.
     pub fn whole_secret_header(name: &str) -> String {
         Self::http(name).replacen(
+            "Authorization = \"Bearer {token}\"",
+            "X-Api-Key = \"{token}\"",
+            1,
+        )
+    }
+
+    /// The address of [`http`](Self::http), written whole rather than in
+    /// part supplied, a header of its own written as it is beside its
+    /// secret one: an address every input of which Codex reads from its
+    /// variable, and is given whole.
+    pub fn address_for_codex(name: &str) -> String {
+        Self::http(name)
+            .replacen(
+                "https://{tenant}.example.com/mcp",
+                "https://example.com/mcp",
+                1,
+            )
+            .replacen(
+                "Authorization = \"Bearer {token}\"",
+                "Authorization = \"Bearer {token}\", X-Client = \"mindweaver\"",
+                1,
+            )
+            .replacen(
+                "[[inputs]]\nname = \"tenant\"\nkind = \"url_var\"\nrequired = true\n\
+                 env_var = \"EXAMPLE_TENANT\"\n\n",
+                "",
+                1,
+            )
+    }
+
+    /// The address of [`address_for_codex`](Self::address_for_codex), its
+    /// secret header the whole value of a header of its own rather than a
+    /// bearer token.
+    pub fn whole_header_for_codex(name: &str) -> String {
+        Self::address_for_codex(name).replacen(
             "Authorization = \"Bearer {token}\"",
             "X-Api-Key = \"{token}\"",
             1,

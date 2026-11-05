@@ -603,6 +603,14 @@ fn every_definition_named_for_what_an_agent_cannot_be_given_is_valid_and_is_so()
             Agent::Codex,
             Some("secret_env_composite"),
         ),
+        (McpMother::program_for_codex(&name), Agent::Codex, None),
+        (McpMother::address_for_codex(&name), Agent::Codex, None),
+        (McpMother::whole_header_for_codex(&name), Agent::Codex, None),
+        (
+            McpMother::with_codex_extras(&name, "command = \"other\"\n"),
+            Agent::Codex,
+            Some("extra_repeated"),
+        ),
         (
             McpMother::sse(&name),
             Agent::OpenCode,

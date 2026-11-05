@@ -31,6 +31,7 @@ use thiserror::Error;
 use crate::agent::Agent;
 use crate::claude_mcp;
 use crate::code::{codes, Said};
+use crate::codex_mcp;
 use crate::mcp::{blanked, keyed, written, Input, InputKind, McpDefinition, Transport};
 use crate::value::{InputName, VariableName};
 
@@ -120,8 +121,9 @@ pub enum Inexpressible {
     TextExpanded { at: String },
     /// A key the agent's extras give that its entry is written with from
     /// the transport: passed on beside it, one of the two would be lost,
-    /// and which one would be the order of a file's keys. Said of Claude,
-    /// whose entry's keys are its renderer's (`claude_mcp::keys`).
+    /// and which one would be the order of a file's keys. Said of Claude
+    /// and Codex, whose entries' keys are their renderers'
+    /// (`claude_mcp::keys`, `codex_mcp::keys`).
     #[error(
         "its extras for the agent give `{key}`, a key the entry there is written with from the \
          transport, so one of the two would be lost"
@@ -312,8 +314,10 @@ impl McpDefinition {
     /// Codex has no interpolation: a secret reaches a server only through
     /// the keys that name a variable (`env_vars`, `env_http_headers`,
     /// `bearer_token_env_var`, D-11), each of which reads one only in a
-    /// shape of its own, so a secret anywhere else, or in any other shape,
-    /// has no spelling there; and it does not take server-sent events.
+    /// shape of its own ([`codex_mcp::passed_on`], [`codex_mcp::bearer`]),
+    /// so a secret anywhere else, or in any other shape, has no spelling
+    /// there; it does not take server-sent events; and its extras go beside
+    /// the keys its entry writes, never over one.
     fn for_codex(&self) -> Vec<Inexpressible> {
         let mut shapes = Vec::new();
         if let Transport::Sse(_) = self.transport {
@@ -352,6 +356,14 @@ impl McpDefinition {
                 }
             }
         }
+        let entry = codex_mcp::keys(self.transport.kind());
+        shapes.extend(
+            self.extras_for(Agent::Codex)
+                .into_iter()
+                .flatten()
+                .filter(|(key, _)| entry.contains(&key.as_str()))
+                .map(|(key, _)| Inexpressible::ExtraRepeated { key: key.clone() }),
+        );
         shapes
     }
 
@@ -378,7 +390,8 @@ impl McpDefinition {
                     });
                 }
                 let variable = input.env_var.as_ref()?;
-                (variable.as_str() != key).then(|| Inexpressible::SecretEnvRenamed {
+                let passed = codex_mcp::passed_on(key, value, &placeholder, variable);
+                (!passed).then(|| Inexpressible::SecretEnvRenamed {
                     key: key.clone(),
                     input: input.name.clone(),
                     variable: variable.clone(),
@@ -400,7 +413,8 @@ impl McpDefinition {
 
     /// Every header, by its name as written, that holds `input` and is not
     /// a header Codex reads a secret into: the input as its whole value,
-    /// or `Authorization` holding `Bearer` and the input, in either case.
+    /// or `Authorization` holding `Bearer` and the input, in either case,
+    /// the first header so named ([`codex_mcp::bearer`]).
     fn composite_headers(&self, input: &InputName) -> Vec<String> {
         let (Transport::Http(endpoint) | Transport::Sse(endpoint)) = &self.transport else {
             return Vec::new();
@@ -411,12 +425,8 @@ impl McpDefinition {
             .iter()
             .filter(|(_, value)| value.contains(&placeholder))
             .filter(|(header, value)| {
-                let whole = **value == placeholder;
-                let bearer = header.eq_ignore_ascii_case("authorization")
-                    && value.split_once(' ').is_some_and(|(scheme, token)| {
-                        scheme.eq_ignore_ascii_case("bearer") && token == placeholder
-                    });
-                !whole && !bearer
+                **value != placeholder
+                    && !codex_mcp::bearer(&endpoint.headers, header, &placeholder)
             })
             .map(|(header, _)| header.clone())
             .collect()
