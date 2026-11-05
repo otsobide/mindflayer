@@ -89,7 +89,7 @@ use thiserror::Error;
 use crate::agent::{Agent, AgentHomes};
 use crate::artifact::{self, issue_list, ValidationIssue};
 use crate::code::codes;
-use crate::config_entry::{self, ConfigFile, Edit, FileError, Format, Value, Written};
+use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
 use crate::install;
 use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
 use crate::value::{ArtifactName, InputName, VariableName};
@@ -357,7 +357,7 @@ pub fn render(
 /// Take the entry keyed `name` out of the [`FILE`] at `root`, every other
 /// byte as it was, and take the file away with it when `created`, that
 /// Mindweaver made it, and nothing else is left in it: no other server,
-/// and nothing beside [`SERVERS`].
+/// nothing beside [`SERVERS`], and no comment ([`holds_only`]).
 ///
 /// [`Written::Removed`] when the file went, [`Written::Changed`] when the
 /// entry did and the file stays, and [`Written::Unchanged`] when there was
@@ -371,7 +371,7 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, CodexMc
     // Taken whole when the entry is all it holds, rather than written
     // without it first only to be taken away.
     if created {
-        let taken = file.take(|document| config_entry::holds_only(document, &[SERVERS, name]))?;
+        let taken = file.take(|text, _| holds_only(text, name))?;
         if taken == Written::Removed {
             return Ok(taken);
         }
@@ -381,6 +381,24 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, CodexMc
         return Ok(Written::Unchanged);
     }
     Ok(file.edit(&key, &Edit::Remove)?)
+}
+
+/// Whether `text` holds the entry keyed `name` and nothing else, or not
+/// even that: what taking the entry out of it leaves is blank.
+///
+/// Asked of the text, where `claude_mcp` asks the document
+/// ([`config_entry::holds_only`]), since TOML has comments and the
+/// document holds none: one somebody wrote in the file, above the entry or
+/// anywhere else outside it, is something, and taking the entry out keeps
+/// it. What the entry's own lines hold goes with it, as it does when the
+/// file stays.
+fn holds_only(text: &str, name: &str) -> bool {
+    match config_entry::edit(Format::Toml, text, &[SERVERS, name], &Edit::Remove) {
+        Ok(left) => left.trim().is_empty(),
+        Err(EntryError::Missing { .. }) => text.trim().is_empty(),
+        // Nothing else an edit refuses is a file holding the entry alone.
+        Err(_) => false,
+    }
 }
 
 /// The project's [`FILE`], read up to [`MAX_BYTES`].

@@ -382,6 +382,27 @@ fn a_file_mindweaver_did_not_make_stays_when_its_last_server_goes() {
 }
 
 #[test]
+fn a_file_mindweaver_made_stays_when_somebody_has_written_a_comment_in_it() {
+    let name = McpMother::name();
+    let comment = "# Our Codex servers: ask #infra before adding one.\n";
+    for (place, above, below) in [("above", comment, ""), ("below", "", comment)] {
+        let root = TempDir::new().unwrap();
+        assert_eq!(
+            render(root.path(), &McpMother::address_for_codex(&name)).written,
+            Written::Created
+        );
+        write(root.path(), &format!("{above}{}{below}", read(root.path())));
+
+        assert_eq!(
+            codex_mcp::remove(root.path(), &name, true).unwrap(),
+            Written::Changed,
+            "{place}"
+        );
+        assert_eq!(read(root.path()), comment, "{place}");
+    }
+}
+
+#[test]
 fn a_server_not_there_is_taken_out_of_nothing() {
     let root = TempDir::new().unwrap();
     write(root.path(), TEAMS);

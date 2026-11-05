@@ -9280,9 +9280,13 @@ A file is taken away only through `ConfigFile::take`, and only when its
 caller says what it holds is nothing it keeps: which documents those are
 is the caller's to say, as the key path is, since `{"mcpServers": {}}` is
 nothing in `.mcp.json` and something in a file that keeps other settings
-beside it. `config_entry::holds_only` answers it for a caller whose file
-keeps nothing of Mindweaver's but entries, in any format: each object on
-the way to the entry holding the next key alone. It is read as an edit reads it, so a file that does not parse is
+beside it. `config_entry::holds_only` answers it of the document for a
+caller whose file keeps nothing of Mindweaver's but entries: each object on
+the way to the entry holding the next key alone. The document holds no
+comment, so `take` hands its caller the text as well, and a caller whose
+format has comments asks the text: one somebody wrote is something.
+`codex_mcp` takes `.codex/config.toml` only when taking the entry out of
+its text leaves it blank. It is read as an edit reads it, so a file that does not parse is
 refused rather than judged, and the route is looked at again before the
 file goes, so one that has become a link is refused and what it points at
 kept.
@@ -9432,8 +9436,11 @@ project whose `.codex/config.toml` is inside an agent's own folder
 (`codex_mcp_user_scope`), one at the user's home while Codex's is
 `~/.codex`, where the file is the one Codex reads for every project, as an
 install refuses a copy there. `remove` takes the entry out, and the file
-with it when the caller says Mindweaver made it and nothing else is left
-(`config_entry::holds_only`), as `claude_mcp::remove` does; `.codex` stays,
+with it when the caller says Mindweaver made it and nothing else is left,
+as `claude_mcp::remove` does. That is asked of the text, not of the
+document `config_entry::holds_only` reads, which holds no comment: what
+taking the entry out leaves must be blank, so a comment somebody wrote
+anywhere outside the entry keeps the file. `.codex` stays,
 whatever is left in it: it is Codex's own folder, which may hold what else
 Codex keeps for the project, and no record says Mindweaver made it. Whose
 entry it is, and whether Mindweaver made the file, are the ledger's to say

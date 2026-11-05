@@ -275,11 +275,13 @@ pub fn loose_json(text: &str) -> bool {
 /// alone, and the entry whatever it holds.
 ///
 /// What a caller that made a file asks before it takes the file away with
-/// the last entry it wrote ([`ConfigFile::take`]), in every format alike:
-/// `{"mcpServers": {}}` holds nothing beside `mcpServers.github`, and a key
-/// somebody wrote anywhere on the way is something. Still the caller's to
-/// ask, as which documents are empty is, since a file that keeps settings
-/// of its own beside its entries is something whatever it holds.
+/// the last entry it wrote ([`ConfigFile::take`]): `{"mcpServers": {}}`
+/// holds nothing beside `mcpServers.github`, and a key somebody wrote
+/// anywhere on the way is something. Still the caller's to ask, as which
+/// documents are empty is, since a file that keeps settings of its own
+/// beside its entries is something whatever it holds. Enough only in a
+/// format with no comments: a document holds none, so a caller whose file
+/// can hold them asks the text `take` hands it too.
 pub fn holds_only(document: &Value, key: &[&str]) -> bool {
     let Some((first, rest)) = key.split_first() else {
         return true;

@@ -253,7 +253,7 @@ pub fn remove(root: &Path, name: &str, created: bool) -> Result<Written, ClaudeM
     // without it first only to be taken away.
     if created {
         let taken = file
-            .take(|document| holds_only(document, name))
+            .take(|_, document| holds_only(document, name))
             .map_err(|error| loose(&file, error))?;
         if taken == Written::Removed {
             return Ok(taken);

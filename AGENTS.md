@@ -769,8 +769,10 @@ These are easy to break from a single file without noticing.
     writes, the user's `config.toml` in the Codex home `AgentHomes` gives,
     refusing a name it holds (`codex_mcp_collision`) and warning of a
     project it does not mark trusted (`codex_mcp_untrusted`), refuses a
-    project whose file is inside an agent's own folder, and leaves `.codex`
-    when its file goes.
+    project whose file is inside an agent's own folder, takes its file
+    away only when taking the entry out of the text leaves it blank, since
+    a comment is somebody's and the document holds none, and leaves
+    `.codex` when its file goes.
   - `ui --token-file` (`TokenFile`, in `src/commands/ui.rs`) makes its
     file with `create_new`, mode 0600 on Unix, so whatever is at the path,
     a link included, is refused and never written over or through, and
