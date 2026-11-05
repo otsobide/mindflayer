@@ -42,6 +42,10 @@ One suite, one module or one test:
 
 ```bash
 cargo test -p mindweaver-cli --test tui_test                 # apps/cli/tests/tui_test.rs
+cargo test -p mindweaver-cli --test e2e_test gathering::     # the CLI end to end, one area of use cases
+cargo test -p mindweaver-cli --test api_e2e_test changing:: # the server's API end to end, one area of use cases
+cargo test -p mindweaver-core --test e2e_test installing::  # core end to end, one area of use cases
+cargo test -p mindweaver-cli --test tui_e2e_test changing:: # the TUI end to end, in a terminal of its own
 cargo test -p mindweaver-core --test install_test <substring>
 cargo test -p mindweaver-core --lib workspace                # src/workspace_test.rs
 cargo test -p mindweaver-server --test commands_test         # apps/server/tests/commands_test.rs
@@ -1489,6 +1493,88 @@ These are easy to break from a single file without noticing.
   virtualenv with, that is not installed is skipped and said on stderr,
   except under `$CI`, where it fails the test: the `test (cli)` job
   installs zsh so that both shells run there.
+- The CLI end to end is `apps/cli/tests/e2e_test.rs`, one target whose
+  modules under `tests/e2e/` group the use cases by what a person is
+  doing (projects, authoring, installing, gathering, updating, reading,
+  workspaces, settings, adopting, removing, loading, upgrading, json,
+  mistakes). Each test is one use case: it builds its own
+  scenario (`e2e/scenario.rs`, `Scenario`), runs one command line as a
+  person types it, and holds its exit status, stdout and stderr word for
+  word, and what it left on the disk. A scenario is a temporary folder read
+  as `/home`, with `you` as the home, so every path a command prints reads
+  as the reference's (`/home/you/Projects/collapse`) and a test spells its
+  folders and its lines from `~` or `/home`. Each command is the built
+  binary as a process, with an environment holding only `PATH` and that
+  home, and no option added to the line: a variable a use case is about
+  is given to that command alone (`run_with`). What a person or a git
+  server makes is made directly (`repository`, `file`, `source`, `change`,
+  with gix, so no `git` binary), and Mindweaver's own state only through
+  the commands (`given`), each held to exit 0 with nothing on stderr, but
+  for what an older build made, which no command of this build writes
+  (`older_project`, a `mind.toml` written by core's `MindProject::init`). A
+  source is gathered by its path from the workspace (`../src/acme-skills`):
+  a table pads every row to its longest, which a temporary folder's path
+  would make depend on the system. No test shares a scenario, so any one
+  runs alone. An expected output is the reference's where it shows one;
+  a use case added there is a test added here. Unix alone, since a
+  Windows path never reads as the reference's.
+- The server end to end is `apps/cli/tests/api_e2e_test.rs`, in the CLI's
+  crate since `mindweaver ui` is the server's only binary and the server may
+  depend on no mindweaver crate. Its modules under `tests/api_e2e/` group
+  the use cases by what a script or the panel's page does (access,
+  reading, changing, authoring, managing, switching, following, launching,
+  mistakes), and it builds the CLI suite's `Scenario`
+  (`#[path = "e2e/scenario.rs"]`). Each test serves the scenario with
+  `mindweaver ui --no-open` typed in one of its folders (`serve`, or
+  `serve_line` for a launch's options), in the same environment as every
+  command there, reads the link it prints for the address and the token,
+  and sends one request over loopback as curl sends it
+  (`api_e2e/served.rs`, `Served`, `Ask`): its status and its JSON,
+  whole or the part a script reads (`answers_at`, a JSON pointer, as jq
+  picks one), and what it left, on the disk or in what a command reads
+  next. Paths in a request are spelled under `/home` and read back so in
+  an answer. What only the API leaves, a transcript, is built through it
+  (`Served::given`, a task held to run clean), and every answer to a
+  route the API describes, and every event, is held to its OpenAPI
+  document (`common/contract.rs`). An event a change on disk sets off is
+  waited for (`Stream::until`), never counted. An expected answer is the
+  guide's (`docs/api.md`) where it shows one. Unix alone, as the server
+  is stopped by a SIGINT `kill` sends.
+- Core end to end is `apps/core/tests/e2e_test.rs`, its modules under
+  `tests/e2e/` grouped by what a front end does (workspaces, projects,
+  authoring, installing, gathering, updating, reading, settings, upgrading,
+  adopting). Each test builds
+  its own world (`e2e/world.rs`, `World`), a temporary folder read as
+  `/home` with `you` as the home, as the CLI suite's scenario is: what a
+  person or a git server makes is made directly, and Mindweaver's state
+  only through core's public calls, each the one a command makes for that
+  step (`init_project` is `MindProject::init_asked`, `link` is
+  `WeaverWorkspace::link`, `install` is `assign::install`), with the home
+  and the agents' own folders under it a front end hands them, and held to
+  go cleanly. The act is one public call, and what it answered is held
+  as a front end reads it: a read type as its JSON (`World::json`, paths
+  read as `/home`), a part of the snapshot every front end reads
+  (`World::snapshot`, `at`), a refusal by its `code()` and its words
+  (`World::said`), and the disk. A gather is by a source's absolute path,
+  since the tests share the process's folder, so the shelf folder it is
+  named into is held by its shape alone. Unix alone.
+- The TUI end to end is `apps/cli/tests/tui_e2e_test.rs`, its modules under
+  `tests/tui_e2e/` grouped by what a person does on the screen (browsing,
+  changing, screens, starting), on the CLI suite's `Scenario`. Each test
+  starts `mindweaver` or `mind` in a pseudo-terminal of its own
+  (`tui_e2e/terminal.rs`, `Terminal`, 120 by 24), its process the leader of
+  a session with that terminal as its controlling one (rustix's `pty`,
+  `setsid` and `TIOCSCTTY`), since crossterm reads the window's size from
+  `/dev/tty`, which would otherwise be the developer's terminal or none
+  under CI. The keys are typed as a terminal sends them (`types`,
+  `presses`, an escape given a moment alone, or it reads as Alt with the
+  next key), what the screen draws is fed to `vt100`, and a test waits,
+  bounded, for what it expects (`shows`, `no_longer_shows`, `draws` for
+  rows word for word), then quits (`exits`) and holds the exit status, the
+  transcript the terminal shows once the window is given back, and the
+  disk. A row with a path inside a box is held by what it says, not word
+  for word: read as `/home`, the path is shorter than the one the box was
+  drawn around. Unix alone.
 - The server's suites run against a fake backend with types of its own
   (`common::Fake`, its reads `common::fake_routes`), never the CLI's.
   `routes_test.rs` holds the server to the table: a path and its
@@ -1623,8 +1709,9 @@ These are easy to break from a single file without noticing.
   not.
 - Screens are tested without a terminal. Drive `state` with key events, or
   call `tui::step`, and render `ui` into `ratatui::backend::TestBackend`. Only
-  the event loops in `tui.rs` and `install.rs` go untested, so keep logic out
-  of them. A task that runs apart is started by `tui::step` and taken in by
+  the event loops in `tui.rs` and `install.rs` go untested there, and only
+  the TUI's end-to-end suite reaches them, so keep logic out of them. A task
+  that runs apart is started by `tui::step` and taken in by
   `tui::settle` or `tui::wait`; to make one slow, stand a `Runner` in for the
   real command lines (`App::runner`).
 - Fixtures use `tempfile::TempDir`. Test names are sentences
