@@ -28,7 +28,8 @@
 //! the markers are.
 //!
 //! [`get`] and [`edit`] work on text, which is what the tests hold to the
-//! byte; [`ConfigFile`] reads the text from a file and writes it back.
+//! byte; [`ConfigFile`] reads the text from a file and writes it back, and
+//! takes the file away when its caller says what is left is nothing.
 
 use std::fmt::{self, Write as _};
 

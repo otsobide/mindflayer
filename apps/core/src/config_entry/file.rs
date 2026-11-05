@@ -21,7 +21,7 @@ use std::path::{Component, Path, PathBuf};
 
 use thiserror::Error;
 
-use super::{edit_document, get, Edit, EntryError, Format, Value};
+use super::{document, edit_document, get, Edit, EntryError, Format, Value};
 
 use crate::code::codes;
 
@@ -45,9 +45,13 @@ pub enum Written {
     /// The file was replaced whole, through a temporary and a rename onto
     /// its path as spelled, with its permissions kept.
     Changed,
-    /// The entry already held what was asked, so the file was left alone, its
-    /// modification time included.
+    /// The entry already held what was asked, or the file held something
+    /// its caller keeps ([`ConfigFile::take`]), so the file was left alone,
+    /// its modification time included.
     Unchanged,
+    /// The file was taken away: what it held was nothing its caller keeps
+    /// ([`ConfigFile::take`]).
+    Removed,
 }
 
 /// Why a config file could not be read or written.
@@ -193,6 +197,35 @@ impl ConfigFile {
                 Ok(Written::Created)
             }
         }
+    }
+
+    /// Take the file away when `empty` says the document it holds is
+    /// nothing its caller keeps, and leave it as it is otherwise.
+    ///
+    /// What a caller that made the file asks once its last entry is out, a
+    /// file nobody else wrote in being nothing to leave behind. Which
+    /// documents are empty is the caller's to say, as the key path is:
+    /// `{"mcpServers": {}}` is nothing in `.mcp.json`, and something in a
+    /// file that holds other settings beside it.
+    ///
+    /// Read as an edit reads it, so a file that does not parse is refused
+    /// rather than judged, and one not there is [`Written::Unchanged`]. The
+    /// route is looked at again just before the file goes, as it is before
+    /// a write: a file that has become a link is refused, and what it points
+    /// at is never this folder's to take.
+    pub fn take(&self, empty: impl FnOnce(&Value) -> bool) -> Result<Written, FileError> {
+        let Some(text) = self.read()? else {
+            return Ok(Written::Unchanged);
+        };
+        let held = document(self.format, &text).map_err(|source| self.entry_error(source))?;
+        if !empty(&held) {
+            return Ok(Written::Unchanged);
+        }
+        let Some(path) = self.walk()? else {
+            return Ok(Written::Unchanged);
+        };
+        fs::remove_file(&path).map_err(|source| FileError::Write { path, source })?;
+        Ok(Written::Removed)
     }
 
     /// The file's text, `None` when it is not there.

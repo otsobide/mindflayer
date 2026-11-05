@@ -345,3 +345,65 @@ fn a_capped_file_not_there_yet_is_made_as_any_is() {
         .unwrap();
     assert_eq!(written, Written::Created);
 }
+
+/// Whether `document` is `{}` or `{"mcpServers": {}}`, as a caller that
+/// made `.mcp.json` would say it holds nothing.
+fn holds_no_servers(document: &Value) -> bool {
+    match document {
+        Value::Object(members) => members
+            .iter()
+            .all(|(name, value)| name == "mcpServers" && *value == Value::Object(Vec::new())),
+        _ => false,
+    }
+}
+
+#[test]
+fn a_file_its_caller_calls_empty_is_taken_away_and_any_other_left() {
+    let root = TempDir::new().unwrap();
+    let path = root.path().join(".mcp.json");
+    let file = ConfigFile::new(root.path(), ".mcp.json", Format::Json).unwrap();
+
+    fs::write(&path, MCP).unwrap();
+    assert_eq!(file.take(holds_no_servers).unwrap(), Written::Unchanged);
+    assert_eq!(fs::read_to_string(&path).unwrap(), MCP);
+
+    fs::write(&path, "{\n  \"mcpServers\": {}\n}\n").unwrap();
+    assert_eq!(file.take(holds_no_servers).unwrap(), Written::Removed);
+    assert!(names(root.path()).is_empty());
+
+    // Not there, nothing is taken.
+    assert_eq!(file.take(|_| true).unwrap(), Written::Unchanged);
+}
+
+#[test]
+fn a_file_that_does_not_parse_is_not_taken() {
+    let root = TempDir::new().unwrap();
+    let path = root.path().join(".mcp.json");
+    let text = "{\n  // emptied by hand\n  \"mcpServers\": {}\n}\n";
+    fs::write(&path, text).unwrap();
+
+    let error = ConfigFile::new(root.path(), ".mcp.json", Format::Json)
+        .unwrap()
+        .take(|_| true)
+        .unwrap_err();
+    assert_eq!(error.code(), "config_malformed", "{error}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), text);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlinked_file_is_not_taken_nor_what_it_points_at() {
+    let root = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let shared = elsewhere.path().join("mcp.json");
+    fs::write(&shared, "{}\n").unwrap();
+    std::os::unix::fs::symlink(&shared, root.path().join(".mcp.json")).unwrap();
+
+    let error = ConfigFile::new(root.path(), ".mcp.json", Format::Json)
+        .unwrap()
+        .take(|_| true)
+        .unwrap_err();
+    assert!(matches!(error, FileError::Symlink { .. }), "{error}");
+    assert!(root.path().join(".mcp.json").is_symlink());
+    assert_eq!(fs::read_to_string(&shared).unwrap(), "{}\n");
+}
