@@ -602,6 +602,102 @@ fn a_user_s_config_kept_elsewhere_and_linked_in_is_read_through_the_link() {
     );
 }
 
+/// A user's own `config.toml`, marking the project at `root` `level`.
+fn trusting(root: &Path, level: &str) -> String {
+    let key = toml::Value::String(root.display().to_string()).to_string();
+    format!("[projects.{key}]\ntrust_level = \"{level}\"\n")
+}
+
+#[test]
+fn a_project_the_user_s_config_marks_trusted_is_written_with_nothing_said() {
+    let root = TempDir::new().unwrap();
+    let (_home, homes) = codex_home(Some(&format!(
+        "{}\n{}",
+        users("other"),
+        trusting(root.path(), "trusted")
+    )));
+
+    let rendered = codex_mcp::render(
+        root.path(),
+        &parsed(&McpMother::address_for_codex(&McpMother::name())),
+        &homes,
+    )
+    .unwrap();
+
+    assert_eq!(rendered.written, Written::Created);
+    assert_eq!(rendered.warnings, []);
+}
+
+#[test]
+fn a_project_codex_is_not_told_it_trusts_is_written_and_said_to_be_read_only_once_it_is() {
+    let name = McpMother::name();
+    let definition = parsed(&McpMother::address_for_codex(&name));
+    let root = TempDir::new().unwrap();
+    let file = root.path().join(FILE);
+    let said = |rest: String| {
+        format!(
+            "`{name}` is written into {}, which Codex reads only in a project it trusts, and \
+             {rest}",
+            file.display()
+        )
+    };
+
+    let mut homes = Vec::new();
+    for config in [
+        Some(trusting(root.path(), "untrusted")),
+        Some(users("other")),
+        Some(trusting(&root.path().join("elsewhere"), "trusted")),
+        None,
+    ] {
+        let (home, given) = codex_home(config.as_deref());
+        let expected = said(format!(
+            "{} does not mark {} `trusted`",
+            home.path().join("config.toml").display(),
+            root.path().display()
+        ));
+        homes.push((home, given, expected));
+    }
+    let none = said(format!(
+        "no Codex home was given to say whether it trusts {}",
+        root.path().display()
+    ));
+
+    for (given, expected) in homes
+        .iter()
+        .map(|(_, given, expected)| (given.clone(), expected.clone()))
+        .chain([(AgentHomes::default(), none)])
+    {
+        let rendered = codex_mcp::render(root.path(), &definition, &given).unwrap();
+
+        // Written all the same: trusting a project is the user's to do.
+        assert!(read(root.path()).contains(&format!("[mcp_servers.{name}]")));
+        let warnings: Vec<(&str, String)> = rendered
+            .warnings
+            .iter()
+            .map(|warning| (warning.code(), warning.to_string()))
+            .collect();
+        assert_eq!(warnings, [("codex_mcp_untrusted", expected)]);
+        assert_eq!(rendered.entry.warnings, []);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_project_reached_through_a_link_is_trusted_under_either_path() {
+    let real = TempDir::new().unwrap();
+    let above = TempDir::new().unwrap();
+    let linked = above.path().join("project");
+    std::os::unix::fs::symlink(real.path(), &linked).unwrap();
+    let resolved = fs::canonicalize(real.path()).unwrap();
+    let definition = parsed(&McpMother::address_for_codex(&McpMother::name()));
+
+    for marked in [linked.as_path(), resolved.as_path()] {
+        let (_home, homes) = codex_home(Some(&trusting(marked, "trusted")));
+        let rendered = codex_mcp::render(&linked, &definition, &homes).unwrap();
+        assert_eq!(rendered.warnings, [], "{}", marked.display());
+    }
+}
+
 #[test]
 fn a_project_whose_config_is_inside_an_agent_s_own_folder_is_refused() {
     // A project at the user's home, whose `.codex` is Codex's home.

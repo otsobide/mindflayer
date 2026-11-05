@@ -63,6 +63,17 @@
 //! on. With no Codex home given there is no user's config to read, and
 //! nothing collides, as in a home holding no `config.toml`.
 //!
+//! Codex reads a project's `.codex/config.toml` only in a project the
+//! user's config marks trusted, `[projects."<path>"] trust_level =
+//! "trusted"`, so an entry written into one it does not is written all the
+//! same, and said ([`Warning::Untrusted`]): trusting a project is the
+//! user's to do, and Codex asks them. The path Mindweaver looks up is the
+//! project's root as it is handed and as its links resolve to, either one
+//! marked trusted counting; which path Codex keys a project by (the folder
+//! it starts in, the repository's root above it) is docs-only, so a project
+//! trusted under another is warned of, which costs a warning. With no Codex
+//! home given nothing marks it trusted, and that is said.
+//!
 //! Nothing here knows of the ledger. Whether an entry of the name is
 //! Mindweaver's to replace or take out, and whether Mindweaver made the
 //! file, are the caller's, as its record says (#93, #94); and the caller
@@ -281,6 +292,9 @@ pub struct Rendered {
     /// which the caller keeps, to hand back to [`remove`] as `created`.
     pub written: Written,
     pub entry: Entry,
+    /// What is said of the project beside what is said of its entry: that
+    /// Codex may not read the file at all.
+    pub warnings: Vec<Warning>,
 }
 
 /// Write `definition`'s entry into the [`FILE`] at `root`, a project's
@@ -305,23 +319,38 @@ pub fn render(
         return Err(CodexMcpError::UserScope { file, home, reader });
     }
     let key = [SERVERS, entry.name.as_str()];
-    if let Some(user) = UserConfig::read(homes)? {
+    let user = UserConfig::read(homes)?;
+    if let Some(user) = &user {
         if user.get(&key)?.is_some() {
             return Err(CodexMcpError::Collision {
                 name: entry.name.to_string(),
-                config: user.path,
+                config: user.path.clone(),
             });
         }
     }
+    let trusted = match &user {
+        Some(user) => user.trusts(root)?,
+        None => false,
+    };
     let edit = match file.get(&key)? {
         None => Edit::Insert(entry.value.clone()),
         Some(_) => Edit::Replace(entry.value.clone()),
     };
     let written = file.edit(&key, &edit)?;
+    let mut warnings = Vec::new();
+    if !trusted {
+        warnings.push(Warning::Untrusted {
+            name: entry.name.to_string(),
+            file: file.path(),
+            project: root.to_path_buf(),
+            config: homes.codex_home.as_ref().map(|home| home.join(USER_FILE)),
+        });
+    }
     Ok(Rendered {
         file: file.path(),
         written,
         entry,
+        warnings,
     })
 }
 
@@ -408,6 +437,26 @@ impl UserConfig {
         Ok(Some(UserConfig { path, text }))
     }
 
+    /// Whether the user's config marks the project at `root` trusted,
+    /// under its root as it is handed or as its links resolve to: the
+    /// folder a program starts in is reported to it with its links
+    /// resolved, and a project is often reached through one.
+    fn trusts(&self, root: &Path) -> Result<bool, CodexMcpError> {
+        let mut roots = vec![root.to_path_buf()];
+        roots.extend(install::resolved(root).filter(|resolved| resolved != root));
+        for root in &roots {
+            // A path no TOML key can spell is none a project is marked by.
+            let Some(key) = root.to_str() else {
+                continue;
+            };
+            let level = self.get(&["projects", key, "trust_level"])?;
+            if level == Some(Value::from("trusted")) {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// What the user's config holds at `key`.
     fn get(&self, key: &[&str]) -> Result<Option<Value>, CodexMcpError> {
         config_entry::get(Format::Toml, &self.text, key).map_err(|source| {
@@ -492,12 +541,40 @@ pub enum Warning {
     /// ([`Inexpressible::refuses`] says it is no refusal).
     #[error("`{name}`: {shape}")]
     Dropped { name: String, shape: Inexpressible },
+    /// The project is not one the user's config marks trusted, and Codex
+    /// reads its `.codex/config.toml` only in one it does: written all the
+    /// same, since trusting a project is the user's to do, and Codex asks
+    /// them. `config` is the user's config looked in, none when no Codex
+    /// home was given.
+    #[error("`{name}` is written into {file}, which Codex reads only in a project it trusts, and {}", unmarked(.project, .config.as_deref()))]
+    Untrusted {
+        name: String,
+        file: PathBuf,
+        project: PathBuf,
+        config: Option<PathBuf>,
+    },
 }
 
 codes!(Warning {
+    Self::Untrusted { .. } => "codex_mcp_untrusted",
 } carried {
     Self::Dropped { shape, .. } => shape,
 });
+
+/// Where nothing says `project` is trusted, for [`Warning::Untrusted`].
+fn unmarked(project: &Path, config: Option<&Path>) -> String {
+    match config {
+        Some(config) => format!(
+            "{} does not mark {} `trusted`",
+            config.display(),
+            project.display()
+        ),
+        None => format!(
+            "no Codex home was given to say whether it trusts {}",
+            project.display()
+        ),
+    }
+}
 
 /// Why Codex is given no entry, or the file is not changed.
 #[derive(Debug, Error)]
