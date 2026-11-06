@@ -17,7 +17,7 @@ use ratatui::Frame;
 use super::minds::{self, Minds};
 use super::state::{
     AddField, AddForm, App, Confirm, Focus, GatherForm, Input, Item, LinkForm, LoadForm, Member,
-    Mode, Reader, RenameForm, Running, Scope, SettingsForm, TargetsForm, Task, Tone, View,
+    Mode, Reader, RenameForm, Running, Scope, SettingsForm, Shelf, TargetsForm, Task, Tone, View,
     Workspace, GATHER_FIELDS,
 };
 use crate::commands::project::worth_linking;
@@ -47,6 +47,7 @@ pub fn draw(app: &App, frame: &mut Frame) {
             Mode::Gathering(form) => gathering(form, frame, area),
             Mode::Confirming(confirm) => confirming(confirm, frame, area),
             Mode::Reading(reader) => reading(reader, frame, area),
+            Mode::Shelf(shelf) => page(&shelf.reader, &shelving(shelf), frame, area),
             Mode::Minds(screen) => minds_screen(app, screen, frame, area),
             Mode::Settings(form) => setting(app, form, frame, area),
             Mode::Targets(form) => targeting(app, form, frame, area),
@@ -1136,6 +1137,23 @@ fn confirming(confirm: &Confirm, frame: &mut Frame, area: Rect) {
 }
 
 fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
+    page(reader, " ↑↓ scroll   esc close ", frame, area);
+}
+
+/// The keys of the shelf's page, with the source they act on: none to say
+/// while nothing is gathered, which leaves them nothing to do.
+fn shelving(shelf: &Shelf) -> String {
+    match shelf.sources.get(shelf.picked) {
+        Some(source) => format!(
+            " ←→ source: {}   u update it   U update all   d remove it   ↑↓ scroll   esc close ",
+            printable(source)
+        ),
+        None => String::from(" ↑↓ scroll   esc close "),
+    }
+}
+
+/// A page of output, `keys` in its bottom border.
+fn page(reader: &Reader, keys: &str, frame: &mut Frame, area: Rect) {
     // Everything below the header: output is read in full, and the keys that
     // apply while reading are in its own border.
     let below = 1.min(area.height);
@@ -1154,7 +1172,7 @@ fn reading(reader: &Reader, frame: &mut Frame, area: Rect) {
         .border_type(BorderType::Thick)
         .border_style(Style::default().fg(Color::Cyan))
         .title(format!(" {} ", printable(&reader.title)))
-        .title_bottom(Line::from(" ↑↓ scroll   esc close ").right_aligned());
+        .title_bottom(Line::from(keys.to_owned()).right_aligned());
     let scroll = u16::try_from(reader.scroll).unwrap_or(u16::MAX);
     frame.render_widget(
         Paragraph::new(lines)

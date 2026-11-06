@@ -9,6 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::*;
+use mindweaver_cli::{GatherCommand, WeaverCommand};
 use mindweaver_core::{Agent, Share};
 use tui::state::Step as TuiStep;
 
@@ -1176,6 +1177,155 @@ fn gathering_in_the_tui_is_weaver_gather_git() {
     assert!(app.transcript().contains("$ mindweaver gather git "));
 }
 
+/// A workspace in a folder of its own that has gathered `deploy` from a
+/// repository kept beside it, under the name `acme`, and the repository.
+fn gathered_as_acme() -> (TempDir, TempDir) {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let url = source.path().to_string_lossy().into_owned();
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
+    (dir, source)
+}
+
+/// The one line a task runs, parsed by the parser `mindweaver` runs it with,
+/// as the gather command it is.
+fn gather_line(task: &Task) -> GatherCommand {
+    let lines = task.commands();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    let cli = WeaverCli::try_parse_from(&lines[0])
+        .unwrap_or_else(|error| panic!("{:?} does not parse: {error}", lines[0]));
+    match cli.command {
+        Some(WeaverCommand::Gather(command)) => command,
+        other => panic!("{:?} is {other:?}", lines[0]),
+    }
+}
+
+#[test]
+fn the_shelf_keys_run_gather_update_and_gather_remove_lines_that_parse_back() {
+    let (dir, _source) = gathered_as_acme();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+    assert!(matches!(app.mode, Mode::Shelf(_)), "{:?}", app.mode);
+    assert!(
+        tui_drawn(&app).contains("source: acme"),
+        "{}",
+        tui_drawn(&app)
+    );
+
+    let TuiStep::Run(one) = press_key(&mut app, KeyCode::Char('u')) else {
+        panic!("{:?}", app.mode);
+    };
+    let TuiStep::Run(every) = press_key(&mut app, KeyCode::Char('U')) else {
+        panic!("{:?}", app.mode);
+    };
+    assert_eq!(press_key(&mut app, KeyCode::Char('d')), TuiStep::Stay);
+    assert!(matches!(app.mode, Mode::Confirming(_)), "{:?}", app.mode);
+    let TuiStep::Run(removal) = press_key(&mut app, KeyCode::Char('y')) else {
+        panic!("{:?}", app.mode);
+    };
+
+    assert_eq!(
+        one,
+        Task::UpdateSource {
+            source: Some(String::from("acme"))
+        }
+    );
+    assert!(one.runs_apart() && every.runs_apart());
+    assert!(matches!(
+        gather_line(&one),
+        GatherCommand::Update { names, all: false } if names == ["acme"]
+    ));
+    assert_eq!(every, Task::UpdateSource { source: None });
+    assert!(matches!(
+        gather_line(&every),
+        GatherCommand::Update { names, all: true } if names.is_empty()
+    ));
+    assert_eq!(
+        removal,
+        Task::RemoveSource {
+            source: String::from("acme"),
+            yes: true
+        }
+    );
+    assert!(matches!(
+        gather_line(&removal),
+        GatherCommand::Remove { name, yes: true } if name == "acme"
+    ));
+    // Back on the shelf's page while it runs, as the confirmation found it.
+    assert!(matches!(app.mode, Mode::Shelf(_)), "{:?}", app.mode);
+}
+
+#[test]
+fn updating_a_source_from_the_shelf_runs_apart_and_says_what_it_gathered() {
+    let (dir, _source) = gathered_as_acme();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+
+    let task = press_and_run(&mut app, KeyCode::Char('u'));
+
+    assert!(matches!(task, Some(Task::UpdateSource { .. })), "{task:?}");
+    let Mode::Reading(reader) = &app.mode else {
+        panic!("{:?}", app.mode);
+    };
+    assert!(
+        reader
+            .lines
+            .iter()
+            .any(|(_, line)| line.contains("unchanged  deploy")),
+        "{:?}",
+        reader.lines
+    );
+    assert!(app
+        .transcript()
+        .contains("$ mindweaver gather update acme\n"));
+}
+
+#[test]
+fn removing_a_source_from_the_shelf_asks_first_and_then_takes_it_off() {
+    let (dir, _source) = gathered_as_acme();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+    press_key(&mut app, KeyCode::Char('d'));
+    assert!(tui_drawn(&app).contains("Remove the source acme?"));
+
+    // No first: nothing removed, and back on the shelf's page.
+    press_key(&mut app, KeyCode::Char('n'));
+    assert!(matches!(app.mode, Mode::Shelf(_)), "{:?}", app.mode);
+    assert_eq!(app.workspace().unwrap().shelf, 1);
+
+    press_key(&mut app, KeyCode::Char('d'));
+    let task = press_and_run(&mut app, KeyCode::Char('y'));
+
+    assert!(
+        matches!(task, Some(Task::RemoveSource { yes: true, .. })),
+        "{task:?}"
+    );
+    assert_eq!(app.workspace().unwrap().shelf, 0);
+    assert!(app.workspace().unwrap().sources.is_empty());
+    assert!(app
+        .transcript()
+        .contains("$ mindweaver gather remove --yes acme\n"));
+}
+
+#[test]
+fn an_empty_shelf_leaves_its_keys_nothing_to_do() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let mut app = tui_in(dir.path());
+    press_and_run(&mut app, KeyCode::Char('s'));
+
+    for key in ['u', 'U', 'd'] {
+        assert_eq!(
+            press_key(&mut app, KeyCode::Char(key)),
+            TuiStep::Stay,
+            "{key}"
+        );
+        assert!(matches!(app.mode, Mode::Shelf(_)), "{key}: {:?}", app.mode);
+    }
+    assert!(!tui_drawn(&app).contains("source:"));
+}
+
 #[test]
 fn a_gather_runs_apart_with_its_progress_drawn_until_it_is_over() {
     let dir = TempDir::new().unwrap();
@@ -2064,6 +2214,14 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Rule,
             name: String::from("git/no-force-push"),
             force: false,
+        },
+        Task::UpdateSource {
+            source: Some(String::from("-odd")),
+        },
+        Task::UpdateSource { source: None },
+        Task::RemoveSource {
+            source: String::from("-odd"),
+            yes: true,
         },
     ];
 

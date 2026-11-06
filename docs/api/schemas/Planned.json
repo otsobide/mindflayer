@@ -988,6 +988,47 @@
           ]
         },
         {
+          "description": "`mindweaver gather update <source>`, or `mindweaver gather update\n--all` when no source is named: sources gathered again, as each was\ngathered last, each by the name `gather sources` lists it by.",
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "update_source"
+            }
+          },
+          "required": [
+            "type",
+            "source"
+          ]
+        },
+        {
+          "description": "`mindweaver gather remove [--yes] <source>`: a source removed, with\nits clone, what it put on the shelf and its rows, every copy\ninstalled from it left orphaned; without `yes`, the dry run, which\nsays so and removes nothing.",
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "remove_source"
+            },
+            "yes": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "source",
+            "yes"
+          ]
+        },
+        {
           "description": "`… targets set --yes <kind> <dir>...`, or `… targets reset --yes\n<kind>` when no folder is named: what the targets form amounts to.",
           "type": "object",
           "properties": {

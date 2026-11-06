@@ -12,7 +12,7 @@ use crate::{Cli, WeaverCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 36] = [
+const TAGS: [&str; 38] = [
     "init_workspace",
     "init_project",
     "link",
@@ -37,6 +37,8 @@ const TAGS: [&str; 36] = [
     "shelf",
     "workspaces",
     "gather",
+    "update_source",
+    "remove_source",
     "targets",
     "settings",
     "toggled",
@@ -130,6 +132,18 @@ fn every(value: &str) -> Vec<Task> {
             url: owned(),
             folder: String::from(DEFAULT_SUBDIRECTORY),
             reference: None,
+        },
+        Task::UpdateSource {
+            source: Some(owned()),
+        },
+        Task::UpdateSource { source: None },
+        Task::RemoveSource {
+            source: owned(),
+            yes: false,
+        },
+        Task::RemoveSource {
+            source: owned(),
+            yes: true,
         },
         Task::Install {
             projects: vec![owned(), String::from("plain")],
@@ -1496,7 +1510,7 @@ fn a_task_is_refused_for_the_first_of_its_lines_that_is() {
         let expected = match &task {
             Task::OpenInstall => Some(Refusal::Screen),
             Task::Edit { .. } => Some(Refusal::Editor),
-            Task::Gather { .. } => Some(Refusal::Unwatched),
+            Task::Gather { .. } | Task::UpdateSource { .. } => Some(Refusal::Unwatched),
             Task::Show { .. } => Some(Refusal::Unheld),
             _ => None,
         };
@@ -1681,6 +1695,7 @@ fn a_task_is_asked_about_for_each_of_its_lines_that_takes_something_away() {
                 vec![(0, Caution::Uninstalls)]
             }
             Task::Update { force: true, .. } => vec![(0, Caution::Forces)],
+            Task::RemoveSource { yes: true, .. } => vec![(0, Caution::Removes)],
             Task::Unlink { .. } => vec![(0, Caution::Unlinks)],
             Task::Unload { .. } | Task::UnloadHere { .. } => vec![(0, Caution::Unloads)],
             // `mind -C <path> init`, `mindweaver link` and `mindweaver unlink`.

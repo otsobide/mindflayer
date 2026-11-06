@@ -80,6 +80,9 @@ pub struct Workspace {
     pub scan_warnings: Vec<String>,
     /// How many artifacts are on the shelf.
     pub shelf: usize,
+    /// The sources it is filled from, by the names `gather sources` lists
+    /// them by, in its order: what the shelf's page picks one of.
+    pub sources: Vec<String>,
     /// The workspaces it loads, in marker order.
     pub loaded: Vec<LoadedSource>,
     pub scope: Scope,
@@ -539,8 +542,11 @@ pub enum Mode {
     Gathering(GatherForm),
     /// A yes or no before something that writes.
     Confirming(Confirm),
-    /// A page of output: validate, show, the shelf, a report.
+    /// A page of output: validate, show, a report.
     Reading(Reader),
+    /// The shelf's page: what `gather list` says, and the source picked
+    /// among those it is filled from, to gather again or remove.
+    Shelf(Shelf),
     /// The install screen, embedded as it is.
     Installing(InstallScreen),
     /// Which minds the workspace manages, ticked, to change in one pass.
@@ -782,6 +788,7 @@ impl App {
             Mode::Gathering(form) => gathering(form, key),
             Mode::Confirming(confirm) => confirming(confirm, key),
             Mode::Reading(reader) => reading(reader, key),
+            Mode::Shelf(shelf) => shelving(shelf, key),
             Mode::Installing(screen) => self.installing(screen, key),
             Mode::Minds(screen) => self.in_minds(screen, key),
             Mode::Settings(form) => self.setting(form, key),
@@ -1693,12 +1700,26 @@ impl App {
 
         match (task, failure) {
             (Task::Refresh, _) => self.message = Some(Message::info("read the disk again")),
+            // The shelf's page, its sources to pick from as the disk was
+            // read last.
+            (Task::Shelf, _) => {
+                let sources = self
+                    .workspace()
+                    .map(|workspace| workspace.sources.clone())
+                    .unwrap_or_default();
+                self.mode = Mode::Shelf(Shelf {
+                    reader: Reader::of(&dones),
+                    sources,
+                    picked: 0,
+                });
+            }
             // Output worth reading in full, whether or not it went well.
             (
                 Task::Show { .. }
                 | Task::Validate { .. }
-                | Task::Shelf
                 | Task::Workspaces
+                | Task::UpdateSource { .. }
+                | Task::RemoveSource { .. }
                 | Task::ApplyInstall { .. }
                 | Task::Install { .. }
                 | Task::Uninstall { .. }
@@ -1948,6 +1969,59 @@ fn reading(mut reader: Reader, key: KeyEvent) -> (Mode, Step) {
         _ => {}
     }
     (Mode::Reading(reader), Step::Stay)
+}
+
+/// The shelf's own keys, over the page's: a source picked, gathered again,
+/// every one gathered again, or removed once somebody says yes, each the
+/// line `gather update` or `gather remove` is; and the page's keys for the
+/// rest. Nothing to pick leaves them nothing to do.
+fn shelving(mut shelf: Shelf, key: KeyEvent) -> (Mode, Step) {
+    let count = shelf.sources.len();
+    let picked = shelf.sources.get(shelf.picked).cloned();
+    match (key.code, picked) {
+        (KeyCode::Tab | KeyCode::Right, Some(_)) => {
+            shelf.picked = (shelf.picked + 1) % count;
+        }
+        (KeyCode::BackTab | KeyCode::Left, Some(_)) => {
+            shelf.picked = (shelf.picked + count - 1) % count;
+        }
+        (KeyCode::Char('u'), Some(source)) => {
+            let task = Task::UpdateSource {
+                source: Some(source),
+            };
+            return (Mode::Shelf(shelf), Step::Run(task));
+        }
+        (KeyCode::Char('U'), Some(_)) => {
+            let task = Task::UpdateSource { source: None };
+            return (Mode::Shelf(shelf), Step::Run(task));
+        }
+        (KeyCode::Char('d'), Some(source)) => {
+            let confirm = Confirm {
+                question: vec![
+                    format!("Remove the source {source}?"),
+                    String::new(),
+                    String::from(
+                        "Its clone, what it put on the shelf and what the workspace records of \
+                         it go. What was installed from it stays in each project, orphaned.",
+                    ),
+                ],
+                task: Task::RemoveSource { source, yes: true },
+                also: None,
+                back: Box::new(Mode::Shelf(shelf)),
+            };
+            return (Mode::Confirming(confirm), Step::Stay);
+        }
+        _ => {
+            return match reading(shelf.reader, key) {
+                (Mode::Reading(reader), step) => {
+                    shelf.reader = reader;
+                    (Mode::Shelf(shelf), step)
+                }
+                closed => closed,
+            };
+        }
+    }
+    (Mode::Shelf(shelf), Step::Stay)
 }
 
 // ---------------------------------------------------------------------------
@@ -2399,6 +2473,17 @@ pub struct Reader {
     pub scroll: usize,
 }
 
+/// The shelf's page: what `gather list` said, read as any page is, and the
+/// source picked among those the shelf is filled from.
+#[derive(Debug)]
+pub struct Shelf {
+    pub reader: Reader,
+    /// The sources, by name, in the order `gather sources` lists them.
+    pub sources: Vec<String>,
+    /// Which of them is picked.
+    pub picked: usize,
+}
+
 impl Reader {
     /// What some commands said: their output, their warnings, and why they
     /// failed if they did, in that order.
@@ -2524,7 +2609,17 @@ impl Reader {
                 "while a gather runs: stop it, until it starts placing",
                 &[],
             ),
-            ("s", "what is on the shelf", &["mindweaver gather list"]),
+            (
+                "s",
+                "what is on the shelf; there, ←→ picks a source, u gathers it again, U every one, \
+                 and d removes it once you say yes",
+                &[
+                    "mindweaver gather list",
+                    "mindweaver gather update <source>",
+                    "mindweaver gather update --all, with U",
+                    "mindweaver gather remove --yes <source>, with d",
+                ],
+            ),
             (
                 "w",
                 "the workspaces this machine knows, the one in use marked",

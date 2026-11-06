@@ -268,6 +268,15 @@ pub enum Task {
         folder: String,
         reference: Option<String>,
     },
+    /// `mindweaver gather update <source>`, or `mindweaver gather update
+    /// --all` when no source is named: sources gathered again, as each was
+    /// gathered last, each by the name `gather sources` lists it by.
+    UpdateSource { source: Option<String> },
+    /// `mindweaver gather remove [--yes] <source>`: a source removed, with
+    /// its clone, what it put on the shelf and its rows, every copy
+    /// installed from it left orphaned; without `yes`, the dry run, which
+    /// says so and removes nothing.
+    RemoveSource { source: String, yes: bool },
     /// `… targets set --yes <kind> <dir>...`, or `… targets reset --yes
     /// <kind>` when no folder is named: what the targets form amounts to.
     Targets {
@@ -730,6 +739,19 @@ impl Task {
                 }
                 vec![words(&head, &[url])]
             }
+            Task::UpdateSource { source } => match source {
+                Some(source) => vec![words(&["mindweaver", "gather", "update"], &[source])],
+                None => vec![words(&["mindweaver", "gather", "update", "--all"], &[])],
+            },
+            // `--yes` before the name, as `remove` has it, so a name a `--`
+            // has to keep from being read as a flag leaves it a flag.
+            Task::RemoveSource { source, yes } => {
+                let mut head = vec!["mindweaver", "gather", "remove"];
+                if *yes {
+                    head.push("--yes");
+                }
+                vec![words(&head, &[source])]
+            }
             // The agents first, so a project turning local finds the copies
             // they bring already kept out of git, and one turning shared
             // finds them in the group it lets go of; either order ends the
@@ -881,6 +903,8 @@ impl Task {
                 | Task::Rename { .. }
                 | Task::Remove { yes: true, .. }
                 | Task::Gather { .. }
+                | Task::UpdateSource { .. }
+                | Task::RemoveSource { yes: true, .. }
                 | Task::Minds { .. }
                 | Task::Marks { .. }
                 | Task::Settings { .. }
@@ -918,11 +942,12 @@ impl Task {
     }
 
     /// Whether it runs on a thread of its own while the screen goes on
-    /// drawing what it reports: a gather, which is the network, and can take
-    /// long enough to want watching. Everything else is the local disk, over
-    /// before anybody could read a count.
+    /// drawing what it reports: a gather, or a source gathered again, which
+    /// is the network, and can take long enough to want watching.
+    /// Everything else is the local disk, over before anybody could read a
+    /// count.
     pub fn runs_apart(&self) -> bool {
-        matches!(self, Task::Gather { .. })
+        matches!(self, Task::Gather { .. } | Task::UpdateSource { .. })
     }
 
     /// What to say while it runs.

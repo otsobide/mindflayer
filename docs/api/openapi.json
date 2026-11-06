@@ -4262,6 +4262,47 @@
             "type": "object"
           },
           {
+            "description": "`mindweaver gather update <source>`, or `mindweaver gather update\n--all` when no source is named: sources gathered again, as each was\ngathered last, each by the name `gather sources` lists it by.",
+            "properties": {
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "const": "update_source",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "source"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`mindweaver gather remove [--yes] <source>`: a source removed, with\nits clone, what it put on the shelf and its rows, every copy\ninstalled from it left orphaned; without `yes`, the dry run, which\nsays so and removes nothing.",
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "type": {
+                "const": "remove_source",
+                "type": "string"
+              },
+              "yes": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "source",
+              "yes"
+            ],
+            "type": "object"
+          },
+          {
             "description": "`… targets set --yes <kind> <dir>...`, or `… targets reset --yes\n<kind>` when no folder is named: what the targets form amounts to.",
             "properties": {
               "folders": {
@@ -5113,6 +5154,48 @@
               "type",
               "url",
               "folder"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "`mindweaver gather update <source>`, or `mindweaver gather update\n--all` when no source is named: sources gathered again, as each was\ngathered last, each by the name `gather sources` lists it by.",
+            "properties": {
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "const": "update_source",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "`mindweaver gather remove [--yes] <source>`: a source removed, with\nits clone, what it put on the shelf and its rows, every copy\ninstalled from it left orphaned; without `yes`, the dry run, which\nsays so and removes nothing.",
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "type": {
+                "const": "remove_source",
+                "type": "string"
+              },
+              "yes": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "source",
+              "yes"
             ],
             "type": "object"
           },

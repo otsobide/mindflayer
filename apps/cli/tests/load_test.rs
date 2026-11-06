@@ -373,7 +373,7 @@ fn the_shelf_and_the_install_screen_offer_a_loaded_skill() {
     let mut app = tui_in(&target);
 
     press_and_run(&mut app, KeyCode::Char('s'));
-    let Mode::Reading(_) = &app.mode else {
+    let Mode::Shelf(_) = &app.mode else {
         panic!("{:?}", app.mode)
     };
     assert!(tui_drawn(&app).contains("deploy  load:../team"));
