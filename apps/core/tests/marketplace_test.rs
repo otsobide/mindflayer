@@ -801,6 +801,25 @@ fn a_catalogs_name_another_source_has_is_numbered_as_a_name_a_url_gives_is() {
 }
 
 #[test]
+fn a_catalog_naming_its_marketplace_as_its_url_would_keeps_that_name_unnumbered() {
+    // `acme/market` is called `acme-market` by its URL until its catalog
+    // is read, and the catalog calls it that too.
+    let market = repository(&[(
+        ".claude-plugin/marketplace.json",
+        r#"{"name": "acme-market", "plugins": []}"#,
+    )]);
+    let routes = Arc::new(Routes::default().to(MARKET, &market));
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report =
+        marketplace::gather(&workspace, &ledger, &request(&routes, Pick::Listing)).unwrap();
+
+    assert_eq!(report.catalog.name, "acme-market");
+    assert_eq!(ledger.sources().unwrap()[0].name, "acme-market");
+}
+
+#[test]
 fn a_repository_holding_no_catalog_is_no_marketplace_and_is_not_recorded() {
     let plain = repository(&[("skills/x/SKILL.md", &skill("x", "x"))]);
     let routes = Arc::new(Routes::default().to(MARKET, &plain));

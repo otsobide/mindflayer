@@ -906,7 +906,7 @@ pub fn look(
             let name = match (checked.name, found) {
                 (Some(name), _) => name,
                 (None, Some(found)) => found.name,
-                (None, None) => free(ledger, named(&read)?)?,
+                (None, None) => free(ledger, named(&read)?, None)?,
             };
             Ok(Listed::of(
                 name,
@@ -978,7 +978,7 @@ fn recorded_now(
         let read = Catalog::read(&clone.root, &request.subdirectory)?;
         let wanted = match name {
             Some(name) => Some(name),
-            None if new => Some(free(ledger, named(&read)?)?),
+            None if new => Some(free(ledger, named(&read)?, Some(parent.id))?),
             None => None,
         };
         // The last moment a cancel is honoured, as a gather's last is before
@@ -1040,16 +1040,20 @@ fn named(read: &Catalog) -> Result<SourceName, MarketplaceError> {
         })
 }
 
-/// `wanted`, or the first of it numbered that no source is called: what a
-/// name the catalog gives is, as a name a URL gives is, rather than refused
-/// as one somebody typed would be.
-fn free(ledger: &Ledger, wanted: SourceName) -> Result<SourceName, LedgerError> {
+/// `wanted`, or the first of it numbered that no source but `own` is
+/// called: what a name the catalog gives is, as a name a URL gives is,
+/// rather than refused as one somebody typed would be.
+///
+/// `own` is the marketplace itself, once it is registered: called what its
+/// URL names it until its catalog is read, it may be called that already,
+/// which is no other source's name to number it away from.
+fn free(ledger: &Ledger, wanted: SourceName, own: Option<i64>) -> Result<SourceName, LedgerError> {
     let mut candidate = wanted.clone();
     for attempt in 2.. {
-        if ledger.source_named(&candidate)?.is_none() {
-            break;
+        match ledger.source_named(&candidate)? {
+            Some(holder) if Some(holder.id) != own => candidate = wanted.numbered(attempt),
+            _ => break,
         }
-        candidate = wanted.numbered(attempt);
     }
     Ok(candidate)
 }
