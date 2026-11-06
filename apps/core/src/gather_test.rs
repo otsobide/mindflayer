@@ -590,6 +590,8 @@ fn a_licence_file_names_the_licence_by_its_spdx_identifier_else_by_its_first_lin
         ),
         // A tag naming nothing is no identifier, and the first line stands.
         ("ISC License\nSPDX-License-Identifier:  \n", "ISC License"),
+        // A byte order mark opens the file, not its first line.
+        ("\u{feff}MIT License\n", "MIT License"),
     ] {
         let folder = TempDir::new().unwrap();
         write(&folder.path().join("LICENSE"), text);

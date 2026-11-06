@@ -872,7 +872,10 @@ pub fn license_of(stated: Option<&str>, folder: &Path) -> Option<String> {
     let mut head = Vec::new();
     let opened = fs::File::open(file).ok()?;
     io::Read::read_to_end(&mut io::Read::take(opened, LICENSE_READ), &mut head).ok()?;
-    let text = String::from_utf8_lossy(&head);
+    let read = String::from_utf8_lossy(&head);
+    // A byte order mark, which an editor on Windows may write, is no part
+    // of the first line, and `trim` keeps it: U+FEFF is not white space.
+    let text = read.strip_prefix('\u{feff}').unwrap_or(&read);
     let tagged = text.lines().find_map(|line| {
         let (_, after) = line.split_once(SPDX_TAG)?;
         // What closes the comment the tag is in, in the files that put it in
