@@ -54,6 +54,7 @@ fn a_plan_that_writes_nothing_is_empty_whatever_it_says() {
         standing: Standing::Orphaned,
         step,
         done: None,
+        previewed: None,
         candidate: None,
     };
     let plan = |step| Plan {
@@ -113,6 +114,7 @@ fn update(standing: Standing, step: Step) -> Update {
         standing,
         step,
         done: None,
+        previewed: None,
         candidate: None,
     }
 }

@@ -3363,9 +3363,10 @@ installed mcp linear into collapse, from load:../team
 An input read from no variable cannot be given to any agent as a reference,
 and no install hands one a value yet, so each agent it would reach says so,
 by its code. `update` writes a changed definition into every entry as an
-install does, saying the same lines once it has, and `status` lists each
-entry an agent each, how it stands and where it came from, beside a server
-somebody keeps in one of those files, `foreign`:
+install does, saying the same lines: without `--yes`, what each agent would
+be given, under each `would update`, and with it, what each now is.
+`status` lists each entry an agent each, how it stands and where it came
+from, beside a server somebody keeps in one of those files, `foreign`:
 
 ```
 $ mindweaver status -p collapse

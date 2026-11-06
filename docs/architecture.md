@@ -3784,9 +3784,14 @@ and is given none (`no_target`).
   server (`Agent::starts_a_server`, from [docs/agents.md](agents.md#what-an-agent-asks-before-it-starts-one)):
   Claude to approve it in a session, OpenCode nothing, Codex nothing more
   than the trust its warning is about. An update that writes one says
-  the same. A line printed before the write would have needed the CLI to
-  print as it runs, which its outcomes, built and then printed, do not;
-  the dry run below is where the lines come before anything is written.
+  the same, and so does its dry run of what each agent would be given
+  (`Update::previewed`, the install's preview), wherever the definition
+  came from: a definition changed since its install, a loaded
+  workspace's or the shelf's among them, is shown before the `--yes`
+  that writes it, as an install's is. A line printed before the write
+  would have needed the CLI to print as it runs, which its outcomes,
+  built and then printed, do not; the dry run below is where the lines
+  come before anything is written.
 - **One from elsewhere asks first.** A server is a command every agent in
   the project runs, or an address each sends what it is given to, so one
   whose definition does not come from the workspace's own library, a

@@ -47,7 +47,7 @@ pub(crate) fn update_projects(
     // that links none, which is what an empty plan otherwise means.
     let unread = projects.is_empty() && !warnings.is_empty();
     if !yes {
-        let plan = update::plan(workspace, projects, &references, edits(force))
+        let plan = update::plan(workspace, projects, &references, edits(force), homes)
             .map_err(|error| failed(error.into(), &warnings))?;
         let mut outcome = laid_out(&plan, false, unread);
         if !plan.is_empty() {
@@ -201,9 +201,24 @@ fn project_laid_out(outcome: &mut Outcome, project: &ProjectPlan, done: bool) {
                     routes.push(&update.name);
                     rule_lines.push_str(&line(&project.root, into, update, true));
                 }
-                None => outcome
-                    .stdout
-                    .push_str(&line(&project.root, into, update, false)),
+                None => {
+                    outcome
+                        .stdout
+                        .push_str(&line(&project.root, into, update, false));
+                    // What each agent of a server would be given, said
+                    // under it before anything is written, as an
+                    // install's dry run says it.
+                    if let Some(Ok(Installation {
+                        entries: Some(entries),
+                        ..
+                    })) = &update.previewed
+                    {
+                        let (lines, warned) = entries_said(entries, Some(into), false);
+                        outcome.stdout.push_str(&lines);
+                        outcome.ok &= warned.is_empty();
+                        outcome.stderr.extend(warned);
+                    }
+                }
                 Some(Ok(installation)) => {
                     installed(outcome, &project.root, into, update, installation);
                 }

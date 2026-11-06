@@ -1297,6 +1297,17 @@ fn a_loaded_workspaces_server_is_a_dry_run_that_writes_nothing_until_yes() {
             reaches("example.org")
         )
     );
+    // And an update says what each agent would be given of it before it
+    // writes it, in its dry run.
+    let update = weaver(dir.path(), &["update", "-p", "app", &home]).unwrap();
+    assert_eq!(
+        update.stdout,
+        format!(
+            "would update mcp linear in app, from {origin}\n{}\
+             nothing changed: add --yes to go ahead\n",
+            reaches("example.org")
+        )
+    );
     assert!(fs::read_to_string(app.join(".mcp.json"))
         .unwrap()
         .contains("example.com"));
@@ -1317,11 +1328,18 @@ fn an_update_says_what_each_agent_runs_now_and_an_uninstall_takes_every_entry_ou
     let updated = weaver(dir.path(), &["update", "-p", "app", "--yes", &home]).unwrap();
     let removed = weaver(dir.path(), &["uninstall", "-p", "app", "github"]).unwrap();
 
+    // What each agent would run said before anything is written, and the
+    // same warning, as the update that writes it says them.
     assert_eq!(
         dry.stdout,
-        "would update mcp github in app, from workspace\n\
+        "would update mcp github in app, from workspace\n  \
+         claude runs: npx -y @example/server --verbose\n  \
+         codex runs: npx -y @example/server --verbose\n  \
+         opencode runs: npx -y @example/server --verbose\n\
          nothing changed: add --yes to go ahead\n"
     );
+    assert_eq!(warned(&dry), warned(&updated));
+    assert_eq!(dry.ok, updated.ok);
     assert_eq!(
         updated.stdout,
         "updated mcp github in app, from workspace\n  \
