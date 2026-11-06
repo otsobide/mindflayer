@@ -245,15 +245,25 @@ under `apps/` with its own `Makefile`:
   `ArtifactName`, a `Revision`, a `ProjectId`), each of which, and each
   record, a test builds through its object mother in `mother`, compiled only
   for tests (`cfg(test)`, or the `mother` feature a dev-dependency turns
-  on). Its only I/O beyond files
-  goes through a port (`port`: a `Remote` a gather fetches through, a
-  `LedgerStore` the ledger keeps its records in, a `Clock` it stamps them
-  by), each implemented by an adapter in `adapter` (`adapter::gix::Gix`,
-  its credentials callback in `adapter/gix/credentials.rs`;
+  on). Its only I/O beyond files is the gix fetch a gather makes and the
+  injectable `Http` client a catalog is read through (`http`: an
+  `http::Client` handed its transport by its caller, never a global, which
+  holds every answer to a total time and a size, follows redirects to https
+  alone, or http on this machine, reads JSON, pages by link or by number as
+  far as a bound (`http/paging.rs`) and keeps answers in
+  `.mindweaver/cache/http`, which no source's clone is given
+  (`http/cache.rs`)). Each, as the ledger's store and the clock, goes
+  through a port (`port`: a `Remote` a gather fetches through, an `Http` a
+  client sends through, a `LedgerStore` the ledger keeps its records in, a
+  `Clock` it stamps them by), each
+  implemented by an adapter in `adapter` (`adapter::gix::Gix`, its
+  credentials callback in `adapter/gix/credentials.rs`;
+  `adapter::reqwest::Reqwest`, reqwest's blocking client over rustls with a
+  connect and a total timeout, its tests in `adapter/reqwest_test.rs`;
   `adapter::sqlite::Sqlite`, every query and schema step, its tests in
   `adapter/sqlite_test.rs`; and `SystemClock`). `ledger::Ledger` is the
   facade every caller holds, reaching its store's methods through `Deref`.
-  It never reads the environment. Under its `ts` feature, `typescript` gives what it hands a
+  It never reads the environment, a proxy included. Under its `ts` feature, `typescript` gives what it hands a
   front end TypeScript (the roots its export writes), under its `schema`
   feature `schema` gives it JSON Schema (the roots its export writes, each
   given or taken, `Schemas`, `Together`), and under either `described` says
@@ -1270,6 +1280,19 @@ These are easy to break from a single file without noticing.
   the architecture doc: what the system ssh asks on the terminal, and `gix`'s
   retry after a remote branch named `HEAD`, a connection the callback cannot
   reach.
+- **Core sends HTTP only through a client handed its transport.** A request
+  goes out through `http::Client`, made with the `Http` its caller hands it
+  (D-14), never one found in a global or read from the environment, so
+  every test runs on a fake. The client, not the transport, holds an answer
+  to its `Limits` (a total time, a size counted as it is read), follows
+  redirects (bounded, to https or http on this machine alone, `fetchable`),
+  and sends a request's credentials, which travel in a header
+  (`Request::credential`) and never in a URL, only to the origin the
+  request named, a next page's included. Every URL an `HttpError` says is a
+  `Redacted`, a header by its name alone. The cache in
+  `.mindweaver/cache/http` keeps no request's URL or headers, takes no
+  answer to a request with a credential, and no source is given its folder
+  (`LedgerStore::source_for`, `gather::own_folder`).
 - **Formats are versioned.** Each marker carries its own `version`
   (`MIND_FORMAT_VERSION` for a project's, `WEAVER_FORMAT_VERSION` for
   `weaver.toml`, so bumping one never makes older builds refuse the other)
@@ -1749,7 +1772,11 @@ These are easy to break from a single file without noticing.
   trusted, makes that folder in a temp dir and hands it over in
   `AgentHomes` (`codex_mcp_test.rs`'s `codex_home`).
 - Git sources are built in-process with `gix` (`common::repository`): no
-  network and no `git` binary. A CLI fixture's project is a repository given
+  network and no `git` binary. HTTP is a fake `Http` kept in memory
+  (`apps/core/tests/http_test.rs`), and the default transport's own tests
+  reach only a server each starts on 127.0.0.1, port 0, with std's
+  `TcpListener` (`adapter/reqwest_test.rs`): no test names another host, and
+  a redirect to one is refused before it could be sent. A CLI fixture's project is a repository given
   `mind init` (`common::new_project`), so a local install keeps its copies out
   of git rather than saying on stderr that nothing does, and where an install
   puts its copies is asked of core (`common::copies`). A test about what a
