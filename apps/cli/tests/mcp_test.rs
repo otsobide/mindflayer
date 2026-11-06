@@ -1,7 +1,8 @@
 //! MCP servers at the command line: added from how an agent starts or
 //! reaches one, listed beside skills and rules, shown, validated, renamed
-//! and removed as every kind is, and what no release does with one yet
-//! refused, saying what to do instead.
+//! and removed as every kind is, installed by a name qualified as one,
+//! and what no release does with one yet refused, saying what to do
+//! instead.
 
 mod common;
 
@@ -909,14 +910,11 @@ fn contents_given_whole_that_name_a_server_otherwise_are_refused() {
 }
 
 #[test]
-fn adding_a_server_told_nothing_of_its_transport_and_installing_one_are_refused_with_what_to_do() {
+fn adding_a_server_told_nothing_of_its_transport_is_refused_with_what_to_do() {
     let dir = library();
     let folder = own_directory_for(dir.path(), Kind::Mcp);
-    new_project(&dir.path().join("app"));
-    weaver(dir.path(), &["link", "app"]).unwrap();
 
     let added = weaver(dir.path(), &["add", "mcp", "linear", "Linear's issues"]).unwrap_err();
-    let installed = weaver(dir.path(), &["install", "-p", "app", "mcp:github"]).unwrap_err();
 
     assert_eq!(added.error.code(), "add_mcp_unscaffolded");
     assert_eq!(
@@ -928,14 +926,72 @@ fn adding_a_server_told_nothing_of_its_transport_and_installing_one_are_refused_
             folder.display()
         )
     );
-    assert_eq!(installed.error.code(), "not_installable");
-    assert_eq!(
-        installed.error.to_string(),
-        "MCP servers cannot be installed into a project yet"
-    );
-    // Typed bare, the name is asked of the kinds an install writes alone.
+}
+
+/// What the commands say of an MCP server installed is #95's: until then
+/// one is installed by a name qualified as a server's, and said as any
+/// kind is.
+#[test]
+fn a_server_is_installed_by_a_name_qualified_as_one_and_not_typed_bare() {
+    let dir = library();
+    new_project(&dir.path().join("app"));
+    weaver(dir.path(), &["link", "app"]).unwrap();
+
+    // Typed bare, the name is asked of the kinds a front end steps through.
     let bare = weaver(dir.path(), &["install", "-p", "app", "github"]).unwrap_err();
+    let installed = weaver(dir.path(), &["install", "-p", "app", "mcp:github"]).unwrap();
+
     assert_eq!(bare.error.code(), "not_offered");
+    assert_eq!(
+        installed.stdout,
+        "installed mcp github into app, from workspace\n"
+    );
+    let app = dir.path().join("app");
+    assert!(fs::read_to_string(app.join(".mcp.json"))
+        .unwrap()
+        .contains("github"));
+}
+
+/// A server a project received is entries in its agents' config files,
+/// never a definition the project keeps (D-23): `rename`, `edit` and
+/// `remove` aimed at one are refused, saying what changes it instead.
+#[test]
+fn a_change_aimed_at_a_server_the_project_received_is_refused_with_what_to_do_instead() {
+    let dir = library();
+    let app = dir.path().join("app");
+    new_project(&app);
+    weaver(dir.path(), &["link", "app"]).unwrap();
+    weaver(dir.path(), &["install", "-p", "app", "mcp:github"]).unwrap();
+    let before = fs::read_to_string(app.join(".mcp.json")).unwrap();
+
+    for line in [
+        &["rename", "mcp:github", "octocat"][..],
+        &["remove", "mcp:github", "--yes"],
+        &["edit", "mcp:github"],
+    ] {
+        let refused = mind(&app, line).unwrap_err();
+
+        assert_eq!(refused.error.code(), "change_received_mcp", "{line:?}");
+        assert_eq!(
+            refused.error.to_string(),
+            "`mcp:github` is an MCP server app received, an entry in its agents' config files \
+             written from the definition it was installed from rather than kept in it, so it is \
+             not changed from here: uninstall it as `mcp:github`, or change its definition in \
+             the library it came from and update",
+            "{line:?}"
+        );
+    }
+    assert_eq!(fs::read_to_string(app.join(".mcp.json")).unwrap(), before);
+    // Typed bare, the name is found received as well, and the hint names
+    // the form an uninstall finds it by.
+    let bare = mind(&app, &["rename", "github", "octocat"]).unwrap_err();
+    assert_eq!(bare.error.code(), "change_received_mcp");
+    assert!(bare
+        .error
+        .to_string()
+        .contains("uninstall it as `mcp:github`"));
+    let uninstalled = mind(&app, &["uninstall", "mcp:github"]).unwrap();
+    assert_eq!(uninstalled.stdout, "removed mcp github from app\n");
 }
 
 #[test]

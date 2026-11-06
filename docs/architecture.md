@@ -905,8 +905,9 @@ skill's body is printed below its front matter: every key an agent is
 given is laid out above, the file is at the path heading it, and `--json`
 holds it whole as `body`. A definition is written by `add` from how a
 command line says the server is started or reached, or from a template
-([adding one](#adding-an-mcp-server)); installing one waits for the
-renderers (`not_installable`), gathering one and adopting one too.
+([adding one](#adding-an-mcp-server)), and installing one writes an entry
+into each agent's config file ([installing an MCP
+server](#installing-an-mcp-server)); gathering one and adopting one wait.
 `add`, `edit --contents` and `rename` hold a definition to every problem
 `validate` reports (`artifact::mcp_strict_issues`, a name an agent only
 uses for its own being a warning and no problem), its name to its file as
@@ -1132,7 +1133,7 @@ An input read from no variable is not among them, though every agent's
 renderer refuses it (`claude_mcp_input_unread`, `codex_mcp_input_unread`,
 `opencode_mcp_input_unread`): every agent could be given its value as it is,
 and none is given it only because no install hands a renderer one yet
-(#93, in the open questions). Said here, `show` would call every agent
+(#95, in the open questions). Said here, `show` would call every agent
 refused a server each of them can take. Nor is an input that is no secret
 written where Codex reads no variable, an argument read from one
 (`add --arg-env`), a part of the address (`--url-var`): Codex's renderer
@@ -3375,7 +3376,10 @@ targets](#a-projects-own-targets)). A project a `mind.toml` marks names no
 agents, and gets one copy in the folder its marker names, as before. A rule is
 no folder, and reaches a project's agents otherwise: through the block of its
 `AGENTS.md` and Claude's files, rendered with every other rule it has
-([installing rules](#installing-rules)).
+([installing rules](#installing-rules)). Nor is an MCP server, whose payload
+is an entry: one in the config file of each agent the project names, by the
+fingerprint of what was written there ([installing an MCP
+server](#installing-an-mcp-server)).
 
 Not the folder a project's settings say it authors in
 ([D-06](#d-06-projects-keep-authoring-beside-the-code)): what the workspace
@@ -3656,6 +3660,111 @@ through the workspace that manages it, as `mind install` does. Both resolve
 it as a read, so neither makes the default workspace in home, not even with
 `--yes`: one made for the occasion links no project, and the update would be
 refused all the same.
+
+### Installing an MCP server
+
+An MCP server's payload is no copy but an entry, one in the config file of
+each agent the project names (`Agent::mcp_file`), written by that agent's
+renderer ([Claude Code's `.mcp.json`](#claude-codes-mcpjson), [Codex's
+`.codex/config.toml`](#codexs-codexconfigtoml), [OpenCode's
+`opencode.json`](#opencodes-opencodejson)), every byte outside it kept
+(`install::mcp`, #94). It is one installation a project, as a skill is,
+recorded with an entry target for each file it wrote and the fingerprint of
+what was written there ([how an entry stands](#how-an-entry-stands)): an
+entry carries no mark of its own, so that record is the one thing that
+makes it Mindweaver's (D-10). A project a `mind.toml` marks names no agent,
+and is given none (`no_target`).
+
+- **Who is given what is decided first.** An agent whose renderer refuses
+  the definition, a shape it cannot express ([what each agent cannot be
+  given](#what-each-agent-cannot-be-given-of-a-server)) or an input read
+  from no variable, is not reached, and said beside the installation with
+  that refusal's code and reason (`install::mcp::Rendered`'s `unreached`);
+  the others are given it all the same, as a rule about some files only
+  reaches Claude alone, since refusing every agent over one would keep a
+  server from the agents that can run it. So is an agent whose file git
+  tracks in a local project that does not set `edit_tracked` (D-02), by the
+  code a block of rules withheld from such a file is said with
+  (`withheld_tracked`), as Claude's `CLAUDE.md` is left alone there; and
+  Codex in a project its user's config does not mark trusted, which is
+  written all the same and counted as reaching no Codex
+  (`codex_mcp_untrusted`), since trusting a project is the user's to do. A
+  name the user's own Codex config holds (`codex_mcp_collision`) is met as
+  Codex's entry is written, before its file is read, and leaves Codex
+  unreached the same way. A server that reaches none of the agents the
+  project names is refused, each reason said (`mcp_unreached`), with
+  nothing written.
+- **All of it or none.** Each file is read before any is written: one its
+  renderer would refuse to write into refuses the install; somebody's
+  server of the name, which nothing records in that file for that agent,
+  refuses it whole, as a copy nothing records does (`Installed::Foreign`),
+  though each agent reads a file of its own; and so does an entry changed
+  since it was written, wherever the record has it, unless forced
+  (`Installed::Edited`). Then each file is written in report order, and the
+  first that fails puts back those written before it as they were, a file
+  made taken away with the folder made on its way, and records nothing, as
+  a record that cannot be written does too. An install over current
+  entries writes nothing, each renderer leaving a file that holds what it
+  would write as it is (`Installed::Unchanged`).
+- **An agent its renderer now refuses loses what an earlier install
+  wrote.** When the definition has changed so that an agent's renderer
+  refuses it, an install over the installation, an update's included,
+  takes that agent's entry out of its file as an uninstall would, and out
+  of the record, the agent said as not reached: left there, it would go on
+  running what the library no longer gives it, reading as outdated while
+  no update could write it again. An edited one refuses the install first,
+  unless forced, as anywhere else. An agent whose file is withheld, which
+  git tracks in a local project without `edit_tracked`, keeps its entry,
+  recorded as it was, since taking it out is an edit of that file too and
+  dropping the record would leave the entry nobody's: it reads as current
+  or outdated as its offer has it, and an update leaves it until the file
+  may be edited.
+- **Out of git, only what it made.** In a local project each config file
+  the install makes is kept out of git, a line a file in the project's
+  group of the exclude block, written before the file lands and taken back
+  out when it does not land ([what keeps an install out of
+  git](#what-keeps-an-install-out-of-git)), and the ledger notes that
+  Mindweaver made it (`created_files`), for the file to go with its last
+  server and only then. One somebody had, git tracking it or not, is
+  theirs to commit, and gets no line.
+- **Uninstalling goes by the record.** Each entry it names is taken out of
+  the file it names, OpenCode's whichever of its four that was
+  (`opencode_mcp::remove_from`), and nothing else, every other server and
+  byte there kept; a file Mindweaver made goes with its last server, as its
+  renderer decides, and its line in the exclude block with it. One
+  somebody took away is forgotten with the record the same way, its line
+  and its mark (`created_files`) with it, whatever server another record
+  still names there: the line would keep the file written there later out
+  of git without a word, the mark would have a later uninstall take that
+  file away as Mindweaver's, and the install that puts the other server
+  back makes the file, and so marks it again. An entry
+  changed since refuses the uninstall unless forced, as an edited copy
+  does, and forcing never reaches an entry nothing records: with no record,
+  a server of the name is somebody's, and said (`Removed::Foreign`). An
+  entry in a file git tracks in a local project without `edit_tracked`
+  refuses it too (`mcp_entry_unedited`), as a rule's section in a block
+  that may not be edited does. Each file is changed in turn, and the first
+  that fails puts back those changed before it and keeps the record.
+- **An update writes through the install's body.** An outdated or missing
+  installation is written again from where its record says it came from
+  (`install_held`), an edited one left, every entry of it, unless forced,
+  and an orphaned one said and left ([bringing what was installed up to
+  date](#bringing-what-was-installed-up-to-date)).
+- **Named by a qualified name, for now.** `install::offered` finds a server
+  by a name qualified as one (`mcp:github`), which is how the CLI reaches
+  it, `mindweaver install -p collapse mcp:github` saying what it did as it
+  says it of any kind. What the front ends step through leaves MCP out
+  (`install::installs`): `survey`, `receives`, which the snapshot closes
+  MCP's boxes by as `not_installable`, and a name typed bare, until the
+  commands say what installing one will run and ask before writing one
+  from elsewhere than the library (#95). What an install hands back says
+  of each entry what its renderer said, and of each agent not reached
+  why, which no command prints yet (#95).
+- **The writers hold the lock.** An install and an uninstall hold the
+  workspace's lock from before the record is read until it is written, as
+  `install::install` does, an update writing through the body that takes
+  none; the renderers take none ([writers at the same
+  time](#writers-at-the-same-time)).
 
 ### Built where no agent looks
 
@@ -4248,7 +4357,9 @@ install of a skill names one entry for each copy git tracks nothing in, a
 render of Claude's rule
 files one for each file ([Claude's rule files](#claudes-rule-files)), a
 render of a project's rules one for an `AGENTS.md` it made ([installing
-rules](#installing-rules)), and #94 will for MCP config.
+rules](#installing-rules)), and an install of an MCP server one for each
+config file it makes ([installing an MCP
+server](#installing-an-mcp-server)).
 
 ```
 # mindweaver:begin
@@ -9229,7 +9340,8 @@ and what an entry holds are the caller's, and the agents' shapes are #90 to
 `.mcp.json`](#claude-codes-mcpjson)), Codex's `.codex/config.toml` the
 second ([Codex's `.codex/config.toml`](#codexs-codexconfigtoml)), OpenCode's
 `opencode.json` the third ([OpenCode's `opencode.json`](#opencodes-opencodejson)),
-and nothing installs through it yet.
+and an install of a server writes and takes out each through its agent's
+renderer ([installing an MCP server](#installing-an-mcp-server)).
 
 An entry is found by its key path, the keys of the objects that lead to it
 (`["mcpServers", "github"]`), and holds a `config_entry::Value`. Its own type
@@ -9458,7 +9570,8 @@ file with it when the caller says Mindweaver made it and nothing else is
 left, no other server and nothing beside them, in one step rather than a
 write and then a removal, as `agents_md` takes away an `AGENTS.md` it made.
 Whose entry it is, and whether Mindweaver made the file, are the ledger's
-to say (#93), and the install's to ask (#94): nothing here reads either.
+to say (#93), and the install's to ask ([installing an MCP
+server](#installing-an-mcp-server)): nothing here reads either.
 
 ### Codex's `.codex/config.toml`
 
@@ -9544,7 +9657,8 @@ anywhere outside the entry keeps the file. `.codex` stays,
 whatever is left in it: it is Codex's own folder, which may hold what else
 Codex keeps for the project, and no record says Mindweaver made it. Whose
 entry it is, and whether Mindweaver made the file, are the ledger's to say
-(#93), and the install's to ask (#94): nothing here reads either.
+(#93), and the install's to ask ([installing an MCP
+server](#installing-an-mcp-server)): nothing here reads either.
 
 ### OpenCode's `opencode.json`
 
@@ -9628,9 +9742,13 @@ on the way to it, empty, and no comment (`config_entry::jsonc_commented`),
 since the document `config_entry::holds_only` reads holds none, and one
 somebody wrote is something. Only `opencode.json` is ever one Mindweaver
 made, so another of the four chosen once it has gone stays whatever it
-holds, and `.opencode` is never taken away. Whose entry it is, and
-whether Mindweaver made the file, are the ledger's to say (#93), and the
-install's to ask (#94): nothing here reads either.
+holds, and `.opencode` is never taken away. `remove_from` takes a server
+out of the one of the four its record names, rather than the first there
+is, which another may have come before since: taken out of the first, it
+would be a server of the name somebody keeps there, and the one written
+left behind. Whose entry it is, and whether Mindweaver made the file, are
+the ledger's to say (#93), and the install's to ask ([installing an MCP
+server](#installing-an-mcp-server)): nothing here reads either.
 
 ### How an entry stands
 
@@ -9683,7 +9801,8 @@ install would refuse to write into is refused here too, with the same
 code, and a recorded entry is looked for in the file its record names,
 OpenCode's whichever of its four that was. `install::entry_standings` says
 how one server stands for each of a project's agents, absent and foreign
-among them, which is what an install will meet in each file (#94).
+among them, which is what an install meets in each file ([installing an
+MCP server](#installing-an-mcp-server)).
 
 ## Creating and changing artifacts
 
@@ -9788,8 +9907,15 @@ a name found only there is refused (`NotAuthored`). So is a rule the project
 only received, a section of its block, never authored in place
 ([D-23](#d-23-what-a-project-received-is-an-installed-view)): a front end
 finds what to change through `lifecycle::find_to_change`, which refuses one
-the ledger records as received (`Received`), saying how to take it out. The
-TUI lists unreadable files in the same way, by the name their place gives
+the ledger records as received (`Received`), saying how to take it out. And
+so is an MCP server the project received, an entry in each of its agents'
+config files written from the library's definition (`ReceivedServer`,
+`change_received_mcp`), saying to uninstall it, or to change its definition
+in the library it came from and update: a change made in a file is read as
+an edit (D-04), never one the next install keeps. The hint names it
+qualified as a server's (`mcp:github`) however it was typed, since a name
+typed bare finds no server to uninstall until #95. A rule is asked of first,
+and a name received as both is one a qualifier settles. The TUI lists unreadable files in the same way, by the name their place gives
 them (`lifecycle::identify`), so they can be reached with a key rather than
 only read about in a warning.
 
@@ -10272,7 +10398,8 @@ other, and none of them makes a reader wait for the workspace.
   rename wins. So a writer holds `.mindweaver/lock` from before it reads what
   it will change until the change is written: an edit of the marker (`link`,
   `unlink`, `load`, `unload`, and the default workspace's, which `mindweaver
-  init` and `workspaces forget` change), an install or an uninstall, a
+  init` and `workspaces forget` change), an install or an uninstall (an
+  MCP server's too, whose renderers take none), a
   gather (clone and all, since two gathers of one source clone into one
   folder) and the scrub that opening the ledger to write runs
   (`ledger_to_write`), while it rewrites clones an older build left a
@@ -10470,7 +10597,11 @@ miss the rules ([installing rules](#installing-rules)). #59 writes no line
 for a copy git tracks, as an adopted one often is, whether an install, an
 update or a project turning local would have written one, since it keeps
 none of the copy out ([what keeps an install out of
-git](#what-keeps-an-install-out-of-git)).
+git](#what-keeps-an-install-out-of-git)). #94 keeps out of git only the
+config files an install of an MCP server makes, a line each, and writes no
+entry into one git tracks in a local project without `edit_tracked`,
+saying which agent then misses the server, nor takes one out of it
+([installing an MCP server](#installing-an-mcp-server)).
 
 ### D-03: Rules reach every agent through `AGENTS.md`
 
@@ -10757,8 +10888,8 @@ Unblocks #18, #86, #89, #93 and #94.
 `format = 1`, its inputs written between braces where their value goes, as
 the registry writes a variable ([what an MCP server's definition
 declares](#what-an-mcp-servers-definition-declares)), listed, shown,
-validated, renamed and removed by the lifecycle every kind goes through.
-Nothing installs one yet (`not_installable`). #88 added one from the
+validated, renamed and removed by the lifecycle every kind goes through,
+and installed by nothing (`not_installable`) until #94. #88 added one from the
 command line, from how an agent starts or reaches it or from a template
 ([adding one](#adding-an-mcp-server)), and laid out what `show` says of
 its transport and inputs. #90 renders one into Claude's `.mcp.json` as
@@ -10769,8 +10900,12 @@ same way ([Codex's `.codex/config.toml`](#codexs-codexconfigtoml)), its
 canonical form its members sorted, since `codex mcp add` writes every entry
 again, and #92 into OpenCode's `opencode.json`, or the first of its four
 config files there is, in the shape the file keeps its servers in
-([OpenCode's `opencode.json`](#opencodes-opencodejson)); installing them,
-and the record, are #93's and #94's.
+([OpenCode's `opencode.json`](#opencodes-opencodejson)). #93 records each
+entry an installation writes by its fingerprint, and tells how it stands
+([how an entry stands](#how-an-entry-stands)), and #94 installs a server
+into the file of each agent the project names, all of them or none, and
+takes out only the entries it recorded that nobody changed since
+([installing an MCP server](#installing-an-mcp-server)).
 
 Checking it, #18 added MCP checks to `scripts/agent-probe`, run by hand.
 Claude Code's and OpenCode's ran on 2026-11-05; Codex's were not run, since
@@ -10797,7 +10932,7 @@ result bears on, and what came of it:
   warning would go. Were a trusted one's not, Codex cannot be reached at
   project scope, and this decision comes back for Codex, with D-22's user
   scope. #94 counts a server installed into an untrusted project as
-  reaching no Codex, as #91 warns.
+  reaching no Codex, as #91 warns, its entry written all the same.
 - **A server of the same name in the user's `config.toml`**
   (`codex-mcp-collision`, recorded): not run, so it settles nothing, and
   #91's open choice is #91's to make without it: refusing a name a lower
@@ -11058,7 +11193,9 @@ the home workspace's default. Unblocks #17, #28, #94 and #96.
 Until then, #34 refuses an install whose copy would land inside one of the
 agents' own folders, which a project at the user's home would otherwise
 reach by accident ([never into an agent's own
-folder](#never-into-an-agents-own-folder)).
+folder](#never-into-an-agents-own-folder)), and #94 an MCP server's entry
+in a config file there, before anything is written ([installing an MCP
+server](#installing-an-mcp-server)).
 
 ### D-23: What a project received is an installed view
 
@@ -11085,7 +11222,10 @@ authors, and #46 says so with a hint to uninstall: the front ends find what
 to change through `lifecycle::find_to_change`, which refuses a name the
 project authors nothing of but the ledger records as a rule it received
 (`LifecycleError::Received`), where "nothing named" would deny what `status`
-just listed.
+just listed. #94 refuses an MCP server a project received the same way
+(`LifecycleError::ReceivedServer`), with a hint to uninstall it, or to
+change its definition in the library it came from and update ([finding
+what to change](#finding-what-to-change)).
 
 ### D-24: The local server is a versioned HTTP API
 
@@ -12623,6 +12763,17 @@ it once as it closes.
   which is what a local project is for avoiding; keeping a copy of them in
   the workspace, beside its entry, would let a command mark the project
   again as it was, its id included.
+- **MCP servers after a change of agents or share mode.** `reapply`
+  carries a project's skills along, and not its MCP servers' entries: a
+  project that names another agent is given no entry for it until the
+  server is installed again, one that stops naming an agent keeps that
+  agent's entry and its record, which an uninstall takes out, and one
+  turning local leaves a config file an install made while it was shared
+  in git's view, an install again writing no line for a file that is
+  there. Carrying the entries as it carries copies, under the lock it
+  holds, would close it: an entry written where an agent is named now,
+  one taken out while it holds what was written where one is no longer,
+  and a line for each file the ledger says Mindweaver made.
 - **Rules after a change of agents or share mode.** `reapply` carries a
   project's skills along when its agents, targets or share mode change, but
   not its rules: those are rendered again by the next install or uninstall
@@ -12656,9 +12807,9 @@ it once as it closes.
   which folder Mindweaver made is no record anybody keeps, so a project
   given a server and then none keeps an empty `.codex`, which git does not
   see. Which files Mindweaver made is `created_files`' to record, as it
-  records an `AGENTS.md`, which an install of a server will note its config
-  file in (#94): the ledger's entries (#93) record each entry, not the
-  file it is in.
+  records an `AGENTS.md`, which an install of a server notes its config
+  file in when it makes one (#94), the ledger's entries (#93) recording
+  each entry, not the file it is in.
 - **An entry left in an OpenCode file that no longer comes first.** A
   recorded entry is looked for in the file its record names
   ([how an entry stands](#how-an-entry-stands)), so one written into
@@ -12666,7 +12817,12 @@ it once as it closes.
   `opencode.json`, which comes first among the four and is the one a new
   entry goes into. Whether OpenCode reads all four or the first is
   docs-only; if the first, the entry reaches OpenCode no more, and an
-  update would have to say so, or move it.
+  update would have to say so, or move it. An uninstall takes it out of
+  the file its record names (`opencode_mcp::remove_from`), but an install
+  writes the server into the first, and the record follows it there,
+  leaving the entry in `.opencode/opencode.json` recorded by nothing, so
+  somebody's from then on; taking it out as the new one is written, while
+  it holds what was written, would close it.
 - **An input given a value rather than a variable.** An input that is no
   secret may name no variable, its value being somebody's to give, and
   Claude's entry then has nothing to refer to: `claude_mcp` refuses it
@@ -12677,9 +12833,12 @@ it once as it closes.
   part of the address `add --arg-env` and `--url-var` write
   (`codex_mcp_input_in_text`): every server `add` writes with either
   reaches Codex only once a value is handed. A value given when the server
-  is installed is an install's to hand the renderer (#94), which would then
-  write it as it is, held to what a value of the transport is held to; the
-  ledger's record of an entry (#93) keeps its fingerprint, not its values.
+  is installed is the commands' to ask for (#95) and the install's to hand
+  the renderer, which would then write it as it is, held to what a value of
+  the transport is held to; the ledger's record of an entry (#93) keeps its
+  fingerprint, not its values. Until then an install of such a server
+  reaches none of those agents, and says why of each
+  ([installing an MCP server](#installing-an-mcp-server)).
 - **Variables Claude empties that the table does not follow.** What Claude
   keeps from a remote server was read from 2.1.318's binary
   (`mcp/blanked.rs`), and only what it keeps in every environment: a

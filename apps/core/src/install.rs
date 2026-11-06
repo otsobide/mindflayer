@@ -16,7 +16,9 @@
 //! A rule is no folder: it reaches a project marked by its settings as a
 //! section of the block in its `AGENTS.md`, rendered with every other rule
 //! the project has, and one a `mind.toml` marks as a copy of its file
-//! ([`rules`]).
+//! ([`rules`]). Nor is an MCP server, which reaches each agent as one entry
+//! in its own config file, recorded by the fingerprint of what was written
+//! there ([`mcp`]).
 
 use std::fs;
 use std::io;
@@ -48,6 +50,7 @@ use crate::value::{ArtifactName, ContentHash, Origin};
 use crate::workspace::{same_directory, Loaded, MindProject, WeaverWorkspace, WorkspaceError};
 
 pub(crate) mod entries;
+pub mod mcp;
 mod plan;
 pub mod rules;
 mod standing;
@@ -1175,8 +1178,27 @@ pub fn offered(
     name: &str,
     from: Option<&str>,
 ) -> Result<Candidate, InstallError> {
-    receives(project, kind)?;
-    let mut matching: Vec<Candidate> = survey(workspace, ledger, project, kind)?
+    // Matched on the kind, so a third one says how it is offered by name.
+    let candidates = match kind {
+        Kind::Skill | Kind::Rule => {
+            receives(project, kind)?;
+            survey(workspace, ledger, project, kind)?
+        }
+        // Named one at a time, by a name qualified as a server's
+        // (`mcp:github`), while no front end steps through what a project
+        // can be given of them ([`installs`]): what installing one will run
+        // is the front ends' to say first (#95).
+        Kind::Mcp => {
+            mcp::receives(project)?;
+            mcp::survey(
+                workspace,
+                ledger,
+                project,
+                &offers(workspace, ledger, kind)?,
+            )?
+        }
+    };
+    let mut matching: Vec<Candidate> = candidates
         .into_iter()
         .filter(|candidate| candidate.name() == name)
         .filter(|candidate| from.is_none_or(|from| candidate.comes_from(from)))
@@ -1374,12 +1396,15 @@ fn filed_as(name: &str) -> Vec<Kind> {
     }
 }
 
-/// Whether an install writes `kind` into a project at all: a skill as a
-/// copy in a folder, a rule as a section of a block or a file, and not yet
-/// an MCP server, whose entry in each agent's own config file (D-10) no
-/// release writes. What a name typed bare is asked of, and what a front end
-/// steps through to install. Matched on the kind, so a kind added says
-/// whether it is installed before it compiles.
+/// Whether a front end steps through `kind` to install, and a name typed
+/// bare is asked of it: a skill, copied into a folder, and a rule, a section
+/// of a block or a file. Not yet an MCP server, though an install writes one
+/// as an entry in each agent's own config file (D-10, [`mcp`]): it is named
+/// by a name qualified as one (`mcp:github`, [`offered`]) until the front
+/// ends say what installing one will run (#95), and [`survey`], what they
+/// step through, and [`receives`] leave it out till then. Matched on the
+/// kind, so a kind added says whether it is stepped through before it
+/// compiles.
 pub const fn installs(kind: Kind) -> bool {
     match kind {
         Kind::Skill | Kind::Rule => true,
@@ -1416,6 +1441,10 @@ pub fn receives(project: &MindProject, kind: Kind) -> Result<(), InstallError> {
 /// nothing written in any target ([`Installed::Edited`]): it is somebody's
 /// work, as a copy nothing records is, until [`install_with`] is told to
 /// write over it.
+///
+/// A rule is rendered with the project's others ([`rules`]), and an MCP
+/// server is no copy but an entry in the config file of each agent the
+/// project names, all of them written or none ([`mcp`]).
 pub fn install(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
@@ -1444,7 +1473,7 @@ pub fn install_with(
     match kind {
         Kind::Skill => {}
         Kind::Rule => return rules::install(workspace, ledger, project, candidate, homes, edits),
-        Kind::Mcp => return Err(InstallError::NotInstallable { kind }),
+        Kind::Mcp => return mcp::install(workspace, ledger, project, candidate, homes, edits),
     }
     let entry = project_entry(workspace, project);
     // The folder is named after the artifact, not after the folder it had on
@@ -1506,7 +1535,7 @@ pub(crate) fn install_held(
         Kind::Rule => {
             return rules::install_held(workspace, ledger, project, candidate, homes, edits)
         }
-        Kind::Mcp => return Err(InstallError::NotInstallable { kind }),
+        Kind::Mcp => return mcp::install_held(workspace, ledger, project, candidate, homes, edits),
     }
     let entry = project_entry(workspace, project);
     let targets = targets(project, kind)?;
@@ -1763,6 +1792,7 @@ pub(crate) fn install_held(
         left_out,
         excluded,
         rendered: None,
+        entries: None,
     })
 }
 
@@ -1939,6 +1969,9 @@ pub fn uninstall_with(
     if kind == Kind::Rule && project.settings().is_some() {
         return rules::uninstall(workspace, ledger, project, name, homes, edits);
     }
+    if kind == Kind::Mcp {
+        return mcp::uninstall(workspace, ledger, project, name, edits);
+    }
     // Held from before the record is read until it is dropped, for the
     // reason `install` holds it: an install of the same name at the same
     // moment comes wholly before this or wholly after it. Between the copies
@@ -2042,7 +2075,11 @@ pub(crate) fn somebodys(
     if ledger.installation(&entry, kind, name)?.is_some() {
         return Ok(None);
     }
-    Ok(held_where(project, kind, name))
+    // Matched on the kind, so a third one says where somebody's is.
+    Ok(match kind {
+        Kind::Skill | Kind::Rule => held_where(project, kind, name),
+        Kind::Mcp => mcp::somebodys(project, name),
+    })
 }
 
 /// The first target of `project` holding something called `name`, of
@@ -2434,6 +2471,11 @@ pub struct Installation {
     /// any of them is said here. None for a skill, and for a rule copied
     /// into a project a `mind.toml` marks.
     pub rendered: Option<rules::Rendered>,
+    /// What installing an MCP server wrote into its agents' config files,
+    /// an entry an agent, and which of the agents the project names it
+    /// does not reach, and why ([`mcp::Rendered`]). None for a skill and a
+    /// rule.
+    pub entries: Option<mcp::Rendered>,
 }
 
 impl From<Installed> for Installation {
@@ -2446,6 +2488,7 @@ impl From<Installed> for Installation {
             left_out: Vec::new(),
             excluded: None,
             rendered: None,
+            entries: None,
         }
     }
 }
@@ -2781,6 +2824,12 @@ pub enum InstallError {
         route: String,
         why: rules::Withheld,
     },
+    #[error("{file}: holds MCP server `{name}`, which cannot be taken out of it ({why}), so the server is not uninstalled: share the project or set edit_tracked, or take its entry out by hand")]
+    EntryWithheld {
+        file: PathBuf,
+        name: String,
+        why: rules::Withheld,
+    },
     #[error(transparent)]
     AgentsMd(#[from] AgentsMdError),
     #[error(transparent)]
@@ -2789,6 +2838,19 @@ pub enum InstallError {
     ClaudeRules(#[from] ClaudeRulesError),
     #[error("{} cannot be installed into a project yet", .kind.plural())]
     NotInstallable { kind: Kind },
+    /// An agent's config file an MCP server's entry is written into, or
+    /// taken out of, that its renderer refuses or cannot write: what the
+    /// renderer says, by its code. Boxed, being far larger than the rest.
+    #[error(transparent)]
+    Config(Box<ConfigUnread>),
+    /// An MCP server that reaches none of the agents the project names,
+    /// each of them refused it or left out for why it says ([`mcp`]).
+    #[error("MCP server `{name}` reaches none of the agents {project} names, so nothing was installed: {}", unreached(.why))]
+    Unreached {
+        name: String,
+        project: String,
+        why: Vec<mcp::Unreached>,
+    },
     #[error("`{name}` cannot be installed: {}", issue_list(.issues))]
     Unfit {
         name: String,
@@ -2855,7 +2917,9 @@ codes!(InstallError {
     Self::NotRecorded { .. } => "rule_not_recorded",
     Self::Unread { .. } => "rule_section_unread",
     Self::Withheld { .. } => "rules_block_unedited",
+    Self::EntryWithheld { .. } => "mcp_entry_unedited",
     Self::NotInstallable { .. } => "not_installable",
+    Self::Unreached { .. } => "mcp_unreached",
     Self::Unfit { .. } => "install_unfit",
     Self::Overlaps { .. } => "install_overlaps",
     Self::KeptByALoad { .. } => "kept_by_a_load",
@@ -2878,6 +2942,7 @@ codes!(InstallError {
     Self::ClaudeRules(error) => error,
     Self::Artifact(error) => error,
     Self::Exclude(error) => error,
+    Self::Config(error) => error,
 });
 
 impl InstallError {
@@ -2895,6 +2960,16 @@ impl InstallError {
             _ => &[],
         }
     }
+}
+
+/// "claude: why; codex: why": each agent an MCP server does not reach, as
+/// [`InstallError::Unreached`] says them.
+fn unreached(why: &[mcp::Unreached]) -> String {
+    let each: Vec<String> = why
+        .iter()
+        .map(|unreached| format!("{}: {}", unreached.agent.name(), unreached.why.message))
+        .collect();
+    each.join("; ")
 }
 
 /// "a skill and as a rule": the kinds a name is, as a refusal says them.

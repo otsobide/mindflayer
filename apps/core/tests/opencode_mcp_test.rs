@@ -476,6 +476,36 @@ fn only_the_opencode_json_mindweaver_makes_is_ever_taken_away() {
 }
 
 #[test]
+fn a_server_is_taken_out_of_the_file_named_though_another_comes_first_now() {
+    let name = McpMother::name();
+    let root = TempDir::new().unwrap();
+    let written = ".opencode/opencode.json";
+    write(root.path(), written, "{}\n");
+    render(root.path(), &McpMother::http(&name));
+    // Somebody keeps a server of the name in the file that comes first now.
+    write(root.path(), FILE, TEAMS);
+    render(root.path(), &McpMother::http(&name));
+    let theirs = read(root.path(), FILE);
+
+    assert_eq!(
+        opencode_mcp::remove_from(root.path(), written, &name, false).unwrap(),
+        Written::Changed
+    );
+    assert_eq!(
+        read(root.path(), written),
+        "{\n  \"mcp\": {\n    \"servers\": {}\n  }\n}\n"
+    );
+    assert_eq!(read(root.path(), FILE), theirs);
+    // A route that is none of OpenCode's files holds none of its servers.
+    write(root.path(), "config.json", &theirs);
+    assert_eq!(
+        opencode_mcp::remove_from(root.path(), "config.json", &name, true).unwrap(),
+        Written::Unchanged
+    );
+    assert_eq!(read(root.path(), "config.json"), theirs);
+}
+
+#[test]
 fn a_server_not_there_is_taken_out_of_nothing() {
     let root = TempDir::new().unwrap();
     write(root.path(), FILE, TEAMS);

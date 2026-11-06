@@ -300,9 +300,10 @@ the environment variable an agent reads it from (`--secret-env`,
 `--secret-header` or `--bearer-env`), never as its value: `--env` and
 `--header` write what they are given as it is, and refuse only a value that
 looks like a token. `mindweaver show mcp:github` says how each agent will be
-given it; installing one into a project comes next. [What an MCP server
-looks like](docs/reference.md#what-an-mcp-server-looks-like) has every
-option, and the rest.
+given it, and `mindweaver install -p <project> mcp:github` gives it to each
+agent the project names, an entry in that agent's own config file. [What an
+MCP server looks like](docs/reference.md#what-an-mcp-server-looks-like) has
+every option, and the rest.
 
 ## Learn more
 
