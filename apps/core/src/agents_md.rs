@@ -485,17 +485,7 @@ pub(crate) fn codex_warnings(project: &Path) -> Vec<Warning> {
     };
     // Every folder from the git root down to the project, root first.
     let folders = match exclude::work_tree(project) {
-        Ok(Some((root, route))) => {
-            let mut folder = root;
-            let mut folders = vec![folder.clone()];
-            for component in route.components() {
-                if let Component::Normal(name) = component {
-                    folder.push(name);
-                    folders.push(folder.clone());
-                }
-            }
-            folders
-        }
+        Ok(Some((root, route))) => down_to(root, &route),
         Ok(None) => {
             warnings.push(Warning::NoGitRoot {
                 project: project.to_path_buf(),
@@ -542,6 +532,49 @@ pub(crate) fn codex_warnings(project: &Path) -> Vec<Warning> {
         });
     }
     warnings
+}
+
+/// `root` and every folder below it on `route`, root first: the folders
+/// Codex reads an `AGENTS.md` in, from the git root down to a project.
+fn down_to(root: PathBuf, route: &Path) -> Vec<PathBuf> {
+    let mut folder = root;
+    let mut folders = vec![folder.clone()];
+    for component in route.components() {
+        if let Component::Normal(name) = component {
+            folder.push(name);
+            folders.push(folder.clone());
+        }
+    }
+    folders
+}
+
+/// Every path [`codex_warnings`] reads for `project`, there or not, for a
+/// front end to watch (`crate::watch`): each [`OVERRIDE`] and [`FILE`] from
+/// the git root down to it. In no work tree, its own two, and a `.git` in
+/// it and in each folder above that is not there, whose making gives Codex
+/// a root to read down from: only one not there, since one that is
+/// changes with every git command and holds nothing Codex reads.
+pub(crate) fn codex_looked_at(project: &Path) -> Vec<PathBuf> {
+    let (folders, rootless) = match exclude::work_tree(project) {
+        Ok(Some((root, route))) => (down_to(root, &route), false),
+        Ok(None) => (vec![project.to_path_buf()], true),
+        // Nothing past the project's own is read of a repository that does
+        // not open.
+        Err(_) => (vec![project.to_path_buf()], false),
+    };
+    let mut paths: Vec<PathBuf> = folders
+        .iter()
+        .flat_map(|folder| [folder.join(OVERRIDE), folder.join(FILE)])
+        .collect();
+    if rootless {
+        paths.extend(
+            project
+                .ancestors()
+                .map(|folder| folder.join(".git"))
+                .filter(|git| fs::symlink_metadata(git).is_err()),
+        );
+    }
+    paths
 }
 
 /// Why `file` is no place for rules rendered for the project at `folder`,

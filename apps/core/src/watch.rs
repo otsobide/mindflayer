@@ -35,6 +35,12 @@
 //!   scope, as [`AgentHomes`] names them, under the workspace's scope, as
 //!   the default workspace's marker is: they are no holder's, and a
 //!   snapshot reads them for every project.
+//! - **And above a project**, what doctor reads there of it, under its
+//!   scope: each `CLAUDE.md`, `.claude/CLAUDE.md` and `CLAUDE.local.md`
+//!   Claude would read in place of its `AGENTS.md`, every `AGENTS.md` and
+//!   `AGENTS.override.md` Codex reads from the git root down, and, in no
+//!   work tree, each `.git` that would give Codex one, named only while it
+//!   is not there, so no `.git` that is there is ever watched.
 //! - **Asked again after every change.** A skill installed is a new folder
 //!   to watch, and a project linked a set of them, so a front end asks for
 //!   the list again once something on it changed rather than keep one the
@@ -44,8 +50,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::agent::{Agent, AgentHomes};
+use crate::agents_md;
 use crate::catalog::Catalog;
-use crate::claude_md::CLAUDE_MD;
+use crate::claude_md::{self, CLAUDE_MD};
 use crate::claude_rules;
 use crate::codex_mcp;
 use crate::kind::Kind;
@@ -190,6 +197,17 @@ impl List {
             }
         }
         self.add(scope, project.scratch_dir());
+        // What doctor reads of what keeps an agent from the project's
+        // `AGENTS.md`, above the project too: each file that keeps Claude
+        // from it, in the project or a folder above, and each file Codex
+        // reads from the git root down, or the `.git` that would give it
+        // one.
+        for path in claude_md::looked_at(project.root()) {
+            self.add(scope, path);
+        }
+        for path in agents_md::codex_looked_at(project.root()) {
+            self.add(scope, path);
+        }
         // Filed by the rule's route, folders and all, as rules are kept, in
         // the folder a Mindflayer build filed them in too, where those it
         // recorded stay until they are moved.

@@ -232,6 +232,71 @@ fn what_doctor_reads_is_watched_the_agents_own_folders_and_the_project_s_scratch
     assert_eq!(watched.iter().filter(|each| each.path == user).count(), 1);
 }
 
+#[test]
+fn what_doctor_reads_above_a_project_is_watched_under_its_scope() {
+    let fixture = Fixture::new();
+    let api = &fixture.api;
+    let hub = fixture.hub.root().to_path_buf();
+
+    let watched = fixture.watched();
+
+    let project = Scope::Project(String::from("api"));
+    for expected in [
+        // What keeps Claude from `AGENTS.md`, in the project and above it.
+        api.join(".claude").join("CLAUDE.md"),
+        hub.join("CLAUDE.md"),
+        hub.join(".claude").join("CLAUDE.md"),
+        hub.join("CLAUDE.local.md"),
+        fixture.dir.path().join("CLAUDE.local.md"),
+        // `api`'s `.git` is no repository, so Codex finds no root: a `.git`
+        // made above would give it one.
+        hub.join(".git"),
+    ] {
+        let expected = of(&project, expected);
+        assert!(watched.contains(&expected), "{expected:?} in {watched:#?}");
+    }
+    assert!(
+        !watched.iter().any(|each| each.path == api.join(".git")),
+        "a .git that is there is never watched"
+    );
+}
+
+#[test]
+fn what_codex_reads_from_the_git_root_down_is_watched_and_no_git() {
+    let dir = TempDir::new().unwrap();
+    gix::init(dir.path()).unwrap();
+    let (mut workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
+    let (project, _) = MindProject::init_settings(
+        dir.path().join("app"),
+        &[Agent::Codex],
+        Share::Local,
+        &Directories::default(),
+    )
+    .unwrap();
+    workspace.link(&project).unwrap();
+    let root = fs::canonicalize(dir.path()).unwrap();
+
+    let watched = watch::watched(&workspace, None, &AgentHomes::default());
+
+    let scope = Scope::Project(String::from("app"));
+    for expected in [
+        root.join("AGENTS.md"),
+        root.join("AGENTS.override.md"),
+        root.join("app").join("AGENTS.md"),
+        root.join("app").join("AGENTS.override.md"),
+    ] {
+        let expected = of(&scope, expected);
+        assert!(watched.contains(&expected), "{expected:?} in {watched:#?}");
+    }
+    assert!(
+        !watched.iter().any(|each| each
+            .path
+            .components()
+            .any(|part| part.as_os_str() == ".git")),
+        "{watched:#?}"
+    );
+}
+
 /// The acceptance's own: a folder is watched for what is directly in it, so
 /// no folder named may be a root whose every file is somebody's code, and
 /// none may sit deeper than discovery looks.
@@ -264,9 +329,18 @@ fn no_path_named_covers_a_whole_tree() {
         assert!(!paths.contains(&whole.as_path()), "{whole:?} is named");
     }
     for path in &paths {
+        // A `.git` is named only while it is not there, for its being made,
+        // as doctor says a project Codex finds no root for: never one that
+        // is, nor anything in one.
+        let unmade_git = path.file_name().is_some_and(|name| name == ".git")
+            && fs::symlink_metadata(path).is_err()
+            && !path
+                .parent()
+                .is_some_and(|folder| folder.components().any(|each| each.as_os_str() == ".git"));
         for part in [".git", "node_modules", "target", "scripts"] {
             assert!(
-                !path.components().any(|each| each.as_os_str() == part),
+                (unmade_git && part == ".git")
+                    || !path.components().any(|each| each.as_os_str() == part),
                 "{path:?} is inside a {part}"
             );
         }

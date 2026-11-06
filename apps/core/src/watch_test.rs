@@ -270,12 +270,18 @@ fn a_project_linked_is_watched_under_its_entry_and_never_by_its_root() {
         }
     }
     assert!(!paths.contains(&project.root()), "{paths:?}");
-    // Beside its own, the workspace's templates, which it is offered too.
+    // Beside its own, the workspace's templates, which it is offered too,
+    // and what doctor reads above it of what keeps its agents from its
+    // `AGENTS.md`, which is no folder.
     let templates = template::looked_in(Some(&workspace), &project);
+    let mut above = crate::claude_md::looked_at(project.root());
+    above.extend(crate::agents_md::codex_looked_at(project.root()));
     for path in &paths {
         assert!(
-            path.starts_with(project.root()) || templates.iter().any(|folder| folder == path),
-            "{path:?} is neither the project's nor a template folder"
+            path.starts_with(project.root())
+                || templates.iter().any(|folder| folder == path)
+                || (above.iter().any(|file| file == path) && !path.is_dir()),
+            "{path:?} is neither the project's, a template folder nor what doctor reads above it"
         );
     }
 }

@@ -5206,7 +5206,16 @@ snapshot now reads, what doctor reads, is watched as everything it reads is
 (`watch::watched`): every folder an agent reads skills from in a project
 and its `.mind/tmp`, under the project's scope, and the agents' own files
 and folders under the workspace's, as the default workspace's marker is,
-since they are no holder's and every project reads them.
+since they are no holder's and every project reads them. Above a project,
+under its scope, each `CLAUDE.md`, `.claude/CLAUDE.md` and
+`CLAUDE.local.md` Claude would read in place of its `AGENTS.md`, in it and
+in every folder up to the one below `/` (`claude_md::looked_at`, the walk
+`reads_agents_md` makes), and each `AGENTS.md` and `AGENTS.override.md`
+Codex reads from the git root down (`agents_md::codex_looked_at`), or, in
+no work tree, each `.git` that would give it one, named only while it is
+not there: a `.git` that is there changes with every git command, and
+holds nothing Codex reads, so none is ever watched. Each is a file, so
+what is watched of a folder above is only a change to that name in it.
 
 ## The TUI
 
@@ -6384,9 +6393,11 @@ project is watched for its marker coming back.
   `SKILL.md` is read, and every folder of rules the walk goes into, since a
   rule is found at any depth. Never a project's root, which would wake for
   every file of the code beside it, and never a `.git`, a `node_modules` or
-  what a skill keeps in folders of its own: a recursive watch costs one of
-  the system's watches for every folder under it. A test of core's list
-  holds it to that over a fixture with all of those, and one of the
+  what a skill keeps in folders of its own (a `.git` is named only while it
+  is not there, for [doctor](#what-no-agent-says)'s sake): a recursive
+  watch costs one of the system's watches for every folder under it. A
+  test of core's list holds it to that over a fixture with all of those,
+  and one of the
   server's to watching only the folders named and the one above each,
   none of them recursively, which it sees in the mode the watcher asks
   the system for: nothing on the stream would show it, since a change

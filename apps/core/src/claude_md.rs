@@ -148,6 +148,20 @@ fn stopping(folder: &Path, homes: &AgentHomes) -> Result<Vec<PathBuf>, ClaudeMdE
     Ok(found)
 }
 
+/// Every path [`reads_agents_md`] looks at for Claude started in `folder`,
+/// there or not, the nearest folder's first: what a front end watches
+/// (`crate::watch`), so a `CLAUDE.md` made above a project since, which
+/// keeps Claude from its `AGENTS.md`, is a change to what doctor says of
+/// it. Spelled from `folder` resolved, as the look is, or as given when it
+/// does not resolve; the user memory file among them, which is watched all
+/// the same.
+pub(crate) fn looked_at(folder: &Path) -> Vec<PathBuf> {
+    let start = fs::canonicalize(folder).unwrap_or_else(|_| folder.to_path_buf());
+    searched(&start)
+        .flat_map(|folder| NAMES.iter().map(move |name| joined(folder, name)))
+        .collect()
+}
+
 /// The folders Claude looks in, started in `start`: `start` and every folder
 /// above it, nearest first, but the filesystem's root.
 ///
