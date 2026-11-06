@@ -31,4 +31,20 @@ revision: string | null,
 /**
  * When it was gathered, in seconds since the Unix epoch.
  */
-gathered_at: number, source: Source, };
+gathered_at: number, source: Source, 
+/**
+ * Its folder in the repository it was gathered from, from the
+ * repository's root, `/` separated ([`Upstream::path`]).
+ */
+upstream_path: string, 
+/**
+ * [`crate::hash::tree`] of what the gather put on the shelf, or `None`
+ * when it could not be read back, or was gathered before hashes were
+ * kept ([`Upstream::content_hash`]).
+ */
+content_hash: string | null, 
+/**
+ * Its licence as it says it, or `None` when nothing does, which is
+ * unknown ([`Upstream::license`]).
+ */
+license: string | null, };

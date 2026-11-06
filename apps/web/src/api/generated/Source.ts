@@ -6,7 +6,8 @@ import type { SourceKind } from "./SourceKind";
  *
  * What it serializes to is a contract, as a status report's is: each field
  * by its name, but the row id, and the URL only through [`redacted`]. Its
- * `name` was added after the rest (#98), which moved no version.
+ * `name` was added after the rest (#98), and its `pin` after that (#99),
+ * which moved no version.
  */
 export type Source = { kind: SourceKind, 
 /**
@@ -40,4 +41,11 @@ directory: string,
  * somebody named it ([`SourceName::derived`]), what a listing shows
  * and `--from` takes.
  */
-name: string, };
+name: string, 
+/**
+ * The commit its last gather was pinned to (`gather git --pin`), its
+ * full id, beside the branch or tag it is on: `None` when that gather
+ * took whatever the branch was at. Not part of what makes the source:
+ * gathered at another pin, or none, it is the same source, moved.
+ */
+pin: string | null, };

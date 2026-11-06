@@ -98,7 +98,8 @@ crate::described::words! {
 ///
 /// What it serializes to is a contract, as a status report's is: each field
 /// by its name, but the row id, and the URL only through [`redacted`]. Its
-/// `name` was added after the rest (#98), which moved no version.
+/// `name` was added after the rest (#98), and its `pin` after that (#99),
+/// which moved no version.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -135,10 +136,6 @@ pub struct Source {
     /// full id, beside the branch or tag it is on: `None` when that gather
     /// took whatever the branch was at. Not part of what makes the source:
     /// gathered at another pin, or none, it is the same source, moved.
-    ///
-    /// Not serialized yet: the envelope and the snapshot are given it once
-    /// a listing shows it.
-    #[serde(skip)]
     pub pin: Option<Revision>,
 }
 
@@ -183,7 +180,9 @@ pub struct Merged {
 /// One gathered artifact, and the source it came from.
 ///
 /// What it serializes to is a contract, as a status report's is: each field
-/// by its name.
+/// by its name. Where it came from beyond its revision, `upstream_path`,
+/// `content_hash` and `license`, was added after the rest (#99), which
+/// moved no version.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -201,19 +200,13 @@ pub struct Gathered {
     pub source: Source,
     /// Its folder in the repository it was gathered from, from the
     /// repository's root, `/` separated ([`Upstream::path`]).
-    ///
-    /// Not serialized yet, nor the two after it: the envelope and the
-    /// snapshot are given them once a listing shows them.
-    #[serde(skip)]
     pub upstream_path: String,
     /// [`crate::hash::tree`] of what the gather put on the shelf, or `None`
     /// when it could not be read back, or was gathered before hashes were
     /// kept ([`Upstream::content_hash`]).
-    #[serde(skip)]
     pub content_hash: Option<ContentHash>,
-    /// Its licence as it says it, or `None` when nothing does
-    /// ([`Upstream::license`]).
-    #[serde(skip)]
+    /// Its licence as it says it, or `None` when nothing does, which is
+    /// unknown ([`Upstream::license`]).
     pub license: Option<String>,
 }
 

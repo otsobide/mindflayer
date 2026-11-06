@@ -3160,6 +3160,13 @@
             "description": "[`Source::origin`], which every artifact it supplied is installed\nfrom.",
             "type": "string"
           },
+          "pin": {
+            "description": "The commit its last gather was pinned to (`gather git --pin`), its\nfull id, beside the branch or tag it is on: `None` when that gather\ntook whatever the branch was at. Not part of what makes the source:\ngathered at another pin, or none, it is the same source, moved.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "reference": {
             "description": "The branch or tag asked for, or `None` for whatever the remote's HEAD\npoints at.",
             "type": [
@@ -3191,6 +3198,7 @@
           "revision",
           "directory",
           "name",
+          "pin",
           "origin"
         ],
         "type": "object"
@@ -3198,6 +3206,13 @@
       "Shelved": {
         "description": "One artifact gathered onto the shelf, with what `--from` takes for it.\n\nThe ledger's row with its origin beside it, as `gather list --json`\nprints an offer from the shelf: the same names, so a script reading\neither reads one shape. Beside the row rather than in it, since an offer\nflattens the row beside an origin of its own.",
         "properties": {
+          "content_hash": {
+            "description": "[`crate::hash::tree`] of what the gather put on the shelf, or `None`\nwhen it could not be read back, or was gathered before hashes were\nkept ([`Upstream::content_hash`]).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "gathered_at": {
             "description": "When it was gathered, in seconds since the Unix epoch.",
             "format": "int64",
@@ -3205,6 +3220,13 @@
           },
           "kind": {
             "$ref": "#/components/schemas/Kind"
+          },
+          "license": {
+            "description": "Its licence as it says it, or `None` when nothing does, which is\nunknown ([`Upstream::license`]).",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -3233,6 +3255,10 @@
               "string",
               "null"
             ]
+          },
+          "upstream_path": {
+            "description": "Its folder in the repository it was gathered from, from the\nrepository's root, `/` separated ([`Upstream::path`]).",
+            "type": "string"
           }
         },
         "required": [
@@ -3243,6 +3269,9 @@
           "revision",
           "gathered_at",
           "source",
+          "upstream_path",
+          "content_hash",
+          "license",
           "origin"
         ],
         "type": "object"
@@ -3398,7 +3427,7 @@
         "type": "object"
       },
       "Source": {
-        "description": "A place artifacts have been gathered from.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name, but the row id, and the URL only through [`redacted`]. Its\n`name` was added after the rest (#98), which moved no version.",
+        "description": "A place artifacts have been gathered from.\n\nWhat it serializes to is a contract, as a status report's is: each field\nby its name, but the row id, and the URL only through [`redacted`]. Its\n`name` was added after the rest (#98), and its `pin` after that (#99),\nwhich moved no version.",
         "properties": {
           "directory": {
             "description": "The folder this source owns under `.mindweaver/<kind folder>/`.\n\nStored rather than derived: two URLs can reduce to the same readable\nname, and where a source's files went is a fact about the past that\nmust not move when the naming rule changes.",
@@ -3410,6 +3439,13 @@
           "name": {
             "description": "What it is called (D-13), one name a source: `owner-repo` unless\nsomebody named it ([`SourceName::derived`]), what a listing shows\nand `--from` takes.",
             "type": "string"
+          },
+          "pin": {
+            "description": "The commit its last gather was pinned to (`gather git --pin`), its\nfull id, beside the branch or tag it is on: `None` when that gather\ntook whatever the branch was at. Not part of what makes the source:\ngathered at another pin, or none, it is the same source, moved.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "reference": {
             "description": "The branch or tag asked for, or `None` for whatever the remote's HEAD\npoints at.",
@@ -3441,7 +3477,8 @@
           "subdirectory",
           "revision",
           "directory",
-          "name"
+          "name",
+          "pin"
         ],
         "type": "object"
       },

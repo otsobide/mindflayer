@@ -962,7 +962,11 @@ enum Offer {
         summary: Option<String>,
         revision: Option<String>,
         gathered_at: i64,
-        source: Source,
+        // Boxed, being far larger than all a load says of itself.
+        source: Box<Source>,
+        upstream_path: String,
+        content_hash: Option<String>,
+        license: Option<String>,
         origin: String,
     },
 }
@@ -977,6 +981,7 @@ struct Source {
     revision: Option<String>,
     directory: String,
     name: String,
+    pin: Option<String>,
 }
 
 impl Offer {

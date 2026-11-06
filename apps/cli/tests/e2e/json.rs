@@ -252,6 +252,18 @@ fn gather_list_json_says_where_each_offer_comes_from_as_from_takes_it() {
         .remove("gathered_at")
         .expect("when it was gathered");
     assert!(gathered.is_u64(), "{gathered}");
+    // The hash of what was shelved, which the core suite holds to the one
+    // an install would make.
+    let hash = data[0]
+        .as_object_mut()
+        .unwrap()
+        .remove("content_hash")
+        .expect("the hash of what was shelved");
+    assert!(
+        hash.as_str()
+            .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit())),
+        "{hash}"
+    );
     assert_eq!(
         data,
         json!([{
@@ -269,7 +281,10 @@ fn gather_list_json_says_where_each_offer_comes_from_as_from_takes_it() {
                 "revision": revision,
                 "directory": "..-src-acme-skills",
                 "name": "src-acme-skills",
+                "pin": null,
             },
+            "upstream_path": "skills/review",
+            "license": null,
             "origin": "../src/acme-skills",
         }])
     );

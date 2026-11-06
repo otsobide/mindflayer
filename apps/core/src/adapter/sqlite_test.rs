@@ -2032,7 +2032,11 @@ fn a_gathered_artifact_serializes_every_field_and_its_source() {
             r#""summary":"Ship it","revision":"4f9c2a7","gathered_at":1790000000,"#,
             r#""source":{"kind":"git","url":"https://github.com/acme/skills.git","#,
             r#""reference":"main","subdirectory":"skills","revision":"4f9c2a7","#,
-            r#""directory":"github.com-acme-skills","name":"acme-skills"}}"#,
+            r#""directory":"github.com-acme-skills","name":"acme-skills","#,
+            r#""pin":"4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3"},"#,
+            r#""upstream_path":"skills/deploy","#,
+            r#""content_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","#,
+            r#""license":"MIT"}"#,
         )
     );
 }
