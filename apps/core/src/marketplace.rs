@@ -218,13 +218,24 @@ impl Holding {
         }
     }
 
-    /// The key a catalog's entry declares it under, and the file or folder
-    /// of a plugin it is kept in.
-    const fn declared(self) -> (&'static str, &'static str) {
+    /// The key a catalog's entry declares it under.
+    const fn key(self) -> &'static str {
         match self {
-            Holding::Hooks => ("hooks", "hooks"),
-            Holding::Agents => ("agents", "agents"),
-            Holding::McpServers => ("mcpServers", ".mcp.json"),
+            Holding::Hooks => "hooks",
+            Holding::Agents => "agents",
+            Holding::McpServers => "mcpServers",
+        }
+    }
+
+    /// The files or folders of a plugin it is kept in, from its root: MCP
+    /// servers in `.mcp.json` or in `mcp.json` (#104), the two names a
+    /// plugin keeps them under, so a plugin keeping them under either is
+    /// said to hold them, and neither reaches the shelf.
+    const fn kept(self) -> &'static [&'static str] {
+        match self {
+            Holding::Hooks => &["hooks"],
+            Holding::Agents => &["agents"],
+            Holding::McpServers => &MCP_FILES,
         }
     }
 
@@ -233,7 +244,9 @@ impl Holding {
     /// Where a plugin keeps each of them, from its root: what a skill that
     /// is the whole of its plugin is put on the shelf without.
     pub(crate) fn kept_in() -> impl Iterator<Item = &'static str> {
-        Holding::ALL.into_iter().map(|holding| holding.declared().1)
+        Holding::ALL
+            .into_iter()
+            .flat_map(|holding| holding.kept().iter().copied())
     }
 
     /// What the plugin at `root` holds of them, as files or folders where a
@@ -241,16 +254,36 @@ impl Holding {
     pub fn held_at(root: &Path) -> Vec<Holding> {
         Holding::ALL
             .into_iter()
-            .filter(|holding| root.join(holding.declared().1).symlink_metadata().is_ok())
+            .filter(|holding| holding.kept().iter().any(|kept| is_there(&root.join(kept))))
             .collect()
     }
+
+    /// The files of [`MCP_FILES`] the plugin at `root` holds, by name, in
+    /// that order: what a report says it found, since which of them holds
+    /// the servers is not for a gather to read, nor anything of them to
+    /// import.
+    pub fn mcp_files_at(root: &Path) -> Vec<&'static str> {
+        MCP_FILES
+            .into_iter()
+            .filter(|file| is_there(&root.join(file)))
+            .collect()
+    }
+}
+
+/// The files a plugin keeps its MCP servers in, at its root: `.mcp.json`,
+/// as Claude Code's and Codex's plugins do, and `mcp.json` (#104).
+pub const MCP_FILES: [&str; 2] = [".mcp.json", "mcp.json"];
+
+/// Whether something is at `path`, a link among it, whatever it leads to.
+fn is_there(path: &Path) -> bool {
+    path.symlink_metadata().is_ok()
 }
 
 /// By the key a catalog declares it under, the word its format gives it,
 /// as a plugin's kind is the catalog's own word.
 impl Serialize for Holding {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(self.declared().0)
+        serializer.serialize_str(self.key())
     }
 }
 
@@ -530,7 +563,7 @@ fn entry(
             .into_iter()
             .filter(|holding| {
                 object
-                    .get(holding.declared().0)
+                    .get(holding.key())
                     .is_some_and(|value| !matches!(value, JsonValue::Null))
             })
             .collect(),
@@ -808,6 +841,9 @@ pub struct Child {
     /// What its plugin holds beside its skills, as its entry declares it or
     /// its folder keeps it, which is not taken.
     pub holds: Vec<Holding>,
+    /// Which of [`MCP_FILES`] its plugin's folder holds, by name: said, so
+    /// a person knows which file to read, and never imported.
+    pub mcp_files: Vec<&'static str>,
 }
 
 /// What a gather of a marketplace did: its catalog as fetched, and each
@@ -1187,6 +1223,7 @@ impl Child {
             entry: entry.name.clone(),
             outcome: Err(GatherError::Cancelled),
             holds: Vec::new(),
+            mcp_files: Vec::new(),
         }
     }
 }
@@ -1242,6 +1279,7 @@ fn inside(
     let reference = catalog.source.reference();
     let request = request_for(catalog, url, reference, &folder, entry);
     let holds = holdings(entry, &clone.root.join(&folder));
+    let mcp_files = Holding::mcp_files_at(&clone.root.join(&folder));
     let placed = (|| {
         let checked = gather::refused(&request)?;
         let new = ledger.child(parent.id, &entry.name)?.is_none();
@@ -1266,6 +1304,7 @@ fn inside(
         entry: entry.name.clone(),
         outcome,
         holds,
+        mcp_files,
     }
 }
 
@@ -1289,6 +1328,7 @@ fn apart(
     );
     let url = fetched(&typed).into_owned();
     let mut holds = entry.declares.clone();
+    let mut mcp_files = Vec::new();
     let outcome = (|| {
         // Held from its refusals to its line in the log, as a gather of a
         // source holds it ([`gather::gather`]): one that cannot have it is
@@ -1309,6 +1349,7 @@ fn apart(
             let placed =
                 gather::fetch(&request, &url, checked.pinned.as_ref(), &cache).and_then(|clone| {
                     holds = holdings(entry, &clone.root.join(entry.plugin.path()));
+                    mcp_files = Holding::mcp_files_at(&clone.root.join(entry.plugin.path()));
                     gather::place(
                         workspace,
                         ledger,
@@ -1334,6 +1375,7 @@ fn apart(
         entry: entry.name.clone(),
         outcome,
         holds,
+        mcp_files,
     }
 }
 

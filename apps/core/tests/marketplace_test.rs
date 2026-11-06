@@ -865,6 +865,64 @@ fn a_plugin_that_is_one_skill_is_gathered_without_its_hooks_agents_and_servers()
 }
 
 #[test]
+fn a_plugins_mcp_file_is_said_by_its_name_and_never_taken() {
+    let entries = [
+        r#"{"name": "kit", "source": "./kit"}"#,
+        r#"{"name": "solo", "source": "./solo"}"#,
+        r#"{"name": "both", "source": "./both"}"#,
+    ]
+    .map(String::from);
+    let market = repository(&[
+        (".claude-plugin/marketplace.json", &catalog("m", &entries)),
+        ("kit/skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("kit/mcp.json", r#"{"mcpServers": {"x": {"command": "x"}}}"#),
+        ("solo/SKILL.md", &skill("solo", "One skill")),
+        ("solo/mcp.json", "{}"),
+        ("both/skills/lint/SKILL.md", &skill("lint", "Lint it")),
+        ("both/.mcp.json", "{}"),
+        ("both/mcp.json", "{}"),
+    ]);
+    let routes = Arc::new(Routes::default().to(MARKET, &market));
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = marketplace::gather(&workspace, &ledger, &request(&routes, Pick::All)).unwrap();
+
+    let said: Vec<(&str, &[Holding], &[&str])> = report
+        .children
+        .iter()
+        .map(|child| {
+            (
+                child.entry.as_str(),
+                child.holds.as_slice(),
+                child.mcp_files.as_slice(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        said,
+        [
+            ("kit", &[Holding::McpServers][..], &["mcp.json"][..]),
+            ("solo", &[Holding::McpServers][..], &["mcp.json"][..]),
+            (
+                "both",
+                &[Holding::McpServers][..],
+                &[".mcp.json", "mcp.json"][..]
+            ),
+        ]
+    );
+    // A plugin that is one skill is put on the shelf without it, and no
+    // plugin's servers are imported: the shelf holds skills alone.
+    let solo = &report.children[1].outcome.as_ref().unwrap().added[0].path;
+    assert!(solo.join("SKILL.md").is_file() && !solo.join("mcp.json").exists());
+    assert!(ledger
+        .gathered()
+        .unwrap()
+        .iter()
+        .all(|gathered| gathered.kind == Kind::Skill));
+}
+
+#[test]
 fn a_plugin_that_cannot_be_fetched_is_said_and_the_rest_gathered() {
     let mixed = mixed();
     // The marketplace and the monorepo, and nothing at acme/tools.

@@ -45,6 +45,7 @@ fn a_plugins_url_its_catalog_gives_is_said_in_printable_text() {
                 removed: Vec::new(),
             }),
             holds: Vec::new(),
+            mcp_files: Vec::new(),
         }],
     };
 

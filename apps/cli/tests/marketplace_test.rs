@@ -136,8 +136,8 @@ fn a_plugin_picked_is_gathered_into_a_source_called_after_its_marketplace() {
     );
     let mut said = ENTRY_WARNINGS.map(String::from).to_vec();
     said.push(String::from(
-        "note: anthropic-agent-skills.document-skills: its plugin holds MCP servers too, which \
-         are not gathered",
+        "note: anthropic-agent-skills.document-skills: its plugin holds MCP servers in \
+         `.mcp.json` too, which are not gathered",
     ));
     assert_eq!(gathered.stderr, said);
     let shelf = weaver(dir.path(), &["gather", "list"]).unwrap();

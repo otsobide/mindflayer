@@ -7,7 +7,7 @@ use std::path::Path;
 use mindweaver_core::gather::{self, Gathered, Preview, Report, Request, Scrub, Watch};
 use mindweaver_core::install::{offered_by_loads, Offer};
 use mindweaver_core::ledger::{Ledger, SourceListing};
-use mindweaver_core::marketplace::{self, Listed, Pick, Plugin};
+use mindweaver_core::marketplace::{self, Holding, Listed, Pick, Plugin};
 use mindweaver_core::sources::{self, Again, Regathered, Removal, Renamed, Which};
 use mindweaver_core::url::redacted;
 use mindweaver_core::{Kind, SourceKind, WeaverWorkspace};
@@ -737,8 +737,12 @@ fn marketplace_gathered(report: &marketplace::Report, pick: &Pick) -> Outcome {
                 outcome.stderr.extend(said.stderr);
                 outcome.ok &= said.ok;
                 if !child.holds.is_empty() {
-                    let holds: Vec<&str> =
-                        child.holds.iter().map(|holding| holding.words()).collect();
+                    let holds: Vec<String> = child
+                        .holds
+                        .iter()
+                        .map(|holding| held(*holding, child))
+                        .collect();
+                    let holds: Vec<&str> = holds.iter().map(String::as_str).collect();
                     outcome.stderr.push(Warning::from(format!(
                         "note: {}: its plugin holds {} too, which are not gathered",
                         printable(&report.name),
@@ -772,6 +776,24 @@ fn gathered_url(catalog: &Listed, child: &marketplace::Child) -> String {
         .and_then(|entry| entry.plugin.url().map(|url| url.into_owned()))
         .map(|url| mindweaver_core::url::fetched(&url).into_owned())
         .unwrap_or_else(|| catalog.url.to_string())
+}
+
+/// What a note says a plugin holds of `holding`: its words, and for its MCP
+/// servers the files its folder keeps them in, when it keeps any, so a
+/// person knows which to read (#104).
+fn held(holding: Holding, child: &marketplace::Child) -> String {
+    match holding {
+        Holding::McpServers if !child.mcp_files.is_empty() => {
+            let files: Vec<String> = child
+                .mcp_files
+                .iter()
+                .map(|file| format!("`{file}`"))
+                .collect();
+            let files: Vec<&str> = files.iter().map(String::as_str).collect();
+            format!("{} in {}", holding.words(), and(&files))
+        }
+        _ => holding.words().to_owned(),
+    }
 }
 
 /// `words` as a sentence lists them: `a`, `a and b`, `a, b and c`.

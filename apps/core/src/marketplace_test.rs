@@ -511,6 +511,27 @@ fn what_a_plugin_holds_beside_its_skills_is_found_by_where_a_plugin_keeps_it() {
 }
 
 #[test]
+fn a_plugin_keeping_its_mcp_servers_in_either_file_holds_them_and_says_which_file() {
+    let dotted = clone(&[(".mcp.json", "{}")]);
+    let plain = clone(&[("mcp.json", "{}"), ("skills/x/SKILL.md", "")]);
+    let both = clone(&[("mcp.json", "{}"), (".mcp.json", "{}")]);
+    let neither = clone(&[("skills/x/SKILL.md", "")]);
+
+    for at in [&dotted, &plain, &both] {
+        assert_eq!(Holding::held_at(at.path()), [Holding::McpServers]);
+    }
+    assert!(Holding::held_at(neither.path()).is_empty());
+    assert_eq!(Holding::mcp_files_at(dotted.path()), [".mcp.json"]);
+    assert_eq!(Holding::mcp_files_at(plain.path()), ["mcp.json"]);
+    assert_eq!(
+        Holding::mcp_files_at(both.path()),
+        [".mcp.json", "mcp.json"]
+    );
+    assert!(Holding::mcp_files_at(neither.path()).is_empty());
+    assert!(Holding::kept_in().any(|kept| kept == "mcp.json"));
+}
+
+#[test]
 fn a_listed_catalog_serializes_each_field_by_its_name_and_leaves_its_failures_to_the_warnings() {
     let listed = Listed {
         name: SourceName::parse("anthropic-agent-skills").unwrap(),
