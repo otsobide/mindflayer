@@ -476,7 +476,9 @@ pub(crate) fn install_held(
 /// ([`Removed::Foreign`]). An entry changed since it was written refuses
 /// the whole uninstall, every entry left and the record kept
 /// ([`Removed::Edited`]), unless `edits` forces it; an entry no longer in
-/// its file has nothing to take out, and is forgotten with the rest.
+/// its file has nothing to take out, and is forgotten with the rest, and so
+/// is a file Mindweaver made that is no longer there, its mark and its
+/// exclude line with it.
 ///
 /// What can refuse is asked before anything is taken out: a file that
 /// cannot be read, and one git tracks in a local project without
@@ -515,7 +517,23 @@ pub(crate) fn uninstall(
         }
     }
     let mut taking: Vec<&EntryTarget> = Vec::new();
+    let mut unmade: Vec<&str> = Vec::new();
     for target in &record.entries {
+        // A file Mindweaver made and somebody took away is forgotten with
+        // the record, as one its renderer takes away is: its exclude line
+        // would keep whatever is written there later out of git without a
+        // word, and its mark would have a later uninstall take that file
+        // away as Mindweaver's. Whichever of them another server's record
+        // still names, the install that puts that server back makes the
+        // file, and so marks it and keeps it out again. A file still there
+        // keeps both, whatever was taken out of it: it is still the one
+        // Mindweaver made, to go with the last server in it.
+        if fs::symlink_metadata(root.join(&target.file)).is_err() {
+            if ledger.created(&entry, &target.file)? {
+                unmade.push(&target.file);
+            }
+            continue;
+        }
         let holds = entries::held(root, target.agent, &target.file)
             .map_err(config)?
             .iter()
@@ -551,6 +569,7 @@ pub(crate) fn uninstall(
             }
         }
     }
+    gone.extend(unmade);
     let forgotten = ledger.uninstalled(&entry, Kind::Mcp, name).and_then(|_| {
         gone.iter()
             .try_for_each(|route| ledger.set_created(&entry, route, false))

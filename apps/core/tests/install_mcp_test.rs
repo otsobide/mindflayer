@@ -574,6 +574,29 @@ fn a_file_an_install_made_goes_with_its_last_server_and_its_exclude_line_with_it
 }
 
 #[test]
+fn a_file_an_install_made_and_somebody_took_away_is_forgotten_by_the_uninstall() {
+    let fixture = fixture(Share::Local, &Agent::ALL, McpMother::plain_program);
+    fixture.install();
+    fs::remove_file(fixture.file(Agent::Claude)).unwrap();
+
+    fixture.uninstall(Edits::Kept);
+
+    assert!(fixture.excluded().is_empty(), "{:?}", fixture.excluded());
+    assert!(!fixture.ledger.created("app", ".mcp.json").unwrap());
+
+    // So the one written there later is theirs: in git's sight, and kept
+    // when the next server in it goes.
+    let theirs = "{\n  \"mcpServers\": {}\n}\n";
+    fixture.write(".mcp.json", theirs);
+    fixture.install();
+    assert!(!fixture.excluded().contains(&"/app/.mcp.json".to_owned()));
+
+    fixture.uninstall(Edits::Kept);
+
+    assert_eq!(fixture.read(".mcp.json").unwrap(), theirs);
+}
+
+#[test]
 fn an_entry_edited_by_hand_refuses_the_uninstall_until_it_is_forced() {
     let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
     fixture.install();

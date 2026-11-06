@@ -3723,7 +3723,13 @@ and is given none (`no_target`).
   the file it names, OpenCode's whichever of its four that was
   (`opencode_mcp::remove_from`), and nothing else, every other server and
   byte there kept; a file Mindweaver made goes with its last server, as its
-  renderer decides, and its line in the exclude block with it. An entry
+  renderer decides, and its line in the exclude block with it. One
+  somebody took away is forgotten with the record the same way, its line
+  and its mark (`created_files`) with it, whatever server another record
+  still names there: the line would keep the file written there later out
+  of git without a word, the mark would have a later uninstall take that
+  file away as Mindweaver's, and the install that puts the other server
+  back makes the file, and so marks it again. An entry
   changed since refuses the uninstall unless forced, as an edited copy
   does, and forcing never reaches an entry nothing records: with no record,
   a server of the name is somebody's, and said (`Removed::Foreign`). An
