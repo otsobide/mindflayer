@@ -523,6 +523,10 @@ mindweaver gather git <URL> [--name NAME] [--pin SHA]
                            # collect skills from a repository onto the shelf,
                            # under a name --from takes, at one commit when
                            # pinned
+mindweaver gather marketplace <SOURCE> --list|--plugin NAME...|--all [--yes]
+                           # list a Claude Code marketplace's plugins, or
+                           # gather the ones named, each into a source of
+                           # its own
 mindweaver gather list [--json]
                            # what is on the shelf or loaded, and where from
 mindweaver gather sources [--json]
@@ -912,7 +916,8 @@ Each is listed by the name of its source, then by its licence as the skill
 says it: its `license`, else what a `LICENSE` or `LICENCE` file beside its
 `SKILL.md` names (the identifier a line tags with
 `SPDX-License-Identifier:`, else the file's first line, its title, which
-names no version), else `unknown`. Nothing reads a licence out of the
+names no version), else, for a plugin [a marketplace](#from-a-claude-code-marketplace)
+lists, the licence its catalog gives the plugin, else `unknown`. Nothing reads a licence out of the
 whole text, nor the repository's own licence at its root. The name of its
 source is what `--from` takes when two sources offer one name:
 
@@ -1088,6 +1093,78 @@ note: https://github.com/acme/skills: the same repository as the source `acme-sk
 `--from https://github.com/acme/skills` still names it, with the warning
 above.
 
+### From a Claude Code marketplace
+
+A Claude Code plugin marketplace is a repository whose
+`.claude-plugin/marketplace.json` lists plugins, each in a folder of the
+repository or in a repository of its own. `gather marketplace` takes the
+skills its plugins hold, and nothing but the catalog is fetched until you
+pick a plugin: `--list` records the marketplace as a source and lists what
+it offers.
+
+```
+$ mindweaver gather marketplace anthropics/skills --list
+anthropic-agent-skills: https://github.com/anthropics/skills at 3e1b2c4
+  document-skills  relative  .
+  example-skills   relative  .
+
+2 plugins listed; nothing gathered: gather some with --plugin <name>, or every one with --all
+```
+
+The marketplace is called by the name its catalog gives it, unless `--name`
+gives another, and `--ref` and `--path` say a branch and the folder the
+catalog is in, as `gather git` takes them, or a tree URL does. Each plugin
+is listed by its name, the kind of source it is (`relative` for a folder of
+the marketplace's repository, `github`, `url` or `git-subdir` for one of its
+own) and where it is, with the branch and the commit its entry pins it to.
+`--plugin` gathers the ones it names, once for each, each into a source of
+its own, called after the marketplace:
+
+```
+$ mindweaver gather marketplace anthropics/skills --plugin document-skills
+anthropic-agent-skills: https://github.com/anthropics/skills at 3e1b2c4
+
+anthropic-agent-skills.document-skills: https://github.com/anthropics/skills at 3e1b2c4
+  added  docx  Create and edit Word documents
+  added  pdf   Read, fill and merge PDFs
+  added  pptx  Make and edit slide decks
+  added  xlsx  Work with spreadsheets
+
+4 skills: 4 added, 0 updated, 0 unchanged
+```
+
+A plugin's skills are the ones its entry names, as anthropics/skills names
+them; with none named, its `skills/` folder and a `SKILL.md` at its root. A
+plugin in the marketplace's own repository is taken from the clone its
+catalog was read from, and one in a repository of its own is cloned, at the
+branch and the commit its entry names: a `sha` there is a pin, as `gather
+git --pin` takes one. A skill that says no licence of its own, in its
+`SKILL.md` or a licence file, is recorded with the plugin's. What a plugin
+holds beside its skills, hooks, agents and MCP servers, is said in a note
+and never taken.
+
+`--all` gathers every plugin the catalog lists. A catalog listing more than
+25 waits for `--yes`: without it, `--all` says what it would gather and
+gathers nothing, with no source recorded and no clone left.
+
+An entry that cannot be gathered is a warning beside the rest, and the
+command exits non-zero, as a skill a gather cannot take makes it: an npm
+package or an archive, which are not gathered; a `command` source, which is
+never run; a folder that climbs out of the repository, or leads out of it
+through a link; a `url` naming a folder on this machine, which a catalog
+does not reach (gather it with `gather git` if you mean it); and two
+entries of one name, neither gathered. A key the catalog holds that
+Mindweaver does not know is passed over, `headersHelper` among them, which
+is never run.
+
+```
+warning: claude-community: `formatter`: the npm package `@acme/formatter`, which is not gathered
+warning: claude-community: `setup`: its plugin is made by running a command, which is never run, so it is refused
+```
+
+Whatever the catalog says is shown as text, with no control character a
+terminal would act on.
+
 ### Keeping the sources
 
 `gather sources` lists the sources the shelf is filled from, each by its
@@ -1102,10 +1179,21 @@ other-rules  https://github.com/other/rules                  2 skills  gathered 
 ```
 
 A source whose first gather failed is listed as `never gathered`, and
-`--json` gives each in [the envelope](#machine-readable-output). `gather
-rename` calls one another name, held to what `--name` takes, and `gather
-list` and `--from` use it from then on; what was installed from it still
-records its URL:
+`--json` gives each in [the envelope](#machine-readable-output). A
+marketplace is listed with how many plugins of it are gathered, and each of
+them under it:
+
+```
+$ mindweaver gather sources
+acme-skills                               https://github.com/acme/skills        pinned a1b2c3d  2 skills  gathered 2026-11-06 14:02 UTC
+anthropic-agent-skills                    https://github.com/anthropics/skills                  1 plugin  gathered 2026-11-06 14:10 UTC
+  anthropic-agent-skills.document-skills  https://github.com/anthropics/skills                  4 skills  gathered 2026-11-06 14:10 UTC
+other-rules                               https://github.com/other/rules                        2 skills  gathered 2026-11-06 14:05 UTC
+```
+
+`gather rename` calls one another name, held to what `--name` takes, and
+`gather list` and `--from` use it from then on; what was installed from it
+still records its URL:
 
 ```
 $ mindweaver gather rename other-rules strict-rules
@@ -1136,7 +1224,11 @@ strict-rules: https://github.com/other/rules at 7e8f9a0
 A source that cannot be gathered is a warning beside the rest. Afterwards
 `status` says each copy a project has of what moved `outdated`, which
 [`update`](#keeping-projects-up-to-date) brings up to date, and of what went
-`orphaned`.
+`orphaned`. A marketplace is gathered again with every plugin of it gathered
+before, each from where its catalog says it is now; one the catalog lists
+no more is a warning, and kept as it was. A plugin named on its own is
+gathered again through its marketplace's catalog, and no other plugin with
+it.
 
 `gather remove` removes a source: its clone, its folder on the shelf and
 what the workspace records of it, and nothing else, as no folder but the two
@@ -1159,8 +1251,23 @@ left commit-style in collapse, installed from it, orphaned
 note: nothing offers what was installed from it any more; `mindweaver uninstall --orphaned --all-projects` takes out what nothing offers
 ```
 
+A marketplace removed takes each plugin of it gathered with it, each said
+first, as a source removed alone is:
+
+```
+$ mindweaver gather remove anthropic-agent-skills
+would remove the marketplace anthropic-agent-skills, gathered from https://github.com/anthropics/skills, and the 1 plugin of it gathered
+would remove its plugin anthropic-agent-skills.document-skills, and the 4 skills it holds on the shelf
+would delete /home/you/Projects/.mindweaver/skills/github.com-anthropics-skills-document-skills
+would delete /home/you/Projects/.mindweaver/cache/github.com-anthropics-skills
+would leave pdf in collapse, installed from it, orphaned
+nothing removed: add --yes to go ahead
+```
+
 In [the TUI](#the-tui), `s` shows the shelf, where `←→` picks a source, `u`
-gathers it again, `U` every one, and `d` removes it once you say yes.
+gathers it again, `U` every one, and `d` removes it once you say yes; `m`
+lists the plugins of the marketplace picked, or of one you type, to tick
+with space and gather with enter.
 
 ### What a workspace keeps
 
@@ -1794,7 +1901,9 @@ warning: /home/you/Projects/collapse/skills/broken/SKILL.md: the file does not s
   row's `source` holds (its `name`, `url`, `reference`, `pin` and the rest),
   `gathered_at`, when a gather last took it, in seconds since the Unix
   epoch, `null` while none has, and `artifacts`, how many it holds on the
-  shelf.
+  shelf; and for a plugin of a marketplace, its `parent`, the marketplace's
+  name, and its `entry`, the name its catalog lists it by, both `null` for
+  a source gathered on its own. A marketplace's `kind` is `marketplace`.
 - `status`, `workspaces` and `scan`: the reports shown in [what each project
   has](#what-each-project-has), [the weavers this machine
   knows](#the-weavers-this-machine-knows) and [commands](#commands).
@@ -2181,7 +2290,7 @@ Every key runs a command you could have typed, through the same parser:
 | `v` | validate everything | `mindweaver validate` |
 | `g` | gather from a git repository, showing how far it has got; `esc` stops it, until it starts placing | `mindweaver gather git <url>` |
 | `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `mindweaver load <path>`, `mindweaver unload <path>` |
-| `s` | what is on the shelf; there, `←→` picks a source, `u` gathers it again, `U` every one, and `d` removes it once you say yes | `mindweaver gather list`; `mindweaver gather update <source>`, `mindweaver gather update --all` and `mindweaver gather remove --yes <source>` |
+| `s` | what is on the shelf; there, `←→` picks a source, `u` gathers it again, `U` every one, and `d` removes it once you say yes; `m` lists a marketplace's plugins, the one picked or one typed, `space` ticks each and `enter` gathers the ticked ones | `mindweaver gather list`; `mindweaver gather update <source>`, `mindweaver gather update --all` and `mindweaver gather remove --yes <source>`; `mindweaver gather marketplace --list <url>` and `mindweaver gather marketplace --plugin <name>... <url>` |
 | `w` | the weavers this machine knows, the one in use marked | `mindweaver workspaces` |
 | `i` | install skills, rules and MCP servers from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `mindweaver install` opens it; `a` runs `mindweaver install -p <project>... --from <origin> <kind:name>`, with `--yes` for an MCP server from elsewhere than the library once `a` has shown what each agent would run, and `mindweaver uninstall -p <project>... <kind:name>` |
 | `R` | read the disk again | nothing: it changes nothing |

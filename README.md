@@ -334,6 +334,30 @@ offers them to yours.
 the formats Mindweaver reads and writes, `--json`, the TUI, and upgrading
 from an older Mindweaver.
 
+## Plugin marketplaces
+
+A Claude Code plugin marketplace, a repository whose
+`.claude-plugin/marketplace.json` lists plugins, is gathered a plugin at a
+time: the catalog is all that is fetched until you pick one.
+
+```bash
+mindweaver gather marketplace anthropics/skills --list    # its plugins, gathering none
+mindweaver gather marketplace anthropics/skills --plugin document-skills
+mindweaver gather marketplace anthropics/skills --all     # every one; past 25, only with --yes
+```
+
+The marketplace is a source called by its catalog's name, and each plugin
+gathered a source of its own under it, `anthropic-agent-skills.document-skills`,
+which `gather sources` lists beneath it and `--from` takes; `gather update`
+and `gather remove` of the marketplace take every plugin of it along. A
+plugin is taken from the marketplace's own repository or cloned from its
+own, at the commit its entry pins, and only its skills are: its hooks,
+agents and MCP servers are said and left, an npm package or an archive is
+not gathered, and a plugin made by running a command is refused, never run.
+In the TUI, `m` on the shelf lists a marketplace's plugins to tick.
+[The reference](docs/reference.md#from-a-claude-code-marketplace) has the
+rest.
+
 ## MCP servers
 
 The library keeps the MCP servers your projects use beside its skills and

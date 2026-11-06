@@ -646,3 +646,143 @@ fn mindweaver_validate_reads_the_shelf_beside_the_library_and_the_projects() {
         ))
         .quiet();
 }
+
+const MARKET: &str = "~/src/agent-skills";
+
+/// `~/Projects` linking `collapse`, beside `~/src/agent-skills`, a
+/// marketplace as anthropics/skills keeps one: two plugins, each the whole
+/// of its repository and named by the skills it is made of.
+fn agent_skills() -> Scenario {
+    let scenario = Scenario::projects(&["collapse"]);
+    scenario.source(
+        MARKET,
+        &[
+            (
+                ".claude-plugin/marketplace.json",
+                r#"{
+  "name": "anthropic-agent-skills",
+  "plugins": [
+    {"name": "document-skills", "source": "./", "skills": ["./skills/docx", "./skills/pdf"]},
+    {"name": "example-skills", "source": "./", "skills": ["./skills/algorithmic-art"]}
+  ]
+}"#,
+            ),
+            (
+                "skills/docx/SKILL.md",
+                &skill("docx", "Create and edit Word documents"),
+            ),
+            (
+                "skills/pdf/SKILL.md",
+                &skill("pdf", "Read, fill and merge PDFs"),
+            ),
+            (
+                "skills/algorithmic-art/SKILL.md",
+                &skill("algorithmic-art", "Make generative art with p5.js"),
+            ),
+        ],
+    );
+    scenario
+}
+
+#[test]
+fn listing_a_marketplace_says_each_plugin_and_where_it_is_and_gathers_none() {
+    let scenario = agent_skills();
+
+    scenario
+        .run(
+            "~/Projects",
+            "mindweaver gather marketplace ../src/agent-skills --list",
+        )
+        .succeeds()
+        .prints(&format!(
+            "anthropic-agent-skills: ../src/agent-skills at {}\n\
+             \x20 document-skills  relative  .\n\
+             \x20 example-skills   relative  .\n\
+             \n\
+             2 plugins listed; nothing gathered: gather some with --plugin <name>, or every one \
+             with --all\n",
+            scenario.head(MARKET)
+        ))
+        .quiet();
+
+    assert!(!scenario.exists("~/Projects/.mindweaver/skills"));
+}
+
+#[test]
+fn gathering_a_marketplaces_plugin_puts_its_skills_on_the_shelf_under_a_source_of_its_own() {
+    let scenario = agent_skills();
+    let head = scenario.head(MARKET);
+
+    scenario
+        .run(
+            "~/Projects",
+            "mindweaver gather marketplace ../src/agent-skills --plugin document-skills",
+        )
+        .succeeds()
+        .prints(&format!(
+            "anthropic-agent-skills: ../src/agent-skills at {head}\n\
+             \n\
+             anthropic-agent-skills.document-skills: ../src/agent-skills at {head}\n\
+             \x20 added  docx  Create and edit Word documents\n\
+             \x20 added  pdf   Read, fill and merge PDFs\n\
+             \n\
+             2 skills: 2 added, 0 updated, 0 unchanged\n"
+        ))
+        .quiet();
+
+    scenario
+        .run("~/Projects", "mindweaver gather list")
+        .succeeds()
+        .prints(concat!(
+            "docx  anthropic-agent-skills.document-skills  unknown  Create and edit Word documents\n",
+            "pdf   anthropic-agent-skills.document-skills  unknown  Read, fill and merge PDFs\n",
+        ))
+        .quiet();
+}
+
+#[test]
+fn gather_sources_lists_a_marketplace_with_its_plugins_under_it() {
+    let scenario = agent_skills();
+    scenario.given(
+        "~/Projects",
+        "mindweaver gather marketplace ../src/agent-skills --all",
+    );
+    let at = gathered_times(&scenario);
+
+    scenario
+        .run("~/Projects", "mindweaver gather sources")
+        .succeeds()
+        .prints(&format!(
+            "anthropic-agent-skills                    ../src/agent-skills  2 plugins  gathered {}\n\
+             \x20 anthropic-agent-skills.document-skills  ../src/agent-skills  2 skills   gathered {}\n\
+             \x20 anthropic-agent-skills.example-skills   ../src/agent-skills  1 skill    gathered {}\n",
+            at[0], at[1], at[2]
+        ))
+        .quiet();
+}
+
+#[test]
+fn gather_remove_of_a_marketplace_says_each_plugin_it_would_take_with_it() {
+    let scenario = agent_skills();
+    scenario
+        .given(
+            "~/Projects",
+            "mindweaver gather marketplace ../src/agent-skills --plugin document-skills",
+        )
+        .given("~/Projects", "mindweaver install -p collapse pdf");
+
+    scenario
+        .run("~/Projects", "mindweaver gather remove anthropic-agent-skills")
+        .succeeds()
+        .prints(
+            "would remove the marketplace anthropic-agent-skills, gathered from \
+             ../src/agent-skills, and the 1 plugin of it gathered\n\
+             would remove its plugin anthropic-agent-skills.document-skills, and the 2 skills it \
+             holds on the shelf\n\
+             would delete /home/you/Projects/.mindweaver/skills/..-src-agent-skills-document-skills\n\
+             would delete /home/you/Projects/.mindweaver/cache/..-src-agent-skills\n\
+             would leave pdf in collapse, installed from it, orphaned\n\
+             nothing removed: add --yes to go ahead\n",
+        )
+        .quiet();
+}

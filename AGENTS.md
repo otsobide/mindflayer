@@ -177,9 +177,12 @@ under `apps/` with its own `Makefile`:
   `edit` told the options does), the
   agents and where each kind goes for them (`agent`), the catalog, gathering
   (through `port::Remote`), and what a gather would take, nothing written
-  (`gather::preview`), a gathered source's own changes, renaming one,
-  gathering some again and removing one with what it put on the shelf
-  (`sources`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
+  (`gather::preview`), a Claude Code plugin marketplace's catalog, read an
+  entry at a time, recorded as a parent source and each plugin picked of it
+  gathered into a child of its own (`marketplace`), a gathered source's own
+  changes, renaming one,
+  gathering some again and removing one with what it put on the shelf, a
+  marketplace's plugins along with it (`sources`), the ledger (through `port::LedgerStore`), installing, keeping installs out of git
   (`exclude`), a project's rules rendered into the block of its `AGENTS.md`
   (`agents_md`) and into Claude's rules folder (`claude_rules`), whether
   Claude reads that block and the `@AGENTS.md` import in a project's
@@ -261,8 +264,8 @@ under `apps/` with its own `Makefile`:
   relink, scan), `workspace` (load, unload), `activate` (activate, which), `known`
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
   templates), `read` (list, show, validate), `status`, `doctor`, `settings`
-  (agents, share, targets), `gather` (git, list, sources, rename, update,
-  remove), `install`, `update` and `migrate`
+  (agents, share, targets), `gather` (git, marketplace, list, sources,
+  rename, update, remove), `install`, `update` and `migrate`
   (each at both levels), `adopt` (mindweaver adopt) and `ui` (the panel, at
   both levels).
   `add mcp`'s options for how a server is started or reached are one
@@ -1149,6 +1152,18 @@ These are easy to break from a single file without noticing.
   - An installed name must be one folder name for a skill
     (`install::is_folder_name`), and for a rule a route held to the name
     rules, which never climbs out (`install::is_installable_name`).
+  - A marketplace's catalog (`marketplace::Catalog`) is JSON somebody else
+    wrote: read as JSON alone, to `marketplace::CATALOG_CAP`, never through
+    a link out of its clone, and an entry at a time, each that cannot be
+    gathered a failure with a code beside the rest (`EntryFailure`), a key
+    it does not know passed over, and nothing it names run: a `command`
+    source is refused, and `headersHelper` never read. A plugin in the
+    marketplace's own repository is held to it lexically and through links,
+    a `github` one to `owner/repo`, a `url` or `git-subdir` one to another
+    machine's repository (`url::is_remote`), and the skills an entry names
+    to the repository they are in (`gathered_listed_outside`). What a
+    catalog says reaches a terminal through `printable`, as a gather's
+    failures do.
   - Symlinks are followed only inside the source (`copy::tree`'s `within`),
     and a rule offered for install that leads out of the workspace offering
     it is refused (`InstallError::Outside`). A gathered skill's licence
@@ -1212,7 +1227,10 @@ These are easy to break from a single file without noticing.
   records it moves are written, `relink::new_id`, `adopt::apply`, from the
   plan it makes again until its record is written, `sources::rename`, from
   finding the source until it is renamed, `sources::remove`, from the plan
-  it makes again until its rows are gone, and `update::apply`, from the plan it makes again until its last
+  it makes again until its rows are gone, a marketplace's plugins' among
+  them, `marketplace::gather`, from registering the marketplace until its
+  catalog is recorded and each plugin of its own repository is placed,
+  every other plugin a gather of its own that takes it in turn, and `update::apply`, from the plan it makes again until its last
   installation is written, through `install::install_held` (the body
   `install_with` hands to once it holds the lock) and
   `install::rules::update_held`, which take none of their own. A new
