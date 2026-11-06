@@ -2492,6 +2492,26 @@ type derives `Serialize` from the start:
   error goes out through `code::Said`. Handed over by the snapshot too, as
   `doctor`, a name added, which moves neither `ENVELOPE_VERSION` nor
   `view::FORMAT`.
+- **Carried for the panel by #97**: each of the library's MCP servers as
+  each agent would be given it (`view::LibraryServer`, and for each agent
+  a `view::GivenTo`, the agent by its name, what it is refused or would be
+  written without a `code::Said` each, what its entry would run or reach
+  a `mcp::Running`, whether it reaches an address and the line as
+  `mcp::Runs` displays it, and what it asks before it starts one an
+  `agent::Starts`), as `servers`, a name added to the snapshot's
+  `library`, and so to what `list --json` prints of it, which moves
+  neither `ENVELOPE_VERSION` nor `view::FORMAT`. `Starts` is derived, by
+  its variant in snake_case (`once_approved`, `in_a_trusted_project`,
+  `unasked`): a word of core's a front end says in words of its own, and
+  no word a command line takes. How a server is started or reached as
+  `add mcp`'s options say it (`mcp::Given`, `given` on a server, none when
+  no option says all of it) serializes both ways, since the panel sends
+  it back in a task and a draft: tagged by `type` inside the object, each
+  pair an array of its two words, each secret the name of the variable it
+  is read from, and a field it does not name refused. And the backend's
+  `Asking`, each install of a plan that waits for a yes, as `asks` on
+  `Planned`: the task it confirms by its place, the lines it was shown
+  with, and the task carrying the yes.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
