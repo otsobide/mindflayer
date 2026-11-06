@@ -3338,7 +3338,10 @@ server.
 
 A server from a workspace this one loads, or from the shelf, is a command
 somebody else wrote that every agent in the project would run, so without
-`--yes` the install says what each agent would run and writes nothing:
+`--yes` the install says what each agent would run and writes nothing,
+`would update` when the project has it already, and that it is already
+current, with nothing to say yes to, while each agent holds what it would
+be given:
 
 ```
 $ mindweaver install -p collapse linear

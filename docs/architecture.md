@@ -3795,7 +3795,11 @@ and is given none (`no_target`).
   either level, core's batch previews it rather than installing it
   (`assign::install`), and the command says what each agent would run and
   `nothing installed`, writing and recording nothing, with the exit
-  status the install would have. A batch whose every part is only previewed
+  status the install would have. The preview comes to what the install
+  would: `would update` what the ledger records already, and nothing to
+  say yes to, `already current`, while each entry it would write is in
+  its file as recorded and none would be taken out (`Installed::Unchanged`
+  rather than `Unconfirmed`). A batch whose every part is only previewed
   reads the ledger without making it (`ledger_for_reading`), as an
   update's dry run does: opened to write, it would be made where there is
   none, told the projects' ids, and scrubbed or migrated where an older

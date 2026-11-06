@@ -204,8 +204,20 @@ fn install_said(
         )),
         // Asked about rather than written: nothing is wrong with it, and
         // what each agent would run is said under it.
-        Installed::Unconfirmed { name, .. } => Outcome::plain(format!(
+        Installed::Unconfirmed {
+            name,
+            recorded: false,
+            ..
+        } => Outcome::plain(format!(
             "would install {} into {into}, from {origin}\n",
+            named(kind, &name)
+        )),
+        Installed::Unconfirmed {
+            name,
+            recorded: true,
+            ..
+        } => Outcome::plain(format!(
+            "would update {} in {into}, from {origin}\n",
             named(kind, &name)
         )),
         // Refused rather than obeyed: somebody wrote that one.

@@ -2446,10 +2446,13 @@ pub enum Installed {
     /// An MCP server that does not come from the workspace's own library,
     /// asked for with no yes ([`asks_first`]): nothing written, and what it
     /// would write into each of `paths` said beside it
-    /// ([`Installation::entries`], [`mcp::preview`]).
+    /// ([`Installation::entries`], [`mcp::preview`]). `recorded` when the
+    /// ledger records it in the project, so that writing it would update
+    /// what an earlier install wrote rather than add it.
     Unconfirmed {
         name: ArtifactName,
         paths: Vec<PathBuf>,
+        recorded: bool,
     },
 }
 

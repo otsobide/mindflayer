@@ -932,6 +932,7 @@ fn a_preview_says_what_each_agent_would_run_and_why_one_is_not_reached_writing_n
         Installed::Unconfirmed {
             name: fixture.name.as_str().into(),
             paths: vec![fixture.file(Agent::Claude), fixture.file(Agent::OpenCode)],
+            recorded: false,
         }
     );
     assert!(previewed
@@ -981,4 +982,50 @@ fn a_preview_meets_somebodys_server_and_codex_s_trust_as_the_install_would() {
         }
     );
     assert!(fixture.record().is_none());
+}
+
+/// A preview comes to what the install would: nothing to change once each
+/// agent holds what it would be given, as recorded, and an update of what
+/// the ledger records once the definition changes.
+#[test]
+fn a_preview_tells_a_server_already_current_and_one_it_would_update() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+    fixture.install();
+
+    let current = fixture.preview();
+    fixture.define(&McpMother::plain_program(&fixture.name).replacen(
+        "--workspace",
+        "--verbose",
+        1,
+    ));
+    let changed = fixture.preview();
+
+    let paths: Vec<PathBuf> = Agent::ALL.map(|agent| fixture.file(agent)).to_vec();
+    assert_eq!(
+        current.installed,
+        Installed::Unchanged {
+            name: fixture.name.as_str().into(),
+            paths: paths.clone(),
+            unhashed: None,
+        }
+    );
+    assert_eq!(
+        changed.installed,
+        Installed::Unconfirmed {
+            name: fixture.name.as_str().into(),
+            paths,
+            recorded: true,
+        }
+    );
+    // What it says is what the install then comes to.
+    let updated = fixture.install();
+    assert!(
+        matches!(updated.installed, Installed::Updated { .. }),
+        "{:?}",
+        updated.installed
+    );
+    assert!(matches!(
+        fixture.preview().installed,
+        Installed::Unchanged { .. }
+    ));
 }

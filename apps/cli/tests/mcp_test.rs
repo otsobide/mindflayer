@@ -1264,6 +1264,42 @@ fn a_loaded_workspaces_server_is_a_dry_run_that_writes_nothing_until_yes() {
     assert!(fs::read_to_string(app.join(".mcp.json"))
         .unwrap()
         .contains("linear"));
+
+    // Asked again, what the install would come to: nothing, while each
+    // agent holds what it was given, and an update once the team changes
+    // it, which waits for a yes as the install did.
+    let current = weaver(dir.path(), &["install", "-p", "app", "linear", &home]).unwrap();
+    fs::write(
+        folder.join("linear.toml"),
+        McpMother::address_for_codex("linear").replace("example.com", "example.org"),
+    )
+    .unwrap();
+    let changed = weaver(dir.path(), &["install", "-p", "app", "linear", &home]).unwrap();
+
+    let reaches = |host: &str| {
+        ["claude", "codex", "opencode"]
+            .map(|agent| format!("  {agent} reaches: https://{host}/mcp\n"))
+            .concat()
+    };
+    assert_eq!(
+        current.stdout,
+        format!(
+            "mcp linear in app was already current\n{}",
+            reaches("example.com")
+        )
+    );
+    assert_eq!(
+        changed.stdout,
+        format!(
+            "would update mcp linear in app, from {origin}\n{}\
+             nothing installed: it comes from elsewhere than this workspace's library, so add \
+             --yes to go ahead\n",
+            reaches("example.org")
+        )
+    );
+    assert!(fs::read_to_string(app.join(".mcp.json"))
+        .unwrap()
+        .contains("example.com"));
 }
 
 #[test]

@@ -232,6 +232,9 @@ struct Decided {
     /// Each agent whose renderer refuses the definition, of those
     /// unreached.
     refused: Vec<Agent>,
+    /// Each entry the record has that its file holds changed since, which
+    /// only a forced install gets this far with.
+    edited: Vec<PathBuf>,
 }
 
 /// Who an install of `candidate` into `project` gives what, every file read
@@ -328,6 +331,7 @@ fn decide(
         reached,
         unreached,
         refused,
+        edited,
     }))
 }
 
@@ -339,10 +343,13 @@ fn decide(
 /// from the workspace's own library ([`super::asks_first`]).
 ///
 /// [`Installed::Unconfirmed`] with what each agent would run and why each
-/// not reached is not, or the refusal the install would meet: somebody's
-/// server of the name, an entry edited since and not forced, a file that
-/// cannot be read, or no agent reached at all. A read: no lock is taken,
-/// as a survey takes none.
+/// not reached is not, saying whether it would update what the ledger
+/// records; [`Installed::Unchanged`] when every entry it would write is in
+/// its file already, as recorded, and none would be taken out, which there
+/// is nothing to say yes to; or the refusal the install would meet:
+/// somebody's server of the name, an entry edited since and not forced, a
+/// file that cannot be read, or no agent reached at all. A read: no lock is
+/// taken, as a survey takes none.
 pub fn preview(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
@@ -359,11 +366,18 @@ pub fn preview(
     let Decided {
         name,
         definition,
+        before,
         reached,
         mut unreached,
-        ..
+        mut refused,
+        edited,
     } = decided;
+    let recorded = before.iter().flat_map(|record| &record.entries);
     let mut given: Vec<Given> = Vec::new();
+    // Whether the install would change nothing, as it tells it once it has
+    // written: each entry it writes held in its file as recorded, and the
+    // definition giving each agent what was recorded of it.
+    let mut kept = before.is_some();
     for reach in &reached {
         let done = match planned(reach.agent, root, &definition, homes) {
             Ok(done) => done,
@@ -372,10 +386,18 @@ pub fn preview(
                     agent: reach.agent,
                     why: Said::of(refusal.code(), &refusal),
                 });
+                refused.push(reach.agent);
                 continue;
             }
             Err(error) => return Err(config(error)),
         };
+        kept &= reach.held
+            && !edited.contains(&reach.file)
+            && recorded.clone().any(|entry| {
+                entry.agent == reach.agent
+                    && entry.file == reach.route
+                    && entry.fingerprint == done.fingerprint
+            });
         unreached.extend(done.unread.into_iter().map(|why| Unreached {
             agent: reach.agent,
             why,
@@ -392,14 +414,33 @@ pub fn preview(
     if given.is_empty() {
         return Err(unreached_by_all(&name, project, unreached));
     }
+    // Nor an entry recorded for an agent refused now, which the install
+    // takes out where its file may be edited.
+    kept &= !recorded.clone().any(|entry| {
+        refused.contains(&entry.agent)
+            && rules::withheld_from(project, Path::new(&entry.file)).is_none()
+    });
     let paths = given.iter().map(|given| given.file.clone()).collect();
+    let installed = if kept {
+        Installed::Unchanged {
+            name,
+            paths,
+            unhashed: None,
+        }
+    } else {
+        Installed::Unconfirmed {
+            name,
+            paths,
+            recorded: before.is_some(),
+        }
+    };
     Ok(Installation {
         entries: Some(Rendered {
             given,
             unreached,
             variables: variables(&definition),
         }),
-        ..Installation::from(Installed::Unconfirmed { name, paths })
+        ..Installation::from(installed)
     })
 }
 
@@ -434,6 +475,7 @@ pub(crate) fn install_held(
         reached,
         mut unreached,
         mut refused,
+        ..
     } = match decide(workspace, ledger, project, candidate, homes, edits)? {
         Ok(decided) => decided,
         Err(refused) => return Ok(refused.into()),
@@ -937,6 +979,8 @@ struct Done {
 
 /// What one agent's renderer would write and say, with nothing written.
 struct Planned {
+    /// What the entry it would write is recorded by, as [`Done::fingerprint`].
+    fingerprint: ContentHash,
     runs: Runs,
     warnings: Vec<Said>,
     /// As [`Done::unread`].
@@ -1011,6 +1055,7 @@ fn planned(
         Agent::Claude => {
             let entry = claude_mcp::entry(definition)?;
             Planned {
+                fingerprint: entry.fingerprint(),
                 runs: entry.runs(),
                 warnings: said(&entry.warnings, claude_mcp::Warning::code),
                 unread: Vec::new(),
@@ -1019,6 +1064,7 @@ fn planned(
         Agent::Codex => {
             let planned = codex_mcp::planned(root, definition, homes)?;
             Planned {
+                fingerprint: planned.entry.fingerprint(),
                 runs: planned.entry.runs(),
                 warnings: said(&planned.entry.warnings, codex_mcp::Warning::code),
                 unread: said(&planned.warnings, codex_mcp::Warning::code),
@@ -1027,6 +1073,7 @@ fn planned(
         Agent::OpenCode => {
             let planned = opencode_mcp::planned(root, definition, homes)?;
             Planned {
+                fingerprint: planned.entry.fingerprint(),
                 runs: planned.entry.runs(),
                 warnings: said(&planned.entry.warnings, opencode_mcp::Warning::code),
                 unread: Vec::new(),
