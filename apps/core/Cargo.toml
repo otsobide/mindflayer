@@ -33,6 +33,14 @@ jsonc-parser = { version = "0.34", features = ["cst"] }
 # (`gather::git`). It builds no new crate: the tree is prodash's, which
 # gix-features already builds with the tree in.
 gix = { version = "0.87", features = ["blocking-network-client", "blocking-http-transport-reqwest-rust-tls", "progress-tree"] }
+# HTTP for catalogs (D-14): the reqwest gix's transport above already builds,
+# at the version Cargo.lock holds, so no crate is added. `blocking`, since
+# core is synchronous; `rustls`, as gix asks for it, so the two share one
+# TLS; and no default features, which add a proxy read from the system and
+# whichever TLS a later release defaults to. Its `Url` is what the client
+# holds every URL it follows to its rules with, the parser the adapter sends
+# with.
+reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "rustls"] }
 # `backup`, for the copy taken before a schema step: SQLite's own online
 # backup, since reading the file from outside while a connection holds it
 # would drop that connection's locks on Unix.

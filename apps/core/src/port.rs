@@ -7,7 +7,7 @@
 //! on nothing outside them; whatever they need from outside is a port here,
 //! a trait in core's own words; and an adapter on the edge implements it with
 //! a library (`gix` for a [`Remote`], SQLite for a [`LedgerStore`], the
-//! system clock for a [`Clock`]). The
+//! system clock for a [`Clock`], reqwest for [`Http`]). The
 //! front ends, the CLI, the TUI and the panel's backend, are the other side's
 //! adapters: they drive core through its functions and the command lines
 //! every one of them runs (`commands::run_line`), and add nothing core has to
@@ -32,11 +32,13 @@
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use thiserror::Error;
 
 use crate::code::codes;
 use crate::gather::Watch;
+use crate::http::{Answer, HttpError, Request};
 use crate::kind::Kind;
 use crate::ledger::{
     Action, Carried, Entry, Forgotten, Gathered, InstallRecord, LedgerError, Merged, Moved,
@@ -77,6 +79,26 @@ pub trait Remote: Debug + Send + Sync {
     /// Take out of the clone at `clone` every credential an older build left
     /// in what it wrote there, returning whether there were any.
     fn scrub(&self, clone: &Path) -> Result<bool, GitError>;
+}
+
+/// What a request over HTTP is sent through (D-14): one exchange, its
+/// answer handed back once its status and headers are in, its body still to
+/// be read.
+///
+/// A transport only carries bytes. Which URLs may be fetched, which redirect
+/// is followed and what an answer is held to are the rules of
+/// [`crate::http::Client`], which reads the body itself, so a fake is held to
+/// them exactly as the network is.
+pub trait Http: Debug + Send + Sync {
+    /// Send a GET for `request`, its headers with it, and give up on the
+    /// exchange, the body's last byte included, once `timeout` has passed
+    /// ([`HttpError::Timeout`]).
+    ///
+    /// A redirect is handed back as the answer it is, never followed. What
+    /// went wrong is said in core's words: [`HttpError::Connect`] when no
+    /// connection was made, [`HttpError::Transfer`] for the rest, each URL
+    /// and each word the transport said [`Redacted`](crate::value::Redacted).
+    fn send(&self, request: &Request, timeout: Duration) -> Result<Answer, HttpError>;
 }
 
 /// The time, for what the ledger stamps an action or a gather with.

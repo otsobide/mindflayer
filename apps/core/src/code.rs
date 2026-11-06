@@ -63,6 +63,7 @@ use crate::everywhere::EverywhereError;
 use crate::exclude::{self, ExcludeError};
 use crate::frontmatter::FrontMatterError;
 use crate::gather::{self, GatherError, Leftover, ScrubFailure};
+use crate::http::HttpError;
 use crate::install::{
     rules, Clash, ConfigUnread, InstallError, LoadFailure, PlanError, Refused, Respelled,
 };
@@ -231,6 +232,7 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("gather::Leftover", Leftover::CODES),
     ("gather::ScrubFailure", ScrubFailure::CODES),
     ("port::GitError", GitError::CODES),
+    ("http::HttpError", HttpError::CODES),
     ("install::InstallError", InstallError::CODES),
     ("install::entries::ConfigUnread", ConfigUnread::CODES),
     ("install::LoadFailure", LoadFailure::CODES),
