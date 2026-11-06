@@ -236,6 +236,7 @@ export type CoreCode =
   | "foreign"
   | "edited"
   | "not_installed"
+  | "from_spelling_deprecated"
   | "rules_block_withheld"
   | "rules_block_left"
   | "rule_unreached"

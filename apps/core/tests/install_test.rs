@@ -1543,6 +1543,52 @@ fn an_origin_as_printed_names_its_one_offer_though_another_branch_has_its_addres
 }
 
 #[test]
+fn from_takes_a_sources_name_and_another_spelling_of_its_url_which_is_said() {
+    let (_dir, workspace, project, ledger) = ready(&["review"]);
+    let one = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
+    let other = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it too"))]);
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&one)).named(Some("one")),
+    )
+    .unwrap();
+    gather::gather(&workspace, &ledger, &Request::git(url(&other))).unwrap();
+    let from = |typed: &str| {
+        install::offered(
+            &workspace,
+            &ledger,
+            &project,
+            Kind::Skill,
+            "deploy",
+            Some(typed),
+        )
+        .unwrap()
+    };
+
+    // Each by its name, the one a listing shows, though both offer it.
+    let named = from("one");
+    let respelled = from(&format!("{}/", url(&one)));
+    let printed = from(&url(&one));
+
+    for candidate in [&named, &respelled, &printed] {
+        assert_eq!(candidate.origin(), url(&one));
+    }
+    assert_eq!(install::respelled(&named, "one"), None);
+    assert_eq!(install::respelled(&printed, &url(&one)), None);
+    let said = install::respelled(&respelled, &format!("{}/", url(&one))).unwrap();
+    assert_eq!(said.code(), "from_spelling_deprecated");
+    assert_eq!(
+        said.to_string(),
+        format!(
+            "--from {}/ names the source `one` by another spelling of its URL, which --from \
+             takes for now: name it `one`",
+            url(&one)
+        )
+    );
+}
+
+#[test]
 fn from_typed_with_credentials_names_the_source_they_were_taken_out_of_and_repeats_none() {
     let (_dir, workspace, project, ledger) = ready(&["deploy"]);
     // As if gathered from an https address rather than from a path.

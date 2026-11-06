@@ -1711,3 +1711,58 @@ fn a_confirmation_taller_than_the_screen_scrolls_and_waits_for_every_row_before_
     assert!(last.contains("y  yes"), "{last}");
     assert_eq!(press(&mut screen, &[KeyCode::Char('y')]), Step::Apply);
 }
+
+#[test]
+fn from_takes_a_sources_name_and_another_spelling_of_its_url_with_a_warning_that_fails_nothing() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    for name in ["collapse", "tanukeys"] {
+        fs::create_dir(dir.path().join(name)).unwrap();
+        new_project(&dir.path().join(name));
+        weaver(dir.path(), &["link", name]).unwrap();
+    }
+    let team = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let other = repository(&[(
+        "skills/deploy/SKILL.md",
+        &skill_file("deploy", "Ship it too"),
+    )]);
+    let url = team.path().to_string_lossy().into_owned();
+    weaver(dir.path(), &["gather", "git", &url, "--name", "team"]).unwrap();
+    weaver(
+        dir.path(),
+        &["gather", "git", &other.path().to_string_lossy()],
+    )
+    .unwrap();
+
+    let named = weaver(
+        dir.path(),
+        &["install", "-p", "collapse", "deploy", "--from", "team"],
+    )
+    .unwrap();
+    let respelled = format!("{url}/");
+    let spelled = weaver(
+        dir.path(),
+        &["install", "-p", "tanukeys", "deploy", "--from", &respelled],
+    )
+    .unwrap();
+
+    assert!(named.ok, "{:?}", named.stderr);
+    assert_eq!(
+        named.stdout,
+        format!("installed deploy into collapse, from {url}\n")
+    );
+    assert!(named.stderr.is_empty(), "{:?}", named.stderr);
+    assert!(spelled.ok, "{:?}", spelled.stderr);
+    assert_eq!(
+        spelled.stdout,
+        format!("installed deploy into tanukeys, from {url}\n")
+    );
+    assert_eq!(
+        spelled.stderr,
+        [format!(
+            "warning: --from {respelled} names the source `team` by another spelling of its \
+             URL, which --from takes for now: name it `team`"
+        )]
+    );
+    assert_eq!(spelled.stderr[0].code, Some("from_spelling_deprecated"));
+}
