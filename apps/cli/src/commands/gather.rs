@@ -127,18 +127,33 @@ impl Scrubbed {
 /// person can act on: every source it scrubbed now needs its credential from
 /// a git credential helper.
 pub(crate) fn scrubbed(scrub: &Scrub) -> Scrubbed {
+    // What the step to schema 7 made one first, which came first: the
+    // spelling that went is what a script may still name it by.
     let mut notes: Vec<Warning> = scrub
-        .sources
+        .merged
         .iter()
-        .map(|source| {
+        .map(|merged| {
+            let went = match &merged.reference {
+                Some(reference) => format!("{}#{reference}", merged.url),
+                None => merged.url.to_string(),
+            };
             format!(
-                "note: {}: the user name, password or token an older Mindweaver stored in this \
-                 URL is taken out; gathering it again needs a git credential helper that has it",
-                source.url
+                "note: {went}: the same repository as the source `{name}` ({kept}), so the two \
+                 are one source now, and the shelf keeps what `{name}` gathered",
+                name = merged.into.name,
+                kept = merged.into.origin(),
             )
             .into()
         })
         .collect();
+    notes.extend(scrub.sources.iter().map(|source| {
+        format!(
+            "note: {}: the user name, password or token an older Mindweaver stored in this \
+                 URL is taken out; gathering it again needs a git credential helper that has it",
+            source.url
+        )
+        .into()
+    }));
     match scrub.actions {
         0 => {}
         1 => notes.push(

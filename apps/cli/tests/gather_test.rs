@@ -461,6 +461,55 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
     assert!(again.stderr.is_empty(), "{:?}", again.stderr);
 }
 
+/// What schema 6 wrote, as core's migration tests have it: one repository
+/// gathered by two spellings of its URL, and another the same way, once
+/// with a token an older build stored, `<token>` there.
+const VERSION_6: &str = include_str!("../../core/tests/fixtures/ledger-v6.sql");
+
+#[test]
+fn the_first_command_that_writes_after_the_step_says_which_sources_are_one_now() {
+    let token = format!("ghp_{}", "T0k3n".repeat(7) + "x");
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    rusqlite::Connection::open(dir.path().join(WEAVER_DIR).join("mindweaver.db"))
+        .unwrap()
+        .execute_batch(&VERSION_6.replace("<token>", &token))
+        .unwrap();
+
+    let gathered = weaver(
+        dir.path(),
+        &["gather", "git", &source.path().to_string_lossy()],
+    )
+    .unwrap();
+
+    assert!(gathered.ok, "{:?}", gathered.stderr);
+    assert_eq!(
+        gathered.stderr,
+        [
+            "note: https://github.com/Acme/Private.git: the same repository as the source \
+             `acme-private` (https://github.com/acme/private), so the two are one source now, \
+             and the shelf keeps what `acme-private` gathered",
+            "note: https://github.com/acme/skills: the same repository as the source \
+             `acme-skills` (git@github.com:acme/skills.git), so the two are one source now, and \
+             the shelf keeps what `acme-skills` gathered",
+            "note: https://github.com/acme/private: the user name, password or token an older \
+             Mindweaver stored in this URL is taken out; gathering it again needs a git \
+             credential helper that has it",
+            "note: 2 action log entries: the user names, passwords or tokens an older \
+             Mindweaver stored in URLs in them are taken out",
+        ]
+    );
+    assert!(!kept_by(dir.path()).contains(&token));
+    // Said once: there is nothing left to say the second time.
+    let again = weaver(
+        dir.path(),
+        &["gather", "git", &source.path().to_string_lossy()],
+    )
+    .unwrap();
+    assert!(again.stderr.is_empty(), "{:?}", again.stderr);
+}
+
 #[test]
 fn a_url_with_a_token_in_it_is_refused_and_nothing_kept_or_said_repeats_the_token() {
     let dir = TempDir::new().unwrap();
