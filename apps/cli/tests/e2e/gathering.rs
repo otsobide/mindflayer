@@ -275,6 +275,90 @@ fn gather_list_says_a_pin_only_of_a_skill_taken_at_it() {
         .quiet();
 }
 
+/// When `gather sources --json` says each source was last gathered, in the
+/// order it lists them: what no run makes the same, read back to be spelled
+/// in what the text says.
+fn gathered_times(scenario: &Scenario) -> Vec<String> {
+    let ran = scenario.run("~/Projects", "mindweaver gather sources --json");
+    let envelope: serde_json::Value = serde_json::from_str(&ran.stdout).expect("JSON");
+    envelope["data"]
+        .as_array()
+        .expect("a list of sources")
+        .iter()
+        .map(|source| utc(source["gathered_at"].as_i64().expect("gathered")))
+        .collect()
+}
+
+/// `seconds` since the epoch as the text says a time: its date and minute
+/// in UTC, worked out here from the calendar rather than by the CLI's own.
+fn utc(seconds: i64) -> String {
+    let (mut days, of_day) = (seconds.div_euclid(86_400), seconds.rem_euclid(86_400));
+    let mut year = 1970;
+    let leap = |year: i64| (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+    while days >= if leap(year) { 366 } else { 365 } {
+        days -= if leap(year) { 366 } else { 365 };
+        year += 1;
+    }
+    let lengths = [
+        31,
+        if leap(year) { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    let mut month = 0;
+    while days >= lengths[month] {
+        days -= lengths[month];
+        month += 1;
+    }
+    format!(
+        "{year:04}-{:02}-{:02} {:02}:{:02} UTC",
+        month + 1,
+        days + 1,
+        of_day / 3600,
+        of_day % 3600 / 60
+    )
+}
+
+#[test]
+fn gather_sources_lists_each_source_by_its_name_with_what_it_holds() {
+    let scenario = acme();
+    scenario.source(
+        "~/src/other-rules",
+        &[(
+            "skills/pdf-forms/SKILL.md",
+            &skill("pdf-forms", "Fill in PDF forms"),
+        )],
+    );
+    let pinned = scenario.commit(SOURCE);
+    scenario
+        .given(
+            "~/Projects",
+            &format!("mindweaver gather git ../src/acme-skills --pin {pinned}"),
+        )
+        .given("~/Projects", "mindweaver gather git ../src/other-rules");
+    let at = gathered_times(&scenario);
+
+    scenario
+        .run("~/Projects", "mindweaver gather sources")
+        .succeeds()
+        .prints(&format!(
+            "src-acme-skills  ../src/acme-skills  pinned {}  2 skills  gathered {}\n\
+             src-other-rules  ../src/other-rules                  1 skill   gathered {}\n",
+            &pinned[..7],
+            at[0],
+            at[1]
+        ))
+        .quiet();
+}
+
 #[test]
 fn a_gathered_skill_installs_from_the_source_it_came_from() {
     let scenario = acme();

@@ -1460,6 +1460,7 @@ fn without_the_ui_feature_there_is_no_ui_command() {
 fn a_front_end_with_no_terminal_runs_everything_else() {
     for said in [
         "mindweaver gather list",
+        "mindweaver gather sources --json",
         "mindweaver install -p alpha deploy",
         "mindweaver install --all-projects deploy",
         // Half an install, which opens no screen: the command refuses it

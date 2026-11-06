@@ -1518,6 +1518,16 @@ pub enum GatherCommand {
         #[arg(long)]
         json: bool,
     },
+
+    /// List the sources the shelf is filled from: each by its name, with
+    /// its URL, the branch or tag and the commit it is pinned to, how many
+    /// skills it holds and when it was last gathered.
+    Sources {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// `NAME=VALUE`, split at its first `=`: what `--env`, `--header`,

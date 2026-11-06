@@ -6,11 +6,12 @@ use std::path::Path;
 
 use mindweaver_core::gather::{self, Gathered, Report, Request, Scrub, Watch};
 use mindweaver_core::install::{offered_by_loads, Offer};
+use mindweaver_core::ledger::SourceListing;
 use mindweaver_core::url::redacted;
 use mindweaver_core::{Kind, WeaverWorkspace};
 
 use super::{reading_workspace, workspace_here};
-use crate::render::{indent, json_or_text, plural, printable, table};
+use crate::render::{indent, json_or_text, plural, printable, table, utc};
 use crate::{CliError, Failure, GatherCommand, Lookup, Outcome, Warning};
 
 /// Collect artifacts onto the workspace shelf, or say what is already on it.
@@ -55,7 +56,77 @@ pub(crate) fn run_gather(
                 reading_workspace(directory, lookup, |workspace| shelf(workspace, &mut found))?;
             Ok(json_or_text(found.filter(|_| *json), text))
         }
+        GatherCommand::Sources { json } => {
+            let mut found = None;
+            let text = reading_workspace(directory, lookup, |workspace| {
+                sources(workspace, &mut found)
+            })?;
+            Ok(json_or_text(found.filter(|_| *json), text))
+        }
     }
+}
+
+/// `mindweaver gather sources`: every source the shelf is filled from, from
+/// a ledger read without being made, as `gather list` reads it, each kept
+/// in `found` for `--json` to print in place of the text.
+fn sources(
+    workspace: &WeaverWorkspace,
+    found: &mut Option<Vec<SourceListing>>,
+) -> Result<Outcome, Failure> {
+    let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
+    let listed = ledger.source_listing().map_err(CliError::from)?;
+    let stdout = sources_listing(&listed);
+    *found = Some(listed);
+    Ok(Outcome {
+        stdout,
+        stderr: Vec::new(),
+        ok: true,
+    })
+}
+
+/// Each source by the name `--from` takes and `gather update` and `gather
+/// remove` are given, then its URL, the branch or tag asked for and the
+/// commit it is pinned to, each in a column that earns its place only once
+/// a source has one, how many skills it holds, and when it was last
+/// gathered, in UTC, the one zone a time can be told in without a
+/// database of them.
+///
+/// Empty, it says how to fill it, as an empty shelf does.
+fn sources_listing(listed: &[SourceListing]) -> String {
+    if listed.is_empty() {
+        return String::from("no sources yet\n  take some with `mindweaver gather git <url>`\n");
+    }
+    let name_reference = listed.iter().any(|it| it.source.reference.is_some());
+    let name_pin = listed.iter().any(|it| it.source.pin.is_some());
+    let rows: Vec<Vec<String>> = listed
+        .iter()
+        .map(|it| {
+            let mut row = vec![printable(&it.source.name), printable(&it.source.url)];
+            if name_reference {
+                row.push(
+                    it.source
+                        .reference
+                        .as_deref()
+                        .map_or_else(String::new, |at| format!("ref {}", printable(at))),
+                );
+            }
+            if name_pin {
+                row.push(
+                    it.source
+                        .pin
+                        .as_deref()
+                        .map_or_else(String::new, |pin| format!("pinned {}", short(pin))),
+                );
+            }
+            row.push(plural(it.artifacts, "skill"));
+            row.push(it.gathered_at.map_or_else(
+                || String::from("never gathered"),
+                |at| format!("gathered {}", utc(at)),
+            ));
+            row
+        })
+        .collect();
+    table(&rows)
 }
 
 /// `mindweaver gather list`: what can be installed from elsewhere, from a
