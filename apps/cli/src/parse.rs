@@ -13,7 +13,7 @@ use clap::{ArgGroup, Args, Parser, Subcommand};
 use mindweaver_core::mcp::{self, Address, Program};
 use mindweaver_core::scan::DEFAULT_DEPTH;
 use mindweaver_core::value::{InputName, VariableName};
-use mindweaver_core::{Agent, Kind, Share, Shell, DEFAULT_SUBDIRECTORY};
+use mindweaver_core::{Agent, Kind, Share, Shell};
 
 /// Manage the agent skills in a mind project.
 //
@@ -1482,9 +1482,10 @@ pub enum GatherCommand {
         /// The repository to clone.
         url: String,
 
-        /// The folder inside the repository to take skills from.
-        #[arg(long, value_name = "DIR", default_value = DEFAULT_SUBDIRECTORY)]
-        path: String,
+        /// The folder inside the repository to search for skills, instead
+        /// of the whole of it.
+        #[arg(long, value_name = "DIR")]
+        path: Option<String>,
 
         /// A branch or tag to take, instead of the repository's default.
         #[arg(long = "ref", value_name = "REF")]

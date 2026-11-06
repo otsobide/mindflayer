@@ -1346,7 +1346,7 @@
           ]
         },
         "subdirectory": {
-          "description": "The folder inside the source that was harvested, `skills` by default.",
+          "description": "The folder inside the source that was searched: empty for the whole\nrepository, the default, as it has been since #101, and `skills` for\na source an older build gathered without `--path`.",
           "type": "string"
         },
         "url": {
@@ -1476,7 +1476,7 @@
           ]
         },
         "subdirectory": {
-          "description": "The folder inside the source that was harvested, `skills` by default.",
+          "description": "The folder inside the source that was searched: empty for the whole\nrepository, the default, as it has been since #101, and `skills` for\na source an older build gathered without `--path`.",
           "type": "string"
         },
         "url": {

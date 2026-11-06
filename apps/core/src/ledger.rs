@@ -118,7 +118,9 @@ pub struct Source {
     /// The branch or tag asked for, or `None` for whatever the remote's HEAD
     /// points at.
     pub reference: Option<String>,
-    /// The folder inside the source that was harvested, `skills` by default.
+    /// The folder inside the source that was searched: empty for the whole
+    /// repository, the default, as it has been since #101, and `skills` for
+    /// a source an older build gathered without `--path`.
     pub subdirectory: String,
     /// The commit last gathered from, once one has been resolved.
     pub revision: Option<Revision>,

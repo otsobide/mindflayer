@@ -124,7 +124,7 @@ fn gather_sources_json_prints_each_source_in_the_envelope() {
     assert_eq!(listed.kind, "git");
     assert_eq!(listed.url, url);
     assert_eq!(listed.reference, None);
-    assert_eq!(listed.subdirectory, "skills");
+    assert_eq!(listed.subdirectory, "", "the whole repository");
     assert_eq!(listed.revision.as_deref(), Some(head(&source).as_str()));
     assert!(!listed.directory.is_empty());
     assert!(!listed.name.is_empty());

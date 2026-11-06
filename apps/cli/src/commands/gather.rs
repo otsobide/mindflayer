@@ -37,8 +37,12 @@ pub(crate) fn run_gather(
             let workspace = workspace_here(directory, lookup)?;
             let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
             let said = scrubbed(&scrub);
-            let request = Request::git(url.clone())
-                .from_subdirectory(path.clone())
+            let request = Request::git(url.clone());
+            let request = match path {
+                Some(path) => request.from_subdirectory(path.clone()),
+                None => request,
+            };
+            let request = request
                 .at(reference.clone())
                 .named(name.clone())
                 .pinned(pin.clone())

@@ -40,8 +40,19 @@ use crate::workspace::WeaverWorkspace;
 
 pub use watch::{Progress, Watch};
 
-/// The folder inside a source that is harvested unless another is named.
-pub const DEFAULT_SUBDIRECTORY: &str = "skills";
+/// The folder inside a source that is searched unless another is named:
+/// none, so the whole repository is searched from its root, as far down as
+/// [`SEARCH_DEPTH`].
+///
+/// The root rather than `skills`, which it was until #101: a repository
+/// keeps its skills where its tools put them (`skills/<name>`,
+/// `.claude/skills/<name>`, `plugins/<plugin>/skills/<name>`, a `SKILL.md`
+/// of its own at its root), and only a search of all of it finds each
+/// layout without being told. A source an older build gathered without
+/// `--path` was recorded at `skills`, and is gathered again from there
+/// (`Request::again`): its folder is part of what makes it the source it
+/// is ([`ledger::Source::subdirectory`]).
+pub const DEFAULT_SUBDIRECTORY: &str = "";
 
 /// The names a licence file beside a skill's manifest goes by, compared
 /// without case, in the order one is looked for when a folder holds more
@@ -124,7 +135,7 @@ impl Source {
 #[derive(Debug, Clone)]
 pub struct Request {
     pub source: Source,
-    /// The folder inside the source to harvest.
+    /// The folder inside the source to search, empty for the whole of it.
     pub subdirectory: String,
     /// What to look for there.
     pub kind: Kind,
@@ -147,7 +158,7 @@ pub struct Request {
 }
 
 impl Request {
-    /// Gather skills from a git repository's `skills` folder.
+    /// Gather skills from a git repository, searched from its root.
     pub fn git(url: impl Into<String>) -> Self {
         Self {
             source: Source::Git {
@@ -182,7 +193,7 @@ impl Request {
         }
     }
 
-    /// Take from `subdirectory` instead of `skills`.
+    /// Search `subdirectory` alone, rather than the whole repository.
     pub fn from_subdirectory(mut self, subdirectory: impl Into<String>) -> Self {
         self.subdirectory = subdirectory.into();
         self

@@ -63,7 +63,7 @@ fn leftover(path: &str) -> Leftover {
 }
 
 #[test]
-fn a_request_for_a_git_source_gathers_skills_from_its_skills_folder_at_its_head() {
+fn a_request_for_a_git_source_searches_the_whole_repository_at_its_head() {
     let url = UrlMother::clean();
     let request = Request::git(url.clone());
 
@@ -75,7 +75,10 @@ fn a_request_for_a_git_source_gathers_skills_from_its_skills_folder_at_its_head(
         }
     );
     assert_eq!(request.subdirectory, DEFAULT_SUBDIRECTORY);
-    assert_eq!(DEFAULT_SUBDIRECTORY, "skills");
+    assert_eq!(
+        DEFAULT_SUBDIRECTORY, "",
+        "no folder: the repository from its root"
+    );
     assert_eq!(request.kind, Kind::Skill);
     assert!(!request.watch.is_cancelled());
 }

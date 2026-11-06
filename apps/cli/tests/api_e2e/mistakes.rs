@@ -227,7 +227,7 @@ fn a_gather_is_refused_since_only_a_terminal_shows_a_fetch_as_it_goes() {
         .refused(
             422,
             "gather_unwatched",
-            "`mindweaver gather git --path '' /home/you/src/acme-skills` fetches over the network \
+            "`mindweaver gather git /home/you/src/acme-skills` fetches over the network \
              for as long as that takes, which only the TUI or a shell shows, and stops",
         );
     scenario

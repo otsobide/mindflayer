@@ -58,7 +58,12 @@ impl GatheredMother {
         Gathered {
             kind,
             path: format!(".mindweaver/{}/{}/{name}", kind.slug(), source.directory),
-            upstream_path: format!("{}/{name}", source.subdirectory),
+            // Found in its `skills` folder, as a search of a repository
+            // from its root finds one most often.
+            upstream_path: match source.subdirectory.as_str() {
+                "" => format!("skills/{name}"),
+                folder => format!("{folder}/{name}"),
+            },
             name,
             summary: random::chance().then(|| random::text(30)),
             revision: source.revision.clone(),

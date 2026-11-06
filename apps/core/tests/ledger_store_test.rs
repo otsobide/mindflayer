@@ -1587,7 +1587,12 @@ fn a_source_keeps_the_pin_its_last_gather_had_and_none_once_one_had_none(mut sto
         assert_eq!(sources[0].pin, pin);
         assert_eq!(sources[0].revision, Some(at));
         let found = store
-            .source(SourceKind::Git, &url, None, "skills")
+            .source(
+                SourceKind::Git,
+                &url,
+                None,
+                mindweaver_core::DEFAULT_SUBDIRECTORY,
+            )
             .unwrap()
             .unwrap();
         assert_eq!(found, sources[0]);
@@ -1618,7 +1623,14 @@ fn forgetting_a_source_takes_what_it_brought_and_frees_its_folder(mut store: Sto
 
     store.reopen();
     assert_eq!(
-        store.source(SourceKind::Git, &url, None, "skills").unwrap(),
+        store
+            .source(
+                SourceKind::Git,
+                &url,
+                None,
+                mindweaver_core::DEFAULT_SUBDIRECTORY
+            )
+            .unwrap(),
         None
     );
     assert_eq!(store.sources().unwrap(), std::slice::from_ref(&kept));

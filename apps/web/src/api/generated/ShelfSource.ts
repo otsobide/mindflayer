@@ -22,7 +22,9 @@ url: string,
  */
 reference: string | null, 
 /**
- * The folder inside the source that was harvested, `skills` by default.
+ * The folder inside the source that was searched: empty for the whole
+ * repository, the default, as it has been since #101, and `skills` for
+ * a source an older build gathered without `--path`.
  */
 subdirectory: string, 
 /**

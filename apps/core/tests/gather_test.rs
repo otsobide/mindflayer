@@ -9,7 +9,7 @@ use common::{commit, repository, skill, url, workspace, write_files};
 use mindweaver_core::gather::{self, GatherError, Progress, Request, Warning, Watch};
 use mindweaver_core::ledger::{Action, Ledger, SourceKind};
 use mindweaver_core::value::SourceName;
-use mindweaver_core::{Kind, MindProject, ValidationIssue, WeaverWorkspace};
+use mindweaver_core::{Kind, MindProject, ValidationIssue, WeaverWorkspace, DEFAULT_SUBDIRECTORY};
 use tempfile::TempDir;
 
 // ---------------------------------------------------------------------------
@@ -612,6 +612,79 @@ fn skills_grouped_in_folders_of_their_own_are_found_in_each() {
     );
 }
 
+/// Every layout the tools that install skills from a repository share, a
+/// repository of its own each: where the skill's folder is in it.
+const LAYOUTS: [&str; 8] = [
+    "skills/deploy",
+    "skills/team/deploy",
+    "deploy",
+    ".agents/skills/deploy",
+    ".claude/skills/deploy",
+    "skills/.curated/deploy",
+    "skills/.system/deploy",
+    "plugins/ops/skills/deploy",
+];
+
+#[test]
+fn a_skill_is_found_in_every_layout_the_tools_share_with_nothing_named() {
+    for layout in LAYOUTS {
+        let manifest = format!("{layout}/SKILL.md");
+        let script = format!("{layout}/scripts/run.sh");
+        let source = repository(&[
+            (&manifest, &skill("deploy", "Ship it")),
+            (&script, "exit 0\n"),
+            ("README.md", "not a skill\n"),
+        ]);
+
+        let gathered = found(&Request::git(url(&source)));
+
+        assert_eq!(gathered, named(&[("deploy", layout)]), "{layout}");
+    }
+}
+
+#[test]
+fn a_repository_holding_every_layout_at_once_offers_each_skill_found() {
+    let files: Vec<(String, String)> = LAYOUTS
+        .iter()
+        .enumerate()
+        .map(|(at, layout)| {
+            let name = format!("skill-{at}");
+            let folder = layout.replace("deploy", &name);
+            (format!("{folder}/SKILL.md"), skill(&name, "Do it"))
+        })
+        .collect();
+    let borrowed: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(path, text)| (path.as_str(), text.as_str()))
+        .collect();
+    let source = repository(&borrowed);
+
+    let gathered = found(&Request::git(url(&source)));
+
+    let mut expected: Vec<(String, String)> = LAYOUTS
+        .iter()
+        .enumerate()
+        .map(|(at, layout)| {
+            let name = format!("skill-{at}");
+            (name.clone(), layout.replace("deploy", &name))
+        })
+        .collect();
+    expected.sort();
+    assert_eq!(gathered, expected);
+}
+
+#[test]
+fn a_repository_holding_no_skill_anywhere_gathers_nothing_and_is_no_failure() {
+    let source = repository(&[("README.md", "nothing to gather\n")]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    assert!(report.is_empty(), "{report:?}");
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+}
+
 #[test]
 fn a_skill_found_further_down_is_filed_on_the_shelf_under_its_folders_name() {
     let source = repository(&[
@@ -770,8 +843,9 @@ fn a_folder_the_source_does_not_have_is_named_in_the_error() {
     let source = repository(&[("README.md", "nothing to gather\n")]);
     let (_dir, workspace) = workspace();
     let ledger = workspace.ledger().unwrap();
+    let request = Request::git(url(&source)).from_subdirectory("skills");
 
-    let error = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap_err();
+    let error = gather::gather(&workspace, &ledger, &request).unwrap_err();
 
     assert!(matches!(error, GatherError::NoSuchFolder { .. }), "{error}");
     assert!(error.to_string().contains("skills"));
@@ -782,7 +856,8 @@ fn a_gather_that_finds_no_folder_leaves_the_revision_its_shelf_came_from() {
     let source = repository(&[("skills/deploy/SKILL.md", &skill("deploy", "Ship it"))]);
     let (_dir, workspace) = workspace();
     let ledger = workspace.ledger().unwrap();
-    gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+    let request = Request::git(url(&source)).from_subdirectory("skills");
+    gather::gather(&workspace, &ledger, &request).unwrap();
     let before = ledger
         .source(SourceKind::Git, &url(&source), None, "skills")
         .unwrap();
@@ -790,7 +865,7 @@ fn a_gather_that_finds_no_folder_leaves_the_revision_its_shelf_came_from() {
     fs::remove_dir_all(source.path().join("skills")).unwrap();
     write_files(source.path(), &[("README.md", "moved elsewhere\n")]);
     commit(source.path());
-    let error = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap_err();
+    let error = gather::gather(&workspace, &ledger, &request).unwrap_err();
 
     assert!(matches!(error, GatherError::NoSuchFolder { .. }), "{error}");
     let after = ledger
@@ -835,7 +910,7 @@ fn the_log_records_a_gather_and_the_source_it_came_from() {
     assert_eq!(history[0].outcome, "ok");
 
     let recorded = ledger
-        .source(SourceKind::Git, &address, None, "skills")
+        .source(SourceKind::Git, &address, None, DEFAULT_SUBDIRECTORY)
         .unwrap()
         .expect("the source was registered");
     assert!(recorded.revision.is_some());
@@ -973,7 +1048,7 @@ fn a_flag_set_before_checkout_leaves_no_shelf_change_and_no_ledger_rows() {
     assert!(ledger.history(10).unwrap().is_empty(), "nothing logged");
     assert_eq!(
         ledger
-            .source(SourceKind::Git, &url(&source), None, "skills")
+            .source(SourceKind::Git, &url(&source), None, DEFAULT_SUBDIRECTORY)
             .unwrap(),
         None,
         "the source it registered is forgotten"
@@ -991,7 +1066,7 @@ fn a_cancelled_gather_of_a_known_source_leaves_its_shelf_and_rows_as_they_were()
     let shelf = workspace.gathered_dir(Kind::Skill).join(&first.directory);
     let before = fs::read_to_string(shelf.join("deploy/SKILL.md")).unwrap();
     let recorded = ledger
-        .source(SourceKind::Git, &url(&source), None, "skills")
+        .source(SourceKind::Git, &url(&source), None, DEFAULT_SUBDIRECTORY)
         .unwrap();
 
     write_files(
@@ -1027,7 +1102,7 @@ fn a_cancelled_gather_of_a_known_source_leaves_its_shelf_and_rows_as_they_were()
     assert_eq!(gathered[0].summary.as_deref(), Some("Ship it"));
     assert_eq!(
         ledger
-            .source(SourceKind::Git, &url(&source), None, "skills")
+            .source(SourceKind::Git, &url(&source), None, DEFAULT_SUBDIRECTORY)
             .unwrap(),
         recorded,
         "the revision it was gathered at is the one it still has"
@@ -1171,7 +1246,7 @@ fn a_url_with_a_token_in_it_is_refused_and_the_token_is_kept_nowhere() {
             SourceKind::Git,
             "https://example.com/acme/skills",
             None,
-            "skills"
+            DEFAULT_SUBDIRECTORY
         )
         .unwrap()
         .is_none());
