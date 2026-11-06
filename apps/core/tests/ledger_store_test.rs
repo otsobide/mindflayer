@@ -203,6 +203,7 @@ every_store![
     forgetting_a_source_takes_what_it_brought_and_frees_its_folder,
     forgetting_one_artifact_a_source_supplied_leaves_the_rest_and_its_source,
     every_source_is_listed_by_url_then_branch_then_folder_even_with_nothing_gathered,
+    each_source_is_listed_with_when_a_gather_last_took_it_and_what_it_holds,
     a_gathered_artifact_reads_back_with_its_source,
     gathering_a_name_again_from_one_source_replaces_it_and_from_another_adds_it,
     what_was_gathered_is_listed_by_name_then_source,
@@ -1711,6 +1712,48 @@ fn every_source_is_listed_by_url_then_branch_then_folder_even_with_nothing_gathe
     });
     registered.dedup();
     assert_eq!(store.sources().unwrap(), registered);
+}
+
+fn each_source_is_listed_with_when_a_gather_last_took_it_and_what_it_holds(store: Store) {
+    let at = random::between(1_600_000_000, 1_900_000_000) as i64;
+    let mut store = store.stamped_by(Arc::new(Stopped(at)));
+    // Registered by a gather that took nothing: no gather of it yet.
+    let unseen = source(&store, &UrlMother::https());
+    let seen = source(&store, &UrlMother::https());
+    store
+        .saw_source(seen.id, Some(RevisionMother::random().as_str()), None)
+        .unwrap();
+    let count = random::between(1, 5);
+    for name in distinct_names(count) {
+        store
+            .record(
+                &seen,
+                Kind::Skill,
+                &name,
+                &format!("skills/{}/{name}", seen.directory),
+                None,
+                &UpstreamMother::random(),
+            )
+            .unwrap();
+    }
+
+    store.reopen();
+    let listed = store.source_listing().unwrap();
+    let sources = store.sources().unwrap();
+    assert_eq!(
+        listed.iter().map(|l| l.source.clone()).collect::<Vec<_>>(),
+        sources,
+        "in the order the sources are listed"
+    );
+    let of = |id: i64| listed.iter().find(|l| l.source.id == id).unwrap();
+    assert_eq!(
+        (of(unseen.id).gathered_at, of(unseen.id).artifacts),
+        (None, 0)
+    );
+    assert_eq!(
+        (of(seen.id).gathered_at, of(seen.id).artifacts),
+        (Some(at), count)
+    );
 }
 
 // ---------------------------------------------------------------------------

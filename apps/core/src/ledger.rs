@@ -153,6 +153,24 @@ impl Source {
     }
 }
 
+/// A source as `gather sources` lists it: the source, when a gather last
+/// took it, and how much of the shelf is its (#100).
+///
+/// What it serializes to is a contract, as a status report's is: the
+/// source's fields as [`Source`] writes them, beside its own, each by its
+/// name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SourceListing {
+    #[serde(flatten)]
+    pub source: Source,
+    /// When a gather last took it, in seconds since the Unix epoch: `None`
+    /// while none has, as for a source a gather registered and then could
+    /// not fetch, which is a source all the same.
+    pub gathered_at: Option<i64>,
+    /// How many artifacts it holds on the shelf, of every kind.
+    pub artifacts: usize,
+}
+
 /// A source the step to schema 7 made one with another it found to be the
 /// same place: one repository's URL spelled two ways
 /// ([`crate::url::canonical`]), gathered at one branch from one folder.

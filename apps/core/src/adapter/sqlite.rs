@@ -19,7 +19,7 @@ use crate::agent::Agent;
 use crate::kind::Kind;
 use crate::ledger::{
     Action, Carried, Entry, EntryTarget, Forgotten, Gathered, InstallRecord, LedgerError, Merged,
-    Moved, Outcome, Source, SourceKind, Target, Upstream,
+    Moved, Outcome, Source, SourceKind, SourceListing, Target, Upstream,
 };
 use crate::port::{Clock, LedgerStore};
 use crate::settings::ProjectId;
@@ -807,6 +807,44 @@ impl LedgerStore for Sqlite {
             (&a.url, &a.reference, &a.subdirectory).cmp(&(&b.url, &b.reference, &b.subdirectory))
         });
         Ok(sources)
+    }
+
+    fn source_listing(&self) -> Result<Vec<SourceListing>, LedgerError> {
+        let failed = |source| self.failed("listing the sources and what each holds", source);
+        // Taken by a gather once it has a revision: `saw_source` writes
+        // `last_seen` with it, past the last cancel, where registering writes
+        // it too, with none. A count of every kind, which `artifacts`
+        // holds, as a row of a kind this build does not know is still
+        // somewhere on the shelf.
+        let counted: Vec<(i64, Option<i64>, i64)> = {
+            let mut statement = self
+                .connection
+                .prepare(
+                    "SELECT id, CASE WHEN revision IS NULL THEN NULL ELSE last_seen END,
+                            (SELECT COUNT(*) FROM artifacts WHERE source_id = sources.id)
+                       FROM sources",
+                )
+                .map_err(failed)?;
+            let rows = statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .map_err(failed)?;
+            rows.collect::<Result<_, _>>().map_err(failed)?
+        };
+        Ok(self
+            .sources()?
+            .into_iter()
+            .map(|source| {
+                let (gathered_at, artifacts) = counted
+                    .iter()
+                    .find(|(id, _, _)| *id == source.id)
+                    .map_or((None, 0), |(_, at, count)| (*at, *count));
+                SourceListing {
+                    source,
+                    gathered_at,
+                    artifacts: usize::try_from(artifacts).unwrap_or_default(),
+                }
+            })
+            .collect())
     }
 
     fn installed(&self, project: &str, installation: &InstallRecord) -> Result<(), LedgerError> {

@@ -386,6 +386,52 @@ fn a_source_typed_with_any_credential_serializes_its_url_without_it() {
 }
 
 #[test]
+fn a_source_listed_serializes_its_source_s_fields_and_then_its_own() {
+    for _ in 0..DRAWS {
+        let listing = SourceListing {
+            source: SourceMother::random(),
+            gathered_at: random::chance().then(|| random::between(0, 2_000_000_000) as i64),
+            artifacts: random::between(0, 100),
+        };
+        let source = source_as_json(&listing.source);
+        let expected = format!(
+            r#"{},"gathered_at":{},"artifacts":{}}}"#,
+            source.strip_suffix('}').unwrap(),
+            json(&listing.gathered_at),
+            listing.artifacts,
+        );
+
+        assert_eq!(json(&listing), expected, "{listing:?}");
+    }
+}
+
+#[test]
+fn a_source_listed_serializes_exactly_these_fields() {
+    let listing = SourceListing {
+        source: SourceMother::random(),
+        gathered_at: None,
+        artifacts: 0,
+    };
+
+    assert_eq!(
+        keys(&json(&listing)),
+        [
+            "kind",
+            "url",
+            "reference",
+            "subdirectory",
+            "revision",
+            "directory",
+            "name",
+            "pin",
+            "gathered_at",
+            "artifacts"
+        ],
+        "{listing:?}"
+    );
+}
+
+#[test]
 fn a_gathered_artifact_serializes_each_field_by_its_name_its_source_nested() {
     for _ in 0..DRAWS {
         let kind = random::pick(&Kind::ALL);

@@ -40,7 +40,7 @@ use crate::gather::Watch;
 use crate::kind::Kind;
 use crate::ledger::{
     Action, Carried, Entry, Forgotten, Gathered, InstallRecord, LedgerError, Merged, Moved,
-    Outcome, Source, SourceKind, Target, Upstream,
+    Outcome, Source, SourceKind, SourceListing, Target, Upstream,
 };
 use crate::settings::ProjectId;
 use crate::value::{Revision, SourceName};
@@ -309,6 +309,15 @@ pub trait LedgerStore: Debug + Send {
     /// older build stored with a credential is listed where the URL it is
     /// shown as goes.
     fn sources(&self) -> Result<Vec<Source>, LedgerError>;
+
+    /// Every source, in the order [`sources`](Self::sources) lists them,
+    /// each with when a gather last took it and how many artifacts it holds
+    /// on the shelf ([`SourceListing`]): what `gather sources` lists.
+    ///
+    /// When a gather last took it rather than when it was registered: a
+    /// gather that registered a source and failed before it took anything
+    /// is no gather of it to tell somebody about.
+    fn source_listing(&self) -> Result<Vec<SourceListing>, LedgerError>;
 
     /// Record that an artifact was put into a project, replacing whatever was
     /// recorded of it before.
