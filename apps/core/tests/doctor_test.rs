@@ -378,3 +378,156 @@ fn rules_kept_from_claude_are_not_asked_of_a_project_that_does_not_name_claude()
 
     assert!(codes(&fixture.examined()).is_empty());
 }
+
+/// Put a skill `name` reading `description` in `folder`.
+fn skill_in(fixture: &Fixture, folder: &Path, name: &str, description: &str) -> PathBuf {
+    let copy = folder.join(name);
+    fixture.write(&copy.join("SKILL.md"), &common::skill(name, description));
+    copy
+}
+
+#[test]
+fn copies_of_one_skill_that_differ_in_folders_opencode_reads_alike_are_found() {
+    let fixture = fixture(&[Agent::OpenCode]);
+    let agents = skill_in(
+        &fixture,
+        &fixture.root().join(".agents/skills"),
+        "review",
+        "Read it",
+    );
+    let claude = skill_in(
+        &fixture,
+        &fixture.root().join(".claude/skills"),
+        "review",
+        "Read it twice",
+    );
+
+    let examined = fixture.examined();
+
+    assert_eq!(codes(&examined), vec!["doctor_copies_differ"]);
+    let finding = &examined.findings[0];
+    assert_eq!(finding.agents, vec![Agent::OpenCode]);
+    assert_eq!(finding.path, agents);
+    assert!(
+        finding
+            .message
+            .contains(&format!("also at {}", claude.display())),
+        "{}",
+        finding.message
+    );
+}
+
+#[test]
+fn copies_that_hold_the_same_or_that_no_one_agent_reads_both_of_are_not_found() {
+    let fixture = fixture(&[Agent::Claude, Agent::Codex, Agent::OpenCode]);
+    skill_in(
+        &fixture,
+        &fixture.root().join(".agents/skills"),
+        "review",
+        "Read it",
+    );
+    skill_in(
+        &fixture,
+        &fixture.root().join(".claude/skills"),
+        "review",
+        "Read it",
+    );
+    assert!(codes(&fixture.examined()).is_empty());
+
+    let apart = self::fixture(&[Agent::Claude, Agent::Codex]);
+    skill_in(
+        &apart,
+        &apart.root().join(".agents/skills"),
+        "review",
+        "Read it",
+    );
+    skill_in(
+        &apart,
+        &apart.root().join(".claude/skills"),
+        "review",
+        "Read it twice",
+    );
+    assert!(codes(&apart.examined()).is_empty());
+}
+
+#[test]
+fn a_project_skill_a_different_one_at_user_scope_shadows_is_found_for_each_agent_reading_both() {
+    let fixture = fixture(&[Agent::Claude, Agent::Codex, Agent::OpenCode]);
+    let homes = fixture.homes();
+    let ours = skill_in(
+        &fixture,
+        &fixture.root().join(".agents/skills"),
+        "review",
+        "Read it",
+    );
+    let theirs = skill_in(
+        &fixture,
+        &homes.agents_dir.unwrap().join("skills"),
+        "review",
+        "Read it my way",
+    );
+
+    let examined = fixture.examined();
+
+    assert_eq!(codes(&examined), vec!["doctor_user_skill_differs"]);
+    let finding = &examined.findings[0];
+    assert_eq!(finding.path, ours);
+    assert_eq!(finding.agents, vec![Agent::Codex, Agent::OpenCode]);
+    assert!(
+        finding
+            .message
+            .contains(&format!("at user scope, at {}", theirs.display())),
+        "{}",
+        finding.message
+    );
+}
+
+#[test]
+fn a_skill_at_user_scope_holding_the_same_or_read_by_no_agent_of_the_project_is_not_found() {
+    let fixture = fixture(&[Agent::Claude]);
+    let homes = fixture.homes();
+    skill_in(
+        &fixture,
+        &fixture.root().join(".claude/skills"),
+        "review",
+        "Read it",
+    );
+    skill_in(
+        &fixture,
+        &homes.claude_config_dir.unwrap().join("skills"),
+        "review",
+        "Read it",
+    );
+    // Claude reads no `~/.agents/skills`.
+    skill_in(
+        &fixture,
+        &homes.agents_dir.unwrap().join("skills"),
+        "review",
+        "Read it my way",
+    );
+
+    assert!(codes(&fixture.examined()).is_empty());
+}
+
+#[test]
+fn a_skill_in_claude_s_own_folder_differing_from_the_project_s_is_found_for_claude() {
+    let fixture = fixture(&[Agent::Claude]);
+    let ours = skill_in(
+        &fixture,
+        &fixture.root().join(".claude/skills"),
+        "review",
+        "Read it",
+    );
+    skill_in(
+        &fixture,
+        &fixture.homes().claude_config_dir.unwrap().join("skills"),
+        "review",
+        "Read it my way",
+    );
+
+    let examined = fixture.examined();
+
+    assert_eq!(codes(&examined), vec!["doctor_user_skill_differs"]);
+    assert_eq!(examined.findings[0].path, ours);
+    assert_eq!(examined.findings[0].agents, vec![Agent::Claude]);
+}

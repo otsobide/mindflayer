@@ -537,3 +537,40 @@ fn claude_starts_a_server_once_approved_codex_in_a_trusted_project_and_opencode_
         ]
     );
 }
+
+#[test]
+fn each_agent_reads_skills_at_user_scope_where_docs_agents_md_says() {
+    let user = Path::new("/home/you");
+    let homes = AgentHomes::defaults_under(user);
+
+    assert_eq!(
+        homes.skills_read_by(Agent::Claude),
+        vec![user.join(".claude").join("skills")]
+    );
+    assert_eq!(
+        homes.skills_read_by(Agent::Codex),
+        vec![user.join(".agents").join("skills")]
+    );
+    assert_eq!(
+        homes.skills_read_by(Agent::OpenCode),
+        vec![
+            user.join(".config").join("opencode").join("skills"),
+            user.join(".claude").join("skills"),
+            user.join(".agents").join("skills"),
+        ]
+    );
+}
+
+#[test]
+fn a_home_not_given_is_read_by_no_agent_at_user_scope() {
+    let homes = AgentHomes {
+        claude_config_dir: Some(PathBuf::from("/home/you/.claude")),
+        ..AgentHomes::default()
+    };
+
+    assert!(homes.skills_read_by(Agent::Codex).is_empty());
+    assert_eq!(
+        homes.skills_read_by(Agent::OpenCode),
+        vec![PathBuf::from("/home/you/.claude").join("skills")]
+    );
+}

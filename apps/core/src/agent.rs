@@ -537,6 +537,33 @@ impl AgentHomes {
         .collect()
     }
 
+    /// Every folder these homes name that `agent` reads skills from at user
+    /// scope, in the order docs/agents.md lists them: a skill there is read
+    /// beside a project's in every project, which is what doctor compares a
+    /// project's skills with (D-22). Mindweaver writes in none of them.
+    ///
+    /// One arm per agent with no wildcard, as `read`'s, so a new agent does
+    /// not compile until somebody has said where it reads at user scope.
+    pub fn skills_read_by(&self, agent: Agent) -> Vec<PathBuf> {
+        let skills = |home: &Option<PathBuf>| home.as_ref().map(|home| home.join("skills"));
+        let folders = match agent {
+            // Verified in part on Claude Code 2.1.309: `<config dir>/skills`.
+            Agent::Claude => vec![skills(&self.claude_config_dir)],
+            // Docs-only: `$HOME/.agents/skills`, whatever `$CODEX_HOME` says.
+            // Not `$CODEX_HOME/skills`, which is deprecated.
+            Agent::Codex => vec![skills(&self.agents_dir)],
+            // Docs-only, V1 and V2: its own folder's, `~/.claude/skills` and
+            // `~/.agents/skills`, Claude's taken as the folder these homes
+            // give Claude, `~/.claude` unless `$CLAUDE_CONFIG_DIR` moves it.
+            Agent::OpenCode => vec![
+                skills(&self.opencode_config_dir),
+                skills(&self.claude_config_dir),
+                skills(&self.agents_dir),
+            ],
+        };
+        folders.into_iter().flatten().collect()
+    }
+
     /// Where each agent keeps its folder when nothing moves it: the fallback a
     /// front end takes once neither its option nor the agent's own variable
     /// answers.

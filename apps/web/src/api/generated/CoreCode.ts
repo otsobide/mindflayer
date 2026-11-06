@@ -161,6 +161,8 @@ export type CoreCode =
   | "doctor_codex_near_budget"
   | "doctor_codex_over_budget"
   | "doctor_claude_misses_rules"
+  | "doctor_copies_differ"
+  | "doctor_user_skill_differs"
   | "exclude_key_invalid"
   | "exclude_pattern_invalid"
   | "exclude_path_unnamable"

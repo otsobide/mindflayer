@@ -26,7 +26,9 @@
 //!   the project it is about ([`Examined::failures`]), as every report
 //!   collects one, and never a reason to leave the rest unsaid.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -34,13 +36,17 @@ use thiserror::Error;
 
 use crate::agent::{Agent, AgentHomes};
 use crate::agents_md::{self, CODEX_BUDGET};
+use crate::catalog::DiscoveryFailure;
 use crate::claude_md::{self, ClaudeMdError};
 use crate::claude_rules;
 use crate::code::{codes, Said};
 use crate::codex_mcp::{self, CodexMcpError, Trust, UserConfig};
+use crate::hash;
 use crate::install;
+use crate::kind::Kind;
 use crate::names::Names;
 use crate::paths;
+use crate::value::ContentHash;
 use crate::workspace::{same_directory, Member, MindProject, WeaverWorkspace};
 
 /// What a front end tells doctor of the machine a project is on: where each
@@ -168,6 +174,8 @@ impl Examined {
         exam.codex_trust();
         exam.codex_reads();
         exam.claude_block();
+        exam.skill_copies();
+        exam.user_skills();
         Examined {
             entry,
             name: Some(project.name().to_owned()),
@@ -254,6 +262,55 @@ pub enum Symptom {
         /// in the block's order. Never empty.
         routes: Vec<String>,
     },
+    /// Copies of one skill, in folders `agent` reads alike in the project,
+    /// that do not hold the same, so which it loads is not told: OpenCode,
+    /// which reads three, keeps one of them (docs/agents.md).
+    #[error("{}: `{name}` is also at {}, which {} reads too, and the copies differ, so it loads one of them", .copies[0].display(), spelled(&.copies[1..]), .agent.title())]
+    CopiesDiffer {
+        agent: Agent,
+        name: String,
+        /// Every copy, in the order the agent's folders are listed. At
+        /// least two.
+        copies: Vec<PathBuf>,
+    },
+    /// A skill of the project whose name a skill at user scope holds too,
+    /// in a folder the same agents read, holding something else: one name
+    /// at both scopes resolves differently in each agent (D-22).
+    #[error("{copy}: {} also read{} a skill `{name}` at user scope, at {user}, which holds something else, and one name at both scopes resolves differently in each agent", titled(.agents), if .agents.len() == 1 { "s" } else { "" })]
+    UserSkillDiffers {
+        name: String,
+        copy: PathBuf,
+        user: PathBuf,
+        /// The project's agents that read both, in report order.
+        agents: Vec<Agent>,
+    },
+}
+
+/// `paths`, each as it is written, in a list a sentence holds.
+fn spelled(paths: &[PathBuf]) -> String {
+    let paths: Vec<String> = paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    listed(&paths)
+}
+
+/// `agents`, each by its title, in a list a sentence holds.
+fn titled(agents: &[Agent]) -> String {
+    let titles: Vec<String> = agents
+        .iter()
+        .map(|agent| agent.title().to_owned())
+        .collect();
+    listed(&titles)
+}
+
+/// `words`, with `and` before the last.
+fn listed(words: &[String]) -> String {
+    match words {
+        [] => String::new(),
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
 }
 
 codes!(Symptom {
@@ -264,6 +321,8 @@ codes!(Symptom {
     Self::CodexNearBudget { .. } => "doctor_codex_near_budget",
     Self::CodexOverBudget { .. } => "doctor_codex_over_budget",
     Self::ClaudeMissesRules { .. } => "doctor_claude_misses_rules",
+    Self::CopiesDiffer { .. } => "doctor_copies_differ",
+    Self::UserSkillDiffers { .. } => "doctor_user_skill_differs",
 });
 
 impl Symptom {
@@ -277,6 +336,8 @@ impl Symptom {
             | Symptom::CodexNearBudget { .. }
             | Symptom::CodexOverBudget { .. } => vec![Agent::Codex],
             Symptom::ClaudeMissesRules { .. } => vec![Agent::Claude],
+            Symptom::CopiesDiffer { agent, .. } => vec![*agent],
+            Symptom::UserSkillDiffers { agents, .. } => agents.clone(),
         }
     }
 
@@ -296,6 +357,8 @@ impl Symptom {
             | Symptom::CodexOverBudget { file, .. } => file,
             Symptom::CodexNoGitRoot { project } => project,
             Symptom::ClaudeMissesRules { file, .. } => file,
+            Symptom::CopiesDiffer { copies, .. } => &copies[0],
+            Symptom::UserSkillDiffers { copy, .. } => copy,
         }
     }
 
@@ -339,6 +402,12 @@ impl Symptom {
                 routes[0],
                 claude_rules::folder().display()
             ),
+            Symptom::CopiesDiffer { .. } => {
+                String::from("make the copies hold the same, or keep one and remove the others")
+            }
+            Symptom::UserSkillDiffers { .. } => String::from(
+                "rename the project's or the one at user scope, or make them hold the same",
+            ),
         }
     }
 
@@ -370,12 +439,18 @@ pub enum DoctorFailure {
     /// reads its `AGENTS.md`.
     #[error(transparent)]
     ClaudeMd(ClaudeMdError),
+    /// A folder of skills, the project's or one at user scope, that cannot
+    /// be listed, or a copy that cannot be read through to be compared,
+    /// as discovery says each.
+    #[error(transparent)]
+    Discovery(DiscoveryFailure),
 }
 
 codes!(DoctorFailure {} carried {
     Self::CodexConfig(error) => error,
     Self::Unmeasured(warning) => warning,
     Self::ClaudeMd(error) => error,
+    Self::Discovery(failure) => failure,
 });
 
 /// One project's examination as it goes: what it has found and what it
@@ -389,6 +464,11 @@ struct Exam<'a> {
     agents: Vec<Agent>,
     symptoms: Vec<Symptom>,
     failures: Vec<DoctorFailure>,
+    /// The skills each folder holds, listed once however many checks ask.
+    listed: BTreeMap<PathBuf, Vec<(String, PathBuf)>>,
+    /// Each copy's tree hash, read once however many checks compare it:
+    /// none for one that cannot be read, which is said once.
+    hashed: BTreeMap<PathBuf, Option<ContentHash>>,
 }
 
 impl<'a> Exam<'a> {
@@ -405,7 +485,83 @@ impl<'a> Exam<'a> {
             agents,
             symptoms: Vec::new(),
             failures: Vec::new(),
+            listed: BTreeMap::new(),
+            hashed: BTreeMap::new(),
         }
+    }
+
+    /// Every skill directly in `folder`, by name, in name order: each
+    /// folder in it holding a `SKILL.md`, through a link as the agents read
+    /// one (docs/agents.md), and none of a hidden name, which is what an
+    /// install leaves beside a copy, said apart. None when `folder` is not
+    /// there, which is no failure; one that cannot be listed is.
+    fn skills_in(&mut self, folder: &Path) -> Vec<(String, PathBuf)> {
+        if let Some(listed) = self.listed.get(folder) {
+            return listed.clone();
+        }
+        let mut skills = Vec::new();
+        match fs::read_dir(folder) {
+            Ok(entries) => {
+                for entry in entries.flatten() {
+                    let Ok(name) = entry.file_name().into_string() else {
+                        continue;
+                    };
+                    let path = entry.path();
+                    if !name.starts_with('.') && path.is_dir() && install::holds(&path, Kind::Skill)
+                    {
+                        skills.push((name, path));
+                    }
+                }
+            }
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+                ) => {}
+            Err(source) => {
+                self.failures
+                    .push(DoctorFailure::Discovery(DiscoveryFailure::Directory {
+                        path: folder.to_path_buf(),
+                        source,
+                    }))
+            }
+        }
+        skills.sort();
+        self.listed.insert(folder.to_path_buf(), skills.clone());
+        skills
+    }
+
+    /// What `copy` of the skill `name` holds, as [`hash::tree`] hashes an
+    /// installed copy: none for one that cannot be read through, said once.
+    fn hash(&mut self, name: &str, copy: &Path) -> Option<ContentHash> {
+        if let Some(hashed) = self.hashed.get(copy) {
+            return hashed.clone();
+        }
+        let hashed = match hash::tree(copy) {
+            Ok(hash) => Some(hash),
+            Err(source) => {
+                self.failures
+                    .push(DoctorFailure::Discovery(DiscoveryFailure::Uncompared {
+                        name: name.to_owned(),
+                        path: copy.to_path_buf(),
+                        source,
+                    }));
+                None
+            }
+        };
+        self.hashed.insert(copy.to_path_buf(), hashed.clone());
+        hashed
+    }
+
+    /// The folders in the project `agent` reads skills from, every one of
+    /// them ([`Agent::reads`]), not only those an install writes in: a copy
+    /// somebody keeps in one is read all the same.
+    fn read_by(&self, agent: Agent) -> Vec<PathBuf> {
+        agent
+            .reads(Kind::Skill)
+            .iter()
+            .map(|folder| self.root().join(folder))
+            .collect()
     }
 
     fn root(&self) -> &Path {
@@ -548,6 +704,86 @@ impl<'a> Exam<'a> {
                 file,
                 project: self.root().to_path_buf(),
                 routes,
+            });
+        }
+    }
+
+    /// Copies of one skill in folders an agent reads alike in the project,
+    /// that differ: OpenCode reads `.agents/skills`, `.claude/skills` and
+    /// `.opencode/skills`, and given one name twice keeps whichever it
+    /// takes last (docs/agents.md, docs-only), where discovery compares
+    /// only the copies in the folders an install writes in.
+    fn skill_copies(&mut self) {
+        for agent in self.agents.clone() {
+            let mut copies: BTreeMap<String, Vec<PathBuf>> = BTreeMap::new();
+            for folder in self.read_by(agent) {
+                for (name, copy) in self.skills_in(&folder) {
+                    copies.entry(name).or_default().push(copy);
+                }
+            }
+            for (name, copies) in copies {
+                if copies.len() < 2 {
+                    continue;
+                }
+                let hashes: Vec<Option<ContentHash>> =
+                    copies.iter().map(|copy| self.hash(&name, copy)).collect();
+                if hashes.iter().any(Option::is_none) {
+                    continue;
+                }
+                if hashes.iter().any(|hash| *hash != hashes[0]) {
+                    self.symptoms.push(Symptom::CopiesDiffer {
+                        agent,
+                        name,
+                        copies,
+                    });
+                }
+            }
+        }
+    }
+
+    /// Each skill of the project whose name a skill at user scope holds
+    /// too, in a folder the same agent reads ([`AgentHomes::skills_read_by`]),
+    /// with something else in it (D-22): Claude prefers the personal one,
+    /// OpenCode V2 lets `~/.agents` beat a project's `.claude`, and Codex
+    /// shows both. One finding for each pair, with every agent reading both.
+    fn user_skills(&mut self) {
+        let mut met: BTreeMap<(PathBuf, PathBuf), (String, Vec<Agent>)> = BTreeMap::new();
+        for agent in self.agents.clone() {
+            let mut users: Vec<(String, PathBuf)> = Vec::new();
+            for folder in self.machine.homes.skills_read_by(agent) {
+                users.extend(self.skills_in(&folder));
+            }
+            for folder in self.read_by(agent) {
+                for (name, copy) in self.skills_in(&folder) {
+                    for (_, user) in users.iter().filter(|(user, _)| *user == name) {
+                        // A project at the user's home, whose folder is the
+                        // one at user scope.
+                        if same_directory(&copy, user) {
+                            continue;
+                        }
+                        let (Some(ours), Some(theirs)) =
+                            (self.hash(&name, &copy), self.hash(&name, user))
+                        else {
+                            continue;
+                        };
+                        if ours != theirs {
+                            let (_, agents) = met
+                                .entry((copy.clone(), user.clone()))
+                                .or_insert_with(|| (name.clone(), Vec::new()));
+                            if !agents.contains(&agent) {
+                                agents.push(agent);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for ((copy, user), (name, agents)) in met {
+            self.symptoms.push(Symptom::UserSkillDiffers {
+                name,
+                copy,
+                user,
+                agents,
             });
         }
     }
