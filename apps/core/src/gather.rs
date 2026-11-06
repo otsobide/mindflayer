@@ -853,15 +853,20 @@ fn take(
 /// `found` there and put what it could take of them on `shelf`: each said
 /// in `report` as removed.
 ///
-/// By its folder, as the shelf files it: one the commit has no folder for
-/// any more goes, its copy and its record, and one whose folder another
-/// name now holds, a skill that renamed itself, loses its record and
-/// keeps the folder, which holds that other name. One whose folder is
-/// still there but could not be taken this time, as it no longer reads, is
-/// kept as it was, the failure said beside it: one broken skill must not
-/// take the copy that worked off the shelf. A record whose path is not a
-/// folder of this source's shelf, which no gather writes, loses its record
-/// and nothing else, as no folder it names is the gather's to remove.
+/// By its folder, as the shelf files it: one the commit has neither the
+/// folder nor the name of any more goes, its copy and its record, and one
+/// whose folder another name now holds, a skill that renamed itself, loses
+/// its record and keeps the folder, which holds that other name. One taken
+/// again under its name from another folder, a skill whose folder was
+/// renamed, keeps its record, which names the folder it was taken into
+/// now, and is no removal; its old folder goes all the same, since no
+/// record names it any more and `validate` would read it on the shelf for
+/// good. One whose folder is still there but could not be taken this time,
+/// as it no longer reads, is kept as it was, the failure said beside it:
+/// one broken skill must not take the copy that worked off the shelf. A
+/// record whose path is not a folder of this source's shelf, which no
+/// gather writes, loses its record and nothing else, as no folder it names
+/// is the gather's to remove.
 ///
 /// The copy goes before its record, and one that will not go keeps its
 /// record, said as a failure: a record dropped first would leave a folder
@@ -891,12 +896,12 @@ fn take_off(
         })
         .collect();
     for gathered in supplied {
-        if taken
+        // Taken again under its name: `record` has moved its row to the
+        // folder it was taken into, which `gathered.path`, read before
+        // anything was placed, may not be.
+        let again = taken
             .iter()
-            .any(|(name, _)| *name == gathered.name.as_str())
-        {
-            continue;
-        }
+            .any(|(name, _)| *name == gathered.name.as_str());
         let at = workspace.root().join(&gathered.path);
         let folder = at
             .file_name()
@@ -904,7 +909,7 @@ fn take_off(
             .unwrap_or_default()
             .to_owned();
         let placed = taken.iter().any(|(_, path)| *path == gathered.path);
-        if !placed && held.contains(&folder.as_str()) {
+        if (again && placed) || (!placed && held.contains(&folder.as_str())) {
             continue;
         }
         let shelved = crate::install::is_folder_name(&folder)
@@ -921,6 +926,9 @@ fn take_off(
                     continue;
                 }
             }
+        }
+        if again {
+            continue;
         }
         ledger.ungathered(source.id, gathered.kind, &gathered.name)?;
         report.removed.push(Harvested {

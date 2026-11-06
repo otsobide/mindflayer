@@ -222,6 +222,41 @@ fn a_skill_that_renamed_itself_is_removed_by_its_old_name_and_keeps_its_folder()
 }
 
 #[test]
+fn a_skill_whose_folder_was_renamed_upstream_leaves_nothing_in_its_old_folder() {
+    let source = repository(&[("skills/deploy-skill/SKILL.md", &skill("deploy", "Ship it"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let request = Request::git(url(&source));
+    let first = gather::gather(&workspace, &ledger, &request).unwrap();
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&first.directory);
+    assert!(shelf.join("deploy-skill").join("SKILL.md").is_file());
+
+    fs::rename(
+        source.path().join("skills").join("deploy-skill"),
+        source.path().join("skills").join("deploy"),
+    )
+    .unwrap();
+    commit(source.path());
+    let again = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    // Still supplied, under its name, so nothing is removed.
+    assert!(again.removed.is_empty(), "{again:?}");
+    assert!(again.failures.is_empty(), "{again:?}");
+    assert!(shelf.join("deploy").join("SKILL.md").is_file());
+    assert!(
+        !shelf.join("deploy-skill").exists(),
+        "its old folder is off the shelf"
+    );
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1, "{gathered:?}");
+    assert_eq!(
+        workspace.root().join(&gathered[0].path),
+        shelf.join("deploy"),
+        "its row names the folder it was taken into"
+    );
+}
+
+#[test]
 fn a_cancelled_gather_takes_nothing_off_the_shelf() {
     let source = repository(&[
         ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),

@@ -3215,20 +3215,25 @@ as current forever, and a report of what an update removed would have
 named what was still there.
 
 It is told by folder, as the shelf files a skill by the folder its source
-gave it. A skill whose folder the commit no longer holds goes, its copy on
-the shelf and its row, which `LedgerStore::ungathered` drops alone. One
-whose folder another name now holds, a skill that renamed itself in its
-`SKILL.md`, loses its row and keeps the folder, which holds that other
-name now. One whose folder is still there and could not be taken this
-time, as its front matter broke, is kept as it was, beside the warning
-that says why: one broken skill must not take off the shelf the copy that
-worked, as it must not cost the forty beside it. The copy goes before its
-row, and one that will not go keeps its row, said with a failure of its
-own (`gathered_unremoved`), so a folder left on the shelf is still one the
-next gather knows to take off; a row dropped first would leave a folder
-nothing offers and `validate` still reads. A row whose path is not a
-folder of the source's own shelf, which no gather writes, loses the row
-and nothing else.
+gave it. A skill whose folder and name the commit no longer holds goes, its
+copy on the shelf and its row, which `LedgerStore::ungathered` drops alone.
+One whose folder another name now holds, a skill that renamed itself in its
+`SKILL.md`, loses its row and keeps the folder, which holds that other name
+now. One taken again under its name from another folder, a skill whose
+folder was renamed upstream, is no removal: `record` has moved its row to
+the folder it was taken into, keyed as it is by kind, name and source, so
+the row stays and its old folder goes, said with `gathered_unremoved` when
+it will not, since no row names that folder any more and `validate` would
+read it on the shelf for good. One whose folder is still there and could
+not be taken this time, as its front matter broke, is kept as it was,
+beside the warning that says why: one broken skill must not take off the
+shelf the copy that worked, as it must not cost the forty beside it. The
+copy goes before its row, and one that will not go keeps its row, said
+with a failure of its own (`gathered_unremoved`), so a folder left on the
+shelf is still one the next gather knows to take off; a row dropped first
+would leave a folder nothing offers and `validate` still reads. A row whose
+path is not a folder of the source's own shelf, which no gather writes,
+loses the row and nothing else.
 
 All of it after the last cancel ([following a gather, and stopping
 it](#following-a-gather-and-stopping-it)), with the rest of what changes
