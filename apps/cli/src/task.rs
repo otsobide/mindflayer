@@ -1446,7 +1446,10 @@ fn picking(head: &[&str], projects: &[String]) -> Vec<String> {
 /// The options `add mcp` and `edit` are told how a server is started or
 /// reached by, in the order the grammar lists them, each value after the
 /// option that takes it ([`option`]), so one led by a dash, an argument
-/// above all, is still its value: `--arg=-y`.
+/// above all, is still its value: `--arg=-y`. A pair is its two words
+/// joined by `=`, which the option ends the name at, so a name holding one
+/// would reach the command as another pair: a task from outside naming one
+/// is refused before its line is built (`policy::sayable`).
 fn server_options(given: &mcp::Given) -> Vec<String> {
     let mut words = Vec::new();
     match given {

@@ -70,7 +70,7 @@ mod token;
 
 pub use expressible::{Expressibility, Inexpressible};
 pub(crate) use given::retransported;
-pub use given::{Address, Given, Program, Repeated};
+pub use given::{Address, Given, Program, Repeated, Unsayable};
 pub use runs::{Running, Runs};
 
 /// The format a definition is written in, and the newest this build reads.

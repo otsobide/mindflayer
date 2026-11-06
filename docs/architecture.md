@@ -1203,16 +1203,22 @@ beside it named as it is in another case (`add_name_unfit`), then the
 definition as it would read (`add_mcp_unfit`, every issue `validate` would
 call it invalid for, a token said by where it is and what it starts with,
 never whole): `add` refuses exactly what `validate` would call invalid,
-with no copy of a rule. Three things beside it are no definition's to
+with no copy of a rule. Four things beside it are no definition's to
 judge, and refused with codes of their own: a transport given for a skill
 or a rule (`add_transport_not_mcp`); a key of `env` or `headers` given
 twice, by two options or one twice, which no TOML file holds
 (`add_mcp_key_repeated`, as given, so two headers in another case are two
-keys, as the file and `validate` hold them); and an address typed with
-something before its host (`add_mcp_url_userinfo`, by
-`url::carries_credentials`, the test a gather refuses a URL by), which the
-file would keep though the definition never does, said without it. Since
-no definition holds either for `validate` to judge, each is looked through
+keys, as the file and `validate` hold them); a name given beside a value
+that holds `=` (`add_mcp_key_unsayable`, `Given::unsayable`), which no
+command line gives, since each option of a pair ends the name at the
+first one, but a request can, and its line would then say another pair
+than the one its draft was judged as, so the path policy refuses such a
+task before its line is built (`policy::sayable`, by the same code); and
+an address typed with something before its host (`add_mcp_url_userinfo`,
+by `url::carries_credentials`, the test a gather refuses a URL by), which
+the file would keep though the definition never does, said without it.
+Since no definition holds a key or an address so for `validate` to
+judge, each is looked through
 for a token as `validate` looks through a value (`mcp::token_in`): a key
 that looks like one is said by what it starts with, and so is an address
 whose query or path still holds one once its userinfo is gone, said as the

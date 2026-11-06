@@ -1158,6 +1158,111 @@ fn no_value_starting_with_a_dash_is_read_as_an_option_or_a_command() {
     }
 }
 
+impl Parsers {
+    /// What `line`, an `add` or an `edit`, tells its command of how a
+    /// server is started or reached, as the command's own options read it:
+    /// each pair split where its option splits it.
+    fn told(&mut self, line: &[String]) -> Option<mcp::Given> {
+        use clap::FromArgMatches as _;
+
+        let command = match line[0].as_str() {
+            "mind" => &mut self.mind,
+            "mindweaver" => &mut self.weaver,
+            other => panic!("{line:?} runs `{other}`"),
+        };
+        let matches = command
+            .try_get_matches_from_mut(line)
+            .unwrap_or_else(|error| panic!("{line:?} does not parse: {error}"));
+        let mut at = &matches;
+        while let Some((name, inner)) = at.subcommand() {
+            at = inner;
+            if name == "add" || name == "edit" {
+                break;
+            }
+        }
+        crate::ServerOptions::from_arg_matches(at)
+            .unwrap_or_else(|error| panic!("{line:?}: {error}"))
+            .given()
+    }
+}
+
+/// `given`, each name it gives beside a value without the `=` its option
+/// would end the name at: what a request may send of it, the rest refused
+/// before a line is built (`policy::sayable`).
+fn sayable(given: mcp::Given) -> mcp::Given {
+    let name = |key: &str| key.replace('=', "");
+    match given {
+        mcp::Given::Program(mut program) => {
+            for (key, _) in &mut program.env {
+                *key = name(key);
+            }
+            mcp::Given::Program(program)
+        }
+        mcp::Given::Address(mut address) => {
+            for (key, _) in &mut address.headers {
+                *key = name(key);
+            }
+            for (header, _) in &mut address.secret_headers {
+                *header = name(header);
+            }
+            for (input, _) in &mut address.url_vars {
+                *input = name(input.as_str()).into();
+            }
+            mcp::Given::Address(address)
+        }
+    }
+}
+
+/// The property above compares the words a line gives each option, which
+/// a pair's are whatever its option splits them into: this one compares
+/// what the command is told, each pair as the option splits it, for every
+/// server a request may send, which is every one but those naming
+/// something with an `=` in the name.
+#[test]
+fn a_server_s_every_option_reaches_its_command_as_the_value_given() {
+    let mut parsers = Parsers::new();
+    let values = VALUES
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .chain(hostile());
+    for value in values {
+        for program in [true, false] {
+            let sent = server(&value, program);
+            assert_eq!(
+                mindweaver_core::policy::sayable(&sent).is_ok(),
+                !value.contains('='),
+                "{sent:?}"
+            );
+            let given = sayable(sent);
+            let tasks = [
+                Task::Add {
+                    holder: Holder::Workspace,
+                    kind: Kind::Mcp,
+                    name: String::from("acme"),
+                    description: String::from("Acme's tools"),
+                    template: None,
+                    server: Some(Box::new(given.clone())),
+                },
+                Task::EditServer {
+                    holder: Holder::Workspace,
+                    name: String::from("acme"),
+                    server: Box::new(given.clone()),
+                },
+            ];
+            for task in tasks {
+                for line in task.commands() {
+                    assert_eq!(
+                        parsers.told(&line),
+                        Some(given.clone()),
+                        "{line:?} does not tell its command what it was given"
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn a_line_named_for_a_workspace_names_it_once_and_is_otherwise_read_as_it_was() {
     let root = "/home/you/work";

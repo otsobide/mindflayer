@@ -490,7 +490,10 @@ says how an agent starts it or reaches it, `{"type": "program", "command":
 from; an `edit_server` task, `{"type": "edit_server", "holder": ...,
 "name": ..., "server": ...}`, writes how one is started again. Each is the
 line `add mcp` or `edit` takes with those options, and a `validate` draft of
-either is judged as that line would judge it.
+either is judged as that line would judge it. The first word of a pair, a
+setting's variable, a header's name or a part of the address's, holds no
+`=`, where the line's option ends it: a task naming one is refused before a
+line is built, as its draft is (`add_mcp_key_unsayable`).
 
 ### Linking a project
 

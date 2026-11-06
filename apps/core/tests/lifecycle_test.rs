@@ -1938,9 +1938,12 @@ fn a_transport_that_would_be_invalid_or_for_another_kind_is_refused_and_nothing_
         ..Address::default()
     });
 
+    let (_, unsayable, _) = McpMother::given_unsayable().remove(0);
+
     for (typed, given, code) in [
         ("mcp:github", literal, "edit_contents_unfit"),
         ("mcp:github", credentialed, "add_mcp_url_userinfo"),
+        ("mcp:github", unsayable, "add_mcp_key_unsayable"),
         ("skill:deploy", McpMother::given(), "edit_transport_not_mcp"),
     ] {
         let refused = retransport(&workspace, typed, &given).unwrap_err();

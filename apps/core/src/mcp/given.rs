@@ -120,6 +120,14 @@ pub struct Repeated {
     pub key: String,
 }
 
+/// A name given beside a value that holds `=`, which no command line can
+/// say: the option that takes the pair, as a line spells it, and the name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unsayable {
+    pub option: &'static str,
+    pub key: String,
+}
+
 impl Given {
     /// The first key of `env` or `headers` given twice, by an option that
     /// writes a value and one that reads it, or by one option twice.
@@ -155,6 +163,48 @@ impl Given {
                 key: (*key).to_owned(),
             })
         })
+    }
+
+    /// The first name given beside a value that holds `=`: a setting's
+    /// variable, a header's name, a secret header's, or a part of the
+    /// address's. Each option of a pair takes it as `NAME=VALUE` and ends
+    /// the name at the first `=` (`--env X=Y=Z` sets `X`), so a line
+    /// would say another pair than the one given, and what a request sent
+    /// would be judged as one definition and written as another. Only a
+    /// request can give one, never a command line; and no variable's,
+    /// header's or input's name holds one.
+    pub fn unsayable(&self) -> Option<Unsayable> {
+        let pairs: Vec<(&'static str, &str)> = match self {
+            Given::Program(program) => program
+                .env
+                .iter()
+                .map(|(key, _)| ("--env", key.as_str()))
+                .collect(),
+            Given::Address(address) => address
+                .headers
+                .iter()
+                .map(|(key, _)| ("--header", key.as_str()))
+                .chain(
+                    address
+                        .secret_headers
+                        .iter()
+                        .map(|(header, _)| ("--secret-header", header.as_str())),
+                )
+                .chain(
+                    address
+                        .url_vars
+                        .iter()
+                        .map(|(name, _)| ("--url-var", name.as_str())),
+                )
+                .collect(),
+        };
+        pairs
+            .into_iter()
+            .find(|(_, key)| key.contains('='))
+            .map(|(option, key)| Unsayable {
+                option,
+                key: key.to_owned(),
+            })
     }
 
     /// What `add` would be told to write `definition`'s transport and

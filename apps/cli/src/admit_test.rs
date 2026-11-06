@@ -555,3 +555,48 @@ fn a_yes_is_admitted_only_with_an_install_that_asks_for_one() {
         );
     }
 }
+
+/// A server's options naming something beside a value with an `=` in the
+/// name are refused before a line is built, by the code `add`'s draft is
+/// refused with: the line would end the name at it, and write another
+/// pair than the one judged. One with an `=` in a value alone is admitted.
+#[test]
+fn a_server_naming_what_no_line_can_say_is_refused_before_a_line_is_built() {
+    use mindweaver_core::mcp::Given;
+    use mindweaver_core::mother::McpMother;
+
+    let (_dir, workspace) = fixture();
+    let add = |server: Given| Task::Add {
+        holder: Holder::Workspace,
+        kind: Kind::Mcp,
+        name: String::from("acme"),
+        description: String::from("Acme's tools"),
+        template: None,
+        server: Some(Box::new(server)),
+    };
+    let edit = |server: Given| Task::EditServer {
+        holder: Holder::Project(String::from("alpha")),
+        name: String::from("acme"),
+        server: Box::new(server),
+    };
+
+    for (why, given, _) in McpMother::given_unsayable() {
+        for task in [add(given.clone()), edit(given.clone())] {
+            assert_eq!(
+                code(admitted(&workspace, &task)),
+                "add_mcp_key_unsayable",
+                "{why}: {task:?}"
+            );
+        }
+    }
+    let Given::Program(mut program) = McpMother::given_program() else {
+        unreachable!("a program is given as one");
+    };
+    program.env = vec![(String::from("OPTIONS"), String::from("a=b"))];
+    for task in [
+        add(Given::Program(program.clone())),
+        edit(Given::Program(program)),
+    ] {
+        assert!(admitted(&workspace, &task).is_ok(), "{task:?}");
+    }
+}

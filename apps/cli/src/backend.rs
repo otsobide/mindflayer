@@ -1340,7 +1340,8 @@ impl Absence for PolicyError {
             | PolicyError::Unnormalized { .. }
             | PolicyError::InWeaverDir { .. }
             | PolicyError::Unlisted { .. }
-            | PolicyError::YesUnasked { .. } => false,
+            | PolicyError::YesUnasked { .. }
+            | PolicyError::Server(_) => false,
         }
     }
 }

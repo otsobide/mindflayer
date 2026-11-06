@@ -37,9 +37,11 @@ use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 
 use crate::code::codes;
+use crate::create::{self, CreateError};
 use crate::install;
 use crate::kind::Kind;
 use crate::known::Switchable;
+use crate::mcp::Given;
 use crate::names::Names;
 use crate::paths;
 use crate::resolve::Reason;
@@ -76,6 +78,11 @@ pub enum PolicyError {
         name: String,
         from: Option<String>,
     },
+    /// A server's options a line cannot say as given, a name beside a
+    /// value that holds `=`, refused by `add`'s own check, and by its code
+    /// ([`sayable`]).
+    #[error(transparent)]
+    Server(CreateError),
     /// An entry no registry holds, or a path no entry points at: the
     /// workspace's own error for an unlink or an unload of one, since it is
     /// the condition they meet too.
@@ -91,6 +98,7 @@ codes!(PolicyError {
     Self::Unlisted { .. } => "switch_unlisted",
     Self::YesUnasked { .. } => "install_yes_unasked",
 } carried {
+    Self::Server(error) => error,
     Self::Workspace(error) => error,
 });
 
@@ -113,6 +121,19 @@ pub fn confirmed(kind: Kind, name: &str, from: Option<&str>) -> Result<(), Polic
         name: name.to_owned(),
         from: from.map(str::to_owned),
     })
+}
+
+/// A server's options a request sends with an `add` or an `edit`, `given`:
+/// refused when a line cannot carry one of its names as given, one beside
+/// a value that holds `=`, which the line's option would end at the first
+/// one (`create::sayable`).
+///
+/// Held here, before a line is built, as every value a request sends is:
+/// the line would write a pair other than the one its draft was judged
+/// as, and the command would never be told. Refused by the code `add`'s
+/// check gives the draft, so the two say one thing.
+pub fn sayable(given: &Given) -> Result<(), PolicyError> {
+    create::sayable(given).map_err(PolicyError::Server)
 }
 
 /// `given`, as a path a request may name: absolute, spelled exactly as

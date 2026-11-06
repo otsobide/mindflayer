@@ -16,6 +16,9 @@
 //!   names** is an entry too, and becomes the `-p` of the same folder.
 //! - **A yes an install carries** is one to an MCP server that asks first
 //!   (`policy::confirmed`), the panel's confirmation of one, and no other.
+//! - **A server's options an `add` or an `edit` sends** name nothing a
+//!   line would say as another (`policy::sayable`): no name beside a value
+//!   holding the `=` its option ends the name at.
 //! - **An entry `unlink`, `unload` or `relink` takes** is one the marker
 //!   holds, and goes to the command as the marker spells it, which is what
 //!   those commands take an entry by.
@@ -108,9 +111,17 @@ impl Admission<'_> {
                     }
                 }
             }
-            Task::Add { holder, .. }
-            | Task::EditServer { holder, .. }
-            | Task::Show { holder, .. }
+            Task::Add { holder, server, .. } => {
+                if let Some(given) = server {
+                    policy::sayable(given)?;
+                }
+                *holder = self.holder(holder)?;
+            }
+            Task::EditServer { holder, server, .. } => {
+                policy::sayable(server)?;
+                *holder = self.holder(holder)?;
+            }
+            Task::Show { holder, .. }
             | Task::Edit { holder, .. }
             | Task::Save { holder, .. }
             | Task::Rename { holder, .. }

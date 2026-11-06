@@ -152,6 +152,7 @@ export type CoreCode =
   | "add_mcp_unscaffolded"
   | "add_transport_not_mcp"
   | "add_mcp_key_repeated"
+  | "add_mcp_key_unsayable"
   | "add_mcp_url_userinfo"
   | "add_mcp_unfit"
   | "doctor_codex_untrusted"
