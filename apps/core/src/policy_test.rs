@@ -365,3 +365,22 @@ fn a_yes_is_taken_only_with_a_server_from_elsewhere_than_the_library() {
          yes is sent with it"
     );
 }
+
+#[test]
+fn a_yes_refused_says_where_it_comes_from_without_the_credential_it_was_typed_with() {
+    use crate::mother::UrlMother;
+
+    for credentialed in UrlMother::every_credentialed() {
+        let from = format!("{}#main", credentialed.typed);
+
+        let said = confirmed(Kind::Skill, "deploy", Some(&from))
+            .unwrap_err()
+            .to_string();
+
+        assert!(!said.contains(&credentialed.secret), "{said}");
+        assert!(
+            said.contains(&format!(" from {}#main:", credentialed.clean)),
+            "{said}"
+        );
+    }
+}

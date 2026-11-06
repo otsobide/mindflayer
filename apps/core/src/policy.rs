@@ -45,6 +45,7 @@ use crate::mcp::Given;
 use crate::names::Names;
 use crate::paths;
 use crate::resolve::Reason;
+use crate::value::Redacted;
 use crate::workspace::{Loaded, Member, WeaverWorkspace, WorkspaceError};
 
 /// Why a value a request holds is not one it may name.
@@ -71,12 +72,15 @@ pub enum PolicyError {
     /// from as `--from` takes it, or from no place named, which is not
     /// told until the line runs (`install::asks_first`). The one yes a
     /// request may carry is to such a server, once somebody has been shown
-    /// what each agent would run of it.
+    /// what each agent would run of it. The place as `--from` took it, a
+    /// source's address among them, without any credential it was typed
+    /// with, as an install's refusal says one: it goes back to whoever
+    /// sent it, and into whatever logs that.
     #[error("{} {name}{}: nothing is asked before it is installed, so no yes is sent with it", .kind.noun(), .from.as_ref().map_or_else(|| String::from(" from no place named"), |from| format!(" from {from}")))]
     YesUnasked {
         kind: Kind,
         name: String,
-        from: Option<String>,
+        from: Option<Redacted>,
     },
     /// A server's options a line cannot say as given, a name beside a
     /// value that holds `=`, refused by `add`'s own check, and by its code
@@ -119,7 +123,7 @@ pub fn confirmed(kind: Kind, name: &str, from: Option<&str>) -> Result<(), Polic
     Err(PolicyError::YesUnasked {
         kind,
         name: name.to_owned(),
-        from: from.map(str::to_owned),
+        from: from.map(Redacted::new),
     })
 }
 
