@@ -13,8 +13,8 @@ use mindweaver_core::resolve::{Reason, Resolved};
 use mindweaver_core::view::Snapshot;
 use mindweaver_core::watch::{self, Scope, Watched};
 use mindweaver_core::{
-    claude_rules, Agent, Catalog, Directories, Kind, MindProject, Share, WeaverWorkspace,
-    LEDGER_FILE, WEAVER_DIR,
+    claude_rules, Agent, AgentHomes, Catalog, Directories, Kind, MindProject, Share,
+    WeaverWorkspace, LEDGER_FILE, WEAVER_DIR,
 };
 use tempfile::TempDir;
 
@@ -109,7 +109,7 @@ impl Fixture {
     }
 
     fn watched(&self) -> Vec<Watched> {
-        watch::watched(&self.hub, Some(&self.home()))
+        watch::watched(&self.hub, Some(&self.home()), &AgentHomes::default())
     }
 }
 
@@ -189,6 +189,49 @@ fn a_project_is_watched_by_its_marker_what_its_agents_read_and_where_it_keeps_ea
     assert!(watched.contains(&of(&gone, marker.join("mind.toml"))));
 }
 
+#[test]
+fn what_doctor_reads_is_watched_the_agents_own_folders_and_the_project_s_scratch_among_it() {
+    let fixture = Fixture::new();
+    let api = &fixture.api;
+    let homes = AgentHomes::defaults_under(&fixture.home());
+    let user = homes.agents_dir.clone().unwrap().join("skills");
+    common::write_files(&user, &[("tidy/SKILL.md", &skill("tidy", "Tidy it"))]);
+
+    let watched = watch::watched(&fixture.hub, Some(&fixture.home()), &homes);
+
+    let workspace = Scope::Workspace;
+    let project = Scope::Project(String::from("api"));
+    let opencode = homes.opencode_config_dir.clone().unwrap();
+    for expected in [
+        of(
+            &workspace,
+            homes.codex_home.clone().unwrap().join("config.toml"),
+        ),
+        of(&workspace, opencode.join("opencode.json")),
+        of(&workspace, opencode.join("opencode.jsonc")),
+        of(&workspace, opencode.join("config.json")),
+        of(&workspace, opencode.join("skills")),
+        of(
+            &workspace,
+            homes.claude_config_dir.clone().unwrap().join("CLAUDE.md"),
+        ),
+        of(
+            &workspace,
+            homes.claude_config_dir.clone().unwrap().join("skills"),
+        ),
+        of(&workspace, user.clone()),
+        of(&workspace, user.join("tidy")),
+        // Read by OpenCode, which `api` does not name, and written by no
+        // install.
+        of(&project, api.join(".opencode").join("skills")),
+        of(&project, api.join(".mind").join("tmp")),
+    ] {
+        assert!(watched.contains(&expected), "{expected:?} in {watched:#?}");
+    }
+    // Each once, however many agents read it.
+    assert_eq!(watched.iter().filter(|each| each.path == user).count(), 1);
+}
+
 /// The acceptance's own: a folder is watched for what is directly in it, so
 /// no folder named may be a root whose every file is somebody's code, and
 /// none may sit deeper than discovery looks.
@@ -241,6 +284,14 @@ fn no_path_named_covers_a_whole_tree() {
         }
     }
     roots.push((api.join(claude_rules::folder()), Some(Kind::Rule)));
+    // And doctor's: every folder an agent reads skills from, and the
+    // scratch folder an install stages in, whose stages it says.
+    for agent in Agent::ALL {
+        for folder in agent.reads(Kind::Skill) {
+            roots.push((api.join(folder), Some(Kind::Skill)));
+        }
+    }
+    roots.push((api.join(".mind").join("tmp"), None));
     for kind in Kind::ALL {
         roots.push((fixture.hub.gathered_dir(kind), None));
     }
@@ -335,11 +386,15 @@ fn reading_a_snapshot_changes_nothing_watched() {
 fn a_project_linked_since_is_watched_once_the_list_is_asked_again() {
     let fixture = Fixture::new();
     let mut hub = WeaverWorkspace::open(fixture.hub.root()).unwrap();
-    let before = watch::watched(&hub, None);
+    let before = watch::watched(&hub, None, &AgentHomes::default());
     let (web, _) = MindProject::init(fixture.dir.path().join("web")).unwrap();
     hub.link(&web).unwrap();
 
-    let after = watch::watched(&WeaverWorkspace::open(hub.root()).unwrap(), None);
+    let after = watch::watched(
+        &WeaverWorkspace::open(hub.root()).unwrap(),
+        None,
+        &AgentHomes::default(),
+    );
 
     let scope = Scope::Project(String::from("../web"));
     assert!(!before.iter().any(|each| each.scope == scope));

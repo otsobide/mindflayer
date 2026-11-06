@@ -154,7 +154,7 @@ fn the_workspace_comes_before_every_project_and_projects_go_by_entry() {
 fn a_workspace_is_watched_first_by_its_marker_its_ledger_and_its_shelf() {
     let (_dir, workspace) = WorkspaceMother::empty();
 
-    let watched = watched(&workspace, None);
+    let watched = watched(&workspace, None, &AgentHomes::default());
 
     let mut expected = vec![workspace.config_path(), workspace.ledger_path()];
     expected.extend(Kind::ALL.iter().map(|kind| workspace.gathered_dir(*kind)));
@@ -178,7 +178,7 @@ fn a_workspace_is_watched_first_by_its_marker_its_ledger_and_its_shelf() {
 fn the_ledger_s_folder_is_never_watched() {
     let (_dir, workspace) = WorkspaceMother::empty();
 
-    let watched = watched(&workspace, None);
+    let watched = watched(&workspace, None, &AgentHomes::default());
 
     let folder = workspace.ledger_path().parent().unwrap().to_path_buf();
     assert!(
@@ -192,8 +192,8 @@ fn the_default_workspace_s_marker_is_watched_when_there_is_a_home() {
     let (dir, workspace) = WorkspaceMother::empty();
     let home = dir.path().join("home");
 
-    let without = watched(&workspace, None);
-    let with = watched(&workspace, Some(&home));
+    let without = watched(&workspace, None, &AgentHomes::default());
+    let with = watched(&workspace, Some(&home), &AgentHomes::default());
 
     // Under both names, either of which would make home a workspace.
     let markers = [
@@ -215,7 +215,7 @@ fn the_default_workspace_s_marker_is_watched_when_there_is_a_home() {
 fn the_default_workspace_watched_from_home_names_its_marker_once() {
     let (_dir, workspace) = WorkspaceMother::empty();
 
-    let watched = watched(&workspace, Some(workspace.root()));
+    let watched = watched(&workspace, Some(workspace.root()), &AgentHomes::default());
 
     let marker = workspace.config_path();
     assert_eq!(
@@ -236,7 +236,7 @@ fn a_project_that_has_gone_is_watched_by_its_markers_alone() {
     let project = ProjectMother::linked(&mut workspace, "app");
     fs::remove_dir_all(project.root()).unwrap();
 
-    let watched = watched(&workspace, None);
+    let watched = watched(&workspace, None, &AgentHomes::default());
 
     let mind = project.root().join(MIND_DIR);
     assert_eq!(
@@ -257,7 +257,7 @@ fn a_project_linked_is_watched_under_its_entry_and_never_by_its_root() {
     let (_dir, mut workspace) = WorkspaceMother::empty();
     let project = ProjectMother::linked(&mut workspace, "app");
 
-    let watched = watched(&workspace, None);
+    let watched = watched(&workspace, None, &AgentHomes::default());
     let paths = project_scope(&watched, "app");
 
     assert!(paths.contains(&project.root().join(MIND_DIR).join("mind.toml").as_path()));
@@ -281,10 +281,11 @@ fn a_project_linked_is_watched_under_its_entry_and_never_by_its_root() {
 }
 
 /// The folders named are those discovery reads, each with what it looks
-/// in below it, so what is listed is what is watched: a folder an agent
-/// reads that no install sends a copy to, OpenCode's own, is neither.
+/// in below it, so what is listed is what is watched, and those doctor
+/// reads besides: a folder an agent reads that no install sends a copy to,
+/// OpenCode's own, which discovery does not list, is doctor's to compare.
 #[test]
-fn a_project_marked_by_its_settings_is_watched_in_every_folder_discovery_reads() {
+fn a_project_marked_by_its_settings_is_watched_in_every_folder_discovery_or_doctor_reads() {
     let (dir, mut workspace) = WorkspaceMother::empty();
     let project = ProjectMother::create(
         &dir.path().join("app"),
@@ -293,7 +294,7 @@ fn a_project_marked_by_its_settings_is_watched_in_every_folder_discovery_reads()
     );
     workspace.link(&project).unwrap();
 
-    let watched = watched(&workspace, None);
+    let watched = watched(&workspace, None, &AgentHomes::default());
     let paths = project_scope(&watched, "app");
 
     for kind in Kind::ALL {
@@ -304,7 +305,7 @@ fn a_project_marked_by_its_settings_is_watched_in_every_folder_discovery_reads()
         }
     }
     let opencode = project.root().join(".opencode").join("skills");
-    assert!(!paths.contains(&opencode.as_path()), "{paths:?}");
+    assert!(paths.contains(&opencode.as_path()), "{paths:?}");
 }
 
 #[test]
@@ -318,7 +319,7 @@ fn no_path_is_named_twice_for_one_scope_however_many_projects_are_linked() {
             }
         }
 
-        let watched = watched(&workspace, Some(dir.path()));
+        let watched = watched(&workspace, Some(dir.path()), &AgentHomes::default());
 
         for (at, one) in watched.iter().enumerate() {
             assert!(
@@ -339,7 +340,7 @@ fn a_loaded_workspace_that_has_gone_is_watched_by_its_marker() {
     let marker = loaded.config_path();
     fs::remove_dir_all(loaded.root()).unwrap();
 
-    let watched = watched(&workspace, None);
+    let watched = watched(&workspace, None, &AgentHomes::default());
 
     assert!(
         workspace_scope(&watched).contains(&marker.as_path()),
