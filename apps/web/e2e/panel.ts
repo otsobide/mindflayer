@@ -10,7 +10,7 @@ import { test as base, expect, type Page, type TestInfo } from '@playwright/test
 import type { Envelope } from '../src/api/generated/Envelope'
 import type { Listing } from '../src/api/generated/Listing'
 import { given, look, run, serve, type Places, type Serving } from './environment.ts'
-import { assignable, authorable, changeable, loadable, updatable } from './fixture.ts'
+import { assignable, authorable, changeable, loadable, serveable, updatable } from './fixture.ts'
 
 /** The server under test, as the link it printed says. */
 export interface Served {
@@ -114,9 +114,10 @@ export interface Own extends Panel {
  * unlinks, unless the spec says `assignable`, for the matrix
  * (`test.use({ building: 'assignable' })`), `updatable`, for updating and
  * removing, `authorable`, for editing, adding and renaming in the
- * library, or `loadable`, for loading and unloading.
+ * library, `loadable`, for loading and unloading, or `serveable`, for
+ * adding an MCP server and assigning it.
  */
-const BUILDERS = { changeable, assignable, updatable, authorable, loadable }
+const BUILDERS = { changeable, assignable, updatable, authorable, loadable, serveable }
 
 /**
  * The builders whose workspace is served with a home of its own, beside
@@ -126,8 +127,13 @@ const BUILDERS = { changeable, assignable, updatable, authorable, loadable }
  */
 const HOMED: readonly (keyof typeof BUILDERS)[] = ['loadable']
 
-export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, own: Own, building: keyof typeof BUILDERS, stalls: void }>({
+export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, own: Own, building: keyof typeof BUILDERS, variables: Record<string, string>, stalls: void }>({
   building: ['changeable', { option: true }],
+
+  // What a test's own `mindweaver ui` has set in its environment beside the
+  // run's, for that server and the lines it runs alone
+  // (`test.use({ variables })`): none unless a spec says.
+  variables: [{}, { option: true }],
 
   // How long the machine stalled while each test ran, kept beside the
   // trace of one that failed, from its first fixture to its last: what
@@ -170,7 +176,7 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
   // one of its own beside it, held here the same way once the server has
   // stopped. Its log is kept beside the trace of a test that failed, once
   // the server has stopped and said all it will.
-  own: async ({ page, building }, use, testInfo) => {
+  own: async ({ page, building, variables }, use, testInfo) => {
     const at = given()
     const folder = mkdtempSync(join(at.scratch, 'own-'))
     const homed = HOMED.includes(building)
@@ -179,7 +185,7 @@ export const test = base.extend<{ served: Served, panel: Panel, watch: Watch, ow
     BUILDERS[building](mine)
     cpSync(mine.workspace, twin.workspace, { recursive: true })
     const made = homed ? look(mine.home) : undefined
-    const server = await serve(mine)
+    const server = await serve(mine, 'fixture', variables)
     const log = () => server.said().split('\n').filter(line => line !== '')
     try {
       await use({ at: mine, twin, served: server, log, open: (path = '/') => open(page, server, path) })
