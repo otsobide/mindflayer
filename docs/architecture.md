@@ -3245,12 +3245,19 @@ refused for before it fetches, fetches, and searches as a gather does
 (`checked` and `offered`, which `harvest` and `take` ask too), then says each
 skill it would take by its name, the folder it would be filed under and its
 `upstream_path`, with what the gather would warn of and so the exit it would
-give. It registers no source, writes nothing to the shelf or the ledger,
+give. Each is copied as the gather would copy it onto the shelf, into a
+folder beside the clone, so one the gather could not copy, holding a link
+out of the repository, to nothing or back into its own folder, is said as
+the gather says it (`gathered_copy_failed`) rather than listed; holding each
+to the copy's bounds without copying would be a second walk of its tree,
+which could come to disagree with the copy's. It registers no source,
+writes nothing to the shelf or the ledger,
 logs nothing and takes no lock, since nothing writers take turns at is
 written; resolved as a read, it makes no workspace, and reads the ledger
-without making it. It leaves no clone: the one it needs is made in a folder
-of its own under the cache, named with a `+`, which no folder a source is
-given holds, and taken away once read, whatever came of reading it, with
+without making it. It leaves no clone: the one it needs, and those copies,
+are made in a folder of its own under the cache, named with a `+`, which no
+folder a source is given holds, and taken away once read, whatever came of
+reading them, with
 the cache and the workspace's folder when it was the dry run that made them.
 Fetching into the source's own clone was the other way, and is rejected:
 that clone is the commit the shelf holds, kept so a gather can be looked at

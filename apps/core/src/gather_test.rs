@@ -48,6 +48,43 @@ impl Remote for Unreached {
     }
 }
 
+/// A remote that fetches by writing two skills, `deploy` holding a link
+/// to `to`, as a repository can hold one.
+#[cfg(unix)]
+#[derive(Debug)]
+struct Linking {
+    to: PathBuf,
+}
+
+#[cfg(unix)]
+impl Remote for Linking {
+    fn fetch(
+        &self,
+        _url: &str,
+        _reference: Option<&str>,
+        _pin: Option<&Revision>,
+        into: &Path,
+        _watch: &Watch,
+    ) -> Result<crate::port::Cloned, GitError> {
+        let _ = fs::remove_dir_all(into);
+        for name in ["deploy", "review"] {
+            write(
+                &into.join(format!("skills/{name}/SKILL.md")),
+                &SkillMother::create(name, "About it"),
+            );
+        }
+        std::os::unix::fs::symlink(&self.to, into.join("skills/deploy/note")).unwrap();
+        Ok(crate::port::Cloned {
+            root: into.to_path_buf(),
+            revision: Some(Revision::from("0123abc")),
+        })
+    }
+
+    fn scrub(&self, _clone: &Path) -> Result<bool, GitError> {
+        Ok(false)
+    }
+}
+
 fn scrub_failure(url: &str) -> ScrubFailure {
     ScrubFailure {
         url: Redacted::new(url),
@@ -1124,6 +1161,41 @@ fn a_dry_run_s_failure_is_said_by_where_it_is_in_the_repository_and_only_there()
             "/w/.mindweaver/skills/s/deploy"
         ]
     );
+}
+
+/// What a gather cannot copy, a link out of the repository or to nothing,
+/// a dry run cannot either, and says as the gather does, so its exit is
+/// the gather's.
+#[cfg(unix)]
+#[test]
+fn a_dry_run_refuses_to_copy_what_a_gather_refuses_and_says_so_as_it_does() {
+    let outside = TempDir::new().unwrap();
+    write(&outside.path().join("secret"), "key");
+    for to in [outside.path().join("secret"), PathBuf::from("nowhere")] {
+        let (_dir, workspace) = WorkspaceMother::empty();
+        let ledger = workspace.ledger().unwrap();
+        let request =
+            Request::git(UrlMother::https()).through(Arc::new(Linking { to: to.clone() }));
+
+        let previewed = preview(&workspace, &ledger, &request).unwrap();
+        let gathered = gather(&workspace, &ledger, &request).unwrap();
+
+        let found: Vec<&str> = previewed.found.iter().map(|it| it.name.as_str()).collect();
+        assert_eq!(found, ["review"], "{}", to.display());
+        assert!(
+            matches!(
+                &previewed.failures[..],
+                [Failure::Copy { path, .. }] if path == Path::new("skills/deploy")
+            ),
+            "{:?}",
+            previewed.failures
+        );
+        let codes = |failures: &[Failure]| failures.iter().map(Failure::code).collect::<Vec<_>>();
+        assert_eq!(codes(&previewed.failures), ["gathered_copy_failed"]);
+        assert_eq!(codes(&gathered.failures), codes(&previewed.failures));
+        let added: Vec<&str> = gathered.added.iter().map(|it| it.name.as_str()).collect();
+        assert_eq!(added, found);
+    }
 }
 
 /// The folder keeps the name the source gave it, whatever the skill

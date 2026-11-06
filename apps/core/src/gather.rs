@@ -441,7 +441,10 @@ pub struct Preview {
     pub found: Vec<Previewed>,
     /// What keeps the rest from being taken, as a gather would say it, but
     /// for each path in the clone, which is said by where it is in the
-    /// repository: the clone the dry run read is taken away again.
+    /// repository: the clone the dry run read is taken away again. A copy
+    /// that fails is said by where its skill is in the repository too,
+    /// where a gather says the shelf's folder it was not put in, and its
+    /// reason as the copy gives it.
     ///
     /// Not serialized, nor `warnings`, as a report's are not: a front end
     /// says both as its warnings.
@@ -467,9 +470,10 @@ pub struct Previewed {
     pub summary: Option<String>,
 }
 
-/// What the folder a dry run clones into is named by, before what makes it
-/// its own ([`copy::unique_name`]): a `+`, which no folder a source is given
-/// holds, so it is never one.
+/// What the folder a dry run clones into, and copies what it would take
+/// into, is named by, before what makes it its own
+/// ([`copy::unique_name`]): a `+`, which no folder a source is given holds,
+/// so it is never one.
 const DRY_RUN: &str = "+dry-run-";
 
 /// What a gather of `request` would take, a dry run of it: the source
@@ -480,9 +484,10 @@ const DRY_RUN: &str = "+dry-run-";
 /// logged, and no lock taken, since none of what writers take turns at is
 /// written: `ledger` is only read, for a `--name` another source has, so
 /// one read without being made ([`WeaverWorkspace::ledger_for_reading`]) is
-/// the one to hand it. The clone it needs is made in a folder of its own
-/// under the workspace's cache ([`DRY_RUN`]) and taken away once it has
-/// been read, whatever came of reading it, with the cache and the
+/// the one to hand it. The clone it needs, and the copies of what it would
+/// take ([`look`]), are made in a folder of its own under the workspace's
+/// cache ([`DRY_RUN`]) and taken away once read, whatever came of reading
+/// them, with the cache and the
 /// workspace's folder when it was the dry run that made them. So it leaves
 /// no clone: not in the folder a source's clone is kept in, which would then
 /// hold another commit than the one its shelf came from, nor in a folder of
@@ -516,8 +521,17 @@ pub fn preview(
     outcome
 }
 
-/// Fetch `request`'s source into `into` and say what a gather would take
-/// of it: the dry run, once its clone has somewhere to go.
+/// Fetch `request`'s source into a folder in `into` and say what a gather
+/// would take of it: the dry run, once it has a folder of its own.
+///
+/// Each skill it would take is copied as a gather copies it onto the
+/// shelf, into another folder in `into`, beside the clone, so what a gather
+/// would refuse to copy, a link leading out of the repository, to nothing
+/// or back into its own folder, is refused here too, and said as the
+/// gather says it (`gathered_copy_failed`). Holding each to the bounds the
+/// copy holds it to without copying was the other way, and is rejected: a
+/// second walk of a skill's tree beside the copy's, which the two could
+/// come to disagree about.
 fn look(
     request: &Request,
     url: &str,
@@ -530,7 +544,7 @@ fn look(
     let clone = match &request.source {
         Source::Git { reference, .. } => request
             .remote
-            .fetch(url, reference.as_deref(), pin, into, watch)
+            .fetch(url, reference.as_deref(), pin, &into.join("clone"), watch)
             .map_err(|error| match error {
                 GitError::Cancelled => GatherError::Cancelled,
                 error => error.into(),
@@ -547,7 +561,17 @@ fn look(
         failures: Vec::new(),
         warnings: Vec::new(),
     };
+    let shelf = into.join("shelf");
+    let leave_out = left_off_the_shelf();
     for (directory, folder, artifact) in &taken {
+        let copied = copy::replace_leaving(directory, &shelf.join(folder), &clone.root, &leave_out);
+        if let Err(source) = copied {
+            failures.push(Failure::Copy {
+                path: directory.clone(),
+                source,
+            });
+            continue;
+        }
         let upstream_path = upstream(directory, &clone.root, folder);
         let at = match upstream_path.as_str() {
             "." => PathBuf::from(manifest),
@@ -1009,12 +1033,7 @@ fn take(
     // since the revision a source names is the one its shelf holds.
     ledger.saw_source(source.id, clone.revision.as_deref(), pin)?;
 
-    // Without what no install copies, so the shelf holds what a project is
-    // given and a plugin's hooks and servers are never offered, and without
-    // git's own folder, which only a skill that is the whole repository has
-    // at its top: its clone's.
-    let mut leave_out = crate::install::left_out_names().to_vec();
-    leave_out.push(".git");
+    let leave_out = left_off_the_shelf();
     watch.report(Progress::Placing {
         done: 0,
         total: taken.len(),
@@ -1109,6 +1128,16 @@ fn take(
     // Stable, so one file's warnings stay in the order `validate` gives them.
     report.warnings.sort_by(|a, b| a.path.cmp(&b.path));
     Ok(report)
+}
+
+/// What no copy on the shelf holds at a skill's top: what no install
+/// copies, so the shelf holds what a project is given and a plugin's hooks
+/// and servers are never offered, and git's own folder, which only a skill
+/// that is the whole repository has at its top: its clone's.
+fn left_off_the_shelf() -> Vec<&'static str> {
+    let mut leave_out = crate::install::left_out_names().to_vec();
+    leave_out.push(".git");
+    leave_out
 }
 
 /// What the repository cloned at `clone`, fetched from `url`, offers of
@@ -1682,7 +1711,11 @@ impl Failure {
                 name,
                 with,
             },
-            Failure::Copy { .. } | Failure::Unhashed { .. } | Failure::Unremoved { .. } => self,
+            Failure::Copy { path, source } => Failure::Copy {
+                path: route(path),
+                source,
+            },
+            Failure::Unhashed { .. } | Failure::Unremoved { .. } => self,
         }
     }
 
