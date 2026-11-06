@@ -1024,6 +1024,15 @@ impl Offer {
     fn origin(&self) -> &str {
         self.said().3
     }
+
+    /// What the text names where it comes from by: a source's name, and
+    /// the origin of anything else.
+    fn listed_from(&self) -> &str {
+        match self {
+            Offer::Shelf { source, .. } => &source.name,
+            Offer::Loaded { origin, .. } => origin,
+        }
+    }
 }
 
 /// A workspace that loads `team`, beside it, which offers its own skill
@@ -1053,7 +1062,7 @@ fn gather_list_as_json_holds_the_offers_the_text_lists() {
     let (offers, warnings): (Vec<Offer>, _) = enveloped(&json);
     let listed: Vec<String> = offers
         .iter()
-        .map(|offer| format!("{} {}", offer.name(), offer.origin()))
+        .map(|offer| format!("{} {}", offer.name(), offer.listed_from()))
         .collect();
     assert_eq!(sorted(listed), rows(&text.stdout, 2));
     let places: Vec<(&str, &str)> = offers

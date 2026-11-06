@@ -332,6 +332,20 @@ impl Offer {
         }
     }
 
+    /// The word a listing names where it came from by, which `--from`
+    /// takes: a shelf source's name (D-13), and the origin of anything else,
+    /// which has no name of its own.
+    ///
+    /// Beside [`origin`](Self::origin) rather than in its place: the origin
+    /// is what an install records and an update finds its offer by, and the
+    /// envelope's and the snapshot's `origin` hold it as they always did.
+    pub fn listed_from(&self) -> String {
+        match self {
+            Offer::Shelf(gathered) => gathered.source.name.to_string(),
+            Offer::Workspace { .. } | Offer::Loaded { .. } => self.origin().into_string(),
+        }
+    }
+
     /// Whether `from`, as somebody typed it, names where this came from
     /// ([`named_by`](Self::named_by)).
     pub fn comes_from(&self, from: &str) -> bool {

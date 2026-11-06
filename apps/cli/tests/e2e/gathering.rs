@@ -123,8 +123,8 @@ fn gather_list_says_what_the_shelf_holds_and_from_where() {
         .run("~/Projects", "mindweaver gather list")
         .succeeds()
         .prints(concat!(
-            "commit-style  ../src/acme-skills  How this repo writes commit messages\n",
-            "ddd-reviewer  ../src/acme-skills  Review a change against the DDD layering rules\n",
+            "commit-style  src-acme-skills  How this repo writes commit messages\n",
+            "ddd-reviewer  src-acme-skills  Review a change against the DDD layering rules\n",
         ))
         .quiet();
 }

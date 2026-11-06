@@ -256,7 +256,8 @@ fn gathered(url: &str, report: &Report) -> Outcome {
 }
 
 /// Everything that can be installed from elsewhere, with where each thing
-/// comes from, spelled as `--from` takes it.
+/// comes from, spelled as `--from` takes it: a source by its name
+/// ([`Offer::listed_from`]).
 ///
 /// Empty, it says how to fill it, and suggests loading only when nothing is
 /// loaded yet; `mindweaver load` on its own lists what is.
@@ -290,7 +291,7 @@ fn shelf_listing(shelf: &[Offer], nothing_loaded: bool) -> String {
                 row.push(entry.kind().slug().to_owned());
             }
             row.push(printable(entry.name()));
-            row.push(printable(&entry.origin()));
+            row.push(printable(&entry.listed_from()));
             row.push(printable(entry.summary().unwrap_or("")));
             row
         })

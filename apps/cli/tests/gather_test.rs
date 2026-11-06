@@ -199,14 +199,13 @@ fn gather_list_names_where_each_skill_came_from() {
     let dir = TempDir::new().unwrap();
     weaver(dir.path(), &["init"]).unwrap();
     let url = source.path().to_string_lossy().into_owned();
-    weaver(dir.path(), &["gather", "git", &url]).unwrap();
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
 
     let outcome = weaver(dir.path(), &["gather", "list"]).unwrap();
 
+    // By the name `--from` takes, which the listing is for.
     assert!(outcome.ok);
-    assert!(outcome.stdout.contains("deploy"));
-    assert!(outcome.stdout.contains(&url), "{}", outcome.stdout);
-    assert!(outcome.stdout.contains("Ship it"));
+    assert_eq!(outcome.stdout, "deploy  acme  Ship it\n");
 }
 
 #[test]
@@ -313,21 +312,24 @@ fn gather_list_tells_two_branches_of_one_repository_apart() {
     weaver(dir.path(), &["init"]).unwrap();
     let url = source.path().to_string_lossy().into_owned();
 
-    // The same URL at its default branch and at a named one: two sources, and
-    // a listing that printed the URL alone would show one origin twice.
+    // The same URL at its default branch and at a named one: two sources,
+    // and two names, the second numbered.
     let head = fs::read_to_string(source.path().join(".git").join("HEAD")).unwrap();
     let branch = head.trim().rsplit('/').next().unwrap().to_owned();
-    weaver(dir.path(), &["gather", "git", &url]).unwrap();
+    weaver(dir.path(), &["gather", "git", &url, "--name", "acme"]).unwrap();
     weaver(dir.path(), &["gather", "git", &url, "--ref", &branch]).unwrap();
 
     let outcome = weaver(dir.path(), &["gather", "list"]).unwrap();
 
     assert_eq!(outcome.stdout.lines().count(), 2, "{}", outcome.stdout);
-    assert!(
-        outcome.stdout.contains(&format!("{url}#{branch}")),
-        "{}",
-        outcome.stdout
-    );
+    let names: Vec<&str> = outcome
+        .stdout
+        .lines()
+        .map(|line| line.split_whitespace().nth(1).unwrap())
+        .collect();
+    assert_eq!(names.len(), 2);
+    assert!(names.contains(&"acme"), "{}", outcome.stdout);
+    assert_ne!(names[0], names[1], "{}", outcome.stdout);
 }
 
 #[test]
@@ -462,19 +464,29 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
     weaver(dir.path(), &["init"]).unwrap();
     weaver(
         dir.path(),
-        &["gather", "git", &first.path().to_string_lossy()],
+        &[
+            "gather",
+            "git",
+            &first.path().to_string_lossy(),
+            "--name",
+            "acme",
+        ],
     )
     .unwrap();
     left_by_an_older_build(dir.path(), "https://me:ghp_t0ken@example.com/acme/skills");
 
     // Listing reads, so it rewrites nothing, and it shows nothing it should
-    // not.
+    // not, the URL its JSON holds included.
     let listed = weaver(dir.path(), &["gather", "list"]).unwrap();
-    assert_eq!(
-        listed.stdout,
-        "deploy  https://example.com/acme/skills  Ship it\n"
-    );
+    assert_eq!(listed.stdout, "deploy  acme  Ship it\n");
     assert!(listed.stderr.is_empty(), "{:?}", listed.stderr);
+    let json = weaver(dir.path(), &["gather", "list", "--json"]).unwrap();
+    assert!(
+        json.stdout.contains("\"https://example.com/acme/skills\""),
+        "{}",
+        json.stdout
+    );
+    assert!(!json.stdout.contains("ghp_t0ken"), "{}", json.stdout);
     assert!(kept_by(dir.path()).contains("ghp_t0ken"));
 
     // The next command that writes takes it out of the ledger and the clone,
@@ -493,13 +505,12 @@ fn a_token_an_older_build_stored_is_never_listed_and_a_command_that_writes_takes
         ]
     );
     assert!(!kept_by(dir.path()).contains("ghp_t0ken"));
-    // Compared word by word: the second source is a temp dir, whose length
-    // (long on macOS and Windows) sets how wide the URL column is padded.
+    // Compared word by word: the second source is named after a temp dir,
+    // whose length sets how wide the name column is padded.
     let listed = weaver(dir.path(), &["gather", "list"]).unwrap();
     assert!(
         listed.stdout.lines().any(|line| {
-            line.split_whitespace().collect::<Vec<_>>()
-                == ["deploy", "https://example.com/acme/skills", "Ship", "it"]
+            line.split_whitespace().collect::<Vec<_>>() == ["deploy", "acme", "Ship", "it"]
         }),
         "{}",
         listed.stdout

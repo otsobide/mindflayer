@@ -1573,6 +1573,8 @@ fn from_takes_a_sources_name_and_another_spelling_of_its_url_which_is_said() {
 
     for candidate in [&named, &respelled, &printed] {
         assert_eq!(candidate.origin(), url(&one));
+        // Listed by its name, the one it is installed from by its origin.
+        assert_eq!(candidate.offer.listed_from(), "one");
     }
     assert_eq!(install::respelled(&named, "one"), None);
     assert_eq!(install::respelled(&printed, &url(&one)), None);
