@@ -486,14 +486,21 @@ fn a_scrub_of_a_ledger_with_no_credential_asks_the_remote_nothing() {
     assert_eq!(*remote.asked.lock().unwrap(), 0);
 }
 
+/// The candidates `root` holds, searched as a gather of a clone at `root`
+/// searches it, with what keeps any from being taken.
+fn found_in(root: &Path) -> (Vec<PathBuf>, Vec<Failure>) {
+    let mut failures = Vec::new();
+    let found = candidates(root, root, "SKILL.md", &mut failures).unwrap();
+    (found, failures)
+}
+
 #[test]
 fn candidates_are_the_folders_holding_a_manifest_in_order() {
     let dir = TempDir::new().unwrap();
     let mut names: Vec<String> = (0..random::between(1, 6))
         .map(|_| random::kebab())
+        .filter(|name| !matches!(name.as_str(), "assets" | "deep"))
         .collect();
-    names.sort();
-    names.dedup();
     for name in &names {
         write(
             &dir.path().join(name).join("SKILL.md"),
@@ -503,11 +510,126 @@ fn candidates_are_the_folders_holding_a_manifest_in_order() {
     fs::create_dir_all(dir.path().join("assets")).unwrap();
     write(&dir.path().join("README.md"), "not a skill");
     write(&dir.path().join("deep").join("inner").join("SKILL.md"), "x");
+    names.push(String::from("deep/inner"));
+    names.sort();
+    names.dedup();
 
-    let found = candidates(dir.path(), "SKILL.md").unwrap();
+    let (found, failures) = found_in(dir.path());
 
     let expected: Vec<PathBuf> = names.iter().map(|name| dir.path().join(name)).collect();
     assert_eq!(found, expected, "{names:?}");
+    assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[test]
+fn candidates_are_found_as_far_down_as_the_search_goes_and_no_further() {
+    let dir = TempDir::new().unwrap();
+    let mut route = PathBuf::new();
+    let mut expected = Vec::new();
+    for depth in 1..=SEARCH_DEPTH + 1 {
+        // A skill at each depth, beside the folder the search goes on into.
+        route.push(format!("level-{depth}"));
+        let skill = route.with_file_name(format!("skill-{depth}"));
+        write(&dir.path().join(&skill).join("SKILL.md"), "x");
+        if depth <= SEARCH_DEPTH {
+            expected.push(dir.path().join(skill));
+        }
+        fs::create_dir_all(dir.path().join(&route)).unwrap();
+    }
+    expected.sort();
+
+    let (found, _) = found_in(dir.path());
+
+    assert_eq!(found, expected);
+}
+
+#[test]
+fn a_folder_holding_a_manifest_is_not_looked_into() {
+    let dir = TempDir::new().unwrap();
+    write(&dir.path().join("skills/teach/SKILL.md"), "x");
+    write(&dir.path().join("skills/teach/examples/demo/SKILL.md"), "x");
+
+    let (found, _) = found_in(dir.path());
+
+    assert_eq!(found, [dir.path().join("skills/teach")]);
+}
+
+#[test]
+fn git_s_own_folder_and_a_package_manager_s_are_passed_over_wherever_they_are() {
+    let dir = TempDir::new().unwrap();
+    for passed in PASSED_OVER {
+        write(&dir.path().join(passed).join("held/SKILL.md"), "x");
+        write(
+            &dir.path().join("tools").join(passed).join("x/SKILL.md"),
+            "x",
+        );
+    }
+    write(&dir.path().join("skills/deploy/SKILL.md"), "x");
+
+    let (found, _) = found_in(dir.path());
+
+    assert_eq!(found, [dir.path().join("skills/deploy")]);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_linked_folder_is_not_searched_and_a_skill_linked_twice_is_found_where_it_is() {
+    use std::os::unix::fs::symlink;
+
+    let dir = TempDir::new().unwrap();
+    write(&dir.path().join("skills/deploy/SKILL.md"), "x");
+    write(&dir.path().join("vendor/review/SKILL.md"), "x");
+    fs::create_dir_all(dir.path().join(".claude")).unwrap();
+    fs::create_dir_all(dir.path().join(".agents/skills")).unwrap();
+    // A whole folder linked: what it holds is found where it is, once.
+    symlink("../skills", dir.path().join(".claude/skills")).unwrap();
+    // One skill linked: taken where the link leads, which is found there.
+    symlink(
+        "../../skills/deploy",
+        dir.path().join(".agents/skills/deploy"),
+    )
+    .unwrap();
+    // A skill kept only as a link, to a folder too deep to be found.
+    write(&dir.path().join("a/b/c/d/e/audit/SKILL.md"), "x");
+    symlink("a/b/c/d/e/audit", dir.path().join("audit")).unwrap();
+
+    let (found, failures) = found_in(dir.path());
+
+    assert_eq!(
+        found,
+        [
+            dir.path().join("audit"),
+            dir.path().join("skills/deploy"),
+            dir.path().join("vendor/review"),
+        ]
+    );
+    assert!(failures.is_empty(), "{failures:?}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_skill_s_folder_linking_out_of_the_repository_is_refused_and_said() {
+    use std::os::unix::fs::symlink;
+
+    let outside = TempDir::new().unwrap();
+    write(&outside.path().join("SKILL.md"), "x");
+    let dir = TempDir::new().unwrap();
+    write(&dir.path().join("skills/deploy/SKILL.md"), "x");
+    symlink(outside.path(), dir.path().join("skills/keys")).unwrap();
+
+    let (found, failures) = found_in(dir.path());
+
+    assert_eq!(found, [dir.path().join("skills/deploy")]);
+    assert!(
+        matches!(
+            &failures[..],
+            [Failure::LinkOutside { path, to }]
+                if *path == dir.path().join("skills/keys")
+                    && *to == fs::canonicalize(outside.path()).unwrap()
+        ),
+        "{failures:?}"
+    );
+    assert_eq!(failures[0].code(), "gathered_link_outside");
 }
 
 /// The folder was checked to be there just before: one that cannot be
@@ -517,7 +639,7 @@ fn candidates_in_a_folder_that_is_not_there_cannot_be_read() {
     let dir = TempDir::new().unwrap();
     let missing = dir.path().join("skills");
 
-    let refused = candidates(&missing, "SKILL.md").unwrap_err();
+    let refused = candidates(&missing, dir.path(), "SKILL.md", &mut Vec::new()).unwrap_err();
 
     assert!(
         matches!(&refused, GatherError::Read { path, .. } if path == &missing),
@@ -767,13 +889,27 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
         "/w/.mindweaver/skills/s/gone: no longer in its source, but cannot be taken off the \
          shelf, so it is kept, and still offered: busy"
     );
+    let outside = Failure::LinkOutside {
+        path: PathBuf::from("/w/.mindweaver/cache/s/skills/keys"),
+        to: PathBuf::from("/home/you/.ssh"),
+    };
+    assert_eq!(
+        outside.path(),
+        Path::new("/w/.mindweaver/cache/s/skills/keys")
+    );
+    assert_eq!(
+        outside.to_string(),
+        "/w/.mindweaver/cache/s/skills/keys: links to /home/you/.ssh, outside the repository, \
+         so it is not gathered"
+    );
     assert_eq!(
         Failure::CODES,
         [
             "gathered_name_not_utf8",
             "gathered_copy_failed",
             "gathered_unhashed",
-            "gathered_unremoved"
+            "gathered_unremoved",
+            "gathered_link_outside"
         ]
     );
 }

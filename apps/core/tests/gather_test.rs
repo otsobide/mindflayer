@@ -560,6 +560,113 @@ fn another_folder_can_be_named_instead_of_skills() {
     assert_eq!(report.added.len(), 1);
 }
 
+/// What `request` gathered into a new workspace, each skill by its name
+/// and where it was found in the repository, held to have failed nowhere.
+fn found(request: &Request) -> Vec<(String, String)> {
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let report = gather::gather(&workspace, &ledger, request).unwrap();
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+    ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|gathered| (gathered.name.to_string(), gathered.upstream_path))
+        .collect()
+}
+
+/// `pairs` as [`found`] gives them.
+fn named(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+    pairs
+        .iter()
+        .map(|(name, path)| ((*name).to_owned(), (*path).to_owned()))
+        .collect()
+}
+
+#[test]
+fn skills_grouped_in_folders_of_their_own_are_found_in_each() {
+    let source = repository(&[
+        ("skills/team/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("skills/team/deploy/run.sh", "exit 0\n"),
+        (
+            "skills/.curated/review/SKILL.md",
+            &skill("review", "Read a change"),
+        ),
+        (
+            "skills/.system/notes/SKILL.md",
+            &skill("notes", "Keep notes"),
+        ),
+        ("skills/audit/SKILL.md", &skill("audit", "Audit it")),
+    ]);
+
+    let gathered = found(&Request::git(url(&source)));
+
+    assert_eq!(
+        gathered,
+        named(&[
+            ("audit", "skills/audit"),
+            ("deploy", "skills/team/deploy"),
+            ("notes", "skills/.system/notes"),
+            ("review", "skills/.curated/review"),
+        ])
+    );
+}
+
+#[test]
+fn a_skill_found_further_down_is_filed_on_the_shelf_under_its_folders_name() {
+    let source = repository(&[
+        ("skills/team/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        ("skills/team/deploy/run.sh", "exit 0\n"),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&report.directory);
+    assert!(shelf.join("deploy").join("run.sh").is_file());
+    assert!(!shelf.join("team").exists());
+    assert_eq!(report.added[0].directory, "deploy");
+}
+
+#[test]
+fn a_folder_named_restricts_the_search_to_what_is_in_it() {
+    let source = repository(&[
+        (
+            "plugins/ops/skills/audit/SKILL.md",
+            &skill("audit", "Audit it"),
+        ),
+        (
+            "plugins/web/skills/deploy/SKILL.md",
+            &skill("deploy", "Ship it"),
+        ),
+        ("skills/review/SKILL.md", &skill("review", "Read a change")),
+    ]);
+
+    let gathered = found(&Request::git(url(&source)).from_subdirectory("plugins/ops"));
+
+    assert_eq!(gathered, named(&[("audit", "plugins/ops/skills/audit")]));
+}
+
+#[test]
+fn a_skill_further_down_than_the_search_goes_or_in_a_package_s_folder_is_not_found() {
+    let source = repository(&[
+        ("skills/review/SKILL.md", &skill("review", "Read a change")),
+        (
+            "skills/a/b/c/d/deep/SKILL.md",
+            &skill("deep", "Too far down"),
+        ),
+        (
+            "skills/tools/node_modules/vendored/SKILL.md",
+            &skill("vendored", "A package's"),
+        ),
+    ]);
+
+    let gathered = found(&Request::git(url(&source)));
+
+    assert_eq!(gathered, named(&[("review", "skills/review")]));
+}
+
 #[test]
 fn each_gathered_skill_records_its_folder_upstream_its_commit_and_the_hash_installs_use() {
     let source = repository(&[

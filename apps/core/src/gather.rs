@@ -727,7 +727,7 @@ fn take(
         .into_iter()
         .filter(|gathered| gathered.source.id == source.id && gathered.kind == request.kind)
         .collect();
-    let found = candidates(&harvested_from, manifest)?;
+    let found = candidates(&harvested_from, &clone.root, manifest, &mut report.failures)?;
     let mut taken = Vec::with_capacity(found.len());
     watch.report(Progress::Harvesting {
         done: 0,
@@ -1032,29 +1032,114 @@ pub fn license_of(stated: Option<&str>, folder: &Path) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// The directories under `root` that hold a `manifest`.
+/// The directories under `root`, in the repository cloned at `clone`, that
+/// hold a `manifest`, in order, each at most [`SEARCH_DEPTH`] folders down,
+/// with what keeps one found from being taken among `failures`.
 ///
-/// Only the immediate ones, for the reason discovery has: the directory
-/// belongs to the artifact, assets and all.
-fn candidates(root: &Path, manifest: &str) -> Result<Vec<PathBuf>, GatherError> {
-    let entries = fs::read_dir(root).map_err(|source| GatherError::Read {
-        path: root.to_path_buf(),
+/// A folder holding one is not looked into, for the reason discovery has:
+/// the directory belongs to the artifact, assets and all, and a skill that
+/// ships another as an example ships it as a file of its own. Nor is one
+/// named in [`PASSED_OVER`], nor a link: a folder found through a link
+/// would be found again where it leads, and a link out of the clone, or
+/// back up it, would lead the search where no repository's own skills are.
+/// A link that is itself a skill's folder is taken when it leads to a
+/// folder inside the clone, as a copy follows it ([`copy::tree`]'s
+/// `within`), and refused otherwise; one leading to a folder found on its
+/// own is that folder, found once, where it is rather than where the link
+/// is, so a repository linking `.claude/skills/<name>` to `skills/<name>`
+/// offers one skill and not two of one name.
+fn candidates(
+    root: &Path,
+    clone: &Path,
+    manifest: &str,
+    failures: &mut Vec<Failure>,
+) -> Result<Vec<PathBuf>, GatherError> {
+    let mut found = Vec::new();
+    search(root, 1, manifest, &mut found)?;
+    found.sort();
+
+    let bound = fs::canonicalize(clone).map_err(|source| GatherError::Read {
+        path: clone.to_path_buf(),
         source,
     })?;
-
-    let mut found = Vec::new();
-    for entry in entries {
-        let entry = entry.map_err(|source| GatherError::Read {
-            path: root.to_path_buf(),
-            source,
-        })?;
-        let path = entry.path();
-        if path.join(manifest).is_file() {
-            found.push(path);
+    let mut kept: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(found.len());
+    for path in found {
+        let (resolved, inside) =
+            copy::followed(&path, std::slice::from_ref(&bound)).map_err(|source| {
+                GatherError::Read {
+                    path: path.clone(),
+                    source,
+                }
+            })?;
+        if !inside {
+            failures.push(Failure::LinkOutside { path, to: resolved });
+            continue;
+        }
+        let linked = is_link(&path);
+        match kept.iter().position(|(_, seen)| *seen == resolved) {
+            // The folder itself rather than a link to it: where it is in
+            // the repository is the `upstream_path` worth recording.
+            Some(at) if is_link(&kept[at].0) && !linked => kept[at] = (path, resolved),
+            Some(_) => {}
+            None => kept.push((path, resolved)),
         }
     }
+    let mut found: Vec<PathBuf> = kept.into_iter().map(|(path, _)| path).collect();
     found.sort();
     Ok(found)
+}
+
+/// How many folders below the one a gather searches a skill's folder may
+/// be: four, the depth of the deepest layout the tools that install skills
+/// from a repository share, `plugins/<plugin>/skills/<name>`, and no
+/// deeper.
+///
+/// Bounded, rather than the whole tree, so that what a repository keeps
+/// further down, a vendored copy of another, its tests' fixtures, an
+/// example inside an example, is not taken for what it offers, and so that
+/// a search of a large repository, or of one made to be large, stays as
+/// short as the layouts need it to be.
+pub const SEARCH_DEPTH: usize = 4;
+
+/// The folders a gather's search never enters, wherever they are: git's
+/// own, which no checkout holds a skill in, and a package manager's, which
+/// holds whatever the packages it installed hold.
+pub const PASSED_OVER: [&str; 2] = [".git", "node_modules"];
+
+/// Look through `folder`, `depth` folders below the one searched, for the
+/// folders holding a `manifest`, putting each in `found`.
+fn search(
+    folder: &Path,
+    depth: usize,
+    manifest: &str,
+    found: &mut Vec<PathBuf>,
+) -> Result<(), GatherError> {
+    let unread = |source| GatherError::Read {
+        path: folder.to_path_buf(),
+        source,
+    };
+    for entry in fs::read_dir(folder).map_err(unread)? {
+        let entry = entry.map_err(unread)?;
+        if PASSED_OVER.iter().any(|name| entry.file_name() == *name) {
+            continue;
+        }
+        let path = entry.path();
+        let linked = entry.file_type().map_err(unread)?.is_symlink();
+        if !path.is_dir() {
+            continue;
+        }
+        if path.join(manifest).is_file() {
+            found.push(path);
+        } else if !linked && depth < SEARCH_DEPTH {
+            search(&path, depth + 1, manifest, found)?;
+        }
+    }
+    Ok(())
+}
+
+/// Whether `path` is a link itself, whatever it leads to.
+fn is_link(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
 }
 
 /// Where `directory` is in the repository cloned at `clone`: its route from
@@ -1107,6 +1192,10 @@ pub enum Failure {
         #[source]
         source: io::Error,
     },
+    /// A skill's folder that is a link leading out of the repository, which
+    /// a gather follows nowhere ([`copy::tree`]'s `within`).
+    #[error("{path}: links to {to}, outside the repository, so it is not gathered")]
+    LinkOutside { path: PathBuf, to: PathBuf },
 }
 
 codes!(Failure {
@@ -1114,6 +1203,7 @@ codes!(Failure {
     Self::Copy { .. } => "gathered_copy_failed",
     Self::Unhashed { .. } => "gathered_unhashed",
     Self::Unremoved { .. } => "gathered_unremoved",
+    Self::LinkOutside { .. } => "gathered_link_outside",
 } carried {
     Self::Artifact(error) => error,
 });
@@ -1126,7 +1216,8 @@ impl Failure {
             Failure::UnusableName { path }
             | Failure::Copy { path, .. }
             | Failure::Unhashed { path, .. }
-            | Failure::Unremoved { path, .. } => path,
+            | Failure::Unremoved { path, .. }
+            | Failure::LinkOutside { path, .. } => path,
         }
     }
 }

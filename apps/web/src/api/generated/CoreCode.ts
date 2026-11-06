@@ -188,6 +188,7 @@ export type CoreCode =
   | "gathered_copy_failed"
   | "gathered_unhashed"
   | "gathered_unremoved"
+  | "gathered_link_outside"
   | "gather_cancelled"
   | "credentials_in_url"
   | "gather_no_such_folder"
