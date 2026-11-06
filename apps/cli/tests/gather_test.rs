@@ -694,3 +694,116 @@ fn a_url_with_a_token_in_it_is_refused_and_nothing_kept_or_said_repeats_the_toke
         listed.stdout
     );
 }
+
+#[test]
+fn a_dry_run_lists_each_skill_a_gather_would_take_and_writes_nothing() {
+    let source = repository(&[
+        ("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it")),
+        (
+            ".claude/skills/review/SKILL.md",
+            &skill_file("review", "Read a change"),
+        ),
+        (
+            "plugins/ops/skills/audit/SKILL.md",
+            &skill_file("audit", "Audit it"),
+        ),
+    ]);
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+    let head = gix::open(source.path())
+        .unwrap()
+        .head_id()
+        .unwrap()
+        .to_string();
+    let before = names_in(&dir.path().join(".mindweaver"));
+
+    let outcome = weaver(dir.path(), &["gather", "git", &url, "--dry-run"]).unwrap();
+
+    assert_eq!(
+        outcome.stdout,
+        format!(
+            "{url} at {}\n  \
+             review  .claude/skills/review\n  \
+             audit   plugins/ops/skills/audit\n  \
+             deploy  skills/deploy\n\
+             \n3 skills to gather; nothing gathered: run it again without --dry-run to gather them\n",
+            &head[..7]
+        )
+    );
+    assert!(outcome.ok, "{:?}", outcome.stderr);
+    assert!(outcome.stderr.is_empty(), "{:?}", outcome.stderr);
+    assert_eq!(names_in(&dir.path().join(".mindweaver")), before);
+    assert_eq!(
+        weaver(dir.path(), &["gather", "sources"]).unwrap().stdout,
+        "no sources yet\n  take some with `mindweaver gather git <url>`\n"
+    );
+}
+
+#[test]
+fn a_dry_run_says_what_a_gather_would_warn_of_and_exits_as_it_would() {
+    let source = repository(&[
+        (
+            "skills/pdf--forms/SKILL.md",
+            &skill_file("pdf--forms", "Fill"),
+        ),
+        ("skills/pdf/SKILL.md", &skill_file("pdf", "Read PDFs")),
+        (
+            ".claude/skills/pdf/SKILL.md",
+            &skill_file("pdf", "Read PDFs"),
+        ),
+    ]);
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+
+    let outcome = weaver(dir.path(), &["gather", "git", &url, "--dry-run"]).unwrap();
+
+    assert!(!outcome.ok);
+    assert!(
+        outcome.stdout.contains("  pdf--forms  skills/pdf--forms\n"),
+        "{}",
+        outcome.stdout
+    );
+    assert!(!outcome.stdout.contains("  pdf  "), "{}", outcome.stdout);
+    assert_eq!(
+        stderr_codes(&outcome),
+        [
+            Some(String::from("gathered_name_clash")),
+            Some(String::from("gathered_name_clash")),
+            Some(String::from("name_not_kebab_case")),
+        ]
+    );
+    assert!(
+        outcome.stderr[2]
+            .to_string()
+            .starts_with("warning: skills/pdf--forms/SKILL.md: "),
+        "{:?}",
+        outcome.stderr
+    );
+}
+
+#[test]
+fn a_dry_run_where_no_workspace_is_made_yet_makes_none() {
+    let source = repository(&[("skills/deploy/SKILL.md", &skill_file("deploy", "Ship it"))]);
+    let home = TempDir::new().unwrap();
+    let dir = TempDir::new().unwrap();
+    let url = source.path().to_string_lossy().into_owned();
+
+    let outcome = weaver_at_home(
+        dir.path(),
+        home.path(),
+        &["gather", "git", &url, "--dry-run"],
+    )
+    .unwrap();
+
+    assert!(
+        outcome.stdout.contains("  deploy  skills/deploy\n"),
+        "{}",
+        outcome.stdout
+    );
+    assert_eq!(names_in(home.path()), Vec::<String>::new());
+    assert!(outcome.stderr[0]
+        .to_string()
+        .starts_with("hint: no workspace here or above"));
+}

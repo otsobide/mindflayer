@@ -1511,6 +1511,12 @@ pub enum GatherCommand {
         /// branch, and refused when it is not there.
         #[arg(long, value_name = "SHA")]
         pin: Option<String>,
+
+        /// Say what would be gathered, each skill by its name and where it
+        /// is in the repository, and gather nothing: no source recorded,
+        /// nothing put on the shelf, and the clone made to look taken away.
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// List what can be installed from the shelf and from loaded workspaces,

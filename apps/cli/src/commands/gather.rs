@@ -4,7 +4,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-use mindweaver_core::gather::{self, Gathered, Report, Request, Scrub, Watch};
+use mindweaver_core::gather::{self, Gathered, Preview, Report, Request, Scrub, Watch};
 use mindweaver_core::install::{offered_by_loads, Offer};
 use mindweaver_core::ledger::{Ledger, SourceListing};
 use mindweaver_core::sources::{self, Regathered, Removal, Renamed, Which};
@@ -33,6 +33,7 @@ pub(crate) fn run_gather(
             reference,
             name,
             pin,
+            dry_run,
         } => {
             // Read before the workspace is: an address its options
             // contradict is refused with nothing opened, let alone made.
@@ -41,6 +42,18 @@ pub(crate) fn run_gather(
                 .named(name.clone())
                 .pinned(pin.clone())
                 .watched_by(watch.clone());
+            // Resolved as a read, which makes no workspace, the default one
+            // in home included, as a dry run of `gather remove` is: one that
+            // wrote a marker there would not be a dry run.
+            if *dry_run {
+                return reading_workspace(directory, lookup, |workspace| {
+                    let ledger = workspace.ledger_for_reading().map_err(CliError::from)?;
+                    match gather::preview(workspace, &ledger, &request) {
+                        Ok(preview) => Ok(previewed(request.source.url(), &preview)),
+                        Err(error) => Err(Failure::from(CliError::from(error))),
+                    }
+                });
+            }
             let workspace = workspace_here(directory, lookup)?;
             let (ledger, scrub) = workspace.ledger_to_write().map_err(CliError::from)?;
             let said = scrubbed(&scrub);
@@ -512,6 +525,52 @@ fn gathered(url: &str, report: &Report) -> Outcome {
         // Printable, because a warning quotes what the skill declares, which
         // is the source's to write.
         .chain(report.warnings.iter().map(|warning| {
+            Warning::coded(
+                warning.issue.code(),
+                format!("warning: {}", printable(&warning.to_string())),
+            )
+        }))
+        .collect();
+    let ok = stderr.is_empty();
+    Outcome { stdout, stderr, ok }
+}
+
+/// What a dry run of a gather found: the source, by the URL it would be
+/// gathered from and the commit it is at, then each skill it would take,
+/// by its name and where it is in the repository, then the count, and that
+/// nothing was gathered.
+///
+/// Its warnings are a gather's: what could not be taken, and what is wrong
+/// with what would be, each failing the command as it would fail a gather,
+/// so a script can tell from a dry run's exit what the gather's would be.
+fn previewed(url: &str, preview: &Preview) -> Outcome {
+    let url = redacted(url);
+    let at = preview
+        .revision
+        .as_deref()
+        .map(short)
+        .map_or_else(String::new, |revision| format!(" at {revision}"));
+    let mut stdout = format!("{url}{at}\n");
+    if preview.found.is_empty() {
+        stdout.push_str("  nothing to gather there\n");
+    } else {
+        let rows: Vec<Vec<String>> = preview
+            .found
+            .iter()
+            .map(|found| vec![printable(&found.name), printable(&found.upstream_path)])
+            .collect();
+        stdout.push_str(&indent(&table(&rows)));
+        let _ = writeln!(
+            stdout,
+            "\n{} to gather; nothing gathered: run it again without --dry-run to gather them",
+            plural(preview.found.len(), "skill")
+        );
+    }
+    let stderr: Vec<Warning> = preview
+        .failures
+        .iter()
+        .map(|failure| Warning::coded(failure.code(), format!("warning: {failure}")))
+        .chain(preview.warnings.iter().map(|warning| {
             Warning::coded(
                 warning.issue.code(),
                 format!("warning: {}", printable(&warning.to_string())),
