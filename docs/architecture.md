@@ -2713,7 +2713,8 @@ beside them, which would be a rule written in TypeScript (#72). `Snapshot::read`
 read does, whatever its inputs intend; `Snapshot::of` builds one for a front
 end that resolved the workspace itself, to scan it too. `view::Project::read`
 and `LoadedWorkspace::of` read the same way what the TUI shows of a project
-no workspace links.
+no workspace links, and `view::Project::read_examined` what doctor finds of
+it beside that read, as a snapshot holds both of every project it lists.
 
 A project's health is the one word a front end sorts and filters its
 projects by, from nothing to do to nothing to open:

@@ -1123,6 +1123,22 @@ impl Project {
         Project::read_kinds(project, workspace, &Kind::ALL)
     }
 
+    /// [`read`](Self::read), with what doctor finds of it told `machine`,
+    /// as a snapshot holds both of every project it lists: for a front end
+    /// showing a project no workspace links, which takes both in one read
+    /// from core rather than a report beside the view, and what `status`
+    /// says its agents miss read once for the two.
+    pub fn read_examined(
+        project: &MindProject,
+        workspace: Option<&WeaverWorkspace>,
+        machine: &Machine,
+    ) -> (Project, Examined) {
+        let read = Project::read(project, workspace);
+        let told = (read.unreached.as_slice(), read.missed.as_slice());
+        let examined = Examined::of(project, read.entry.clone(), workspace, machine, Some(told));
+        (read, examined)
+    }
+
     /// [`read`](Self::read), for `kinds` alone.
     fn read_kinds(
         project: &MindProject,

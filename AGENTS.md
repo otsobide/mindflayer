@@ -605,11 +605,12 @@ These are easy to break from a single file without noticing.
   end. It is a read: the ledger only through `ledger_for_reading`, the
   default workspace never made, nothing scrubbed, and no scan, which is a
   query of its own (a test counts scans with `scan::scans`, a test build's).
-  What doctor finds of each project is in it (`doctor`), told the agent
-  homes and the names of the variables set the front end decided
-  (`doctor::Machine`, handed to `Snapshot::of` and `Snapshot::read`), and
-  what it reads is watched as the rest is (`watch::watched`, given the
-  same agent homes).
+  What doctor finds of each project is in it (`doctor`), and of a project
+  no workspace links beside its read (`view::Project::read_examined`),
+  told the agent homes and the names of the variables set the front end
+  decided (`doctor::Machine`, handed to `Snapshot::of` and
+  `Snapshot::read`), and what it reads is watched as the rest is
+  (`watch::watched`, given the same agent homes).
   Its names are a contract under `view::FORMAT`, as a report's are under
   `ENVELOPE_VERSION`, and every URL in it, an error's message included,
   goes out through `url::redacted`. What a front end reads beside it is

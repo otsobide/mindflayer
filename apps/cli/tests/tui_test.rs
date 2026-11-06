@@ -3674,6 +3674,31 @@ fn a_project_doctor_finds_something_in_is_marked_with_how_much_and_its_pane_says
 }
 
 #[test]
+fn a_project_no_workspace_links_is_marked_for_what_doctor_finds_in_it_too() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let project = elsewhere.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    new_project(&project);
+    let stage = project.join(".mind/tmp/4242-00112233445566ff");
+    fs::create_dir_all(&stage).unwrap();
+
+    let View::Workspace(workspace) =
+        tui::load_project(&project, &Lookup::at_home(Some(home.path()))).unwrap()
+    else {
+        panic!("no screen for {}", project.display());
+    };
+
+    let holdings = workspace.members[0].holdings.as_ref().unwrap();
+    assert_eq!(holdings.found.len(), 1, "{:?}", holdings.found);
+    assert!(
+        holdings.found[0].starts_with(&format!("{}: ", stage.display())),
+        "{:?}",
+        holdings.found
+    );
+}
+
+#[test]
 fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
     let dir = workspace_with_own();
     let alpha = dir.path().join("alpha");

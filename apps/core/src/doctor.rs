@@ -175,7 +175,7 @@ impl Examined {
     /// `project`, linked as `entry`, what `status` says its agents miss
     /// told by the caller that read it already (`told`), as a snapshot
     /// has, or read here.
-    fn of(
+    pub(crate) fn of(
         project: &MindProject,
         entry: Option<String>,
         workspace: Option<&WeaverWorkspace>,

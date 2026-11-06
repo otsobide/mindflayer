@@ -22,7 +22,7 @@ use std::thread;
 use std::time::Duration;
 
 use mindweaver_core::code::Said;
-use mindweaver_core::doctor::{Examined, Report};
+use mindweaver_core::doctor::Examined;
 use mindweaver_core::gather::Watch;
 use mindweaver_core::resolve::{self, resolve, Intent, Resolved};
 use mindweaver_core::status::{EntryStatus, State};
@@ -481,13 +481,10 @@ pub fn load_project(directory: &Path, lookup: &Lookup) -> Result<View, CliError>
     let above = consulted.map(|resolved| resolved.workspace);
     // Read as a snapshot reads each project, with `above`'s templates, the
     // ones `mind add` will find, and no records: it does not link the
-    // project, so it says nothing of what was installed there.
-    let read = view::Project::read(&project, above.as_ref());
-    // Examined alone, as `mind doctor` examines a project no workspace
-    // links: nothing records what was installed into it.
-    let examined = Report::of_project(&project, None, &lookup.machine())
-        .projects
-        .remove(0);
+    // project, so it says nothing of what was installed there, and doctor,
+    // as `mind doctor` examines it, nothing of the servers installed.
+    let (read, examined) =
+        view::Project::read_examined(&project, above.as_ref(), &lookup.machine());
     Ok(View::Workspace(Box::new(Workspace {
         name: project.name().to_owned(),
         // `.`, because the commands run from the project itself.
