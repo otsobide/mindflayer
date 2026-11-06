@@ -70,6 +70,13 @@ pub struct Row {
     /// installing that one replaces this one's copy, so this one is not
     /// removed.
     pub superseded: bool,
+    /// What installing it would give each agent, as the line installing it
+    /// says it, for an offer whose install waits for a yes
+    /// ([`Candidate::asks_first`]): an MCP server from elsewhere than the
+    /// library, which the confirmation shows before the screen applies and
+    /// its line carries `--yes`. Read when the screen is built, as every
+    /// standing is; none for every other offer.
+    pub preview: Option<Vec<String>>,
 }
 
 impl Row {
@@ -80,6 +87,7 @@ impl Row {
             checked,
             was: checked,
             superseded: false,
+            preview: None,
         }
     }
 
@@ -410,7 +418,10 @@ impl Screen {
     /// than taking it out, the box the one ticked unticked
     /// ([`Row::superseded`]) asked away all the same, for core to see it is
     /// replaced. A box this screen holds, somebody's or one edited since,
-    /// never moves, so nothing it plans is locked or clashes.
+    /// never moves, so nothing it plans is locked or clashes. An install
+    /// that waits for a yes carries `--yes` ([`Task::confirmed`]): the
+    /// screen applies only once its confirmation has shown what each agent
+    /// would run of it ([`Screen::previews`]).
     pub fn task(&self) -> Task {
         let asked: Vec<Asked> = self
             .targets
@@ -442,9 +453,34 @@ impl Screen {
             changes: Plan::of(&asked)
                 .changes
                 .into_iter()
-                .map(Task::from)
+                .map(Task::confirmed)
                 .collect(),
         }
+    }
+
+    /// What each box marked to install that waits for a yes would give the
+    /// agents of its project, a line each, under a line naming it: what the
+    /// confirmation shows before anything is written.
+    pub fn previews(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        for target in &self.targets {
+            for row in &target.rows {
+                let Some(preview) = &row.preview else {
+                    continue;
+                };
+                if row.pending() != Some(Pending::Install) {
+                    continue;
+                }
+                lines.push(format!(
+                    "{} into {}, from {}:",
+                    named(row.candidate.kind(), row.candidate.name()),
+                    target.name(),
+                    row.candidate.origin()
+                ));
+                lines.extend(preview.iter().cloned());
+            }
+        }
+        lines
     }
 
     /// Feed it a key.

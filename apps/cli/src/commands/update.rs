@@ -12,7 +12,7 @@ use mindweaver_core::update::{self, Plan, ProjectPlan, Step, Update};
 use mindweaver_core::{paths, AgentHomes, Excluded, MindProject, Reference, WeaverWorkspace};
 
 use super::gather::scrubbed;
-use super::install::{edits, left_out, named};
+use super::install::{edits, entries_said, left_out, named};
 use crate::{CliError, Failure, Outcome, Warning};
 
 /// What a dry run that would write something ends with.
@@ -352,6 +352,18 @@ fn installed(
             "  cleared {}, left by an install that did not finish",
             at(root, path)
         );
+    }
+    // What each agent of a server is given now, as an install says it, each
+    // warning said of the project, as an update says every one.
+    if let Some(entries) = &installation.entries {
+        let written = matches!(
+            installation.installed,
+            Installed::Added { .. } | Installed::Updated { .. }
+        );
+        let (lines, warned) = entries_said(entries, Some(into), written);
+        outcome.stdout.push_str(&lines);
+        outcome.ok &= warned.is_empty();
+        outcome.stderr.extend(warned);
     }
     for left in &installation.left_out {
         outcome

@@ -1,5 +1,5 @@
-//! The commands that put one skill or rule into projects and take it back
-//! out: `install` and `uninstall`, at either level, into one project or, at
+//! The commands that put one skill, rule or MCP server into projects and
+//! take it back out: `install` and `uninstall`, at either level, into one project or, at
 //! the workspace's, into each of several at once; and `uninstall --orphaned`,
 //! which takes out whatever nothing offers any more. The screen `mindweaver
 //! install` opens on its own is [`crate::install`].
@@ -7,8 +7,11 @@
 use std::path::Path;
 
 use mindweaver_core::assign::{self, Offered};
+use mindweaver_core::install::mcp::{self, Variable};
 use mindweaver_core::install::rules::Rendered;
-use mindweaver_core::{AgentHomes, Kind, MindProject, Reference, WeaverWorkspace};
+use mindweaver_core::install::{Confirmed, Installed};
+use mindweaver_core::mcp::Runs;
+use mindweaver_core::{AgentHomes, Kind, MindProject, Reference, Starts, WeaverWorkspace};
 
 use crate::commands::gather::{scrubbed, Scrubbed};
 use crate::commands::update::listed as words_listed;
@@ -40,7 +43,14 @@ use crate::{CliError, Failure, Outcome, Warning};
 ///
 /// `homes` are the agents' own folders the command line decided, which core
 /// refuses to install into. `force` writes over a copy edited since it was
-/// installed, which core otherwise leaves alone.
+/// installed, which core otherwise leaves alone. `yes` writes an MCP server
+/// that comes from elsewhere than the library ([`install::asks_first`]),
+/// which is otherwise only said, as what each agent would run, and ends in
+/// [`UNINSTALLED`].
+///
+/// [`install::asks_first`]: mindweaver_core::install::asks_first
+// Each a word of the command line, as core's batch takes them.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn install_named(
     workspace: &WeaverWorkspace,
     projects: &[MindProject],
@@ -49,6 +59,7 @@ pub(crate) fn install_named(
     directory: &Path,
     homes: &AgentHomes,
     force: bool,
+    yes: bool,
 ) -> Result<Outcome, Failure> {
     let reference = Reference::parse(typed);
     let loads = load_warnings(workspace);
@@ -60,6 +71,7 @@ pub(crate) fn install_named(
         directory,
         homes,
         edits(force),
+        if yes { Confirmed::Yes } else { Confirmed::No },
     )
     .map_err(|error| {
         let kinds = mindweaver_core::install::kinds_named(&reference);
@@ -76,12 +88,30 @@ pub(crate) fn install_named(
     // same.
     let said = scrubbed(&assigned.scrub);
     let mut parts = assigned.parts;
+    // Said once, after every part: nothing of it was written anywhere.
+    let unconfirmed = parts.iter().any(|part| {
+        matches!(
+            &part.done,
+            Ok(Offered {
+                installed: Ok(done),
+                ..
+            }) if matches!(done.installed, Installed::Unconfirmed { .. })
+        )
+    });
+    let asked = |outcome: Result<Outcome, Failure>| {
+        outcome.map(|mut outcome| {
+            if unconfirmed {
+                outcome.stdout.push_str(UNINSTALLED);
+            }
+            outcome
+        })
+    };
     if parts.len() == 1 {
         let part = parts.remove(0);
-        return alone(
+        return asked(alone(
             said,
             install_said(&part.project, part.done, &reference, &loads, false),
-        );
+        ));
     }
     let each = parts
         .into_iter()
@@ -93,8 +123,13 @@ pub(crate) fn install_named(
             )
         })
         .collect();
-    together(said, each, loads)
+    asked(together(said, each, loads))
 }
+
+/// What an install that waits for a yes ends with, once it has said what
+/// each agent would run: an MCP server from elsewhere than the library.
+const UNINSTALLED: &str = "nothing installed: it comes from elsewhere than this workspace's \
+                           library, so add --yes to go ahead\n";
 
 /// One project's part of an install, `done`, as a command that installs into
 /// it alone says it: a line of what it did and what there is to say beside
@@ -112,7 +147,7 @@ fn install_said(
     loads: &[Warning],
     among: bool,
 ) -> Result<Outcome, Failure> {
-    use mindweaver_core::install::{self as installing, Installed};
+    use mindweaver_core::install as installing;
     use mindweaver_core::Excluded;
 
     let Offered {
@@ -148,6 +183,12 @@ fn install_said(
     // Why it was refused, when it was: what the panel tells somebody's copy
     // from one changed since by, as the line does in words.
     let refused = done.installed.refused().map(|refused| refused.code());
+    // What to do before an agent starts a server is said once it is
+    // written, not of one asked about or found as it was.
+    let written = !matches!(
+        done.installed,
+        Installed::Unconfirmed { .. } | Installed::Unchanged { .. }
+    );
     let mut outcome = match done.installed {
         Installed::Added { name, .. } => Outcome::plain(format!(
             "installed {} into {into}, from {origin}\n",
@@ -161,7 +202,8 @@ fn install_said(
             "{} in {into} was already current\n",
             named(kind, &name)
         )),
-        // Asked about rather than written: nothing is wrong with it.
+        // Asked about rather than written: nothing is wrong with it, and
+        // what each agent would run is said under it.
         Installed::Unconfirmed { name, .. } => Outcome::plain(format!(
             "would install {} into {into}, from {origin}\n",
             named(kind, &name)
@@ -195,6 +237,14 @@ fn install_said(
     };
     let name = named(kind, candidate.name());
     outcome.stdout.push_str(&swept(project, &done.swept));
+    // What each agent was given of a server, or would be, and what is said
+    // beside it; and once it is written, what to do before one starts it.
+    if let Some(entries) = &done.entries {
+        let (lines, warned) = entries_said(entries, among.then_some(into), written);
+        outcome.stdout.push_str(&lines);
+        outcome.ok &= warned.is_empty();
+        outcome.stderr.extend(warned);
+    }
     // Installed all the same, but not all of what was offered, which is
     // worth a look before an agent runs it.
     for left in &done.left_out {
@@ -357,6 +407,93 @@ pub(crate) fn render_said(
             .map(|note| format!("note: {note}").into())
             .collect(),
     )
+}
+
+/// What an MCP server's install says of its entries (`entries`), as lines
+/// under the one saying what it did, and as warnings: what each agent is
+/// given, the program it runs or the address it reaches, read off its
+/// renderer's entry by core ([`Runs`]); each agent it does not reach, by
+/// the code of why, Codex in a project it does not trust among them; and
+/// what each renderer says it wrote the entry without. Once `written`,
+/// what to do before an agent starts it too: each variable its entries
+/// read where the agents run, and what each agent asks first, as core
+/// says it does ([`Starts`]).
+///
+/// Each warning said of `project` when one is given, as among other
+/// projects' lines, where one naming a file would not say whose it is.
+pub(crate) fn entries_said(
+    entries: &mcp::Rendered,
+    project: Option<&str>,
+    written: bool,
+) -> (String, Vec<Warning>) {
+    let of = project.map_or_else(String::new, |project| format!("{project}: "));
+    let mut lines = String::new();
+    let mut warned = Vec::new();
+    for given in &entries.given {
+        let agent = given.agent.name();
+        lines.push_str(&match &given.runs {
+            Runs::Program { .. } => format!("  {agent} runs: {}\n", given.runs),
+            Runs::Address { .. } => format!("  {agent} reaches: {}\n", given.runs),
+        });
+        warned.extend(
+            given
+                .warnings
+                .iter()
+                .map(|said| Warning::coded(said.code, format!("warning: {of}{}", said.message))),
+        );
+    }
+    warned.extend(entries.unreached.iter().map(|unreached| {
+        Warning::coded(
+            unreached.why.code,
+            format!("warning: {of}{}", unreached.why.message),
+        )
+    }));
+    if !written {
+        return (lines, warned);
+    }
+    if let Some(set) = variables(&entries.variables) {
+        lines.push_str(&set);
+    }
+    for given in &entries.given {
+        let agent = given.agent.name();
+        // Matched with no wildcard, so a way of starting one added is said.
+        match given.agent.starts_a_server() {
+            Starts::OnceApproved => lines.push_str(&format!(
+                "  {agent} asks to approve it before it starts it in a session, though a run \
+                 with `-p` starts it unasked\n"
+            )),
+            // Said by `codex_mcp_untrusted` among the warnings, when nothing
+            // marks the project trusted, and nothing to ask otherwise.
+            Starts::InATrustedProject => {}
+            Starts::Unasked => lines.push_str(&format!("  {agent} starts it without asking\n")),
+        }
+    }
+    (lines, warned)
+}
+
+/// The line saying which variables to set where the agents run, each with
+/// what it is for: none when the entries read none.
+fn variables(variables: &[Variable]) -> Option<String> {
+    let named: Vec<String> = variables
+        .iter()
+        .map(|variable| {
+            if variable.secret {
+                format!("{} (a secret)", variable.name)
+            } else {
+                variable.name.to_string()
+            }
+        })
+        .collect();
+    let (them, are) = match named.len() {
+        0 => return None,
+        1 => ("it", "it"),
+        _ => ("them", "them"),
+    };
+    let listed: Vec<&str> = named.iter().map(String::as_str).collect();
+    Some(format!(
+        "  set {} where the agents run: each reads {them} there, and no file holds {are}\n",
+        words_listed(&listed)
+    ))
 }
 
 /// A warning for each folder `project`'s settings name for one of `kinds`

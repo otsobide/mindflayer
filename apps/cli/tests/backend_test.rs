@@ -2029,7 +2029,7 @@ fn applying_a_plans_tasks_leaves_what_the_install_screen_leaves_for_the_same_mar
 
     let workspace = WeaverWorkspace::locate(&screened).unwrap().unwrap();
     let (projects, _) = install_screen::registered(&workspace);
-    let mut screen = install_screen::open(&workspace, projects).unwrap();
+    let mut screen = install_screen::open(&workspace, projects, &AgentHomes::default()).unwrap();
     // The team's `deploy` in the place of the workspace's, which unticks it.
     mark(&mut screen, "alpha", "deploy", "load:../team");
     mark(&mut screen, "alpha", "review", "workspace");

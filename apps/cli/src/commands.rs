@@ -291,7 +291,12 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
             let project = project_here(&directory)?;
             unload_command(&directory, project.root(), workspaces, lookup)
         }
-        Command::Install { name, from, force } => {
+        Command::Install {
+            name,
+            from,
+            force,
+            yes,
+        } => {
             let project = project_here(&directory)?;
             let workspace = managing(&project, lookup)?;
             install_named(
@@ -302,6 +307,7 @@ pub(crate) fn run_with(cli: &Cli, lookup: &Lookup, watch: &Watch) -> Result<Outc
                 &directory,
                 &lookup.agents,
                 *force,
+                *yes,
             )
         }
         // The parser holds a name and --orphaned apart, and asks for one.
@@ -650,6 +656,7 @@ fn run_weaver(
             name,
             from,
             force,
+            yes,
         } => match (name, projects.is_empty() && !*all_projects) {
             // The screen reads until something on it is applied, so it is
             // opened the way a read is: on the default workspace before it
@@ -671,6 +678,7 @@ fn run_weaver(
                         directory,
                         &lookup.agents,
                         *force,
+                        *yes,
                     ),
                     unread,
                 )

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::slice;
 
 use mindweaver_core::assign;
-use mindweaver_core::install::{self, Edits};
+use mindweaver_core::install::{self, Confirmed, Edits};
 use mindweaver_core::known;
 use mindweaver_core::ledger::{Action, InstallRecord, Outcome, Target};
 use mindweaver_core::reapply::{self, Change};
@@ -105,6 +105,7 @@ fn fixture() -> Fixture {
         workspace.root(),
         &AgentHomes::default(),
         Edits::Kept,
+        Confirmed::Yes,
     )
     .unwrap()
     .parts;

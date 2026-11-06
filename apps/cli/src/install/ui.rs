@@ -320,12 +320,14 @@ fn footer(screen: &Screen, frame: &mut Frame, area: Rect) {
     );
 }
 
-/// The question asked before anything is written or deleted.
+/// The question asked before anything is written or deleted, and, for each
+/// MCP server marked that comes from elsewhere than the library, what each
+/// agent would run of it ([`Screen::previews`]): saying yes is what its
+/// line's `--yes` says, so it is shown before, never after.
 fn confirm(screen: &Screen, frame: &mut Frame, area: Rect) {
     let (install, remove) = screen.counts();
-    let box_ = centred(area, 60, 7);
-    frame.render_widget(Clear, box_);
-    let text = vec![
+    let previews = screen.previews();
+    let mut text = vec![
         Line::from(format!("Install {install}, remove {remove}?")),
         Line::from(""),
         Line::from(Span::styled(
@@ -333,15 +335,33 @@ fn confirm(screen: &Screen, frame: &mut Frame, area: Rect) {
             Style::default().fg(Color::Red),
         )),
         Line::from(""),
-        Line::from(Span::styled(
-            "y  yes        n  no",
-            Style::default().add_modifier(Modifier::BOLD),
-        )),
     ];
+    if !previews.is_empty() {
+        text.push(Line::from(Span::styled(
+            "from elsewhere than the library, each agent would run:",
+            Style::default().fg(Color::Yellow),
+        )));
+        text.extend(previews.into_iter().map(Line::from));
+        text.push(Line::from(""));
+    }
+    text.push(Line::from(Span::styled(
+        "y  yes        n  no",
+        Style::default().add_modifier(Modifier::BOLD),
+    )));
+    // As wide as the longest line, up to the screen, and as tall as every
+    // line, the border included: a command cut short is no command shown.
+    let widest = text.iter().map(Line::width).max().unwrap_or(0);
+    let width = u16::try_from(widest + 2).unwrap_or(u16::MAX).max(60);
+    let height = u16::try_from(text.len() + 2).unwrap_or(u16::MAX);
+    let box_ = centred(area, width, height);
+    frame.render_widget(Clear, box_);
     let block = Block::bordered()
         .border_type(BorderType::Thick)
         .title(" Apply ");
-    frame.render_widget(Paragraph::new(text).block(block), box_);
+    frame.render_widget(
+        Paragraph::new(text).wrap(Wrap { trim: false }).block(block),
+        box_,
+    );
 }
 
 fn title(kind: Kind, target: &Target) -> String {

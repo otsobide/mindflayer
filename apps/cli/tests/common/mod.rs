@@ -640,7 +640,7 @@ fn shelved_with(
 
 pub fn screen_for(workspace: &WeaverWorkspace, ledger: &Ledger) -> Screen {
     let (projects, _) = install_screen::registered(workspace);
-    install_screen::build(workspace, ledger, projects).unwrap()
+    install_screen::build(workspace, ledger, projects, &AgentHomes::default()).unwrap()
 }
 
 /// Everything the screen would show, as plain text.

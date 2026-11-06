@@ -1423,6 +1423,15 @@ pub fn asks_first(kind: Kind, origin: &str) -> bool {
     }
 }
 
+/// Whether somebody has said yes to an install that waits for one
+/// ([`asks_first`]): the CLI's `--yes`. Without it, such an install writes
+/// nothing and says what it would give each agent ([`mcp::preview`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Confirmed {
+    Yes,
+    No,
+}
+
 /// Refuse `project` when an install of `kind` has nowhere to go in it: no
 /// [`targets`] for a kind copied into a folder, for a rule into a project
 /// marked by its settings, which goes into its `AGENTS.md`, no agent to

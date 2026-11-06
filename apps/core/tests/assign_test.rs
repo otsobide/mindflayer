@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use common::skill;
 use mindweaver_core::assign::{self, Install, Offered, Part};
-use mindweaver_core::install::{self, Edits, Installed, Removed};
+use mindweaver_core::install::{self, Confirmed, Edits, Installed, Removed};
 use mindweaver_core::{
     create, Agent, AgentHomes, Directories, Kind, MindProject, Reference, Share, WeaverWorkspace,
 };
@@ -59,6 +59,7 @@ fn installing(
         workspace.root(),
         &AgentHomes::default(),
         Edits::Kept,
+        Confirmed::Yes,
     )
     .unwrap()
     .parts

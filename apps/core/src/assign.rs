@@ -28,7 +28,7 @@ use std::path::Path;
 use crate::agent::AgentHomes;
 use crate::catalog::Reference;
 use crate::gather::Scrub;
-use crate::install::{self, Candidate, Edits, InstallError, Installation, Removed};
+use crate::install::{self, Candidate, Confirmed, Edits, InstallError, Installation, Removed};
 use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError};
 use crate::value::ArtifactName;
@@ -76,7 +76,10 @@ pub struct Offered {
 /// name each is offered ([`install::offered_typed`], `from` and `base` as it
 /// takes them), installed there ([`install::install_with`]), writing over an
 /// edited copy only when `edits` says so, and into none of the agents' own
-/// folders, `homes`.
+/// folders, `homes`. One that waits for a yes ([`install::asks_first`]),
+/// an MCP server from elsewhere than the library, is only previewed
+/// ([`install::mcp::preview`]) until `confirmed` says yes: what each agent
+/// would run said, and nothing written.
 ///
 /// A part for each project once, in the order asked: two spellings of one
 /// directory are one project, installed into once. A project offered nothing
@@ -88,6 +91,9 @@ pub struct Offered {
 /// ([`WeaverWorkspace::ledger_to_write`]), as an update opens it, and only
 /// that refuses the whole batch, before anything is written. A batch of no
 /// project opens nothing: there is nothing to record.
+// Each a word of the command line it carries out, which a struct of them
+// would only spell again.
+#[allow(clippy::too_many_arguments)]
 pub fn install(
     workspace: &WeaverWorkspace,
     projects: &[MindProject],
@@ -96,6 +102,7 @@ pub fn install(
     base: &Path,
     homes: &AgentHomes,
     edits: Edits,
+    confirmed: Confirmed,
 ) -> Result<Assigned<Install>, LedgerError> {
     let Some((ledger, scrub)) = opened(workspace, projects)? else {
         return Ok(nothing());
@@ -105,9 +112,11 @@ pub fn install(
         .map(|project| {
             let done = install::offered_typed(workspace, &ledger, project, reference, from, base)
                 .map(|candidate| {
-                    let installed = install::install_with(
-                        workspace, &ledger, project, &candidate, homes, edits,
-                    );
+                    let installed = if candidate.asks_first() && confirmed == Confirmed::No {
+                        install::mcp::preview(workspace, &ledger, project, &candidate, homes, edits)
+                    } else {
+                        install::install_with(workspace, &ledger, project, &candidate, homes, edits)
+                    };
                     Offered {
                         candidate,
                         installed,

@@ -911,12 +911,10 @@ fn an_install_hands_back_what_each_agent_runs_and_every_variable_its_entries_rea
             Variable {
                 name: "EXAMPLE_API_KEY".into(),
                 secret: true,
-                required: true,
             },
             Variable {
                 name: "EXAMPLE_WORKSPACE".into(),
                 secret: false,
-                required: false,
             },
         ]
     );

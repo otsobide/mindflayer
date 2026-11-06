@@ -4,7 +4,7 @@
 
 use mindweaver_core::assign;
 use mindweaver_core::install::{self, Cell};
-use mindweaver_core::install::{Edits, Installed, Removed};
+use mindweaver_core::install::{Confirmed, Edits, Installed, Removed};
 use mindweaver_core::{Kind, Reference};
 use serde_json::json;
 
@@ -32,6 +32,7 @@ fn install(world: &World, typed: &str, edits: Edits) -> Installed {
         &world.at("~/Projects"),
         &world.homes(),
         edits,
+        Confirmed::Yes,
     )
     .expect("open the ledger");
     let part = assigned.parts.remove(0);
@@ -242,6 +243,7 @@ fn a_name_nothing_offers_is_refused_with_what_would_offer_it() {
         &world.at("~/Projects"),
         &world.homes(),
         Edits::Kept,
+        Confirmed::Yes,
     )
     .expect("open the ledger");
 

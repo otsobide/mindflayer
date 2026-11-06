@@ -135,6 +135,7 @@ fn every(value: &str) -> Vec<Task> {
             kind: Kind::Skill,
             name: owned(),
             from: Some(owned()),
+            yes: false,
         },
         Task::Uninstall {
             projects: vec![owned()],
@@ -1702,6 +1703,7 @@ fn carrying(url: &str) -> Vec<Task> {
             kind: Kind::Skill,
             name: String::from("deploy"),
             from: Some(url.to_owned()),
+            yes: false,
         },
     ]
 }
@@ -1740,4 +1742,58 @@ fn a_line_carrying_a_credential_runs_it_as_typed_and_is_shown_without_it() {
             }
         }
     }
+}
+
+/// A yes to an install that waits for one is a front end's that has shown
+/// what each agent would run: never in JSON, so the panel, which shows no
+/// agent's line yet, sends none, and one that does is refused.
+#[test]
+fn an_install_says_yes_on_its_line_and_never_in_its_json() {
+    let task = Task::Install {
+        projects: vec![String::from("alpha")],
+        kind: Kind::Mcp,
+        name: String::from("github"),
+        from: Some(String::from("load:../team")),
+        yes: true,
+    };
+
+    assert_eq!(
+        task.describe(),
+        "mindweaver install -p alpha --from load:../team --yes mcp:github"
+    );
+    let json = serde_json::to_value(&task).unwrap();
+    assert!(json.get("yes").is_none(), "{json}");
+    let read: Task = serde_json::from_value(json).unwrap();
+    assert!(matches!(read, Task::Install { yes: false, .. }), "{read:?}");
+    let said = serde_json::json!({
+        "type": "install",
+        "projects": ["alpha"],
+        "kind": "mcp",
+        "name": "github",
+        "from": "load:../team",
+        "yes": true,
+    });
+    assert!(serde_json::from_value::<Task>(said).is_err());
+}
+
+#[test]
+fn a_change_confirmed_says_yes_only_of_an_install_that_waits_for_one() {
+    use mindweaver_core::install::Change;
+
+    let install = |kind: Kind, from: &str| Change::Install {
+        projects: vec![String::from("alpha")],
+        kind,
+        name: "github".into(),
+        from: from.into(),
+    };
+    let yes = |task: Task| matches!(task, Task::Install { yes: true, .. });
+
+    assert!(yes(Task::confirmed(install(Kind::Mcp, "load:../team"))));
+    assert!(yes(Task::confirmed(install(
+        Kind::Mcp,
+        "https://example.com/acme/servers"
+    ))));
+    assert!(!yes(Task::confirmed(install(Kind::Mcp, "workspace"))));
+    assert!(!yes(Task::confirmed(install(Kind::Skill, "load:../team"))));
+    assert!(!yes(Task::from(install(Kind::Mcp, "load:../team"))));
 }

@@ -185,6 +185,7 @@ fn each_project_an_install_names_is_named_by_its_folder() {
         kind: Kind::Skill,
         name: String::from("deploy"),
         from: Some(String::from("--yes")),
+        yes: false,
     };
 
     assert_eq!(

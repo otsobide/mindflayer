@@ -26,7 +26,7 @@ use mindweaver_core::gather::Watch;
 use mindweaver_core::resolve::{self, resolve, Intent, Resolved};
 use mindweaver_core::view::{self, Directory, Held, LoadedWorkspace, Snapshot};
 use mindweaver_core::{
-    scan, Kind, MarkerFile, MindProject, Template, WeaverWorkspace, WorkspaceError,
+    scan, AgentHomes, Kind, MarkerFile, MindProject, Template, WeaverWorkspace, WorkspaceError,
 };
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::terminal::{self, EnterAlternateScreen};
@@ -282,6 +282,7 @@ pub fn perform(task: &Task, app: &App) -> Performed {
         Task::OpenInstall => open_install(
             &base,
             app.workspace().is_some_and(|workspace| !workspace.made),
+            &app.lookup.agents,
         ),
         // Asked about rather than failed: `mindweaver link` would refuse it, and
         // `mind init` is what would make it work.
@@ -407,7 +408,7 @@ const INPUT_IN_A_SCREEN: &str =
 /// from the ledger as it is, as `mindweaver install` builds it, so opening the
 /// screen makes nothing and scrubs nothing: the first line applying it runs
 /// opens the ledger to write, as that command does from the shell.
-fn open_install(base: &Path, unmade: bool) -> Performed {
+fn open_install(base: &Path, unmade: bool, homes: &AgentHomes) -> Performed {
     let workspace = if unmade {
         WeaverWorkspace::unmade(base)
     } else {
@@ -416,7 +417,7 @@ fn open_install(base: &Path, unmade: bool) -> Performed {
     let screen = workspace.map_err(CliError::from).and_then(|workspace| {
         // What would not open is already on screen, beside what did.
         let (projects, _) = install::registered(&workspace);
-        install::open(&workspace, projects)
+        install::open(&workspace, projects, homes)
     });
     match screen {
         Ok(screen) => Performed::Install(screen),

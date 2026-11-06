@@ -274,11 +274,12 @@ pub enum Command {
         workspaces: Vec<PathBuf>,
     },
 
-    /// Put a skill or a rule into this project: one of the workspace's own,
-    /// a loaded workspace's, or one from its shelf.
+    /// Put a skill, a rule or an MCP server into this project: one of the
+    /// workspace's own, a loaded workspace's, or one from its shelf.
     Install {
-        /// Its name: a skill's, or a rule's route like `git/commits`;
-        /// `skill:<name>` or `rule:<route>` when one name is both.
+        /// Its name: a skill's, a server's, or a rule's route like
+        /// `git/commits`; `skill:<name>`, `rule:<route>` or `mcp:<name>`
+        /// when one name is two kinds.
         name: String,
 
         /// Where it comes from, when two places offer that name: `workspace`,
@@ -290,6 +291,12 @@ pub enum Command {
         /// otherwise left alone.
         #[arg(long)]
         force: bool,
+
+        /// Install an MCP server that comes from elsewhere than the
+        /// workspace's own library. Without this nothing is written, and
+        /// the command says what each agent would run.
+        #[arg(short, long)]
+        yes: bool,
     },
 
     /// Take a skill or a rule Mindweaver installed back out of this project.
@@ -800,6 +807,12 @@ pub enum WeaverCommand {
         /// otherwise left alone.
         #[arg(long, requires = "name")]
         force: bool,
+
+        /// Install an MCP server that comes from elsewhere than the
+        /// workspace's own library. Without this nothing is written, and
+        /// the command says what each agent would run.
+        #[arg(short, long, requires = "name")]
+        yes: bool,
     },
 
     /// Take a skill or a rule Mindweaver installed back out of projects.

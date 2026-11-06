@@ -1378,6 +1378,7 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
                 kind: Kind::Skill,
                 name: String::from("deploy"),
                 from: Some(origin.clone()),
+                yes: false,
             }]
         })
     );
@@ -1515,6 +1516,7 @@ fn a_rule_ticked_on_the_install_screen_inside_the_tui_is_installed_from_there() 
                 kind: Kind::Rule,
                 name: String::from("git/commits"),
                 from: Some(String::from("workspace")),
+                yes: false,
             }]
         })
     );
@@ -2043,12 +2045,14 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Skill,
             name: String::from("deploy"),
             from: Some(String::from("-weird")),
+            yes: false,
         },
         Task::Install {
             projects: vec![String::from("../collapse")],
             kind: Kind::Rule,
             name: String::from("git/no-force-push"),
             from: None,
+            yes: false,
         },
         Task::Uninstall {
             projects: vec![String::from("-odd"), String::from("./alpha")],
@@ -2119,9 +2123,10 @@ fn the_agents_and_share_toggles_parse_back_into_what_they_were() {
 fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
     let install = Task::Install {
         projects: vec![String::from("alpha"), String::from("-odd")],
-        kind: Kind::Skill,
+        kind: Kind::Mcp,
         name: String::from("deploy"),
         from: Some(String::from("https://example.com/acme/skills#main")),
+        yes: true,
     };
     let uninstall = Task::Uninstall {
         projects: vec![String::from("../collapse")],
@@ -2133,7 +2138,7 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
     assert_eq!(
         install.describe(),
         "mindweaver install -p alpha -p ./-odd --from 'https://example.com/acme/skills#main' \
-         skill:deploy"
+         --yes mcp:deploy"
     );
     assert_eq!(
         uninstall.describe(),
@@ -2148,13 +2153,14 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
         name,
         from,
         force,
+        yes,
     }) = WeaverCli::try_parse_from(&line).unwrap().command
     else {
         panic!("{line:?}");
     };
     assert_eq!(projects, ["alpha", "./-odd"]);
-    assert!(!all_projects && !force);
-    assert_eq!(name.as_deref(), Some("skill:deploy"));
+    assert!(!all_projects && !force && yes);
+    assert_eq!(name.as_deref(), Some("mcp:deploy"));
     assert_eq!(
         from.as_deref(),
         Some("https://example.com/acme/skills#main")
@@ -2189,6 +2195,7 @@ fn an_install_task_installs_into_every_project_it_names_and_an_uninstall_takes_i
             kind: Kind::Skill,
             name: String::from("deploy"),
             from: None,
+            yes: false,
         },
     );
     for project in &projects {

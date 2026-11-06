@@ -82,7 +82,8 @@ pub struct Rendered {
     /// Each variable an agent given it reads where it runs, for an input of
     /// the server's, in the order the definition declares them, each once:
     /// what somebody sets there before an agent starts it, since no file
-    /// holds a value (D-11).
+    /// holds a value (D-11). Every input's, a secret's or not: a value an
+    /// entry refers to is read from its variable alike.
     pub variables: Vec<Variable>,
 }
 
@@ -109,8 +110,6 @@ pub struct Variable {
     pub name: VariableName,
     /// Whether an input read from it is a secret.
     pub secret: bool,
-    /// Whether an input read from it is one the server needs.
-    pub required: bool,
 }
 
 /// An agent the project names that an MCP server does not reach, and why,
@@ -1037,7 +1036,7 @@ fn planned(
 }
 
 /// Each variable `definition`'s inputs are read from, in the order they are
-/// declared, each once, secret or required when any input read from it is.
+/// declared, each once, a secret when any input read from it is.
 fn variables(definition: &McpDefinition) -> Vec<Variable> {
     let mut variables: Vec<Variable> = Vec::new();
     for input in &definition.inputs {
@@ -1045,14 +1044,10 @@ fn variables(definition: &McpDefinition) -> Vec<Variable> {
             continue;
         };
         match variables.iter_mut().find(|seen| seen.name == *name) {
-            Some(seen) => {
-                seen.secret |= input.secret;
-                seen.required |= input.required;
-            }
+            Some(seen) => seen.secret |= input.secret,
             None => variables.push(Variable {
                 name: name.clone(),
                 secret: input.secret,
-                required: input.required,
             }),
         }
     }
