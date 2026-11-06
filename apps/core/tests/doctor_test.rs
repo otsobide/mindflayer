@@ -277,9 +277,17 @@ fn every_project_a_workspace_links_is_examined_once_and_a_stale_one_says_why() {
     .unwrap();
     fixture.workspace.link(&other).unwrap();
     fs::remove_dir_all(&gone).unwrap();
+    // A second spelling of `app`, after the stale one: an entry of its own,
+    // and the same project.
+    let marker = fixture.workspace.config_path();
+    let text = fs::read_to_string(&marker).unwrap();
+    assert!(text.contains("\"gone\""), "{text}");
+    fs::write(&marker, text.replacen("\"gone\"", "\"gone\", \"./app\"", 1)).unwrap();
+    let workspace = WeaverWorkspace::open(fixture.dir.path()).unwrap();
+    assert_eq!(workspace.members().len(), 3);
     let machine = Machine::new(fixture.homes(), Vec::new());
 
-    let report = Report::of_workspace(&fixture.workspace, &machine);
+    let report = Report::of_workspace(&workspace, &machine);
 
     let entries: Vec<Option<&str>> = report
         .projects
