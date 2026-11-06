@@ -55,6 +55,15 @@ function shown(): (string | null)[] {
   return [...document.body.querySelectorAll('[data-testid="command"]')].map(each => each.textContent)
 }
 
+/** How the last server the form judged was drafted, and the add task it then sent. */
+function requested(queries: Query[], sent: { task: Task }[]) {
+  const judging = queries.filter((query): query is Extract<Query, { type: 'validate' }> => query.type === 'validate').at(-1)!
+  return {
+    judged: (judging.draft as Extract<Draft, { type: 'add' }>).server,
+    task: sent.at(-1)!.task as Extract<Task, { type: 'add' }>
+  }
+}
+
 /** Every string `value` holds, at any depth, with the key it is under. */
 function strings(value: unknown, under = ''): [string, string][] {
   if (typeof value === 'string') {
@@ -190,18 +199,18 @@ describe('the form adding one', () => {
     expect(sent.map(each => each.mode)).toEqual(['preview', 'run'])
   })
 
-  it('never sends a secret\'s value: no field takes one, and every secret goes out as the name typed for its variable', async () => {
+  it('never sends a secret\'s value: each field in a secret\'s place takes its variable\'s name, sent there alone, and a header as typed', async () => {
     const { queries, sent, transport } = commanding(fixture('serving'), [], servers())
     const { page } = await render('/mcp', transport)
-    // A value somebody would never type here, put together as the test
-    // runs, so no file of the repository holds one.
-    const value = ['not', 'typed', String(Math.random()).slice(2)].join('-')
 
     await fill(page, 'name', 'acme')
     await fill(page, 'description', 'Acme\'s tools')
     await page.get('[data-testid="transport"] [role="radio"][value="address"]').trigger('click')
     await flushPromises()
     await fill(page, 'url', 'https://{tenant}.example.com/mcp')
+    await page.get('[data-testid="add-header"]').trigger('click')
+    await fill(page, 'header-key', 'Accept')
+    await fill(page, 'header-value', 'application/json')
     await page.get('[data-testid="add-secret-header"]').trigger('click')
     await fill(page, 'secret-header-key', 'X-Api-Key')
     await fill(page, 'secret-header-variable', 'ACME_API_KEY')
@@ -220,29 +229,64 @@ describe('the form adding one', () => {
     const bearer = page.get('input[data-testid="bearer-variable"]').element
     expect(document.querySelector(`label[for="${bearer.id}"]`)!.textContent).toContain('Bearer token, the name of its variable')
     expect(page.get('[data-testid="secret-headers"] [data-testid="never-stored"]').text()).toContain('No value is stored')
-    // What went out, judged and then previewed, holds every secret as the
-    // name typed and nothing else: no string the form was not given, and
-    // the value nowhere, whatever key a field of it went under.
-    const judging = queries.filter((query): query is Extract<Query, { type: 'validate' }> => query.type === 'validate').at(-1)!
-    const task = sent.at(-1)!.task as Extract<Task, { type: 'add' }>
-    for (const server of [(judging.draft as Extract<Draft, { type: 'add' }>).server, task.server]) {
+    expect(page.get('[data-testid="headers"]').text()).toContain('no secret goes here')
+    // What went out, judged and then previewed, holds each secret as the
+    // name typed for its variable, in a secret's place, and the header as
+    // typed, in its own: no string the form was not given, whatever key a
+    // field of it went under.
+    const { judged: draft, task } = requested(queries, sent)
+    for (const server of [draft, task.server]) {
       expect(server).toEqual({
         type: 'address',
         url: 'https://{tenant}.example.com/mcp',
         events: false,
-        headers: [],
+        headers: [['Accept', 'application/json']],
         secret_headers: [['X-Api-Key', 'ACME_API_KEY']],
         bearer: 'ACME_TOKEN',
         url_vars: [['tenant', 'ACME_TENANT']]
       })
     }
-    const typed = ['acme', 'Acme\'s tools', 'https://{tenant}.example.com/mcp', 'X-Api-Key', 'ACME_API_KEY', 'ACME_TOKEN', 'tenant', 'ACME_TENANT']
-    const words = ['add', 'workspace', 'mcp', 'address']
+    const typed = ['acme', 'Acme\'s tools', 'https://{tenant}.example.com/mcp', 'Accept', 'application/json', 'X-Api-Key', 'ACME_API_KEY', 'ACME_TOKEN', 'tenant', 'ACME_TENANT']
     for (const [key, said] of strings(task)) {
-      expect([...typed, ...words], `${key}: ${said}`).toContain(said)
+      expect([...typed, 'add', 'workspace', 'mcp', 'address'], `${key}: ${said}`).toContain(said)
     }
-    expect(JSON.stringify(task)).not.toContain(value)
-    expect(JSON.stringify(judging)).not.toContain(value)
+  })
+
+  it('sends a program\'s settings as typed, and each secret in its environment as its variable\'s name alone', async () => {
+    const { queries, sent, transport } = commanding(fixture('serving'), [], servers())
+    const { page } = await render('/mcp', transport)
+
+    await fill(page, 'name', 'acme')
+    await fill(page, 'description', 'Acme\'s tools')
+    await fill(page, 'server-command', 'npx')
+    await page.get('[data-testid="add-env"]').trigger('click')
+    await fill(page, 'env-key', 'LOG_LEVEL')
+    await fill(page, 'env-value', 'debug')
+    await page.get('[data-testid="add-secret-env"]').trigger('click')
+    await fill(page, 'secret-env-variable', 'ACME_TOKEN')
+    await page.get('[data-testid="add-arg-env"]').trigger('click')
+    await fill(page, 'arg-env-variable', 'ACME_ORG')
+    await settle()
+    await page.get('[data-testid="server-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(page.get('[data-testid="env"]').text()).toContain('no secret goes here')
+    expect(page.get('[data-testid="secret-env"] [data-testid="never-stored"]').text()).toContain('No value is stored')
+    const { judged: draft, task } = requested(queries, sent)
+    for (const server of [draft, task.server]) {
+      expect(server).toEqual({
+        type: 'program',
+        command: 'npx',
+        args: [],
+        env: [['LOG_LEVEL', 'debug']],
+        secret_env: ['ACME_TOKEN'],
+        arg_env: ['ACME_ORG']
+      })
+    }
+    const typed = ['acme', 'Acme\'s tools', 'npx', 'LOG_LEVEL', 'debug', 'ACME_TOKEN', 'ACME_ORG']
+    for (const [key, said] of strings(task)) {
+      expect([...typed, 'add', 'workspace', 'mcp', 'program'], `${key}: ${said}`).toContain(said)
+    }
   })
 })
 
