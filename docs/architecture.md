@@ -3628,10 +3628,12 @@ given to no new source, so no gather can clone into a folder about to be
 removed. A credential is left where the scrub finds it, which rewrites a
 clone before its row, and which the first command that writes runs next.
 Version 8 fills in an artifact's place upstream in its own SQL, from what
-version 1 already kept: its source's folder, as it was typed, without a `/`
-at its end and nothing for the repository's root (`.`), joined by `/` to the
-folder it has on the shelf, which keeps the name the source gave it ([the
-folder a skill lands in](#everything-is-namespaced-by-its-source)). It makes
+version 1 already kept: its source's folder by its lexical route, as a
+gather takes it, walked a folder at a time so `./skills/` and `skills//`
+are `skills`, a `..` takes off the folder before it and the repository's
+root (`.`) is nothing, joined by `/` to the folder it has on the shelf,
+which keeps the name the source gave it ([the folder a skill lands
+in](#everything-is-namespaced-by-its-source)). It makes
 up no hash and no licence. Both could be read from the shelf as it is now,
 but the shelf is a folder anybody can change, and a hash taken of it at the
 step would vouch for bytes no gather placed: the next gather of its source

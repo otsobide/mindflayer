@@ -1207,6 +1207,38 @@ fn a_version_7_ledger_keeps_every_row_and_knows_where_each_artifact_is_upstream(
 }
 
 #[test]
+fn a_version_7_folder_typed_another_way_is_upstream_where_a_gather_says_it_is() {
+    let dir = TempDir::new().unwrap();
+    let path = written_at(dir.path(), VERSION_7);
+    // Each source's folder as somebody may have typed it, which schema 7
+    // kept word for word.
+    Connection::open(&path)
+        .unwrap()
+        .execute_batch(
+            "UPDATE sources SET subdirectory = './skills/' WHERE id = 1;
+             UPDATE sources SET subdirectory = 'plugins//ops/./skills' WHERE id = 2;
+             UPDATE sources SET subdirectory = 'tools/..' WHERE id = 3;",
+        )
+        .unwrap();
+
+    Ledger::open(&path).unwrap();
+
+    // By its lexical route, as a gather of the source records it.
+    assert_eq!(
+        rows(
+            &Connection::open(&path).unwrap(),
+            "SELECT upstream_path FROM artifacts ORDER BY id"
+        ),
+        [
+            [text("skills/deploy")],
+            [text("skills/review")],
+            [text("plugins/ops/skills/audit")],
+            [text("lint")],
+        ]
+    );
+}
+
+#[test]
 fn a_version_7_ledger_is_copied_aside_and_the_copy_opens_at_version_7() {
     let dir = TempDir::new().unwrap();
     let path = written_at(dir.path(), VERSION_7);

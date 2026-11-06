@@ -2384,9 +2384,16 @@ CREATE UNIQUE INDEX sources_by_name ON sources (name);
 /// to cascade into.
 ///
 /// What a version before it held is filled in where it can be known from
-/// the row: its place upstream is its source's folder, as it was typed,
-/// without a `/` at its end and nothing for the root (`.`), joined by `/` to
+/// the row: its place upstream is its source's folder, by its lexical route
+/// as a gather takes it ([`crate::paths::normalize`]), so `./skills/` and
+/// `skills//` are `skills` and the root (`.`) is nothing, joined by `/` to
 /// the folder it has on the shelf, which keeps the name the source gave it.
+/// The route is walked a folder at a time (`walk`), each `.` and empty one
+/// dropped and each `..` taking off the folder before it, in the step's own
+/// SQL rather than handed in from today's `normalize`, as the step to
+/// schema 7 is handed each identity: a rule of text is one SQL can follow,
+/// where which URLs are one repository's is not.
+///
 /// No hash and no licence is made up: the shelf may have been touched since
 /// it was gathered, and a hash or a licence read from it now would vouch
 /// for bytes no gather placed. The next gather of its source fills them in.
@@ -2395,12 +2402,29 @@ ALTER TABLE artifacts ADD COLUMN upstream_path TEXT NOT NULL DEFAULT '';
 ALTER TABLE artifacts ADD COLUMN content_hash TEXT;
 ALTER TABLE artifacts ADD COLUMN license TEXT;
 
+WITH RECURSIVE walk(id, rest, route) AS (
+    SELECT id, subdirectory || '/', '' FROM sources
+    UNION ALL
+    SELECT id,
+           substr(rest, instr(rest, '/') + 1),
+           CASE substr(rest, 1, instr(rest, '/') - 1)
+               WHEN '' THEN route
+               WHEN '.' THEN route
+               WHEN '..' THEN
+                   CASE WHEN route = '' OR route = '..' OR route LIKE '%/..'
+                        THEN ltrim(route || '/..', '/')
+                        ELSE rtrim(rtrim(route, replace(route, '/', '')), '/')
+                   END
+               ELSE ltrim(route || '/' || substr(rest, 1, instr(rest, '/') - 1), '/')
+           END
+      FROM walk
+     WHERE rest <> ''
+)
 UPDATE artifacts
    SET upstream_path =
-       (SELECT CASE WHEN rtrim(s.subdirectory, '/') IN ('', '.') THEN ''
-                    ELSE rtrim(s.subdirectory, '/') || '/' END
-          FROM sources s
-         WHERE s.id = artifacts.source_id)
+       (SELECT CASE WHEN route = '' THEN '' ELSE route || '/' END
+          FROM walk
+         WHERE walk.id = artifacts.source_id AND rest = '')
        || replace(path, rtrim(path, replace(path, '/', '')), '');
 ";
 
