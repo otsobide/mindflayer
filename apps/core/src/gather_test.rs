@@ -982,6 +982,21 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
          repository's name, and its URL names none, so it is not gathered: gather it by a URL \
          or a path that ends in a name"
     );
+    let clash = Failure::Clash {
+        path: PathBuf::from("/w/.mindweaver/cache/s/skills/pdf"),
+        name: String::from("pdf"),
+        with: vec![
+            String::from(".claude/skills/pdf"),
+            String::from("vendor/pdf"),
+        ],
+    };
+    assert_eq!(clash.path(), Path::new("/w/.mindweaver/cache/s/skills/pdf"));
+    assert_eq!(
+        clash.to_string(),
+        "/w/.mindweaver/cache/s/skills/pdf: another skill in this source is called `pdf` too, \
+         at .claude/skills/pdf, vendor/pdf, so neither is gathered: gather the one you want \
+         with --path naming its folder"
+    );
     assert_eq!(
         Failure::CODES,
         [
@@ -990,7 +1005,8 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
             "gathered_unhashed",
             "gathered_unremoved",
             "gathered_link_outside",
-            "gathered_root_unnamed"
+            "gathered_root_unnamed",
+            "gathered_name_clash"
         ]
     );
 }

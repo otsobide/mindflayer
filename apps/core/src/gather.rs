@@ -760,6 +760,7 @@ fn take(
             total: found.len(),
         });
     }
+    let taken = unclashed(taken, &clone.root, &mut report.failures);
 
     // The last moment a cancel is honoured, and the reason everything is read
     // first: past here the shelf and the ledger change, and a gather stopped
@@ -1005,6 +1006,70 @@ fn read(
         return None;
     };
     Some((directory.to_path_buf(), folder, artifact))
+}
+
+/// What of `taken`, read out of the repository cloned at `clone`, no other
+/// skill read beside it shares a name with: each one that does is said
+/// among `failures`, by the name it shares and where the others are, and
+/// not taken.
+///
+/// Both names, the folder a skill is filed under on the shelf, where two
+/// would be one folder, and the name it declares, which the ledger keeps
+/// one row of a source's for and an install asks for: either way taking
+/// one would be a pick nobody made, by whichever the search met last, and
+/// taking neither says so where somebody can choose, with `--path`. The
+/// rest of the source is taken all the same, and each folder is still one
+/// the source holds, so what an earlier gather took of either stays on the
+/// shelf as it was ([`take_off`]).
+fn unclashed(
+    taken: Vec<(PathBuf, String, Artifact)>,
+    clone: &Path,
+    failures: &mut Vec<Failure>,
+) -> Vec<(PathBuf, String, Artifact)> {
+    let sharing: Vec<Vec<usize>> = taken
+        .iter()
+        .enumerate()
+        .map(|(at, (_, folder, artifact))| {
+            taken
+                .iter()
+                .enumerate()
+                .filter(|(other, (_, its_folder, its))| {
+                    *other != at && (its_folder == folder || its.name() == artifact.name())
+                })
+                .map(|(other, _)| other)
+                .collect()
+        })
+        .collect();
+    let routes: Vec<String> = taken
+        .iter()
+        .map(|(directory, folder, _)| upstream(directory, clone, folder))
+        .collect();
+    let mut kept = Vec::with_capacity(taken.len());
+    for (at, read) in taken.iter().enumerate() {
+        if sharing[at].is_empty() {
+            continue;
+        }
+        let (directory, folder, artifact) = read;
+        let filed_alike = sharing[at].iter().any(|other| taken[*other].1 == *folder);
+        failures.push(Failure::Clash {
+            path: directory.clone(),
+            name: if filed_alike {
+                folder.clone()
+            } else {
+                artifact.name().to_string()
+            },
+            with: sharing[at]
+                .iter()
+                .map(|other| routes[*other].clone())
+                .collect(),
+        });
+    }
+    for (at, read) in taken.into_iter().enumerate() {
+        if sharing[at].is_empty() {
+            kept.push(read);
+        }
+    }
+    kept
 }
 
 /// The folder the skill at `directory`, in the repository cloned at
@@ -1272,6 +1337,16 @@ pub enum Failure {
         #[source]
         source: io::Error,
     },
+    /// Another skill in the same source is filed under `name` on the shelf,
+    /// or declares it, at each of `with`, its folder in the repository, so
+    /// neither is taken: which one a source means is not a gather's to
+    /// guess ([`unclashed`]).
+    #[error("{path}: another skill in this source is called `{name}` too, at {}, so neither is gathered: gather the one you want with --path naming its folder", .with.join(", "))]
+    Clash {
+        path: PathBuf,
+        name: String,
+        with: Vec<String>,
+    },
     /// A `SKILL.md` at the root of a repository whose URL names no
     /// repository to file the skill under ([`crate::url::repository`]):
     /// `.`, say, or a folder with no name of its own.
@@ -1290,6 +1365,7 @@ codes!(Failure {
     Self::Unremoved { .. } => "gathered_unremoved",
     Self::LinkOutside { .. } => "gathered_link_outside",
     Self::Unnamed { .. } => "gathered_root_unnamed",
+    Self::Clash { .. } => "gathered_name_clash",
 } carried {
     Self::Artifact(error) => error,
 });
@@ -1301,6 +1377,7 @@ impl Failure {
             Failure::Artifact(error) => error.path(),
             Failure::UnusableName { path }
             | Failure::Unnamed { path }
+            | Failure::Clash { path, .. }
             | Failure::Copy { path, .. }
             | Failure::Unhashed { path, .. }
             | Failure::Unremoved { path, .. }

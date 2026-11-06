@@ -808,6 +808,131 @@ fn a_folder_named_that_holds_a_skill_md_is_that_one_skill() {
     assert_eq!(gathered, named(&[("pdf", "skills/pdf")]));
 }
 
+/// Each failure of `report` that is a clash: the folder in the clone it
+/// is of, by its route from the clone's root, the name it shares and
+/// where the others are.
+fn clashes(
+    report: &gather::Report,
+    workspace: &WeaverWorkspace,
+) -> Vec<(String, String, Vec<String>)> {
+    let clone = workspace.cache_dir().join(&report.directory);
+    report
+        .failures
+        .iter()
+        .map(|failure| match failure {
+            gather::Failure::Clash { path, name, with } => {
+                assert_eq!(failure.code(), "gathered_name_clash");
+                let route = path.strip_prefix(&clone).unwrap();
+                (
+                    route.to_string_lossy().into_owned(),
+                    name.clone(),
+                    with.clone(),
+                )
+            }
+            other => panic!("{other}"),
+        })
+        .collect()
+}
+
+#[test]
+fn two_skills_of_one_folder_name_in_one_source_are_a_failure_for_both_and_the_rest_is_taken() {
+    let source = repository(&[
+        ("skills/pdf/SKILL.md", &skill("pdf", "Read PDFs")),
+        (
+            ".claude/skills/pdf/SKILL.md",
+            &skill("pdf", "Read PDFs, ours"),
+        ),
+        ("skills/review/SKILL.md", &skill("review", "Read a change")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let added: Vec<&str> = report.added.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(added, ["review"]);
+    assert_eq!(
+        clashes(&report, &workspace),
+        [
+            (
+                String::from(".claude/skills/pdf"),
+                String::from("pdf"),
+                vec![String::from("skills/pdf")]
+            ),
+            (
+                String::from("skills/pdf"),
+                String::from("pdf"),
+                vec![String::from(".claude/skills/pdf")]
+            ),
+        ]
+    );
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&report.directory);
+    assert!(!shelf.join("pdf").exists(), "neither is picked");
+    let names: Vec<String> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|gathered| gathered.name.to_string())
+        .collect();
+    assert_eq!(names, ["review"]);
+}
+
+#[test]
+fn two_skills_declaring_one_name_in_one_source_are_a_failure_for_both() {
+    let source = repository(&[
+        ("skills/pdf-reader/SKILL.md", &skill("pdf", "Read PDFs")),
+        ("skills/pdf-writer/SKILL.md", &skill("pdf", "Write PDFs")),
+        ("skills/review/SKILL.md", &skill("review", "Read a change")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    let added: Vec<&str> = report.added.iter().map(|h| h.name.as_str()).collect();
+    assert_eq!(added, ["review"]);
+    assert_eq!(
+        clashes(&report, &workspace),
+        [
+            (
+                String::from("skills/pdf-reader"),
+                String::from("pdf"),
+                vec![String::from("skills/pdf-writer")]
+            ),
+            (
+                String::from("skills/pdf-writer"),
+                String::from("pdf"),
+                vec![String::from("skills/pdf-reader")]
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_skill_an_earlier_gather_took_stays_as_it_was_once_another_of_its_name_clashes_with_it() {
+    let source = repository(&[("skills/pdf/SKILL.md", &skill("pdf", "Read PDFs"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+    let request = Request::git(url(&source));
+    let first = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    write_files(
+        source.path(),
+        &[(".agents/skills/pdf/SKILL.md", &skill("pdf", "Another"))],
+    );
+    commit(source.path());
+    let again = gather::gather(&workspace, &ledger, &request).unwrap();
+
+    assert_eq!(again.failures.len(), 2, "{:?}", again.failures);
+    assert!(again.removed.is_empty(), "{again:?}");
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&first.directory);
+    assert_eq!(
+        fs::read_to_string(shelf.join("pdf/SKILL.md")).unwrap(),
+        skill("pdf", "Read PDFs")
+    );
+    assert_eq!(ledger.gathered().unwrap().len(), 1);
+}
+
 #[test]
 fn a_repository_holding_no_skill_anywhere_gathers_nothing_and_is_no_failure() {
     let source = repository(&[("README.md", "nothing to gather\n")]);

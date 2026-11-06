@@ -190,6 +190,7 @@ export type CoreCode =
   | "gathered_unremoved"
   | "gathered_link_outside"
   | "gathered_root_unnamed"
+  | "gathered_name_clash"
   | "gather_cancelled"
   | "credentials_in_url"
   | "gather_no_such_folder"
