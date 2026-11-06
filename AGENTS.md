@@ -1959,7 +1959,10 @@ These are easy to break from a single file without noticing.
   binaries, which `e2e (web)` downloads and drives in Chromium and WebKit
   (`make web/e2e/run`), uploading the traces of what fails. `types drift
   (web)` runs `make web/types/check`, `make web/fixtures/check`, `make
-  api/schemas/check` and `make api/openapi/check`. Development targets Linux only for now: macOS
+  api/schemas/check` and `make api/openapi/check`. The Linux jobs run on
+  the runner the repository variable `LINUX_RUNNER` names (a self-hosted
+  one's label), and on `ubuntu-latest` while it is unset. Development
+  targets Linux only for now: macOS
   and Windows (`test (macos)`, `test (windows)`, which set up Node too) run
   only by hand (`workflow_dispatch`) or on PRs labelled `full-matrix`, until
   the compatibility pass (#154) puts them back on pushes to `dev`/`main` and
