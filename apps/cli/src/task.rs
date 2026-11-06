@@ -305,12 +305,25 @@ pub enum Task {
     /// would keep it a name, was the alternative, and it would change the
     /// line the TUI has always run and shown for such a project.
     ///
+    /// With `yes`, `--yes`: an MCP server from elsewhere than the library
+    /// written ([`install::asks_first`]), once what each agent would run
+    /// has been shown, as the install screen shows it before it applies;
+    /// without, such a line writes nothing and says what it would. Never
+    /// in JSON, read or written: the panel shows no agent's line yet (#97),
+    /// so a task it sends never says yes for it, and one saying so is
+    /// refused as any field it does not have is; nor from a plan
+    /// ([`Change`]), whose tasks the panel sends back as they are.
+    ///
     /// [`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming
+    /// [`install::asks_first`]: mindweaver_core::install::asks_first
     Install {
         projects: Vec<String>,
         kind: Kind,
         name: String,
         from: Option<String>,
+        #[serde(skip)]
+        #[cfg_attr(feature = "ts", ts(skip))]
+        yes: bool,
     },
     /// `mindweaver uninstall -p <project>... <kind:name>`: one artifact taken
     /// back out of each project named, whichever place its copy came from,
@@ -390,6 +403,7 @@ impl From<Change> for Task {
                 kind,
                 name: name.into_string(),
                 from: Some(from.into_string()),
+                yes: false,
             },
             Change::Uninstall {
                 projects,
@@ -402,6 +416,29 @@ impl From<Change> for Task {
                 force: false,
             },
         }
+    }
+}
+
+impl Task {
+    /// The task that runs `change` once what it would write has been shown
+    /// and somebody said yes to it: `--yes` on an install that waits for
+    /// one ([`install::asks_first`]), an MCP server from elsewhere than the
+    /// library, as the install screen shows what each agent would run
+    /// before it applies. Every other change is the task [`Task::from`]
+    /// gives it.
+    ///
+    /// [`install::asks_first`]: mindweaver_core::install::asks_first
+    pub fn confirmed(change: Change) -> Task {
+        let asks = matches!(
+            &change,
+            Change::Install { kind, from, .. }
+                if mindweaver_core::install::asks_first(*kind, from)
+        );
+        let mut task = Task::from(change);
+        if let Task::Install { yes, .. } = &mut task {
+            *yes = asks;
+        }
+        task
     }
 }
 
@@ -719,15 +756,20 @@ impl Task {
                     _ => vec![at(holder, &[&["update", "--yes"], forced].concat(), &named)],
                 }
             }
+            // `--yes` before the name, as `adopt` has it.
             Task::Install {
                 projects,
                 kind,
                 name,
                 from,
+                yes,
             } => {
                 let mut head = picking(&["mindweaver", "install"], projects);
                 if let Some(from) = from {
                     head.extend(option("--from", from));
+                }
+                if *yes {
+                    head.push(String::from("--yes"));
                 }
                 let head: Vec<&str> = head.iter().map(String::as_str).collect();
                 vec![words(&head, &[&qualified(*kind, name)])]

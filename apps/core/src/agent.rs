@@ -170,6 +170,41 @@ impl Agent {
             Agent::OpenCode => opencode_mcp::chosen(root),
         }
     }
+
+    /// What this agent asks before it starts an MCP server a project's
+    /// config file gives it: what an install says once it has written one,
+    /// as `docs/agents.md` ("MCP servers") records it, never decided again
+    /// by a front end. Matched with no wildcard, so an agent added says it
+    /// before it compiles.
+    pub const fn starts_a_server(self) -> Starts {
+        match self {
+            // In a session somebody works in, once they approve it
+            // (docs-only); a `-p` run starts every server the file names,
+            // approved or not (verified on 2.1.318, `claude-mcp`).
+            Agent::Claude => Starts::OnceApproved,
+            // Only in a project its user's config marks trusted
+            // (docs-only, `codex-mcp-trusted` and `codex-mcp-untrusted`
+            // pending), which an install says by `codex_mcp_untrusted`.
+            Agent::Codex => Starts::InATrustedProject,
+            // Unasked: `opencode mcp list` connected every server the
+            // project's file named, nothing approved (verified on 2.2.5,
+            // 2.1.3 and 1.19.4, the OpenCode runs).
+            Agent::OpenCode => Starts::Unasked,
+        }
+    }
+}
+
+/// What an agent asks before it starts an MCP server its project's config
+/// file gives it ([`Agent::starts_a_server`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Starts {
+    /// Once somebody approves the project's servers when it asks; a run
+    /// with no one to ask starts them all the same.
+    OnceApproved,
+    /// Only in a project its user's config marks trusted.
+    InATrustedProject,
+    /// With nothing asked.
+    Unasked,
 }
 
 /// The files `agent` reads in a project, beside the folders [`read`] names,

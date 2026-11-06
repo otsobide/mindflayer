@@ -367,3 +367,23 @@ fn a_server_s_key_is_under_servers_in_v2_s_shape_and_under_mcp_in_v1_s() {
     assert_eq!(Shape::V2.key(&name), ["mcp", "servers", name.as_str()]);
     assert_eq!(Shape::V1.key(&name), ["mcp", name.as_str()]);
 }
+
+#[test]
+fn what_opencode_runs_is_read_off_its_one_line_in_either_shape() {
+    let name = McpMother::name();
+    for shape in [Shape::V2, Shape::V1] {
+        let program = entry_of(&McpMother::stdio(&name), shape);
+        let address = entry_of(&McpMother::http(&name), shape);
+
+        assert_eq!(
+            program.runs().to_string(),
+            "npx -y @example/server --workspace {env:EXAMPLE_WORKSPACE}",
+            "{shape:?}"
+        );
+        assert_eq!(
+            address.runs().to_string(),
+            "https://{env:EXAMPLE_TENANT}.example.com/mcp",
+            "{shape:?}"
+        );
+    }
+}

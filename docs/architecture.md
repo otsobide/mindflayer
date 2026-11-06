@@ -75,9 +75,12 @@ command's literal output among them, which buried all of that. The
 reference moved, whole and unchanged in substance, into
 [docs/reference.md](reference.md), how to build and test into
 [docs/development.md](development.md). No literal output is left in the
-README: the commands' is the reference's, where `examples_test.rs` reads
-its walk-through of the examples, and the HTTP API's is [its
-guide's](#the-apis-guide-runs-its-examples), written since.
+README but one: the commands' is the reference's, where `examples_test.rs`
+reads its walk-through of the examples, and the HTTP API's is [its
+guide's](#the-apis-guide-runs-its-examples), written since. The one left is
+what an MCP server's install prints (#95): what each agent will run is the
+first thing somebody adding one needs to see, in the section that tells
+them how.
 
 Every relative link in the README and under `docs/` is held to lead
 somewhere by `apps/cli/tests/docs_test.rs`: the file it names is there, an
@@ -1132,8 +1135,8 @@ added, so no version moved.
 An input read from no variable is not among them, though every agent's
 renderer refuses it (`claude_mcp_input_unread`, `codex_mcp_input_unread`,
 `opencode_mcp_input_unread`): every agent could be given its value as it is,
-and none is given it only because no install hands a renderer one yet
-(#95, in the open questions). Said here, `show` would call every agent
+and none is given it only because no install hands a renderer one, which
+#95 left as it was (in the open questions). Said here, `show` would call every agent
 refused a server each of them can take. Nor is an input that is no secret
 written where Codex reads no variable, an argument read from one
 (`add --arg-env`), a part of the address (`--url-var`): Codex's renderer
@@ -1272,8 +1275,10 @@ and no file an agent reads, so they needed what the first two did not:
   list mcp` takes in either place.
 - **Saying what no release does yet**, by a predicate each a front end can
   ask: `install::installs`, behind the refusal in `install::targets` that
-  every install, adoption and survey of a project meets, and
-  `create::scaffolds`, whether `add` writes a kind from a name and a
+  every install, adoption and survey of a project meets, which says yes of
+  every kind since #95, `install::targets` refusing a server by a code of
+  its own (`not_copied`), since it is installed as entries, never into a
+  folder, and `create::scaffolds`, whether `add` writes a kind from a name and a
   description alone, which the TUI's add form steps through, so neither
   screen offers a choice only to refuse it; `add mcp` is told the rest by
   its options ([adding one](#adding-an-mcp-server)). Each is a match on
@@ -3750,16 +3755,66 @@ and is given none (`no_target`).
   (`install_held`), an edited one left, every entry of it, unless forced,
   and an orphaned one said and left ([bringing what was installed up to
   date](#bringing-what-was-installed-up-to-date)).
-- **Named by a qualified name, for now.** `install::offered` finds a server
-  by a name qualified as one (`mcp:github`), which is how the CLI reaches
-  it, `mindweaver install -p collapse mcp:github` saying what it did as it
-  says it of any kind. What the front ends step through leaves MCP out
-  (`install::installs`): `survey`, `receives`, which the snapshot closes
-  MCP's boxes by as `not_installable`, and a name typed bare, until the
-  commands say what installing one will run and ask before writing one
-  from elsewhere than the library (#95). What an install hands back says
-  of each entry what its renderer said, and of each agent not reached
-  why, which no command prints yet (#95).
+- **Named as every kind is** (#95). `install::installs` says yes of a
+  server, so `survey` and `receives` hand one to `install::mcp`, the
+  snapshot's boxes of one are read as its entries stand, and a name typed
+  bare is asked of it wherever a skill's is ([which kind a name
+  is](#which-kind-a-name-is)): `mindweaver install -p collapse github`. Its
+  record says where it came from, which is what tells the box it holds
+  (`install::is_current`, as a rule's). `install::targets` refuses it by a
+  code of its own (`not_copied`), since it is never a copy in a folder,
+  which keeps every caller asking a kind's folders from reading one for a
+  server.
+- **What each agent will run is said before it is written.** Who is given
+  what is decided first (`decide`), as above, and a preview asks the same
+  of each renderer's plan with nothing written (`install::mcp::preview`,
+  `codex_mcp::planned` and `opencode_mcp::planned`, which read and refuse
+  as their `render` does, the user's Codex config included). What an
+  install hands back, and a preview, says of each agent the program it
+  runs or the address it reaches as its own entry spells it
+  (`mcp::Runs`, read off the entry by its renderer, never spelled again
+  from the definition: Claude is given an input as `${VAR}`, OpenCode as
+  `{env:VAR}`), what its renderer said of the entry, each agent not
+  reached by the code of why, and each variable the entries read where
+  the agents run (`Rendered::variables`), a secret's marked. The CLI
+  prints them under the install's line, the agents not reached and what a
+  renderer wrote an entry without as warnings with their codes, Codex in
+  a project it does not trust among them, and once something is written,
+  which variables to set and what each agent asks before it starts the
+  server (`Agent::starts_a_server`, from [docs/agents.md](agents.md#what-an-agent-asks-before-it-starts-one)):
+  Claude to approve it in a session, OpenCode nothing, Codex nothing more
+  than the trust its warning is about. An update that writes one says
+  the same, and so does its dry run of what each agent would be given
+  (`Update::previewed`, the install's preview), wherever the definition
+  came from: a definition changed since its install, a loaded
+  workspace's or the shelf's among them, is shown before the `--yes`
+  that writes it, as an install's is. A line printed before the write
+  would have needed the CLI to print as it runs, which its outcomes,
+  built and then printed, do not; the dry run below is where the lines
+  come before anything is written.
+- **One from elsewhere asks first.** A server is a command every agent in
+  the project runs, or an address each sends what it is given to, so one
+  whose definition does not come from the workspace's own library, a
+  loaded workspace's or the shelf's, is written only once somebody says
+  yes (`install::asks_first`, `install::Confirmed`): without `--yes`, at
+  either level, core's batch previews it rather than installing it
+  (`assign::install`), and the command says what each agent would run and
+  `nothing installed`, writing and recording nothing, with the exit
+  status the install would have. The preview comes to what the install
+  would: `would update` what the ledger records already, and nothing to
+  say yes to, `already current`, while each entry it would write is in
+  its file as recorded and none would be taken out (`Installed::Unchanged`
+  rather than `Unconfirmed`). A batch whose every part is only previewed
+  reads the ledger without making it (`ledger_for_reading`), as an
+  update's dry run does: opened to write, it would be made where there is
+  none, told the projects' ids, and scrubbed or migrated where an older
+  build left one, for a command that writes nothing. One with a part
+  refused is asked again of the ledger opened to write, since a refusal
+  read before the scrub can be one it takes away, two rows of one shelf
+  source offering a name twice until then. The library's own is written as
+  a skill is: it is the workspace's own, written by whoever keeps it. Asking of
+  every server was the alternative, and would ask of the library's own
+  what a skill is never asked.
 - **The writers hold the lock.** An install and an uninstall hold the
   workspace's lock from before the record is read until it is written, as
   `install::install` does, an update writing through the body that takes
@@ -3890,6 +3945,14 @@ of each kind as typed, and only when that kind is offered nothing, as a path
 to a loaded workspace (`install::resolve_from`): asked once for every kind,
 the refusal of a project with nowhere to put a skill would hide a rule the
 path offers.
+
+A server's name is a key (`mcp::name::is_key`), so `github` is asked of the
+skills, the rules and the servers alike, and `git/commits` of the rules
+alone (#95). A kind with nowhere to go in the project is then said over
+another that offers nothing of the name only when the name is offered as
+that kind: a project a `mind.toml` marks names no agent to give a server,
+and a typo in a skill's name there would otherwise be answered with why no
+server can go in, rather than that nothing of the name is offered.
 
 Taking one out reads the ledger instead (`install::uninstall_typed`): a bare
 name is the one kind recorded under it, one recorded as two is refused
@@ -4684,9 +4747,32 @@ the screen is no reason to change the rest without asking again.
   line says as it does typed by hand, so the screen says it only when no
   install line ran, rather than once more than the lines did.
 
+- **A server from elsewhere is shown before its line says yes** (#95). An
+  MCP server whose install waits for a yes (`install::asks_first`) is
+  previewed for its project when the screen is built, as every standing is
+  read then (`install::mcp::preview`, laid out by the lines an install
+  says under its own, `entries_said`), and each one marked to install is
+  shown in the confirmation `a` opens, each agent's program or address
+  and why one is not reached, before anything is written
+  (`Screen::previews`). Its line carries `--yes` (`Task::confirmed`) only
+  because the screen applies only past that confirmation, so what each
+  agent will run is on screen when somebody says yes to it, and the
+  transcript prints the line with it. The confirmation is as tall as the
+  rows its lines wrap into (`Paragraph::line_count`), and what the
+  terminal cannot hold scrolls, the question and the keys kept in place;
+  its yes waits until every row has been on screen (`Screen::unseen`, set
+  as it is drawn, the one place that knows the terminal's size), since a
+  box cut to the screen would ask a yes of commands nobody was shown. A
+  line without `--yes`, which would write nothing and say so under its
+  line, was the alternative: the confirmation would have been asked for
+  nothing. The panel's matrix sends
+  no yes, the field being no JSON of a task: it shows no agent's line yet
+  (#97), so a server from elsewhere ticked there runs as the dry run its
+  line is, saying what it would give each agent.
+
 The right column holds every kind's offers, filtered to one kind at a time:
-`tab` shows the next (`Screen::kind`), skills first, and a project's marks of
-every kind are applied together. A filter rather than a column a kind, so the
+`tab` shows the next (`Screen::kind`), skills first, then rules and MCP
+servers, and a project's marks of every kind are applied together. A filter rather than a column a kind, so the
 screen keeps two columns however many kinds there are; and rather than every
 kind in one list, where a skill and a rule of one name would sit side by side
 as two boxes for what reads as one thing. A row is one kind and name, so
@@ -4865,14 +4951,21 @@ found, otherwise as core stands it from its entries, reaching the agents
 whose entry is found, held in each of their files. The snapshot carries
 the same `entries` on each project ([the read model](#the-read-model)), and
 a project a `mind.toml` marks, which names no agent, lists none. The text
-of `status` lists each foreign entry as a row of its own, kind `mcp`, with
-the agent whose file holds it, so whoever reads it is told of a server
-somebody keeps there as of a foreign copy; an entry Mindweaver wrote is
-told by its installation's row, which the table has already.
+of `status` lists each entry as a row of its own, kind `mcp`, with the
+agent whose file holds it, its state and where it came from, in the place
+of its installation's row (#95): one row for an installation could not say
+that Claude's entry was edited while Codex's is current, which is what
+somebody reading it is about to act on. A foreign one is listed so too, so
+whoever reads it is told of a server somebody keeps there as of a foreign
+copy. The TUI's rows of a project keep each installation's row, whose
+badges say which agents it reaches, and add somebody's beside it, as
+foreign.
 
 Each rule a project marked by its settings received that some of its agents
-read nowhere is named in `missed`, with those agents, and is a warning beside
-the report too: one about some files, which Claude alone reads, or one Codex
+read nowhere is named in `missed`, with those agents, and so is each MCP
+server it received that some of them are given no entry of, one an agent's
+renderer refuses or whose file git tracks in a local project, as its install
+said (#95). Either is a warning beside the report too: one about some files, which Claude alone reads, or one Codex
 and OpenCode read nowhere because its block could not be written. Of each
 rule rather than of its kind, as `unreached` says a skill's: a skill reaches
 the agents that read the folders its kind goes to, the same for every skill,
@@ -9912,9 +10005,11 @@ so is an MCP server the project received, an entry in each of its agents'
 config files written from the library's definition (`ReceivedServer`,
 `change_received_mcp`), saying to uninstall it, or to change its definition
 in the library it came from and update: a change made in a file is read as
-an edit (D-04), never one the next install keeps. The hint names it
-qualified as a server's (`mcp:github`) however it was typed, since a name
-typed bare finds no server to uninstall until #95. A rule is asked of first,
+an edit (D-04), never one the next install keeps. The hint names it as an
+uninstall finds it, however it was typed: bare (`github`) while the ledger
+records the name as no other kind a bare name could be, and qualified as a
+server's (`mcp:github`) where it records a skill or a rule of the name
+too, which a bare name would be refused for as two. A rule is asked of first,
 and a name received as both is one a qualifier settles. The TUI lists unreadable files in the same way, by the name their place gives
 them (`lifecycle::identify`), so they can be reached with a key rather than
 only read about in a warning.
@@ -10889,7 +10984,8 @@ Unblocks #18, #86, #89, #93 and #94.
 the registry writes a variable ([what an MCP server's definition
 declares](#what-an-mcp-servers-definition-declares)), listed, shown,
 validated, renamed and removed by the lifecycle every kind goes through,
-and installed by nothing (`not_installable`) until #94. #88 added one from the
+and installed by nothing (`not_installable`) until #94, nor stepped
+through by any front end until #95. #88 added one from the
 command line, from how an agent starts or reaches it or from a template
 ([adding one](#adding-an-mcp-server)), and laid out what `show` says of
 its transport and inputs. #90 renders one into Claude's `.mcp.json` as
@@ -10905,7 +11001,11 @@ entry an installation writes by its fingerprint, and tells how it stands
 ([how an entry stands](#how-an-entry-stands)), and #94 installs a server
 into the file of each agent the project names, all of them or none, and
 takes out only the entries it recorded that nobody changed since
-([installing an MCP server](#installing-an-mcp-server)).
+([installing an MCP server](#installing-an-mcp-server)). #95 gave it the
+commands' words: a server named bare as every kind is, what each agent
+will run said from its renderer's own entry, and one from elsewhere than
+the library written only with `--yes`, on the command line and from the
+install screen alike.
 
 Checking it, #18 added MCP checks to `scripts/agent-probe`, run by hand.
 Claude Code's and OpenCode's ran on 2026-11-05; Codex's were not run, since
@@ -12832,12 +12932,15 @@ it once as it closes.
   names a variable and is written where Codex reads none, an argument or a
   part of the address `add --arg-env` and `--url-var` write
   (`codex_mcp_input_in_text`): every server `add` writes with either
-  reaches Codex only once a value is handed. A value given when the server
-  is installed is the commands' to ask for (#95) and the install's to hand
-  the renderer, which would then write it as it is, held to what a value of
-  the transport is held to; the ledger's record of an entry (#93) keeps its
-  fingerprint, not its values. Until then an install of such a server
-  reaches none of those agents, and says why of each
+  reaches Codex only once a value is handed. #95 gave the commands what
+  installing a server will run and which variables to set, and no way to
+  hand a value: one given when the server is installed would be the
+  commands' to ask for, an option of `install` or a question the screen
+  asks, and the install's to hand the renderer, which would then write it
+  as it is, held to what a value of the transport is held to; the ledger's
+  record of an entry (#93) keeps its fingerprint, not its values. Until
+  then an install of such a server reaches none of those agents, and says
+  why of each as a warning with that refusal's code, its preview as much
   ([installing an MCP server](#installing-an-mcp-server)).
 - **Variables Claude empties that the table does not follow.** What Claude
   keeps from a remote server was read from 2.1.318's binary

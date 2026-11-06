@@ -195,6 +195,7 @@ export type CoreCode =
   | "rules_block_unedited"
   | "mcp_entry_unedited"
   | "not_installable"
+  | "not_copied"
   | "mcp_unreached"
   | "install_unfit"
   | "install_overlaps"

@@ -818,11 +818,66 @@ fn a_kind_a_project_has_nowhere_to_put_closes_its_boxes_by_the_code_a_plan_locks
         [
             (Kind::Skill, "no_target"),
             (Kind::Rule, "no_target"),
-            (Kind::Mcp, "not_installable"),
+            (Kind::Mcp, "no_target"),
         ]
     );
     assert_eq!(boxes.held, []);
     let plan = fixture.planned(&[cell("bare", "skill:deploy", "workspace", true)]);
     assert_eq!(codes(&plan), (vec![], vec!["no_target"]));
     assert_eq!(plan.locked[0].why, boxes.closed[0].why);
+}
+
+/// Somebody's MCP server of the name in a file an agent of the project
+/// reads ticks its box, there whichever is asked for, and locks it asked
+/// away by the code an uninstall refuses it with, as a copy nobody
+/// installed does; the projects with none go ahead.
+#[test]
+fn an_mcp_server_somebody_keeps_in_an_agents_file_locks_its_box_as_foreign() {
+    let fixture = given(&["alpha", "beta"]);
+    let folder = fixture.workspace.own().directory_for(Kind::Mcp).unwrap();
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("github.toml"),
+        mindweaver_core::mother::McpMother::plain_program("github"),
+    )
+    .unwrap();
+    fs::write(
+        fixture.projects[0].root().join(".mcp.json"),
+        "{\n  \"mcpServers\": {\n    \"github\": {\n      \"command\": \"theirs\"\n    }\n  }\n}\n",
+    )
+    .unwrap();
+
+    let plan = fixture.planned(&[
+        cell("alpha", "mcp:github", "workspace", false),
+        cell("beta", "mcp:github", "workspace", true),
+    ]);
+
+    assert_eq!(
+        plan.changes,
+        [Change::Install {
+            projects: owned(&["beta"]),
+            kind: Kind::Mcp,
+            name: "github".into(),
+            from: "workspace".into(),
+        }]
+    );
+    assert_eq!(codes(&plan), (vec![], vec!["foreign"]));
+    assert_eq!(
+        plan.locked[0].cell,
+        cell("alpha", "mcp:github", "workspace", false)
+    );
+    // And the snapshot's box says it is somebody's, as the plan locks it.
+    let snapshot = fixture.snapshot();
+    let held: Vec<(&str, State)> = snapshot
+        .boxes
+        .iter()
+        .flat_map(|boxes| {
+            boxes
+                .held
+                .iter()
+                .filter(|held| held.kind == Kind::Mcp)
+                .map(move |held| (boxes.entry.as_str(), held.state))
+        })
+        .collect();
+    assert_eq!(held, [("alpha", State::Foreign)]);
 }

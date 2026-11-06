@@ -21,6 +21,8 @@
 //! `tab` shows the next kind, which means the same either way round, so the
 //! two cannot share it.
 
+use std::cell::Cell as Seen;
+
 use mindweaver_core::install::{self, Asked, Candidate, Cell, Plan, Standing};
 use mindweaver_core::{Kind, MindProject};
 use ratatui::crossterm::event::KeyCode;
@@ -70,6 +72,13 @@ pub struct Row {
     /// installing that one replaces this one's copy, so this one is not
     /// removed.
     pub superseded: bool,
+    /// What installing it would give each agent, as the line installing it
+    /// says it, for an offer whose install waits for a yes
+    /// ([`Candidate::asks_first`]): an MCP server from elsewhere than the
+    /// library, which the confirmation shows before the screen applies and
+    /// its line carries `--yes`. Read when the screen is built, as every
+    /// standing is; none for every other offer.
+    pub preview: Option<Vec<String>>,
 }
 
 impl Row {
@@ -80,6 +89,7 @@ impl Row {
             checked,
             was: checked,
             superseded: false,
+            preview: None,
         }
     }
 
@@ -245,6 +255,16 @@ pub struct Screen {
     /// Whether the confirmation is up. Applying removes files, so it is asked
     /// for rather than assumed.
     pub confirming: bool,
+    /// How many rows of what each agent would run the confirmation is
+    /// scrolled past, when it holds more than the screen does.
+    pub scroll: usize,
+    /// How many of those rows the confirmation last drawn left below what
+    /// it showed. Set as it is drawn ([`super::ui`]), the one place that
+    /// knows how tall the terminal is and how its lines wrap, and read by a
+    /// yes, which waits until none is left: a `--yes` given to a command
+    /// nobody was shown is the yes the confirmation is there to ask for. A
+    /// cell, since drawing reads the screen and changes nothing else of it.
+    pub unseen: Seen<usize>,
 }
 
 impl Screen {
@@ -258,6 +278,8 @@ impl Screen {
             receiver: 0,
             message: None,
             confirming: false,
+            scroll: 0,
+            unseen: Seen::new(0),
         };
         screen.show(Kind::Skill);
         screen
@@ -410,7 +432,10 @@ impl Screen {
     /// than taking it out, the box the one ticked unticked
     /// ([`Row::superseded`]) asked away all the same, for core to see it is
     /// replaced. A box this screen holds, somebody's or one edited since,
-    /// never moves, so nothing it plans is locked or clashes.
+    /// never moves, so nothing it plans is locked or clashes. An install
+    /// that waits for a yes carries `--yes` ([`Task::confirmed`]): the
+    /// screen applies only once its confirmation has shown what each agent
+    /// would run of it ([`Screen::previews`]).
     pub fn task(&self) -> Task {
         let asked: Vec<Asked> = self
             .targets
@@ -442,9 +467,34 @@ impl Screen {
             changes: Plan::of(&asked)
                 .changes
                 .into_iter()
-                .map(Task::from)
+                .map(Task::confirmed)
                 .collect(),
         }
+    }
+
+    /// What each box marked to install that waits for a yes would give the
+    /// agents of its project, a line each, under a line naming it: what the
+    /// confirmation shows before anything is written.
+    pub fn previews(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        for target in &self.targets {
+            for row in &target.rows {
+                let Some(preview) = &row.preview else {
+                    continue;
+                };
+                if row.pending() != Some(Pending::Install) {
+                    continue;
+                }
+                lines.push(format!(
+                    "{} into {}, from {}:",
+                    named(row.candidate.kind(), row.candidate.name()),
+                    target.name(),
+                    row.candidate.origin()
+                ));
+                lines.extend(preview.iter().cloned());
+            }
+        }
+        lines
     }
 
     /// Feed it a key.
@@ -484,14 +534,28 @@ impl Screen {
             return Step::Stay;
         }
         self.confirming = true;
+        self.scroll = 0;
+        self.unseen.set(0);
         Step::Stay
     }
 
     fn confirm(&mut self, key: KeyCode) -> Step {
         match key {
+            // Not before every line it asks a yes to has been shown.
+            KeyCode::Char('y') | KeyCode::Enter if self.unseen.get() > 0 => Step::Stay,
             KeyCode::Char('y') | KeyCode::Enter => {
                 self.confirming = false;
                 Step::Apply
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.unseen.get() > 0 {
+                    self.scroll += 1;
+                }
+                Step::Stay
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.scroll = self.scroll.saturating_sub(1);
+                Step::Stay
             }
             KeyCode::Char('n') | KeyCode::Esc => {
                 self.confirming = false;

@@ -122,6 +122,7 @@ fn installing_into_no_project_and_taking_out_of_none_make_no_ledger() {
         workspace.root(),
         &homes,
         Edits::Kept,
+        Confirmed::Yes,
     )
     .unwrap();
     let uninstalled = uninstall(&workspace, &[], &reference, &homes, Edits::Kept).unwrap();

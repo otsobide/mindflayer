@@ -436,10 +436,13 @@ mind link / mind unlink    # this project, into or out of the workspace above
 mind load / mind unload <path>...
                            # another workspace's skills and rules, into the
                            # one above
-mind install <NAME> [--from ORIGIN] [--force]
-                           # put a skill or a rule in: the workspace's own, a
-                           # loaded workspace's, or the shelf's; --force
-                           # writes over a copy changed since it was installed
+mind install <NAME> [--from ORIGIN] [--force] [--yes]
+                           # put a skill, a rule or an MCP server in: the
+                           # workspace's own, a loaded workspace's, or the
+                           # shelf's; --force writes over a copy changed since
+                           # it was installed; a server from elsewhere than
+                           # the library needs --yes, and without it says
+                           # what each agent would run
 mind uninstall <NAME>|--orphaned [--force]
                            # take one Mindweaver installed back out, or every
                            # one nothing offers any more
@@ -513,9 +516,9 @@ mindweaver gather git <URL>
                            # collect skills from a repository onto the shelf
 mindweaver gather list [--json]
                            # what is on the shelf or loaded, and where from
-mindweaver install         # a screen for putting skills and rules into its
-                           # projects
-mindweaver install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force]
+mindweaver install         # a screen for putting skills, rules and MCP
+                           # servers into its projects
+mindweaver install (-p PROJECT)...|--all-projects <NAME> [--from ORIGIN] [--force] [--yes]
                            # one, into the projects named or every one,
                            # without the screen
 mindweaver uninstall (-p PROJECT)...|--all-projects <NAME>|--orphaned [--force]
@@ -981,13 +984,14 @@ where that project already holds it:
 ```
 
 Move down the projects and the right column follows. `tab` shows the rules in
-it instead, and the skills again (`shift+tab` goes the other way). `→` or
+it instead, then the MCP servers, and the skills again (`shift+tab` goes the
+other way). `→` or
 `enter` goes into the column, `space` ticks and unticks, `←` or `esc` comes
 back. Nothing touches a file until `a`, which asks first and then does
 everything at once, of both kinds: installs and removals together.
 
 What `a` runs is the commands you would have typed: a `mindweaver install` for
-each skill or rule ticked, with a `-p` for every project ticked to take it
+each skill, rule or MCP server ticked, with a `-p` for every project ticked to take it
 and `--from` for where the one ticked comes from, and a `mindweaver uninstall`
 for each one unticked. It prints each with what it said, as the TUI prints a
 session when it closes, so a session with the screen in it can be run again
@@ -1004,6 +1008,32 @@ removed rule git/commits from collapse
 One that fails says why where it ran, and the rest run all the same. All of
 it is on stdout, warnings and errors included, each under the line it is
 about.
+
+An MCP server ticked that comes from a loaded workspace or the shelf is
+somebody else's command, so the question `a` asks shows, before anything is
+written, what each of the project's agents would run of it, or why one would
+not be given it, as `install` says it ([what an MCP server looks
+like](#what-an-mcp-server-looks-like)):
+
+```
+from elsewhere than the library, each agent would run:
+mcp linear into collapse, from load:../team:
+  claude reaches: https://mcp.linear.app/mcp
+  codex reaches: https://mcp.linear.app/mcp
+  opencode reaches: https://mcp.linear.app/mcp
+  warning: Codex reads `linear` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
+```
+
+What does not fit the terminal scrolls with `j` and `k`, and `y` waits
+until all of it has been shown. Saying yes runs its line with `--yes`,
+which is how the transcript prints it:
+
+```
+$ mindweaver install -p collapse --from load:../team --yes mcp:linear
+```
+
+One of the workspace's own goes in as a skill does, with no question of its
+own.
 
 Each project keeps its own ticks, so one pass across the list is one plan for
 the whole workspace. The number beside a project is how many of its boxes you
@@ -1288,7 +1318,8 @@ non-zero, as for anything that could not be read. So is a project that
 [installs where some of its agents do not read](#installing-somewhere-else):
 a warning names the agents that read none of its folders, and `unreached` in
 the JSON says the same; and one given a rule some of its agents read nowhere,
-which `missed` in the JSON says.
+or an MCP server some of them are given no entry of, which `missed` in the
+JSON says.
 
 `entries` in the JSON lists each MCP server's entry in the config files of
 the project's agents (`.mcp.json` for Claude Code, `.codex/config.toml` for
@@ -1300,11 +1331,11 @@ and one it installed stands as an installed skill does, `edited` once what
 the file holds under its name has changed. A config file holding an entry
 Mindweaver installed that cannot be read is a warning beside the report,
 the entry `missing`; one holding none it installed is passed over, a link
-included, and nothing in it is listed. The text lists each `foreign` one
-as a row of its own, kind `mcp`, with the agent whose file holds it, as a
-foreign copy is listed; one Mindweaver installed is the row of its
-installation, which says how it stands and which agents it reaches, as an
-installed skill's row does.
+included, and nothing in it is listed. The text lists each entry as a row
+of its own, kind `mcp`, with the agent whose file holds it, how it stands
+and, for one Mindweaver installed, where it came from, in the place of its
+installation's row: Claude's entry can be edited while Codex's is current.
+A `foreign` one is listed so too, as a foreign copy is.
 
 `--json` prints the same report in the envelope every reading command's
 `--json` shares ([machine-readable output](#machine-readable-output)): the
@@ -1810,7 +1841,7 @@ Every key runs a command you could have typed, through the same parser:
 | `L` | load another workspace's own skills and rules; enter on a loaded one unloads it | `mindweaver load <path>`, `mindweaver unload <path>` |
 | `s` | what is on the shelf | `mindweaver gather list` |
 | `w` | the weavers this machine knows, the one in use marked | `mindweaver workspaces` |
-| `i` | install skills and rules from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `mindweaver install` opens it; `a` runs `mindweaver install -p <project>... --from <origin> <kind:name>` and `mindweaver uninstall -p <project>... <kind:name>` |
+| `i` | install skills, rules and MCP servers from the workspace's own, a loaded workspace, or the shelf; `tab` switches between them, and `v` turns the screen round to every project for one of them | `mindweaver install` opens it; `a` runs `mindweaver install -p <project>... --from <origin> <kind:name>`, with `--yes` for an MCP server from elsewhere than the library once `a` has shown what each agent would run, and `mindweaver uninstall -p <project>... <kind:name>` |
 | `R` | read the disk again | nothing: it changes nothing |
 
 A project whose own commands would reach another workspace (linked from
@@ -3275,26 +3306,96 @@ and nothing else, and `mindweaver remove mcp:github --yes` takes it away;
 `mindweaver edit` opens it, and `--contents` refuses a definition that does
 not read or names another server.
 
-Installing one into a project, named as `mcp:github`, writes it into the
-config file of each agent the project names, an entry each, every other
-server and setting there kept, all of them or none:
+Installing one into a project writes it into the config file of each agent
+the project names, an entry each, every other server and setting there kept,
+all of them or none. Its name is enough, as a skill's is, or `mcp:github`
+when a skill or a rule shares it. What the install says under its line is
+what each agent now runs, or the address it reaches, spelled as that agent
+is given it, then the variables to set where the agents run, and what each
+agent asks before it starts the server:
 
 ```
-$ mindweaver install -p collapse mcp:github
+$ mindweaver install -p collapse github
 installed mcp github into collapse, from workspace
+  claude runs: npx -y @modelcontextprotocol/server-github
+  codex runs: npx -y @modelcontextprotocol/server-github
+  opencode runs: npx -y @modelcontextprotocol/server-github
+  set GITHUB_PERSONAL_ACCESS_TOKEN (a secret) where the agents run: each reads it there, and no file holds it
+  claude asks to approve it before it starts it in a session, though a run with `-p` starts it unasked
+  opencode starts it without asking
+warning: Codex reads `github` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
 ```
 
-An agent that cannot be given it, or whose file git tracks in a local
-project without `edit_tracked`, is passed over and the rest are given it;
-one that reaches none of them is refused, saying why of each. A server of
-the name somebody keeps in one of those files refuses the install, as a
-skill somebody keeps does, and so does an entry changed since it was
-written, until `--force`. In a local project, a config file the install
-makes is kept out of git, and goes with its last server.
-`mindweaver uninstall -p collapse mcp:github` takes out each entry it
-wrote, and nothing else. `rename`, `edit` and `remove` aimed at a server a
-project received are refused there: uninstall it, or change its definition
-in the library and `update`.
+Codex reads a project's servers only once its own config marks the project
+trusted, which is yours to do, so its entry is written all the same and the
+warning says why Codex will not start it yet. An input reaches Claude as
+`${VAR}` and OpenCode as `{env:VAR}`, which is what their lines show. An
+agent that cannot be given the server, or whose file git tracks in a local
+project without `edit_tracked`, is passed over and said as a warning with
+the code of why, and the rest are given it; one that reaches none of them is
+refused, saying why of each. A server of the name somebody keeps in one of
+those files refuses the install, as a skill somebody keeps does, and so does
+an entry changed since it was written, until `--force`. In a local project,
+a config file the install makes is kept out of git, and goes with its last
+server.
+
+A server from a workspace this one loads, or from the shelf, is a command
+somebody else wrote that every agent in the project would run, so without
+`--yes` the install says what each agent would run and writes nothing,
+`would update` when the project has it already, and that it is already
+current, with nothing to say yes to, while each agent holds what it would
+be given:
+
+```
+$ mindweaver install -p collapse linear
+would install mcp linear into collapse, from load:../team
+  claude reaches: https://mcp.linear.app/mcp
+  codex reaches: https://mcp.linear.app/mcp
+  opencode reaches: https://mcp.linear.app/mcp
+nothing installed: it comes from elsewhere than this workspace's library, so add --yes to go ahead
+warning: Codex reads `linear` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
+$ mindweaver install -p collapse linear --yes
+installed mcp linear into collapse, from load:../team
+  claude reaches: https://mcp.linear.app/mcp
+  codex reaches: https://mcp.linear.app/mcp
+  opencode reaches: https://mcp.linear.app/mcp
+  set LINEAR_API_KEY (a secret) where the agents run: each reads it there, and no file holds it
+  claude asks to approve it before it starts it in a session, though a run with `-p` starts it unasked
+  opencode starts it without asking
+warning: Codex reads `linear` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
+```
+
+An input read from no variable cannot be given to any agent as a reference,
+and no install hands one a value yet, so each agent it would reach says so,
+by its code. `update` writes a changed definition into every entry as an
+install does, saying the same lines: without `--yes`, what each agent would
+be given, under each `would update`, and with it, what each now is.
+`status` lists each entry an agent each, how it stands and where it came
+from, beside a server somebody keeps in one of those files, `foreign`:
+
+```
+$ mindweaver status -p collapse
+github  current  claude    workspace
+linear  current  claude    load:../team
+github  current  codex     workspace
+linear  current  codex     load:../team
+github  current  opencode  workspace
+linear  current  opencode  load:../team
+```
+
+A server one of the project's agents is given no entry of is a warning
+beside it, as a rule some of them read nowhere is.
+`mindweaver uninstall -p collapse linear` takes out each entry it wrote, and
+nothing else:
+
+```
+$ mindweaver uninstall -p collapse linear
+removed mcp linear from collapse
+```
+
+`rename`, `edit` and `remove` aimed at a server a project received are
+refused there: uninstall it, or change its definition in the library and
+`update`.
 
 A project keeps MCP servers of its own only where its settings name a folder
 for them, under `[directories]` as `mcp = "mcp"`, and `mind add mcp` writes

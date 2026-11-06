@@ -9,6 +9,7 @@ mod common;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use mindweaver_core::install::mcp::Variable;
 use mindweaver_core::install::{
     self, Edits, InstallError, Installation, Installed, Removed, Standing,
 };
@@ -111,6 +112,28 @@ impl Fixture {
 
     fn install(&self) -> Installation {
         self.try_install(Edits::Kept).unwrap()
+    }
+
+    /// What installing the server would give each agent, nothing written.
+    fn preview(&self) -> Installation {
+        let candidate = install::offered(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            Kind::Mcp,
+            &self.name,
+            None,
+        )
+        .unwrap();
+        install::mcp::preview(
+            &self.workspace,
+            &self.ledger,
+            &self.project,
+            &candidate,
+            &AgentHomes::default(),
+            Edits::Kept,
+        )
+        .unwrap()
     }
 
     fn try_uninstall(&self, edits: Edits) -> Result<Removed, InstallError> {
@@ -820,16 +843,17 @@ fn a_change_aimed_at_a_server_the_project_received_is_refused_as_received() {
         "{received:?}"
     );
     assert_eq!(received.code(), "change_received_mcp");
+    // Named bare however it was typed, the ledger recording the name as no
+    // other kind: the form an uninstall finds it by.
     assert!(received.to_string().ends_with(&format!(
-        "uninstall it as `{qualified}`, or change its definition in the library it came from \
-         and update"
+        "uninstall it as `{}`, or change its definition in the library it came from and \
+         update",
+        fixture.name
     )));
-    // Typed bare, the hint names it qualified all the same: the one form an
-    // uninstall finds a server by.
     assert!(matches!(
         find(Some(&fixture.workspace), &fixture.name),
-        LifecycleError::ReceivedServer { typed, qualified: hint, .. }
-            if *typed == fixture.name && *hint == qualified
+        LifecycleError::ReceivedServer { typed, named, .. }
+            if *typed == fixture.name && *named == fixture.name
     ));
     assert!(matches!(
         find(Some(&fixture.workspace), &format!("skill:{}", fixture.name)),
@@ -840,5 +864,168 @@ fn a_change_aimed_at_a_server_the_project_received_is_refused_as_received() {
     assert!(matches!(
         find(None, &qualified),
         LifecycleError::NotFound { .. }
+    ));
+}
+
+/// What each agent of `installation` is given, as its line says it.
+fn runs(installation: &Installation) -> Vec<(Agent, String)> {
+    installation
+        .entries
+        .as_ref()
+        .unwrap()
+        .given
+        .iter()
+        .map(|given| (given.agent, given.runs.to_string()))
+        .collect()
+}
+
+#[test]
+fn an_install_hands_back_what_each_agent_runs_and_every_variable_its_entries_read() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::stdio);
+
+    let installed = fixture.install();
+
+    // Each input as the agent reads it, and no Codex, which cannot be
+    // given a secret under a name other than its variable's.
+    assert_eq!(
+        runs(&installed),
+        [
+            (
+                Agent::Claude,
+                String::from("npx -y @example/server --workspace ${EXAMPLE_WORKSPACE}")
+            ),
+            (
+                Agent::OpenCode,
+                String::from("npx -y @example/server --workspace {env:EXAMPLE_WORKSPACE}")
+            ),
+        ]
+    );
+    let entries = installed.entries.as_ref().unwrap();
+    assert!(entries
+        .given
+        .iter()
+        .all(|given| given.written == Some(mindweaver_core::config_entry::Written::Created)));
+    assert_eq!(
+        entries.variables,
+        [
+            Variable {
+                name: "EXAMPLE_API_KEY".into(),
+                secret: true,
+            },
+            Variable {
+                name: "EXAMPLE_WORKSPACE".into(),
+                secret: false,
+            },
+        ]
+    );
+}
+
+#[test]
+fn a_preview_says_what_each_agent_would_run_and_why_one_is_not_reached_writing_nothing() {
+    let fixture = fixture(Share::Local, &Agent::ALL, McpMother::stdio);
+    let refused = codex_mcp::entry(&fixture.definition()).unwrap_err();
+
+    let previewed = fixture.preview();
+
+    assert_eq!(
+        previewed.installed,
+        Installed::Unconfirmed {
+            name: fixture.name.as_str().into(),
+            paths: vec![fixture.file(Agent::Claude), fixture.file(Agent::OpenCode)],
+            recorded: false,
+        }
+    );
+    assert!(previewed
+        .entries
+        .as_ref()
+        .unwrap()
+        .given
+        .iter()
+        .all(|given| given.written.is_none()));
+    assert_eq!(unreached(&previewed), [(Agent::Codex, refused.code())]);
+    assert!(fixture.files().iter().all(|(_, text)| text.is_none()));
+    assert!(fixture.record().is_none());
+    assert!(fixture.excluded().is_empty());
+    // What it says each agent would run is what the install then writes.
+    let installed = fixture.install();
+    assert_eq!(runs(&installed), runs(&previewed));
+    assert_eq!(
+        installed.entries.unwrap().variables,
+        previewed.entries.unwrap().variables
+    );
+}
+
+#[test]
+fn a_preview_meets_somebodys_server_and_codex_s_trust_as_the_install_would() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+
+    let untrusted = fixture.preview();
+    fixture.write(
+        ".mcp.json",
+        &TEAMS.replace("\"docs\"", &format!("\"{}\"", fixture.name)),
+    );
+    let foreign = fixture.preview();
+
+    assert_eq!(
+        unreached(&untrusted),
+        [(Agent::Codex, "codex_mcp_untrusted")]
+    );
+    assert_eq!(
+        runs(&untrusted),
+        Agent::ALL.map(|agent| (agent, String::from("npx -y @example/server --workspace .")))
+    );
+    assert_eq!(
+        foreign.installed,
+        Installed::Foreign {
+            name: fixture.name.as_str().into(),
+            path: fixture.file(Agent::Claude),
+        }
+    );
+    assert!(fixture.record().is_none());
+}
+
+/// A preview comes to what the install would: nothing to change once each
+/// agent holds what it would be given, as recorded, and an update of what
+/// the ledger records once the definition changes.
+#[test]
+fn a_preview_tells_a_server_already_current_and_one_it_would_update() {
+    let fixture = fixture(Share::Shared, &Agent::ALL, McpMother::plain_program);
+    fixture.install();
+
+    let current = fixture.preview();
+    fixture.define(&McpMother::plain_program(&fixture.name).replacen(
+        "--workspace",
+        "--verbose",
+        1,
+    ));
+    let changed = fixture.preview();
+
+    let paths: Vec<PathBuf> = Agent::ALL.map(|agent| fixture.file(agent)).to_vec();
+    assert_eq!(
+        current.installed,
+        Installed::Unchanged {
+            name: fixture.name.as_str().into(),
+            paths: paths.clone(),
+            unhashed: None,
+        }
+    );
+    assert_eq!(
+        changed.installed,
+        Installed::Unconfirmed {
+            name: fixture.name.as_str().into(),
+            paths,
+            recorded: true,
+        }
+    );
+    // What it says is what the install then comes to.
+    let updated = fixture.install();
+    assert!(
+        matches!(updated.installed, Installed::Updated { .. }),
+        "{:?}",
+        updated.installed
+    );
+    assert!(matches!(
+        fixture.preview().installed,
+        Installed::Unchanged { .. }
     ));
 }

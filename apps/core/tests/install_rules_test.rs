@@ -1826,22 +1826,19 @@ fn the_offer_of_a_rule_a_project_holds_is_the_one_its_record_came_from() {
 }
 
 #[test]
-fn a_project_whose_settings_name_no_agent_receives_neither_kind() {
+fn a_project_whose_settings_name_no_agent_receives_no_kind() {
     let named = fixture(Share::Shared, &[Agent::Codex]);
     let none = fixture(Share::Shared, &[]);
 
-    for kind in [Kind::Skill, Kind::Rule] {
+    // An MCP server among them, an entry in each agent's config file, with
+    // none to write into.
+    for kind in Kind::ALL {
         assert!(install::receives(&named.project, kind).is_ok(), "{kind}");
         let refused = install::receives(&none.project, kind).unwrap_err();
         assert!(
             matches!(&refused, InstallError::NoTarget { kind: refused, .. } if *refused == kind),
             "{refused:?}"
         );
-    }
-    // And neither receives an MCP server, which no install writes yet.
-    for fixture in [&named, &none] {
-        let refused = install::receives(&fixture.project, Kind::Mcp).unwrap_err();
-        assert_eq!(refused.code(), "not_installable", "{refused}");
     }
 }
 

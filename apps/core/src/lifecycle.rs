@@ -286,6 +286,22 @@ pub fn find_to_change(
                     .is_ok_and(|record| record.is_some())
             })
     };
+    // Typed bare, an uninstall finds the server when the ledger records
+    // the name as no other kind a bare name could be ([`install::kinds_named`],
+    // `uninstall_typed`); one it records as a skill too needs its qualifier.
+    let recorded = |kind: Kind| {
+        workspace.is_some_and(|workspace| {
+            let entry = install::entry_for_root(workspace, project.root());
+            workspace
+                .ledger_for_reading()
+                .and_then(|ledger| ledger.installation(&entry, kind, name))
+                .is_ok_and(|record| record.is_some())
+        })
+    };
+    let alone = install::kinds_named(&Reference::parse(name))
+        .into_iter()
+        .filter(|&kind| kind != Kind::Mcp)
+        .all(|kind| !recorded(kind));
     let project = project.name().to_owned();
     Err(if received(Kind::Rule) {
         LifecycleError::Received { typed, project }
@@ -293,7 +309,11 @@ pub fn find_to_change(
         LifecycleError::ReceivedServer {
             typed,
             project,
-            qualified: format!("{}{QUALIFIER}{name}", Kind::Mcp.slug()),
+            named: if alone {
+                name.to_owned()
+            } else {
+                format!("{}{QUALIFIER}{name}", Kind::Mcp.slug())
+            },
         }
     } else {
         LifecycleError::NotFound { typed }
@@ -1285,15 +1305,15 @@ pub enum LifecycleError {
     Received { typed: String, project: String },
     /// Not authored in the project but received: an MCP server written into
     /// its agents' config files from the definition it was installed from
-    /// ([`find_to_change`]). Uninstalled by `qualified`, its name qualified
-    /// as a server's, however it was typed: the one form an uninstall finds
-    /// a server by until #95, so a hint naming what was typed bare would
-    /// lead to "nothing to take out".
-    #[error("`{typed}` is an MCP server {project} received, an entry in its agents' config files written from the definition it was installed from rather than kept in it, so it is not changed from here: uninstall it as `{qualified}`, or change its definition in the library it came from and update")]
+    /// ([`find_to_change`]). Uninstalled by `named`, however it was typed:
+    /// its name bare where an uninstall finds the server by it, and
+    /// qualified as a server's where the ledger records it as another kind
+    /// too, which a bare name would be refused for as two.
+    #[error("`{typed}` is an MCP server {project} received, an entry in its agents' config files written from the definition it was installed from rather than kept in it, so it is not changed from here: uninstall it as `{named}`, or change its definition in the library it came from and update")]
     ReceivedServer {
         typed: String,
         project: String,
-        qualified: String,
+        named: String,
     },
     /// Listed, from a folder the project's agents read, but in none the
     /// project authors in: installed there, or somebody's own.

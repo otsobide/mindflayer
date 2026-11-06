@@ -300,10 +300,28 @@ the environment variable an agent reads it from (`--secret-env`,
 `--secret-header` or `--bearer-env`), never as its value: `--env` and
 `--header` write what they are given as it is, and refuse only a value that
 looks like a token. `mindweaver show mcp:github` says how each agent will be
-given it, and `mindweaver install -p <project> mcp:github` gives it to each
-agent the project names, an entry in that agent's own config file. [What an
-MCP server looks like](docs/reference.md#what-an-mcp-server-looks-like) has
-every option, and the rest.
+given it. Installing it gives it to each agent the project names, an entry in
+that agent's own config file, and says what each will run, then what to set
+before one starts it, and that Codex reads it only once you trust the
+project:
+
+```
+$ mindweaver install -p collapse github
+installed mcp github into collapse, from workspace
+  claude runs: npx -y @modelcontextprotocol/server-github
+  codex runs: npx -y @modelcontextprotocol/server-github
+  opencode runs: npx -y @modelcontextprotocol/server-github
+  set GITHUB_PERSONAL_ACCESS_TOKEN (a secret) where the agents run: each reads it there, and no file holds it
+  claude asks to approve it before it starts it in a session, though a run with `-p` starts it unasked
+  opencode starts it without asking
+warning: Codex reads `github` from /home/you/Projects/collapse/.codex/config.toml only in a project it trusts, and /home/you/.codex/config.toml does not mark /home/you/Projects/collapse `trusted`
+```
+
+A server from a workspace yours loads, or from the shelf, is a command
+somebody else wrote: without `--yes`, installing it says what each agent
+would run and writes nothing. [What an MCP server
+looks like](docs/reference.md#what-an-mcp-server-looks-like) has every
+option, and the rest.
 
 ## Learn more
 

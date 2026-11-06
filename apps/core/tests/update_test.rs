@@ -115,7 +115,14 @@ impl Given {
     }
 
     fn plan(&self, typed: &[&str], edits: Edits) -> Plan {
-        update::plan(&self.workspace, &self.projects, &references(typed), edits).unwrap()
+        update::plan(
+            &self.workspace,
+            &self.projects,
+            &references(typed),
+            edits,
+            &AgentHomes::default(),
+        )
+        .unwrap()
     }
 
     fn apply(&self, typed: &[&str], edits: Edits) -> Applied {

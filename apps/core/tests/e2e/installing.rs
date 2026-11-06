@@ -4,7 +4,7 @@
 
 use mindweaver_core::assign;
 use mindweaver_core::install::{self, Cell};
-use mindweaver_core::install::{Edits, Installed, Removed};
+use mindweaver_core::install::{Confirmed, Edits, Installed, Removed};
 use mindweaver_core::{Kind, Reference};
 use serde_json::json;
 
@@ -32,6 +32,7 @@ fn install(world: &World, typed: &str, edits: Edits) -> Installed {
         &world.at("~/Projects"),
         &world.homes(),
         edits,
+        Confirmed::Yes,
     )
     .expect("open the ledger");
     let part = assigned.parts.remove(0);
@@ -62,7 +63,8 @@ fn written(world: &World, installed: &Installed) -> Vec<String> {
         Installed::Added { paths, .. }
         | Installed::Updated { paths, .. }
         | Installed::Unchanged { paths, .. }
-        | Installed::Edited { paths, .. } => paths.iter().map(|p| world.spelled(p)).collect(),
+        | Installed::Edited { paths, .. }
+        | Installed::Unconfirmed { paths, .. } => paths.iter().map(|p| world.spelled(p)).collect(),
         Installed::Foreign { path, .. } => vec![world.spelled(path)],
     }
 }
@@ -131,13 +133,7 @@ fn an_installed_skill_reads_as_current_in_every_front_ends_snapshot() {
     assert_eq!(
         at(&snapshot, "/boxes"),
         &json!([{
-            "closed": [{
-                "kind": "mcp",
-                "why": {
-                    "code": "not_installable",
-                    "message": "MCP servers cannot be installed into a project yet",
-                },
-            }],
+            "closed": [],
             "entry": "api",
             "held": [{
                 "kind": "skill", "name": "review", "origin": "workspace",
@@ -247,6 +243,7 @@ fn a_name_nothing_offers_is_refused_with_what_would_offer_it() {
         &world.at("~/Projects"),
         &world.homes(),
         Edits::Kept,
+        Confirmed::Yes,
     )
     .expect("open the ledger");
 

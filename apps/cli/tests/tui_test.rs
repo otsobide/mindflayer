@@ -1378,6 +1378,7 @@ fn the_install_screen_opens_inside_the_tui_and_applies_from_there() {
                 kind: Kind::Skill,
                 name: String::from("deploy"),
                 from: Some(origin.clone()),
+                yes: false,
             }]
         })
     );
@@ -1515,6 +1516,7 @@ fn a_rule_ticked_on_the_install_screen_inside_the_tui_is_installed_from_there() 
                 kind: Kind::Rule,
                 name: String::from("git/commits"),
                 from: Some(String::from("workspace")),
+                yes: false,
             }]
         })
     );
@@ -1795,12 +1797,13 @@ fn the_lines_the_install_screen_ran_run_again_on_a_copy_leave_the_same_ledger_an
         KeyCode::Char(' '),
         KeyCode::Tab,
         KeyCode::Char(' '),
-        // tanukeys: git/commits and deploy ticked, lint unticked.
+        // tanukeys: git/commits and deploy ticked, lint unticked, back
+        // past the MCP servers to the skills.
         KeyCode::Left,
         KeyCode::Down,
         KeyCode::Right,
         KeyCode::Char(' '),
-        KeyCode::Tab,
+        KeyCode::BackTab,
         KeyCode::Char(' '),
         KeyCode::Down,
         KeyCode::Char(' '),
@@ -2042,12 +2045,14 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             kind: Kind::Skill,
             name: String::from("deploy"),
             from: Some(String::from("-weird")),
+            yes: false,
         },
         Task::Install {
             projects: vec![String::from("../collapse")],
             kind: Kind::Rule,
             name: String::from("git/no-force-push"),
             from: None,
+            yes: false,
         },
         Task::Uninstall {
             projects: vec![String::from("-odd"), String::from("./alpha")],
@@ -2118,9 +2123,10 @@ fn the_agents_and_share_toggles_parse_back_into_what_they_were() {
 fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
     let install = Task::Install {
         projects: vec![String::from("alpha"), String::from("-odd")],
-        kind: Kind::Skill,
+        kind: Kind::Mcp,
         name: String::from("deploy"),
         from: Some(String::from("https://example.com/acme/skills#main")),
+        yes: true,
     };
     let uninstall = Task::Uninstall {
         projects: vec![String::from("../collapse")],
@@ -2132,7 +2138,7 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
     assert_eq!(
         install.describe(),
         "mindweaver install -p alpha -p ./-odd --from 'https://example.com/acme/skills#main' \
-         skill:deploy"
+         --yes mcp:deploy"
     );
     assert_eq!(
         uninstall.describe(),
@@ -2147,13 +2153,14 @@ fn the_install_and_uninstall_tasks_parse_back_into_what_they_were() {
         name,
         from,
         force,
+        yes,
     }) = WeaverCli::try_parse_from(&line).unwrap().command
     else {
         panic!("{line:?}");
     };
     assert_eq!(projects, ["alpha", "./-odd"]);
-    assert!(!all_projects && !force);
-    assert_eq!(name.as_deref(), Some("skill:deploy"));
+    assert!(!all_projects && !force && yes);
+    assert_eq!(name.as_deref(), Some("mcp:deploy"));
     assert_eq!(
         from.as_deref(),
         Some("https://example.com/acme/skills#main")
@@ -2188,6 +2195,7 @@ fn an_install_task_installs_into_every_project_it_names_and_an_uninstall_takes_i
             kind: Kind::Skill,
             name: String::from("deploy"),
             from: None,
+            yes: false,
         },
     );
     for project in &projects {
@@ -3971,4 +3979,45 @@ fn a_line_that_reads_standard_input_is_not_run_from_the_screen() {
     let done = tui::execute(&words(&said), dir.path(), &Lookup::default(), &Watch::new());
     assert!(done.ok, "{done:?}");
     assert_eq!(fs::read_to_string(&manifest).unwrap(), rewritten);
+}
+
+/// A project's rows show the MCP servers it received, each with a badge
+/// in each agent's place it reaches, and each somebody keeps in an agent's
+/// config file as foreign, as `status` lists them.
+#[test]
+fn a_projects_rows_show_its_mcp_servers_installed_and_somebodys() {
+    let dir = TempDir::new().unwrap();
+    weaver(dir.path(), &["init"]).unwrap();
+    let collapse = dir.path().join("collapse");
+    fs::create_dir(&collapse).unwrap();
+    new_project(&collapse);
+    weaver(dir.path(), &["link", "collapse"]).unwrap();
+    let folder = own_directory_for(dir.path(), Kind::Mcp);
+    fs::create_dir_all(&folder).unwrap();
+    fs::write(
+        folder.join("github.toml"),
+        mindweaver_core::mother::McpMother::plain_program("github"),
+    )
+    .unwrap();
+    weaver(dir.path(), &["install", "-p", "collapse", "github"]).unwrap();
+    let claude = fs::read_to_string(collapse.join(".mcp.json")).unwrap();
+    fs::write(
+        collapse.join(".mcp.json"),
+        claude.replacen(
+            "\"mcpServers\": {",
+            "\"mcpServers\": {\n    \"theirs\": {\"type\": \"http\", \"url\": \"https://example.com/mcp\"},",
+            1,
+        ),
+    )
+    .unwrap();
+    let app = tui_in(dir.path());
+
+    let drawn = tui_drawn(&app);
+
+    for row in [
+        "mcp   github  current  CC CX OC",
+        "mcp   theirs  foreign  CC",
+    ] {
+        assert!(drawn.contains(row), "{row}\n{drawn}");
+    }
 }

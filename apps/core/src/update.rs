@@ -114,6 +114,13 @@ pub struct Update {
     /// settings, whose project's render writes it
     /// ([`ProjectPlan::rendered`]).
     pub done: Option<Result<Installation, InstallError>>,
+    /// What writing an MCP server would give each agent, in a dry run
+    /// ([`plan`]), as an install previews it ([`install::mcp::preview`]):
+    /// what each agent would run is a command a definition gave, which is
+    /// said before anything is written, an update's as much as an
+    /// install's. None for any other kind, for one not written, and once
+    /// applied, when [`Update::done`] says what each was given.
+    pub previewed: Option<Result<Installation, InstallError>>,
     /// What it is written from, when it is.
     candidate: Option<Candidate>,
 }
@@ -389,14 +396,45 @@ codes!(UpdateError {} carried {
 /// Only the installations `references` name, by kind and name as typed
 /// (`deploy`, `rule:git/commits`), or every one when they name none. An
 /// edited copy is written over only when `edits` says so, as `--force` does.
+///
+/// Each MCP server it would write is previewed ([`Update::previewed`]),
+/// against `homes`, the agents' own folders, as [`apply`] writes it.
 pub fn plan(
     workspace: &WeaverWorkspace,
     projects: &[MindProject],
     references: &[Reference],
     edits: Edits,
+    homes: &AgentHomes,
 ) -> Result<Plan, UpdateError> {
     let ledger = workspace.ledger_for_reading()?;
-    plan_with(workspace, &ledger, projects, references, edits)
+    let mut plan = plan_with(workspace, &ledger, projects, references, edits)?;
+    for planned in &mut plan.projects {
+        let Some(project) = projects
+            .iter()
+            .find(|project| project.root() == planned.root)
+        else {
+            continue;
+        };
+        for update in &mut planned.installations {
+            // Matched on the kind, so a third one has to say whether what
+            // it writes is shown first.
+            let previews = match update.kind {
+                Kind::Mcp => update.step.writes(),
+                Kind::Skill | Kind::Rule => false,
+            };
+            let Some(candidate) = update.candidate.as_ref().filter(|_| previews) else {
+                continue;
+            };
+            let edits = match update.step {
+                Step::WriteOver(_) => Edits::Forced,
+                _ => Edits::Kept,
+            };
+            update.previewed = Some(install::mcp::preview(
+                workspace, &ledger, project, candidate, homes, edits,
+            ));
+        }
+    }
+    Ok(plan)
 }
 
 /// Update `projects`: [`plan`], done.
@@ -429,7 +467,7 @@ pub fn apply(
 ) -> Result<Applied, UpdateError> {
     if !workspace.is_made() {
         return Ok(Applied {
-            plan: plan(workspace, projects, references, edits)?,
+            plan: plan(workspace, projects, references, edits, homes)?,
             scrub: Scrub::default(),
         });
     }
@@ -542,6 +580,7 @@ fn plan_with(
                         standing: surveyed.standing,
                         step,
                         done: None,
+                        previewed: None,
                         candidate,
                     },
                 ));
@@ -723,7 +762,10 @@ impl Updates {
                 Err(error) => unread.push(Said::of(error.code(), &error)),
             }
         }
-        let plan = plan(workspace, &projects, &[], Edits::Kept)?;
+        // The plan alone, as [`plan`] makes it before it previews what each
+        // server would give each agent, which nothing here draws.
+        let ledger = workspace.ledger_for_reading()?;
+        let plan = plan_with(workspace, &ledger, &projects, &[], Edits::Kept)?;
         let mut listed: Vec<ProjectUpdates> = Vec::new();
         for project in &plan.projects {
             // Planned once a directory, by the first project opened there.

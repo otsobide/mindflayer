@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 use mindweaver_core::assign;
 use mindweaver_core::create::Start;
-use mindweaver_core::install::{Edits, Installed};
+use mindweaver_core::install::{Confirmed, Edits, Installed};
 use mindweaver_core::known;
 use mindweaver_core::lifecycle;
 use mindweaver_core::mother::GitRepositoryMother;
@@ -348,6 +348,7 @@ impl World {
             &self.at(workspace),
             &self.homes(),
             Edits::Kept,
+            Confirmed::Yes,
         )
         .unwrap_or_else(|error| panic!("open the ledger of {workspace}: {error}"));
         for part in assigned.parts {

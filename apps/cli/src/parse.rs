@@ -274,11 +274,12 @@ pub enum Command {
         workspaces: Vec<PathBuf>,
     },
 
-    /// Put a skill or a rule into this project: one of the workspace's own,
-    /// a loaded workspace's, or one from its shelf.
+    /// Put a skill, a rule or an MCP server into this project: one of the
+    /// workspace's own, a loaded workspace's, or one from its shelf.
     Install {
-        /// Its name: a skill's, or a rule's route like `git/commits`;
-        /// `skill:<name>` or `rule:<route>` when one name is both.
+        /// Its name: a skill's, a server's, or a rule's route like
+        /// `git/commits`; `skill:<name>`, `rule:<route>` or `mcp:<name>`
+        /// when one name is two kinds.
         name: String,
 
         /// Where it comes from, when two places offer that name: `workspace`,
@@ -290,11 +291,18 @@ pub enum Command {
         /// otherwise left alone.
         #[arg(long)]
         force: bool,
+
+        /// Install an MCP server that comes from elsewhere than the
+        /// workspace's own library. Without this nothing is written, and
+        /// the command says what each agent would run.
+        #[arg(short, long)]
+        yes: bool,
     },
 
-    /// Take a skill or a rule Mindweaver installed back out of this project.
+    /// Take a skill, a rule or an MCP server Mindweaver installed back out
+    /// of this project.
     Uninstall {
-        /// Its name, or `kind:name` when one name is both.
+        /// Its name, or `kind:name` when one name is two kinds.
         #[arg(required_unless_present = "orphaned")]
         name: Option<String>,
 
@@ -772,8 +780,8 @@ pub enum WeaverCommand {
     #[command(subcommand)]
     Gather(GatherCommand),
 
-    /// Put skills and rules into the projects this workspace manages: the
-    /// workspace's own, a loaded workspace's, or its shelf's.
+    /// Put skills, rules and MCP servers into the projects this workspace
+    /// manages: the workspace's own, a loaded workspace's, or its shelf's.
     ///
     /// On its own it opens a screen for all of them at once. Given a name and
     /// projects, it installs that one into each, without the screen.
@@ -786,9 +794,9 @@ pub enum WeaverCommand {
         #[arg(long, conflicts_with = "projects")]
         all_projects: bool,
 
-        /// Its name: a skill's, or a rule's route like `git/commits`;
-        /// `skill:<name>` or `rule:<route>` when one name is both [default:
-        /// open the screen].
+        /// Its name: a skill's, a server's, or a rule's route like
+        /// `git/commits`; `skill:<name>`, `rule:<route>` or `mcp:<name>`
+        /// when one name is two kinds [default: open the screen].
         name: Option<String>,
 
         /// Where it comes from, when two places offer that name: `workspace`,
@@ -800,9 +808,16 @@ pub enum WeaverCommand {
         /// otherwise left alone.
         #[arg(long, requires = "name")]
         force: bool,
+
+        /// Install an MCP server that comes from elsewhere than the
+        /// workspace's own library. Without this nothing is written, and
+        /// the command says what each agent would run.
+        #[arg(short, long, requires = "name")]
+        yes: bool,
     },
 
-    /// Take a skill or a rule Mindweaver installed back out of projects.
+    /// Take a skill, a rule or an MCP server Mindweaver installed back out
+    /// of projects.
     Uninstall {
         /// A project to take it out of, by name or path; once for each.
         #[arg(short = 'p', long = "project", value_name = "PROJECT")]
@@ -812,7 +827,7 @@ pub enum WeaverCommand {
         #[arg(long, conflicts_with = "projects")]
         all_projects: bool,
 
-        /// Its name, or `kind:name` when one name is both.
+        /// Its name, or `kind:name` when one name is two kinds.
         #[arg(required_unless_present = "orphaned")]
         name: Option<String>,
 

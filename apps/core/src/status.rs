@@ -82,7 +82,10 @@ pub struct ProjectStatus {
     /// Each rule it received that some of its agents read nowhere, all of it
     /// there as it was installed, in the order of `artifacts`: one about
     /// some files only, which Claude alone reads, or one Codex and OpenCode
-    /// read nowhere because no block could be written for them.
+    /// read nowhere because no block could be written for them. And each
+    /// MCP server it received that some of them are given no entry of: one
+    /// an agent's renderer refuses, or whose file git tracks in a local
+    /// project, as its install said.
     ///
     /// Said of each rule rather than of its kind, as `unreached` says a
     /// skill's: a skill reaches the agents that read the folders its kind is
@@ -596,6 +599,10 @@ impl ProjectStatus {
         let (servers, installed): (Vec<InstallRecord>, Vec<InstallRecord>) = installed
             .into_iter()
             .partition(|record| record.kind == Kind::Mcp);
+        let served: Vec<String> = servers
+            .iter()
+            .map(|record| record.name.to_string())
+            .collect();
         let mut entries = Vec::new();
         if kinds.contains(&Kind::Mcp) {
             let (listed, unread) =
@@ -628,7 +635,7 @@ impl ProjectStatus {
             marker: Some(project.marker_file()),
             stale: None,
             unreached: unreached(project, kinds, &agents),
-            missed: missed(&agents, &artifacts, &received),
+            missed: missed(&agents, &artifacts, &received, &served),
             agents,
             artifacts,
             entries,
@@ -925,18 +932,29 @@ fn entered(
 }
 
 /// Each of `artifacts` that is one of the rules a project marked by its
-/// settings `received`, installed whole, with the agents among `agents`,
-/// its own, that read it nowhere ([`ProjectStatus::missed`]).
+/// settings `received`, or of the MCP servers it was `served`, installed
+/// whole, with the agents among `agents`, its own, that read it nowhere
+/// ([`ProjectStatus::missed`]).
 ///
-/// From the rows as the report lists them, so what is said of a rule is
-/// what its row says it reaches.
-fn missed(agents: &[Agent], artifacts: &[ArtifactStatus], received: &[String]) -> Vec<Missed> {
+/// From the rows as the report lists them, so what is said of a rule or a
+/// server is what its row says it reaches.
+fn missed(
+    agents: &[Agent],
+    artifacts: &[ArtifactStatus],
+    received: &[String],
+    served: &[String],
+) -> Vec<Missed> {
     artifacts
         .iter()
         .filter(|held| {
-            held.kind == Kind::Rule
-                && held.state.whole()
-                && received.iter().any(|route| *route == held.name)
+            // Matched on the kind, so a kind added says whether it is
+            // received a section or an entry at a time.
+            let of = match held.kind {
+                Kind::Rule => received,
+                Kind::Mcp => served,
+                Kind::Skill => &[],
+            };
+            held.state.whole() && of.iter().any(|name| *name == held.name)
         })
         .filter_map(|held| {
             let agents: Vec<Agent> = agents

@@ -14,15 +14,7 @@
   ],
   "boxes": [
     {
-      "closed": [
-        {
-          "kind": "mcp",
-          "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
-          }
-        }
-      ],
+      "closed": [],
       "entry": "api",
       "held": [
         {
@@ -42,15 +34,7 @@
       ]
     },
     {
-      "closed": [
-        {
-          "kind": "mcp",
-          "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
-          }
-        }
-      ],
+      "closed": [],
       "entry": "web",
       "held": [
         {
@@ -70,15 +54,7 @@
       ]
     },
     {
-      "closed": [
-        {
-          "kind": "mcp",
-          "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
-          }
-        }
-      ],
+      "closed": [],
       "entry": "docs",
       "held": [
         {
@@ -149,8 +125,8 @@
         {
           "kind": "mcp",
           "why": {
-            "code": "not_installable",
-            "message": "MCP servers cannot be installed into a project yet"
+            "code": "no_target",
+            "message": "legacy names no agent in its settings that MCP servers are installed for, so none can be installed into it"
           }
         }
       ],

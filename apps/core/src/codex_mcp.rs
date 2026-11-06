@@ -92,7 +92,7 @@ use crate::code::codes;
 use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
 use crate::hash;
 use crate::install;
-use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
+use crate::mcp::{self, Inexpressible, McpDefinition, Runs, Transport, TransportType};
 use crate::value::{ArtifactName, ContentHash, InputName, VariableName};
 
 /// Where Codex reads a project's servers, from its root.
@@ -141,6 +141,13 @@ impl Entry {
     /// it is written, and what one an agent's file holds is told by.
     pub fn fingerprint(&self) -> ContentHash {
         hash::fingerprint(&self.canonical())
+    }
+
+    /// What the agent runs or reaches, read off the entry as it is written,
+    /// its `command` and `args`, or its `url`: what an install says it gives the agent before it writes
+    /// anything, never spelled again from the definition.
+    pub fn runs(&self) -> Runs {
+        Runs::of(&self.value).expect("an entry is written with a program or an address")
     }
 }
 
@@ -305,6 +312,18 @@ pub struct Rendered {
     pub warnings: Vec<Warning>,
 }
 
+/// What [`render`] would write, and say, with nothing written: for an
+/// install to say what Codex would be given before it writes anything.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Planned {
+    /// The project's [`FILE`].
+    pub file: PathBuf,
+    pub entry: Entry,
+    /// What would be said of the project beside its entry, as
+    /// [`Rendered::warnings`] says it.
+    pub warnings: Vec<Warning>,
+}
+
 /// Write `definition`'s entry into the [`FILE`] at `root`, a project's
 /// root, in place of one of the same name or after the servers already
 /// there, and make the file, and `.codex`, when it is not there yet.
@@ -321,6 +340,47 @@ pub fn render(
     definition: &McpDefinition,
     homes: &AgentHomes,
 ) -> Result<Rendered, CodexMcpError> {
+    let (file, entry, warnings) = prepared(root, definition, homes)?;
+    let key = [SERVERS, entry.name.as_str()];
+    let edit = match file.get(&key)? {
+        None => Edit::Insert(entry.value.clone()),
+        Some(_) => Edit::Replace(entry.value.clone()),
+    };
+    let written = file.edit(&key, &edit)?;
+    Ok(Rendered {
+        file: file.path(),
+        written,
+        entry,
+        warnings,
+    })
+}
+
+/// What [`render`] would write into the [`FILE`] at `root`, and say, read
+/// and refused as [`render`] reads and refuses it, the user's config
+/// included, with nothing written: one place deciding both, so what an
+/// install says Codex will be given is what it then writes.
+pub fn planned(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<Planned, CodexMcpError> {
+    let (file, entry, warnings) = prepared(root, definition, homes)?;
+    file.get(&[SERVERS, entry.name.as_str()])?;
+    Ok(Planned {
+        file: file.path(),
+        entry,
+        warnings,
+    })
+}
+
+/// The file [`render`] writes into, the entry it writes there and what it
+/// says beside it, each refusal asked in the order [`render`] asks it:
+/// what it and [`planned`] share.
+fn prepared(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<(ConfigFile, Entry, Vec<Warning>), CodexMcpError> {
     let entry = entry(definition)?;
     let file = config(root)?;
     if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.path()]) {
@@ -340,11 +400,6 @@ pub fn render(
         Some(user) => user.trusts(root)?,
         None => false,
     };
-    let edit = match file.get(&key)? {
-        None => Edit::Insert(entry.value.clone()),
-        Some(_) => Edit::Replace(entry.value.clone()),
-    };
-    let written = file.edit(&key, &edit)?;
     let mut warnings = Vec::new();
     if !trusted {
         warnings.push(Warning::Untrusted {
@@ -354,12 +409,7 @@ pub fn render(
             config: homes.codex_home.as_ref().map(|home| home.join(USER_FILE)),
         });
     }
-    Ok(Rendered {
-        file: file.path(),
-        written,
-        entry,
-        warnings,
-    })
+    Ok((file, entry, warnings))
 }
 
 /// Take the entry keyed `name` out of the [`FILE`] at `root`, every other
@@ -587,7 +637,9 @@ pub enum Warning {
     /// same, since trusting a project is the user's to do, and Codex asks
     /// them. `config` is the user's config looked in, none when no Codex
     /// home was given.
-    #[error("`{name}` is written into {file}, which Codex reads only in a project it trusts, and {}", unmarked(.project, .config.as_deref()))]
+    // Said alike of an entry written and of one a preview says would be,
+    // which nothing is written for yet.
+    #[error("Codex reads `{name}` from {file} only in a project it trusts, and {}", unmarked(.project, .config.as_deref()))]
     Untrusted {
         name: String,
         file: PathBuf,

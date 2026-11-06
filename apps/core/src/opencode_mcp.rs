@@ -69,7 +69,7 @@ use crate::code::codes;
 use crate::config_entry::{self, ConfigFile, Edit, EntryError, FileError, Format, Value, Written};
 use crate::hash;
 use crate::install;
-use crate::mcp::{self, Inexpressible, McpDefinition, Transport, TransportType};
+use crate::mcp::{self, Inexpressible, McpDefinition, Runs, Transport, TransportType};
 use crate::value::{ArtifactName, ContentHash, InputName, VariableName};
 
 /// Where OpenCode reads a project's config from its root, in the order one
@@ -150,6 +150,13 @@ impl Entry {
     /// it is written, and what one an agent's file holds is told by.
     pub fn fingerprint(&self) -> ContentHash {
         hash::fingerprint(&self.canonical())
+    }
+
+    /// What the agent runs or reaches, read off the entry as it is written,
+    /// its `command`, the program and its arguments in one array, or its `url`: what an install says it gives the agent before it writes
+    /// anything, never spelled again from the definition.
+    pub fn runs(&self) -> Runs {
+        Runs::of_line(&self.value).expect("an entry is written with a program or an address")
     }
 }
 
@@ -325,16 +332,7 @@ pub fn render(
     definition: &McpDefinition,
     homes: &AgentHomes,
 ) -> Result<Rendered, OpenCodeMcpError> {
-    let checked = entry(definition, Shape::V2)?;
-    let (file, _) = config(root)?;
-    if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.path()]) {
-        return Err(OpenCodeMcpError::UserScope { file, home, reader });
-    }
-    let standing = standing(&file, checked.name.as_str())?;
-    let given = match standing.map_or_else(|| followed(&file), Ok)? {
-        Shape::V2 => checked,
-        Shape::V1 => entry(definition, Shape::V1)?,
-    };
+    let (file, given, standing) = prepared(root, definition, homes)?;
     let key = given.shape.key(given.name.as_str());
     let edit = match standing {
         None => Edit::Insert(given.value.clone()),
@@ -346,6 +344,54 @@ pub fn render(
         written,
         entry: given,
     })
+}
+
+/// What [`render`] would write, with nothing written: for an install to
+/// say what OpenCode would be given before it writes anything.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Planned {
+    /// The one of [`FILES`] it would be written into.
+    pub file: PathBuf,
+    /// The entry, in the shape that file would be given it in.
+    pub entry: Entry,
+}
+
+/// What [`render`] would write into the first of [`FILES`] there is at
+/// `root`, read and refused as [`render`] reads and refuses it, in the
+/// shape it would write, with nothing written: one place deciding both, so
+/// what an install says OpenCode will be given is what it then writes.
+pub fn planned(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<Planned, OpenCodeMcpError> {
+    let (file, entry, _) = prepared(root, definition, homes)?;
+    Ok(Planned {
+        file: file.path(),
+        entry,
+    })
+}
+
+/// The file [`render`] writes into, the entry it writes there in the shape
+/// it is written in, and the shape a server of the name stands in there
+/// already, each refusal asked in the order [`render`] asks it: what it
+/// and [`planned`] share.
+fn prepared(
+    root: &Path,
+    definition: &McpDefinition,
+    homes: &AgentHomes,
+) -> Result<(ConfigFile, Entry, Option<Shape>), OpenCodeMcpError> {
+    let checked = entry(definition, Shape::V2)?;
+    let (file, _) = config(root)?;
+    if let Some((file, home, reader)) = install::in_agent_home(homes, &[file.path()]) {
+        return Err(OpenCodeMcpError::UserScope { file, home, reader });
+    }
+    let standing = standing(&file, checked.name.as_str())?;
+    let given = match standing.map_or_else(|| followed(&file), Ok)? {
+        Shape::V2 => checked,
+        Shape::V1 => entry(definition, Shape::V1)?,
+    };
+    Ok((file, given, standing))
 }
 
 /// Take the server keyed `name` out of the first of [`FILES`] there is at
