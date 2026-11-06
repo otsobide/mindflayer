@@ -1473,6 +1473,114 @@ fn a_repository_gathered_whole_is_searched_as_it_was_whatever_agents_manifest_it
     );
 }
 
+/// An Agent Plugins package's `plugin.json`, its `$schema` on a host of no
+/// format's: what the format's own is, is matched within the URL
+/// (`plugin::AGENT_PLUGINS_SCHEMA`).
+const PACKAGE: &str = r#"{"$schema": "https://example.org/agent-plugins/plugin.schema.json", "name": "kit", "version": "1.0.0", "license": "MIT"}"#;
+
+#[test]
+fn an_agent_plugins_package_offers_its_skills_children_alone_and_nothing_deeper() {
+    let source = repository(&[
+        ("plugin.json", PACKAGE),
+        ("SKILL.md", &skill("kit", "The package itself")),
+        ("skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        (
+            "skills/team/review/SKILL.md",
+            &skill("review", "Nested below a child"),
+        ),
+        ("tools/lint/SKILL.md", &skill("lint", "Outside skills/")),
+        ("mcp.json", r#"{"mcpServers": {}}"#),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(url(&source))).unwrap();
+
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+    let gathered: Vec<(String, String, Option<String>)> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|gathered| {
+            (
+                gathered.name.to_string(),
+                gathered.upstream_path,
+                gathered.license,
+            )
+        })
+        .collect();
+    // Its licence, as its manifest gives it, for a skill that says none.
+    assert_eq!(
+        gathered,
+        [(
+            String::from("deploy"),
+            String::from("skills/deploy"),
+            Some(String::from("MIT"))
+        )]
+    );
+}
+
+#[test]
+fn a_package_the_search_of_a_repository_comes_to_offers_its_skills_children_alone() {
+    let source = repository(&[
+        ("kit/plugin.json", PACKAGE),
+        ("kit/skills/deploy/SKILL.md", &skill("deploy", "Ship it")),
+        (
+            "kit/skills/team/review/SKILL.md",
+            &skill("review", "Nested below a child"),
+        ),
+        ("skills/top/SKILL.md", &skill("top", "The repository's own")),
+        (
+            "other/plugin.json",
+            r#"{"name": "not a package", "skills": "./x"}"#,
+        ),
+        (
+            "other/skills/team/notes/SKILL.md",
+            &skill("notes", "Found by its layout"),
+        ),
+    ]);
+
+    let gathered = found(&Request::git(url(&source)));
+
+    assert_eq!(
+        gathered,
+        named(&[
+            ("deploy", "kit/skills/deploy"),
+            ("notes", "other/skills/team/notes"),
+            ("top", "skills/top"),
+        ])
+    );
+}
+
+#[test]
+fn a_plugin_a_catalog_lists_that_is_a_package_offers_its_skills_children_alone() {
+    let source = repository(&[
+        ("plugins/kit/plugin.json", PACKAGE),
+        (
+            "plugins/kit/skills/deploy/SKILL.md",
+            &skill("deploy", "Ship it"),
+        ),
+        (
+            "plugins/kit/skills/team/review/SKILL.md",
+            &skill("review", "Nested below a child"),
+        ),
+    ]);
+
+    for dialect in [Dialect::Claude, Dialect::Codex] {
+        let gathered = found(
+            &Request::git(url(&source))
+                .from_subdirectory("plugins/kit")
+                .searching(listed_by(dialect)),
+        );
+
+        assert_eq!(
+            gathered,
+            named(&[("deploy", "plugins/kit/skills/deploy")]),
+            "{dialect:?}"
+        );
+    }
+}
+
 #[test]
 fn a_folder_the_source_does_not_have_is_named_in_the_error() {
     let source = repository(&[("README.md", "nothing to gather\n")]);

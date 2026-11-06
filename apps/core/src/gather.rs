@@ -1789,6 +1789,13 @@ pub fn license_of(stated: Option<&str>, folder: &Path) -> Option<String> {
 /// repository the same way (`gathered_manifest_outside`), each searched as
 /// a repository is.
 ///
+/// A package in the Agent Plugins format, the folder searched or one the
+/// search comes to (`plugin`, [`plugin::is_package`]), offers its
+/// `skills/<child>` alone, never deeper, as that format says, a `SKILL.md`
+/// at its root among what it does not offer: one the search of a
+/// repository would find further down is no skill of it. What its entry
+/// names is a plugin's skills all the same, as the catalog says them.
+///
 /// Either way, a link that is itself a skill's folder is taken when it
 /// leads to a folder inside the clone, as a copy follows it
 /// ([`copy::tree`]'s `within`), and refused otherwise; one leading to a
@@ -1807,6 +1814,7 @@ fn candidates(
         path: clone.to_path_buf(),
         source,
     })?;
+    let package = plugin.is_some_and(|plugin| plugin.format == plugin::Format::AgentPlugins);
     let mut found = Vec::new();
     match &request.search {
         Search::Plugin {
@@ -1830,17 +1838,18 @@ fn candidates(
                 }
             }
         }
+        _ if package => children(&root.join("skills"), manifest, &mut found)?,
         // The folder searched is one skill, the repository itself when it
         // is its root, and nothing in it is another's.
         _ if root.join(manifest).is_file() => found.push(root.to_path_buf()),
         Search::Plugin { skills: None, .. } => {
             for folder in plugin_folders(root, request, plugin, failures) {
                 if folder.is_dir() {
-                    search(&folder, 1, manifest, &mut found)?;
+                    search(&folder, 1, manifest, &bound, &mut found)?;
                 }
             }
         }
-        Search::Layouts => search(root, 1, manifest, &mut found)?,
+        Search::Layouts => search(root, 1, manifest, &bound, &mut found)?,
     }
     found.sort();
     found.dedup();
@@ -1881,7 +1890,9 @@ fn candidates(
 /// further down, a vendored copy of another, its tests' fixtures, an
 /// example inside an example, is not taken for what it offers, and so that
 /// a search of a large repository, or of one made to be large, stays as
-/// short as the layouts need it to be.
+/// short as the layouts need it to be. A package in the Agent Plugins
+/// format is not searched to it: its skills are its `skills/<child>`
+/// alone, as that format says (#104).
 pub const SEARCH_DEPTH: usize = 4;
 
 /// The folders a gather's search never enters, wherever they are: git's
@@ -1926,12 +1937,41 @@ fn plugin_folders(
     folders
 }
 
+/// What the `skills` folder of a package in the Agent Plugins format holds
+/// as its skills, into `found`: each folder in it holding a `manifest`, and
+/// nothing further down, as that format says. A package with no `skills`
+/// folder offers nothing, which is no failure.
+fn children(skills: &Path, manifest: &str, found: &mut Vec<PathBuf>) -> Result<(), GatherError> {
+    if !skills.is_dir() {
+        return Ok(());
+    }
+    let unread = |source| GatherError::Read {
+        path: skills.to_path_buf(),
+        source,
+    };
+    for entry in fs::read_dir(skills).map_err(unread)? {
+        let entry = entry.map_err(unread)?;
+        if PASSED_OVER.iter().any(|name| entry.file_name() == *name) {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() && path.join(manifest).is_file() {
+            found.push(path);
+        }
+    }
+    Ok(())
+}
+
 /// Look through `folder`, `depth` folders below the one searched, for the
-/// folders holding a `manifest`, putting each in `found`.
+/// folders holding a `manifest`, putting each in `found`: a folder that is
+/// a package in the Agent Plugins format, in the repository whose clone
+/// resolves to `bound`, as that format says ([`children`]), and any other
+/// as far down as [`SEARCH_DEPTH`].
 fn search(
     folder: &Path,
     depth: usize,
     manifest: &str,
+    bound: &Path,
     found: &mut Vec<PathBuf>,
 ) -> Result<(), GatherError> {
     let unread = |source| GatherError::Read {
@@ -1948,10 +1988,13 @@ fn search(
         if !path.is_dir() {
             continue;
         }
-        if path.join(manifest).is_file() {
+        let deeper = !linked && depth < SEARCH_DEPTH;
+        if deeper && plugin::is_package(&path, bound) {
+            children(&path.join("skills"), manifest, found)?;
+        } else if path.join(manifest).is_file() {
             found.push(path);
-        } else if !linked && depth < SEARCH_DEPTH {
-            search(&path, depth + 1, manifest, found)?;
+        } else if deeper {
+            search(&path, depth + 1, manifest, bound, found)?;
         }
     }
     Ok(())

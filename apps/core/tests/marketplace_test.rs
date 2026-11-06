@@ -1383,3 +1383,35 @@ fn a_codex_plugin_is_searched_and_said_as_its_manifest_says() {
         .collect();
     assert_eq!(licenses, [Some(String::from("MIT"))]);
 }
+
+#[test]
+fn an_agent_plugins_package_a_catalog_lists_is_gathered_as_its_format_says_and_its_servers_said() {
+    let market = repository(&[
+        (
+            ".agents/plugins/marketplace.json",
+            &catalog("c", &[codex_entry("kit", "./plugins/kit")]),
+        ),
+        (
+            "plugins/kit/plugin.json",
+            r#"{"$schema": "https://example.org/agent-plugins/plugin.schema.json", "name": "kit"}"#,
+        ),
+        (
+            "plugins/kit/skills/deploy/SKILL.md",
+            &skill("deploy", "Ship it"),
+        ),
+        (
+            "plugins/kit/skills/team/review/SKILL.md",
+            &skill("review", "Nested below a child"),
+        ),
+        ("plugins/kit/mcp.json", r#"{"mcpServers": {}}"#),
+    ]);
+    let routes = Arc::new(Routes::default().to(MARKET, &market));
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = marketplace::gather(&workspace, &ledger, &request(&routes, Pick::All)).unwrap();
+
+    assert_eq!(shelf(&ledger), pairs(&[("deploy", "c.kit")]));
+    assert_eq!(report.children[0].holds, [Holding::McpServers]);
+    assert_eq!(report.children[0].mcp_files, ["mcp.json"]);
+}
