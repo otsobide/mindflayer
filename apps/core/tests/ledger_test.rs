@@ -760,9 +760,10 @@ fn a_version_6_ledger_keeps_every_row_but_those_of_a_spelling_made_one_with_anot
         assert!(!kept.is_empty(), "{now} reads nothing to compare");
     }
     // An installation from a spelling that went is from the one kept, by
-    // the origin that one is installed from.
+    // the origin that one is installed from, without the credential the
+    // kept one still holds, which it never held.
     let skills = String::from("git@github.com:acme/skills.git");
-    let private = format!("https://x-access-token:{token}@github.com/acme/private");
+    let private = String::from("https://github.com/acme/private");
     assert_eq!(
         rows(
             &after,

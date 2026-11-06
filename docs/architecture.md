@@ -3503,7 +3503,9 @@ to be one place one, before the identity is made unique: the one whose shelf
 was filled most recently is kept, by the rule the scrub keeps, what the
 other gathered goes with it, and every installation from it is from the kept
 one, its origin rewritten to the kept one's as version 3 spelled an origin,
-so an update finds where it came from offered there. It is the second
+without the credential the kept one's URL may still hold, so an update finds
+where it came from offered there and no row is given one it did not hold. It
+is the second
 exception, and of another kind: what it is handed is a rule, today's, since
 no SQL can tell that two URLs are one repository's, and what the rule says
 of each row is written into the row, which a gather finds its source by from

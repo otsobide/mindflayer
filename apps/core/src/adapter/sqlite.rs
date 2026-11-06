@@ -2304,14 +2304,17 @@ CREATE UNIQUE INDEX sources_by_name ON sources (name);
 /// anything loses however recently it was tried. What the other gathered
 /// goes with it, and every installation from it is from the kept one now,
 /// its origin rewritten to the kept one's as version 3 spelled an origin,
-/// so an update finds where it came from offered there. The rows that went
+/// without the credential the kept one's URL may hold, so an update finds
+/// where it came from offered there and no row is given a credential it
+/// did not hold. The rows that went
 /// are handed back ([`Merged`]), for the folders they had to go too, which
 /// nothing points into any more.
 ///
 /// A credential is left where the scrub finds it, which every command that
 /// writes runs ([`crate::gather::scrub`]): it rewrites a clone before its
 /// row, and a row this rewrote first would no longer say that its clone
-/// still holds the credential. The identity and the name never hold one.
+/// still holds the credential. The identity, the name and an origin this
+/// writes never hold one.
 fn seven(
     transaction: &Transaction<'_>,
     canonical: impl Fn(&str) -> String,
@@ -2365,13 +2368,24 @@ fn seven(
         }
     }
     for (gone, into) in &pairs {
+        // Spelled without the credential the kept row may still hold, which
+        // the scrub takes out of the row and its own installations' origins
+        // later: an installation moved here held none, and is not to be
+        // given one.
+        let origin = transaction.query_row(
+            "SELECT url, reference FROM sources WHERE id = ?1",
+            [into],
+            |row| {
+                let url = redacted(&row.get::<_, String>(0)?).into_owned();
+                Ok(match row.get::<_, Option<String>>(1)? {
+                    Some(reference) => format!("{url}#{reference}"),
+                    None => url,
+                })
+            },
+        )?;
         transaction.execute(
-            "UPDATE installations
-                SET source_id = ?1,
-                    origin = (SELECT url || coalesce('#' || reference, '')
-                                FROM sources WHERE id = ?1)
-              WHERE source_id = ?2",
-            [into, &gone.id],
+            "UPDATE installations SET source_id = ?1, origin = ?3 WHERE source_id = ?2",
+            rusqlite::params![into, gone.id, origin],
         )?;
         // What it gathered goes with it, by the cascade.
         transaction.execute("DELETE FROM sources WHERE id = ?1", [gone.id])?;
