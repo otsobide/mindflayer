@@ -1190,7 +1190,9 @@ The same rule holds: a skill or a rule somebody wrote is never overwritten or
 removed, and says so. `--from` takes `workspace`, a shelf source's name or
 URL, or a loaded workspace's path or name, and is only needed when two places offer the
 same name: which of the two lands in the project's one folder of that name is
-not something to guess.
+not something to guess. A word that is both a source's name and a loaded
+workspace's name or path names neither, and is refused as offered twice: say
+the source's URL or `load:<path>` instead.
 
 `mindweaver install` takes `-p` once for each project, to install into several
 at once, or `--all-projects` for every one the workspace links, and `mindweaver

@@ -387,11 +387,14 @@ text_value! {
     ///
     /// Letters, digits, `.`, `_` and `-`, as D-13 says, so it is one word on
     /// a command line that nothing quotes and no shell reads, and none of
-    /// the other words `--from` takes: no `:`, which `load:` has, and no
-    /// `/`, which a URL and a path have. Not `.` or `..`, which read as a
+    /// the origins `--from` takes: no `:`, which `load:` has, and no `/`,
+    /// which a URL and a path have. Not `.` or `..`, which read as a
     /// folder, nor starting with `-`, which reads as an option, nor
     /// `workspace`, which `--from` takes for the workspace's own
-    /// ([`crate::install::WORKSPACE_ORIGIN`]).
+    /// ([`crate::install::WORKSPACE_ORIGIN`]). A loaded workspace may be
+    /// called what a source is, or be loaded from a folder of that name,
+    /// and `--from` that word then names neither, refused as offered twice
+    /// ([`crate::install::offered_typed`]).
     ///
     /// Made by [`parse`](Self::parse), which holds a name somebody typed to
     /// that, by [`derived`](Self::derived) from a source's URL, or as the

@@ -3096,9 +3096,14 @@ Its name (`value::SourceName`) is `owner-repo`, the last two folders of that
 identity, numbered when another source has it, unless `gather git --name`
 gives one, which a later gather with another `--name` changes; letters,
 digits, `.`, `_` and `-`, so it is one word on a command line, none of the
-other words `--from` takes (no `:`, which `load:` has, no `/`, which a path
+origins `--from` takes (no `:`, which `load:` has, no `/`, which a path
 has, and not `workspace`). A name another source has is refused before
-anything is registered or fetched: one name is one source. It is what `gather
+anything is registered or fetched: one name is one source. A loaded
+workspace may still be called what a source is, or be loaded from a folder
+of that name, which `--from` took for it before sources had names: such a
+word names neither, refused as offered twice, since taking it for the
+source would hand a script the source's skill unsaid, and each is still
+named by its origin (`install::Naming::Named`). It is what `gather
 list` shows of where an offer from the shelf comes from (`Offer::listed_from`)
 and what `--from` takes for it, which is what a listing showing it is for. The
 origin an install records stays the source's URL with its branch, which
