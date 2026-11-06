@@ -364,6 +364,29 @@ pub fn repository(url: &str) -> Option<String> {
     (!matches!(last, "" | "..")).then(|| last.to_owned())
 }
 
+/// Whether `url` names a repository on another machine: a URL with a
+/// scheme other than `file`, or an scp-like `[user@]host:path`, as `gix`
+/// reads one. A path, relative or absolute, and a `file://` URL are this
+/// machine's.
+///
+/// What a marketplace's catalog may name a plugin's repository by (#103):
+/// a catalog is somebody else's file, and one naming a folder on this
+/// machine would have a gather put on the shelf whatever that folder holds,
+/// which no catalog was written to reach. A plugin in the marketplace's own
+/// repository is named by its path in it instead, and held there.
+pub fn is_remote(url: &str) -> bool {
+    match url.split_once("://") {
+        Some((scheme, _)) => {
+            !scheme.is_empty()
+                && scheme
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
+                && !scheme.eq_ignore_ascii_case("file")
+        }
+        None => scp_like(url).is_some(),
+    }
+}
+
 /// Whether `part` is a name a forge takes for an owner or a repository:
 /// letters, digits, `.`, `_` and `-`, at least one of them.
 fn is_plain(part: &str) -> bool {

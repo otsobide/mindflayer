@@ -46,6 +46,7 @@ pub mod ledger;
 pub mod lifecycle;
 mod lines;
 pub mod lock;
+pub mod marketplace;
 pub mod mcp;
 pub mod migrate;
 #[cfg(any(test, feature = "mother"))]

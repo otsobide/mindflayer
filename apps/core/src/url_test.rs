@@ -567,3 +567,32 @@ fn anything_else_is_the_url_it_is_with_nothing_beside_it() {
         assert_eq!(address(typed), addressed(typed, None, None), "{typed}");
     }
 }
+
+#[test]
+fn a_url_naming_another_machine_is_remote_and_a_path_or_a_file_url_is_not() {
+    for remote in [
+        "https://github.com/acme/skills.git",
+        "http://git.example.com/acme/skills",
+        "ssh://git@github.com/acme/skills",
+        "git+ssh://git@host/x",
+        "git://host/x",
+        "git@github.com:acme/skills.git",
+        "host:skills",
+    ] {
+        assert!(is_remote(remote), "{remote}");
+    }
+    for here in [
+        "/srv/git/skills",
+        "../skills",
+        "./skills",
+        "skills",
+        "acme/skills",
+        "file:///srv/git/skills",
+        "FILE://localhost/srv/git/skills",
+        "C:\\git\\skills",
+        "c:/git/skills",
+        "://nothing",
+    ] {
+        assert!(!is_remote(here), "{here}");
+    }
+}

@@ -996,7 +996,7 @@ fn checked(
 /// climbing out of the repository's root, lexically, as every route is
 /// read ([`paths::normalize`]), as an installed rule's route is refused
 /// when it climbs ([`crate::install::is_installable_name`]).
-fn outside(subdirectory: &str) -> bool {
+pub(crate) fn outside(subdirectory: &str) -> bool {
     let path = Path::new(subdirectory);
     path.components()
         .any(|part| matches!(part, Component::Prefix(_) | Component::RootDir))
