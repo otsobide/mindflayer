@@ -1756,3 +1756,66 @@ fn a_server_ticked_on_the_screen_shows_what_each_agent_runs_before_its_line_says
     let held = fs::read_to_string(collapse.join(".mcp.json")).unwrap();
     assert!(held.contains("github") && held.contains("linear"), "{held}");
 }
+
+/// The install screen drawn into a terminal `width` columns wide and
+/// `height` rows high, a row a line.
+fn drawn_at(screen: &Screen, width: u16, height: u16) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    terminal.draw(|frame| ui::draw(screen, frame)).unwrap();
+    terminal
+        .backend()
+        .buffer()
+        .content()
+        .chunks(usize::from(width))
+        .map(|line| line.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// A confirmation taller than the terminal scrolls, its question and keys
+/// kept in place, and its yes waits until every row of what each agent
+/// would run has been on the screen: a `--yes` given to what nobody was
+/// shown is no yes.
+#[test]
+fn a_confirmation_taller_than_the_screen_scrolls_and_waits_for_every_row_before_its_yes() {
+    let (_dir, workspace, ledger) = with_servers();
+    let mut screen = screen_for(&workspace, &ledger);
+    press(
+        &mut screen,
+        &[
+            KeyCode::Tab,
+            KeyCode::Tab,
+            KeyCode::Right,
+            KeyCode::Down,
+            KeyCode::Char(' '),
+            KeyCode::Char('a'),
+        ],
+    );
+
+    let first = drawn_at(&screen, 80, 14);
+
+    assert!(first.contains("Install 1, remove 0?"), "{first}");
+    assert!(first.contains("more rows below"), "{first}");
+    assert!(first.contains("j  down"), "{first}");
+    assert!(!first.contains("y  yes"), "{first}");
+    assert_eq!(press(&mut screen, &[KeyCode::Char('y')]), Step::Stay);
+    assert!(screen.confirming);
+    let mut shown = first;
+    for _ in 0..40 {
+        if screen.unseen.get() == 0 {
+            break;
+        }
+        press(&mut screen, &[KeyCode::Char('j')]);
+        shown.push_str(&drawn_at(&screen, 80, 14));
+    }
+    assert_eq!(screen.unseen.get(), 0, "{shown}");
+    for agent in ["claude", "codex", "opencode"] {
+        assert!(
+            shown.contains(&format!("{agent} reaches: https://example.com/mcp")),
+            "{shown}"
+        );
+    }
+    let last = drawn_at(&screen, 80, 14);
+    assert!(last.contains("y  yes"), "{last}");
+    assert_eq!(press(&mut screen, &[KeyCode::Char('y')]), Step::Apply);
+}

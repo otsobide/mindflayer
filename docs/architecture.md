@@ -4757,9 +4757,15 @@ the screen is no reason to change the rest without asking again.
   (`Screen::previews`). Its line carries `--yes` (`Task::confirmed`) only
   because the screen applies only past that confirmation, so what each
   agent will run is on screen when somebody says yes to it, and the
-  transcript prints the line with it. A line without `--yes`, which would
-  write nothing and say so under its line, was the alternative: the
-  confirmation would have been asked for nothing. The panel's matrix sends
+  transcript prints the line with it. The confirmation is as tall as the
+  rows its lines wrap into (`Paragraph::line_count`), and what the
+  terminal cannot hold scrolls, the question and the keys kept in place;
+  its yes waits until every row has been on screen (`Screen::unseen`, set
+  as it is drawn, the one place that knows the terminal's size), since a
+  box cut to the screen would ask a yes of commands nobody was shown. A
+  line without `--yes`, which would write nothing and say so under its
+  line, was the alternative: the confirmation would have been asked for
+  nothing. The panel's matrix sends
   no yes, the field being no JSON of a task: it shows no agent's line yet
   (#97), so a server from elsewhere ticked there runs as the dry run its
   line is, saying what it would give each agent.

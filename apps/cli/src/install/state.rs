@@ -21,6 +21,8 @@
 //! `tab` shows the next kind, which means the same either way round, so the
 //! two cannot share it.
 
+use std::cell::Cell as Seen;
+
 use mindweaver_core::install::{self, Asked, Candidate, Cell, Plan, Standing};
 use mindweaver_core::{Kind, MindProject};
 use ratatui::crossterm::event::KeyCode;
@@ -253,6 +255,16 @@ pub struct Screen {
     /// Whether the confirmation is up. Applying removes files, so it is asked
     /// for rather than assumed.
     pub confirming: bool,
+    /// How many rows of what each agent would run the confirmation is
+    /// scrolled past, when it holds more than the screen does.
+    pub scroll: usize,
+    /// How many of those rows the confirmation last drawn left below what
+    /// it showed. Set as it is drawn ([`super::ui`]), the one place that
+    /// knows how tall the terminal is and how its lines wrap, and read by a
+    /// yes, which waits until none is left: a `--yes` given to a command
+    /// nobody was shown is the yes the confirmation is there to ask for. A
+    /// cell, since drawing reads the screen and changes nothing else of it.
+    pub unseen: Seen<usize>,
 }
 
 impl Screen {
@@ -266,6 +278,8 @@ impl Screen {
             receiver: 0,
             message: None,
             confirming: false,
+            scroll: 0,
+            unseen: Seen::new(0),
         };
         screen.show(Kind::Skill);
         screen
@@ -520,14 +534,28 @@ impl Screen {
             return Step::Stay;
         }
         self.confirming = true;
+        self.scroll = 0;
+        self.unseen.set(0);
         Step::Stay
     }
 
     fn confirm(&mut self, key: KeyCode) -> Step {
         match key {
+            // Not before every line it asks a yes to has been shown.
+            KeyCode::Char('y') | KeyCode::Enter if self.unseen.get() > 0 => Step::Stay,
             KeyCode::Char('y') | KeyCode::Enter => {
                 self.confirming = false;
                 Step::Apply
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.unseen.get() > 0 {
+                    self.scroll += 1;
+                }
+                Step::Stay
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.scroll = self.scroll.saturating_sub(1);
+                Step::Stay
             }
             KeyCode::Char('n') | KeyCode::Esc => {
                 self.confirming = false;

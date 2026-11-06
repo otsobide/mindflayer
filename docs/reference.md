@@ -1023,7 +1023,9 @@ mcp linear into collapse, from load:../team:
   opencode reaches: https://mcp.linear.app/mcp
 ```
 
-Saying yes runs its line with `--yes`, which is how the transcript prints it:
+What does not fit the terminal scrolls with `j` and `k`, and `y` waits
+until all of it has been shown. Saying yes runs its line with `--yes`,
+which is how the transcript prints it:
 
 ```
 $ mindweaver install -p collapse --from load:../team --yes mcp:linear
