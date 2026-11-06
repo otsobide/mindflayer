@@ -176,6 +176,7 @@ fn a_lookup_hands_core_what_it_holds() {
         activated: path("/activated"),
         home: path("/home"),
         agents: AgentHomes::default(),
+        variables: Default::default(),
         older: Vec::new(),
     };
 
@@ -264,6 +265,8 @@ fn with_nothing_given_each_agent_home_is_its_folder_in_the_users_home() {
             codex_home: Some(user.join(".codex")),
             opencode_config_dir: Some(user.join(".config").join("opencode")),
             agents_dir: Some(user.join(".agents")),
+            claude_dir_in_home: None,
+            opencode_dir_in_home: None,
         }
     );
 }
@@ -286,8 +289,33 @@ fn each_variable_moves_its_own_agent_home_and_no_other() {
             opencode_config_dir: path("/variable/opencode"),
             // `~/.agents` has no variable of its own to follow.
             agents_dir: Some(user.join(".agents")),
+            // OpenCode reads Claude's skills in `~/.claude` whatever its
+            // variable says, and `~/.config/opencode` beneath the folder
+            // its own names.
+            claude_dir_in_home: Some(user.join(".claude")),
+            opencode_dir_in_home: Some(user.join(".config").join("opencode")),
         }
     );
+}
+
+#[test]
+fn a_variable_naming_the_folder_in_the_home_itself_keeps_none_beside_it() {
+    let user = PathBuf::from("/home/user");
+
+    let homes = agent_homes_from(
+        &AgentHomeOptions::default(),
+        &environment(&[
+            ("CLAUDE_CONFIG_DIR", "/home/user/.claude"),
+            ("OPENCODE_CONFIG_DIR", ""),
+        ]),
+        Some(&user),
+    );
+
+    assert_eq!(homes.claude_config_dir, Some(user.join(".claude")));
+    assert_eq!(homes.claude_dir_in_home, None);
+    // Empty, it is no folder at all, as for every home.
+    assert_eq!(homes.opencode_config_dir, None);
+    assert_eq!(homes.opencode_dir_in_home, None);
 }
 
 #[test]
@@ -305,6 +333,9 @@ fn each_option_wins_over_its_variable_and_its_default() {
             codex_home: path("/option/codex"),
             opencode_config_dir: path("/option/opencode"),
             agents_dir: path("/option/agents"),
+            // An option names the one folder outright, for every agent.
+            claude_dir_in_home: None,
+            opencode_dir_in_home: None,
         }
     );
 }
@@ -355,6 +386,8 @@ fn with_no_users_home_an_agent_left_to_its_default_has_none() {
             codex_home: path("/option/codex"),
             opencode_config_dir: None,
             agents_dir: None,
+            claude_dir_in_home: None,
+            opencode_dir_in_home: None,
         }
     );
 }
@@ -367,4 +400,35 @@ fn agent_homes_takes_every_option_first() {
         agent_homes_from(&every_option(""), &environment(&[]), None)
     );
     assert_eq!(agent_homes(&every_option_empty()), AgentHomes::default());
+}
+
+#[test]
+fn a_lookup_tells_doctor_its_agent_homes_and_the_names_it_was_given_alone() {
+    let lookup = Lookup {
+        agents: AgentHomes {
+            codex_home: path("/codex"),
+            ..AgentHomes::default()
+        },
+        variables: ["GITHUB_TOKEN", "PATH"].map(String::from).into(),
+        ..Lookup::default()
+    };
+
+    let machine = lookup.machine();
+
+    assert_eq!(
+        machine,
+        mindweaver_core::doctor::Machine::new(
+            lookup.agents.clone(),
+            [String::from("PATH"), String::from("GITHUB_TOKEN")]
+        )
+    );
+}
+
+#[test]
+fn the_variables_set_are_read_by_name_and_hold_no_value() {
+    let set = set_variables();
+
+    // Set wherever a test runs, and never a `name=value`.
+    assert!(set.contains("PATH"), "{set:?}");
+    assert!(set.iter().all(|name| !name.contains('=')), "{set:?}");
 }

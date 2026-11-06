@@ -37,6 +37,7 @@ use crate::agent::Agent;
 use crate::artifact::ValidationIssue;
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::code::Said;
+use crate::doctor::{Examined, Machine};
 use crate::install::{self, LoadFailure, Offer, Place};
 use crate::kind::Kind;
 use crate::known::{self, KnownWorkspace};
@@ -112,6 +113,12 @@ pub struct Snapshot {
     /// How each entry in the registry stands with every offer, in the
     /// order `projects` lists them: what each of its boxes shows.
     pub boxes: Vec<Boxes>,
+    /// What doctor finds of each entry in the registry, in the order
+    /// `projects` lists them: what keeps its agents from what it gives
+    /// them, as `mindweaver doctor` says it ([`crate::doctor`]), with the
+    /// agent homes and the names of the variables set the front end told
+    /// the snapshot ([`Machine`]).
+    pub doctor: Vec<Examined>,
     /// Every workspace this machine knows ([`crate::known`]), this one
     /// among them, each with whether this one loads it, and could.
     pub known: Vec<KnownHere>,
@@ -913,7 +920,7 @@ impl Listing {
             library: Some(Library::of(workspace, kinds)),
             projects: workspace
                 .members()
-                .into_iter()
+                .iter()
                 .map(|member| Project::of_member(member, workspace, kinds))
                 .collect(),
         }
@@ -941,18 +948,25 @@ impl Snapshot {
     /// A read: the default workspace is the one in home as it is, or as it
     /// would be, never made; a workspace named or activated that is not one
     /// is refused, as every command refuses it.
-    pub fn read(inputs: &Inputs<'_>) -> Result<Option<Snapshot>, ResolveError> {
+    ///
+    /// `machine` is what doctor is told of the agent homes and the
+    /// variables set, as the front end decided them ([`Machine`]).
+    pub fn read(inputs: &Inputs<'_>, machine: &Machine) -> Result<Option<Snapshot>, ResolveError> {
         let inputs = Inputs {
             intent: Intent::Read,
             ..*inputs
         };
-        Ok(resolve::resolve(&inputs)?.map(|resolved| Snapshot::of(&resolved, inputs.home)))
+        Ok(
+            resolve::resolve(&inputs)?
+                .map(|resolved| Snapshot::of(&resolved, inputs.home, machine)),
+        )
     }
 
     /// Everything `resolved` holds, with the workspaces the default one in
-    /// `home` knows: for a front end that resolved the workspace itself, to
-    /// scan it too ([`crate::scan`]), which no snapshot does.
-    pub fn of(resolved: &Resolved, home: Option<&Path>) -> Snapshot {
+    /// `home` knows and what doctor finds told `machine`: for a front end
+    /// that resolved the workspace itself, to scan it too
+    /// ([`crate::scan`]), which no snapshot does.
+    pub fn of(resolved: &Resolved, home: Option<&Path>, machine: &Machine) -> Snapshot {
         let workspace = &resolved.workspace;
         let mut warnings: Vec<Said> = Vec::new();
 
@@ -965,10 +979,15 @@ impl Snapshot {
             })
             .collect();
         let (offers, boxes) = boxes(workspace, &members);
-        let projects: Vec<Project> = members
-            .into_iter()
-            .map(|member| Project::of_member(member, workspace, &Kind::ALL))
-            .collect();
+        let mut projects: Vec<Project> = Vec::new();
+        let mut doctor: Vec<Examined> = Vec::new();
+        for member in &members {
+            let project = Project::of_member(member, workspace, &Kind::ALL);
+            // Told what the project's agents miss, read for it already.
+            let told = (project.unreached.as_slice(), project.missed.as_slice());
+            doctor.push(Examined::of_member(member, workspace, machine, Some(told)));
+            projects.push(project);
+        }
         warnings.extend(
             relink::duplicates(&ids)
                 .iter()
@@ -1040,6 +1059,7 @@ impl Snapshot {
             sources,
             offers,
             boxes,
+            doctor,
             known,
             history,
             warnings,
@@ -1103,6 +1123,22 @@ impl Project {
         Project::read_kinds(project, workspace, &Kind::ALL)
     }
 
+    /// [`read`](Self::read), with what doctor finds of it told `machine`,
+    /// as a snapshot holds both of every project it lists: for a front end
+    /// showing a project no workspace links, which takes both in one read
+    /// from core rather than a report beside the view, and what `status`
+    /// says its agents miss read once for the two.
+    pub fn read_examined(
+        project: &MindProject,
+        workspace: Option<&WeaverWorkspace>,
+        machine: &Machine,
+    ) -> (Project, Examined) {
+        let read = Project::read(project, workspace);
+        let told = (read.unreached.as_slice(), read.missed.as_slice());
+        let examined = Examined::of(project, read.entry.clone(), workspace, machine, Some(told));
+        (read, examined)
+    }
+
     /// [`read`](Self::read), for `kinds` alone.
     fn read_kinds(
         project: &MindProject,
@@ -1118,11 +1154,11 @@ impl Project {
     /// One entry of `workspace`'s registry, named as that entry spells it
     /// rather than as the first entry pointing at the same directory does,
     /// read for `kinds`.
-    fn of_member(member: Member, workspace: &WeaverWorkspace, kinds: &[Kind]) -> Project {
+    fn of_member(member: &Member, workspace: &WeaverWorkspace, kinds: &[Kind]) -> Project {
         let entry = paths::as_route(&member.entry);
-        match member.project {
-            Ok(project) => Project::opened(Some(entry), &project, Some(workspace), kinds),
-            Err(error) => Project::stale(entry, member.root, &error, kinds),
+        match &member.project {
+            Ok(project) => Project::opened(Some(entry), project, Some(workspace), kinds),
+            Err(error) => Project::stale(entry, member.root.clone(), error, kinds),
         }
     }
 

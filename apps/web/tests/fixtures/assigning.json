@@ -128,6 +128,58 @@
       "held": []
     }
   ],
+  "doctor": [
+    {
+      "entry": "api",
+      "failures": [],
+      "findings": [],
+      "name": "api",
+      "path": "/home/you/Assign/api"
+    },
+    {
+      "entry": "web",
+      "failures": [],
+      "findings": [
+        {
+          "agents": [
+            "opencode"
+          ],
+          "code": "doctor_copies_differ",
+          "fix": "make the copies hold the same, or keep one and remove the others",
+          "message": "/home/you/Assign/web/.agents/skills/review: `review` is also at /home/you/Assign/web/.claude/skills/review, which OpenCode reads too, and the copies differ, so it loads one of them",
+          "path": "/home/you/Assign/web/.agents/skills/review"
+        }
+      ],
+      "name": "web",
+      "path": "/home/you/Assign/web"
+    },
+    {
+      "entry": "docs",
+      "failures": [],
+      "findings": [],
+      "name": "docs",
+      "path": "/home/you/Assign/docs"
+    },
+    {
+      "entry": "bare",
+      "failures": [],
+      "findings": [],
+      "name": "bare",
+      "path": "/home/you/Assign/bare"
+    },
+    {
+      "entry": "gone",
+      "failures": [
+        {
+          "code": "not_a_project",
+          "message": "/home/you/Assign/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+        }
+      ],
+      "findings": [],
+      "name": null,
+      "path": "/home/you/Assign/gone"
+    }
+  ],
   "format": 1,
   "healths": [
     "ok",

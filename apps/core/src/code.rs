@@ -58,6 +58,7 @@ use crate::codex_mcp::{self, CodexMcpError};
 use crate::config_entry::{EntryError, FileError};
 use crate::contents::ContentsError;
 use crate::create::CreateError;
+use crate::doctor::{DoctorFailure, Symptom};
 use crate::everywhere::EverywhereError;
 use crate::exclude::{self, ExcludeError};
 use crate::frontmatter::FrontMatterError;
@@ -215,6 +216,8 @@ pub const ALL: &[(&str, &[&str])] = &[
     ("config_entry::file::FileError", FileError::CODES),
     ("contents::ContentsError", ContentsError::CODES),
     ("create::CreateError", CreateError::CODES),
+    ("doctor::DoctorFailure", DoctorFailure::CODES),
+    ("doctor::Symptom", Symptom::CODES),
     ("everywhere::EverywhereError", EverywhereError::CODES),
     ("exclude::ExcludeError", ExcludeError::CODES),
     ("exclude::Malformed", exclude::Malformed::CODES),

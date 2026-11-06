@@ -520,6 +520,18 @@ pub struct AgentHomes {
     /// The user's `~/.agents`, which belongs to no one agent: several read
     /// skills from it, whatever their own folders say.
     pub agents_dir: Option<PathBuf>,
+    /// `~/.claude`, while `$CLAUDE_CONFIG_DIR` moves Claude Code's folder
+    /// elsewhere: OpenCode reads Claude's skills in `~/.claude/skills`
+    /// whatever that variable says (docs/agents.md, docs-only). None while
+    /// `claude_config_dir` is that folder already, or an option names it
+    /// outright, which every agent reading it is taken to read.
+    pub claude_dir_in_home: Option<PathBuf>,
+    /// `~/.config/opencode`, while `$OPENCODE_CONFIG_DIR` names another
+    /// folder for `opencode_config_dir`: OpenCode loads that one on top of
+    /// this one, never in its place (docs/agents.md, docs-only), so both
+    /// are read. None while `opencode_config_dir` is that folder already,
+    /// or an option names OpenCode's outright.
+    pub opencode_dir_in_home: Option<PathBuf>,
 }
 
 impl AgentHomes {
@@ -531,10 +543,44 @@ impl AgentHomes {
             ("Codex", &self.codex_home),
             ("OpenCode", &self.opencode_config_dir),
             ("more than one agent", &self.agents_dir),
+            ("OpenCode", &self.claude_dir_in_home),
+            ("OpenCode", &self.opencode_dir_in_home),
         ]
         .into_iter()
         .filter_map(|(reader, folder)| Some((reader, folder.as_deref()?)))
         .collect()
+    }
+
+    /// Every folder these homes name that `agent` reads skills from at user
+    /// scope, in the order docs/agents.md lists them: a skill there is read
+    /// beside a project's in every project, which is what doctor compares a
+    /// project's skills with (D-22). Mindweaver writes in none of them.
+    ///
+    /// One arm per agent with no wildcard, as `read`'s, so a new agent does
+    /// not compile until somebody has said where it reads at user scope.
+    pub fn skills_read_by(&self, agent: Agent) -> Vec<PathBuf> {
+        let skills = |home: &Option<PathBuf>| home.as_ref().map(|home| home.join("skills"));
+        let folders = match agent {
+            // Verified in part on Claude Code 2.1.309: `<config dir>/skills`.
+            Agent::Claude => vec![skills(&self.claude_config_dir)],
+            // Docs-only: `$HOME/.agents/skills`, whatever `$CODEX_HOME` says.
+            // Not `$CODEX_HOME/skills`, which is deprecated.
+            Agent::Codex => vec![skills(&self.agents_dir)],
+            // Docs-only, V1 and V2: its own folder's, `~/.config/opencode`'s
+            // beneath the one `$OPENCODE_CONFIG_DIR` names, `~/.claude/skills`
+            // whatever `$CLAUDE_CONFIG_DIR` says, and `~/.agents/skills`.
+            Agent::OpenCode => vec![
+                skills(&self.opencode_dir_in_home),
+                skills(&self.opencode_config_dir),
+                skills(if self.claude_dir_in_home.is_some() {
+                    &self.claude_dir_in_home
+                } else {
+                    &self.claude_config_dir
+                }),
+                skills(&self.agents_dir),
+            ],
+        };
+        folders.into_iter().flatten().collect()
     }
 
     /// Where each agent keeps its folder when nothing moves it: the fallback a
@@ -553,7 +599,20 @@ impl AgentHomes {
             // the path has one kind of separator on Windows too.
             opencode_config_dir: Some(user_home.join(".config").join("opencode")),
             agents_dir: Some(user_home.join(".agents")),
+            // Each is one of the above, which no variable has moved.
+            claude_dir_in_home: None,
+            opencode_dir_in_home: None,
         }
+    }
+
+    /// OpenCode's own folders, each of them it reads, in the order it loads
+    /// them: `~/.config/opencode`, then the one `$OPENCODE_CONFIG_DIR`
+    /// names on top of it (docs/agents.md, docs-only).
+    pub fn opencode_dirs(&self) -> Vec<&Path> {
+        [&self.opencode_dir_in_home, &self.opencode_config_dir]
+            .into_iter()
+            .filter_map(Option::as_deref)
+            .collect()
     }
 }
 

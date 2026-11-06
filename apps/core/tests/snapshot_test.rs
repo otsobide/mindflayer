@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::slice;
 
 use mindweaver_core::assign;
+use mindweaver_core::doctor::Machine;
 use mindweaver_core::install::{self, Confirmed, Edits};
 use mindweaver_core::known;
 use mindweaver_core::ledger::{Action, InstallRecord, Outcome, Target};
@@ -811,6 +812,37 @@ const EXPECTED: &str = r#"{
       "held": []
     }
   ],
+  "doctor": [
+    {
+      "entry": "api",
+      "name": "api",
+      "path": "<root>/hub/api",
+      "findings": [
+        {
+          "code": "doctor_codex_no_git_root",
+          "agents": [
+            "codex"
+          ],
+          "path": "<root>/hub/api",
+          "message": "<root>/hub/api: in no git work tree, so Codex reads its AGENTS.md only when started in that folder itself",
+          "fix": "make the project a git repository (`git init`), or start Codex in that folder"
+        }
+      ],
+      "failures": []
+    },
+    {
+      "entry": "gone",
+      "name": null,
+      "path": "<root>/hub/gone",
+      "findings": [],
+      "failures": [
+        {
+          "code": "not_a_project",
+          "message": "<root>/hub/gone: not a mind project (no .mind/settings.toml, .mind/settings.json or .mind/mind.toml)"
+        }
+      ]
+    }
+  ],
   "known": [
     {
       "name": "hub",
@@ -852,7 +884,7 @@ fn a_snapshot_serializes_every_name_in_order() {
     let api = MindProject::open(fixture.hub.join("api")).unwrap();
     let id = api.settings().unwrap().id.to_string();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let json = serde_json::to_string_pretty(&snapshot).unwrap();
@@ -889,18 +921,21 @@ fn building_a_snapshot_creates_no_path_and_never_the_home_workspace() {
     fs::create_dir_all(&home).unwrap();
     let before = tree(fixture.dir.path());
 
-    let named = Snapshot::read(&naming(&fixture.hub, Some(&home)))
+    let named = Snapshot::read(&naming(&fixture.hub, Some(&home)), &Machine::default())
         .unwrap()
         .unwrap();
     // Nothing named and nothing above: the default one, as it would be,
     // even asked by inputs that mean to write, which a read is not.
-    let defaulted = Snapshot::read(&Inputs {
-        flag: None,
-        activated: None,
-        start: &home,
-        home: Some(&home),
-        intent: Intent::Write,
-    })
+    let defaulted = Snapshot::read(
+        &Inputs {
+            flag: None,
+            activated: None,
+            start: &home,
+            home: Some(&home),
+            intent: Intent::Write,
+        },
+        &Machine::default(),
+    )
     .unwrap()
     .unwrap();
 
@@ -930,7 +965,7 @@ fn no_url_in_a_snapshot_carries_userinfo_even_from_rows_written_before_the_scrub
         .unwrap();
     let ledger = fs::read(workspace.ledger_path()).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let json = serde_json::to_string(&snapshot).unwrap();
@@ -1046,7 +1081,7 @@ fn an_install_nothing_of_which_is_found_says_where_it_went() {
 fn a_project_with_nothing_to_do_is_ok_and_one_that_opens_none_is_stale() {
     let fixture = fixture();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1066,7 +1101,7 @@ fn a_project_with_nothing_to_do_is_ok_and_one_that_opens_none_is_stale() {
 fn one_project_is_the_snapshots_own_by_its_entry_and_no_other_spelling() {
     let fixture = fixture();
     let snapshot = || {
-        Snapshot::read(&naming(&fixture.hub, None))
+        Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
             .unwrap()
             .unwrap()
     };
@@ -1103,7 +1138,7 @@ fn a_project_an_older_marker_marks_is_said_to_migrate_and_no_other() {
     .unwrap();
     workspace.link(&MindProject::open(&json).unwrap()).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1182,7 +1217,7 @@ fn the_summary_counts_each_directory_once_however_many_entries_spell_it() {
     assert!(text.contains("\"gone\""), "{text}");
     fs::write(&marker, text.replacen("\"gone\"", "\"gone\", \"./api\"", 1)).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1203,7 +1238,7 @@ fn what_a_workspace_loads_is_listed_on_its_own_as_the_snapshot_lists_it() {
     let fixture = fixture();
     let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1229,7 +1264,7 @@ fn each_workspace_this_machine_knows_says_whether_this_one_loads_it_and_could() 
     }
     fs::remove_dir_all(&old).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, Some(&home)))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, Some(&home)), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1281,7 +1316,7 @@ fn a_workspace_loaded_by_another_spelling_is_said_to_be_loaded_by_the_first() {
     )
     .unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, Some(&home)))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, Some(&home)), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1304,7 +1339,7 @@ fn every_origin_a_snapshot_lists_names_its_offer_to_from() {
     let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     let ledger = workspace.ledger_for_reading().unwrap();
     let api = MindProject::open(fixture.hub.join("api")).unwrap();
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let offered = |name: &str, origin: &str| {
@@ -1346,7 +1381,7 @@ fn a_second_spelling_of_a_load_lists_the_origin_its_offers_go_by() {
     )
     .unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1389,7 +1424,7 @@ fn a_copy_recorded_before_origins_were_kept_is_a_copy_of_the_librarys_own() {
         .execute_batch("UPDATE installations SET origin = NULL WHERE name = 'review';")
         .unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1428,7 +1463,7 @@ fn a_copy_recorded_before_origins_were_kept_is_nobodys_while_a_load_offers_its_n
         &[("review/SKILL.md", &skill("review", "Read it"))],
     );
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
 
@@ -1443,7 +1478,7 @@ fn a_listing_of_every_kind_holds_what_the_snapshot_holds() {
     let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
     let api = MindProject::open(fixture.hub.join("api")).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let listing = Listing::of_workspace(&workspace, &Kind::ALL);
@@ -1462,7 +1497,7 @@ fn a_listing_of_one_kind_holds_only_that_kind() {
     let fixture = fixture();
     let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let rules = Listing::of_workspace(&workspace, &[Kind::Rule]);
@@ -1519,7 +1554,7 @@ fn a_listing_of_one_kind_tells_health_from_that_kind_alone() {
     .unwrap();
     let workspace = WeaverWorkspace::open(&fixture.hub).unwrap();
 
-    let snapshot = Snapshot::read(&naming(&fixture.hub, None))
+    let snapshot = Snapshot::read(&naming(&fixture.hub, None), &Machine::default())
         .unwrap()
         .unwrap();
     let skills = Listing::of_workspace(&workspace, &[Kind::Skill]);

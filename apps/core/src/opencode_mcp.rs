@@ -84,6 +84,12 @@ pub const FILES: [&str; 4] = [
 /// The one of [`FILES`] made when none of them is there.
 pub const FILE: &str = FILES[0];
 
+/// Where OpenCode reads its global config, in its own folder, every one of
+/// them there is merged under a project's config key by key (docs/agents.md,
+/// docs-only): what doctor reads for a server of an installed one's name,
+/// never written.
+pub const USER_FILES: [&str; 3] = ["config.json", "opencode.json", "opencode.jsonc"];
+
 /// The most a file of [`FILES`] is read for: 2 MiB, as Claude's
 /// `.mcp.json` is.
 ///
@@ -485,6 +491,41 @@ pub fn servers(root: &Path, route: &str) -> Result<Vec<(String, Shape, Value)>, 
     }
     servers.extend(v1);
     Ok(servers)
+}
+
+/// The first of OpenCode's global config files ([`USER_FILES`]) in the
+/// folders `homes` gives it ([`AgentHomes::opencode_dirs`]) that holds a
+/// server keyed `name`, in either shape: none when none does, or no folder
+/// is given.
+///
+/// Read through a link and up to [`MAX_BYTES`], as JSONC, as Codex's own
+/// config is read ([`config_entry::read_through`]): only read, and a
+/// user's config is most often linked into the home from a repository of
+/// their settings.
+pub(crate) fn held_by_user(
+    homes: &AgentHomes,
+    name: &str,
+) -> Result<Option<PathBuf>, OpenCodeMcpError> {
+    for path in homes
+        .opencode_dirs()
+        .into_iter()
+        .flat_map(|folder| USER_FILES.map(|file| folder.join(file)))
+    {
+        let Some(text) = config_entry::read_through(&path, MAX_BYTES)? else {
+            continue;
+        };
+        let holds = |key: &[&str]| {
+            config_entry::get(Format::Jsonc, &text, key).map_err(|source| FileError::Entry {
+                path: path.clone(),
+                source,
+            })
+        };
+        let v1 = !held(name) && holds(&Shape::V1.key(name))?.is_some();
+        if v1 || holds(&Shape::V2.key(name))?.is_some() {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
 }
 
 /// The shape a server not in `file` yet is written in: V1's when `file`

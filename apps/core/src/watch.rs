@@ -29,6 +29,18 @@
 //!   marker, its ledger, its library, its shelf and what it loads, or a
 //!   project, by its entry, so a front end that rebuilds part of what it
 //!   shows can tell which part.
+//! - **The agents' own folders too**, those doctor reads for every project
+//!   ([`crate::doctor`]): Codex's config, OpenCode's global one, Claude's
+//!   user memory file and each folder of skills an agent reads at user
+//!   scope, as [`AgentHomes`] names them, under the workspace's scope, as
+//!   the default workspace's marker is: they are no holder's, and a
+//!   snapshot reads them for every project.
+//! - **And above a project**, what doctor reads there of it, under its
+//!   scope: each `CLAUDE.md`, `.claude/CLAUDE.md` and `CLAUDE.local.md`
+//!   Claude would read in place of its `AGENTS.md`, every `AGENTS.md` and
+//!   `AGENTS.override.md` Codex reads from the git root down, and, in no
+//!   work tree, each `.git` that would give Codex one, named only while it
+//!   is not there, so no `.git` that is there is ever watched.
 //! - **Asked again after every change.** A skill installed is a new folder
 //!   to watch, and a project linked a set of them, so a front end asks for
 //!   the list again once something on it changed rather than keep one the
@@ -37,11 +49,15 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::agent::Agent;
+use crate::agent::{Agent, AgentHomes};
+use crate::agents_md;
 use crate::catalog::Catalog;
+use crate::claude_md::{self, CLAUDE_MD};
 use crate::claude_rules;
+use crate::codex_mcp;
 use crate::kind::Kind;
 use crate::names::Names;
+use crate::opencode_mcp;
 use crate::paths;
 use crate::template;
 use crate::workspace::{MarkerFile, MindProject, WeaverWorkspace, MIND_DIR};
@@ -77,9 +93,14 @@ pub enum Scope {
 ///
 /// `home` is the one [`Snapshot::of`](crate::view::Snapshot::of) is handed,
 /// whose default workspace's marker says which workspaces this machine
-/// knows. A read, as the snapshot is: nothing is made or changed, and what
-/// cannot be listed is left out, as discovery reports it.
-pub fn watched(workspace: &WeaverWorkspace, home: Option<&Path>) -> Vec<Watched> {
+/// knows, and `homes` the agents' own folders its doctor is told of. A
+/// read, as the snapshot is: nothing is made or changed, and what cannot be
+/// listed is left out, as discovery reports it.
+pub fn watched(
+    workspace: &WeaverWorkspace,
+    home: Option<&Path>,
+    homes: &AgentHomes,
+) -> Vec<Watched> {
     let mut list = List::default();
     let at_home = Scope::Workspace;
 
@@ -106,6 +127,7 @@ pub fn watched(workspace: &WeaverWorkspace, home: Option<&Path>) -> Vec<Watched>
     if let Some(home) = home {
         list.workspace_markers(&at_home, home);
     }
+    list.agent_homes(&at_home, homes);
 
     for member in workspace.members() {
         let scope = Scope::Project(paths::as_route(&member.entry));
@@ -164,6 +186,28 @@ impl List {
             }
         }
         self.folders(scope, project);
+        // Every folder an agent reads skills from, whoever put them there,
+        // which doctor compares, and the scratch folder whose stages it
+        // says.
+        for agent in Agent::ALL {
+            for folder in agent.reads(Kind::Skill) {
+                for looked in Catalog::looked_in(&project.root().join(folder), Kind::Skill) {
+                    self.add(scope, looked);
+                }
+            }
+        }
+        self.add(scope, project.scratch_dir());
+        // What doctor reads of what keeps an agent from the project's
+        // `AGENTS.md`, above the project too: each file that keeps Claude
+        // from it, in the project or a folder above, and each file Codex
+        // reads from the git root down, or the `.git` that would give it
+        // one.
+        for path in claude_md::looked_at(project.root()) {
+            self.add(scope, path);
+        }
+        for path in agents_md::codex_looked_at(project.root()) {
+            self.add(scope, path);
+        }
         // Filed by the rule's route, folders and all, as rules are kept, in
         // the folder a Mindflayer build filed them in too, where those it
         // recorded stay until they are moved.
@@ -174,6 +218,32 @@ impl List {
             }
         }
         self.templates(scope, workspace, project);
+    }
+
+    /// What doctor reads in each agent's own folder for every project:
+    /// Codex's config, OpenCode's global config files, Claude's user memory
+    /// file, which it leaves out of what keeps Claude from `AGENTS.md`, and
+    /// each folder of skills an agent reads at user scope, with each skill
+    /// in it. None of a folder `homes` does not name.
+    fn agent_homes(&mut self, scope: &Scope, homes: &AgentHomes) {
+        if let Some(home) = &homes.codex_home {
+            self.add(scope, home.join(codex_mcp::USER_FILE));
+        }
+        for folder in homes.opencode_dirs() {
+            for file in opencode_mcp::USER_FILES {
+                self.add(scope, folder.join(file));
+            }
+        }
+        if let Some(folder) = &homes.claude_config_dir {
+            self.add(scope, folder.join(CLAUDE_MD));
+        }
+        for agent in Agent::ALL {
+            for folder in homes.skills_read_by(agent) {
+                for looked in Catalog::looked_in(&folder, Kind::Skill) {
+                    self.add(scope, looked);
+                }
+            }
+        }
     }
 
     /// Each file a project's marker can be in, under `root`: whichever is

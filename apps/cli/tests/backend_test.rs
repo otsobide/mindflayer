@@ -911,7 +911,7 @@ fn the_backend_watches_what_core_names_each_by_the_holder_a_query_names() {
 
     let watched = backend(root).watched_paths();
 
-    let named: Vec<(PathBuf, Value)> = watch::watched(&workspace, None)
+    let named: Vec<(PathBuf, Value)> = watch::watched(&workspace, None, &AgentHomes::default())
         .into_iter()
         .map(|each| {
             let scope = match each.scope {

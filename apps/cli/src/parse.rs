@@ -251,6 +251,18 @@ pub enum Command {
         json: bool,
     },
 
+    /// Find what keeps this project's agents from what it gives them,
+    /// which no agent says: a Codex project nothing trusts, an
+    /// AGENTS.override.md, a CLAUDE.local.md, a skill at user scope, an
+    /// MCP server's variable that is not set. Reads files alone, and fixes
+    /// nothing.
+    Doctor {
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Register this project with the weaver workspace above it.
     Link,
 
@@ -673,6 +685,22 @@ pub enum WeaverCommand {
     /// somebody's and what is the project's own, which agents read each,
     /// and where what was installed came from.
     Status {
+        /// Only this project.
+        #[arg(short, long, value_name = "PROJECT")]
+        project: Option<String>,
+
+        /// Print it as JSON, in the envelope every reading command's --json
+        /// shares.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Find what keeps each managed project's agents from what it gives
+    /// them, which no agent says: a Codex project nothing trusts, an
+    /// AGENTS.override.md, a CLAUDE.local.md, a skill at user scope, an
+    /// MCP server's variable that is not set. Reads files alone, and fixes
+    /// nothing.
+    Doctor {
         /// Only this project.
         #[arg(short, long, value_name = "PROJECT")]
         project: Option<String>,

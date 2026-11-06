@@ -11,9 +11,11 @@
 //! taken, so a shell an older `activate` set up keeps its workspace, and the
 //! line says so ([`Lookup::older`]).
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use mindweaver_core::activate::{FLAYER_WORKSPACE_VARIABLE, WORKSPACE_VARIABLE};
+use mindweaver_core::doctor::Machine;
 use mindweaver_core::{AgentHomes, Inputs, Intent};
 
 use crate::AgentHomeOptions;
@@ -39,6 +41,10 @@ pub struct Lookup {
     /// Where each agent keeps what it reads for every project
     /// ([`agent_homes`]); none of them unless given.
     pub agents: AgentHomes,
+    /// The names of the environment variables set where the command line
+    /// runs, and nothing of what they hold ([`set_variables`]): what doctor
+    /// says of an MCP server's inputs. None unless given.
+    pub variables: BTreeSet<String>,
     /// Each variable taken under the name a Mindflayer build read, because
     /// the one it is called now was not set, for the line to say.
     pub older: Vec<Older>,
@@ -81,8 +87,16 @@ impl Lookup {
         Self {
             home,
             agents: agent_homes(agents),
+            variables: set_variables(),
             ..chosen
         }
+    }
+
+    /// What doctor is told of the machine: the agent homes and the names of
+    /// the variables set, both decided once per command line here, so a
+    /// line the TUI or the panel runs is told what its launch was.
+    pub fn machine(&self) -> Machine {
+        Machine::new(self.agents.clone(), self.variables.iter().cloned())
     }
 
     /// What `-W` and `$MINDWEAVER_WORKSPACE` say, with the environment passed
@@ -209,25 +223,58 @@ fn agent_homes_from(
     // Only which home the folders sit in is decided here; the folders
     // themselves are core's.
     let fallback = user.map(AgentHomes::defaults_under).unwrap_or_default();
+    let claude_config_dir = resolve(
+        given.claude_config_dir.as_deref(),
+        variable("CLAUDE_CONFIG_DIR"),
+        fallback.claude_config_dir.clone(),
+    );
+    let opencode_config_dir = resolve(
+        given.opencode_config_dir.as_deref(),
+        variable("OPENCODE_CONFIG_DIR"),
+        fallback.opencode_config_dir.clone(),
+    );
     AgentHomes {
-        claude_config_dir: resolve(
+        claude_dir_in_home: in_home(
             given.claude_config_dir.as_deref(),
-            variable("CLAUDE_CONFIG_DIR"),
+            &claude_config_dir,
             fallback.claude_config_dir,
         ),
+        opencode_dir_in_home: in_home(
+            given.opencode_config_dir.as_deref(),
+            &opencode_config_dir,
+            fallback.opencode_config_dir,
+        ),
+        claude_config_dir,
         codex_home: resolve(
             given.codex_home.as_deref(),
             variable("CODEX_HOME"),
             fallback.codex_home,
         ),
-        opencode_config_dir: resolve(
-            given.opencode_config_dir.as_deref(),
-            variable("OPENCODE_CONFIG_DIR"),
-            fallback.opencode_config_dir,
-        ),
+        opencode_config_dir,
         // No variable: the folder belongs to no one agent, so none of their
         // variables moves it.
         agents_dir: resolve(given.agents_dir.as_deref(), None, fallback.agents_dir),
+    }
+}
+
+/// The agent's folder in the user's home, `fallback`, while its variable
+/// named another folder for `chosen`, for the agents that read the one in
+/// the home all the same: OpenCode reads `~/.claude/skills` whatever
+/// `$CLAUDE_CONFIG_DIR` says, and `~/.config/opencode` beneath the folder
+/// `$OPENCODE_CONFIG_DIR` names (docs/agents.md, docs-only).
+///
+/// None while an option names the folder outright, so a test that pins
+/// every option reaches no folder in the user's home through this either,
+/// and while the variable is unset, empty or names that folder itself: an
+/// empty one is no folder at all, as it is for every home.
+fn in_home(
+    given: Option<&str>,
+    chosen: &Option<PathBuf>,
+    fallback: Option<PathBuf>,
+) -> Option<PathBuf> {
+    match (given, chosen) {
+        (None, Some(chosen)) if fallback.as_ref() != Some(chosen) => fallback,
+        _ => None,
     }
 }
 
@@ -249,6 +296,16 @@ fn resolve(
         (None, None) => return fallback,
     };
     (!chosen.is_empty()).then(|| PathBuf::from(chosen))
+}
+
+/// The name of every environment variable set, read once per command line,
+/// each value dropped as it is read: core is handed names alone, so no
+/// report it builds can say a value (#96). A name that is not Unicode is
+/// none an MCP server's input can be read from.
+fn set_variables() -> BTreeSet<String> {
+    std::env::vars_os()
+        .filter_map(|(name, _)| name.into_string().ok())
+        .collect()
 }
 
 /// A variable's value. One that is not Unicode counts as unset, as it always

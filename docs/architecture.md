@@ -1359,7 +1359,9 @@ project with `-p`; `mindweaver validate` reads the shelf as well, labelling what
 finds there `shelf/<source folder>`. `mindweaver status` reads every project, or
 one with `-p`, and `mind status` the one you are in: not the workspace's own,
 which nothing is installed into ([what each project
-has](#what-each-project-has)). `mind agents`, `share` and `targets` change
+has](#what-each-project-has)). `mindweaver doctor` and `mind doctor` read
+the same projects the same way ([what no agent
+says](#what-no-agent-says)). `mind agents`, `share` and `targets` change
 the project you are in, and `mindweaver agents`, `share` and `targets` the one
 `-p` names, which they need: the workspace's own have no agents, and reach
 one by being installed.
@@ -2253,7 +2255,9 @@ one rather than a shape of its own: `scan --json` ([Scanning](#scanning)),
 knows](#the-workspaces-this-machine-knows)), and, since #64, `list`, `show`,
 `validate`, `templates` and `gather list`, so that what a front end shows of
 a workspace's holders, their templates and its offers a script or an agent
-can print: not yet the whole snapshot (an open question below). One shape
+can print: not yet the whole snapshot (an open question below). `doctor
+--json` (#96) prints its report in it too ([what no agent
+says](#what-no-agent-says)). One shape
 is one parser for a script, and for the panel's backend when it reads
 through the CLI.
 
@@ -2441,6 +2445,15 @@ type derives `Serialize` from the start:
   an artifact's is said in and its origin a `value::Origin`, as `entries`,
   a field added to `ProjectStatus` and `view::Project`, which moves
   neither `ENVELOPE_VERSION` nor `view::FORMAT`.
+- **Found by `doctor` since #96**: what keeps a project's agents from
+  what it gives them (`doctor::Report`, each project's `Examined` and each
+  `Finding`), a finding its code, the agents by their names, its path
+  through `paths::lossy`, its message and its fix, and what could not be
+  read a `code::Said`: derived, the condition a `doctor::Symptom` with a
+  code of its own that goes out as the finding's `code` and message, as an
+  error goes out through `code::Said`. Handed over by the snapshot too, as
+  `doctor`, a name added, which moves neither `ENVELOPE_VERSION` nor
+  `view::FORMAT`.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -2638,6 +2651,12 @@ read, built and ordered in core from the read types the commands print:
   (`entries`, as `status` lists them, [what each project
   has](#what-each-project-has)), read from the ledger and those files, as
   D-23 has it, since discovery parses no config file;
+- what doctor finds of each entry in its registry, in the order
+  `projects` lists them (`doctor`, `doctor::Examined`), told the agent
+  homes and the names of the variables set the front end decided
+  (`doctor::Machine`), and told what `status` says each project's agents
+  miss, which the project was read for already ([what no agent
+  says](#what-no-agent-says));
 - the workspaces it loads, each with how many of its own it offers; its
   shelf and the sources it is filled from; the workspaces this machine
   knows, each with whether it loads it and by which entry, and whether it
@@ -2694,7 +2713,8 @@ beside them, which would be a rule written in TypeScript (#72). `Snapshot::read`
 read does, whatever its inputs intend; `Snapshot::of` builds one for a front
 end that resolved the workspace itself, to scan it too. `view::Project::read`
 and `LoadedWorkspace::of` read the same way what the TUI shows of a project
-no workspace links.
+no workspace links, and `view::Project::read_examined` what doctor finds of
+it beside that read, as a snapshot holds both of every project it lists.
 
 A project's health is the one word a front end sorts and filters its
 projects by, from nothing to do to nothing to open:
@@ -5048,6 +5068,158 @@ own initials for each agent, since Claude Code and Codex share the first. A
 row of the workspace's own says neither, and an install nothing of which is
 found has a row like the rest, from which `i` puts it back.
 
+## What no agent says
+
+Some failures are silent: an untrusted Codex project ignores its
+`.codex/config.toml`, an `AGENTS.override.md` hides `AGENTS.md`, a
+`CLAUDE.local.md` stops Claude reading it, an unset secret variable breaks a
+server and a skill at user scope can shadow a project's. `mindweaver doctor`
+and `mind doctor` (#96) find them, a project at a time, and fix nothing.
+
+Core builds the report (`doctor::Report`, a `doctor::Examined` a project).
+Each finding is a `doctor::Symptom` with a code of its own (`doctor_*`),
+said as a `doctor::Finding`: its code, the agents it keeps something from,
+the path it is about, which is the one its fix acts on, its message, naming
+that path first as every warning does, and its fix. A finding is no
+failure: the project is read whole, and what is said of it is true. What
+doctor could not read to tell, a Codex config that does not parse or a
+folder that cannot be listed, is a failure collected beside the project's
+findings (`Examined::failures`, `doctor::DoctorFailure`), with the code of
+the error it carries, and on stderr as a `warning:`, never a reason to say
+less of the rest.
+
+**File reads alone, and never the environment.** Each check rests on a
+fact docs/agents.md records, verified or docs-only, and reads what that
+fact is about with the function that already reads it for an install or a
+render, never a second reading of its own. No agent is run, which is the
+probe's, by hand; nothing is written, no lock is taken and the ledger is
+opened only to read (`ledger_for_reading`). The front end hands it the
+agent homes and the names of the environment variables set
+(`doctor::Machine`): core reads no environment, and names alone, since a
+value doctor never had is one no report can say. The CLI reads both once
+per command line into its `Lookup` (`Lookup::variables`, each value
+dropped as it is read), so a line the TUI runs is told what the TUI was
+opened in, and the panel what `mindweaver ui` was started in.
+
+The checks, each where an agent of the project's reads, so a project a
+`mind.toml` marks, which names no agent, is asked only of what an install
+left and what `status` says:
+
+- **Codex's trust.** Codex reads a project's `.codex/config.toml` only in a
+  project its user's config marks `trusted`, and a project marked
+  `untrusted` loses its `AGENTS.md` too (docs-only). Read through #91's
+  reader of `$CODEX_HOME/config.toml` (`codex_mcp::UserConfig`), whose
+  `trust` an install's `codex_mcp_untrusted` warning is told by, under the
+  project's root as linked and as resolved: a project marked `untrusted`
+  is found whatever it holds (`doctor_codex_distrusted`), one marked
+  neither way only while it has a `.codex/config.toml` to lose
+  (`doctor_codex_untrusted`).
+- **What Codex reads of `AGENTS.md`.** An `AGENTS.override.md` beside it,
+  which Codex reads in its place, no git root to read down from, and a
+  chain from the git root near or past Codex's 32 KiB budget (docs-only),
+  read by the render's own `agents_md::codex_warnings`, of the project as
+  it stands rather than as a render left it: the override only while there
+  is an `AGENTS.md` for it to hide (`doctor_codex_overridden`,
+  `doctor_codex_no_git_root`, `doctor_codex_near_budget`,
+  `doctor_codex_over_budget`). A chain that cannot be measured is a
+  failure, `codex_unmeasured`, as the render says it.
+- **Claude and the block.** A `CLAUDE.md`, `.claude/CLAUDE.md` or
+  `CLAUDE.local.md` in or above the project keeps Claude from `AGENTS.md`
+  (verified), and a render chose how Claude reaches the block when the
+  rules were installed ([how Claude reaches the
+  block](#how-claude-reaches-the-block)): one made since leaves the block's
+  rules reaching Claude through nothing. `claude_md::unread_by` asks what
+  `reach` asks, of the files as they stand, an import a file holds already
+  counting and one a render is yet to add not; a rule whose file is in
+  Claude's rules folder, under either names, reaches it there
+  (`doctor_claude_misses_rules`). The fix is an install of one of them
+  again, which renders every rule as the project now stands, as a test
+  holds it to.
+- **Copies of one skill that differ in folders one agent reads.** OpenCode
+  reads `.agents/skills`, `.claude/skills` and `.opencode/skills`, and
+  given one name twice keeps one (docs-only). Discovery compares the copies
+  in the folders an install writes in alone ([open
+  questions](#open-questions)), so doctor reads every folder `Agent::reads`
+  names, and compares by `hash::tree`, the hash an install records
+  (`doctor_copies_differ`).
+- **A skill at user scope (D-22).** One name at both scopes resolves
+  differently in each agent, so a project skill whose name a skill at
+  user scope holds too, in a folder the same agent reads, with something
+  else in it, is found, one finding for each pair with every agent that
+  reads both (`doctor_user_skill_differs`). Which folders each agent reads
+  there is core's, matched with no wildcard (`AgentHomes::skills_read_by`:
+  Claude's `skills`, verified in part; `~/.agents/skills` for Codex,
+  docs-only; OpenCode's own, the one in the home beneath the one
+  `$OPENCODE_CONFIG_DIR` names, `~/.claude`'s whatever
+  `$CLAUDE_CONFIG_DIR` says, and `~/.agents`'s, docs-only). A
+  project at the home, whose folder is the one at user scope, is not
+  compared with itself.
+- **A server of an installed one's name at user scope.** Codex reads a
+  project's servers over its user's key by key (docs-only), which an
+  install refuses (`codex_mcp_collision`) and a server added to the user's
+  config since is not; OpenCode merges a project's config over its global
+  `config.json`, `opencode.json` and `opencode.jsonc` key by key
+  (docs-only), in each of its folders (`AgentHomes::opencode_dirs`), read
+  as Codex's is (`opencode_mcp::held_by_user`, through
+  `config_entry::read_through`), in either shape
+  (`doctor_server_at_user_scope`). Claude's servers at user scope are not
+  read ([open questions](#open-questions)).
+- **A variable an installed server's inputs read, not set** (D-11). The
+  variables are those an install says to set (`install::mcp::variables`),
+  a secret said as one, of the definition the installation came from, the
+  first offered from its origin, which is what was written unless the
+  offer moved on since, as `status` says; one no longer offered says
+  nothing, being orphaned. Told by the names the front end says are set,
+  where doctor runs: nothing of a V2 OpenCode server started elsewhere,
+  which fills its references from its own environment
+  (`doctor_variable_unset`, [open questions](#open-questions)).
+- **What an install that did not finish left.** A stage in the project's
+  `.mind/tmp` and an older version beside a copy, by the names a sweep and
+  a replacement clear (`copy::stages_in`, `copy::left_beside`), the second
+  where an agent may load it as a skill ([built where no agent
+  looks](#built-where-no-agent-looks)). Said, never swept: doctor takes no
+  lock, so it cannot tell a stage left from one in use, which the next
+  install's sweep can (`doctor_leftover_stage`, `doctor_leftover_beside`).
+- **What `status` says the project's agents miss** (D-02): a kind
+  installed only where some of them read none of it, and a rule or a
+  server some of them read nowhere, as `ProjectStatus::unreached` and
+  `missed` say, whatever the share mode, since `status` says them whatever
+  it is (`doctor_unreached`, `doctor_missed`).
+
+Its exit status is a reading command's for what it found: non-zero once it
+finds anything, as `validate` is once something does not pass, so it works
+in a script or CI, and once something could not be read, as every reading
+command's is. `--json` prints the report in the envelope, its warnings the
+failures, the exit status the text's (`render::as_json`).
+
+The snapshot carries what doctor finds of each entry, in the order
+`projects` lists them (`doctor`, [the read model](#the-read-model)), told
+what `status` says each project's agents miss, which the snapshot read
+already, so a project is not read twice. A name added, so `view::FORMAT`
+stays; `health` is not told by it, since what `health` holds is a verdict a
+command answers, and weighing doctor's findings in, most of them about
+files Mindweaver does not own, would change what it holds, which moves the
+format: #97 shows the findings beside it. The TUI marks a project doctor
+finds something in with `✚` and how many, and its pane says each with its
+fix, in a strip of its own beside the one of what its agents do not see
+([the TUI](#the-tui)), and what doctor could not read to tell in the one of
+what could not be read, counted with it, as `mindweaver doctor` says it on
+stderr; the panel draws nothing of them yet. What the
+snapshot now reads, what doctor reads, is watched as everything it reads is
+(`watch::watched`): every folder an agent reads skills from in a project
+and its `.mind/tmp`, under the project's scope, and the agents' own files
+and folders under the workspace's, as the default workspace's marker is,
+since they are no holder's and every project reads them. Above a project,
+under its scope, each `CLAUDE.md`, `.claude/CLAUDE.md` and
+`CLAUDE.local.md` Claude would read in place of its `AGENTS.md`, in it and
+in every folder up to the one below `/` (`claude_md::looked_at`, the walk
+`reads_agents_md` makes), and each `AGENTS.md` and `AGENTS.override.md`
+Codex reads from the git root down (`agents_md::codex_looked_at`), or, in
+no work tree, each `.git` that would give it one, named only while it is
+not there: a `.git` that is there changes with every git command, and
+holds nothing Codex reads, so none is ever watched. Each is a file, so
+what is watched of a folder above is only a change to that name in it.
+
 ## The TUI
 
 `mindweaver` on its own opens a screen over the whole workspace. It is not a
@@ -6224,9 +6396,11 @@ project is watched for its marker coming back.
   `SKILL.md` is read, and every folder of rules the walk goes into, since a
   rule is found at any depth. Never a project's root, which would wake for
   every file of the code beside it, and never a `.git`, a `node_modules` or
-  what a skill keeps in folders of its own: a recursive watch costs one of
-  the system's watches for every folder under it. A test of core's list
-  holds it to that over a fixture with all of those, and one of the
+  what a skill keeps in folders of its own (a `.git` is named only while it
+  is not there, for [doctor](#what-no-agent-says)'s sake): a recursive
+  watch costs one of the system's watches for every folder under it. A
+  test of core's list holds it to that over a fixture with all of those,
+  and one of the
   server's to watching only the folders named and the one above each,
   none of them recursively, which it sees in the mode the watcher asks
   the system for: nothing on the stream would show it, since a change
@@ -8838,9 +9012,11 @@ finds the agents' own folders, not what the agents do in them.
 Some checks look at what an agent reads for every project, not only at what
 a project holds: Claude's user memory, which `claude_md` leaves out of what
 keeps Claude from reading `AGENTS.md` (#44), and Codex's `config.toml`,
-which `codex_mcp::render` reads (#91). Checks to come read OpenCode's
-configuration folder and the skills in `~/.agents` (#96). Those folders
-come in the way home does. `--claude-config-dir`, `--codex-home`,
+which `codex_mcp::render` reads (#91), and what doctor reads (#96): Codex's
+`config.toml` again, OpenCode's global config files and every folder of
+skills an agent reads at user scope, `~/.agents/skills` among them
+(`AgentHomes::skills_read_by`, [what no agent says](#what-no-agent-says)).
+Those folders come in the way home does. `--claude-config-dir`, `--codex-home`,
 `--opencode-config-dir` and `--agents-dir` are global options on both parsers,
 and `homes::agent_homes` takes each from its option, then from the variable
 the agent itself reads (`$CLAUDE_CONFIG_DIR`, `$CODEX_HOME`,
@@ -8851,10 +9027,18 @@ the answer as an `AgentHomes` and never resolves one.
 
 For OpenCode that order is a simplification: its documentation reads
 `$OPENCODE_CONFIG_DIR` as a folder loaded on top of `~/.config/opencode`, not
-one that replaces it. Nothing reads either yet, and #17 ran only Claude Code,
-so that reading is still docs-only and the simpler shape stands until a check
-on the binary confirms it; the [open questions](#open-questions) say what
-changes if one does.
+one that replaces it, and names `~/.claude/skills` whatever
+`$CLAUDE_CONFIG_DIR` says. Doctor is the first to read OpenCode's folder, so
+`AgentHomes` takes both, as docs/agents.md's fallback says it would then:
+while a variable names a folder of its own, the one in the user's home is
+kept beside it, `~/.config/opencode` beneath OpenCode's
+(`opencode_dir_in_home`) and `~/.claude` for the skills OpenCode reads
+there (`claude_dir_in_home`), and read, watched and kept free of copies as
+OpenCode's. An option names the one folder outright, for every agent
+reading it, so a test that pins every option reaches no folder in the home
+through these either. #17 ran only Claude Code, so both readings are still
+docs-only; the [open questions](#open-questions) say what changes if a
+check on the binary disagrees.
 
 Those folder names are core's all the same (`AgentHomes::defaults_under`),
 the way `.mindweaver` is: the CLI finds the user's home and core says which
@@ -8889,12 +9073,14 @@ decided once per command line, with the workspace to use, into the same
 runs (`tui::execute`), its install screen's among them: a line the TUI runs
 carries none of the four options, so deciding them again would read the
 environment the TUI was opened in, and a test that drives the TUI would reach
-the real folders. One file in them is read, and none written:
-`codex_mcp::render` reads `config.toml` in the Codex home `AgentHomes`
-gives, through a link and up to 2 MiB, to refuse a server's name it holds
-already and to warn of a project it does not mark trusted ([Codex's
-`.codex/config.toml`](#codexs-codexconfigtoml)). With no Codex home given
-it reads nothing.
+the real folders. None is written in. `codex_mcp::render` reads `config.toml` in the Codex
+home `AgentHomes` gives, through a link and up to 2 MiB, to refuse a
+server's name it holds already and to warn of a project it does not mark
+trusted ([Codex's `.codex/config.toml`](#codexs-codexconfigtoml)), and
+doctor reads it the same way, through the same reader, with OpenCode's
+global config files beside it (`config_entry::read_through`, one function
+for every such file), and each folder of skills an agent reads at user
+scope. With no folder given for an agent, nothing of it is read.
 
 ## How a rule reaches the agents
 
@@ -11295,7 +11481,11 @@ agents' own folders, which a project at the user's home would otherwise
 reach by accident ([never into an agent's own
 folder](#never-into-an-agents-own-folder)), and #94 an MCP server's entry
 in a config file there, before anything is written ([installing an MCP
-server](#installing-an-mcp-server)).
+server](#installing-an-mcp-server)). #96's doctor reports a project skill
+whose name a skill at user scope that the same agent reads holds too, with
+something else in it, in `~/.claude/skills`, `~/.agents/skills` or
+OpenCode's own `skills`, by the folders `AgentHomes` gives, writing in none
+([what no agent says](#what-no-agent-says)).
 
 ### D-23: What a project received is an installed view
 
@@ -12616,15 +12806,16 @@ it once as it closes.
   variable becomes the step before the default for `--opencode-config-dir`,
   and tests that spawn a binary clear it too.
 - **`$OPENCODE_CONFIG_DIR` beside OpenCode's folder, not instead of it.**
-  `--opencode-config-dir` takes the variable in place of `~/.config/opencode`,
-  as `--codex-home` takes `$CODEX_HOME` in place of `~/.codex`. OpenCode's
-  documentation says otherwise: the folder the variable names is loaded after
-  the global one and the project's `.opencode`, so it can override their
-  settings, and the global folder is still read. #17 did not run OpenCode, so
-  that stays docs-only. If a check on the real binary confirms it, a check
-  that reads only one folder misses what OpenCode reads from the other
-  whenever the variable is set, and `AgentHomes` needs both for OpenCode:
-  `~/.config/opencode`, and the variable's folder on top.
+  OpenCode's documentation loads the folder the variable names after the
+  global one and the project's `.opencode`, so it can override their
+  settings, and the global folder is still read. `AgentHomes` takes both
+  while the variable names a folder (`opencode_dir_in_home`), and doctor
+  reads both, as it reads `~/.claude/skills` for OpenCode whatever
+  `$CLAUDE_CONFIG_DIR` says (`claude_dir_in_home`). #17 did not run
+  OpenCode, so both stay docs-only. If a check on the real binary finds
+  that the variable replaces the global folder after all, or that OpenCode
+  follows `$CLAUDE_CONFIG_DIR`, doctor reads a folder OpenCode does not and
+  says too much, never too little, and the folder in the home goes.
 - **An empty agent variable.** An empty `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
   `$OPENCODE_CONFIG_DIR` means no folder at all here, following
   `$MINDWEAVER_HOME`. An agent that reads an empty one as unset uses its
@@ -12703,7 +12894,9 @@ it once as it closes.
   that asks (D-11, the run of 2026-11-05), so a secret given to a V2
   server Mindweaver did not start reaches it only through the shell that
   started it or `opencode service set env`. Whether #92 warns of it, and
-  #96 checks the server's variables, is the owner's to say.
+  doctor checks the server's variables, is the owner's to say. #96 was
+  built without it: doctor checks the variables the front end says are set
+  where it runs, and says nothing of a V2 server's own.
 - **Folders an agent reads and is sent nothing in.** A project marked by its
   settings is read in its agents' targets and in its authored folder, not in
   every folder they read ([read where its agents
@@ -12713,8 +12906,9 @@ it once as it closes.
   OpenCode loads what is in them. The targets are where an install lands and
   can meet somebody's work, so those are what a listing has to know; reading
   every folder `Agent::reads` names would list the rest as well, from folders
-  no install of Mindweaver's reaches. Doctor (#96) is the other place a skill
-  only there could be reported. An install refuses on the targets alone too,
+  no install of Mindweaver's reaches. Doctor (#96) reads every one of them,
+  for copies of one name that differ there and for a skill at user scope
+  that shadows one, but lists nothing of what is only there. An install refuses on the targets alone too,
   so in a project that names OpenCode and not Claude it writes
   `.agents/skills/<name>` beside somebody's `.claude/skills/<name>` or
   `.opencode/skills/<name>`, and OpenCode loads two versions of one skill.
@@ -12787,8 +12981,32 @@ it once as it closes.
   `AGENTS.md` files too, after the project's, and its config can rename the
   files it looks for (`project_doc_fallback_filenames`), say what marks the
   root (`project_root_markers`) or change the budget, none of which
-  Mindweaver reads yet. Reading Codex's config, as a doctor check would
-  (#96), would make each warning exact for one more case.
+  Mindweaver reads yet. Doctor (#96) reads Codex's config for its trust and
+  its servers and none of those keys; reading them too would make each
+  warning exact for one more case.
+- **Claude Code's servers at user scope.** Doctor finds a server of an
+  installed one's name in Codex's and OpenCode's own config, and not in
+  Claude's: Claude keeps a user's servers, and those of each project it
+  was told of at local scope, in a `.claude.json` beside its folder, or in
+  it while `$CLAUDE_CONFIG_DIR` names one (its docs), and `AgentHomes`
+  says which folder, not which way it was found. Which of a project's and a
+  local one Claude starts is docs-only too. A home of its own for that file,
+  decided where the agent homes are, would let doctor read it.
+- **A stage in use, or left.** Doctor takes no lock, so a stage in
+  `.mind/tmp` an install is building as it reads is found as one an
+  interrupted install left, and said "unless one is running now". Taking
+  the stage lock shared, as an install does, would tell them apart, at the
+  price of a read that makes the lock file.
+- **The variables of the moment.** The names doctor is told are set are
+  read once per command line, so the TUI and the panel are told what they
+  were opened in, and a variable set in a shell since is found unset until
+  they are opened again, as the agents the TUI was opened beside would not
+  see it either.
+- **What doctor finds, every time a snapshot is read.** The snapshot reads
+  every folder of skills at user scope and hashes each skill a project
+  shares a name with there, on every live update. A skill is a few small
+  files, as for [listing every copy it
+  compares](#open-questions), so it is accepted for now.
 - **`.claude/rules` above where Claude starts.** Claude reads every
   `AGENTS.md` and `CLAUDE.md` from where it starts up the tree, but whether
   it reads a `.claude/rules` in a folder above, as it reads `.claude/rules`

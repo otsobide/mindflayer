@@ -43,6 +43,7 @@ mod file;
 mod json;
 mod toml;
 
+pub(crate) use file::read_through;
 pub use file::{ConfigFile, FileError, Written};
 
 /// The grammar a config file is written in.

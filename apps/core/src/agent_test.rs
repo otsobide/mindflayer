@@ -15,6 +15,8 @@ fn each_agents_default_folder_is_its_own_in_the_users_home() {
             codex_home: Some(user.join(".codex")),
             opencode_config_dir: Some(user.join(".config").join("opencode")),
             agents_dir: Some(user.join(".agents")),
+            claude_dir_in_home: None,
+            opencode_dir_in_home: None,
         }
     );
 }
@@ -536,4 +538,81 @@ fn claude_starts_a_server_once_approved_codex_in_a_trusted_project_and_opencode_
             (Agent::OpenCode, Starts::Unasked),
         ]
     );
+}
+
+#[test]
+fn each_agent_reads_skills_at_user_scope_where_docs_agents_md_says() {
+    let user = Path::new("/home/you");
+    let homes = AgentHomes::defaults_under(user);
+
+    assert_eq!(
+        homes.skills_read_by(Agent::Claude),
+        vec![user.join(".claude").join("skills")]
+    );
+    assert_eq!(
+        homes.skills_read_by(Agent::Codex),
+        vec![user.join(".agents").join("skills")]
+    );
+    assert_eq!(
+        homes.skills_read_by(Agent::OpenCode),
+        vec![
+            user.join(".config").join("opencode").join("skills"),
+            user.join(".claude").join("skills"),
+            user.join(".agents").join("skills"),
+        ]
+    );
+}
+
+#[test]
+fn a_home_not_given_is_read_by_no_agent_at_user_scope() {
+    let homes = AgentHomes {
+        claude_config_dir: Some(PathBuf::from("/home/you/.claude")),
+        ..AgentHomes::default()
+    };
+
+    assert!(homes.skills_read_by(Agent::Codex).is_empty());
+    assert_eq!(
+        homes.skills_read_by(Agent::OpenCode),
+        vec![PathBuf::from("/home/you/.claude").join("skills")]
+    );
+}
+
+/// What OpenCode reads at user scope when a variable moved Claude's folder
+/// or named another of its own: `~/.claude/skills` still, and
+/// `~/.config/opencode` beneath the folder named (docs/agents.md).
+#[test]
+fn opencode_reads_the_folders_in_the_home_a_variable_moved_or_named_another_beside() {
+    let user = Path::new("/home/user");
+    let homes = AgentHomes {
+        claude_config_dir: Some(PathBuf::from("/elsewhere/claude")),
+        opencode_config_dir: Some(PathBuf::from("/elsewhere/opencode")),
+        claude_dir_in_home: Some(user.join(".claude")),
+        opencode_dir_in_home: Some(user.join(".config").join("opencode")),
+        ..AgentHomes::defaults_under(user)
+    };
+
+    assert_eq!(
+        homes.skills_read_by(Agent::OpenCode),
+        vec![
+            user.join(".config").join("opencode").join("skills"),
+            PathBuf::from("/elsewhere/opencode").join("skills"),
+            user.join(".claude").join("skills"),
+            user.join(".agents").join("skills"),
+        ]
+    );
+    assert_eq!(
+        homes.skills_read_by(Agent::Claude),
+        vec![PathBuf::from("/elsewhere/claude").join("skills")]
+    );
+    assert_eq!(
+        homes.opencode_dirs(),
+        [
+            user.join(".config").join("opencode").as_path(),
+            Path::new("/elsewhere/opencode"),
+        ]
+    );
+    // Neither is a place for a copy: OpenCode reads it in every project.
+    let folders = homes.folders();
+    assert!(folders.contains(&("OpenCode", user.join(".claude").as_path())));
+    assert!(folders.contains(&("OpenCode", user.join(".config").join("opencode").as_path())));
 }

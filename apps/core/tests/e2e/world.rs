@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 
 use mindweaver_core::assign;
 use mindweaver_core::create::Start;
+use mindweaver_core::doctor::Machine;
 use mindweaver_core::install::{Confirmed, Edits, Installed};
 use mindweaver_core::known;
 use mindweaver_core::lifecycle;
@@ -247,13 +248,16 @@ impl World {
     pub fn snapshot(&self, at: &str) -> Value {
         let start = self.at(at);
         let home = self.home();
-        let snapshot = Snapshot::read(&Inputs {
-            flag: None,
-            activated: None,
-            start: &start,
-            home: Some(&home),
-            intent: Intent::Read,
-        })
+        let snapshot = Snapshot::read(
+            &Inputs {
+                flag: None,
+                activated: None,
+                start: &start,
+                home: Some(&home),
+                intent: Intent::Read,
+            },
+            &Machine::default(),
+        )
         .expect("read the snapshot")
         .expect("a workspace to read");
         self.json(&snapshot)

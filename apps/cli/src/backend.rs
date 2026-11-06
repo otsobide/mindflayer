@@ -705,7 +705,11 @@ impl Backend for PanelBackend {
                 workspace,
                 reason: pin.reason,
             };
-            Snapshot::of(&resolved, self.lookup.home.as_deref())
+            Snapshot::of(
+                &resolved,
+                self.lookup.home.as_deref(),
+                &self.lookup.machine(),
+            )
         };
         match query {
             Query::Snapshot {} => {
@@ -961,7 +965,7 @@ impl Backend for PanelBackend {
         let Ok(workspace) = self.pin().opened_or_not() else {
             return Vec::new();
         };
-        watch::watched(&workspace, self.lookup.home.as_deref())
+        watch::watched(&workspace, self.lookup.home.as_deref(), &self.lookup.agents)
             .into_iter()
             .map(|watched| Watched {
                 path: watched.path,

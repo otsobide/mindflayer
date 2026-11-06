@@ -3649,6 +3649,89 @@ fn a_project_given_a_rule_some_of_its_agents_read_nowhere_is_marked_and_its_pane
 }
 
 #[test]
+fn a_project_doctor_finds_something_in_is_marked_with_how_much_and_its_pane_says_what() {
+    let dir = workspace_with_own();
+    let stage = dir.path().join("alpha/.mind/tmp/4242-00112233445566ff");
+    fs::create_dir_all(&stage).unwrap();
+
+    let app = tui_in(dir.path());
+
+    let holdings = app.member().unwrap().holdings.as_ref().unwrap();
+    assert_eq!(holdings.found.len(), 1, "{:?}", holdings.found);
+    assert!(
+        holdings.found[0].starts_with(&format!("{}: ", stage.display())),
+        "{:?}",
+        holdings.found
+    );
+    assert!(
+        holdings.found[0].contains("; fix: "),
+        "{:?}",
+        holdings.found
+    );
+    let drawn = tui_drawn(&app);
+    assert!(drawn.contains("✚ 1"), "{drawn}");
+    assert!(drawn.contains("Found by doctor"), "{drawn}");
+}
+
+#[test]
+fn what_doctor_could_not_read_to_tell_is_said_beside_what_could_not_be_read() {
+    let dir = workspace_with_own();
+    let codex = dir.path().join("home/.codex");
+    fs::create_dir_all(&codex).unwrap();
+    let config = codex.join("config.toml");
+    fs::write(&config, "[projects\n").unwrap();
+    let lookup = Lookup {
+        agents: AgentHomes {
+            codex_home: Some(codex),
+            ..AgentHomes::default()
+        },
+        ..Lookup::default()
+    };
+
+    let view = tui::load(dir.path(), &lookup).unwrap();
+    let app = App::new(dir.path().to_path_buf(), view).with_lookup(lookup);
+
+    let member = app.member().unwrap();
+    let holdings = member.holdings.as_ref().unwrap();
+    let said: Vec<&String> = holdings
+        .warnings
+        .iter()
+        .filter(|line| line.starts_with(&format!("{}: ", config.display())))
+        .collect();
+    assert_eq!(said.len(), 1, "{:?}", holdings.warnings);
+    assert!(
+        member.problems() > 0,
+        "a check left unmade is no clean bill"
+    );
+    assert!(tui_drawn(&app).contains("Could not be read"));
+}
+
+#[test]
+fn a_project_no_workspace_links_is_marked_for_what_doctor_finds_in_it_too() {
+    let home = TempDir::new().unwrap();
+    let elsewhere = TempDir::new().unwrap();
+    let project = elsewhere.path().join("collapse");
+    fs::create_dir(&project).unwrap();
+    new_project(&project);
+    let stage = project.join(".mind/tmp/4242-00112233445566ff");
+    fs::create_dir_all(&stage).unwrap();
+
+    let View::Workspace(workspace) =
+        tui::load_project(&project, &Lookup::at_home(Some(home.path()))).unwrap()
+    else {
+        panic!("no screen for {}", project.display());
+    };
+
+    let holdings = workspace.members[0].holdings.as_ref().unwrap();
+    assert_eq!(holdings.found.len(), 1, "{:?}", holdings.found);
+    assert!(
+        holdings.found[0].starts_with(&format!("{}: ", stage.display())),
+        "{:?}",
+        holdings.found
+    );
+}
+
+#[test]
 fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
     let dir = workspace_with_own();
     let alpha = dir.path().join("alpha");
@@ -3668,7 +3751,9 @@ fn a_strip_wraps_by_how_wide_its_words_are_drawn() {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert_eq!(drawn.matches('技').count(), 16, "{width}: {drawn}");
+        // Once in the strip of what its agents do not see, and twice in
+        // doctor's, by the folder's path and among the folders.
+        assert_eq!(drawn.matches('技').count(), 48, "{width}: {drawn}");
         assert!(drawn.contains("until"), "{width}: {drawn}");
         assert!(drawn.contains("pointed"), "{width}: {drawn}");
     }

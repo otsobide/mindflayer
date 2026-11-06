@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::slice;
 
 use common::{repository, skill};
+use mindweaver_core::doctor::Machine;
 use mindweaver_core::gather::{self, Request};
 use mindweaver_core::install::{self, Candidate, Cell, Change, Plan};
 use mindweaver_core::ledger::Ledger;
@@ -657,7 +658,7 @@ impl Fixture {
             workspace: WeaverWorkspace::open(self.workspace.root()).unwrap(),
             reason: Reason::Explicit,
         };
-        Snapshot::of(&resolved, None)
+        Snapshot::of(&resolved, None, &Machine::default())
     }
 
     /// Each box of `kind` `name` in the project at `entry`, as a snapshot

@@ -306,6 +306,13 @@ fn project_row(member: &Member) -> ListItem<'_> {
             if !holdings.unreached.is_empty() {
                 spans.push(Span::styled("  ⚠", warn()));
             }
+            // What doctor finds, counted, which a strip beside says too.
+            if !holdings.found.is_empty() {
+                spans.push(Span::styled(
+                    format!("  ✚ {}", holdings.found.len()),
+                    warn(),
+                ));
+            }
             spans
         }
     };
@@ -384,6 +391,7 @@ fn holdings(app: &App, workspace: &Workspace, frame: &mut Frame, area: Rect) {
     let strips: Vec<(&str, &[String])> = [
         (" Could not be read ", holdings.warnings.as_slice()),
         (" Not seen by every agent ", holdings.unreached.as_slice()),
+        (" Found by doctor ", holdings.found.as_slice()),
     ]
     .into_iter()
     .filter(|(_, lines)| !lines.is_empty())

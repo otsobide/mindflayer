@@ -174,8 +174,9 @@ misspelled name is said rather than read as nothing.
 `workspace` (above), `projects`, `library`, `loaded`, the workspaces it
 loads, and `known`, those this machine knows, `shelf` and `sources`,
 `offers`, everything there is to install and where it comes from,
-`boxes`, how each project holds each of those, `history`, what the ledger
-logged lately, `summary`, what it counts, `warnings`, what could not be
+`boxes`, how each project holds each of those, `doctor`, what keeps each
+project's agents from what it gives them, as `mindweaver doctor` says it,
+`history`, what the ledger logged lately, `summary`, what it counts, `warnings`, what could not be
 read, and `format`, the version of what it holds; `kinds`, `states`,
 `box_states`, `healths` and `agents` are the order each is listed in. The
 routes below cut parts of it, or read what it does not hold.

@@ -206,10 +206,14 @@ under `apps/` with its own `Makefile`:
   workspace's own from every project it links before the library
   (`everywhere`), and bringing a skill somebody keeps in a project's agents'
   folders into the library, its copies recorded as installed from there
-  (`adopt`), the stable code each of its errors gives (`code`), the
+  (`adopt`), what keeps a project's agents from what it gives them, which
+  no agent says, found from file reads alone and told the agent homes and
+  the names of the variables set (`doctor`, `doctor::Machine`), the stable
+  code each of its errors gives (`code`), the
   snapshot every front end reads a workspace through, with what it counts,
-  each project's health, and every offer with each project's box of it,
-  and the part of it `list --json` prints (`view`), every path a snapshot reads that a front end watches for a
+  each project's health, every offer with each project's box of it and
+  what doctor finds of each, and the part of it `list --json` prints
+  (`view`), every path a snapshot reads that a front end watches for a
   change, each with the holder it is of (`watch`), one file of an artifact
   read as text for
   the panel, cut at its front matter when it is the one the artifact is
@@ -249,9 +253,10 @@ under `apps/` with its own `Makefile`:
   commands has a file under `src/commands/`: `project` (init, link, unlink,
   relink, scan), `workspace` (load, unload), `activate` (activate, which), `known`
   (workspaces, workspaces forget), `artifact` (add, edit, rename, remove,
-  templates), `read` (list, show, validate), `status`, `settings` (agents,
-  share, targets), `gather`, `install`, `update` and `migrate` (each at both
-  levels), `adopt` (mindweaver adopt) and `ui` (the panel, at both levels).
+  templates), `read` (list, show, validate), `status`, `doctor`, `settings`
+  (agents, share, targets), `gather`, `install`, `update` and `migrate`
+  (each at both levels), `adopt` (mindweaver adopt) and `ui` (the panel, at
+  both levels).
   `add mcp`'s options for how a server is started or reached are one
   struct both binaries flatten (`ServerOptions`), which hands core a
   `mcp::Given`. `src/render.rs` holds `Outcome`,
@@ -566,8 +571,8 @@ These are easy to break from a single file without noticing.
   by hand for a line built from text.
 - **Reading commands print JSON in one envelope, and its names are a
   contract.** A reading command's `--json` (`list`, `show`, `validate`,
-  `templates` and `status` at both levels, `workspaces`, `scan` and `gather
-  list`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
+  `templates`, `status` and `doctor` at both levels, `workspaces`, `scan`
+  and `gather list`) prints `render::json`'s `{"version": 2, "data": ..., "warnings":
   [...], "coded_warnings": [...]}`, never a shape of its own, with what its
   text says on stderr as `warning:` lines in `warnings`, the same lines
   with their codes in `coded_warnings`, and the exit status its text has;
@@ -600,6 +605,12 @@ These are easy to break from a single file without noticing.
   end. It is a read: the ledger only through `ledger_for_reading`, the
   default workspace never made, nothing scrubbed, and no scan, which is a
   query of its own (a test counts scans with `scan::scans`, a test build's).
+  What doctor finds of each project is in it (`doctor`), and of a project
+  no workspace links beside its read (`view::Project::read_examined`),
+  told the agent homes and the names of the variables set the front end
+  decided (`doctor::Machine`, handed to `Snapshot::of` and
+  `Snapshot::read`), and what it reads is watched as the rest is
+  (`watch::watched`, given the same agent homes).
   Its names are a contract under `view::FORMAT`, as a report's are under
   `ENVELOPE_VERSION`, and every URL in it, an error's message included,
   goes out through `url::redacted`. What a front end reads beside it is
@@ -1267,17 +1278,26 @@ These are easy to break from a single file without noticing.
   (`--claude-config-dir`, `--codex-home`, `--opencode-config-dir`,
   `--agents-dir`), then `$CLAUDE_CONFIG_DIR`, `$CODEX_HOME` or
   `$OPENCODE_CONFIG_DIR`, then `~/.claude`, `~/.codex`, `~/.config/opencode`
-  or `~/.agents`; empty means none. Those folder names are core's
-  (`AgentHomes::defaults_under`), and only the user's home is the CLI's to
-  find. Core takes the answer as `AgentHomes` and never resolves one.
+  or `~/.agents`; empty means none. While `$CLAUDE_CONFIG_DIR` or
+  `$OPENCODE_CONFIG_DIR` names a folder of its own, the one in the user's
+  home is kept beside it (`claude_dir_in_home`, `opencode_dir_in_home`),
+  which OpenCode reads all the same (docs/agents.md); an option names the
+  one folder outright, so a pinned test reaches neither. Those folder
+  names are core's (`AgentHomes::defaults_under`), and only the user's
+  home is the CLI's to find. Core takes the answer as `AgentHomes` and never resolves one.
   `Lookup::given` decides them once per command line, into the `Lookup`
   (`Lookup::agents`), and install is the first to take them, to refuse a
   copy inside one, as `agents_md::render` and `claude_rules::render` take
   them to refuse rules there, `claude_md` to leave the user memory file
   out of what keeps Claude from reading `AGENTS.md`,
   `codex_mcp::render` to refuse a `.codex/config.toml` inside one and to
-  read, never write, the Codex home's `config.toml`, and
-  `opencode_mcp::render` to refuse OpenCode's config inside one. `tui::execute` hands each line the TUI's own
+  read, never write, the Codex home's `config.toml`,
+  `opencode_mcp::render` to refuse OpenCode's config inside one, and
+  doctor to read, never write, what each holds that a project's agents
+  read too (`AgentHomes::skills_read_by`), told beside them the names of
+  the environment variables set, names alone (`Lookup::variables`,
+  `Lookup::machine`), decided once per command line the same way.
+  `tui::execute` hands each line the TUI's own
   with the rest of its `Lookup`, and so does its install screen: a command
   the TUI runs carries none of the four options, so it would decide them
   again from the environment.

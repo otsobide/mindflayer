@@ -323,6 +323,18 @@ would run and writes nothing. [What an MCP server
 looks like](docs/reference.md#what-an-mcp-server-looks-like) has every
 option, and the rest.
 
+## When an agent says nothing
+
+Some things keep an agent from what a project gives it without a word from
+the agent: a Codex project you never trusted, an `AGENTS.override.md` hiding
+`AGENTS.md`, a `CLAUDE.local.md` that stops Claude reading it, a skill of the
+same name in `~/.claude/skills` or `~/.agents/skills` holding something
+else, an MCP server whose variable is not set. `mindweaver doctor` looks for
+them in every project, or `mind doctor` in the one you are in, and names the
+file each is about and what fixes it. It reads files and changes nothing,
+and exits non-zero when it finds something, so it fits in CI;
+[the reference](docs/reference.md#what-no-agent-says) lists every check.
+
 ## Learn more
 
 - [The reference](docs/reference.md): every command, with what it prints.
