@@ -54,6 +54,7 @@ pub mod mother;
 pub mod names;
 pub mod opencode_mcp;
 pub mod paths;
+pub mod plugin;
 pub mod policy;
 pub mod port;
 pub mod reading;

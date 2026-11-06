@@ -744,6 +744,7 @@ fn found_in(root: &Path) -> (Vec<PathBuf>, Vec<Failure>) {
         root,
         root,
         &Request::git("unused"),
+        None,
         "SKILL.md",
         &mut failures,
     )
@@ -905,10 +906,19 @@ fn a_skill_a_plugin_names_through_a_link_out_of_the_repository_is_refused_and_sa
             String::from("./skills/keys"),
         ]),
         license: None,
+        dialect: Dialect::Claude,
     });
     let mut failures = Vec::new();
 
-    let found = candidates(dir.path(), dir.path(), &request, "SKILL.md", &mut failures).unwrap();
+    let found = candidates(
+        dir.path(),
+        dir.path(),
+        &request,
+        None,
+        "SKILL.md",
+        &mut failures,
+    )
+    .unwrap();
 
     assert_eq!(found, [dir.path().join("skills/xlsx")]);
     assert!(
@@ -933,6 +943,7 @@ fn candidates_in_a_folder_that_is_not_there_cannot_be_read() {
         &missing,
         dir.path(),
         &Request::git("unused"),
+        None,
         "SKILL.md",
         &mut Vec::new(),
     )
@@ -1416,6 +1427,32 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
         "/w/.mindweaver/cache/s/skills/gone: its plugin's catalog entry names it as a skill, \
          and it holds no SKILL.md, so it is not gathered"
     );
+    let unreadable = Failure::ManifestUnreadable {
+        path: PathBuf::from("/w/.mindweaver/cache/s/.codex-plugin/plugin.json"),
+        reason: String::from("it is not a JSON object"),
+    };
+    assert_eq!(
+        unreadable.path(),
+        Path::new("/w/.mindweaver/cache/s/.codex-plugin/plugin.json")
+    );
+    assert_eq!(
+        unreadable.to_string(),
+        "/w/.mindweaver/cache/s/.codex-plugin/plugin.json: its plugin's manifest cannot be read: \
+         it is not a JSON object, so its plugin is searched as if it had none"
+    );
+    let manifest_outside = Failure::ManifestOutside {
+        path: PathBuf::from("/w/.mindweaver/cache/s/.claude-plugin/plugin.json"),
+        named: String::from("../../etc"),
+    };
+    assert_eq!(
+        manifest_outside.path(),
+        Path::new("/w/.mindweaver/cache/s/.claude-plugin/plugin.json")
+    );
+    assert_eq!(
+        manifest_outside.to_string(),
+        "/w/.mindweaver/cache/s/.claude-plugin/plugin.json: names `../../etc` as a folder of its \
+         plugin's skills, which is no folder of the repository, so nothing there is gathered"
+    );
     assert_eq!(
         Failure::CODES,
         [
@@ -1427,7 +1464,9 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
             "gathered_root_unnamed",
             "gathered_name_clash",
             "gathered_listed_outside",
-            "gathered_listed_missing"
+            "gathered_listed_missing",
+            "gathered_manifest_unreadable",
+            "gathered_manifest_outside"
         ]
     );
 }

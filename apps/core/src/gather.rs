@@ -32,7 +32,9 @@ use crate::hash;
 use crate::kind::{Kind, Layout};
 use crate::ledger::{self, Action, Ledger, LedgerError, Merged, Outcome, SourceKind, Upstream};
 use crate::lock::LockError;
+use crate::marketplace::Dialect;
 use crate::paths;
+use crate::plugin::{self, Manifest};
 use crate::port::{Cloned, GitError, Remote};
 use crate::url::{carries_credentials, fetched, redacted};
 use crate::value::{ArtifactName, Origin, Redacted, Revision, SourceName};
@@ -169,15 +171,20 @@ pub enum Search {
     Layouts,
     /// A plugin a marketplace's catalog lists (#103), the folder searched
     /// being its root: the skills its entry names, each a folder from
-    /// there, when it names them, and otherwise its `skills/` folder, as
+    /// there, when it names them, and otherwise its `skills/` folder and
+    /// the folders its manifest names ([`plugin::Manifest`], #104), each as
     /// far down as [`SEARCH_DEPTH`], or a `SKILL.md` at its root, which
     /// makes it one skill. What else of it a plugin holds is no skill.
     Plugin {
         /// The skills its entry names, as the catalog writes each.
         skills: Option<Vec<String>>,
         /// Its licence, as the catalog gives it: a skill's own for one
-        /// whose manifest and licence file say none ([`license_of`]).
+        /// whose manifest, licence file and plugin's manifest say none
+        /// ([`license_of`]).
         license: Option<String>,
+        /// The dialect of the catalog listing it, which says the order its
+        /// manifest is looked for in ([`plugin::Format::read_for`]).
+        dialect: Dialect,
     },
 }
 
@@ -187,6 +194,19 @@ impl Search {
         match self {
             Search::Layouts => None,
             Search::Plugin { license, .. } => license.as_deref(),
+        }
+    }
+
+    /// The formats the folder searched is looked in for a manifest of, in
+    /// order: for a repository, the Agent Plugins format's alone, which
+    /// makes it a package whose skills are its `skills/<child>` (#104), a
+    /// Codex or a Claude Code plugin's manifest changing nothing of how a
+    /// repository is searched (#101); for a plugin, each, as
+    /// [`plugin::Format::read_for`] orders them.
+    fn formats(&self) -> Vec<plugin::Format> {
+        match self {
+            Search::Layouts => vec![plugin::Format::AgentPlugins],
+            Search::Plugin { dialect, .. } => plugin::Format::read_for(*dialect).to_vec(),
         }
     }
 }
@@ -1230,8 +1250,11 @@ pub(crate) fn place(
         .into_iter()
         .filter(|gathered| gathered.source.id == source.id && gathered.kind == request.kind)
         .collect();
-    let Offered { held, taken } =
-        offered(&clone.root, request, url, manifest, &mut report.failures)?;
+    let Offered {
+        held,
+        taken,
+        license: plugins,
+    } = offered(&clone.root, request, url, manifest, &mut report.failures)?;
 
     // The last moment a cancel is honoured, and the reason everything is read
     // first: past here the shelf and the ledger change, and a gather stopped
@@ -1297,11 +1320,13 @@ pub(crate) fn place(
         let stated = artifact
             .manifest()
             .and_then(|manifest| manifest.license.as_deref());
-        // A plugin's licence, as its catalog gives it, for a skill that says
-        // none of its own, after its manifest and its licence file: what the
-        // skill says of itself is nearer to it than what a catalog says of
-        // the plugin it is in.
+        // A plugin's licence, as its own manifest gives it and then as its
+        // catalog does, for a skill that says none of its own, after its
+        // manifest and its licence file: what the skill says of itself is
+        // nearer to it than what its plugin says, and what a plugin says of
+        // itself nearer than what a catalog says of the plugin it lists.
         let license = license_of(stated, &destination)
+            .or_else(|| plugins.clone())
             .or_else(|| request.search.license().map(str::to_owned));
         let recorded = relative(workspace, &destination);
         ledger.record(
@@ -1379,6 +1404,9 @@ fn left_off_the_shelf(request: &Request, clone: &Path, directory: &Path) -> Vec<
 struct Offered {
     held: Vec<String>,
     taken: Vec<(PathBuf, String, Artifact)>,
+    /// The licence the manifest of the plugin or package searched gives,
+    /// when it has one that gives one (#104).
+    license: Option<String>,
 }
 
 /// Read what the clone at `clone` offers ([`Offered`]), telling `request`'s
@@ -1398,7 +1426,28 @@ fn offered(
             url: url.to_owned(),
         });
     }
-    let found = candidates(&searched, clone, request, manifest, failures)?;
+    let bound = fs::canonicalize(clone).map_err(|source| GatherError::Read {
+        path: clone.to_path_buf(),
+        source,
+    })?;
+    let plugin = match Manifest::read(&searched, &bound, &request.search.formats()) {
+        Ok(plugin) => plugin,
+        Err(unreadable) => {
+            failures.push(Failure::ManifestUnreadable {
+                path: unreadable.path,
+                reason: unreadable.reason,
+            });
+            None
+        }
+    };
+    let found = candidates(
+        &searched,
+        clone,
+        request,
+        plugin.as_ref(),
+        manifest,
+        failures,
+    )?;
     // What a skill at the repository's root is filed under.
     let repository = crate::url::repository(url);
     let mut taken = Vec::with_capacity(found.len());
@@ -1420,7 +1469,11 @@ fn offered(
         .iter()
         .filter_map(|directory| filed(directory, clone, repository.as_deref()))
         .collect();
-    Ok(Offered { held, taken })
+    Ok(Offered {
+        held,
+        taken,
+        license: plugin.and_then(|plugin| plugin.license),
+    })
 }
 
 /// Take off the shelf what `source` supplied before (`supplied`) and does
@@ -1731,8 +1784,10 @@ pub fn license_of(stated: Option<&str>, folder: &Path) -> Option<String> {
 /// folder from `root` held to the repository lexically, as `--path` is
 /// (`gathered_listed_outside`), and holding a `manifest`
 /// (`gathered_listed_missing`); with none named, `root` alone when it holds
-/// one, and otherwise what its `skills/` folder holds, searched as a
-/// repository is.
+/// one, and otherwise what its `skills/` folder holds, and each folder its
+/// own manifest, `plugin`, names under `skills` (#104), held to the
+/// repository the same way (`gathered_manifest_outside`), each searched as
+/// a repository is.
 ///
 /// Either way, a link that is itself a skill's folder is taken when it
 /// leads to a folder inside the clone, as a copy follows it
@@ -1744,9 +1799,14 @@ fn candidates(
     root: &Path,
     clone: &Path,
     request: &Request,
+    plugin: Option<&Manifest>,
     manifest: &str,
     failures: &mut Vec<Failure>,
 ) -> Result<Vec<PathBuf>, GatherError> {
+    let bound = fs::canonicalize(clone).map_err(|source| GatherError::Read {
+        path: clone.to_path_buf(),
+        source,
+    })?;
     let mut found = Vec::new();
     match &request.search {
         Search::Plugin {
@@ -1774,9 +1834,10 @@ fn candidates(
         // is its root, and nothing in it is another's.
         _ if root.join(manifest).is_file() => found.push(root.to_path_buf()),
         Search::Plugin { skills: None, .. } => {
-            let skills = root.join("skills");
-            if skills.is_dir() {
-                search(&skills, 1, manifest, &mut found)?;
+            for folder in plugin_folders(root, request, plugin, failures) {
+                if folder.is_dir() {
+                    search(&folder, 1, manifest, &mut found)?;
+                }
             }
         }
         Search::Layouts => search(root, 1, manifest, &mut found)?,
@@ -1784,10 +1845,6 @@ fn candidates(
     found.sort();
     found.dedup();
 
-    let bound = fs::canonicalize(clone).map_err(|source| GatherError::Read {
-        path: clone.to_path_buf(),
-        source,
-    })?;
     let mut kept: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(found.len());
     for path in found {
         let (resolved, inside) =
@@ -1831,6 +1888,43 @@ pub const SEARCH_DEPTH: usize = 4;
 /// own, which no checkout holds a skill in, and a package manager's, which
 /// holds whatever the packages it installed hold.
 pub const PASSED_OVER: [&str; 2] = [".git", "node_modules"];
+
+/// The folders a plugin at `root` keeps its skills in, its entry naming
+/// none: its `skills/`, and each folder its manifest, `plugin`, names under
+/// `skills`, from its root, once each, one that climbs out of the
+/// repository lexically said (`gathered_manifest_outside`) and passed over.
+///
+/// Beside `skills/` rather than instead of it, for both agents' manifests:
+/// a folder named there is where its skills are as well, and a gather that
+/// took the one and not the other on an agent's behalf would guess at what
+/// that agent loads, where taking both leaves nothing a plugin offers off
+/// the shelf.
+fn plugin_folders(
+    root: &Path,
+    request: &Request,
+    plugin: Option<&Manifest>,
+    failures: &mut Vec<Failure>,
+) -> Vec<PathBuf> {
+    let mut folders = vec![root.join("skills")];
+    let Some(plugin) = plugin else {
+        return folders;
+    };
+    for named in &plugin.skills {
+        let route = Path::new(&request.subdirectory).join(named);
+        if outside(&route.to_string_lossy()) {
+            failures.push(Failure::ManifestOutside {
+                path: root.join(plugin.format.file()),
+                named: named.clone(),
+            });
+            continue;
+        }
+        let folder = paths::normalize(&root.join(named));
+        if !folders.contains(&folder) {
+            folders.push(folder);
+        }
+    }
+    folders
+}
 
 /// Look through `folder`, `depth` folders below the one searched, for the
 /// folders holding a `manifest`, putting each in `found`.
@@ -1946,6 +2040,15 @@ pub enum Failure {
     /// not there.
     #[error("{path}: its plugin's catalog entry names it as a skill, and it holds no SKILL.md, so it is not gathered")]
     ListedMissing { path: PathBuf },
+    /// A plugin's manifest (`path`) that is there and cannot be read
+    /// (#104): the plugin is searched as if it had none.
+    #[error("{path}: its plugin's manifest cannot be read: {reason}, so its plugin is searched as if it had none")]
+    ManifestUnreadable { path: PathBuf, reason: String },
+    /// A folder of skills a plugin's manifest (`path`) names (`named`, as
+    /// it writes it) that is absolute or climbs out of the repository,
+    /// lexically ([`outside`]): no folder of it is looked at.
+    #[error("{path}: names `{named}` as a folder of its plugin's skills, which is no folder of the repository, so nothing there is gathered")]
+    ManifestOutside { path: PathBuf, named: String },
 }
 
 codes!(Failure {
@@ -1958,6 +2061,8 @@ codes!(Failure {
     Self::Clash { .. } => "gathered_name_clash",
     Self::ListedOutside { .. } => "gathered_listed_outside",
     Self::ListedMissing { .. } => "gathered_listed_missing",
+    Self::ManifestUnreadable { .. } => "gathered_manifest_unreadable",
+    Self::ManifestOutside { .. } => "gathered_manifest_outside",
 } carried {
     Self::Artifact(error) => error,
 });
@@ -1997,6 +2102,14 @@ impl Failure {
                 listed,
             },
             Failure::ListedMissing { path } => Failure::ListedMissing { path: route(path) },
+            Failure::ManifestUnreadable { path, reason } => Failure::ManifestUnreadable {
+                path: route(path),
+                reason,
+            },
+            Failure::ManifestOutside { path, named } => Failure::ManifestOutside {
+                path: route(path),
+                named,
+            },
             Failure::Unhashed { .. } | Failure::Unremoved { .. } => self,
         }
     }
@@ -2009,6 +2122,8 @@ impl Failure {
             | Failure::Unnamed { path }
             | Failure::ListedMissing { path }
             | Failure::ListedOutside { path, .. }
+            | Failure::ManifestUnreadable { path, .. }
+            | Failure::ManifestOutside { path, .. }
             | Failure::Clash { path, .. }
             | Failure::Copy { path, .. }
             | Failure::Unhashed { path, .. }

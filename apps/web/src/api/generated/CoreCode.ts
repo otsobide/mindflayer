@@ -193,6 +193,8 @@ export type CoreCode =
   | "gathered_name_clash"
   | "gathered_listed_outside"
   | "gathered_listed_missing"
+  | "gathered_manifest_unreadable"
+  | "gathered_manifest_outside"
   | "gather_cancelled"
   | "credentials_in_url"
   | "gather_no_such_folder"

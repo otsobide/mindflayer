@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use common::{commit, repository, skill, url, workspace, write_files};
 use mindweaver_core::gather::{self, GatherError, Progress, Request, Search, Warning, Watch};
 use mindweaver_core::ledger::{Action, Ledger, SourceKind};
+use mindweaver_core::marketplace::Dialect;
 use mindweaver_core::value::SourceName;
 use mindweaver_core::{Kind, MindProject, ValidationIssue, WeaverWorkspace, DEFAULT_SUBDIRECTORY};
 use tempfile::TempDir;
@@ -1134,6 +1135,7 @@ fn plugin(skills: Option<&[&str]>, license: Option<&str>) -> Search {
     Search::Plugin {
         skills: skills.map(|skills| skills.iter().map(|skill| (*skill).to_owned()).collect()),
         license: license.map(str::to_owned),
+        dialect: Dialect::Claude,
     }
 }
 
@@ -1298,6 +1300,176 @@ fn a_plugins_licence_is_a_skills_that_says_none_after_its_manifest_and_its_licen
             (String::from("silent"), Some(String::from("BSD-3-Clause"))),
             (String::from("stated"), Some(String::from("Apache-2.0"))),
         ]
+    );
+}
+
+/// A plugin's search as a catalog in `dialect` lists it, naming no skills.
+fn listed_by(dialect: Dialect) -> Search {
+    Search::Plugin {
+        skills: None,
+        license: None,
+        dialect,
+    }
+}
+
+#[test]
+fn the_folders_a_plugins_manifest_names_are_searched_beside_its_skills_folder() {
+    let source = repository(&[
+        (
+            "plugins/codex/.codex-plugin/plugin.json",
+            r#"{"name": "codex", "skills": "./custom/"}"#,
+        ),
+        (
+            "plugins/codex/skills/plain/SKILL.md",
+            &skill("plain", "In skills/"),
+        ),
+        (
+            "plugins/codex/custom/named/SKILL.md",
+            &skill("named", "Where its manifest says"),
+        ),
+        (
+            "plugins/codex/other/left/SKILL.md",
+            &skill("left", "Nowhere it names"),
+        ),
+        (
+            "plugins/claude/.claude-plugin/plugin.json",
+            r#"{"name": "claude", "skills": ["./a", "./b/", "./a"]}"#,
+        ),
+        ("plugins/claude/a/one/SKILL.md", &skill("one", "In a")),
+        ("plugins/claude/b/two/SKILL.md", &skill("two", "In b")),
+    ]);
+
+    let codex = found(
+        &Request::git(url(&source))
+            .from_subdirectory("plugins/codex")
+            .searching(listed_by(Dialect::Codex)),
+    );
+    let claude = found(
+        &Request::git(url(&source))
+            .from_subdirectory("plugins/claude")
+            .searching(listed_by(Dialect::Claude)),
+    );
+
+    assert_eq!(
+        codex,
+        named(&[
+            ("named", "plugins/codex/custom/named"),
+            ("plain", "plugins/codex/skills/plain"),
+        ])
+    );
+    assert_eq!(
+        claude,
+        named(&[
+            ("one", "plugins/claude/a/one"),
+            ("two", "plugins/claude/b/two")
+        ])
+    );
+}
+
+#[test]
+fn a_folder_a_plugins_manifest_names_out_of_the_repository_is_said_and_the_rest_taken() {
+    let source = repository(&[
+        (
+            ".codex-plugin/plugin.json",
+            r#"{"skills": ["../../etc", "/etc", "./skills"]}"#,
+        ),
+        ("skills/kept/SKILL.md", &skill("kept", "Kept")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).searching(listed_by(Dialect::Codex)),
+    )
+    .unwrap();
+
+    assert_eq!(report.added.len(), 1, "{report:?}");
+    let codes: Vec<&str> = report
+        .failures
+        .iter()
+        .map(|failure| failure.code())
+        .collect();
+    assert_eq!(
+        codes,
+        ["gathered_manifest_outside", "gathered_manifest_outside"]
+    );
+}
+
+#[test]
+fn a_plugins_manifest_that_cannot_be_read_is_said_and_its_plugin_searched_as_if_it_had_none() {
+    let source = repository(&[
+        (".codex-plugin/plugin.json", "{\"name\": \"broken\""),
+        ("skills/kept/SKILL.md", &skill("kept", "Kept")),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).searching(listed_by(Dialect::Codex)),
+    )
+    .unwrap();
+
+    assert_eq!(report.added.len(), 1, "{report:?}");
+    assert_eq!(report.failures.len(), 1, "{:?}", report.failures);
+    assert_eq!(report.failures[0].code(), "gathered_manifest_unreadable");
+    assert!(report.failures[0]
+        .path()
+        .ends_with(".codex-plugin/plugin.json"));
+}
+
+#[test]
+fn a_plugins_licence_is_its_manifests_before_its_catalogs() {
+    let source = repository(&[
+        (".claude-plugin/plugin.json", r#"{"license": "MIT"}"#),
+        ("skills/silent/SKILL.md", &skill("silent", "Says nothing")),
+        (
+            "skills/stated/SKILL.md",
+            "---\nname: stated\ndescription: Says it\nlicense: Apache-2.0\n---\n",
+        ),
+    ]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    gather::gather(
+        &workspace,
+        &ledger,
+        &Request::git(url(&source)).searching(plugin(None, Some("BSD-3-Clause"))),
+    )
+    .unwrap();
+
+    let licenses: Vec<(String, Option<String>)> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|artifact| (artifact.name.to_string(), artifact.license))
+        .collect();
+    assert_eq!(
+        licenses,
+        [
+            (String::from("silent"), Some(String::from("MIT"))),
+            (String::from("stated"), Some(String::from("Apache-2.0"))),
+        ]
+    );
+}
+
+#[test]
+fn a_repository_gathered_whole_is_searched_as_it_was_whatever_agents_manifest_it_holds() {
+    let source = repository(&[
+        (".codex-plugin/plugin.json", r#"{"skills": "./nowhere"}"#),
+        (".claude-plugin/plugin.json", r#"{"skills": 7}"#),
+        ("skills/kept/SKILL.md", &skill("kept", "Kept")),
+        ("tools/also/SKILL.md", &skill("also", "Found by its layout")),
+    ]);
+
+    let gathered = found(&Request::git(url(&source)));
+
+    assert_eq!(
+        gathered,
+        named(&[("also", "tools/also"), ("kept", "skills/kept")])
     );
 }
 

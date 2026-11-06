@@ -1342,3 +1342,44 @@ fn a_catalog_in_the_other_dialects_shape_is_refused_whichever_place_it_is_at_and
         assert!(ledger.gathered().unwrap().is_empty());
     }
 }
+
+#[test]
+fn a_codex_plugin_is_searched_and_said_as_its_manifest_says() {
+    let market = repository(&[
+        (
+            ".agents/plugins/marketplace.json",
+            &catalog("c", &[codex_entry("kit", "./plugins/kit")]),
+        ),
+        (
+            "plugins/kit/.codex-plugin/plugin.json",
+            r#"{"name": "kit", "license": "MIT", "skills": "./custom/", "mcpServers": {"x": {"command": "x"}}}"#,
+        ),
+        // Claude Code's manifest is read only when Codex's is not there.
+        (
+            "plugins/kit/.claude-plugin/plugin.json",
+            r#"{"license": "Apache-2.0", "hooks": "./hooks.json"}"#,
+        ),
+        (
+            "plugins/kit/custom/deploy/SKILL.md",
+            &skill("deploy", "Ship it"),
+        ),
+    ]);
+    let routes = Arc::new(Routes::default().to(MARKET, &market));
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = marketplace::gather(&workspace, &ledger, &request(&routes, Pick::All)).unwrap();
+
+    let child = &report.children[0];
+    assert_eq!(child.outcome.as_ref().unwrap().added.len(), 1, "{child:?}");
+    // Declared in its manifest, and kept in no file of the two.
+    assert_eq!(child.holds, [Holding::McpServers]);
+    assert!(child.mcp_files.is_empty());
+    let licenses: Vec<Option<String>> = ledger
+        .gathered()
+        .unwrap()
+        .into_iter()
+        .map(|gathered| gathered.license)
+        .collect();
+    assert_eq!(licenses, [Some(String::from("MIT"))]);
+}

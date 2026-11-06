@@ -38,6 +38,7 @@ use crate::gather::{self, GatherError, Search};
 use crate::ledger::{Action, Ledger, LedgerError, Outcome, Source, SourceKind};
 use crate::lock::LockError;
 use crate::paths;
+use crate::plugin;
 use crate::port::Cloned;
 use crate::url::{fetched, is_remote, redacted};
 use crate::value::{Redacted, Revision, SourceName};
@@ -302,7 +303,8 @@ impl Holding {
         }
     }
 
-    /// The key a catalog's entry declares it under.
+    /// The key a catalog's entry, or a plugin's manifest, declares it
+    /// under.
     const fn key(self) -> &'static str {
         match self {
             Holding::Hooks => "hooks",
@@ -339,6 +341,28 @@ impl Holding {
         Holding::ALL
             .into_iter()
             .filter(|holding| holding.kept().iter().any(|kept| is_there(&root.join(kept))))
+            .collect()
+    }
+
+    /// What `object`, a catalog's entry or a plugin's manifest, declares of
+    /// them, by the key each is declared under, `null` declaring nothing.
+    ///
+    /// A manifest's, of the plugin at `root`, declares one by a path only
+    /// while something is at that path, lexically inside the plugin's
+    /// folder and looked at, never followed (#104): a path names where
+    /// the plugin keeps it, and one that keeps nothing there holds nothing
+    /// to say. A catalog's entry, which names no file of the plugin's,
+    /// declares whatever it holds under the key, as #103 read it.
+    pub(crate) fn declared_in(object: &JsonObject<'_>, root: Option<&Path>) -> Vec<Holding> {
+        Holding::ALL
+            .into_iter()
+            .filter(|holding| match (object.get(holding.key()), root) {
+                (None | Some(JsonValue::Null), _) => false,
+                (Some(JsonValue::String(path)), Some(root)) => {
+                    !crate::gather::outside(path) && is_there(&root.join(path.as_ref()))
+                }
+                (Some(_), _) => true,
+            })
             .collect()
     }
 
@@ -388,7 +412,7 @@ const ARCHIVES: [&str; 8] = [
 /// of nesting a catalog made deep enough to overflow the stack would pass,
 /// rather than one parsed into types, so an entry that does not fit costs
 /// only itself.
-fn options() -> ParseOptions {
+pub(crate) fn options() -> ParseOptions {
     ParseOptions {
         allow_comments: false,
         allow_trailing_commas: false,
@@ -707,14 +731,7 @@ fn entry(
     Ok(Entry {
         description: text(object, "description"),
         license: text(object, "license"),
-        declares: Holding::ALL
-            .into_iter()
-            .filter(|holding| {
-                object
-                    .get(holding.key())
-                    .is_some_and(|value| !matches!(value, JsonValue::Null))
-            })
-            .collect(),
+        declares: Holding::declared_in(object, None),
         name,
         plugin,
         skills,
@@ -807,7 +824,7 @@ fn shape(plugins: &JsonArray<'_>) -> Option<Dialect> {
 
 /// The string `object` holds under `key`, when it holds one there that is
 /// not blank.
-fn text(object: &JsonObject<'_>, key: &str) -> Option<String> {
+pub(crate) fn text(object: &JsonObject<'_>, key: &str) -> Option<String> {
     object
         .get_string(key)
         .map(|text| text.trim().to_owned())
@@ -815,7 +832,7 @@ fn text(object: &JsonObject<'_>, key: &str) -> Option<String> {
 }
 
 /// Each string in `values`, or `None` when one is something else.
-fn strings(values: &JsonArray<'_>) -> Option<Vec<String>> {
+pub(crate) fn strings(values: &JsonArray<'_>) -> Option<Vec<String>> {
     values
         .iter()
         .map(|value| match value {
@@ -1143,7 +1160,15 @@ pub fn gather(
             Child::cancelled(entry)
         } else {
             inside(
-                workspace, ledger, catalog, &url, &parent, &clone, entry, route,
+                workspace,
+                ledger,
+                catalog,
+                &url,
+                &parent,
+                &clone,
+                entry,
+                route,
+                listed.dialect,
             )
         };
         cancelled = matches!(child.outcome, Err(GatherError::Cancelled));
@@ -1157,7 +1182,7 @@ pub fn gather(
         let child = if cancelled {
             Child::cancelled(entry)
         } else {
-            apart(workspace, ledger, catalog, &parent, entry)
+            apart(workspace, ledger, catalog, &parent, entry, listed.dialect)
         };
         cancelled = matches!(child.outcome, Err(GatherError::Cancelled));
         children[at] = Some(child);
@@ -1464,14 +1489,15 @@ impl Child {
 }
 
 /// The request a plugin `entry` is gathered with, from `url`: its folder,
-/// its branch and its commit, searched as a plugin, watched and fetched as
-/// `catalog`, its marketplace's, is.
+/// its branch and its commit, searched as a plugin a catalog in `dialect`
+/// lists, watched and fetched as `catalog`, its marketplace's, is.
 fn request_for(
     catalog: &gather::Request,
     url: &str,
     reference: Option<&str>,
     subdirectory: &str,
     entry: &Entry,
+    dialect: Dialect,
 ) -> gather::Request {
     gather::Request::git(url)
         .at(reference)
@@ -1480,14 +1506,24 @@ fn request_for(
         .searching(Search::Plugin {
             skills: entry.skills.clone(),
             license: entry.license.clone(),
+            dialect,
         })
         .watched_by(catalog.watch.clone())
         .through(catalog.remote.clone())
 }
 
-/// What `entry` declares and its folder at `root` holds beside its skills.
-fn holdings(entry: &Entry, root: &Path) -> Vec<Holding> {
+/// What `entry` declares, its plugin's manifest declares and its folder at
+/// `root` holds beside its skills, in the repository cloned at `clone`, a
+/// catalog in `dialect` listing it. A manifest that cannot be read declares
+/// nothing here: the gather of the plugin says why.
+fn holdings(entry: &Entry, root: &Path, clone: &Path, dialect: Dialect) -> Vec<Holding> {
     let mut holds = entry.declares.clone();
+    let manifest = fs::canonicalize(clone).ok().and_then(|bound| {
+        plugin::Manifest::read(root, &bound, &plugin::Format::read_for(dialect))
+            .ok()
+            .flatten()
+    });
+    holds.extend(manifest.into_iter().flat_map(|manifest| manifest.declares));
     holds.extend(Holding::held_at(root));
     holds.sort();
     holds.dedup();
@@ -1507,13 +1543,14 @@ fn inside(
     clone: &Cloned,
     entry: &Entry,
     route: &str,
+    dialect: Dialect,
 ) -> Child {
     let folder = paths::as_route(&paths::normalize(
         &Path::new(&catalog.subdirectory).join(route),
     ));
     let reference = catalog.source.reference();
-    let request = request_for(catalog, url, reference, &folder, entry);
-    let holds = holdings(entry, &clone.root.join(&folder));
+    let request = request_for(catalog, url, reference, &folder, entry, dialect);
+    let holds = holdings(entry, &clone.root.join(&folder), &clone.root, dialect);
     let mcp_files = Holding::mcp_files_at(&clone.root.join(&folder));
     let placed = (|| {
         let checked = gather::refused(&request)?;
@@ -1552,6 +1589,7 @@ fn apart(
     catalog: &gather::Request,
     parent: &Source,
     entry: &Entry,
+    dialect: Dialect,
 ) -> Child {
     let typed = entry.plugin.url().map(Cow::into_owned).unwrap_or_default();
     let request = request_for(
@@ -1560,6 +1598,7 @@ fn apart(
         entry.plugin.reference(),
         entry.plugin.path(),
         entry,
+        dialect,
     );
     let url = fetched(&typed).into_owned();
     let mut holds = entry.declares.clone();
@@ -1583,7 +1622,12 @@ fn apart(
             let cache = workspace.cache_dir().join(gather::own_folder(&source)?);
             let placed =
                 gather::fetch(&request, &url, checked.pinned.as_ref(), &cache).and_then(|clone| {
-                    holds = holdings(entry, &clone.root.join(entry.plugin.path()));
+                    holds = holdings(
+                        entry,
+                        &clone.root.join(entry.plugin.path()),
+                        &clone.root,
+                        dialect,
+                    );
                     mcp_files = Holding::mcp_files_at(&clone.root.join(entry.plugin.path()));
                     gather::place(
                         workspace,
