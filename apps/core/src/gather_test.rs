@@ -703,8 +703,11 @@ fn a_gathered_folder_is_where_it_is_in_the_repository_from_its_root() {
         assert_eq!(upstream(&directory.join(&folder), clone, &folder), route);
         assert_eq!(upstream(&typed, clone, &folder), route, "{typed:?}");
     }
-    // A skill at the repository's root is its folder alone.
+    // A skill one folder down is its folder alone, and one that is the
+    // whole repository, at its root, is the root, `.` as a route says so.
     assert_eq!(upstream(&clone.join("lint"), clone, "lint"), "lint");
+    assert_eq!(upstream(clone, clone, "lint"), ".");
+    assert_eq!(upstream(&clone.join("."), clone, "lint"), ".");
 }
 
 #[test]
@@ -809,7 +812,7 @@ fn a_skill_whose_folder_is_not_utf_8_cannot_be_filed() {
     write(&folder.join("SKILL.md"), &SkillMother::create("cafe", "x"));
     let mut failures = Vec::new();
 
-    let taken = read(&folder, dir.path(), &mut failures);
+    let taken = read(&folder, dir.path(), None, &mut failures);
 
     assert!(taken.is_none());
     assert!(
@@ -817,6 +820,70 @@ fn a_skill_whose_folder_is_not_utf_8_cannot_be_filed() {
         "{failures:?}"
     );
     assert_eq!(failures[0].code(), "gathered_name_not_utf8");
+}
+
+#[test]
+fn a_skill_at_the_repository_s_root_is_filed_under_the_repository_s_name() {
+    let dir = TempDir::new().unwrap();
+    write(
+        &dir.path().join("SKILL.md"),
+        &SkillMother::create("pdf", "Read PDFs"),
+    );
+    let mut failures = Vec::new();
+
+    let (path, filed, artifact) = read(
+        &dir.path().join("."),
+        dir.path(),
+        Some("pdf-skill"),
+        &mut failures,
+    )
+    .unwrap();
+
+    assert_eq!((path, filed.as_str()), (dir.path().join("."), "pdf-skill"));
+    assert_eq!(artifact.name().as_str(), "pdf");
+    assert!(failures.is_empty(), "{failures:?}");
+    // Held to the folder it is filed under, not to the clone's.
+    assert_eq!(
+        filed_issues(&artifact, &filed),
+        [ValidationIssue::NameDirectoryMismatch {
+            name: String::from("pdf"),
+            directory: String::from("pdf-skill"),
+        }]
+    );
+    assert_eq!(filed_issues(&artifact, "pdf"), []);
+}
+
+#[test]
+fn a_skill_at_the_root_of_a_repository_its_url_names_no_name_of_is_not_taken() {
+    let dir = TempDir::new().unwrap();
+    write(
+        &dir.path().join("SKILL.md"),
+        &SkillMother::create("pdf", "x"),
+    );
+    let mut failures = Vec::new();
+
+    for repository in [None, Some(".."), Some("a/b")] {
+        failures.clear();
+
+        assert!(read(dir.path(), dir.path(), repository, &mut failures).is_none());
+
+        assert!(
+            matches!(&failures[..], [Failure::Unnamed { path }] if path == dir.path()),
+            "{failures:?}"
+        );
+    }
+    assert_eq!(failures[0].code(), "gathered_root_unnamed");
+}
+
+#[test]
+fn the_folder_searched_holding_a_manifest_is_the_one_candidate() {
+    let dir = TempDir::new().unwrap();
+    write(&dir.path().join("SKILL.md"), "x");
+    write(&dir.path().join("skills/deploy/SKILL.md"), "x");
+
+    let (found, _) = found_in(dir.path());
+
+    assert_eq!(found, [dir.path()]);
 }
 
 /// The folder keeps the name the source gave it, whatever the skill
@@ -831,7 +898,7 @@ fn a_skill_is_filed_under_its_folder_s_name_whatever_it_declares() {
     );
     let mut failures = Vec::new();
 
-    let (path, filed, artifact) = read(&folder, dir.path(), &mut failures).unwrap();
+    let (path, filed, artifact) = read(&folder, dir.path(), None, &mut failures).unwrap();
 
     assert_eq!(path, folder);
     assert_eq!(filed, "deploy-old");
@@ -846,7 +913,7 @@ fn a_skill_that_cannot_be_read_is_a_failure_and_not_taken() {
     write(&folder.join("SKILL.md"), "---\nname: [unclosed\n---\n");
     let mut failures = Vec::new();
 
-    assert!(read(&folder, dir.path(), &mut failures).is_none());
+    assert!(read(&folder, dir.path(), None, &mut failures).is_none());
     assert!(
         matches!(&failures[..], [Failure::Artifact(_)]),
         "{failures:?}"
@@ -905,6 +972,16 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
         "/w/.mindweaver/cache/s/skills/keys: links to /home/you/.ssh, outside the repository, \
          so it is not gathered"
     );
+    let unnamed = Failure::Unnamed {
+        path: PathBuf::from("/w/.mindweaver/cache/s"),
+    };
+    assert_eq!(unnamed.path(), Path::new("/w/.mindweaver/cache/s"));
+    assert_eq!(
+        unnamed.to_string(),
+        "/w/.mindweaver/cache/s: a SKILL.md at the repository's root is filed under the \
+         repository's name, and its URL names none, so it is not gathered: gather it by a URL \
+         or a path that ends in a name"
+    );
     assert_eq!(
         Failure::CODES,
         [
@@ -912,7 +989,8 @@ fn each_gather_failure_names_its_path_and_gives_its_code() {
             "gathered_copy_failed",
             "gathered_unhashed",
             "gathered_unremoved",
-            "gathered_link_outside"
+            "gathered_link_outside",
+            "gathered_root_unnamed"
         ]
     );
 }

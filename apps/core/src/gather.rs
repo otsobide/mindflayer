@@ -739,13 +739,20 @@ fn take(
         .filter(|gathered| gathered.source.id == source.id && gathered.kind == request.kind)
         .collect();
     let found = candidates(&harvested_from, &clone.root, manifest, &mut report.failures)?;
+    // What a skill at the repository's root is filed under.
+    let repository = crate::url::repository(url);
     let mut taken = Vec::with_capacity(found.len());
     watch.report(Progress::Harvesting {
         done: 0,
         total: found.len(),
     });
     for (done, directory) in found.iter().enumerate() {
-        if let Some(read) = read(directory, &clone.root, &mut report.failures) {
+        if let Some(read) = read(
+            directory,
+            &clone.root,
+            repository.as_deref(),
+            &mut report.failures,
+        ) {
             taken.push(read);
         }
         watch.report(Progress::Harvesting {
@@ -765,20 +772,19 @@ fn take(
     // since the revision a source names is the one its shelf holds.
     ledger.saw_source(source.id, clone.revision.as_deref(), pin)?;
 
+    // Without what no install copies, so the shelf holds what a project is
+    // given and a plugin's hooks and servers are never offered, and without
+    // git's own folder, which only a skill that is the whole repository has
+    // at its top: its clone's.
+    let mut leave_out = crate::install::left_out_names().to_vec();
+    leave_out.push(".git");
     watch.report(Progress::Placing {
         done: 0,
         total: taken.len(),
     });
     for (done, (directory, folder, artifact)) in taken.iter().enumerate() {
         let destination = shelf.join(folder);
-        // Without what no install copies, so the shelf holds what a project
-        // is given, and a plugin's hooks and servers are never offered.
-        let placed = copy::replace_leaving(
-            directory,
-            &destination,
-            &clone.root,
-            &crate::install::left_out_names(),
-        );
+        let placed = copy::replace_leaving(directory, &destination, &clone.root, &leave_out);
         watch.report(Progress::Placing {
             done: done + 1,
             total: taken.len(),
@@ -797,12 +803,14 @@ fn take(
         // Lenient, as the Agent Skills client guide advises for skills
         // written for other agents: what is wrong with one is said, and it is
         // taken anyway. Installing it is where it is held to the rules.
-        report
-            .warnings
-            .extend(artifact.validate().into_iter().map(|issue| Warning {
-                path: destination.join(manifest),
-                issue,
-            }));
+        report.warnings.extend(
+            filed_issues(artifact, folder)
+                .into_iter()
+                .map(|issue| Warning {
+                    path: destination.join(manifest),
+                    issue,
+                }),
+        );
 
         // Of the copy on the shelf rather than the folder in the clone: it
         // is what an install copies from, and what a link in the clone led
@@ -850,12 +858,16 @@ fn take(
         }
     }
 
+    let held: Vec<String> = found
+        .iter()
+        .filter_map(|directory| filed(directory, &clone.root, repository.as_deref()))
+        .collect();
     take_off(
         workspace,
         ledger,
         source,
         &shelf,
-        &found,
+        &held,
         supplied,
         &mut report,
     )?;
@@ -867,9 +879,9 @@ fn take(
 }
 
 /// Take off the shelf what `source` supplied before (`supplied`) and does
-/// not hold at the commit this gather took, which found the folders
-/// `found` there and put what it could take of them on `shelf`: each said
-/// in `report` as removed.
+/// not hold at the commit this gather took, which found skills to file
+/// under the folders `held` there and put what it could take of them on
+/// `shelf`: each said in `report` as removed.
 ///
 /// By its folder, as the shelf files it: one the commit has neither the
 /// folder nor the name of any more goes, its copy and its record, and one
@@ -895,14 +907,10 @@ fn take_off(
     ledger: &Ledger,
     source: &ledger::Source,
     shelf: &Path,
-    found: &[PathBuf],
+    held: &[String],
     supplied: Vec<Gathered>,
     report: &mut Report,
 ) -> Result<(), GatherError> {
-    let held: Vec<&str> = found
-        .iter()
-        .filter_map(|directory| directory.file_name().and_then(|name| name.to_str()))
-        .collect();
     let taken: Vec<(&str, String)> = [&report.added, &report.updated, &report.unchanged]
         .into_iter()
         .flatten()
@@ -927,7 +935,7 @@ fn take_off(
             .unwrap_or_default()
             .to_owned();
         let placed = taken.iter().any(|(_, path)| *path == gathered.path);
-        if (again && placed) || (!placed && held.contains(&folder.as_str())) {
+        if (again && placed) || (!placed && held.contains(&folder)) {
             continue;
         }
         let shelved = crate::install::is_folder_name(&folder)
@@ -964,10 +972,12 @@ fn take_off(
 /// reason among `failures`, when it cannot be taken.
 ///
 /// `project` is the clone it was found in, which is where it was found and
-/// not a claim that a clone is a mind project.
+/// not a claim that a clone is a mind project, and `repository` the name a
+/// skill at its root is filed under ([`filed`]).
 fn read(
     directory: &Path,
     clone: &Path,
+    repository: Option<&str>,
     failures: &mut Vec<Failure>,
 ) -> Option<(PathBuf, String, Artifact)> {
     let artifact = match Artifact::skill(directory, clone) {
@@ -982,13 +992,57 @@ fn read(
     // skill declares. A disagreement between the two is something `validate`
     // reports; silently renaming the folder would repair the symptom and hide
     // it.
-    let Some(folder) = directory.file_name().and_then(|name| name.to_str()) else {
-        failures.push(Failure::UnusableName {
-            path: directory.to_path_buf(),
+    let Some(folder) = filed(directory, clone, repository) else {
+        failures.push(if is_root(directory, clone) {
+            Failure::Unnamed {
+                path: directory.to_path_buf(),
+            }
+        } else {
+            Failure::UnusableName {
+                path: directory.to_path_buf(),
+            }
         });
         return None;
     };
-    Some((directory.to_path_buf(), folder.to_owned(), artifact))
+    Some((directory.to_path_buf(), folder, artifact))
+}
+
+/// The folder the skill at `directory`, in the repository cloned at
+/// `clone`, is filed under on the shelf: its own folder's name, or, for a
+/// `SKILL.md` at the repository's root, which makes the whole of it one
+/// skill, the repository's name (`repository`, [`crate::url::repository`]),
+/// since the clone's folder is named for the workspace's own reasons. `None`
+/// when that is no name to file one under: a folder's not in UTF-8, or no
+/// repository's name at all.
+fn filed(directory: &Path, clone: &Path, repository: Option<&str>) -> Option<String> {
+    if is_root(directory, clone) {
+        return repository
+            .filter(|name| crate::install::is_folder_name(name))
+            .map(str::to_owned);
+    }
+    directory
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(str::to_owned)
+}
+
+/// Whether `directory` is the root of the repository cloned at `clone`,
+/// lexically, as a folder typed `.` is: the route from one to the other is
+/// `.` ([`paths::relative_to`]).
+fn is_root(directory: &Path, clone: &Path) -> bool {
+    paths::relative_to(directory, clone).is_some_and(|route| route == Path::new("."))
+}
+
+/// What is wrong with `artifact` filed in a folder called `folder`: judged
+/// where it is going rather than where it was found, as
+/// [`crate::artifact::strict_issues`] judges a skill about to be written,
+/// so a skill at a repository's root is held to the folder the shelf files
+/// it in, which `validate` reads it from, and not to the clone's.
+fn filed_issues(artifact: &Artifact, folder: &str) -> Vec<ValidationIssue> {
+    match artifact.manifest() {
+        Some(manifest) => crate::artifact::skill_issues(manifest, Some(folder)),
+        None => artifact.validate(),
+    }
 }
 
 /// What the skill at `folder`, its copy on the shelf, says its licence is,
@@ -1052,7 +1106,9 @@ pub fn license_of(stated: Option<&str>, folder: &Path) -> Option<String> {
 
 /// The directories under `root`, in the repository cloned at `clone`, that
 /// hold a `manifest`, in order, each at most [`SEARCH_DEPTH`] folders down,
-/// with what keeps one found from being taken among `failures`.
+/// with what keeps one found from being taken among `failures`: `root`
+/// alone when it holds one, as a repository with a `SKILL.md` at its root
+/// is one skill.
 ///
 /// A folder holding one is not looked into, for the reason discovery has:
 /// the directory belongs to the artifact, assets and all, and a skill that
@@ -1073,7 +1129,13 @@ fn candidates(
     failures: &mut Vec<Failure>,
 ) -> Result<Vec<PathBuf>, GatherError> {
     let mut found = Vec::new();
-    search(root, 1, manifest, &mut found)?;
+    if root.join(manifest).is_file() {
+        // The folder searched is one skill, the repository itself when it
+        // is its root, and nothing in it is another's.
+        found.push(root.to_path_buf());
+    } else {
+        search(root, 1, manifest, &mut found)?;
+    }
     found.sort();
 
     let bound = fs::canonicalize(clone).map_err(|source| GatherError::Read {
@@ -1210,6 +1272,11 @@ pub enum Failure {
         #[source]
         source: io::Error,
     },
+    /// A `SKILL.md` at the root of a repository whose URL names no
+    /// repository to file the skill under ([`crate::url::repository`]):
+    /// `.`, say, or a folder with no name of its own.
+    #[error("{path}: a SKILL.md at the repository's root is filed under the repository's name, and its URL names none, so it is not gathered: gather it by a URL or a path that ends in a name")]
+    Unnamed { path: PathBuf },
     /// A skill's folder that is a link leading out of the repository, which
     /// a gather follows nowhere ([`copy::tree`]'s `within`).
     #[error("{path}: links to {to}, outside the repository, so it is not gathered")]
@@ -1222,6 +1289,7 @@ codes!(Failure {
     Self::Unhashed { .. } => "gathered_unhashed",
     Self::Unremoved { .. } => "gathered_unremoved",
     Self::LinkOutside { .. } => "gathered_link_outside",
+    Self::Unnamed { .. } => "gathered_root_unnamed",
 } carried {
     Self::Artifact(error) => error,
 });
@@ -1232,6 +1300,7 @@ impl Failure {
         match self {
             Failure::Artifact(error) => error.path(),
             Failure::UnusableName { path }
+            | Failure::Unnamed { path }
             | Failure::Copy { path, .. }
             | Failure::Unhashed { path, .. }
             | Failure::Unremoved { path, .. }

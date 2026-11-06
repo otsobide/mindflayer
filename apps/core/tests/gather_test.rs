@@ -712,6 +712,102 @@ fn a_repository_holding_every_layout_at_once_offers_each_skill_found() {
     assert_eq!(gathered, expected);
 }
 
+/// A repository holding `files`, in a folder called `name` of its own, as
+/// a clone of `owner/<name>` is: its URL ends in the name.
+fn repository_named(name: &str, files: &[(&str, &str)]) -> (TempDir, String) {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path().join(name);
+    write_files(&root, files);
+    commit(&root);
+    let url = root.to_string_lossy().into_owned();
+    (dir, url)
+}
+
+#[test]
+fn a_skill_md_at_the_repository_s_root_makes_the_whole_of_it_one_skill_filed_by_its_name() {
+    let (_source, address) = repository_named(
+        "pdf-skill",
+        &[
+            ("SKILL.md", &skill("pdf-skill", "Read PDFs")),
+            ("scripts/extract.py", "print(1)\n"),
+            ("LICENSE", "MIT License\n"),
+            // Inside the one skill, so a file of it, and nothing of its own.
+            ("skills/forms/SKILL.md", &skill("forms", "Fill in forms")),
+            (".claude-plugin/plugin.json", "{}"),
+        ],
+    );
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(address.clone())).unwrap();
+
+    assert!(report.failures.is_empty(), "{:?}", report.failures);
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    let names: Vec<(&str, &str)> = report
+        .added
+        .iter()
+        .map(|harvested| (harvested.name.as_str(), harvested.directory.as_str()))
+        .collect();
+    assert_eq!(names, [("pdf-skill", "pdf-skill")]);
+    let skill = workspace
+        .gathered_dir(Kind::Skill)
+        .join(&report.directory)
+        .join("pdf-skill");
+    assert!(skill.join("scripts/extract.py").is_file());
+    assert!(skill.join("skills/forms/SKILL.md").is_file());
+    assert!(
+        !skill.join(".git").exists(),
+        "the clone's own is no part of it"
+    );
+    assert!(!skill.join(".claude-plugin").exists());
+    let gathered = ledger.gathered().unwrap();
+    assert_eq!(gathered.len(), 1, "{gathered:?}");
+    assert_eq!(gathered[0].upstream_path, ".");
+    assert_eq!(gathered[0].license.as_deref(), Some("MIT License"));
+
+    let again = gather::gather(&workspace, &ledger, &Request::git(address)).unwrap();
+    assert_eq!(again.unchanged.len(), 1, "{again:?}");
+}
+
+#[test]
+fn a_root_skill_declaring_another_name_than_its_repository_s_is_gathered_with_a_warning() {
+    let (_source, address) = repository_named("pdf-skill", &[("SKILL.md", &skill("pdf", "Read"))]);
+    let (_dir, workspace) = workspace();
+    let ledger = workspace.ledger().unwrap();
+
+    let report = gather::gather(&workspace, &ledger, &Request::git(address)).unwrap();
+
+    let shelf = workspace.gathered_dir(Kind::Skill).join(&report.directory);
+    assert_eq!(report.added.len(), 1, "{report:?}");
+    assert_eq!(report.added[0].name.as_str(), "pdf");
+    assert_eq!(
+        report.warnings,
+        [Warning {
+            path: shelf.join("pdf-skill").join("SKILL.md"),
+            issue: ValidationIssue::NameDirectoryMismatch {
+                name: String::from("pdf"),
+                directory: String::from("pdf-skill"),
+            },
+        }]
+    );
+}
+
+#[test]
+fn a_folder_named_that_holds_a_skill_md_is_that_one_skill() {
+    let source = repository(&[
+        ("skills/pdf/SKILL.md", &skill("pdf", "Read PDFs")),
+        (
+            "skills/pdf/forms/SKILL.md",
+            &skill("forms", "Fill in forms"),
+        ),
+        ("skills/review/SKILL.md", &skill("review", "Read a change")),
+    ]);
+
+    let gathered = found(&Request::git(url(&source)).from_subdirectory("skills/pdf"));
+
+    assert_eq!(gathered, named(&[("pdf", "skills/pdf")]));
+}
+
 #[test]
 fn a_repository_holding_no_skill_anywhere_gathers_nothing_and_is_no_failure() {
     let source = repository(&[("README.md", "nothing to gather\n")]);

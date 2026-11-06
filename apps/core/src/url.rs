@@ -184,6 +184,31 @@ pub fn fetched(url: &str) -> Cow<'_, str> {
     }
 }
 
+/// The name of the repository `url` names: the last folder of its path in
+/// the URL every spelling of it is ([`canonical`]), `.git` left off, so
+/// `acme/pdf-skill`, `git@github.com:Acme/PDF-Skill.git` and
+/// `https://github.com/acme/pdf-skill/` are each `pdf-skill`, and
+/// `../src/notes` is `notes`. `None` when its path ends in no folder, as
+/// `.` and `/` do, or climbs out of the one it is in (`..`).
+///
+/// What a skill that is a whole repository, a `SKILL.md` at its root, is
+/// filed under on the shelf, as any other is under its folder's name: the
+/// clone's folder is named for the workspace's own reasons, and the name a
+/// skill declares is the one a disagreement with its folder is said of,
+/// not the one a folder is given.
+pub fn repository(url: &str) -> Option<String> {
+    let known = canonical(url);
+    let path = match known.split_once("://") {
+        Some((_, rest)) => rest.split_once('/').map_or("", |(_, path)| path),
+        None => scp_like(&known).map_or(known.as_str(), |(_, path)| path),
+    };
+    let last = path
+        .split(['/', '\\'])
+        .rfind(|folder| !matches!(*folder, "" | "."))?;
+    let last = last.strip_suffix(".git").unwrap_or(last);
+    (!matches!(last, "" | "..")).then(|| last.to_owned())
+}
+
 /// Whether `part` is a name a forge takes for an owner or a repository:
 /// letters, digits, `.`, `_` and `-`, at least one of them.
 fn is_plain(part: &str) -> bool {

@@ -735,7 +735,7 @@ pub(crate) fn mcp_strict_issues(
 ///
 /// Apart from [`Artifact::validate`] so that a skill can be judged where it is
 /// going rather than where it is: [`strict_issues`].
-fn skill_issues(manifest: &SkillManifest, folder: Option<&str>) -> Vec<ValidationIssue> {
+pub(crate) fn skill_issues(manifest: &SkillManifest, folder: Option<&str>) -> Vec<ValidationIssue> {
     // Every kind is looked up by name, so every kind is checked for one.
     let mut issues = name_issues(&manifest.name);
 

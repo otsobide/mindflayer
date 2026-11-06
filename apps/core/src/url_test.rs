@@ -298,3 +298,36 @@ fn owner_and_repo_is_fetched_from_github_and_a_path_says_it_is_one() {
         assert_eq!(fetched(typed), typed, "{typed}");
     }
 }
+
+#[test]
+fn a_repository_is_named_by_the_last_folder_of_its_identity() {
+    for (url, name) in [
+        ("acme/pdf-skill", "pdf-skill"),
+        ("git@github.com:Acme/PDF-Skill.git", "pdf-skill"),
+        ("https://github.com/acme/pdf-skill/", "pdf-skill"),
+        ("ssh://git@gitlab.com/group/sub/notes.git", "notes"),
+        ("https://git.example.com/team/Notes.git", "Notes"),
+        ("alice@host:skills/notes", "notes"),
+        ("file:///srv/git/notes.git", "notes"),
+        ("../src/notes", "notes"),
+        ("./notes/", "notes"),
+        ("https://me:t0ken@example.com/team/notes", "notes"),
+    ] {
+        assert_eq!(repository(url).as_deref(), Some(name), "{url}");
+    }
+}
+
+#[test]
+fn a_url_whose_path_ends_in_no_folder_names_no_repository() {
+    for url in [
+        ".",
+        "./",
+        "/",
+        "..",
+        "../",
+        "https://example.com",
+        "https://example.com/",
+    ] {
+        assert_eq!(repository(url), None, "{url}");
+    }
+}
