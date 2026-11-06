@@ -23,9 +23,9 @@ the roadmap, and the one choice still pending: read it before changing a
 format, installing, MCP, credentials or the server, and carry a decision out
 rather than reopen it. `docs/agents.md` records where Claude Code, Codex and
 OpenCode read skills and rules, and what they make of MCP servers, each fact
-verified on the binary, docs-only with a fallback, or pending a probe run: an
-agent path in code cites it, and a change that disagrees with it starts
-there.
+verified on the binary, docs-only with a fallback, pending a probe run, or
+unchecked, from an issue's description, with a fallback: an agent path in
+code cites it, and a change that disagrees with it starts there.
 
 ## Commands
 

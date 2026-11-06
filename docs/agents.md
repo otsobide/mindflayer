@@ -23,7 +23,7 @@ and OpenCode's ran on 2026-11-05, on Claude Code 2.1.318 and OpenCode 2.2.5,
 owner has no Codex subscription, so its MCP facts stand as its
 documentation says, and the work built on them takes them as they stand.
 
-Each fact carries one of three marks:
+Each fact carries one of four marks:
 
 - **verified**: seen on the real binary by `scripts/agent-probe/probe.sh`, in
   one of the runs recorded under [the Claude Code runs](#the-claude-code-runs)
@@ -35,6 +35,9 @@ Each fact carries one of three marks:
 - **pending**: a check `probe.sh` holds that has not run yet. Until it does,
   the fact stands as its source says, docs-only, and its expected result is
   what a run is held to.
+- **unchecked**: taken from how a roadmap issue describes what the agent
+  reads, and neither run nor read in its documentation or source. Each one
+  names a fallback, as a docs-only fact does.
 
 ## What the decisions rest on
 
@@ -576,9 +579,9 @@ skills), which a gather of a Codex marketplace is modelled on.
 
 | Fact | Mark | Source, and the fallback |
 |---|---|---|
-| A repository's plugin marketplace is `.agents/plugins/marketplace.json`, its paths read from the folder `.agents` is in. | docs-only | openai/plugins, as #104 describes it. Fallback: the place is one constant in core (`marketplace::CODEX_CATALOG`), and a repository with no catalog at either place is said to be no marketplace, never read as one. |
-| Each entry is `{"source": "local", "path": "./x"}`, beside a `policy` and a `category`, and an entry Codex cannot resolve is skipped. | docs-only | openai/plugins, as #104 describes it. Fallback: an entry Mindweaver does not resolve is skipped with a warning (`marketplace_entry_unresolved`), and the rest are gathered. |
-| A plugin's manifest is `.codex-plugin/plugin.json`, naming its skills' folder (`skills`), its MCP servers' file (`mcpServers`) and its app connectors' (`apps`). | docs-only | openai/plugins, as #104 describes it. Fallback: `skills/` is searched beside whatever the manifest names, so a manifest read wrong loses none of the plugin's skills there; MCP files are named and never imported, and app connectors are not looked at. |
+| A repository's plugin marketplace is `.agents/plugins/marketplace.json`, its paths read from the folder `.agents` is in. | unchecked | openai/plugins, as #104 describes it. Fallback: the place is one constant in core (`marketplace::CODEX_CATALOG`), and a repository with no catalog at either place is said to be no marketplace, never read as one. |
+| Each entry is `{"source": "local", "path": "./x"}`, beside a `policy` and a `category`, and an entry Codex cannot resolve is skipped. | unchecked | openai/plugins, as #104 describes it. Fallback: an entry Mindweaver does not resolve is skipped with a warning (`marketplace_entry_unresolved`), and the rest are gathered. |
+| A plugin's manifest is `.codex-plugin/plugin.json`, naming its skills' folder (`skills`), its MCP servers' file (`mcpServers`) and its app connectors' (`apps`). | unchecked | openai/plugins, as #104 describes it. Fallback: `skills/` is searched beside whatever the manifest names, so a manifest read wrong loses none of the plugin's skills there; MCP files are named and never imported, and app connectors are not looked at. |
 
 ## OpenCode
 
