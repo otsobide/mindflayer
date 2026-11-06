@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
+import type { Asking } from '@/api/generated/Asking'
 import type { Cell } from '@/api/generated/Cell'
 import type { Offered } from '@/api/generated/Offered'
 import type { Project } from '@/api/generated/Project'
@@ -64,8 +65,36 @@ const { data: planned, error: refused, isFetching: planning, isPlaceholderData }
 /** The plan of the boxes marked now, none while it is asked for or when nothing is marked. */
 const plan = computed(() => (selection.value.length > 0 && !isPlaceholderData.value ? planned.value : undefined))
 
-/** The batch the plan's tasks are, sent back as they came: the install screen's apply. */
-const batch = computed<Task | undefined>(() => (plan.value ? batchOf(plan.value) : undefined))
+/**
+ * Each install waiting for a yes that somebody said yes to, once its lines
+ * were shown, by the task its confirmation carries: one the plan no longer
+ * asks of is no longer sent, and one asked of again is said yes to again.
+ */
+const said = ref<Asking[]>([])
+
+/** Whether `asking` was said yes to. */
+function yes(asking: Asking): boolean {
+  return said.value.some(each => JSON.stringify(each.confirmed) === JSON.stringify(asking.confirmed))
+}
+
+/** Say yes to `asking`, or take it back. */
+function say(asking: Asking, to: boolean) {
+  const others = said.value.filter(each => JSON.stringify(each.confirmed) !== JSON.stringify(asking.confirmed))
+  said.value = to ? [...others, asking] : others
+}
+
+/** What `asking` installs, as its line names it: `mcp sentry from load:../team`. */
+function asked(asking: Asking): string {
+  const task = asking.confirmed
+  return task.type === 'install' ? `${task.kind} ${task.name} from ${task.from}` : task.type
+}
+
+/**
+ * The batch the plan's tasks are, sent back as they came: the install
+ * screen's apply, each install said yes to in the place the plan gave its
+ * confirmation.
+ */
+const batch = computed<Task | undefined>(() => (plan.value ? batchOf(plan.value, said.value) : undefined))
 const { data: preview, error: unpreviewed } = usePreview(batch)
 
 /** Each box the plan holds back, and why: locked by a code, or clashing with another. */
@@ -208,6 +237,7 @@ async function apply() {
   const ran = await runner.ask(batch.value)
   if (ran) {
     marks.clear()
+    said.value = []
   }
 }
 
@@ -494,6 +524,53 @@ function commands(snapshot: Snapshot) {
               >
                 Nothing runs: every box marked is held back.
               </p>
+
+              <div
+                v-if="plan.asks.length > 0"
+                class="flex flex-col gap-2"
+                data-testid="asks"
+              >
+                <h3 class="flex items-center gap-1.5 text-xs font-medium text-muted">
+                  <UIcon
+                    name="i-lucide-shield-question"
+                    class="size-3.5"
+                    aria-hidden="true"
+                  />
+                  Asked first
+                </h3>
+                <p class="text-sm text-muted">
+                  An MCP server from elsewhere than the library is a command somebody else wrote, which every agent its project names
+                  will run, or an address each will send what it is given to. Read what each would run: until you say yes, its line
+                  says so and installs nothing.
+                </p>
+                <div
+                  v-for="asking in plan.asks"
+                  :key="JSON.stringify(asking.confirmed)"
+                  class="flex flex-col gap-2 rounded-md border border-default p-2"
+                  data-testid="ask"
+                >
+                  <ul
+                    class="flex flex-col gap-0.5 rounded-md bg-muted px-3 py-2 font-mono text-xs"
+                    :aria-label="`What ${asked(asking)} would give each agent`"
+                  >
+                    <li
+                      v-for="(line, at) in asking.lines"
+                      :key="at"
+                      class="whitespace-pre-wrap break-all"
+                      data-testid="ask-line"
+                    >
+                      {{ line }}
+                    </li>
+                  </ul>
+                  <UCheckbox
+                    :model-value="yes(asking)"
+                    :label="`Yes: install ${asked(asking)}, as these lines say`"
+                    :disabled="busy"
+                    data-testid="say-yes"
+                    @update:model-value="say(asking, $event === true)"
+                  />
+                </div>
+              </div>
 
               <div v-if="plan.conflicts.length > 0">
                 <h3 class="mb-1 text-xs font-medium text-muted">

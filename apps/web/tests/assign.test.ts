@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { flushPromises, type DOMWrapper } from '@vue/test-utils'
 import type { Cell } from '@/api/generated/Cell'
 import type { Offered } from '@/api/generated/Offered'
+import type { Planned } from '@/api/generated/Planned'
 import type { Snapshot } from '@/api/generated/Snapshot'
 import type { Query } from '@/api/transport'
-import { answering, applying, commanding, fixture, plans, render, texts, unmount, type Answered } from './panel'
+import { answering, applying, commanding, fixture, plans, render, served, servers, texts, unmount, type Answered } from './panel'
 
 afterEach(unmount)
 
@@ -308,5 +309,72 @@ describe('applying a plan', () => {
     expect(applied!.task).toEqual({ type: 'apply_install', changes: (answered[0]!.answer as { tasks: unknown[] }).tasks })
     expect(page.find('[data-testid="plan"]').exists()).toBe(false)
     expect(box(page, 'skill', 'format', simple![0]!.origin, 'api').attributes('data-changed')).toBeUndefined()
+  })
+})
+
+describe('an MCP server on the matrix', () => {
+  it('draws the servers as every other offer, ticked where a project holds one', async () => {
+    const { page } = await render('/assign?kind=mcp', fixture('serving'))
+
+    expect(texts(page, '[data-testid="matrix-row-label"]')).toEqual(['events', 'github', 'linear', 'sentry'])
+    const github = box(page, 'mcp', 'github', 'workspace', 'api')
+    expect(github.attributes('aria-checked')).toBe('true')
+    expect(github.attributes('data-state')).toBe('current')
+    expect(box(page, 'mcp', 'sentry', 'load:../team', 'web').attributes('aria-checked')).toBe('false')
+  })
+
+  it('confirms one that asks first as the install screen does: its lines shown, and only its confirmation says yes', async () => {
+    const [plain, confirmed] = served().filter(each => each.task.type === 'apply_install')
+    const plan = servers().find(each => each.query.type === 'plan' && JSON.stringify(each.query).includes('mcp:sentry'))!
+    const asks = (plan.answer as Planned).asks
+    const { sent, transport } = commanding(fixture('serving'), [plain!, confirmed!], servers())
+    const { page } = await render('/assign?kind=mcp', transport)
+
+    await box(page, 'mcp', 'sentry', 'load:../team', 'web').trigger('click')
+    await flushPromises()
+
+    expect(texts(page, '[data-testid="ask-line"]')).toEqual(asks[0]!.lines.map(line => line.trim()))
+    expect(texts(page, '[data-testid="line"]')).toEqual(plain!.preview.lines.map(line => `$ ${line}`))
+    expect(plain!.task).toEqual({ type: 'apply_install', changes: (plan.answer as Planned).tasks })
+    expect(JSON.stringify(plain!.task)).not.toContain('"yes":true')
+
+    document.body.querySelector<HTMLElement>('[data-testid="say-yes"] [role="checkbox"], [role="checkbox"][data-testid="say-yes"]')!.click()
+    await flushPromises()
+    expect(texts(page, '[data-testid="line"]')).toEqual(confirmed!.preview.lines.map(line => `$ ${line}`))
+    expect(confirmed!.task).toEqual({ type: 'apply_install', changes: [asks[0]!.confirmed] })
+
+    await page.get('[data-testid="apply"]').trigger('click')
+    await flushPromises()
+    const dialog = document.querySelector('[role="dialog"]')!
+    expect([...dialog.querySelectorAll('[data-testid="command"]')].map(line => line.textContent!.trim()))
+      .toEqual(confirmed!.preview.lines.map(line => `$ ${line}`))
+    ;(dialog.querySelector('[data-testid="run"]') as HTMLElement).click()
+    await flushPromises()
+    expect(sent.filter(each => each.mode === 'run').map(each => each.task)).toEqual([confirmed!.task])
+  })
+
+  it('sends one that asks first with no yes until it is said, which installs nothing', async () => {
+    const [plain] = served().filter(each => each.task.type === 'apply_install')
+    const { sent, transport } = commanding(fixture('serving'), [plain!], servers())
+    const { page } = await render('/assign?kind=mcp', transport)
+
+    await box(page, 'mcp', 'sentry', 'load:../team', 'web').trigger('click')
+    await flushPromises()
+    await page.get('[data-testid="apply"]').trigger('click')
+    await flushPromises()
+    ;(document.querySelector('[role="dialog"] [data-testid="run"]') as HTMLElement).click()
+    await flushPromises()
+
+    expect(sent.filter(each => each.mode === 'run').map(each => each.task)).toEqual([plain!.task])
+    expect(plain!.ran.outcome.runs[0]!.stdout).toContain('nothing installed')
+  })
+
+  it('asks nothing first of the library\'s own server', async () => {
+    const { page } = await render('/assign?kind=mcp', commanding(fixture('serving'), served(), servers()).transport)
+
+    await box(page, 'mcp', 'linear', 'workspace', 'web').trigger('click')
+    await flushPromises()
+
+    expect(page.find('[data-testid="asks"]').exists()).toBe(false)
   })
 })

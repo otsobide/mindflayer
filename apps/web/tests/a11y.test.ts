@@ -411,4 +411,17 @@ describe('the page of MCP servers', () => {
     expect(document.querySelector('[data-testid="secret-header-variable"]')).not.toBeNull()
     expect(await violations()).toEqual([])
   })
+
+  it('passes axe on the matrix with a server that asks first, its lines and its yes drawn', async () => {
+    const { transport } = answering(fixture('serving'), servers())
+    await render('/assign?kind=mcp', transport)
+
+    const box = [...document.querySelectorAll<HTMLElement>('[data-testid="box"]')]
+      .find(each => each.getAttribute('aria-label')!.startsWith('mcp sentry from load:../team in web'))!
+    box.click()
+    await flushPromises()
+
+    expect(document.querySelector('[data-testid="ask"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+  })
 })
