@@ -1967,7 +1967,11 @@ These are easy to break from a single file without noticing.
   runs on the repository's self-hosted runner, asked for by its labels
   (`runs-on: [self-hosted, Linux, X64]`), and only macOS and Windows on
   GitHub's: a step that needs what GitHub's image held installs it where it
-  is missing, since a self-hosted runner keeps what a job installed.
+  is missing, since a self-hosted runner keeps what a job installed. Its
+  image holds `make` and a C compiler (`build-essential`), and it runs as a
+  user of its own with sudo, never root, which writes where a test takes the
+  permission away: `fmt and clippy` fails first thing on a runner that is
+  root.
 - The rulesets for `dev` and `main` require every check that runs on every
   pull request: `fmt and clippy`, `test (core)`, `test (cli)`, `test
   (server)`, `test (web)`, `types drift (web)`, `build (core)`, `build

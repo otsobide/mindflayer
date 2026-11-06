@@ -8557,14 +8557,28 @@ it would switch back without a commit, but the workflow would no longer say
 where a job runs. A self-hosted runner's image is not GitHub's, and it keeps
 what a job installed, so a step that needs what GitHub's image held
 installs it only where it is missing, as `test (cli)` does zsh and the
-python3 its virtualenv is made with. The repository is public, and such a
-runner runs whatever a pull request's code says, on a machine that keeps
-what a job leaves: the repository's Actions settings hold a pull request
-from a fork for a maintainer's approval only from somebody with nothing
-merged here yet, so one merged change is all it takes for a stranger's
-next to run there unasked. Approval for every outside contributor would
-close that, at the price of approving each of their runs; collaborators
-work in branches of the repository, which no setting holds.
+python3 its virtualenv is made with. What every job needs is the image's:
+`make` and a C compiler (`build-essential`), which links every binary and
+compiles the SQLite `rusqlite` bundles, and a user of its own with sudo,
+never root. Root
+writes in a folder whose write permission a test took away, which is how
+the suites make a write fail to see what is put back after it
+(`migrate_names_test`, `writers_test`, `everywhere_test`), so under root
+those fail, and the ones that probe first pass without holding anything;
+`fmt and clippy` refuses a runner that is root before anything compiles,
+rather than leave it to the first of them a quarter of an hour into `test
+(core)`. Skipping them under root, as four others already skip when the
+folder can be written all the same, was rejected: CI would then never hold
+a failed write to what it puts back.
+
+The repository is public, and such a runner runs whatever a pull request's
+code says, on a machine that keeps what a job leaves. A first-time
+contributor's approval, GitHub's default, is not enough there: one merged
+change is all it takes for a stranger's next pull request to run unasked.
+So the repository's Actions settings hold a pull request from a fork for a
+maintainer's approval from every outside contributor
+(`all_external_contributors`); collaborators work in branches of the
+repository, which no setting holds.
 
 The tests are split by app and by nothing else. A crate's unit tests, its
 value objects and its integration suites run in its one `test (<app>)`,
