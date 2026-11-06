@@ -203,3 +203,17 @@ export function loadable(at: Places): void {
   succeed(at, 'mindweaver', at.workspace, ['add', 'skill', OWN, 'Read a change before it lands'])
   project(at, 'alpha', ['--agents', 'claude'])
 }
+
+/** The project `serveable` links, for every agent. */
+export const SERVED = 'alpha' as const
+
+/**
+ * A workspace for the spec that adds an MCP server from the panel and
+ * assigns it, which no other spec reads: its library holds nothing, and it
+ * links `alpha`, made by `mind init` for Claude, Codex and OpenCode, so
+ * the server is written into each agent's own config file.
+ */
+export function serveable(at: Places): void {
+  succeed(at, 'mindweaver', at.scratch, ['init', at.workspace], 'none')
+  project(at, SERVED, ['--agents', 'claude,codex,opencode'])
+}

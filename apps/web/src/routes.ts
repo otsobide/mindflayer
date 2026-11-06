@@ -50,3 +50,12 @@ export function assignLink(origin: string): RouteLocationRaw {
 export function newLink(kind: Kind): RouteLocationRaw {
   return { path: '/new', query: { kind } }
 }
+
+/**
+ * The page of the library's MCP servers, its form adding one, or changing
+ * how the one `edit` names is started or reached, named by its name in the
+ * query, as one of the library's own is; at the part of it `hash` names.
+ */
+export function serversLink(edit?: string, hash = ''): RouteLocationRaw {
+  return edit === undefined ? { path: '/mcp', hash } : { path: '/mcp', query: { edit }, hash }
+}

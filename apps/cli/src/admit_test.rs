@@ -61,6 +61,7 @@ fn add(holder: Holder) -> Task {
         name: String::from("deploy"),
         description: String::from("Ship it"),
         template: None,
+        server: None,
     }
 }
 
@@ -473,6 +474,7 @@ fn what_names_nothing_on_the_disk_is_left_as_it_was_sent() {
         name: String::from("--yes"),
         description: String::from("- the fast way"),
         template: Some(String::from("-rf")),
+        server: None,
     };
 
     assert_eq!(admitted(&workspace, &task).unwrap(), task);
@@ -521,4 +523,80 @@ fn every_project_a_selection_names_is_an_entry_the_registry_holds() {
         assert_eq!(refused.code(), "not_registered", "{project}");
     }
     assert!(admission.selection(&[]).is_ok());
+}
+
+/// A yes is admitted with an MCP server from elsewhere than the library
+/// alone, the panel's confirmation of one; with any other install it is
+/// refused by its code, whatever else the task names.
+#[test]
+fn a_yes_is_admitted_only_with_an_install_that_asks_for_one() {
+    let (_dir, workspace) = fixture();
+    let install = |kind: Kind, from: Option<&str>| Task::Install {
+        projects: vec![String::from("alpha")],
+        kind,
+        name: String::from("github"),
+        from: from.map(String::from),
+        yes: true,
+    };
+
+    assert!(admitted(&workspace, &install(Kind::Mcp, Some("load:../team"))).is_ok());
+    for task in [
+        install(Kind::Skill, Some("load:../team")),
+        install(Kind::Mcp, Some("workspace")),
+        install(Kind::Mcp, None),
+        Task::ApplyInstall {
+            changes: vec![install(Kind::Rule, Some("workspace"))],
+        },
+    ] {
+        assert_eq!(
+            code(admitted(&workspace, &task)),
+            "install_yes_unasked",
+            "{task:?}"
+        );
+    }
+}
+
+/// A server's options naming something beside a value with an `=` in the
+/// name are refused before a line is built, by the code `add`'s draft is
+/// refused with: the line would end the name at it, and write another
+/// pair than the one judged. One with an `=` in a value alone is admitted.
+#[test]
+fn a_server_naming_what_no_line_can_say_is_refused_before_a_line_is_built() {
+    use mindweaver_core::mcp::Given;
+    use mindweaver_core::mother::McpMother;
+
+    let (_dir, workspace) = fixture();
+    let add = |server: Given| Task::Add {
+        holder: Holder::Workspace,
+        kind: Kind::Mcp,
+        name: String::from("acme"),
+        description: String::from("Acme's tools"),
+        template: None,
+        server: Some(Box::new(server)),
+    };
+    let edit = |server: Given| Task::EditServer {
+        holder: Holder::Project(String::from("alpha")),
+        name: String::from("acme"),
+        server: Box::new(server),
+    };
+
+    for (why, given, _) in McpMother::given_unsayable() {
+        for task in [add(given.clone()), edit(given.clone())] {
+            assert_eq!(
+                code(admitted(&workspace, &task)),
+                "add_mcp_key_unsayable",
+                "{why}: {task:?}"
+            );
+        }
+    }
+    let Given::Program(mut program) = McpMother::given_program() else {
+        unreachable!("a program is given as one");
+    };
+    program.env = vec![(String::from("OPTIONS"), String::from("a=b"))];
+    for task in [
+        add(Given::Program(program.clone())),
+        edit(Given::Program(program)),
+    ] {
+        assert!(admitted(&workspace, &task).is_ok(), "{task:?}");
+    }
 }

@@ -4,6 +4,13 @@
   "description": "What a selection the panel asked to plan amounts to ([`Query::Plan`]):\ncore's plan of it ([`install::Plan`]), each change in it the task that\nruns it.\n\nTasks rather than core's changes, so the panel sends back what it was\nhanded, never a task it puts together itself: the `install` and\n`uninstall` tasks, each a project by the entry its box named it by, which\nthe backend turns into the folder the registry resolves as it does any\ntask's. Sent as one `apply_install`, as the install screen applies its\nmarks, each line runs whatever came of the ones before.",
   "type": "object",
   "properties": {
+    "asks": {
+      "description": "Each of `tasks` that waits for a yes ([`install::asks_first`]), with\nwhat it would give each agent of each project and the task carrying\nthe yes, in the order of `tasks`.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Asking"
+      }
+    },
     "conflicts": {
       "description": "Boxes of one name in one project that cannot all be as asked, none\nof which is planned.",
       "type": "array",
@@ -19,7 +26,7 @@
       }
     },
     "tasks": {
-      "description": "Each `install` and `uninstall` that carries the selection out, in\nthe order to run them.",
+      "description": "Each `install` and `uninstall` that carries the selection out, in\nthe order to run them. None carries a yes: an MCP server from\nelsewhere than the library is only previewed by its line, until its\nconfirmation (`asks`) is sent in its place.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/Task"
@@ -29,7 +36,8 @@
   "required": [
     "tasks",
     "conflicts",
-    "locked"
+    "locked",
+    "asks"
   ],
   "$defs": {
     "Agent": {
@@ -84,6 +92,34 @@
             "agents"
           ]
         }
+      ]
+    },
+    "Asking": {
+      "description": "An install of a plan that waits for somebody to say yes, an MCP server\nfrom elsewhere than the library, as the install screen confirms one:\nwhat it would give each agent of each project, laid out as its line\nwould say it ([`crate::install::foreseen`]), then the task that writes\nit once that has been shown.\n\nThe task carrying the yes is handed over here, beside the lines it was\nshown with, rather than the panel setting one on the task it holds:\nwhich install waits for one is core's, and the yes is the\nconfirmation's alone. The panel sends it in the place of the task it\nconfirms, `task` by its place among the plan's.",
+      "type": "object",
+      "properties": {
+        "confirmed": {
+          "description": "That task, saying yes: its line with `--yes`.",
+          "$ref": "#/$defs/Task"
+        },
+        "lines": {
+          "description": "For each project it names, a line naming the install, then what\neach agent there would run or reach, and each warning, as the\ninstall screen's confirmation shows them.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "task": {
+          "description": "Which of the plan's tasks it confirms, by its place among them.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "task",
+        "lines",
+        "confirmed"
       ]
     },
     "Cell": {
@@ -142,6 +178,156 @@
         "name",
         "cells",
         "why"
+      ]
+    },
+    "Given": {
+      "description": "How an agent starts an MCP server, or reaches one: a program or an\naddress, never both.\n\nIn JSON, what a front end sends a command line's options as, and what\nthe snapshot says a definition is told as: tagged by `type` inside the\nobject, `{\"type\": \"program\", \"command\": \"npx\", ...}`, as a task is, each\npair as an array of its two words. A field it does not have is refused,\nas a task's is: it is a write, and one misspelled would be dropped.\nEvery secret is the name of the variable it is read from, and no field\nholds a secret's value, there being none for it to hold.",
+      "oneOf": [
+        {
+          "description": "A program an agent starts, `--command`.",
+          "type": "object",
+          "properties": {
+            "arg_env": {
+              "description": "Each argument read from a variable, after those written as they are\n(`--arg-env VAR`). No secret: a program's arguments are what a\nprocess list shows, and Codex reads no secret into one.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "args": {
+              "description": "What it is started with, in order (`--arg`), before every argument\nread from a variable.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "command": {
+              "description": "The program, as the agent finds it (`--command`).",
+              "type": "string"
+            },
+            "env": {
+              "description": "What its environment is given, each value as written (`--env\nK=V`), before every secret.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "secret_env": {
+              "description": "Each variable passed on to its environment under its own name, a\nsecret (`--secret-env VAR`): the shape every agent can give one,\nCodex's `env_vars` among them.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "program"
+            }
+          },
+          "required": [
+            "type",
+            "command",
+            "args",
+            "env",
+            "secret_env",
+            "arg_env"
+          ]
+        },
+        {
+          "description": "A server at an address, `--url`.",
+          "type": "object",
+          "properties": {
+            "bearer": {
+              "description": "The variable `Authorization: Bearer` is followed by, a secret\n(`--bearer-env VAR`): what Codex reads one into\n(`bearer_token_env_var`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "events": {
+              "description": "Whether it is reached over server-sent events rather than streamable\nHTTP (`--sse`).",
+              "type": "boolean"
+            },
+            "headers": {
+              "description": "What every request carries, each value as written (`--header K=V`),\nbefore every secret.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "secret_headers": {
+              "description": "Each header whose whole value is read from a variable, a secret\n(`--secret-header H=VAR`): what Codex reads one into\n(`env_http_headers`).",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "address"
+            },
+            "url": {
+              "description": "Where the server is, as typed (`--url`): checked for a credential\nbefore anything is written, since the file would keep one, and\nnever kept or said whole once one is found.",
+              "type": "string"
+            },
+            "url_vars": {
+              "description": "Each part of the address read from a variable, by the name the\naddress writes between braces where it goes (`--url-var NAME=VAR`).\nNo secret: an address is what a log or a proxy shows, and Codex\nreads no secret into one.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "type",
+            "url",
+            "events",
+            "headers",
+            "secret_headers",
+            "bearer",
+            "url_vars"
+          ]
+        }
       ]
     },
     "Holder": {
@@ -462,7 +648,7 @@
           ]
         },
         {
-          "description": "`… add [--template <template>] <kind> <name> <description>`.",
+          "description": "`… add [--template <template>] <kind> <name> <description>`, or,\nfor an MCP server, `… add mcp <name> <description>` and the options\nthat say how an agent starts it or reaches it (`server`): what the\npanel's form adding one sends, the form's fields as the options'\nwords, each secret the name of the variable it is read from.",
           "type": "object",
           "properties": {
             "description": {
@@ -476,6 +662,18 @@
             },
             "name": {
               "type": "string"
+            },
+            "server": {
+              "description": "None but for a server added from its options, which a template\nsays otherwise: the grammar refuses both, and so the line does.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Given"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "template": {
               "type": [
@@ -494,7 +692,8 @@
             "kind",
             "name",
             "description",
-            "template"
+            "template",
+            "server"
           ]
         },
         {
@@ -574,6 +773,31 @@
             "name",
             "text",
             "hash"
+          ]
+        },
+        {
+          "description": "`… edit mcp:<name>` and the options that say how an agent starts\nthe server or reaches it: its transport and inputs written again\nfrom them, everything else its definition holds kept\n(`lifecycle::retransport`). What the panel's form changing one\nsends, as the form adding one sends `add`'s.",
+          "type": "object",
+          "properties": {
+            "holder": {
+              "$ref": "#/$defs/Holder"
+            },
+            "name": {
+              "type": "string"
+            },
+            "server": {
+              "$ref": "#/$defs/Given"
+            },
+            "type": {
+              "type": "string",
+              "const": "edit_server"
+            }
+          },
+          "required": [
+            "type",
+            "holder",
+            "name",
+            "server"
           ]
         },
         {
@@ -893,7 +1117,7 @@
           ]
         },
         {
-          "description": "`mindweaver install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`WeaverWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\nWith `yes`, `--yes`: an MCP server from elsewhere than the library\nwritten ([`install::asks_first`]), once what each agent would run\nhas been shown, as the install screen shows it before it applies;\nwithout, such a line writes nothing and says what it would. Never\nin JSON, read or written: the panel shows no agent's line yet (#97),\nso a task it sends never says yes for it, and one saying so is\nrefused as any field it does not have is; nor from a plan\n([`Change`]), whose tasks the panel sends back as they are.\n\n[`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming\n[`install::asks_first`]: mindweaver_core::install::asks_first",
+          "description": "`mindweaver install -p <project>... [--from <origin>] <kind:name>`: one\noffer into each project named, by what picks it out\n([`WeaverWorkspace::naming`]), from the place `from` names when it\nnames one.\n\nEach of `projects` is what `naming` gives, an entry or a path from\nthe root, never a project's name, though `-p` takes one: a value\nthat starts with a dash reaches `-p` behind a `./` (`directory`),\nwhich names the same directory, and so picks the same project by its\npath, but is no longer a name `pick` would match. `-p=-odd`, which\nwould keep it a name, was the alternative, and it would change the\nline the TUI has always run and shown for such a project.\n\nWith `yes`, `--yes`: an MCP server from elsewhere than the library\nwritten ([`install::asks_first`]), once what each agent would run\nhas been shown, as the install screen shows it before it applies;\nwithout, such a line writes nothing and says what it would.\n\nIn JSON for the panel's confirmation of such a server alone (#97):\na plan's task carries none ([`Task::from`]), and its confirmation,\nshown beside what each agent would run, is the one task that does\n([`Task::confirmed`], the backend's `Planned::asks`). A yes sent\nwith any other install is refused by the path policy before a line\nis built (`policy::confirmed`, `install_yes_unasked`), and one left\nout is none, as before a yes could be sent.\n\n[`WeaverWorkspace::naming`]: mindweaver_core::WeaverWorkspace::naming\n[`install::asks_first`]: mindweaver_core::install::asks_first",
           "type": "object",
           "properties": {
             "from": {
@@ -917,6 +1141,10 @@
             "type": {
               "type": "string",
               "const": "install"
+            },
+            "yes": {
+              "type": "boolean",
+              "default": false
             }
           },
           "required": [
@@ -924,7 +1152,8 @@
             "projects",
             "kind",
             "name",
-            "from"
+            "from",
+            "yes"
           ]
         },
         {

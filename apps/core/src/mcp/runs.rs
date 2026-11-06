@@ -12,6 +12,8 @@
 
 use std::fmt;
 
+use serde::Serialize;
+
 use crate::config_entry::Value;
 
 /// The program an agent starts, or the address it reaches.
@@ -56,6 +58,34 @@ impl Runs {
             command: line.next()?,
             args: line.collect(),
         })
+    }
+}
+
+/// What an agent runs or reaches, as a front end shows it: whether it is
+/// an address rather than a program, and the line, as [`Runs`] displays
+/// it, each word a shell would split quoted.
+///
+/// The line as core writes it rather than the words for a front end to
+/// join, which would be the shell's quoting spelled again in TypeScript,
+/// and could show a line no shell reads as the program it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct Running {
+    /// Whether it reaches an address, which it then is, rather than
+    /// starting a program.
+    pub reaches: bool,
+    /// The program as a shell line that runs it, or the address.
+    pub line: String,
+}
+
+impl Runs {
+    /// What a front end shows of it.
+    pub fn shown(&self) -> Running {
+        Running {
+            reaches: matches!(self, Runs::Address { .. }),
+            line: self.to_string(),
+        }
     }
 }
 

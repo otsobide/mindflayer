@@ -81,6 +81,7 @@
         "description": "Publish the docs",
         "kind": "skill",
         "name": "deploy-docs",
+        "server": null,
         "template": null,
         "type": "add"
       },
@@ -100,6 +101,7 @@
         "description": "Publish the docs",
         "kind": "skill",
         "name": "deploy-docs",
+        "server": null,
         "template": "full",
         "type": "add"
       },
@@ -122,6 +124,7 @@
         "description": "Publish the docs",
         "kind": "skill",
         "name": "Deploy Docs",
+        "server": null,
         "template": null,
         "type": "add"
       },
@@ -144,6 +147,7 @@
         "description": "Read it again",
         "kind": "skill",
         "name": "review",
+        "server": null,
         "template": null,
         "type": "add"
       },

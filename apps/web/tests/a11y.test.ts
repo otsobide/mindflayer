@@ -6,7 +6,7 @@ import { useRunner, type Runner } from '@/api/commands'
 import type { LiveEvent, Transport } from '@/api/transport'
 import Projects from '@/pages/projects.vue'
 import { useShell } from '@/stores/shell'
-import { answering, answers, commanded, commanding, drafts, fixture, plans, render, switching, unmount, updates, validated, walks, type Fixture } from './panel'
+import { answering, answers, commanded, commanding, drafts, fixture, plans, render, servers, switching, unmount, updates, validated, walks, type Fixture } from './panel'
 
 afterEach(unmount)
 
@@ -71,6 +71,12 @@ const PAGES: [string, Fixture][] = [
   ['/assign', 'workspace'],
   ['/assign', 'unmade'],
   ['/projects', 'updating'],
+  ['/mcp', 'serving'],
+  ['/mcp?edit=github', 'serving'],
+  ['/mcp?edit=nowhere', 'serving'],
+  ['/mcp', 'workspace'],
+  ['/mcp', 'unmade'],
+  ['/assign?kind=mcp', 'serving'],
   ['/nowhere', 'workspace']
 ]
 
@@ -387,5 +393,35 @@ describe('the explorer', () => {
     await pressed('[data-testid="scan-browse"]')
 
     expect(await violations(OVER)).toEqual([])
+  })
+})
+
+describe('the page of MCP servers', () => {
+  it('passes axe with its form filled in for an address, every row of it drawn', async () => {
+    const { transport } = answering(fixture('serving'), servers())
+    await render('/mcp', transport)
+
+    document.querySelector<HTMLElement>('[data-testid="transport"] [role="radio"][value="address"]')!.click()
+    await flushPromises()
+    for (const add of ['add-header', 'add-secret-header', 'add-url-var']) {
+      document.querySelector<HTMLElement>(`[data-testid="${add}"]`)!.click()
+    }
+    await flushPromises()
+
+    expect(document.querySelector('[data-testid="secret-header-variable"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
+  })
+
+  it('passes axe on the matrix with a server that asks first, its lines and its yes drawn', async () => {
+    const { transport } = answering(fixture('serving'), servers())
+    await render('/assign?kind=mcp', transport)
+
+    const box = [...document.querySelectorAll<HTMLElement>('[data-testid="box"]')]
+      .find(each => each.getAttribute('aria-label')!.startsWith('mcp sentry from load:../team in web'))!
+    box.click()
+    await flushPromises()
+
+    expect(document.querySelector('[data-testid="ask"]')).not.toBeNull()
+    expect(await violations()).toEqual([])
   })
 })

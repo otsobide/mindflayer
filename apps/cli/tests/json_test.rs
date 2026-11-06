@@ -37,6 +37,7 @@ struct Library {
     holders: Vec<LibraryHolder>,
     templates: Vec<Template>,
     failures: Vec<Said>,
+    servers: Vec<Value>,
 }
 
 #[derive(Debug, Deserialize)]

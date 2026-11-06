@@ -1,6 +1,7 @@
 [
   {
     "answer": {
+      "asks": [],
       "conflicts": [],
       "locked": [],
       "tasks": [
@@ -12,7 +13,8 @@
             "api",
             "docs"
           ],
-          "type": "install"
+          "type": "install",
+          "yes": false
         }
       ]
     },
@@ -36,6 +38,7 @@
   },
   {
     "answer": {
+      "asks": [],
       "conflicts": [],
       "locked": [],
       "tasks": [
@@ -46,7 +49,8 @@
           "projects": [
             "api"
           ],
-          "type": "install"
+          "type": "install",
+          "yes": false
         }
       ]
     },
@@ -64,6 +68,7 @@
   },
   {
     "answer": {
+      "asks": [],
       "conflicts": [
         {
           "cells": [
@@ -123,7 +128,8 @@
           "projects": [
             "api"
           ],
-          "type": "install"
+          "type": "install",
+          "yes": false
         }
       ]
     },

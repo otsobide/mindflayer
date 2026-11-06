@@ -10,16 +10,21 @@ use std::path::{Path, PathBuf};
 use std::slice;
 
 use mindweaver_core::assign;
+use mindweaver_core::create::Start;
 use mindweaver_core::doctor::Machine;
 use mindweaver_core::install::{self, Confirmed, Edits};
 use mindweaver_core::known;
 use mindweaver_core::ledger::{Action, InstallRecord, Outcome, Target};
+use mindweaver_core::lifecycle;
+use mindweaver_core::mcp::{Address, Given, Program};
+use mindweaver_core::mother::{McpMother, VariableNameMother};
 use mindweaver_core::reapply::{self, Change};
 use mindweaver_core::resolve::{Inputs, Intent, Reason};
+use mindweaver_core::value::VariableName;
 use mindweaver_core::view::{Health, Held, Listing, LoadedWorkspace, Project, Snapshot};
 use mindweaver_core::{
     create, hash, Agent, AgentHomes, Directories, Kind, MindProject, Reference, Share, SourceKind,
-    State, WeaverWorkspace, MIND_DIR, SETTINGS_JSON_FILE, WEAVER_DIR,
+    Starts, State, WeaverWorkspace, MIND_DIR, SETTINGS_JSON_FILE, WEAVER_DIR,
 };
 use tempfile::TempDir;
 
@@ -471,7 +476,8 @@ const EXPECTED: &str = r#"{
         "origin": null
       }
     ],
-    "failures": []
+    "failures": [],
+    "servers": []
   },
   "projects": [
     {
@@ -1569,4 +1575,180 @@ fn a_listing_of_one_kind_tells_health_from_that_kind_alone() {
 /// The name of each row, in order.
 fn names(held: &[Held]) -> Vec<&str> {
     held.iter().map(|held| held.name.as_str()).collect()
+}
+
+/// A workspace whose library holds `given` as the MCP server `name`,
+/// written by `add` as a command line tells it, and nothing else.
+fn serving(name: &str, given: &Given) -> (TempDir, Snapshot) {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
+    lifecycle::add(
+        Some(&workspace),
+        &workspace.own(),
+        Kind::Mcp,
+        name,
+        "A server",
+        Start::Server(given),
+    )
+    .unwrap();
+    let snapshot = Snapshot::read(&naming(dir.path(), None), &Machine::default())
+        .unwrap()
+        .unwrap();
+    (dir, snapshot)
+}
+
+/// What each agent is said to run is what its own entry spells, a secret
+/// read from a variable as that agent refers to one, and what each asks
+/// before it starts a server is core's word for it; the server reads back
+/// as what `add` was told, for a form to start from.
+#[test]
+fn each_of_the_librarys_servers_says_what_each_agent_runs_and_asks() {
+    let variable = VariableNameMother::random();
+    let given = Given::Program(Program {
+        command: String::from("npx"),
+        args: vec![String::from("-y"), String::from("@example/server")],
+        env: Vec::new(),
+        secret_env: Vec::new(),
+        arg_env: vec![variable.clone()],
+    });
+    let name = McpMother::name();
+
+    let (_dir, snapshot) = serving(&name, &given);
+
+    let [server] = snapshot.library.servers.as_slice() else {
+        panic!("{:?}", snapshot.library.servers);
+    };
+    assert_eq!(server.name, name);
+    assert_eq!(server.given.as_ref(), Some(&given));
+    let said: Vec<(Agent, Option<&str>, Starts, bool)> = server
+        .agents
+        .iter()
+        .map(|given| {
+            (
+                given.agent,
+                given.runs.as_ref().map(|runs| runs.line.as_str()),
+                given.starts,
+                given.refused.is_empty() && given.dropped.is_empty(),
+            )
+        })
+        .collect();
+    let claude = format!("npx -y @example/server ${{{variable}}}");
+    let opencode = format!("npx -y @example/server {{env:{variable}}}");
+    assert_eq!(
+        said,
+        vec![
+            (
+                Agent::Claude,
+                Some(claude.as_str()),
+                Starts::OnceApproved,
+                true
+            ),
+            (Agent::Codex, None, Starts::InATrustedProject, false),
+            (
+                Agent::OpenCode,
+                Some(opencode.as_str()),
+                Starts::Unasked,
+                true
+            ),
+        ]
+    );
+    // Codex has no interpolation, so an argument read from a variable is a
+    // value its renderer is not handed, and said by its code.
+    let codes: Vec<&str> = server.agents[1]
+        .refused
+        .iter()
+        .map(|said| said.code)
+        .collect();
+    assert_eq!(codes, vec!["codex_mcp_input_in_text"]);
+}
+
+/// A server reached over server-sent events is refused the agents that
+/// take none, each by the code `show` gives, and no line is said for them;
+/// an address is said to be reached, and as the entry spells it.
+#[test]
+fn a_server_an_agent_cannot_be_given_says_why_and_runs_nothing_there() {
+    let given = Given::Address(Address {
+        url: String::from("https://example.com/sse"),
+        events: true,
+        ..Address::default()
+    });
+
+    let (_dir, snapshot) = serving(&McpMother::name(), &given);
+
+    let server = &snapshot.library.servers[0];
+    let runs: Vec<Option<(bool, &str)>> = server
+        .agents
+        .iter()
+        .map(|given| {
+            given
+                .runs
+                .as_ref()
+                .map(|runs| (runs.reaches, runs.line.as_str()))
+        })
+        .collect();
+    let refused: Vec<Vec<&str>> = server
+        .agents
+        .iter()
+        .map(|given| given.refused.iter().map(|said| said.code).collect())
+        .collect();
+    assert_eq!(
+        runs,
+        vec![Some((true, "https://example.com/sse")), None, None]
+    );
+    assert_eq!(
+        refused,
+        vec![Vec::new(), vec!["sse_unsupported"], vec!["sse_unsupported"]]
+    );
+}
+
+/// What a front end reads of a server of the library's own, by name: a
+/// contract, as every name of the snapshot is.
+#[test]
+fn a_server_of_the_librarys_own_serializes_every_name_in_order() {
+    let given = Given::Program(Program {
+        command: String::from("npx"),
+        secret_env: vec![VariableName::from("GITHUB_TOKEN")],
+        ..Program::default()
+    });
+
+    let (_dir, snapshot) = serving("github", &given);
+
+    let json = serde_json::to_value(&snapshot.library.servers[0]).unwrap();
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "name": "github",
+            "given": {
+                "type": "program",
+                "command": "npx",
+                "args": [],
+                "env": [],
+                "secret_env": ["GITHUB_TOKEN"],
+                "arg_env": []
+            },
+            "agents": [
+                {
+                    "agent": "claude",
+                    "refused": [],
+                    "dropped": [],
+                    "runs": {"reaches": false, "line": "npx"},
+                    "starts": "once_approved"
+                },
+                {
+                    "agent": "codex",
+                    "refused": [],
+                    "dropped": [],
+                    "runs": {"reaches": false, "line": "npx"},
+                    "starts": "in_a_trusted_project"
+                },
+                {
+                    "agent": "opencode",
+                    "refused": [],
+                    "dropped": [],
+                    "runs": {"reaches": false, "line": "npx"},
+                    "starts": "unasked"
+                }
+            ]
+        })
+    );
 }

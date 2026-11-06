@@ -1,0 +1,757 @@
+{
+  "agents": [
+    "claude",
+    "codex",
+    "opencode"
+  ],
+  "box_states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign"
+  ],
+  "boxes": [
+    {
+      "closed": [],
+      "entry": "api",
+      "held": [
+        {
+          "kind": "mcp",
+          "name": "github",
+          "origin": "workspace",
+          "state": "current",
+          "ticked": true
+        }
+      ]
+    },
+    {
+      "closed": [],
+      "entry": "web",
+      "held": []
+    }
+  ],
+  "doctor": [
+    {
+      "entry": "api",
+      "failures": [],
+      "findings": [
+        {
+          "agents": [
+            "codex"
+          ],
+          "code": "doctor_codex_untrusted",
+          "fix": "name Codex's home with --codex-home, for doctor to read whether it trusts the project",
+          "message": "/home/you/Serving/api/.codex/config.toml: Codex reads it only in a project it trusts, and no Codex home was given to say whether it trusts /home/you/Serving/api",
+          "path": "/home/you/Serving/api/.codex/config.toml"
+        },
+        {
+          "agents": [
+            "claude",
+            "codex",
+            "opencode"
+          ],
+          "code": "doctor_variable_unset",
+          "fix": "set GITHUB_PERSONAL_ACCESS_TOKEN where the agents start `github`: no file holds its value",
+          "message": "/home/you/Serving/api/.mcp.json: `github` is given GITHUB_PERSONAL_ACCESS_TOKEN (a secret) where Claude Code, Codex and OpenCode start it, and it is not set here",
+          "path": "/home/you/Serving/api/.mcp.json"
+        }
+      ],
+      "name": "api",
+      "path": "/home/you/Serving/api"
+    },
+    {
+      "entry": "web",
+      "failures": [],
+      "findings": [],
+      "name": "web",
+      "path": "/home/you/Serving/web"
+    }
+  ],
+  "format": 1,
+  "healths": [
+    "ok",
+    "attention",
+    "broken",
+    "stale"
+  ],
+  "history": [
+    {
+      "action": "install",
+      "at": 1792850460,
+      "detail": "github into api",
+      "outcome": "ok",
+      "target": "api"
+    }
+  ],
+  "kinds": [
+    "skill",
+    "rule",
+    "mcp"
+  ],
+  "known": [
+    {
+      "default": false,
+      "in_use": true,
+      "loadable": false,
+      "loaded_as": null,
+      "name": "Serving",
+      "path": "/home/you/Serving",
+      "projects": 2,
+      "remembered": false,
+      "stale": null,
+      "stale_projects": 0
+    }
+  ],
+  "library": {
+    "artifacts": [
+      {
+        "agents": [],
+        "issues": [],
+        "kind": "mcp",
+        "name": "events",
+        "origin": null,
+        "state": null,
+        "summary": "An older server, reached over server-sent events",
+        "targets": [
+          ".mindweaver/library/mcp/events.toml"
+        ],
+        "unread": null
+      },
+      {
+        "agents": [],
+        "issues": [],
+        "kind": "mcp",
+        "name": "github",
+        "origin": null,
+        "state": null,
+        "summary": "GitHub's issues, pull requests and code",
+        "targets": [
+          ".mindweaver/library/mcp/github.toml"
+        ],
+        "unread": null
+      },
+      {
+        "agents": [],
+        "issues": [],
+        "kind": "mcp",
+        "name": "linear",
+        "origin": null,
+        "state": null,
+        "summary": "Linear's issues",
+        "targets": [
+          ".mindweaver/library/mcp/linear.toml"
+        ],
+        "unread": null
+      }
+    ],
+    "directories": [
+      {
+        "kind": "skill",
+        "path": ".mindweaver/library/skills"
+      },
+      {
+        "kind": "rule",
+        "path": ".mindweaver/library/rules"
+      },
+      {
+        "kind": "mcp",
+        "path": ".mindweaver/library/mcp"
+      }
+    ],
+    "failures": [],
+    "holders": [
+      {
+        "entry": "api",
+        "kind": "mcp",
+        "name": "github"
+      }
+    ],
+    "origin": "workspace",
+    "servers": [
+      {
+        "agents": [
+          {
+            "agent": "claude",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "https://events.example.com/sse",
+              "reaches": true
+            },
+            "starts": "once_approved"
+          },
+          {
+            "agent": "codex",
+            "dropped": [],
+            "refused": [
+              {
+                "code": "sse_unsupported",
+                "message": "the sse transport, server-sent events, is not one taken there"
+              }
+            ],
+            "runs": null,
+            "starts": "in_a_trusted_project"
+          },
+          {
+            "agent": "opencode",
+            "dropped": [],
+            "refused": [
+              {
+                "code": "sse_unsupported",
+                "message": "the sse transport, server-sent events, is not one taken there"
+              }
+            ],
+            "runs": null,
+            "starts": "unasked"
+          }
+        ],
+        "given": {
+          "bearer": null,
+          "events": true,
+          "headers": [],
+          "secret_headers": [],
+          "type": "address",
+          "url": "https://events.example.com/sse",
+          "url_vars": []
+        },
+        "name": "events"
+      },
+      {
+        "agents": [
+          {
+            "agent": "claude",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "npx -y @modelcontextprotocol/server-github",
+              "reaches": false
+            },
+            "starts": "once_approved"
+          },
+          {
+            "agent": "codex",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "npx -y @modelcontextprotocol/server-github",
+              "reaches": false
+            },
+            "starts": "in_a_trusted_project"
+          },
+          {
+            "agent": "opencode",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "npx -y @modelcontextprotocol/server-github",
+              "reaches": false
+            },
+            "starts": "unasked"
+          }
+        ],
+        "given": {
+          "arg_env": [],
+          "args": [
+            "-y",
+            "@modelcontextprotocol/server-github"
+          ],
+          "command": "npx",
+          "env": [],
+          "secret_env": [
+            "GITHUB_PERSONAL_ACCESS_TOKEN"
+          ],
+          "type": "program"
+        },
+        "name": "github"
+      },
+      {
+        "agents": [
+          {
+            "agent": "claude",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "https://mcp.linear.app/mcp",
+              "reaches": true
+            },
+            "starts": "once_approved"
+          },
+          {
+            "agent": "codex",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "https://mcp.linear.app/mcp",
+              "reaches": true
+            },
+            "starts": "in_a_trusted_project"
+          },
+          {
+            "agent": "opencode",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "https://mcp.linear.app/mcp",
+              "reaches": true
+            },
+            "starts": "unasked"
+          }
+        ],
+        "given": {
+          "bearer": "LINEAR_API_KEY",
+          "events": false,
+          "headers": [],
+          "secret_headers": [],
+          "type": "address",
+          "url": "https://mcp.linear.app/mcp",
+          "url_vars": []
+        },
+        "name": "linear"
+      }
+    ],
+    "templates": [
+      {
+        "kind": "skill",
+        "name": "full",
+        "origin": null
+      }
+    ]
+  },
+  "loaded": [
+    {
+      "entry": "../team",
+      "error": null,
+      "name": "team",
+      "offers": 1,
+      "origin": "load:../team",
+      "path": "/home/you/team"
+    }
+  ],
+  "offers": [
+    {
+      "kind": "mcp",
+      "name": "events",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "An older server, reached over server-sent events"
+    },
+    {
+      "kind": "mcp",
+      "name": "github",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "GitHub's issues, pull requests and code"
+    },
+    {
+      "kind": "mcp",
+      "name": "linear",
+      "origin": "workspace",
+      "place": "workspace",
+      "summary": "Linear's issues"
+    },
+    {
+      "kind": "mcp",
+      "name": "sentry",
+      "origin": "load:../team",
+      "place": "loaded",
+      "summary": "Sentry's issues, as the team runs it"
+    }
+  ],
+  "projects": [
+    {
+      "agents": [
+        "claude",
+        "codex",
+        "opencode"
+      ],
+      "artifacts": [
+        {
+          "agents": [
+            "claude",
+            "codex",
+            "opencode"
+          ],
+          "issues": [],
+          "kind": "mcp",
+          "name": "github",
+          "origin": "workspace",
+          "state": "current",
+          "summary": null,
+          "targets": [
+            ".codex/config.toml",
+            ".mcp.json",
+            "opencode.json"
+          ],
+          "unread": null
+        }
+      ],
+      "directories": [
+        {
+          "kind": "skill",
+          "path": "skills"
+        },
+        {
+          "kind": "rule",
+          "path": "rules"
+        }
+      ],
+      "entries": [
+        {
+          "agent": "claude",
+          "file": ".mcp.json",
+          "name": "github",
+          "origin": "workspace",
+          "state": "current"
+        },
+        {
+          "agent": "codex",
+          "file": ".codex/config.toml",
+          "name": "github",
+          "origin": "workspace",
+          "state": "current"
+        },
+        {
+          "agent": "opencode",
+          "file": "opencode.json",
+          "name": "github",
+          "origin": "workspace",
+          "state": "current"
+        }
+      ],
+      "entry": "api",
+      "failures": [],
+      "health": "ok",
+      "id": "4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5",
+      "marker": "settings.toml",
+      "migrates": false,
+      "misplaced": [],
+      "missed": [],
+      "name": "api",
+      "path": "/home/you/Serving/api",
+      "settings": {
+        "agents": [
+          "claude",
+          "codex",
+          "opencode"
+        ],
+        "edit_tracked": false,
+        "share": "local",
+        "targets": []
+      },
+      "stale": null,
+      "tally": {
+        "kinds": [
+          {
+            "count": 0,
+            "kind": "skill"
+          },
+          {
+            "count": 0,
+            "kind": "rule"
+          },
+          {
+            "count": 1,
+            "kind": "mcp"
+          }
+        ],
+        "states": [
+          {
+            "count": 1,
+            "state": "current"
+          },
+          {
+            "count": 0,
+            "state": "outdated"
+          },
+          {
+            "count": 0,
+            "state": "edited"
+          },
+          {
+            "count": 0,
+            "state": "missing"
+          },
+          {
+            "count": 0,
+            "state": "orphaned"
+          },
+          {
+            "count": 0,
+            "state": "foreign"
+          },
+          {
+            "count": 0,
+            "state": "authored"
+          }
+        ],
+        "total": 1
+      },
+      "templates": [
+        {
+          "kind": "skill",
+          "name": "full",
+          "origin": null
+        }
+      ],
+      "unreached": []
+    },
+    {
+      "agents": [
+        "claude",
+        "opencode"
+      ],
+      "artifacts": [],
+      "directories": [
+        {
+          "kind": "skill",
+          "path": "skills"
+        },
+        {
+          "kind": "rule",
+          "path": "rules"
+        }
+      ],
+      "entries": [],
+      "entry": "web",
+      "failures": [],
+      "health": "ok",
+      "id": "0123456789abcdef0123456789abcdef",
+      "marker": "settings.toml",
+      "migrates": false,
+      "misplaced": [],
+      "missed": [],
+      "name": "web",
+      "path": "/home/you/Serving/web",
+      "settings": {
+        "agents": [
+          "claude",
+          "opencode"
+        ],
+        "edit_tracked": false,
+        "share": "shared",
+        "targets": []
+      },
+      "stale": null,
+      "tally": {
+        "kinds": [
+          {
+            "count": 0,
+            "kind": "skill"
+          },
+          {
+            "count": 0,
+            "kind": "rule"
+          },
+          {
+            "count": 0,
+            "kind": "mcp"
+          }
+        ],
+        "states": [
+          {
+            "count": 0,
+            "state": "current"
+          },
+          {
+            "count": 0,
+            "state": "outdated"
+          },
+          {
+            "count": 0,
+            "state": "edited"
+          },
+          {
+            "count": 0,
+            "state": "missing"
+          },
+          {
+            "count": 0,
+            "state": "orphaned"
+          },
+          {
+            "count": 0,
+            "state": "foreign"
+          },
+          {
+            "count": 0,
+            "state": "authored"
+          }
+        ],
+        "total": 0
+      },
+      "templates": [
+        {
+          "kind": "skill",
+          "name": "full",
+          "origin": null
+        }
+      ],
+      "unreached": []
+    }
+  ],
+  "shelf": [],
+  "sources": [],
+  "states": [
+    "current",
+    "outdated",
+    "edited",
+    "missing",
+    "orphaned",
+    "foreign",
+    "authored"
+  ],
+  "summary": {
+    "held": {
+      "kinds": [
+        {
+          "count": 0,
+          "kind": "skill"
+        },
+        {
+          "count": 0,
+          "kind": "rule"
+        },
+        {
+          "count": 1,
+          "kind": "mcp"
+        }
+      ],
+      "states": [
+        {
+          "count": 1,
+          "state": "current"
+        },
+        {
+          "count": 0,
+          "state": "outdated"
+        },
+        {
+          "count": 0,
+          "state": "edited"
+        },
+        {
+          "count": 0,
+          "state": "missing"
+        },
+        {
+          "count": 0,
+          "state": "orphaned"
+        },
+        {
+          "count": 0,
+          "state": "foreign"
+        },
+        {
+          "count": 0,
+          "state": "authored"
+        }
+      ],
+      "total": 1
+    },
+    "library": {
+      "kinds": [
+        {
+          "count": 0,
+          "kind": "skill"
+        },
+        {
+          "count": 0,
+          "kind": "rule"
+        },
+        {
+          "count": 3,
+          "kind": "mcp"
+        }
+      ],
+      "states": [
+        {
+          "count": 0,
+          "state": "current"
+        },
+        {
+          "count": 0,
+          "state": "outdated"
+        },
+        {
+          "count": 0,
+          "state": "edited"
+        },
+        {
+          "count": 0,
+          "state": "missing"
+        },
+        {
+          "count": 0,
+          "state": "orphaned"
+        },
+        {
+          "count": 0,
+          "state": "foreign"
+        },
+        {
+          "count": 0,
+          "state": "authored"
+        }
+      ],
+      "total": 3
+    },
+    "projects": 2,
+    "shelf": {
+      "kinds": [
+        {
+          "count": 0,
+          "kind": "skill"
+        },
+        {
+          "count": 0,
+          "kind": "rule"
+        },
+        {
+          "count": 0,
+          "kind": "mcp"
+        }
+      ],
+      "states": [
+        {
+          "count": 0,
+          "state": "current"
+        },
+        {
+          "count": 0,
+          "state": "outdated"
+        },
+        {
+          "count": 0,
+          "state": "edited"
+        },
+        {
+          "count": 0,
+          "state": "missing"
+        },
+        {
+          "count": 0,
+          "state": "orphaned"
+        },
+        {
+          "count": 0,
+          "state": "foreign"
+        },
+        {
+          "count": 0,
+          "state": "authored"
+        }
+      ],
+      "total": 0
+    },
+    "stale": 0
+  },
+  "warnings": [],
+  "workspace": {
+    "made": true,
+    "name": "Serving",
+    "path": "/home/you/Serving",
+    "reason": "above"
+  }
+}

@@ -75,7 +75,9 @@ pub(crate) fn add_to(
 /// `edit`, at either level: in an editor, or, with `--contents`, by
 /// replacing what the artifact holds with what a file or standard input
 /// does, which core checks before it writes a byte
-/// ([`lifecycle::replace_contents`]). Either way the same is said after:
+/// ([`lifecycle::replace_contents`]), or, for an MCP server told how it is
+/// started or reached, by writing that again ([`lifecycle::retransport`]),
+/// held to the same rules. Either way the same is said after:
 /// whether it changed, what `validate` makes of it now, and that an
 /// installed copy stays installed, edited.
 ///
@@ -91,9 +93,14 @@ pub(crate) fn edit_in(
 ) -> Result<Outcome, Failure> {
     let target = lifecycle::find_to_change(workspace, holder, &Reference::parse(reference))
         .map_err(CliError::from)?;
-    let finished = match editing.given() {
-        None => open(workspace, holder, &target, editing.editor.as_deref())?,
-        Some(given) => {
+    let finished = match (editing.server.given(), editing.given()) {
+        // A server's options, which the grammar refuses beside an editor
+        // and contents: what its transport is written again from.
+        (Some(server), _) => {
+            lifecycle::retransport(workspace, holder, &target, &server).map_err(CliError::from)?
+        }
+        (None, None) => open(workspace, holder, &target, editing.editor.as_deref())?,
+        (None, Some(given)) => {
             let contents = read_given(given, directory)?;
             lifecycle::replace_contents(
                 workspace,

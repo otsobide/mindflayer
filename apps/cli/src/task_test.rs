@@ -12,7 +12,7 @@ use crate::{Cli, WeaverCli};
 /// Every task's name in JSON, as a front end sends it: a contract, pinned
 /// here word for word, so renaming a variant fails a test rather than every
 /// front end that sends the old name.
-const TAGS: [&str; 35] = [
+const TAGS: [&str; 36] = [
     "init_workspace",
     "init_project",
     "link",
@@ -28,6 +28,7 @@ const TAGS: [&str; 35] = [
     "show",
     "edit",
     "save",
+    "edit_server",
     "rename",
     "remove",
     "validate",
@@ -208,6 +209,22 @@ fn every(value: &str) -> Vec<Task> {
                 name: owned(),
                 description: owned(),
                 template: (at % 2 == 0).then(owned),
+                server: None,
+            },
+            // A server's options, which a template refuses beside them: a
+            // program's, or an address's, every field the value.
+            Task::Add {
+                holder: holder.clone(),
+                kind: Kind::Mcp,
+                name: owned(),
+                description: owned(),
+                template: None,
+                server: Some(Box::new(server(value, at % 2 == 0))),
+            },
+            Task::EditServer {
+                holder: holder.clone(),
+                name: owned(),
+                server: Box::new(server(value, at % 2 == 1)),
             },
             Task::Show {
                 holder: holder.clone(),
@@ -300,6 +317,30 @@ fn every(value: &str) -> Vec<Task> {
         ]);
     }
     tasks
+}
+
+/// How a server is started, `value` in every field, as a program, or as an
+/// address reached over server-sent events.
+fn server(value: &str, program: bool) -> mcp::Given {
+    let owned = || value.to_owned();
+    if program {
+        mcp::Given::Program(mcp::Program {
+            command: owned(),
+            args: vec![owned(), String::from("plain")],
+            env: vec![(owned(), owned())],
+            secret_env: vec![value.into()],
+            arg_env: vec![value.into()],
+        })
+    } else {
+        mcp::Given::Address(mcp::Address {
+            url: owned(),
+            events: true,
+            headers: vec![(owned(), owned())],
+            secret_headers: vec![(owned(), value.into())],
+            bearer: Some(value.into()),
+            url_vars: vec![(value.into(), value.into())],
+        })
+    }
 }
 
 /// The name a task goes by in JSON.
@@ -754,6 +795,7 @@ fn a_task_is_one_flat_record_tagged_by_its_name() {
             name: String::from("git/commits"),
             description: String::from("One step at a time"),
             template: None,
+            server: None,
         })
         .unwrap(),
         serde_json::json!({
@@ -763,8 +805,42 @@ fn a_task_is_one_flat_record_tagged_by_its_name() {
             "name": "git/commits",
             "description": "One step at a time",
             "template": null,
+            "server": null,
         })
     );
+    assert_eq!(
+        serde_json::to_value(Task::EditServer {
+            holder: Holder::Workspace,
+            name: String::from("github"),
+            server: Box::new(mcp::Given::Program(mcp::Program {
+                command: String::from("npx"),
+                secret_env: vec!["GITHUB_TOKEN".into()],
+                ..mcp::Program::default()
+            })),
+        })
+        .unwrap(),
+        serde_json::json!({
+            "type": "edit_server",
+            "holder": {"type": "workspace"},
+            "name": "github",
+            "server": {
+                "type": "program",
+                "command": "npx",
+                "args": [],
+                "env": [],
+                "secret_env": ["GITHUB_TOKEN"],
+                "arg_env": [],
+            },
+        })
+    );
+    // An add sent as it was before a server could be told, with no
+    // `server`, is the same add.
+    let sent: Task = serde_json::from_value(serde_json::json!({
+        "type": "add", "holder": {"type": "workspace"}, "kind": "skill",
+        "name": "deploy", "description": "Ship it", "template": null,
+    }))
+    .unwrap();
+    assert!(matches!(sent, Task::Add { server: None, .. }), "{sent:?}");
     assert_eq!(
         serde_json::to_value(MindsChange::InitAndLink).unwrap(),
         "init_and_link"
@@ -1077,6 +1153,111 @@ fn no_value_starting_with_a_dash_is_read_as_an_option_or_a_command() {
                     holding(read, &value),
                     "{line:?} is not read as {plainly:?} is, holding {value:?}"
                 );
+            }
+        }
+    }
+}
+
+impl Parsers {
+    /// What `line`, an `add` or an `edit`, tells its command of how a
+    /// server is started or reached, as the command's own options read it:
+    /// each pair split where its option splits it.
+    fn told(&mut self, line: &[String]) -> Option<mcp::Given> {
+        use clap::FromArgMatches as _;
+
+        let command = match line[0].as_str() {
+            "mind" => &mut self.mind,
+            "mindweaver" => &mut self.weaver,
+            other => panic!("{line:?} runs `{other}`"),
+        };
+        let matches = command
+            .try_get_matches_from_mut(line)
+            .unwrap_or_else(|error| panic!("{line:?} does not parse: {error}"));
+        let mut at = &matches;
+        while let Some((name, inner)) = at.subcommand() {
+            at = inner;
+            if name == "add" || name == "edit" {
+                break;
+            }
+        }
+        crate::ServerOptions::from_arg_matches(at)
+            .unwrap_or_else(|error| panic!("{line:?}: {error}"))
+            .given()
+    }
+}
+
+/// `given`, each name it gives beside a value without the `=` its option
+/// would end the name at: what a request may send of it, the rest refused
+/// before a line is built (`policy::sayable`).
+fn sayable(given: mcp::Given) -> mcp::Given {
+    let name = |key: &str| key.replace('=', "");
+    match given {
+        mcp::Given::Program(mut program) => {
+            for (key, _) in &mut program.env {
+                *key = name(key);
+            }
+            mcp::Given::Program(program)
+        }
+        mcp::Given::Address(mut address) => {
+            for (key, _) in &mut address.headers {
+                *key = name(key);
+            }
+            for (header, _) in &mut address.secret_headers {
+                *header = name(header);
+            }
+            for (input, _) in &mut address.url_vars {
+                *input = name(input.as_str()).into();
+            }
+            mcp::Given::Address(address)
+        }
+    }
+}
+
+/// The property above compares the words a line gives each option, which
+/// a pair's are whatever its option splits them into: this one compares
+/// what the command is told, each pair as the option splits it, for every
+/// server a request may send, which is every one but those naming
+/// something with an `=` in the name.
+#[test]
+fn a_server_s_every_option_reaches_its_command_as_the_value_given() {
+    let mut parsers = Parsers::new();
+    let values = VALUES
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .chain(hostile());
+    for value in values {
+        for program in [true, false] {
+            let sent = server(&value, program);
+            assert_eq!(
+                mindweaver_core::policy::sayable(&sent).is_ok(),
+                !value.contains('='),
+                "{sent:?}"
+            );
+            let given = sayable(sent);
+            let tasks = [
+                Task::Add {
+                    holder: Holder::Workspace,
+                    kind: Kind::Mcp,
+                    name: String::from("acme"),
+                    description: String::from("Acme's tools"),
+                    template: None,
+                    server: Some(Box::new(given.clone())),
+                },
+                Task::EditServer {
+                    holder: Holder::Workspace,
+                    name: String::from("acme"),
+                    server: Box::new(given.clone()),
+                },
+            ];
+            for task in tasks {
+                for line in task.commands() {
+                    assert_eq!(
+                        parsers.told(&line),
+                        Some(given.clone()),
+                        "{line:?} does not tell its command what it was given"
+                    );
+                }
             }
         }
     }
@@ -1745,10 +1926,11 @@ fn a_line_carrying_a_credential_runs_it_as_typed_and_is_shown_without_it() {
 }
 
 /// A yes to an install that waits for one is a front end's that has shown
-/// what each agent would run: never in JSON, so the panel, which shows no
-/// agent's line yet, sends none, and one that does is refused.
+/// what each agent would run: in JSON for the panel's confirmation, and
+/// left out, by a script or a front end from before it could be sent, it
+/// is none.
 #[test]
-fn an_install_says_yes_on_its_line_and_never_in_its_json() {
+fn an_install_says_yes_on_its_line_and_in_its_json() {
     let task = Task::Install {
         projects: vec![String::from("alpha")],
         kind: Kind::Mcp,
@@ -1762,18 +1944,27 @@ fn an_install_says_yes_on_its_line_and_never_in_its_json() {
         "mindweaver install -p alpha --from load:../team --yes mcp:github"
     );
     let json = serde_json::to_value(&task).unwrap();
-    assert!(json.get("yes").is_none(), "{json}");
-    let read: Task = serde_json::from_value(json).unwrap();
-    assert!(matches!(read, Task::Install { yes: false, .. }), "{read:?}");
-    let said = serde_json::json!({
+    assert_eq!(
+        json,
+        serde_json::json!({
+            "type": "install",
+            "projects": ["alpha"],
+            "kind": "mcp",
+            "name": "github",
+            "from": "load:../team",
+            "yes": true,
+        })
+    );
+    assert_eq!(serde_json::from_value::<Task>(json).unwrap(), task);
+    let unsaid = serde_json::json!({
         "type": "install",
         "projects": ["alpha"],
         "kind": "mcp",
         "name": "github",
         "from": "load:../team",
-        "yes": true,
     });
-    assert!(serde_json::from_value::<Task>(said).is_err());
+    let read: Task = serde_json::from_value(unsaid).unwrap();
+    assert!(matches!(read, Task::Install { yes: false, .. }), "{read:?}");
 }
 
 #[test]
@@ -1795,5 +1986,88 @@ fn a_change_confirmed_says_yes_only_of_an_install_that_waits_for_one() {
     ))));
     assert!(!yes(Task::confirmed(install(Kind::Mcp, "workspace"))));
     assert!(!yes(Task::confirmed(install(Kind::Skill, "load:../team"))));
-    assert!(!yes(Task::from(install(Kind::Mcp, "load:../team"))));
+    // Built without the confirmation, as a plan's task and the palette's
+    // are, it carries none, in JSON as on its line.
+    let plain = Task::from(install(Kind::Mcp, "load:../team"));
+    assert!(!yes(plain.clone()));
+    assert_eq!(serde_json::to_value(&plain).unwrap()["yes"], false);
+    assert!(!plain.commands()[0].contains(&String::from("--yes")));
+}
+
+#[test]
+fn a_servers_add_and_edit_are_its_options_words_each_secret_a_variables_name() {
+    let program = mcp::Given::Program(mcp::Program {
+        command: String::from("npx"),
+        args: vec![String::from("-y"), String::from("@acme/server")],
+        env: vec![(String::from("LOG_LEVEL"), String::from("info"))],
+        secret_env: vec!["GITHUB_TOKEN".into()],
+        arg_env: vec!["WORKSPACE".into()],
+    });
+    let address = mcp::Given::Address(mcp::Address {
+        url: String::from("https://{tenant}.example.com/mcp"),
+        events: true,
+        headers: vec![(String::from("X-Client"), String::from("me"))],
+        secret_headers: vec![(String::from("X-Api-Key"), "API_KEY".into())],
+        bearer: Some("TOKEN".into()),
+        url_vars: vec![("tenant".into(), "TENANT".into())],
+    });
+
+    let added = Task::Add {
+        holder: Holder::Workspace,
+        kind: Kind::Mcp,
+        name: String::from("github"),
+        description: String::from("GitHub"),
+        template: None,
+        server: Some(Box::new(program)),
+    };
+    let edited = Task::EditServer {
+        holder: Holder::Project(String::from("api")),
+        name: String::from("github"),
+        server: Box::new(address),
+    };
+
+    assert_eq!(
+        added.commands(),
+        [owned(&[
+            "mindweaver",
+            "add",
+            "--command",
+            "npx",
+            "--arg=-y",
+            "--arg",
+            "@acme/server",
+            "--env",
+            "LOG_LEVEL=info",
+            "--secret-env",
+            "GITHUB_TOKEN",
+            "--arg-env",
+            "WORKSPACE",
+            "mcp",
+            "github",
+            "GitHub",
+        ])]
+    );
+    assert_eq!(
+        edited.commands(),
+        [owned(&[
+            "mind",
+            "-C",
+            "api",
+            "edit",
+            "--url",
+            "https://{tenant}.example.com/mcp",
+            "--sse",
+            "--header",
+            "X-Client=me",
+            "--secret-header",
+            "X-Api-Key=API_KEY",
+            "--bearer-env",
+            "TOKEN",
+            "--url-var",
+            "tenant=TENANT",
+            "mcp:github",
+        ])]
+    );
+    assert_eq!(added.refusal(), None);
+    assert_eq!(edited.refusal(), None);
 }

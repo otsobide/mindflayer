@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import type { VueWrapper } from '@vue/test-utils'
 import type { Folders } from '@/api/generated/Folders'
 import type { Health } from '@/api/generated/Health'
-import { answering, answers, applying, commanded, commanding, drafts, fixture, plans, render, unmount, updates, walks, type Answered } from './panel'
+import { answering, answers, applying, commanded, commanding, drafts, fixture, plans, render, servers, unmount, updates, walks, type Answered } from './panel'
 
 /** Every `<style>` element anything adds while a test runs, which the CSP would refuse. */
 let styles: Element[]
@@ -123,6 +123,16 @@ describe('one of the library\'s own, about to be removed', () => {
     await flushPromises()
     document.querySelector<HTMLElement>('[data-testid="run"]')!.click()
     await vi.waitFor(() => expect(page.find('[data-testid="remove-yes"]').exists()).toBe(true))
+
+    drawsEveryIcon(page)
+    expect(styles).toEqual([])
+  })
+})
+
+describe('the page of MCP servers', () => {
+  it.each(['/mcp', '/mcp?edit=github'])('%s draws every icon from the bundle and adds no style element', async (path) => {
+    const { transport } = answering(fixture('serving'), servers())
+    const { page } = await render(path, transport)
 
     drawsEveryIcon(page)
     expect(styles).toEqual([])

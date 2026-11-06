@@ -408,13 +408,13 @@ impl Fixtures {
     /// The fixture `name`, by what each part of it is an answer to.
     fn hold(&self, name: &str, fixture: &Value) {
         match name {
-            "workspace" | "candidates" | "unmade" | "assigning" | "updating" => {
+            "workspace" | "candidates" | "unmade" | "assigning" | "updating" | "serving" => {
                 self.is(name, "Snapshot", fixture);
             }
-            "library" | "scan" | "plans" | "updates" | "drafts" => {
+            "library" | "scan" | "plans" | "updates" | "drafts" | "servers" => {
                 self.each(name, fixture, Self::asked);
             }
-            "commands" | "applied" | "loads" | "updated" | "authored" => {
+            "commands" | "applied" | "loads" | "updated" | "authored" | "served" => {
                 self.each(name, fixture, Self::ran);
             }
             "folders" => {

@@ -37,14 +37,14 @@ use thiserror::Error;
 use crate::artifact::{self, issue_list, Artifact, ArtifactError, ValidationIssue};
 use crate::catalog::{Catalog, Reference, QUALIFIER};
 use crate::code::codes;
-use crate::create::{scaffold, CreateError, Start};
+use crate::create::{self, scaffold, CreateError, Start};
 use crate::frontmatter;
 use crate::gather::Scrub;
 use crate::hash;
 use crate::install::{self, InstallError};
 use crate::kind::{Kind, Layout};
 use crate::ledger::Carried;
-use crate::mcp::McpDefinition;
+use crate::mcp::{self, Given, McpDefinition};
 use crate::paths;
 use crate::skill::SkillManifest;
 use crate::value::{ArtifactName, ContentHash};
@@ -554,6 +554,50 @@ pub fn replace_contents(
         changed: true,
         copy,
     })
+}
+
+/// Change how the MCP server `target` in `project` is started or reached,
+/// and what is supplied for it, to what `given` says, as `add` would write
+/// them from a command line's options; every other key of its definition,
+/// its name, description, provenance and extras, kept as the file holds
+/// it (`mcp::retransported`). `workspace` is the one consulted, as for
+/// [`replace_contents`].
+///
+/// What `edit` does when it is told a server's options rather than its
+/// contents: the edit for a form, which has the options' words and no
+/// text. The definition is read as it is now, rewritten, and written as
+/// contents given whole are ([`replace_contents`]), held to every rule
+/// they are, so it refuses what `validate` would call invalid, a token
+/// written as it is among it, and writes nothing when nothing changes.
+/// Refused for any other kind, as `add` refuses a transport for one
+/// (`edit_transport_not_mcp`), and before it reads the file for what no
+/// definition can be written from as given, a credential typed into the
+/// address and a key given twice, by `add`'s own checks.
+pub fn retransport(
+    workspace: Option<&WeaverWorkspace>,
+    project: &MindProject,
+    target: &Target,
+    given: &Given,
+) -> Result<Edited, LifecycleError> {
+    let text = retransported(target, given)?;
+    replace_contents(workspace, project, target, text.as_bytes(), None)
+}
+
+/// What [`retransport`] would write into `target`: its definition, read
+/// as the file holds it now, rewritten from `given`. Apart from the write
+/// so a draft is judged as the write is ([`crate::draft::retransported`]).
+pub(crate) fn retransported(target: &Target, given: &Given) -> Result<String, LifecycleError> {
+    if target.kind != Kind::Mcp {
+        return Err(LifecycleError::TransportNotMcp { kind: target.kind });
+    }
+    create::writable(given).map_err(LifecycleError::Server)?;
+    let file = target.file();
+    let text = fs::read_to_string(&file).map_err(|source| LifecycleError::Io {
+        path: file.clone(),
+        source,
+    })?;
+    mcp::retransported(&text, given)
+        .map_err(|reason| LifecycleError::ServerUnreadable { path: file, reason })
 }
 
 /// Where `contents` given whole for `target` in `project` would be written,
@@ -1398,6 +1442,20 @@ pub enum LifecycleError {
         #[source]
         source: io::Error,
     },
+    /// A server's transport given for a kind no agent starts.
+    #[error(
+        "`--command` and `--url` say how an MCP server is started or reached, and a {} is \
+         neither started nor reached",
+        .kind.noun()
+    )]
+    TransportNotMcp { kind: Kind },
+    /// A server whose definition does not read, so what is its transport
+    /// and what is the rest cannot be told apart to write the one again.
+    #[error("{path}: it cannot be read as an MCP server's definition ({reason}), so how it is started cannot be written again; fix it with `mind edit` first")]
+    ServerUnreadable { path: PathBuf, reason: String },
+    /// What `add` refuses of a transport as given, refused by its checks.
+    #[error(transparent)]
+    Server(CreateError),
     #[error(transparent)]
     Workspace(#[from] WorkspaceError),
     #[error(transparent)]
@@ -1430,7 +1488,10 @@ codes!(LifecycleError {
     Self::Stale { .. } => "edit_stale",
     Self::LeadsOut { .. } => "edit_leads_outside",
     Self::Io { .. } => "change_failed",
+    Self::TransportNotMcp { .. } => "edit_transport_not_mcp",
+    Self::ServerUnreadable { .. } => "edit_server_unreadable",
 } carried {
+    Self::Server(error) => error,
     Self::Workspace(error) => error,
     Self::Artifact(error) => error,
 });

@@ -33,8 +33,8 @@ use std::slice;
 
 use serde::{Serialize, Serializer};
 
-use crate::agent::Agent;
-use crate::artifact::ValidationIssue;
+use crate::agent::{Agent, Starts};
+use crate::artifact::{Artifact, ValidationIssue};
 use crate::catalog::{Catalog, DiscoveryFailure};
 use crate::code::Said;
 use crate::doctor::{Examined, Machine};
@@ -43,6 +43,7 @@ use crate::kind::Kind;
 use crate::known::{self, KnownWorkspace};
 use crate::ledger::{Entry, Gathered, InstallRecord, Ledger, LedgerError, Source};
 use crate::lifecycle;
+use crate::mcp::{self, McpDefinition, Running};
 use crate::paths;
 use crate::relink;
 use crate::resolve::{self, Inputs, Intent, Reason, ResolveError, Resolved};
@@ -53,6 +54,7 @@ use crate::value::{ArtifactName, Origin, Redacted};
 use crate::workspace::{
     same_directory, MarkerFile, Member, MindProject, WeaverWorkspace, WorkspaceError,
 };
+use crate::{claude_mcp, codex_mcp, opencode_mcp};
 
 /// The version of what a snapshot holds, which it carries as `format`.
 ///
@@ -226,6 +228,104 @@ pub struct Library {
     /// What could not be read in it and is no artifact's: a folder that
     /// cannot be listed, its templates.
     pub failures: Vec<Said>,
+    /// Each of its own MCP servers whose definition reads, in the order
+    /// of `artifacts`, as each agent would be given it: what a page of
+    /// servers shows beside each one's row of `artifacts`.
+    pub servers: Vec<LibraryServer>,
+}
+
+/// One of the workspace's own MCP servers, as `add mcp` would be told to
+/// write it and as each agent would be given it.
+///
+/// Worked out here, from each agent's renderer, rather than by a front end
+/// from the definition: what an agent runs is what its own entry spells
+/// ([`mcp::Runs`]), an input reaching Claude as `${VAR}` and OpenCode as
+/// `{env:VAR}`, and what it cannot be given is core's report of it
+/// ([`McpDefinition::expressibility`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct LibraryServer {
+    pub name: ArtifactName,
+    /// How it is started or reached, as `add mcp`'s options would say it
+    /// ([`mcp::Given::of`]), for a form changing it to start from: none
+    /// when the definition holds what no option says, which is changed as
+    /// text.
+    pub given: Option<mcp::Given>,
+    /// How each agent would be given it, in report order.
+    pub agents: Vec<GivenTo>,
+}
+
+/// How one agent would be given an MCP server: what it cannot be given of
+/// it, what its entry would run or reach, and what it asks before it
+/// starts one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+pub struct GivenTo {
+    pub agent: Agent,
+    /// Why it would be given none of it, each by its code and in its
+    /// words: what it cannot be given at all, as `show` says it, or else
+    /// why its renderer writes it no entry, an input read from no
+    /// variable. Empty, and it is given an entry.
+    pub refused: Vec<Said>,
+    /// What its entry would be written without, as `show` says it.
+    pub dropped: Vec<Said>,
+    /// What its entry would run or reach, as the entry spells it; none
+    /// when it is refused.
+    pub runs: Option<Running>,
+    /// What it asks before it starts a server a project gives it.
+    pub starts: Starts,
+}
+
+impl LibraryServer {
+    /// `definition`, as each agent would be given it.
+    fn of(definition: &McpDefinition) -> LibraryServer {
+        let agents = definition
+            .expressibility()
+            .into_iter()
+            .map(|reported| {
+                // Matched on the agent with no wildcard, so an agent added
+                // says how its entry is made before it compiles. OpenCode's
+                // in the shape Mindweaver writes (D-12), which runs what the
+                // other does.
+                let entry = match reported.agent {
+                    Agent::Claude => claude_mcp::entry(definition)
+                        .map(|entry| entry.runs())
+                        .map_err(|error| Said::of(error.code(), &error)),
+                    Agent::Codex => codex_mcp::entry(definition)
+                        .map(|entry| entry.runs())
+                        .map_err(|error| Said::of(error.code(), &error)),
+                    Agent::OpenCode => opencode_mcp::entry(definition, opencode_mcp::Shape::V2)
+                        .map(|entry| entry.runs())
+                        .map_err(|error| Said::of(error.code(), &error)),
+                };
+                let mut refused = reported.refused;
+                let runs = match entry {
+                    Ok(runs) if refused.is_empty() => Some(runs.shown()),
+                    Ok(_) => None,
+                    Err(why) => {
+                        if refused.is_empty() {
+                            refused.push(why);
+                        }
+                        None
+                    }
+                };
+                GivenTo {
+                    agent: reported.agent,
+                    refused,
+                    dropped: reported.dropped,
+                    runs,
+                    starts: reported.agent.starts_a_server(),
+                }
+            })
+            .collect();
+        LibraryServer {
+            name: definition.name.clone(),
+            given: mcp::Given::of(definition),
+            agents,
+        }
+    }
 }
 
 /// A project holding a copy of one of the workspace's own: one whose install
@@ -1103,6 +1203,12 @@ impl Library {
         let catalog = Catalog::discover_kinds(slice::from_ref(&own), &own_kinds);
         let (artifacts, mut failures) = holdings(&own, &catalog, None);
         let templates = templates(Some(workspace), &own, kinds, &mut failures);
+        let servers = catalog
+            .artifacts()
+            .iter()
+            .filter_map(Artifact::definition)
+            .map(LibraryServer::of)
+            .collect();
         Library {
             origin: install::WORKSPACE_ORIGIN,
             directories: directories(&own, kinds),
@@ -1110,6 +1216,7 @@ impl Library {
             artifacts,
             templates,
             failures,
+            servers,
         }
     }
 }

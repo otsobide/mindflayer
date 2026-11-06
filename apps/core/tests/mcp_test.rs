@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use mindweaver_core::create::{create_server, Start};
 use mindweaver_core::lifecycle;
-use mindweaver_core::mcp::{Address, Given, McpDefinition};
+use mindweaver_core::mcp::{Address, Given, McpDefinition, Program};
 use mindweaver_core::mother::{
     McpMother, MindflayerMother, ProjectMother, SettingsMother, SkillMother, UrlMother,
     WorkspaceMother,
@@ -659,6 +659,40 @@ fn add_refuses_a_key_given_twice_and_an_address_typed_with_a_credential() {
 }
 
 #[test]
+fn add_refuses_a_name_beside_a_value_that_no_command_line_can_give() {
+    let (_dir, project, folder) = authoring();
+
+    for (why, given, unsayable) in McpMother::given_unsayable() {
+        let refused = add_server(&project, &McpMother::name(), &given).unwrap_err();
+
+        assert_eq!(refused.code(), "add_mcp_key_unsayable", "{why}: {refused}");
+        assert_eq!(
+            refused.to_string(),
+            format!(
+                "`{}` holds `=`, where `{} NAME=VALUE` ends the name, so no command line can \
+                 give it; no variable's, header's or input's name holds one",
+                unsayable.key, unsayable.option
+            ),
+            "{why}"
+        );
+        assert_eq!(given.unsayable(), Some(unsayable), "{why}");
+    }
+    // A token pasted where the name goes is said by what it starts with.
+    let (prefix, token) = McpMother::tokens().remove(0);
+    let given = Given::Program(Program {
+        command: String::from("npx"),
+        env: vec![(format!("{token}=1"), String::from("x"))],
+        ..Program::default()
+    });
+    let refused = add_server(&project, &McpMother::name(), &given).unwrap_err();
+    let said = refused.to_string();
+    assert_eq!(refused.code(), "add_mcp_key_unsayable", "{said}");
+    assert!(said.contains(&format!("`{prefix}`")), "{said}");
+    assert!(!said.contains(token[prefix.len()..].trim_start()), "{said}");
+    assert_eq!(held(&folder), []);
+}
+
+#[test]
 fn add_refuses_a_transport_for_a_kind_no_agent_starts() {
     let (_dir, project, _folder) = authoring();
     let given = McpMother::given();
@@ -792,9 +826,9 @@ fn add_from_a_template_holds_what_it_writes_to_what_validate_would_say() {
             None,
             &project,
             Kind::Mcp,
-            "ours",
-            "Ours",
+            ("ours", "Ours"),
             Some(template),
+            None,
         );
         assert_eq!(
             judged.refused.map(|said| said.code),
@@ -803,7 +837,7 @@ fn add_from_a_template_holds_what_it_writes_to_what_validate_would_say() {
         );
     }
     let unscaffolded =
-        mindweaver_core::draft::added(None, &project, Kind::Mcp, "ours", "Ours", None);
+        mindweaver_core::draft::added(None, &project, Kind::Mcp, ("ours", "Ours"), None, None);
     assert_eq!(
         unscaffolded.refused.map(|said| said.code),
         Some("add_mcp_unscaffolded")

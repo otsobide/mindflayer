@@ -1,5 +1,6 @@
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/vue-query'
+import type { Asking } from './generated/Asking'
 import type { Cell } from './generated/Cell'
 import type { Planned } from './generated/Planned'
 import { useFreshness } from './live'
@@ -10,9 +11,31 @@ import { useTransport, type Task } from './transport'
  * screen applies its marks; none when every box is held back and nothing
  * runs. What applying a plan sends, from the matrix or anywhere else that
  * plans a box, so the one batch is spelled once.
+ *
+ * Each install the plan says waits for a yes (`asks`) is sent as it came,
+ * its line installing nothing, unless it is among `confirmed`, those
+ * somebody said yes to once their lines were shown (`sameAsking`): then
+ * the task the plan handed beside it carrying the yes goes in its place.
+ * The panel sets no yes on a task of its own; one built anywhere else
+ * carries none.
  */
-export function batchOf(plan: Planned): Task | undefined {
-  return plan.tasks.length > 0 ? { type: 'apply_install', changes: plan.tasks } : undefined
+export function batchOf(plan: Planned, confirmed: Asking[] = []): Task | undefined {
+  const changes = plan.tasks.map((task, at) => {
+    const asking = plan.asks.find(each => each.task === at)
+    return asking && confirmed.some(each => sameAsking(each, asking)) ? asking.confirmed : task
+  })
+  return changes.length > 0 ? { type: 'apply_install', changes } : undefined
+}
+
+/**
+ * Whether a yes said to `said` is one to `asking`: the same task, shown
+ * the same lines. A plan is asked for again whenever the disk changes, a
+ * definition in a loaded workspace among it, so the same task may come to
+ * run what nobody has read: its lines changed, it waits for a yes of its
+ * own.
+ */
+export function sameAsking(said: Asking, asking: Asking): boolean {
+  return JSON.stringify([said.confirmed, said.lines]) === JSON.stringify([asking.confirmed, asking.lines])
 }
 
 /**

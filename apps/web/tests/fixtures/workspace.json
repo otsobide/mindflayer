@@ -330,6 +330,56 @@
       }
     ],
     "origin": "workspace",
+    "servers": [
+      {
+        "agents": [
+          {
+            "agent": "claude",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "npx -y @modelcontextprotocol/server-github",
+              "reaches": false
+            },
+            "starts": "once_approved"
+          },
+          {
+            "agent": "codex",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "npx -y @modelcontextprotocol/server-github",
+              "reaches": false
+            },
+            "starts": "in_a_trusted_project"
+          },
+          {
+            "agent": "opencode",
+            "dropped": [],
+            "refused": [],
+            "runs": {
+              "line": "npx -y @modelcontextprotocol/server-github",
+              "reaches": false
+            },
+            "starts": "unasked"
+          }
+        ],
+        "given": {
+          "arg_env": [],
+          "args": [
+            "-y",
+            "@modelcontextprotocol/server-github"
+          ],
+          "command": "npx",
+          "env": [],
+          "secret_env": [
+            "GITHUB_PERSONAL_ACCESS_TOKEN"
+          ],
+          "type": "program"
+        },
+        "name": "github"
+      }
+    ],
     "templates": [
       {
         "kind": "skill",

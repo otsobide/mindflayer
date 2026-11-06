@@ -274,6 +274,14 @@ const TOUR: Shot[] = [
     }
   },
   {
+    // The library's MCP servers: what each agent would run of each, what
+    // it asks before it starts one, and what doctor finds in the project
+    // holding one.
+    name: 'mcp',
+    path: '/mcp',
+    ready: async page => page.getByTestId('server').first().waitFor()
+  },
+  {
     name: 'shelf',
     path: '/shelf',
     ready: async page => page.getByTestId('row').first().waitFor()

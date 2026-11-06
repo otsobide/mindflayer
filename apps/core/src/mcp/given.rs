@@ -20,15 +20,33 @@
 //! invalid. What no definition can hold at all, two transports, or an
 //! option of one given with the other, no value of this type can say: a
 //! front end's grammar refuses it before one is made.
+//!
+//! The other way round, a definition is read back as what `add` would be
+//! told to write it ([`Given::of`]), when the options can say all of it:
+//! what a form changing one starts from, and what `edit` writes from
+//! again ([`retransported`]), every other key of the file kept.
 
 use std::fmt::Write as _;
 
-use crate::mcp::written;
+use serde::{Deserialize, Serialize};
+
+use crate::mcp::{written, Input, InputKind, McpDefinition, Transport};
 use crate::value::{InputName, VariableName};
 
 /// How an agent starts an MCP server, or reaches one: a program or an
 /// address, never both.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// In JSON, what a front end sends a command line's options as, and what
+/// the snapshot says a definition is told as: tagged by `type` inside the
+/// object, `{"type": "program", "command": "npx", ...}`, as a task is, each
+/// pair as an array of its two words. A field it does not have is refused,
+/// as a task's is: it is a write, and one misspelled would be dropped.
+/// Every secret is the name of the variable it is read from, and no field
+/// holds a secret's value, there being none for it to hold.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Given {
     /// A program an agent starts, `--command`.
     Program(Program),
@@ -37,7 +55,10 @@ pub enum Given {
 }
 
 /// A program an agent starts, and what it is started with.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct Program {
     /// The program, as the agent finds it (`--command`).
     pub command: String,
@@ -58,7 +79,10 @@ pub struct Program {
 }
 
 /// A server at an address, and what every request to it carries.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
 pub struct Address {
     /// Where the server is, as typed (`--url`): checked for a credential
     /// before anything is written, since the file would keep one, and
@@ -93,6 +117,14 @@ const AUTHORIZATION: &str = "Authorization";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Repeated {
     pub table: &'static str,
+    pub key: String,
+}
+
+/// A name given beside a value that holds `=`, which no command line can
+/// say: the option that takes the pair, as a line spells it, and the name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unsayable {
+    pub option: &'static str,
     pub key: String,
 }
 
@@ -133,6 +165,224 @@ impl Given {
         })
     }
 
+    /// The first name given beside a value that holds `=`: a setting's
+    /// variable, a header's name, a secret header's, or a part of the
+    /// address's. Each option of a pair takes it as `NAME=VALUE` and ends
+    /// the name at the first `=` (`--env X=Y=Z` sets `X`), so a line
+    /// would say another pair than the one given, and what a request sent
+    /// would be judged as one definition and written as another. Only a
+    /// request can give one, never a command line; and no variable's,
+    /// header's or input's name holds one.
+    pub fn unsayable(&self) -> Option<Unsayable> {
+        let pairs: Vec<(&'static str, &str)> = match self {
+            Given::Program(program) => program
+                .env
+                .iter()
+                .map(|(key, _)| ("--env", key.as_str()))
+                .collect(),
+            Given::Address(address) => address
+                .headers
+                .iter()
+                .map(|(key, _)| ("--header", key.as_str()))
+                .chain(
+                    address
+                        .secret_headers
+                        .iter()
+                        .map(|(header, _)| ("--secret-header", header.as_str())),
+                )
+                .chain(
+                    address
+                        .url_vars
+                        .iter()
+                        .map(|(name, _)| ("--url-var", name.as_str())),
+                )
+                .collect(),
+        };
+        pairs
+            .into_iter()
+            .find(|(_, key)| key.contains('='))
+            .map(|(option, key)| Unsayable {
+                option,
+                key: key.to_owned(),
+            })
+    }
+
+    /// What `add` would be told to write `definition`'s transport and
+    /// inputs as they are: none when it holds what no option says.
+    ///
+    /// Every input declared as `add` declares one, named after the
+    /// variable it is read from but for a part of an address, which is
+    /// named in it, with no description and not said to be required; a
+    /// secret passed on to a program's environment under its variable's
+    /// name, a secret header's whole value, `Authorization: Bearer` and a
+    /// secret, an argument read from a variable after every argument
+    /// written as it is, and a part of the address; and nothing else: no
+    /// folder to start a program in, no input written anywhere else, and
+    /// no placeholder in a value written as it is. Then writing it again
+    /// from what this answers gives an agent what the file gives it now,
+    /// its keys in the order `add` writes them.
+    ///
+    /// None rather than the part the options can say: a form starting
+    /// from that would write the rest away. Such a definition is changed
+    /// as text, whole.
+    pub fn of(definition: &McpDefinition) -> Option<Given> {
+        let inputs = &definition.inputs;
+        if inputs
+            .iter()
+            .any(|input| input.description.is_some() || input.required)
+        {
+            return None;
+        }
+        // Each input, once, by its place among them.
+        let mut used = vec![false; inputs.len()];
+        let mut take = |found: Option<usize>| -> Option<&Input> {
+            let at = found?;
+            (!used[at]).then(|| {
+                used[at] = true;
+                &inputs[at]
+            })
+        };
+        // An input as `add` declares one read from the variable it is
+        // named after.
+        let as_named = |input: &Input, kind: InputKind, secret: bool| {
+            input.kind == kind
+                && input.secret == secret
+                && input
+                    .env_var
+                    .as_ref()
+                    .is_some_and(|variable| variable.as_str() == input.name.as_str())
+        };
+        let placeholders: Vec<String> = inputs.iter().map(|input| written(&input.name)).collect();
+        let plain = |text: &str| !placeholders.iter().any(|written| text.contains(written));
+        let given = match &definition.transport {
+            Transport::Stdio(stdio) => {
+                if stdio.cwd.is_some() {
+                    return None;
+                }
+                let read_at = |text: &str, kind: InputKind, secret: bool| {
+                    inputs.iter().position(|input| {
+                        written(&input.name) == text && as_named(input, kind, secret)
+                    })
+                };
+                let mut env = Vec::new();
+                let mut secret_env = Vec::new();
+                for (key, value) in &stdio.env {
+                    match read_at(value, InputKind::Env, true) {
+                        Some(at) if inputs[at].name.as_str() == key => {
+                            secret_env.push((at, take(Some(at))?.name.as_str().into()));
+                        }
+                        _ if plain(value) => env.push((key.clone(), value.clone())),
+                        _ => return None,
+                    }
+                }
+                let written_as_is = stdio
+                    .args
+                    .iter()
+                    .take_while(|arg| read_at(arg, InputKind::Arg, false).is_none())
+                    .count();
+                let (args, read) = stdio.args.split_at(written_as_is);
+                if !args.iter().all(|arg| plain(arg)) {
+                    return None;
+                }
+                let mut arg_env = Vec::new();
+                for arg in read {
+                    arg_env.push(
+                        take(read_at(arg, InputKind::Arg, false))?
+                            .name
+                            .as_str()
+                            .into(),
+                    );
+                }
+                // In the order the inputs are declared, as `add` declares
+                // them: the order an agent is told nothing of.
+                secret_env.sort_by_key(|(at, _): &(usize, VariableName)| *at);
+                Given::Program(Program {
+                    command: stdio.command.clone(),
+                    args: args.to_vec(),
+                    env,
+                    secret_env: secret_env
+                        .into_iter()
+                        .map(|(_, variable)| variable)
+                        .collect(),
+                    arg_env,
+                })
+            }
+            Transport::Http(endpoint) | Transport::Sse(endpoint) => {
+                if !endpoint.withheld.is_empty() {
+                    return None;
+                }
+                let secret_at = |variable: &str| {
+                    inputs.iter().position(|input| {
+                        input.name.as_str() == variable && as_named(input, InputKind::Header, true)
+                    })
+                };
+                let mut headers = Vec::new();
+                let mut secret_headers = Vec::new();
+                let mut bearer = None;
+                for (key, value) in &endpoint.headers {
+                    let whole = value
+                        .strip_prefix('{')
+                        .and_then(|rest| rest.strip_suffix('}'))
+                        .and_then(secret_at);
+                    let token = (key == AUTHORIZATION)
+                        .then(|| value.strip_prefix("Bearer {")?.strip_suffix('}'))
+                        .flatten()
+                        .and_then(secret_at);
+                    match (whole, token) {
+                        (Some(at), _) => {
+                            secret_headers.push((
+                                at,
+                                key.clone(),
+                                take(Some(at))?.name.as_str().into(),
+                            ));
+                        }
+                        (None, Some(at)) if bearer.is_none() => {
+                            bearer = Some(VariableName::from(take(Some(at))?.name.as_str()));
+                        }
+                        _ if plain(value) => headers.push((key.clone(), value.clone())),
+                        _ => return None,
+                    }
+                }
+                let mut url_vars = Vec::new();
+                for (at, input) in inputs.iter().enumerate() {
+                    if input.kind != InputKind::UrlVar || input.secret || used[at] {
+                        continue;
+                    }
+                    let variable = input.env_var.clone()?;
+                    if !endpoint.url.contains(&written(&input.name)) {
+                        return None;
+                    }
+                    used[at] = true;
+                    url_vars.push((input.name.clone(), variable));
+                }
+                let url_read: Vec<String> =
+                    url_vars.iter().map(|(name, _)| written(name)).collect();
+                let others = placeholders
+                    .iter()
+                    .filter(|written| !url_read.contains(written));
+                if others
+                    .clone()
+                    .any(|written| endpoint.url.contains(written.as_str()))
+                {
+                    return None;
+                }
+                secret_headers.sort_by_key(|(at, _, _): &(usize, String, VariableName)| *at);
+                Given::Address(Address {
+                    url: endpoint.url.to_string(),
+                    events: matches!(definition.transport, Transport::Sse(_)),
+                    headers,
+                    secret_headers: secret_headers
+                        .into_iter()
+                        .map(|(_, header, variable)| (header, variable))
+                        .collect(),
+                    bearer,
+                    url_vars,
+                })
+            }
+        };
+        used.iter().all(|used| *used).then_some(given)
+    }
+
     /// The text of a definition of `name`, described as `description`,
     /// written from what is given: a template of its own, its comments
     /// saying what each part is for, as a marker's say what each key is,
@@ -167,6 +417,77 @@ impl Given {
         }
         text
     }
+}
+
+/// `text`, a definition's file, with how its server is started or reached
+/// and what is supplied for it, its `transport` and `inputs`, as `given`
+/// says them, written as `add` writes them; every other key, its name, its
+/// description, its provenance and its extras, kept as it was, the
+/// comments on them with it, through `toml_edit`.
+///
+/// What `edit` writes when it is told a server's transport rather than
+/// its contents: a form changing how a server is started has the options'
+/// words, and a definition written again whole from them would drop what
+/// the file holds beside them. Refused, with why, when the file does not
+/// read as a definition, whose transport cannot be told apart from the
+/// rest then.
+///
+/// `text` as it is when `given` says what it holds already, its
+/// `transport` and `inputs` the same values to TOML: a form starts from
+/// what [`Given::of`] reads back, `env` and `headers` in the order of
+/// their keys, which is no order an agent reads, so a change told nothing
+/// new rewrites nothing, a layout or a comment of somebody's in those
+/// tables included, and `edit` writes nothing.
+pub(crate) fn retransported(text: &str, given: &Given) -> Result<String, String> {
+    let before = McpDefinition::parse(text).map_err(|error| error.to_string())?;
+    let mut document: toml_edit::DocumentMut = text
+        .parse()
+        .map_err(|error: toml_edit::TomlError| error.to_string())?;
+    let rewritten = given.text(&before.name, &before.description);
+    let written: toml_edit::DocumentMut = rewritten
+        .parse()
+        .map_err(|error: toml_edit::TomlError| error.to_string())?;
+    if let (Ok(held), Ok(told)) = (started(text), started(&rewritten)) {
+        if held == told {
+            return Ok(text.to_owned());
+        }
+    }
+    // Where the transport stood, so the new one stands there, its inputs
+    // after it, and not below the extras, which a file reads as written
+    // after them: each table is given the one place, which `toml_edit`
+    // lays out in the order they are inserted, before any table after it.
+    let at = document
+        .get("transport")
+        .and_then(toml_edit::Item::as_table)
+        .and_then(toml_edit::Table::position)
+        .unwrap_or(isize::MAX);
+    document.remove("transport");
+    document.remove("inputs");
+    for key in ["transport", "inputs"] {
+        let Some(item) = written.get(key) else {
+            continue;
+        };
+        let mut item = item.clone();
+        match &mut item {
+            toml_edit::Item::Table(table) => table.set_position(Some(at)),
+            toml_edit::Item::ArrayOfTables(tables) => {
+                for table in tables.iter_mut() {
+                    table.set_position(Some(at));
+                }
+            }
+            toml_edit::Item::None | toml_edit::Item::Value(_) => {}
+        }
+        document.insert(key, item);
+    }
+    Ok(document.to_string())
+}
+
+/// What a definition's `text` says of how its server is started or reached
+/// and of what is supplied for it, its `transport` and `inputs`, as TOML
+/// reads their values: a table's keys in no order.
+fn started(text: &str) -> Result<(Option<toml::Value>, Option<toml::Value>), toml::de::Error> {
+    let mut table: toml::Table = toml::from_str(text)?;
+    Ok((table.remove("transport"), table.remove("inputs")))
 }
 
 /// An input a definition declares, as `add` writes it.

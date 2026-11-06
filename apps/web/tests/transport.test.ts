@@ -19,7 +19,7 @@ function serve(reply: () => Response | Promise<Response>): Sent[] {
 }
 
 /** A task to send: one install of one skill into one project. */
-const INSTALL: Task = { type: 'install', projects: ['app'], kind: 'skill', name: 'demo', from: null }
+const INSTALL: Task = { type: 'install', projects: ['app'], kind: 'skill', name: 'demo', from: null, yes: false }
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {

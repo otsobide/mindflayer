@@ -21,7 +21,7 @@
       "description": "An artifact a command is about to write, as the panel asks core to judge\nit ([`Query::Validate`]): tagged as a query is, `{\"type\": \"add\", ...}`.",
       "oneOf": [
         {
-          "description": "What `add` would write, by the fields an `add` task carries: a\ntemplate by its name, as `--template` takes it.",
+          "description": "What `add` would write, by the fields an `add` task carries: a\ntemplate by its name, as `--template` takes it, or for an MCP\nserver how it is started or reached, as `add mcp`'s options say it.",
           "type": "object",
           "properties": {
             "description": {
@@ -32,6 +32,17 @@
             },
             "name": {
               "type": "string"
+            },
+            "server": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Given"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
             },
             "template": {
               "type": [
@@ -72,6 +83,179 @@
             "type",
             "reference",
             "text"
+          ]
+        },
+        {
+          "description": "What `edit` would write into the MCP server `name` told `server`,\nhow it is started or reached, by the fields an `edit_server` task\ncarries.",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "server": {
+              "$ref": "#/$defs/Given"
+            },
+            "type": {
+              "type": "string",
+              "const": "edit_server"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name",
+            "server"
+          ]
+        }
+      ]
+    },
+    "Given": {
+      "description": "How an agent starts an MCP server, or reaches one: a program or an\naddress, never both.\n\nIn JSON, what a front end sends a command line's options as, and what\nthe snapshot says a definition is told as: tagged by `type` inside the\nobject, `{\"type\": \"program\", \"command\": \"npx\", ...}`, as a task is, each\npair as an array of its two words. A field it does not have is refused,\nas a task's is: it is a write, and one misspelled would be dropped.\nEvery secret is the name of the variable it is read from, and no field\nholds a secret's value, there being none for it to hold.",
+      "oneOf": [
+        {
+          "description": "A program an agent starts, `--command`.",
+          "type": "object",
+          "properties": {
+            "arg_env": {
+              "description": "Each argument read from a variable, after those written as they are\n(`--arg-env VAR`). No secret: a program's arguments are what a\nprocess list shows, and Codex reads no secret into one.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "args": {
+              "description": "What it is started with, in order (`--arg`), before every argument\nread from a variable.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "command": {
+              "description": "The program, as the agent finds it (`--command`).",
+              "type": "string"
+            },
+            "env": {
+              "description": "What its environment is given, each value as written (`--env\nK=V`), before every secret.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "secret_env": {
+              "description": "Each variable passed on to its environment under its own name, a\nsecret (`--secret-env VAR`): the shape every agent can give one,\nCodex's `env_vars` among them.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "program"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "command",
+            "args",
+            "env",
+            "secret_env",
+            "arg_env"
+          ]
+        },
+        {
+          "description": "A server at an address, `--url`.",
+          "type": "object",
+          "properties": {
+            "bearer": {
+              "description": "The variable `Authorization: Bearer` is followed by, a secret\n(`--bearer-env VAR`): what Codex reads one into\n(`bearer_token_env_var`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "events": {
+              "description": "Whether it is reached over server-sent events rather than streamable\nHTTP (`--sse`).",
+              "type": "boolean"
+            },
+            "headers": {
+              "description": "What every request carries, each value as written (`--header K=V`),\nbefore every secret.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "secret_headers": {
+              "description": "Each header whose whole value is read from a variable, a secret\n(`--secret-header H=VAR`): what Codex reads one into\n(`env_http_headers`).",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "address"
+            },
+            "url": {
+              "description": "Where the server is, as typed (`--url`): checked for a credential\nbefore anything is written, since the file would keep one, and\nnever kept or said whole once one is found.",
+              "type": "string"
+            },
+            "url_vars": {
+              "description": "Each part of the address read from a variable, by the name the\naddress writes between braces where it goes (`--url-var NAME=VAR`).\nNo secret: an address is what a log or a proxy shows, and Codex\nreads no secret into one.",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "url",
+            "events",
+            "headers",
+            "secret_headers",
+            "url_vars"
           ]
         }
       ]

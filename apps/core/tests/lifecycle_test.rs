@@ -9,6 +9,8 @@ use mindweaver_core::hash;
 use mindweaver_core::install::{self, InstallError, Standing};
 use mindweaver_core::ledger::{Ledger, SourceKind};
 use mindweaver_core::lifecycle::{self, Record, Target};
+use mindweaver_core::mcp::{Address, Given, McpDefinition, Program};
+use mindweaver_core::mother::McpMother;
 use mindweaver_core::AgentHomes;
 use mindweaver_core::{
     create, Agent, Catalog, Directories, Kind, LifecycleError, MindProject, Reference, Share,
@@ -1864,4 +1866,134 @@ fn a_record_is_kept_under_the_workspaces_spelling_of_a_project_whatever_the_syml
 
     assert_eq!(removed.copy.unwrap(), Record::Dropped);
     assert_eq!(recorded(), Vec::<String>::new());
+}
+
+// ---------------------------------------------------------------------------
+// Changing how a server is started
+// ---------------------------------------------------------------------------
+
+/// A workspace whose library holds the MCP server `github`, written by
+/// `add` from a program, and the definition's file.
+fn serving() -> (TempDir, WeaverWorkspace, PathBuf) {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
+    let added = lifecycle::add(
+        Some(&workspace),
+        &workspace.own(),
+        Kind::Mcp,
+        "github",
+        "GitHub's issues",
+        Start::Server(&McpMother::given_program()),
+    )
+    .unwrap();
+    let file = added.artifact.file();
+    (dir, workspace, file)
+}
+
+/// Change the server `typed` names in the library to what `given` says.
+fn retransport(
+    workspace: &WeaverWorkspace,
+    typed: &str,
+    given: &Given,
+) -> Result<lifecycle::Edited, LifecycleError> {
+    let own = workspace.own();
+    let target = lifecycle::find_to_change(Some(workspace), &own, &Reference::parse(typed))?;
+    lifecycle::retransport(Some(workspace), &own, &target, given)
+}
+
+#[test]
+fn a_server_is_given_another_transport_and_keeps_its_name_and_description() {
+    let (_dir, workspace, file) = serving();
+    let given = McpMother::given_address(false);
+
+    let edited = retransport(&workspace, "mcp:github", &given).unwrap();
+
+    assert!(edited.changed);
+    let definition = McpDefinition::parse(&fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(definition.name, "github");
+    assert_eq!(definition.description, "GitHub's issues");
+    let Given::Address(address) = &given else {
+        unreachable!("an address is given as one");
+    };
+    let mut read = address.clone();
+    read.headers.sort();
+    assert_eq!(Given::of(&definition), Some(Given::Address(read)));
+    // Told the same again, nothing changes.
+    assert!(
+        !retransport(&workspace, "mcp:github", &given)
+            .unwrap()
+            .changed
+    );
+}
+
+#[test]
+fn a_server_told_back_what_it_holds_is_left_as_it_is_whatever_order_its_keys_were_written_in() {
+    let dir = TempDir::new().unwrap();
+    let (workspace, _) = WeaverWorkspace::init(dir.path()).unwrap();
+    let given = Given::Program(Program {
+        command: String::from("npx"),
+        env: vec![
+            (String::from("B"), String::from("1")),
+            (String::from("A"), String::from("2")),
+        ],
+        ..Program::default()
+    });
+    let added = lifecycle::add(
+        Some(&workspace),
+        &workspace.own(),
+        Kind::Mcp,
+        "acme",
+        "Acme's tools",
+        Start::Server(&given),
+    )
+    .unwrap();
+    let file = added.artifact.file();
+    let before = fs::read_to_string(&file).unwrap();
+    let read = Given::of(&McpDefinition::parse(&before).unwrap()).unwrap();
+
+    let edited = retransport(&workspace, "mcp:acme", &read).unwrap();
+
+    assert!(!edited.changed);
+    assert_eq!(fs::read_to_string(&file).unwrap(), before);
+}
+
+#[test]
+fn a_transport_that_would_be_invalid_or_for_another_kind_is_refused_and_nothing_written() {
+    let (_dir, workspace, file) = serving();
+    create(&workspace.own(), Kind::Skill, "deploy", "Ship it").unwrap();
+    let before = fs::read_to_string(&file).unwrap();
+    let (prefix, token) = McpMother::tokens().remove(0);
+    let (literal, _) = McpMother::given_with_literal("env", &token);
+    let credentialed = Given::Address(Address {
+        url: format!("https://me:{token}@example.com/mcp"),
+        ..Address::default()
+    });
+
+    let (_, unsayable, _) = McpMother::given_unsayable().remove(0);
+
+    for (typed, given, code) in [
+        ("mcp:github", literal, "edit_contents_unfit"),
+        ("mcp:github", credentialed, "add_mcp_url_userinfo"),
+        ("mcp:github", unsayable, "add_mcp_key_unsayable"),
+        ("skill:deploy", McpMother::given(), "edit_transport_not_mcp"),
+    ] {
+        let refused = retransport(&workspace, typed, &given).unwrap_err();
+
+        assert_eq!(refused.code(), code, "{refused}");
+        assert!(
+            !refused.to_string().contains(&token[prefix.len()..]),
+            "{refused}"
+        );
+    }
+    assert_eq!(fs::read_to_string(&file).unwrap(), before);
+}
+
+#[test]
+fn a_definition_that_does_not_read_is_not_given_a_transport() {
+    let (_dir, workspace, file) = serving();
+    fs::write(&file, "format = 1\nname = \"github\"\ndescription = [\n").unwrap();
+
+    let refused = retransport(&workspace, "mcp:github", &McpMother::given()).unwrap_err();
+
+    assert_eq!(refused.code(), "edit_server_unreadable", "{refused}");
 }

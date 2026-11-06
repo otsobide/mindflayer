@@ -130,6 +130,7 @@
         "failures": [],
         "holders": [],
         "origin": "workspace",
+        "servers": [],
         "templates": [
           {
             "kind": "skill",

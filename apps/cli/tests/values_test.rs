@@ -93,6 +93,7 @@ fn a_description_reaches_the_file_as_it_was_typed() {
                 name: name.clone(),
                 description: description.clone(),
                 template: None,
+                server: None,
             };
             let lines = task.commands();
 
@@ -143,6 +144,7 @@ fn a_template_named_by_a_value_is_looked_for_by_that_name_and_nothing_is_added()
                 name: fresh(kind, &[]),
                 description: String::from("Does it"),
                 template: Some(template.clone()),
+                server: None,
             };
             let lines = task.commands();
 

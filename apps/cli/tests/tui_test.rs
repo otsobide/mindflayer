@@ -639,6 +639,7 @@ fn adding_in_the_tui_is_mind_add() {
             name: String::from("deploy"),
             description: String::from("Ship the service"),
             template: None,
+            server: None,
         })
     );
     assert!(dir.path().join("alpha/skills/deploy/SKILL.md").is_file());
@@ -1898,6 +1899,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             name: String::from("deploy"),
             description: awkward.clone(),
             template: None,
+            server: None,
         },
         Task::Show {
             holder: Holder::Project(String::from("alpha")),
@@ -1921,6 +1923,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             name: String::from("git/no-force-push"),
             description: String::from("Never"),
             template: Some(String::from("policy")),
+            server: None,
         },
         Task::Edit {
             holder: Holder::Project(String::from("-odd")),
@@ -1946,6 +1949,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             name: String::from("commit-style"),
             description: String::from("Shared"),
             template: Some(String::from("full")),
+            server: None,
         },
         Task::Edit {
             holder: Holder::Workspace,
@@ -1989,6 +1993,7 @@ fn every_task_the_tui_runs_is_a_line_the_binaries_accept() {
             name: String::from("deploy"),
             description: awkward.clone(),
             template: Some(String::from("-weird")),
+            server: None,
         },
         Task::Settings {
             holder: Holder::Project(String::from("alpha")),

@@ -265,3 +265,31 @@ fn a_template_of_the_projects_own_is_listed_and_copied_whole() {
         "- [ ] page someone\n"
     );
 }
+
+#[test]
+fn edit_writes_how_a_server_is_reached_again_and_keeps_its_name_and_description() {
+    let scenario = Scenario::projects(&["collapse"]);
+    scenario.given(
+        "~/Projects",
+        "mindweaver add mcp linear \"Linear's issues\" --url https://mcp.linear.app/mcp --bearer-env LINEAR_API_KEY",
+    );
+
+    scenario
+        .run(
+            "~/Projects",
+            "mindweaver edit mcp:linear --url https://mcp.linear.app/sse --sse --bearer-env LINEAR_API_KEY",
+        )
+        .succeeds()
+        .prints("edited mcp linear: ok\n")
+        .quiet();
+
+    let written = scenario.read("~/Projects/.mindweaver/library/mcp/linear.toml");
+    for kept in [
+        "name = \"linear\"\n",
+        "description = \"Linear's issues\"\n",
+        "type = \"sse\"\nurl = \"https://mcp.linear.app/sse\"\n",
+        "headers = { Authorization = \"Bearer {LINEAR_API_KEY}\" }\n",
+    ] {
+        assert!(written.contains(kept), "{written}");
+    }
+}

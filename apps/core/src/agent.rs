@@ -196,7 +196,14 @@ impl Agent {
 
 /// What an agent asks before it starts an MCP server its project's config
 /// file gives it ([`Agent::starts_a_server`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// By its name in snake_case in JSON, `"once_approved"`: a word of core's
+/// a front end says in words of its own, as it says a state, and no word a
+/// command line takes, so derived.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
 pub enum Starts {
     /// Once somebody approves the project's servers when it asks; a run
     /// with no one to ask starts them all the same.

@@ -358,22 +358,7 @@ fn plan_mcp(
             })?
         }
         Start::Server(given) => {
-            // The file would keep whatever the address was typed with, so
-            // a credential in it is refused before a byte is written, as a
-            // gather refuses one, and said without it.
-            if let Given::Address(address) = given {
-                if carries_credentials(&address.url) {
-                    return Err(CreateError::UrlUserinfo {
-                        url: Redacted::new(&address.url),
-                    });
-                }
-            }
-            if let Some(repeated) = given.repeated() {
-                return Err(CreateError::KeyRepeated {
-                    table: repeated.table,
-                    key: repeated.key,
-                });
-            }
+            writable(given)?;
             given.text(name, description)
         }
     };
@@ -400,6 +385,53 @@ fn plan_mcp(
         file,
         text,
     })
+}
+
+/// Refuse what a command line told of a server's transport that no
+/// definition can be written from as given: an address typed with
+/// something before its host, which the file would keep, so a credential
+/// in it is refused before a byte is written, as a gather refuses one, and
+/// said without it; a name given beside a value that holds `=` ([`sayable`]);
+/// and a key of `env` or `headers` given twice, which no TOML file holds.
+///
+/// What `add` asks before it writes a definition from the options, and
+/// `edit` before it writes a definition's transport again from them
+/// ([`crate::lifecycle::retransport`]), so the two refuse alike.
+pub(crate) fn writable(given: &Given) -> Result<(), CreateError> {
+    if let Given::Address(address) = given {
+        if carries_credentials(&address.url) {
+            return Err(CreateError::UrlUserinfo {
+                url: Redacted::new(&address.url),
+            });
+        }
+    }
+    sayable(given)?;
+    if let Some(repeated) = given.repeated() {
+        return Err(CreateError::KeyRepeated {
+            table: repeated.table,
+            key: repeated.key,
+        });
+    }
+    Ok(())
+}
+
+/// Refuse a server's options holding a name a command line cannot say as
+/// given, one beside a value that holds `=` ([`Given::unsayable`]): which
+/// only a request can send, and which its line would say as another pair.
+///
+/// Asked of a draft as `add` and `edit` ask it ([`writable`]), and of a
+/// task by the path policy before its line is built
+/// ([`crate::policy::sayable`]), so the draft refuses what the task would,
+/// by the same code, and no line is run that writes a pair other than the
+/// one judged.
+pub(crate) fn sayable(given: &Given) -> Result<(), CreateError> {
+    match given.unsayable() {
+        Some(unsayable) => Err(CreateError::KeyUnsayable {
+            option: unsayable.option,
+            key: unsayable.key,
+        }),
+        None => Ok(()),
+    }
 }
 
 /// A skill: its own directory, holding a manifest with front matter.
@@ -787,6 +819,15 @@ pub enum CreateError {
         key_said(.key)
     )]
     KeyRepeated { table: &'static str, key: String },
+    /// A name given beside a value that holds `=`, which the option that
+    /// takes the pair ends at the first one: said by what it starts with
+    /// alone when it looks like a token.
+    #[error(
+        "{} holds `=`, where `{option} NAME=VALUE` ends the name, so no command line can give \
+         it; no variable's, header's or input's name holds one",
+        key_said(.key)
+    )]
+    KeyUnsayable { option: &'static str, key: String },
     /// An address typed with something before its host, its userinfo,
     /// which the file would keep: said without it, and as the address
     /// alone when what is left of it still looks like a token.
@@ -848,6 +889,7 @@ codes!(CreateError {
     Self::McpUnscaffolded { .. } => "add_mcp_unscaffolded",
     Self::TransportNotMcp { .. } => "add_transport_not_mcp",
     Self::KeyRepeated { .. } => "add_mcp_key_repeated",
+    Self::KeyUnsayable { .. } => "add_mcp_key_unsayable",
     Self::UrlUserinfo { .. } => "add_mcp_url_userinfo",
     Self::Definition { .. } => "add_mcp_unfit",
 } carried {

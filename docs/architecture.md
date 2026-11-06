@@ -1203,16 +1203,22 @@ beside it named as it is in another case (`add_name_unfit`), then the
 definition as it would read (`add_mcp_unfit`, every issue `validate` would
 call it invalid for, a token said by where it is and what it starts with,
 never whole): `add` refuses exactly what `validate` would call invalid,
-with no copy of a rule. Three things beside it are no definition's to
+with no copy of a rule. Four things beside it are no definition's to
 judge, and refused with codes of their own: a transport given for a skill
 or a rule (`add_transport_not_mcp`); a key of `env` or `headers` given
 twice, by two options or one twice, which no TOML file holds
 (`add_mcp_key_repeated`, as given, so two headers in another case are two
-keys, as the file and `validate` hold them); and an address typed with
-something before its host (`add_mcp_url_userinfo`, by
-`url::carries_credentials`, the test a gather refuses a URL by), which the
-file would keep though the definition never does, said without it. Since
-no definition holds either for `validate` to judge, each is looked through
+keys, as the file and `validate` hold them); a name given beside a value
+that holds `=` (`add_mcp_key_unsayable`, `Given::unsayable`), which no
+command line gives, since each option of a pair ends the name at the
+first one, but a request can, and its line would then say another pair
+than the one its draft was judged as, so the path policy refuses such a
+task before its line is built (`policy::sayable`, by the same code); and
+an address typed with something before its host (`add_mcp_url_userinfo`,
+by `url::carries_credentials`, the test a gather refuses a URL by), which
+the file would keep though the definition never does, said without it.
+Since no definition holds a key or an address so for `validate` to
+judge, each is looked through
 for a token as `validate` looks through a value (`mcp::token_in`): a key
 that looks like one is said by what it starts with, and so is an address
 whose query or path still holds one once its userinfo is gone, said as the
@@ -1237,9 +1243,41 @@ The TUI's add form steps through the kinds `add` writes from a name and a
 description alone (`create::scaffolds`), which a server, needing how it is
 started, is not: a form of fields for a transport is a form of its own, and
 offering the kind with a name and a description would offer a choice only
-to refuse it. The panel's page adding one is #96's ([open
-questions](#open-questions)), and its task the same `add` line, so it
-writes one from a template already and says core's refusal otherwise.
+to refuse it. The panel's MCP page has that form (#97, [its
+views](#its-views)), and its task is the same `add` line told the options
+(`Task::Add`'s `server`, an `mcp::Given`), each value after its option as
+every value of a task is; its draft is judged as the line would write it
+(`draft::added` told the `Given`).
+
+`edit` changes how a server is started or reached from the same options
+(`mindweaver edit mcp:<name> --command ...`, `Editing`'s `server`, the
+`ServerOptions` `add` flattens): its `transport` and `inputs` are written
+again as `add` writes them, and every other key of the file, its name,
+description, provenance and extras with their comments, is kept, through
+`toml_edit` (`mcp::retransported`, the new tables put where the old
+transport stood), then held to every rule contents given whole are
+(`lifecycle::retransport`, through `replace_contents`), after `add`'s own
+checks of a credential in the address and a key given twice
+(`create::writable`), so the two refuse alike. Refused for another kind
+(`edit_transport_not_mcp`), and for a definition that does not read
+(`edit_server_unreadable`), whose transport cannot be told from the rest.
+The options rather than a file of TOML, so a front end with a form sends
+what the form asks and never writes the format itself; and the transport
+and inputs whole rather than an option at a time, so a form shows the
+server as it is and sends it as it should be. What it starts from is the
+definition read back as the options would say it (`Given::of`), none when
+it holds what no option says, an input described or required, a program's
+folder, a secret under a name of its own, or an argument read from a
+variable before one written as it is: a form starting from part of it
+would write the rest away, so such a definition is changed as text. It
+reads `env` and `headers` back in the order of their keys, the order the
+definition holds them in, which is no order an agent reads, so options
+saying what the file's `transport` and `inputs` hold already, as TOML
+reads their values, leave the file as it is, and `edit` writes nothing:
+a form changed in nothing would otherwise rewrite a file `add` wrote in
+the order typed, and say it was edited. The grammar refuses the options beside an editor or contents, as beside a
+template, through the group clap gives `ServerOptions`, which `--template`,
+`--editor` and `--contents` each conflict with.
 
 ### Adding a third kind
 
@@ -2454,6 +2492,26 @@ type derives `Serialize` from the start:
   error goes out through `code::Said`. Handed over by the snapshot too, as
   `doctor`, a name added, which moves neither `ENVELOPE_VERSION` nor
   `view::FORMAT`.
+- **Carried for the panel by #97**: each of the library's MCP servers as
+  each agent would be given it (`view::LibraryServer`, and for each agent
+  a `view::GivenTo`, the agent by its name, what it is refused or would be
+  written without a `code::Said` each, what its entry would run or reach
+  a `mcp::Running`, whether it reaches an address and the line as
+  `mcp::Runs` displays it, and what it asks before it starts one an
+  `agent::Starts`), as `servers`, a name added to the snapshot's
+  `library`, and so to what `list --json` prints of it, which moves
+  neither `ENVELOPE_VERSION` nor `view::FORMAT`. `Starts` is derived, by
+  its variant in snake_case (`once_approved`, `in_a_trusted_project`,
+  `unasked`): a word of core's a front end says in words of its own, and
+  no word a command line takes. How a server is started or reached as
+  `add mcp`'s options say it (`mcp::Given`, `given` on a server, none when
+  no option says all of it) serializes both ways, since the panel sends
+  it back in a task and a draft: tagged by `type` inside the object, each
+  pair an array of its two words, each secret the name of the variable it
+  is read from, and a field it does not name refused. And the backend's
+  `Asking`, each install of a plan that waits for a yes, as `asks` on
+  `Planned`: the task it confirms by its place, the lines it was shown
+  with, and the task carrying the yes.
 - **Not yet**, being older than the rule and handed to no front end so far:
   the ledger's record of an install (`InstallRecord`), and what an update or
   a change of agents would do as each plans it (`update::Plan`,
@@ -2628,7 +2686,16 @@ read, built and ordered in core from the read types the commands print:
   is `workspace`: an install recorded before origins were kept names none,
   and is a copy of the library's own all the same while no loaded
   workspace offers its name. A front end comparing origins would miss it,
-  and would hold a rule core holds already;
+  and would hold a rule core holds already. Beside them, each of its MCP
+  servers whose definition reads (`servers`, `view::LibraryServer`): what
+  `add mcp`'s options would say of it (`given`, `mcp::Given::of`, none when
+  it holds what no option says), and for each agent what it cannot be
+  given, as `show` says it, what its entry would run or reach, as the
+  entry spells it (`mcp::Running`, the line `mcp::Runs` displays, read off
+  each renderer's `entry`, OpenCode's in the shape D-12 writes), and what it
+  asks before it starts one (`Agent::starts_a_server`, as its word): what
+  the panel's MCP page draws, rather than the definition for the panel to
+  put through three agents' syntaxes and a shell's quoting;
 - each project its registry names, in marker order, a stale entry with why
   it opens none, and a second spelling of one directory as a project of its
   own, since each entry is what `unlink` is given, as the TUI has always
@@ -3834,7 +3901,11 @@ and is given none (`no_target`).
   source offering a name twice until then. The library's own is written as
   a skill is: it is the workspace's own, written by whoever keeps it. Asking of
   every server was the alternative, and would ask of the library's own
-  what a skill is never asked.
+  what a skill is never asked. The panel asks it on the matrix, as the
+  install screen does ([its changes](#its-changes)): a plan hands each such
+  install's lines beside its task (`Planned::asks`), and the task carrying
+  the yes, which the panel sends in its place only once those lines are
+  ticked as read.
 - **The writers hold the lock.** An install and an uninstall hold the
   workspace's lock from before the record is read until it is written, as
   `install::install` does, an update writing through the body that takes
@@ -4785,10 +4856,10 @@ the screen is no reason to change the rest without asking again.
   box cut to the screen would ask a yes of commands nobody was shown. A
   line without `--yes`, which would write nothing and say so under its
   line, was the alternative: the confirmation would have been asked for
-  nothing. The panel's matrix sends
-  no yes, the field being no JSON of a task: it shows no agent's line yet
-  (#97), so a server from elsewhere ticked there runs as the dry run its
-  line is, saying what it would give each agent.
+  nothing. The panel's matrix shows the same lines (#97), laid out by the
+  same function (`install::foreseen`, under `install::heading`), and sends
+  the yes only with the task its confirmation carries ([its
+  changes](#its-changes)).
 
 The right column holds every kind's offers, filtered to one kind at a time:
 `tab` shows the next (`Screen::kind`), skills first, then rules and MCP
@@ -5199,12 +5270,14 @@ already, so a project is not read twice. A name added, so `view::FORMAT`
 stays; `health` is not told by it, since what `health` holds is a verdict a
 command answers, and weighing doctor's findings in, most of them about
 files Mindweaver does not own, would change what it holds, which moves the
-format: #97 shows the findings beside it. The TUI marks a project doctor
+format: the panel's MCP page shows the findings of each project holding a
+server beside it (#97). The TUI marks a project doctor
 finds something in with `✚` and how many, and its pane says each with its
 fix, in a strip of its own beside the one of what its agents do not see
 ([the TUI](#the-tui)), and what doctor could not read to tell in the one of
 what could not be read, counted with it, as `mindweaver doctor` says it on
-stderr; the panel draws nothing of them yet. What the
+stderr; the panel draws them on its MCP page, for each project holding a
+server. What the
 snapshot now reads, what doctor reads, is watched as everything it reads is
 (`watch::watched`): every folder an agent reads skills from in a project
 and its `.mind/tmp`, under the project's scope, and the agents' own files
@@ -7178,9 +7251,9 @@ relative to where the document is served, and as `info.version`.
 
 ### Its views
 
-Nine pages draw the snapshot ([the read model](#the-read-model)), a tenth
-a scan beside it and an eleventh what an update would do, each a file under
-`src/pages`:
+Ten pages draw the snapshot ([the read model](#the-read-model)), an
+eleventh a scan beside it and a twelfth what an update would do, each a
+file under `src/pages`:
 
 - **The overview** (`/`) names the workspace, where it is and why that one,
   counts what it holds from the snapshot's `summary`, a card for every kind
@@ -7239,6 +7312,22 @@ a scan beside it and an eleventh what an update would do, each a file under
   copy, each with its state, agents and targets, and below, its removal
   everywhere, dry run first ([its changes](#its-changes)). Named in the
   query, as a project is, since a rule's name is a route.
+- **The MCP page** (`/mcp?edit=...`), beside the library in the sidebar,
+  draws each of the library's servers as the snapshot carries it
+  (`library.servers`): for each agent whether it is given it, in words, an
+  icon and a colour (`given whole`, `given in part` for what its entry is
+  written without, `refused`), each refusal and each thing dropped by its
+  code and in core's words, what it would run or reach as its entry would
+  spell it, and what it asks before it starts one, the word core says
+  (`Starts`) put in the words the install's line says it in, as a state's
+  look is the panel's; and for each project holding it (`library.holders`)
+  how its copy stands and what doctor finds there (`doctor`, by the
+  project's entry), Codex's trust among it. A filter of the snapshot's
+  lists, as the library's holders are. Below, its form adds a server, or
+  changes how the one the address names is started
+  (`ServerForm.vue`, [its changes](#its-changes)), started from what core
+  read it back as (`given`); one whose definition no form can say offers
+  its file's editor instead.
 - **Loads** (`/loads`), beside the library and the shelf in the sidebar,
   the third place an offer comes from, lists every workspace it loads, with
   its entry, where it is, its `origin`, why it does not open, and what it
@@ -7553,6 +7642,50 @@ What the pages offer:
 - **A save, an addition and a rename of one of the library's own, and an
   adoption from a project's page**, each a task the server previews like
   any other ([authoring in the library](#authoring-in-the-library)).
+- **An MCP server added, or how one is started changed, from the MCP
+  page's form**: `Task::Add` with its `server`, `mindweaver add [options]
+  mcp <name> <description>`, or `Task::EditServer`, `mindweaver edit
+  [options] mcp:<name>`, the form's transport and each of its fields an
+  option's value as an `mcp::Given` holds it, a row of the form a value,
+  nothing judged or left out in TypeScript. Judged as it is typed by
+  core, a quarter of a second after the last key (`Draft::Add`'s `server`,
+  `Draft::EditServer`), so what the line would refuse is said in its words
+  and by its code before it is sent, and again by the line when it runs. A
+  secret is the name of the variable an agent reads it from, each field in
+  a secret's place labelled so, with a note that no value is stored: a
+  `Given` holds a secret as that name alone, so no field in a secret's
+  place sends a value, which a test of the request holds it to. A setting
+  of the environment and a header are values `add mcp` writes as typed
+  (`--env`, `--header`), which the form says no secret goes in: core
+  refuses one that looks like a token, and nothing else tells a secret
+  typed there from a setting, as the options' own note says.
+- **An MCP server that asks first, confirmed on the matrix**, as the
+  install screen confirms it ([installing an MCP
+  server](#installing-an-mcp-server)). A plan answers, beside its tasks,
+  each install that waits for a yes (`Planned::asks`, `Asking`): which of
+  the tasks it is, what it would give each agent of each project, in the
+  lines the install screen's confirmation shows (`install::foreseen` of
+  core's `install::mcp::preview`, under a heading a project), and the task
+  carrying the yes (`Task::confirmed`). The page draws the lines under
+  what runs, with a box to say yes once they are read; until it is ticked
+  the plan's own task goes, whose line installs nothing and says what it
+  would, and once ticked the confirmation's task goes in its place
+  (`batchOf`, given what was said yes to), its line `--yes`, previewed and
+  asked like any other. A yes is to that task as its lines were shown
+  (`sameAsking`): a plan is asked for again whenever the disk changes, a
+  loaded workspace's definition among it, so lines that changed since ask
+  again, and a yes the plan no longer asks for, a box unmarked, is let
+  go. `Task::Install`'s `yes` is JSON for that alone: a
+  plan's task carries `false`, the palette's install too, and the panel
+  sets it on no task of its own, sending only what a plan handed it. A yes
+  sent with any other install is refused by the path policy before a line
+  is built (`policy::confirmed`, `install_yes_unasked`): the panel's
+  backend holds a request to the server's own rule of which install asks
+  first (`install::asks_first`), as every value a browser sends is held,
+  and one left out is none, as before a yes could be sent. Handing the yes
+  over beside the lines rather than letting the panel set it was the
+  choice: which install waits for one is core's, and the confirmation is
+  the one place a yes may come from.
 - **A load and an unload, from the page of loads**: a workspace this
   machine knows by the path the snapshot lists it by, offered only where
   core says the workspace can load it (`loadable`), or any other by the
@@ -7939,7 +8072,17 @@ refuses; `validated.json` what `mindweaver validate` says of the library once
 word for word; and `authored.json` each change authoring sends, previewed
 and run each on the workspace as it was built, a save, a save once the file
 changed on disk since it was read, an addition from a template, a rename
-and an adoption. So
+and an adoption. `serving.json` is a workspace keeping MCP servers, a
+program, an address and one reached over server-sent events, loading a
+team's server that waits for a yes, and linking a project for every agent
+that received one; `servers.json` what its MCP page and its matrix ask of
+it, a server to add judged fit and one whose secret is read from a
+variable no agent can refer to, `github` given another transport, and
+plans of the team's server and of one of the library's own; and
+`served.json` a server added, one changed, and the team's server
+installed by the plan's task, which writes nothing, then by its
+confirmation's. No token is in any of them: a fixture is a file of the
+repository, so what core refuses there is a variable's name. So
 the panel's tests render what core says rather than what a person drew,
 and a field the snapshot adds, renames or fills differently reaches them.
 What differs between runs is pinned: the temporary folder reads as
@@ -8135,6 +8278,18 @@ one from their fixture. That the ledger a batch leaves is the one its
 lines leave run in the CLI, every hash and action logged, is the backend
 suite's to hold (`backend_test.rs`), which reads it.
 
+`e2e/mcp.spec.ts` takes `serveable`, a workspace linking one project for
+Claude, Codex and OpenCode, and serves it with a variable set in its
+`mindweaver ui`'s environment alone (`variables`, handed to `serve`): an
+MCP server's secret, its value drawn as the run starts, never a token
+written in the repository. A server added from the MCP page's form, its
+secret that variable's name, and ticked into the project on the matrix,
+each line shown first, has to be in `.mcp.json`, `.codex/config.toml` and
+`opencode.json`, each referring to the variable in its agent's own way,
+and the value in none of them nor in the library; the run's own warning
+says Codex reads it only in a project it trusts, by its code; and the twin
+given the same lines has to hold the same files.
+
 `e2e/palette.spec.ts` takes `assignable` too, and drives the palette with
 the keyboard alone once the sidebar's **Search** has the focus: opened by
 its keys, it has to hold the focus through Tab and Shift+Tab,
@@ -8251,7 +8406,9 @@ The workspace it shows is `e2e/demo.ts`'s rather than the suite's fixture,
 which is made to be compared and looks it: six projects with plausible
 names, each a repository `git init` made and `mind init` made a project,
 some local and some shared, for different agents; a library of two skills
-and three rules, with bodies to render; a shelf gathered from a repository
+and three rules, with bodies to render, and two MCP servers, a program
+started with a secret, installed into `billing-api`, and an address
+reached with a bearer token, for the MCP page; a shelf gathered from a repository
 beside the workspace, made with the git binary under a fixed author and
 date and no configuration of the user's; installs from both, three of them
 outdated, two by a second gather and one by an edit of the library's own,
@@ -11826,11 +11983,12 @@ it once as it closes.
   each hold another problem are repaired in an editor or by hand
   ([which names a server is given](#which-names-an-mcp-server-is-given)),
   and the panel has neither: `edit --contents` and `rename` refuse each,
-  so removing one is all it can do. Whether a change of contents passes
-  over a problem those contents cannot change (a clash, or a reserved name
-  a hand-made file is filed under), as a rule's contents are never refused
-  for its route, waits for the panel's page for MCP servers, which is
-  where it would be met.
+  so removing one is all it can do. The MCP page's form (#97) changes a
+  server's transport through the same rules (`lifecycle::retransport`), so
+  it refuses such a pair too, by the clash. Whether a change of contents
+  passes over a problem those contents cannot change (a clash, or a
+  reserved name a hand-made file is filed under), as a rule's contents are
+  never refused for its route, is still open.
 - **Names that clash by case across holders.** Two definitions clash by
   case only in one folder: a project's own `github` and the library's
   `GitHub` are told nothing of each other until an install (#93) would put
@@ -11846,25 +12004,24 @@ it once as it closes.
   (`input_repeated`), where a definition written by hand names them apart.
   Nor does `add` say an input is `required`, a secret argument or one in
   an address, a program's `cwd`, provenance or extras: each is written by
-  hand, and a front end with a form of its own for them (#96) is the place
-  a need for any is met.
-- **What the panel draws of an MCP server.** The snapshot carries the kind
-  as it carries every kind, and no view changed for it, but three pages
-  draw it as they draw the others where it is not: an artifact's page puts
-  its definition, which is TOML, through the markdown renderer, as the body
-  a skill's front matter is cut from, and lays out none of what `show`
-  says of its transport and inputs (`reading::ShownTransport`,
-  `ShownInput`, which no query of the panel's answers yet); the page
-  adding one offers `mcp` among the kinds, writes one from a template of
-  the kind, and otherwise says core's refusal (`add_mcp_unscaffolded`)
-  once a name is typed, since its task (`Task::Add`) carries no transport;
-  and the projects table gains a column, which at the README's width
-  pushes its `stale` column out of view. Each wants a view of its own, or
-  a word from core (whether a kind's file is markdown, which kinds `add`
-  writes from a name and a description alone, `create::scaffolds`), with
-  #96, rather than a special case here: a transport the page asks for goes
-  to the backend in the task, for the task module to spell as `add mcp`'s
-  options, each value after its option as every value is.
+  hand. The MCP page's form (#97) says what the options say and nothing
+  more, so a definition holding any of them is not one it starts from
+  (`Given::of`), and is changed in its file; a form saying more needs the
+  options to say it first.
+- **What the panel draws of an MCP server elsewhere.** The MCP page (#97)
+  draws each server as each agent would be given it and adds and changes
+  one from a form, but three pages still draw it as they draw the other
+  kinds where it is not one: an artifact's page puts its definition, which
+  is TOML, through the markdown renderer, as the body a skill's front
+  matter is cut from; the page adding one of the library's own offers
+  `mcp` among the kinds, writes one from a template of the kind, and
+  otherwise says core's refusal (`add_mcp_unscaffolded`) once a name is
+  typed, where the MCP page's form would; and the projects table gains a
+  column, which at the README's width pushes its `stale` column out of
+  view. Each wants a word from core (whether a kind's file is markdown,
+  which kinds `add` writes from a name and a description alone,
+  `create::scaffolds`) rather than a special case of the kind's name in
+  TypeScript.
 - **An imported value holding its own placeholder as text.** Format 1 has
   no escape, and needs none while a definition's author chooses its inputs'
   names ([what an MCP server's definition
