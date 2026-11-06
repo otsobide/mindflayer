@@ -349,6 +349,8 @@ export type CoreCode =
   | "ambiguous_project"
   | "scan_folder_unlisted"
   | "source_not_found"
+  | "source_folder_not_its_own"
+  | "source_folder_unremoved"
   | "template_name_invalid"
   | "unknown_template"
   | "template_wrong_kind"

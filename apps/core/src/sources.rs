@@ -1,20 +1,27 @@
 //! A gathered source's own changes, each a source named as `gather list`
-//! shows it and `--from` takes it (#100): renaming one, and gathering some
-//! again. Listing them is the ledger's
+//! shows it and `--from` takes it (#100): renaming one, gathering some
+//! again, and removing one with what it put on the shelf. Listing them is
+//! the ledger's
 //! ([`LedgerStore::source_listing`](crate::port::LedgerStore::source_listing)).
 //!
 //! A source is found by the name it is called, word for word, among those
 //! the ledger keeps, never by its URL or its folder: the name is what a
 //! listing shows, and one word a person types for one source (D-13).
 
+use std::fs;
+use std::io;
+use std::path::PathBuf;
+
 use thiserror::Error;
 
 use crate::code::codes;
 use crate::gather::{self, GatherError, Report, Request, Watch};
+use crate::install;
+use crate::kind::Kind;
 use crate::ledger::{Ledger, LedgerError, Source};
 use crate::lock::LockError;
-use crate::value::{Origin, SourceName};
-use crate::workspace::WeaverWorkspace;
+use crate::value::{ArtifactName, Origin, SourceName};
+use crate::workspace::{same_directory, MindProject, WeaverWorkspace, WorkspaceError};
 
 /// The source called `name`, as the ledger records it.
 ///
@@ -157,6 +164,159 @@ pub fn update(
     Ok(updated)
 }
 
+/// One installation of what a source supplied, in a project the workspace
+/// links: what removing the source leaves there, recorded and orphaned.
+#[derive(Debug)]
+pub struct FromIt {
+    pub project: MindProject,
+    pub kind: Kind,
+    pub name: ArtifactName,
+}
+
+/// What removing a source would do ([`plan_removal`]), or did ([`remove`]).
+#[derive(Debug)]
+pub struct Removal {
+    /// The source, as the ledger recorded it.
+    pub source: Source,
+    /// How many artifacts it holds on the shelf, whose records go with it.
+    pub artifacts: usize,
+    /// Its folders that are there, which removing it deletes: its clone
+    /// under the cache, then its folder on the shelf. Nothing else is ever
+    /// among them ([`SourceError::FolderNotItsOwn`]).
+    pub folders: Vec<PathBuf>,
+    /// What the projects the workspace links installed from it, in the
+    /// order it links them: each keeps its record and its copies, which
+    /// nothing offers once the source is gone, so each reads as orphaned.
+    pub installed: Vec<FromIt>,
+    /// Each project the workspace links that cannot be opened: what it
+    /// installed from the source cannot be told, so it is said beside the
+    /// rest.
+    pub unread: Vec<WorkspaceError>,
+}
+
+/// What removing the source called `name` would do: the folders it would
+/// delete and what the projects the workspace links installed from it,
+/// nothing written.
+pub fn plan_removal(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    name: &str,
+) -> Result<Removal, SourceError> {
+    let source = named(ledger, name)?;
+    let folders = folders_of(workspace, &source)?;
+    let artifacts = ledger
+        .gathered()?
+        .iter()
+        .filter(|gathered| gathered.source.id == source.id)
+        .count();
+    let (projects, unread) = workspace.projects();
+    let mut installed = Vec::new();
+    let mut seen: Vec<MindProject> = Vec::new();
+    for project in projects {
+        // A project linked twice, by two spellings of its folder, is one
+        // project's copies, said once.
+        if seen
+            .iter()
+            .any(|other| same_directory(other.root(), project.root()))
+        {
+            continue;
+        }
+        let entry = install::entry_for_root(workspace, project.root());
+        let mut from_it = Vec::new();
+        for kind in Kind::ALL {
+            for record in ledger.records(&entry, kind)? {
+                if record.source_id == Some(source.id) {
+                    from_it.push((kind, record.name));
+                }
+            }
+        }
+        installed.extend(from_it.into_iter().map(|(kind, name)| FromIt {
+            project: project.clone(),
+            kind,
+            name,
+        }));
+        seen.push(project);
+    }
+    Ok(Removal {
+        source,
+        artifacts,
+        folders,
+        installed,
+        unread,
+    })
+}
+
+/// Remove the source called `name`: its clone, its folder on the shelf and
+/// its rows, and with them the rows of what it supplied
+/// ([`plan_removal`], done).
+///
+/// Planned again under the workspace's lock, which is held until its rows
+/// are gone, so a gather of it cannot put on the shelf what this is taking
+/// off. Only the folders the ledger records as the source's own are
+/// deleted, each whole and never followed through a link; a source whose
+/// recorded folder is not one folder name is refused, nothing deleted. The
+/// clone goes first, which every gather makes again, then the shelf, and
+/// the rows only once both are gone: a folder that will not go refuses the
+/// rest, its rows kept, so the source is still listed and a removal tried
+/// again finds what is left, where rows dropped first would leave a folder
+/// on the shelf that `validate` reads and nothing knows to remove.
+///
+/// What the projects installed from it keeps its record, its origin
+/// included, and no longer points at the source, as the ledger forgets a
+/// source ([`forget_source`](crate::port::LedgerStore::forget_source)):
+/// nothing offers it there any more, so `status` says it is orphaned, an
+/// update leaves it, and `uninstall --orphaned` takes it out.
+pub fn remove(
+    workspace: &WeaverWorkspace,
+    ledger: &Ledger,
+    name: &str,
+) -> Result<Removal, SourceError> {
+    let _lock = workspace.lock()?;
+    let removal = plan_removal(workspace, ledger, name)?;
+    for folder in &removal.folders {
+        match fs::remove_dir_all(folder) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(SourceError::Unremoved {
+                    name: removal.source.name.clone(),
+                    path: folder.clone(),
+                    source: error,
+                })
+            }
+        }
+    }
+    ledger.forget_source(removal.source.id)?;
+    Ok(removal)
+}
+
+/// The folders `source` has on the disk, each that is there: its clone
+/// under the cache and its folder on the shelf, by the folder name the
+/// ledger records for it, and nothing else.
+///
+/// Refused unless that name is one folder name: anything else would name a
+/// folder that is not the source's to delete, `..` the cache itself. The
+/// shelf's folder of each kind a gather fills, matched on the kind as the
+/// refusal in a gather is, so a third kind gathered says whether a source
+/// has a folder of it.
+fn folders_of(workspace: &WeaverWorkspace, source: &Source) -> Result<Vec<PathBuf>, SourceError> {
+    if !install::is_folder_name(&source.directory) {
+        return Err(SourceError::FolderNotItsOwn {
+            name: source.name.clone(),
+            directory: source.directory.clone(),
+        });
+    }
+    let mut folders = vec![workspace.cache_dir().join(&source.directory)];
+    for kind in Kind::ALL {
+        match kind {
+            Kind::Skill => folders.push(workspace.gathered_dir(kind).join(&source.directory)),
+            Kind::Rule | Kind::Mcp => {}
+        }
+    }
+    folders.retain(|folder| folder.symlink_metadata().is_ok());
+    Ok(folders)
+}
+
 /// Why a change to a source could not be made, with nothing changed.
 #[derive(Debug, Error)]
 pub enum SourceError {
@@ -178,10 +338,31 @@ pub enum SourceError {
     /// `gather git --name` meets, said for a rename.
     #[error("`{name}` is the name of the source at {origin} already: rename this one to another")]
     NameTaken { name: SourceName, origin: Origin },
+    /// The folder the ledger records for the source is not one folder
+    /// name, so what removing it would delete is no folder of its own.
+    #[error(
+        "the source `{name}` is recorded with the folder `{directory}`, which is no one folder of \
+         the shelf or the cache, so nothing is removed"
+    )]
+    FolderNotItsOwn { name: SourceName, directory: String },
+    /// One of its folders would not go: what was deleted before it is
+    /// gone, and the source is kept, with its rows.
+    #[error(
+        "{path}: cannot be removed, so the source `{name}` is kept, with what is left of it: \
+         {source}"
+    )]
+    Unremoved {
+        name: SourceName,
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
 }
 
 codes!(SourceError {
     Self::NotFound { .. } => "source_not_found",
+    Self::FolderNotItsOwn { .. } => "source_folder_not_its_own",
+    Self::Unremoved { .. } => "source_folder_unremoved",
 } carried {
     Self::Ledger(error) => error,
     Self::Lock(error) => error,

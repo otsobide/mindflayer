@@ -2392,7 +2392,7 @@ CREATE TABLE installation_entries (
 /// the opening that took the step, which is a read as often as not and says
 /// nothing; and while a row is there its folder name is given to no new
 /// source, whose clone would otherwise be removed as the merge's. Forgotten
-/// with the source it is one with, which `gather forget` removes only once
+/// with the source it is one with, which `gather remove` removes only once
 /// it has opened the ledger to write, and so said the merge.
 const SCHEMA_V7: &str = "
 ALTER TABLE sources ADD COLUMN name TEXT NOT NULL DEFAULT '';
