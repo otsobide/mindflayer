@@ -243,8 +243,9 @@ pub struct Finding {
 pub enum Symptom {
     /// The project holds a `.codex/config.toml`, and nothing marks it
     /// trusted, so Codex reads none of it. `config` is the user's config
-    /// looked in, none when no Codex home was given.
-    #[error("{file}: Codex reads it only in a project it trusts, and {}", codex_mcp::unmarked(.project, .config.as_deref()))]
+    /// looked in, none when no Codex home was given: said from it, the file
+    /// the fix is made in, when there is one ([`untrusted`]).
+    #[error("{}", untrusted(.file, .project, .config.as_deref()))]
     CodexUntrusted {
         file: PathBuf,
         project: PathBuf,
@@ -362,6 +363,27 @@ pub enum Symptom {
         path: PathBuf,
         agents: Vec<Agent>,
     },
+}
+
+/// What [`Symptom::CodexUntrusted`] says: from the user's config, which
+/// does not mark the project trusted, as [`Symptom::CodexDistrusted`] says
+/// it marks one `untrusted`, so the path named first is the one the fix is
+/// made in; or, with no Codex home given, from the project's file Codex
+/// leaves unread.
+fn untrusted(file: &Path, project: &Path, config: Option<&Path>) -> String {
+    match config {
+        Some(config) => format!(
+            "{}: does not mark {} `trusted`, and Codex reads {} only in a project it trusts",
+            config.display(),
+            project.display(),
+            file.display()
+        ),
+        None => format!(
+            "{}: Codex reads it only in a project it trusts, and {}",
+            file.display(),
+            codex_mcp::unmarked(project, None)
+        ),
+    }
 }
 
 /// `paths`, each as it is written, in a list a sentence holds.

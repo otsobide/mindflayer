@@ -168,6 +168,16 @@ fn a_codex_project_with_a_config_nothing_trusts_is_found() {
     assert_eq!(codes(&examined), vec!["doctor_codex_untrusted"]);
     let finding = &examined.findings[0];
     assert_eq!(finding.path, fixture.codex_config());
+    assert_eq!(
+        finding.message,
+        format!(
+            "{}: does not mark {} `trusted`, and Codex reads {} only in a project it trusts",
+            fixture.codex_config().display(),
+            fixture.root().display(),
+            fixture.root().join(".codex/config.toml").display()
+        ),
+        "named from the file the fix is made in"
+    );
     assert_eq!(finding.agents, vec![Agent::Codex]);
     assert!(
         finding.fix.contains(&format!(
@@ -244,6 +254,13 @@ fn with_no_codex_home_a_config_nothing_trusts_says_so() {
     let finding = &report.projects[0].findings[0];
     assert_eq!(finding.code, "doctor_codex_untrusted");
     assert_eq!(finding.path, fixture.root().join(".codex/config.toml"));
+    assert!(
+        finding
+            .message
+            .starts_with(&format!("{}: ", finding.path.display())),
+        "{}",
+        finding.message
+    );
     assert!(finding.fix.contains("--codex-home"), "{}", finding.fix);
 }
 

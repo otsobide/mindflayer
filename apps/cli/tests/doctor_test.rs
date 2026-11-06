@@ -193,11 +193,11 @@ fn doctor_reads_codex_s_trust_from_the_home_its_option_names() {
 
     assert!(
         untrusted.stdout.starts_with(&format!(
-            "app: {}: Codex reads it only in a project it trusts, and {} does not mark {} \
-             `trusted`\n",
-            app.join(".codex/config.toml").display(),
+            "app: {}: does not mark {} `trusted`, and Codex reads {} only in a project it \
+             trusts\n",
             codex.join("config.toml").display(),
-            app.display()
+            app.display(),
+            app.join(".codex/config.toml").display()
         )),
         "{}",
         untrusted.stdout
