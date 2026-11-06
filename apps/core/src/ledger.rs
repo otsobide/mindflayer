@@ -40,7 +40,7 @@ use crate::settings::ProjectId;
 // What the docs link to, which no code here calls since the store redacts.
 #[cfg(doc)]
 use crate::url::redacted;
-use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision};
+use crate::value::{ArtifactName, ContentHash, Origin, Redacted, Revision, SourceName};
 
 /// The schema version this build writes, and the copy kept of an older
 /// one before a step: the SQLite store's, named here where they always were.
@@ -126,6 +126,13 @@ pub struct Source {
     /// name, and where a source's files went is a fact about the past that
     /// must not move when the naming rule changes.
     pub directory: String,
+    /// What it is called (D-13), one name a source: `owner-repo` unless
+    /// somebody named it ([`SourceName::derived`]).
+    ///
+    /// Not serialized yet: the envelope and the snapshot are given it once
+    /// a listing shows it.
+    #[serde(skip)]
+    pub name: SourceName,
 }
 
 impl Source {
@@ -140,6 +147,30 @@ impl Source {
             None => Origin::from(self.url.as_str()),
         }
     }
+}
+
+/// A source the step to schema 7 made one with another it found to be the
+/// same place: one repository's URL spelled two ways
+/// ([`crate::url::canonical`]), gathered at one branch from one folder.
+///
+/// The row that went, as it was, beside the one it is one with now: what it
+/// gathered went with it, and its folders are nobody's
+/// ([`crate::workspace::WeaverWorkspace::ledger_to_write`] removes them and
+/// says so). Every installation from it is from `into` now, its origin
+/// rewritten to `into`'s, so an update finds what it came from there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Merged {
+    /// The URL it was gathered from, without the credentials [`redacted`]
+    /// takes out: what `--from` named it by, which still names `into`
+    /// ([`crate::install::Offer::comes_from`]).
+    pub url: Redacted,
+    /// The branch or tag it was asked at, `into`'s too.
+    pub reference: Option<String>,
+    /// The folder it had under `cache/` and each kind's shelf.
+    pub directory: String,
+    /// The source it is one with: the one whose shelf was filled most
+    /// recently, since its folder holds the newer files.
+    pub into: Source,
 }
 
 /// One gathered artifact, and the source it came from.

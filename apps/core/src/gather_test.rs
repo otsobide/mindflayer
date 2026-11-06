@@ -302,6 +302,15 @@ fn a_scrub_that_took_anything_out_is_not_empty() {
             leftovers: vec![leftover("/w/.mindweaver/cache/a")],
             ..Scrub::default()
         },
+        Scrub {
+            merged: vec![Merged {
+                url: crate::value::Redacted::new(&UrlMother::https()),
+                reference: None,
+                directory: String::from("a"),
+                into: SourceMother::random(),
+            }],
+            ..Scrub::default()
+        },
     ];
     for scrub in nonempty {
         assert!(!scrub.is_empty(), "{scrub:?}");
@@ -319,6 +328,7 @@ fn a_later_scrub_absorbed_tells_each_url_once_and_counts_every_entry() {
         actions: 2,
         failures: vec![scrub_failure(&url)],
         leftovers: vec![leftover("/w/a")],
+        merged: Vec::new(),
     };
     let later = Scrub {
         sources: vec![
@@ -328,6 +338,7 @@ fn a_later_scrub_absorbed_tells_each_url_once_and_counts_every_entry() {
         actions: 3,
         failures: vec![scrub_failure(&url), scrub_failure(&other)],
         leftovers: vec![leftover("/w/a"), leftover("/w/b")],
+        merged: Vec::new(),
     };
 
     first.absorb(later);
@@ -666,11 +677,9 @@ fn the_folders_of_a_source_whose_directory_is_no_folder_name_are_left_alone() {
     let (dir, workspace) = WorkspaceMother::empty();
     let outside = dir.path().join("outside");
     fs::create_dir_all(&outside).unwrap();
-    let mut gone = SourceMother::random();
-    gone.directory = String::from("../../outside");
     let mut leftovers = Vec::new();
 
-    remove_folders_of(&workspace, &gone, &mut leftovers);
+    remove_folders_of(&workspace, "../../outside", &mut leftovers);
 
     assert!(outside.is_dir());
     assert!(leftovers.is_empty(), "{leftovers:?}");
@@ -689,7 +698,7 @@ fn the_folders_of_a_source_that_went_are_removed_from_the_cache_and_every_shelf(
     }
     let mut leftovers = Vec::new();
 
-    remove_folders_of(&workspace, &gone, &mut leftovers);
+    remove_folders_of(&workspace, &gone.directory, &mut leftovers);
 
     for folder in &folders {
         assert!(!folder.exists(), "{folder:?}");
@@ -702,7 +711,11 @@ fn removing_the_folders_of_a_source_that_has_none_is_no_failure() {
     let (_dir, workspace) = WorkspaceMother::empty();
     let mut leftovers = Vec::new();
 
-    remove_folders_of(&workspace, &SourceMother::random(), &mut leftovers);
+    remove_folders_of(
+        &workspace,
+        &SourceMother::random().directory,
+        &mut leftovers,
+    );
 
     assert!(leftovers.is_empty(), "{leftovers:?}");
 }

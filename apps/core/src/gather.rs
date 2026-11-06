@@ -29,11 +29,11 @@ use crate::artifact::{Artifact, ArtifactError, ValidationIssue};
 use crate::code::codes;
 use crate::copy::{self, Change};
 use crate::kind::{Kind, Layout};
-use crate::ledger::{self, Action, Ledger, LedgerError, Outcome, SourceKind};
+use crate::ledger::{self, Action, Ledger, LedgerError, Merged, Outcome, SourceKind};
 use crate::lock::LockError;
 use crate::paths;
 use crate::port::{GitError, Remote};
-use crate::url::{carries_credentials, redacted};
+use crate::url::{carries_credentials, fetched, redacted};
 use crate::value::{ArtifactName, Redacted, Revision};
 use crate::workspace::WeaverWorkspace;
 
@@ -231,6 +231,8 @@ pub fn gather(
     // have it is not logged, because no gather was attempted.
     let _lock = workspace.lock()?;
     let outcome = harvest(workspace, ledger, request);
+    // What was fetched, `owner/repo` read as the GitHub repository it names.
+    let url = fetched(request.source.url());
 
     // The log records what was attempted, not only what worked: a gather that
     // failed is the entry somebody opens the log to find. A log write that
@@ -245,12 +247,7 @@ pub fn gather(
                 report.unchanged.len(),
                 report.failures.len()
             );
-            ledger.log(
-                Action::Gather,
-                Some(request.source.url()),
-                Outcome::Ok,
-                Some(&detail),
-            )?;
+            ledger.log(Action::Gather, Some(&url), Outcome::Ok, Some(&detail))?;
         }
         // Not logged: a cancel leaves the ledger as it found it, and the
         // person who cancelled knows already.
@@ -258,7 +255,7 @@ pub fn gather(
         Err(error) => {
             let _ = ledger.log(
                 Action::Gather,
-                Some(request.source.url()),
+                Some(&url),
                 Outcome::Failed,
                 Some(&error.to_string()),
             );
@@ -282,6 +279,10 @@ pub struct Scrub {
     /// Folders of a source that became one with another, which nothing
     /// points into any more and which could not be removed.
     pub leftovers: Vec<Leftover>,
+    /// The sources the step to schema 7 made one with another as the ledger
+    /// was opened ([`Merged`]): said once, as what the scrub takes out is,
+    /// by the command that opened it to write.
+    pub merged: Vec<Merged>,
 }
 
 impl Scrub {
@@ -292,6 +293,7 @@ impl Scrub {
             && self.actions == 0
             && self.failures.is_empty()
             && self.leftovers.is_empty()
+            && self.merged.is_empty()
     }
 
     /// Add what a later scrub took out, for a change that opened the ledger
@@ -313,6 +315,7 @@ impl Scrub {
             }
         }
         self.leftovers.extend(later.leftovers);
+        self.merged.extend(later.merged);
     }
 }
 
@@ -331,9 +334,8 @@ impl Scrub {
 /// write.
 ///
 /// The workspace is held ([`WeaverWorkspace::lock_waiting`], up to `wait`)
-/// while clones are rewritten and the folders of a source made one with
-/// another are removed, since a gather beside it would be cloning into and
-/// filling those same folders. Only then: with no clone to rewrite, which is
+/// while clones are rewritten, since a gather beside it would be cloning
+/// into those same folders. Only then: with no clone to rewrite, which is
 /// every time but the first after an older build stored a credential, the
 /// scrub writes nothing but rows, which SQLite keeps apart, and a change to
 /// an artifact opening the ledger to drop a record does not wait behind a
@@ -364,9 +366,7 @@ pub(crate) fn scrub(
             });
             continue;
         }
-        if let Some(gone) = ledger.scrub_source(source.id)? {
-            remove_folders_of(workspace, &gone, &mut scrub.leftovers);
-        }
+        ledger.scrub_source(source.id)?;
         // Two branches or folders of one URL are one credential to tell
         // somebody about.
         if !scrub.sources.iter().any(|seen| seen.url == source.url) {
@@ -377,26 +377,38 @@ pub(crate) fn scrub(
     Ok(scrub)
 }
 
-/// Remove the clone and the shelf folders of a source the ledger no longer
-/// has, noting each that will not go.
+/// Remove the clone and the shelf folders of every source the step to
+/// schema 7 made one with another as `ledger` was opened ([`Merged`]),
+/// handing back each that will not go.
 ///
 /// Removed rather than left, because the shelf is read from its folders
 /// ([`crate::Catalog::discover_gathered`]): one left behind would be listed
-/// as skills no source owns. A directory that is not one folder name was not
-/// named by this ledger, and is left alone rather than followed out of the
-/// workspace.
-fn remove_folders_of(
-    workspace: &WeaverWorkspace,
-    gone: &ledger::Source,
-    leftovers: &mut Vec<Leftover>,
-) {
-    if !crate::install::is_folder_name(&gone.directory) {
+/// as skills no source owns, and its clone keeps whatever credential it was
+/// made with. Whoever opened the ledger does it, a read too, since the step
+/// that made them nobody's is the one write a read may make, and only that
+/// opening knows which they are: the next would find the ledger at schema 7
+/// and nothing to clear.
+pub(crate) fn clear_merged(workspace: &WeaverWorkspace, ledger: &Ledger) -> Vec<Leftover> {
+    let mut leftovers = Vec::new();
+    for merged in ledger.merged() {
+        remove_folders_of(workspace, &merged.directory, &mut leftovers);
+    }
+    leftovers
+}
+
+/// Remove the clone and the shelf folders of a source called `directory`
+/// that the ledger no longer has, noting each that will not go.
+///
+/// A directory that is not one folder name was not named by this ledger, and
+/// is left alone rather than followed out of the workspace.
+fn remove_folders_of(workspace: &WeaverWorkspace, directory: &str, leftovers: &mut Vec<Leftover>) {
+    if !crate::install::is_folder_name(directory) {
         return;
     }
     let shelves = Kind::ALL
         .iter()
-        .map(|kind| workspace.gathered_dir(*kind).join(&gone.directory));
-    for path in std::iter::once(workspace.cache_dir().join(&gone.directory)).chain(shelves) {
+        .map(|kind| workspace.gathered_dir(*kind).join(directory));
+    for path in std::iter::once(workspace.cache_dir().join(directory)).chain(shelves) {
         match fs::remove_dir_all(&path) {
             Ok(()) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
@@ -480,22 +492,26 @@ fn harvest(
         return Err(GatherError::Cancelled);
     }
 
+    // Found by the URL every spelling of it is ([`crate::url::canonical`]),
+    // so a second spelling gathers into the source the first registered,
+    // and registered as fetched.
+    let url = fetched(request.source.url());
     let new = ledger
         .source(
             request.source.kind(),
-            request.source.url(),
+            &url,
             request.source.reference(),
             &request.subdirectory,
         )?
         .is_none();
     let source = ledger.source_for(
         request.source.kind(),
-        request.source.url(),
+        &url,
         request.source.reference(),
         &request.subdirectory,
     )?;
 
-    let outcome = take(workspace, ledger, request, &source, manifest);
+    let outcome = take(workspace, ledger, request, &url, &source, manifest);
     if new && matches!(outcome, Err(GatherError::Cancelled)) {
         // Undone rather than never done: the clone needs the folder name that
         // registering gives it before anything is fetched. Holding the
@@ -511,12 +527,19 @@ fn harvest(
     outcome
 }
 
-/// Fetch `source`, read what it offers, and put that on the shelf: the
-/// gather, once its source is registered.
+/// Fetch `source` from `url`, as it was typed this time, read what it
+/// offers, and put that on the shelf: the gather, once its source is
+/// registered.
+///
+/// From the URL typed rather than the one the source was first registered
+/// with, though both are one repository's: the second spelling is the one
+/// somebody asked for now, an ssh one where https needs a credential the
+/// helpers lack, or the reverse.
 fn take(
     workspace: &WeaverWorkspace,
     ledger: &Ledger,
     request: &Request,
+    url: &str,
     source: &ledger::Source,
     manifest: &str,
 ) -> Result<Report, GatherError> {
@@ -524,7 +547,7 @@ fn take(
     let cache = workspace.cache_dir().join(&source.directory);
     watch.report(Progress::Connecting);
     let clone = match &request.source {
-        Source::Git { url, reference } => request
+        Source::Git { reference, .. } => request
             .remote
             .fetch(url, reference.as_deref(), &cache, watch)
             .map_err(|error| match error {
@@ -537,7 +560,7 @@ fn take(
     if !harvested_from.is_dir() {
         return Err(GatherError::NoSuchFolder {
             subdirectory: request.subdirectory.clone(),
-            url: request.source.url().to_owned(),
+            url: url.to_owned(),
         });
     }
 

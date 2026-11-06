@@ -468,6 +468,13 @@ impl SourceName {
     pub fn numbered(&self, n: usize) -> Self {
         SourceName(format!("{}-{n}", self.0))
     }
+
+    /// A name as the ledger holds it, taken as written rather than judged
+    /// again: every name there a store made by one of the two ways above,
+    /// and a row somebody edited by hand is still listed by what it says.
+    pub(crate) fn recorded(text: String) -> Self {
+        SourceName(text)
+    }
 }
 
 text_value! {

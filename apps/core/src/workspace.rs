@@ -1573,14 +1573,24 @@ impl WeaverWorkspace {
     ///
     /// A ledger made or migrated here is told the id of each project the
     /// workspace links (`WeaverWorkspace::known`), which the step to schema 5
-    /// names each one's records by.
+    /// names each one's records by. One the step to schema 7 made two
+    /// sources one in has the folders of the one that went removed
+    /// ([`gather::clear_merged`]).
     pub fn ledger(&self) -> Result<Ledger, LedgerError> {
+        self.ledger_cleared().map(|(ledger, _)| ledger)
+    }
+
+    /// [`ledger`](Self::ledger), with every folder of a source the step to
+    /// schema 7 made one with another that would not go.
+    fn ledger_cleared(&self) -> Result<(Ledger, Vec<gather::Leftover>), LedgerError> {
         if !self.made {
             return Err(LedgerError::Unmade {
                 path: self.ledger_path(),
             });
         }
-        Ledger::open_knowing(self.ledger_path(), || self.known().ids)
+        let ledger = Ledger::open_knowing(self.ledger_path(), || self.known().ids)?;
+        let leftovers = gather::clear_merged(self, &ledger);
+        Ok((ledger, leftovers))
     }
 
     /// Open that database for a command that writes to it: scrubbed first of
@@ -1618,10 +1628,13 @@ impl WeaverWorkspace {
         &self,
         wait: Duration,
     ) -> Result<(Ledger, Scrub), LedgerError> {
-        let ledger = self.ledger()?;
+        let (ledger, leftovers) = self.ledger_cleared()?;
         // Through gix whatever a gather is handed: what is scrubbed is what
         // an older build's gix clones kept, and only gix knows those files.
-        let scrub = gather::scrub(self, &ledger, wait, &crate::adapter::gix::Gix)?;
+        let mut scrub = gather::scrub(self, &ledger, wait, &crate::adapter::gix::Gix)?;
+        // Said by the command that opened it to write, as the scrub is.
+        scrub.merged = ledger.merged().to_vec();
+        scrub.leftovers.extend(leftovers);
         let known = self.known();
         ledger.knew(&known.ids, &known.stale)?;
         Ok((ledger, scrub))
@@ -1652,7 +1665,11 @@ impl WeaverWorkspace {
             return Ledger::in_memory();
         }
         match Ledger::open_existing_knowing(self.ledger_path(), || self.known().ids)? {
-            Some(ledger) => Ok(ledger),
+            Some(ledger) => {
+                // Cleared, unsaid: a read says nothing of the step either.
+                gather::clear_merged(self, &ledger);
+                Ok(ledger)
+            }
             None => Ledger::in_memory(),
         }
     }

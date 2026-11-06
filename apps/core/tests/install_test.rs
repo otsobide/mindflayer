@@ -2031,6 +2031,7 @@ fn a_candidate_from_the_shelf_serializes_without_the_credentials_its_source_carr
                 subdirectory: String::from("skills"),
                 revision: Some("4f9c2a7".into()),
                 directory: String::from("github.com-acme-skills"),
+                name: mindweaver_core::value::SourceName::parse("acme-skills").unwrap(),
             },
         }),
         standing: Standing::Outdated,
