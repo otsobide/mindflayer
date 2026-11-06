@@ -30,6 +30,7 @@ impl Remote for Written {
         &self,
         url: &str,
         reference: Option<&str>,
+        _pin: Option<&Revision>,
         into: &Path,
         watch: &Watch,
     ) -> Result<Cloned, GitError> {

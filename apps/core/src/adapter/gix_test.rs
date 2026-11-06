@@ -119,7 +119,7 @@ fn a_url_gix_cannot_parse_is_named_without_its_credentials_and_so_is_what_gix_sa
     let cache = tempfile::TempDir::new().unwrap();
     let error = clone(
         "https://me:hunter2@exa mple.com/acme/private.git",
-        None,
+        At::Reference(None),
         &cache.path().join("clone"),
         &Watch::new(),
     )
@@ -249,4 +249,111 @@ fn the_step_read_off_gix_progress_is_the_latest_under_way() {
             total: Some(12)
         })
     );
+}
+
+/// A repository on the disk whose `skills/deploy` says `first` at its first
+/// commit and `second` at its second, and both commits, oldest first.
+fn moved_on() -> (tempfile::TempDir, Revision, Revision) {
+    use crate::mother::GitRepositoryMother;
+
+    let deploy = "skills/deploy/SKILL.md";
+    let repository = GitRepositoryMother::create(&[(deploy, "first\n")]);
+    let head = |dir: &Path| Revision::from(gix::open(dir).unwrap().head_id().unwrap().to_string());
+    let first = head(repository.path());
+    GitRepositoryMother::write(repository.path(), &[(deploy, "second\n")]);
+    GitRepositoryMother::commit(repository.path());
+    let second = head(repository.path());
+    (repository, first, second)
+}
+
+fn deploy_in(cloned: &Cloned) -> String {
+    fs::read_to_string(cloned.root.join("skills/deploy/SKILL.md")).unwrap()
+}
+
+#[test]
+fn a_pin_is_fetched_by_itself_and_checked_out() {
+    let (repository, first, _) = moved_on();
+    let cache = tempfile::TempDir::new().unwrap();
+    let url = repository.path().to_string_lossy();
+
+    let cloned = Gix
+        .fetch(
+            &url,
+            None,
+            Some(&first),
+            &cache.path().join("clone"),
+            &Watch::new(),
+        )
+        .unwrap();
+
+    assert_eq!(cloned.revision, Some(first));
+    assert_eq!(deploy_in(&cloned), "first\n");
+}
+
+#[test]
+fn a_pin_a_remote_will_not_hand_over_is_looked_for_in_its_references_history() {
+    let (repository, first, second) = moved_on();
+    let url = repository.path().to_string_lossy();
+    let head = fs::read_to_string(repository.path().join(".git/HEAD")).unwrap();
+    let branch = head
+        .trim()
+        .strip_prefix("ref: refs/heads/")
+        .unwrap()
+        .to_owned();
+
+    for reference in [None, Some(branch.as_str())] {
+        let cache = tempfile::TempDir::new().unwrap();
+        let into = cache.path().join("clone");
+        let cloned = reaching(&url, reference, &first, &into, &Watch::new()).unwrap();
+
+        assert_eq!(cloned.revision.as_ref(), Some(&first), "{reference:?}");
+        assert_eq!(deploy_in(&cloned), "first\n", "{reference:?}");
+        // The tip it was found from is kept where the remote's branch is.
+        let clone = gix::open(&into).unwrap();
+        let tracked = clone
+            .find_reference(format!("refs/remotes/origin/{branch}").as_str())
+            .unwrap()
+            .into_fully_peeled_id()
+            .unwrap();
+        assert_eq!(tracked.to_string(), second.as_str(), "{reference:?}");
+    }
+}
+
+#[test]
+fn a_pin_its_reference_does_not_reach_is_refused_and_leaves_no_clone() {
+    let (repository, _, _) = moved_on();
+    // A commit of another repository's, which this one does not hold: its
+    // files are its own, since two repositories made alike commit alike.
+    let elsewhere = crate::mother::GitRepositoryMother::create(&[("README.md", "elsewhere\n")]);
+    let other = Revision::from(
+        gix::open(elsewhere.path())
+            .unwrap()
+            .head_id()
+            .unwrap()
+            .to_string(),
+    );
+    drop(elsewhere);
+    let url = repository.path().to_string_lossy();
+    let cache = tempfile::TempDir::new().unwrap();
+    let into = cache.path().join("clone");
+
+    // Asked by itself first, which the remote refuses, holding no such
+    // commit, and then looked for in the history of its HEAD.
+    let refused = Gix
+        .fetch(&url, None, Some(&other), &into, &Watch::new())
+        .unwrap_err();
+
+    assert!(
+        matches!(&refused, GitError::PinUnreachable { pin, reference: None, .. } if *pin == other),
+        "{refused}"
+    );
+    assert_eq!(refused.code(), "git_pin_unreachable");
+    assert_eq!(
+        refused.to_string(),
+        format!(
+            "{url}: commit {other} is neither handed over by itself nor in the history of the \
+             remote's HEAD, so it cannot be gathered: name the branch or tag it is on with --ref"
+        )
+    );
+    assert!(!into.exists());
 }

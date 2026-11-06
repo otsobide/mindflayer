@@ -617,7 +617,7 @@ fn take(
     let clone = match &request.source {
         Source::Git { reference, .. } => request
             .remote
-            .fetch(url, reference.as_deref(), &cache, watch)
+            .fetch(url, reference.as_deref(), None, &cache, watch)
             .map_err(|error| match error {
                 GitError::Cancelled => GatherError::Cancelled,
                 error => error.into(),

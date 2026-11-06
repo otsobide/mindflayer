@@ -59,6 +59,14 @@ fn every_own_error(url: &str, detail: &str) -> Vec<(GitError, &'static str)> {
             },
             "git_checkout_failed",
         ),
+        (
+            GitError::PinUnreachable {
+                url: url.to_owned(),
+                pin: Revision::from("4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3"),
+                reference: Some(String::from("main")),
+            },
+            "git_pin_unreachable",
+        ),
         (GitError::Cancelled, "git_clone_cancelled"),
     ]
 }
@@ -182,6 +190,30 @@ fn a_remote_that_asks_who_is_fetching_says_where_a_credential_is_looked_for() {
         error.to_string(),
         "https://example.com/acme/private.git: needs credentials, and gathering never \
          prompts for them: configure a git credential helper, or use ssh-agent for an ssh URL"
+    );
+}
+
+#[test]
+fn a_pin_a_remote_will_not_hand_over_says_the_history_it_was_looked_for_in() {
+    let pin = Revision::from("4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3");
+    let at = |reference: Option<&str>| GitError::PinUnreachable {
+        url: String::from("https://example.com/acme/skills.git"),
+        pin: pin.clone(),
+        reference: reference.map(str::to_owned),
+    };
+
+    assert_eq!(
+        at(Some("v2")).to_string(),
+        "https://example.com/acme/skills.git: commit 4f9c2a7e1b3d5f60a8c4e2b6d0f1a3c5e7b9d1f3 is \
+         neither handed over by itself nor in the history of `v2`, so it cannot be gathered: \
+         name the branch or tag it is on with --ref"
+    );
+    assert!(
+        at(None)
+            .to_string()
+            .contains("in the history of the remote's HEAD,"),
+        "{}",
+        at(None)
     );
 }
 

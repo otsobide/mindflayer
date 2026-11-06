@@ -946,11 +946,12 @@ impl mindweaver_core::Remote for Forge {
         &self,
         url: &str,
         reference: Option<&str>,
+        pin: Option<&mindweaver_core::value::Revision>,
         into: &std::path::Path,
         watch: &Watch,
     ) -> Result<mindweaver_core::port::Cloned, mindweaver_core::port::GitError> {
         self.asked.lock().unwrap().push(url.to_owned());
-        mindweaver_core::adapter::gix::Gix.fetch(&self.from, reference, into, watch)
+        mindweaver_core::adapter::gix::Gix.fetch(&self.from, reference, pin, into, watch)
     }
 
     fn scrub(&self, clone: &std::path::Path) -> Result<bool, mindweaver_core::port::GitError> {

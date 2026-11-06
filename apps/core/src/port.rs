@@ -58,12 +58,18 @@ pub trait Remote: Debug + Send + Sync {
     /// whatever was there, telling `watch` how it goes and stopping when it
     /// is cancelled ([`GitError::Cancelled`]).
     ///
+    /// At `pin`, a commit's full id, when one is given: that commit, by
+    /// itself where the remote hands it over so, and otherwise only when it
+    /// is in the history of `reference`, or of the remote's HEAD without
+    /// one, refused when it is not ([`GitError::PinUnreachable`]).
+    ///
     /// What is left at `into` holds no credential once this returns, whoever
     /// asked: a caller that forgot to refuse one is not trusted to.
     fn fetch(
         &self,
         url: &str,
         reference: Option<&str>,
+        pin: Option<&Revision>,
         into: &Path,
         watch: &Watch,
     ) -> Result<Cloned, GitError>;
@@ -123,6 +129,19 @@ pub enum GitError {
     Credentials { url: String },
     #[error("{url}: cloned, but its files could not be checked out: {detail}")]
     Checkout { url: String, detail: String },
+    /// The remote would not hand over the commit a gather is pinned to by
+    /// itself, and it is not in the history of the branch or tag asked for,
+    /// or of the remote's HEAD when none was.
+    #[error(
+        "{url}: commit {pin} is neither handed over by itself nor in the history of {}, so \
+         it cannot be gathered: name the branch or tag it is on with --ref",
+        .reference.as_deref().map_or_else(|| String::from("the remote's HEAD"), |reference| format!("`{reference}`"))
+    )]
+    PinUnreachable {
+        url: String,
+        pin: Revision,
+        reference: Option<String>,
+    },
     /// The [`Watch`] was cancelled before the clone was finished. What there
     /// was of it is gone.
     #[error("the clone was cancelled before it was finished")]
@@ -140,6 +159,7 @@ codes!(GitError {
     Self::Fetch { .. } => "git_fetch_failed",
     Self::Credentials { .. } => "git_credentials_needed",
     Self::Checkout { .. } => "git_checkout_failed",
+    Self::PinUnreachable { .. } => "git_pin_unreachable",
     Self::Cancelled => "git_clone_cancelled",
 } carried {
     Self::Scrub(error) => error,

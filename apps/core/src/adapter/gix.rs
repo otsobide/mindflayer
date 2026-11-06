@@ -43,10 +43,23 @@ impl Remote for Gix {
         &self,
         url: &str,
         reference: Option<&str>,
+        pin: Option<&Revision>,
         into: &Path,
         watch: &Watch,
     ) -> Result<Cloned, GitError> {
-        clone(url, reference, into, watch)
+        match pin {
+            None => clone(url, At::Reference(reference), into, watch),
+            Some(pin) => match clone(url, At::Commit(pin), into, watch) {
+                // A remote that will not hand over a commit by its id alone,
+                // as one that only takes a want of what it advertises: a
+                // clone that is not shallow is made, and the commit looked
+                // for in the reference's history. Any other failure is the
+                // remote's or the credentials', which a second try would
+                // meet again.
+                Err(GitError::Fetch { .. }) => reaching(url, reference, pin, into, watch),
+                cloned => cloned,
+            },
+        }
     }
 
     fn scrub(&self, clone: &Path) -> Result<bool, GitError> {
@@ -54,20 +67,135 @@ impl Remote for Gix {
     }
 }
 
-/// Clone `url` into `into`, replacing whatever was there, telling `watch`
-/// what `gix` counts as it goes.
+/// What a clone checks out.
+#[derive(Debug, Clone, Copy)]
+enum At<'a> {
+    /// A branch or a tag, or the remote's HEAD when there is none.
+    Reference(Option<&'a str>),
+    /// One commit, fetched by its id on its own (`gix`'s `with_revision`),
+    /// and checked out with a detached HEAD.
+    Commit(&'a Revision),
+}
+
+/// Clone `url` into `into`, replacing whatever was there, at `at`, telling
+/// `watch` what `gix` counts as it goes.
 ///
 /// A fetch into the existing clone is the obvious optimisation and is
 /// deliberately not done: the clone is shallow, so re-cloning costs about what
 /// a fetch would, and it is one code path rather than three (clone, fetch,
 /// reconcile a checkout that someone may have edited). Gathering is not
 /// something anybody runs in a loop.
-fn clone(
+fn clone(url: &str, at: At<'_>, into: &Path, watch: &Watch) -> Result<Cloned, GitError> {
+    let shortfalls = Shortfalls::default();
+    // Depth 1: the history is not what is being gathered, the files are.
+    let mut prepare = prepared(url, into, watch, &shortfalls)?.with_shallow(
+        gix::remote::fetch::Shallow::DepthAtRemote(NonZeroU32::new(1).expect("1 is not zero")),
+    );
+    match at {
+        At::Reference(None) => {}
+        At::Reference(Some(reference)) => {
+            prepare =
+                prepare
+                    .with_ref_name(Some(reference))
+                    .map_err(|error| GitError::Reference {
+                        // Redacted as every URL this error says is: a URL typed
+                        // where a branch goes is still somebody's credential.
+                        reference: redacted(reference).into_owned(),
+                        detail: said(error),
+                    })?;
+        }
+        At::Commit(pin) => {
+            prepare =
+                prepare
+                    .with_revision(Some(pin.as_str()))
+                    .map_err(|error| GitError::Reference {
+                        reference: redacted(pin).into_owned(),
+                        detail: said(error),
+                    })?;
+        }
+    }
+    checked_out(url, prepare, into, watch, &shortfalls, |_| Ok(()))
+}
+
+/// Clone `url` into `into` at `pin`, for a remote that would not hand the
+/// commit over by itself: a clone that is not shallow, every branch as
+/// `git clone` fetches them, and `pin` checked out only once it is found in
+/// the history of `reference`, or of the remote's HEAD when there is none,
+/// refused otherwise ([`GitError::PinUnreachable`]).
+///
+/// Not shallow, since only the whole of a history says whether a commit is
+/// in it: the slow way, taken only when the fast one is refused. Checked
+/// out as `git reset --hard` to it would: the branch or tag the fetch made
+/// of the reference moves to the pin, and the remote-tracking one keeps the
+/// tip it was found from. Moving HEAD alone would not do, since `gix`
+/// checks out the reference it was asked for rather than HEAD.
+fn reaching(
     url: &str,
     reference: Option<&str>,
+    pin: &Revision,
     into: &Path,
     watch: &Watch,
 ) -> Result<Cloned, GitError> {
+    let unreachable = || GitError::PinUnreachable {
+        url: redacted(url).into_owned(),
+        pin: pin.clone(),
+        reference: reference.map(|reference| redacted(reference).into_owned()),
+    };
+    let shortfalls = Shortfalls::default();
+    let mut prepare = prepared(url, into, watch, &shortfalls)?;
+    if let Some(reference) = reference {
+        prepare = prepare
+            .with_ref_name(Some(reference))
+            .map_err(|error| GitError::Reference {
+                reference: redacted(reference).into_owned(),
+                detail: said(error),
+            })?;
+    }
+    checked_out(url, prepare, into, watch, &shortfalls, |repository| {
+        let wanted = gix::ObjectId::from_hex(pin.as_bytes()).map_err(|_| unreachable())?;
+        // HEAD names the reference's tip, as the fetch left it.
+        let tip = repository.head_id().map_err(|_| unreachable())?.detach();
+        let reached = tip == wanted
+            || repository
+                .rev_walk([tip])
+                .all()
+                .map_err(|_| unreachable())?
+                .filter_map(Result::ok)
+                .any(|commit| commit.id == wanted);
+        if !reached {
+            return Err(unreachable());
+        }
+        repository
+            .edit_reference(gix::refs::transaction::RefEdit {
+                change: gix::refs::transaction::Change::Update {
+                    log: gix::refs::transaction::LogChange {
+                        mode: gix::refs::transaction::RefLog::AndReference,
+                        force_create_reflog: false,
+                        message: format!("pinned to {pin}").into(),
+                    },
+                    expected: gix::refs::transaction::PreviousValue::Any,
+                    new: gix::refs::Target::Object(wanted),
+                },
+                name: "HEAD".try_into().expect("HEAD is a reference's name"),
+                deref: true,
+            })
+            .map_err(|error| GitError::Checkout {
+                url: redacted(url).into_owned(),
+                detail: said(error),
+            })?;
+        Ok(())
+    })
+}
+
+/// A clone of `url` ready to be told what to fetch, at `into`, replacing
+/// whatever was there, and never prompting for a credential: what it lacked
+/// is noted in `shortfalls`.
+fn prepared(
+    url: &str,
+    into: &Path,
+    watch: &Watch,
+    shortfalls: &Shortfalls,
+) -> Result<gix::clone::PrepareFetch, GitError> {
     // Before the clone already there is removed, which a cancel should not
     // cost.
     if watch.is_cancelled() {
@@ -86,16 +214,11 @@ fn clone(
         })?;
     }
 
-    let shortfalls = Shortfalls::default();
-    let mut prepare = gix::prepare_clone(url, into)
+    Ok(gix::prepare_clone(url, into)
         .map_err(|error| GitError::Url {
             url: redacted(url).into_owned(),
             detail: said(error),
         })?
-        // Depth 1: the history is not what is being gathered, the files are.
-        .with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
-            NonZeroU32::new(1).expect("1 is not zero"),
-        ))
         // Every connection `gix` lets the clone configure, not only the
         // first: a shallow clone connects once to find the branch and again
         // to fetch it, and either one may be asked for a credential. The one
@@ -112,19 +235,19 @@ fn clone(
                 ));
                 Ok(())
             }
-        });
+        }))
+}
 
-    if let Some(reference) = reference {
-        prepare = prepare
-            .with_ref_name(Some(reference))
-            .map_err(|error| GitError::Reference {
-                // Redacted as every URL this error says is: a URL typed
-                // where a branch goes is still somebody's credential.
-                reference: redacted(reference).into_owned(),
-                detail: said(error),
-            })?;
-    }
-
+/// Fetch what `prepare` was told to and check it out, once `before` has
+/// seen the fetched repository and found it what was wanted.
+fn checked_out(
+    url: &str,
+    mut prepare: gix::clone::PrepareFetch,
+    into: &Path,
+    watch: &Watch,
+    shortfalls: &Shortfalls,
+    before: impl FnOnce(&gix::Repository) -> Result<(), GitError>,
+) -> Result<Cloned, GitError> {
     // The watch's own flag, so a cancel stops `gix` where it checks, between
     // the objects it receives and the files it writes, rather than once it
     // is done. A clone it stops partway is removed by `gix` itself.
@@ -140,6 +263,8 @@ fn clone(
                 }
             })
     })?;
+    // Refused, the clone goes with `checkout`, which removes what it made.
+    before(checkout.repo())?;
     // Said before the checkout starts rather than once its count is first
     // read, so the step is named even when it is over before that.
     watch.report(Progress::CheckingOut {
